@@ -1,0 +1,26 @@
+[honeypot]
+hostname = {{ COWRIE_HOSTNAME | default('svr01') }}
+listen_endpoints = tcp:2222:interface=0.0.0.0
+
+[ssh]
+enabled = true
+listen_endpoints = tcp:2222:interface=0.0.0.0
+
+{% if COWRIE_LOG_HOST is defined and COWRIE_LOG_HOST %}
+[output_jsonlog]
+enabled = true
+logfile = cowrie.json
+
+[output_localsocket]
+enabled = false
+
+# Forward JSON events to SIEM/aggregator
+[output_tcp]
+enabled = true
+host = {{ COWRIE_LOG_HOST }}
+port = {{ COWRIE_LOG_PORT | default('5140') }}
+{% else %}
+[output_jsonlog]
+enabled = true
+logfile = cowrie.json
+{% endif %}
