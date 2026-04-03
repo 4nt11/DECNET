@@ -4,35 +4,26 @@ State is persisted to decnet-state.json in the working directory.
 """
 
 import json
-import random
 from pathlib import Path
 from typing import Literal
 
 from pydantic import BaseModel, field_validator
 
+from decnet.distros import random_hostname as _random_hostname
+
 STATE_FILE = Path("decnet-state.json")
 
-BASE_IMAGES = [
-    "debian:bookworm-slim",
-    "ubuntu:22.04",
-]
 
-DECKY_NAME_WORDS = [
-    "alpha", "bravo", "charlie", "delta", "echo",
-    "foxtrot", "golf", "hotel", "india", "juliet",
-    "kilo", "lima", "mike", "nova", "oscar",
-]
-
-
-def random_hostname() -> str:
-    return f"SRV-{random.choice(DECKY_NAME_WORDS).upper()}-{random.randint(10, 99)}"
+def random_hostname(distro_slug: str = "debian") -> str:
+    return _random_hostname(distro_slug)
 
 
 class DeckyConfig(BaseModel):
     name: str
     ip: str
     services: list[str]
-    base_image: str
+    distro: str          # slug from distros.DISTROS, e.g. "debian", "ubuntu22"
+    base_image: str      # resolved Docker image tag
     hostname: str
 
     @field_validator("services")

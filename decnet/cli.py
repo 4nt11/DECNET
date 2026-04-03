@@ -16,11 +16,11 @@ from rich.console import Console
 from rich.table import Table
 
 from decnet.config import (
-    BASE_IMAGES,
     DeckyConfig,
     DecnetConfig,
     random_hostname,
 )
+from decnet.distros import all_distros, get_distro, random_distro
 from decnet.ini_loader import IniConfig, load_ini
 from decnet.network import detect_interface, detect_subnet, allocate_ips, get_host_ip
 from decnet.services.registry import all_services
@@ -35,23 +35,42 @@ console = Console()
 ALL_SERVICE_NAMES = ["ssh", "smb", "rdp", "http", "ftp"]
 
 
+def _resolve_distros(
+    distros_explicit: list[str] | None,
+    randomize_distros: bool,
+    n: int,
+) -> list[str]:
+    """Return a list of n distro slugs based on CLI flags."""
+    if distros_explicit:
+        # Round-robin the provided list to fill n slots
+        return [distros_explicit[i % len(distros_explicit)] for i in range(n)]
+    if randomize_distros:
+        return [random_distro().slug for _ in range(n)]
+    # Default: cycle through all distros to maximize heterogeneity
+    slugs = list(all_distros().keys())
+    return [slugs[i % len(slugs)] for i in range(n)]
+
+
 def _build_deckies(
     n: int,
     ips: list[str],
     services_explicit: list[str] | None,
-    randomize: bool,
+    randomize_services: bool,
+    distros_explicit: list[str] | None = None,
+    randomize_distros: bool = False,
 ) -> list[DeckyConfig]:
     deckies = []
     used_combos: set[frozenset] = set()
+    distro_slugs = _resolve_distros(distros_explicit, randomize_distros, n)
 
     for i, ip in enumerate(ips):
         name = f"decky-{i + 1:02d}"
-        base_image = BASE_IMAGES[i % len(BASE_IMAGES)]
-        hostname = random_hostname()
+        distro = get_distro(distro_slugs[i])
+        hostname = random_hostname(distro.slug)
 
         if services_explicit:
             svc_list = services_explicit
-        elif randomize:
+        elif randomize_services:
             # Pick 1-3 random services, try to avoid exact duplicates
             attempts = 0
             while True:
@@ -71,7 +90,8 @@ def _build_deckies(
                 name=name,
                 ip=ip,
                 services=svc_list,
-                base_image=base_image,
+                distro=distro.slug,
+                base_image=distro.image,
                 hostname=hostname,
             )
         )
@@ -103,10 +123,11 @@ def _build_deckies_from_ini(
 
     auto_pool = (str(addr) for addr in net.hosts() if addr not in reserved)
 
+    distro_slugs = _resolve_distros(None, randomize, len(ini.deckies))
     deckies: list[DeckyConfig] = []
     for i, spec in enumerate(ini.deckies):
-        base_image = BASE_IMAGES[i % len(BASE_IMAGES)]
-        hostname = random_hostname()
+        distro = get_distro(distro_slugs[i])
+        hostname = random_hostname(distro.slug)
 
         ip = spec.ip or next(auto_pool, None)
         if ip is None:
@@ -125,9 +146,8 @@ def _build_deckies_from_ini(
                 raise typer.Exit(1)
             svc_list = spec.services
         elif randomize:
-            import random as _random
-            count = _random.randint(1, min(3, len(ALL_SERVICE_NAMES)))
-            svc_list = _random.sample(ALL_SERVICE_NAMES, count)
+            count = random.randint(1, min(3, len(ALL_SERVICE_NAMES)))
+            svc_list = random.sample(ALL_SERVICE_NAMES, count)
         else:
             console.print(
                 f"[red]Decky '[{spec.name}]' has no services= in config. "
@@ -139,7 +159,8 @@ def _build_deckies_from_ini(
             name=spec.name,
             ip=ip,
             services=svc_list,
-            base_image=base_image,
+            distro=distro.slug,
+            base_image=distro.image,
             hostname=hostname,
         ))
     return deckies
@@ -154,6 +175,8 @@ def deploy(
     ip_start: Optional[str] = typer.Option(None, "--ip-start", help="First decky IP (auto if omitted)"),
     services: Optional[str] = typer.Option(None, "--services", help="Comma-separated services, e.g. ssh,smb,rdp"),
     randomize_services: bool = typer.Option(False, "--randomize-services", help="Assign random services to each decky"),
+    distro: Optional[str] = typer.Option(None, "--distro", help="Comma-separated distro slugs, e.g. debian,ubuntu22,rocky9"),
+    randomize_distros: bool = typer.Option(False, "--randomize-distros", help="Assign a random distro to each decky"),
     log_target: Optional[str] = typer.Option(None, "--log-target", help="Forward logs to ip:port (e.g. 192.168.1.5:5140)"),
     dry_run: bool = typer.Option(False, "--dry-run", help="Generate compose file without starting containers"),
     no_cache: bool = typer.Option(False, "--no-cache", help="Force rebuild all images, ignoring Docker layer cache"),
@@ -223,8 +246,20 @@ def deploy(
         console.print(f"[dim]Interface:[/] {iface}  [dim]Subnet:[/] {subnet_cidr}  "
                       f"[dim]Gateway:[/] {effective_gateway}  [dim]Host IP:[/] {host_ip}")
 
+        distros_list = [d.strip() for d in distro.split(",")] if distro else None
+        if distros_list:
+            try:
+                for slug in distros_list:
+                    get_distro(slug)
+            except ValueError as e:
+                console.print(f"[red]{e}[/]")
+                raise typer.Exit(1)
+
         ips = allocate_ips(subnet_cidr, effective_gateway, host_ip, deckies, ip_start)
-        decky_configs = _build_deckies(deckies, ips, services_list, randomize_services)
+        decky_configs = _build_deckies(
+            deckies, ips, services_list, randomize_services,
+            distros_explicit=distros_list, randomize_distros=randomize_distros,
+        )
         effective_log_target = log_target
 
     config = DecnetConfig(
@@ -277,4 +312,16 @@ def list_services() -> None:
     table.add_column("Image")
     for name, svc in sorted(svcs.items()):
         table.add_row(name, ", ".join(str(p) for p in svc.ports), svc.default_image)
+    console.print(table)
+
+
+@app.command(name="distros")
+def list_distros() -> None:
+    """List all available OS distro profiles for deckies."""
+    table = Table(title="Available Distro Profiles", show_lines=True)
+    table.add_column("Slug", style="bold cyan")
+    table.add_column("Display Name")
+    table.add_column("Docker Image", style="dim")
+    for slug, profile in sorted(all_distros().items()):
+        table.add_row(slug, profile.display_name, profile.image)
     console.print(table)

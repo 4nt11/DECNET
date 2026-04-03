@@ -18,9 +18,6 @@ from decnet.services.registry import get_service
 
 _LOG_NETWORK = "decnet_logs"
 
-# Minimal image for the base container — just needs to stay alive.
-_BASE_IMAGE = "debian:bookworm-slim"
-
 
 def generate_compose(config: DecnetConfig) -> dict:
     """Build and return the full docker-compose data structure."""
@@ -31,7 +28,7 @@ def generate_compose(config: DecnetConfig) -> dict:
 
         # --- Base container: owns the MACVLAN IP, runs nothing but sleep ---
         base: dict = {
-            "image": _BASE_IMAGE,
+            "image": decky.base_image,
             "container_name": base_key,
             "hostname": decky.hostname,
             "command": ["sleep", "infinity"],
