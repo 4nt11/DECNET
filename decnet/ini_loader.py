@@ -53,6 +53,7 @@ class DeckySpec:
     services: list[str] | None = None
     archetype: str | None = None
     service_config: dict[str, dict] = field(default_factory=dict)
+    nmap_os: str | None = None     # explicit OS family override (linux/windows/bsd/embedded/cisco)
 
 
 @dataclass
@@ -113,6 +114,7 @@ def load_ini(path: str | Path) -> IniConfig:
         svc_raw = s.get("services")
         services = [sv.strip() for sv in svc_raw.split(",")] if svc_raw else None
         archetype = s.get("archetype")
+        nmap_os = s.get("nmap_os") or s.get("nmap-os") or None
         amount_raw = s.get("amount", "1")
         try:
             amount = int(amount_raw)
@@ -123,7 +125,7 @@ def load_ini(path: str | Path) -> IniConfig:
 
         if amount == 1:
             cfg.deckies.append(DeckySpec(
-                name=section, ip=ip, services=services, archetype=archetype,
+                name=section, ip=ip, services=services, archetype=archetype, nmap_os=nmap_os,
             ))
         else:
             # Expand into N deckies; explicit ip is ignored (can't share one IP)
@@ -138,6 +140,7 @@ def load_ini(path: str | Path) -> IniConfig:
                     ip=None,
                     services=services,
                     archetype=archetype,
+                    nmap_os=nmap_os,
                 ))
 
     # Second pass: collect per-service subsections [decky-name.service]

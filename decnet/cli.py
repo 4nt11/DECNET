@@ -179,6 +179,8 @@ def _build_deckies_from_ini(
             )
             raise typer.Exit(1)
 
+        # nmap_os priority: explicit INI key > archetype default > "linux"
+        resolved_nmap_os = spec.nmap_os or (arch.nmap_os if arch else "linux")
         deckies.append(DeckyConfig(
             name=spec.name,
             ip=ip,
@@ -189,7 +191,7 @@ def _build_deckies_from_ini(
             hostname=hostname,
             archetype=arch.slug if arch else None,
             service_config=spec.service_config,
-            nmap_os=arch.nmap_os if arch else "linux",
+            nmap_os=resolved_nmap_os,
         ))
     return deckies
 

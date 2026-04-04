@@ -156,3 +156,62 @@ def test_no_custom_services_gives_empty_list(tmp_path):
     """)
     cfg = load_ini(ini_file)
     assert cfg.custom_services == []
+
+
+# ---------------------------------------------------------------------------
+# nmap_os parsing
+# ---------------------------------------------------------------------------
+
+def test_nmap_os_parsed_from_ini(tmp_path):
+    ini_file = _write_ini(tmp_path, """
+        [decky-win]
+        ip = 192.168.1.101
+        services = rdp, smb
+        nmap_os = windows
+    """)
+    cfg = load_ini(ini_file)
+    assert cfg.deckies[0].nmap_os == "windows"
+
+
+def test_nmap_os_defaults_to_none_when_absent(tmp_path):
+    ini_file = _write_ini(tmp_path, """
+        [decky-01]
+        services = ssh
+    """)
+    cfg = load_ini(ini_file)
+    assert cfg.deckies[0].nmap_os is None
+
+
+@pytest.mark.parametrize("os_family", ["linux", "windows", "bsd", "embedded", "cisco"])
+def test_nmap_os_all_families_accepted(tmp_path, os_family):
+    ini_file = _write_ini(tmp_path, f"""
+        [decky-01]
+        services = ssh
+        nmap_os = {os_family}
+    """)
+    cfg = load_ini(ini_file)
+    assert cfg.deckies[0].nmap_os == os_family
+
+
+def test_nmap_os_propagates_to_amount_expanded_deckies(tmp_path):
+    ini_file = _write_ini(tmp_path, """
+        [corp-printers]
+        services = snmp
+        nmap_os  = embedded
+        amount   = 3
+    """)
+    cfg = load_ini(ini_file)
+    assert len(cfg.deckies) == 3
+    for d in cfg.deckies:
+        assert d.nmap_os == "embedded"
+
+
+def test_nmap_os_hyphen_alias_accepted(tmp_path):
+    """nmap-os= (hyphen) should work as an alias for nmap_os=."""
+    ini_file = _write_ini(tmp_path, """
+        [decky-01]
+        services = ssh
+        nmap-os = bsd
+    """)
+    cfg = load_ini(ini_file)
+    assert cfg.deckies[0].nmap_os == "bsd"
