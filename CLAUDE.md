@@ -54,3 +54,4 @@ DECNET is a honeypot/deception network framework. It deploys fake machines (call
 - NEVER pass broken code to the user.
     - Broken means: not running, not passing 100% tests, etc.
 - After tests pass with 100%, always git commit your changes.
+- NEVER add "Co-Authored-By" or any Claude attribution lines to git commit messages.

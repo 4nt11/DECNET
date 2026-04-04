@@ -7,8 +7,6 @@ as JSON. Designed to attract automated scanners and credential stuffers.
 
 import json
 import os
-import socket
-from datetime import datetime, timezone
 from http.server import BaseHTTPRequestHandler, HTTPServer
 from decnet_logging import syslog_line, write_syslog_file, forward_syslog
 

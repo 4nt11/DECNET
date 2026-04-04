@@ -6,11 +6,8 @@ in the initial RDP negotiation request. Forwards events as JSON to
 LOG_TARGET if set.
 """
 
-import json
 import os
-import socket
 import sys
-from datetime import datetime, timezone
 
 from twisted.internet import protocol, reactor
 from twisted.python import log as twisted_log

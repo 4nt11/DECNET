@@ -1,5 +1,4 @@
 #!/usr/bin/env python3
-from __future__ import annotations
 """
 Shared RFC 5424 syslog helper for DECNET service templates.
 

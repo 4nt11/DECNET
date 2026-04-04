@@ -8,8 +8,6 @@ Responds to recon endpoints (/version, /api, /apis, /api/v1/namespaces,
 
 import json
 import os
-import socket
-from datetime import datetime, timezone
 
 from flask import Flask, request
 from decnet_logging import syslog_line, write_syslog_file, forward_syslog

@@ -17,7 +17,7 @@ The attacker IP may appear under several field names depending on service:
 from __future__ import annotations
 
 import re
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from datetime import datetime
 
 # RFC 5424 line structure
