@@ -30,10 +30,33 @@ jobs:
       - run: pip install -e .
       - run: pytest tests/ -v --tb=short
 
+  bandit:
+    name: SAST (bandit)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - run: pip install bandit
+      - run: bandit -r decnet/ -ll -x decnet/services/registry.py
+
+  pip-audit:
+    name: Dependency audit (pip-audit)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - run: pip install pip-audit
+      - run: pip install -e .
+      - run: pip-audit --skip-editable
+
   open-pr:
     name: Open PR to main
     runs-on: ubuntu-latest
-    needs: [lint, test]
+    needs: [lint, test, bandit, pip-audit]
     if: github.ref == 'refs/heads/dev'
     steps:
       - name: Open PR via Gitea API
@@ -53,6 +76,6 @@ jobs:
               "title": "Auto PR: dev → main",
               "head": "dev",
               "base": "main",
-              "body": "All CI checks passed. Review and merge when ready."
+              "body": "All CI and security checks passed. Review and merge when ready."
             }' \
             "https://git.resacachile.cl/api/v1/repos/anti/DECNET/pulls"
