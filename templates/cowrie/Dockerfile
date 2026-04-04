@@ -10,8 +10,11 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 RUN useradd -m -s /bin/bash cowrie
 
 WORKDIR /home/cowrie
-RUN python3 -m venv cowrie-env \
-    && cowrie-env/bin/pip install --no-cache-dir cowrie jinja2
+# pip install strips data/honeyfs — clone source so the fake filesystem is included
+RUN git clone --depth 1 https://github.com/cowrie/cowrie.git /tmp/cowrie-src \
+    && python3 -m venv cowrie-env \
+    && cowrie-env/bin/pip install --no-cache-dir /tmp/cowrie-src jinja2 \
+    && rm -rf /tmp/cowrie-src
 
 # Authbind to bind port 22 as non-root
 RUN touch /etc/authbind/byport/22 /etc/authbind/byport/2222 \
