@@ -1,3 +1,4 @@
+from __future__ import annotations
 """
 RFC 5424 syslog formatter for DECNET.
 

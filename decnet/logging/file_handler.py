@@ -1,3 +1,4 @@
+from __future__ import annotations
 """
 Rotating file handler for DECNET syslog output.
 
