@@ -13,7 +13,9 @@ Primary discriminator leveraged by nmap: net.ipv4.ip_default_ttl (TTL)
 
 Secondary tuning (TCP behaviour):
   net.ipv4.tcp_syn_retries  – SYN retransmits before giving up
-  net.core.rmem_default     – initial receive buffer → affects SYN-ACK window field
+
+Note: net.core.rmem_default is a global (non-namespaced) sysctl and cannot be
+set per-container without --privileged; it is intentionally excluded.
 """
 
 from __future__ import annotations
@@ -26,7 +28,6 @@ OS_SYSCTLS: dict[str, dict[str, str]] = {
     "windows": {
         "net.ipv4.ip_default_ttl": "128",
         "net.ipv4.tcp_syn_retries": "2",
-        "net.core.rmem_default": "8388608",   # 8 MB → large initial window like Windows
     },
     "bsd": {
         "net.ipv4.ip_default_ttl": "64",
