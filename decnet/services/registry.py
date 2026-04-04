@@ -26,6 +26,8 @@ def _load_plugins() -> None:
             continue
         importlib.import_module(f"decnet.services.{module_info.name}")
     for cls in BaseService.__subclasses__():
+        if not cls.__module__.startswith("decnet.services."):
+            continue
         instance = cls()
         _registry[instance.name] = instance
     _loaded = True
