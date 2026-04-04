@@ -16,12 +16,34 @@ from decnet.config import DecnetConfig
 from decnet.network import MACVLAN_NETWORK_NAME
 from decnet.services.registry import get_service
 
+_CONTAINER_LOG_DIR = "/var/log/decnet"
+
 _LOG_NETWORK = "decnet_logs"
+
+
+def _resolve_log_file(log_file: str) -> tuple[str, str]:
+    """
+    Return (host_dir, container_log_path) for a user-supplied log file path.
+
+    The host path is resolved to absolute so Docker can bind-mount it.
+    All containers share the same host directory, mounted at _CONTAINER_LOG_DIR.
+    """
+    host_path = Path(log_file).resolve()
+    host_dir = str(host_path.parent)
+    container_path = f"{_CONTAINER_LOG_DIR}/{host_path.name}"
+    return host_dir, container_path
 
 
 def generate_compose(config: DecnetConfig) -> dict:
     """Build and return the full docker-compose data structure."""
     services: dict = {}
+
+    log_host_dir: str | None = None
+    log_container_path: str | None = None
+    if config.log_file:
+        log_host_dir, log_container_path = _resolve_log_file(config.log_file)
+        # Ensure the host log directory exists so Docker doesn't create it as root-owned
+        Path(log_host_dir).mkdir(parents=True, exist_ok=True)
 
     for decky in config.deckies:
         base_key = decky.name  # e.g. "decky-01"
@@ -58,8 +80,12 @@ def generate_compose(config: DecnetConfig) -> dict:
 
             fragment.setdefault("environment", {})
             fragment["environment"]["HOSTNAME"] = decky.hostname
-            if config.log_file:
-                fragment["environment"]["DECNET_LOG_FILE"] = config.log_file
+            if log_host_dir and log_container_path:
+                fragment["environment"]["DECNET_LOG_FILE"] = log_container_path
+                fragment.setdefault("volumes", [])
+                mount = f"{log_host_dir}:{_CONTAINER_LOG_DIR}"
+                if mount not in fragment["volumes"]:
+                    fragment["volumes"].append(mount)
 
             # Share the base container's network — no own IP needed
             fragment["network_mode"] = f"service:{base_key}"
