@@ -1,0 +1,93 @@
+name: Release
+
+on:
+  push:
+    branches: [main]
+
+env:
+  REGISTRY: git.resacachile.cl
+  OWNER: anti
+
+jobs:
+  tag:
+    name: Auto-tag release
+    runs-on: ubuntu-latest
+    outputs:
+      version: ${{ steps.version.outputs.version }}
+      tag_created: ${{ steps.tag.outputs.created }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Extract version from pyproject.toml
+        id: version
+        run: |
+          VERSION=$(python3 -c "import tomllib; f=open('pyproject.toml','rb'); d=tomllib.load(f); print(d['project']['version'])")
+          echo "version=$VERSION" >> $GITHUB_OUTPUT
+
+      - name: Create tag if not exists
+        id: tag
+        run: |
+          VERSION=${{ steps.version.outputs.version }}
+          if git rev-parse "v$VERSION" >/dev/null 2>&1; then
+            echo "Tag v$VERSION already exists, skipping."
+            echo "created=false" >> $GITHUB_OUTPUT
+          else
+            git config user.name "gitea-actions"
+            git config user.email "actions@git.resacachile.cl"
+            git tag -a "v$VERSION" -m "Release v$VERSION"
+            git push origin "v$VERSION"
+            echo "created=true" >> $GITHUB_OUTPUT
+          fi
+
+  docker:
+    name: Build & push ${{ matrix.service }}
+    runs-on: ubuntu-latest
+    needs: tag
+    strategy:
+      fail-fast: false
+      matrix:
+        service:
+          - cowrie
+          - docker_api
+          - elasticsearch
+          - ftp
+          - http
+          - imap
+          - k8s
+          - ldap
+          - llmnr
+          - mongodb
+          - mqtt
+          - mssql
+          - mysql
+          - pop3
+          - postgres
+          - rdp
+          - redis
+          - real_ssh
+          - sip
+          - smb
+          - smtp
+          - snmp
+          - tftp
+          - vnc
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Log in to Gitea container registry
+        uses: docker/login-action@v3
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ secrets.REGISTRY_USER }}
+          password: ${{ secrets.REGISTRY_TOKEN }}
+
+      - name: Build and push
+        uses: docker/build-push-action@v5
+        with:
+          context: templates/${{ matrix.service }}
+          push: true
+          tags: |
+            ${{ env.REGISTRY }}/${{ env.OWNER }}/decnet-${{ matrix.service }}:latest
+            ${{ env.REGISTRY }}/${{ env.OWNER }}/decnet-${{ matrix.service }}:v${{ needs.tag.outputs.version }}
