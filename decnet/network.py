@@ -208,7 +208,7 @@ def ips_to_range(ips: list[str]) -> str:
     """
     addrs = [IPv4Address(ip) for ip in ips]
     network = IPv4Network(
-        (int(min(addrs)), 32 - (int(max(addrs)) - int(min(addrs))).bit_length()),
+        (int(min(addrs)), 32 - (int(max(addrs)) ^ int(min(addrs))).bit_length()),
         strict=False,
     )
     return str(network)
