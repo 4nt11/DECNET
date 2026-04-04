@@ -29,3 +29,30 @@ jobs:
           python-version: ${{ matrix.python-version }}
       - run: pip install -e .
       - run: pytest tests/ -v --tb=short
+
+  open-pr:
+    name: Open PR to main
+    runs-on: ubuntu-latest
+    needs: [lint, test]
+    if: github.ref == 'refs/heads/dev'
+    steps:
+      - name: Open PR via Gitea API
+        run: |
+          EXISTING=$(curl -s \
+            -H "Authorization: token ${{ secrets.DECNET_PR_TOKEN }}" \
+            "https://git.resacachile.cl/api/v1/repos/anti/DECNET/pulls?state=open&head=dev&base=main" \
+            | python3 -c "import sys, json; print(len(json.load(sys.stdin)))")
+          if [ "$EXISTING" -gt "0" ]; then
+            echo "PR already open, skipping."
+            exit 0
+          fi
+          curl -s -X POST \
+            -H "Authorization: token ${{ secrets.DECNET_PR_TOKEN }}" \
+            -H "Content-Type: application/json" \
+            -d '{
+              "title": "Auto PR: dev → main",
+              "head": "dev",
+              "base": "main",
+              "body": "All CI checks passed. Review and merge when ready."
+            }' \
+            "https://git.resacachile.cl/api/v1/repos/anti/DECNET/pulls"
