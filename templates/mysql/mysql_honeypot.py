@@ -28,7 +28,7 @@ _GREETING = (
     b"\x02\x00"                          # status flags
     b"\xff\x81"                          # capability flags high
     b"\x15"                              # auth plugin data length
-    b"\x00" * 10                         # reserved
+    b"\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00"  # reserved (10 bytes)
     b"\x21\x4f\x7d\x25\x3e\x55\x4d\x7c\x67\x75\x5e\x31\x00"  # auth part 2
     b"mysql_native_password\x00"        # auth plugin name
 )
