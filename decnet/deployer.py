@@ -169,7 +169,7 @@ def status() -> None:
     for decky in config.deckies:
         statuses = []
         for svc in decky.services:
-            cname = f"{decky.name}-{svc}"
+            cname = f"{decky.name}-{svc.replace('_', '-')}"
             st = running.get(cname, "absent")
             color = "green" if st == "running" else "red"
             statuses.append(f"[{color}]{svc}({st})[/{color}]")
