@@ -1,0 +1,29 @@
+name: Security
+
+on:
+  push:
+    branches: [dev, testing]
+
+jobs:
+  bandit:
+    name: SAST (bandit)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - run: pip install bandit
+      - run: bandit -r decnet/ -ll -x decnet/services/registry.py
+
+  pip-audit:
+    name: Dependency audit (pip-audit)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - run: pip install pip-audit
+      - run: pip install -e .
+      - run: pip-audit
