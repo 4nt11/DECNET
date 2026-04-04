@@ -1,0 +1,96 @@
+#!/usr/bin/env python3
+"""
+TFTP honeypot (UDP 69).
+Parses RRQ (read) and WRQ (write) requests, logs filename and transfer mode,
+then responds with an error packet. Logs all requests as JSON.
+"""
+
+import asyncio
+import json
+import os
+import socket
+import struct
+from datetime import datetime, timezone
+
+HONEYPOT_NAME = os.environ.get("HONEYPOT_NAME", "tftpserver")
+LOG_TARGET = os.environ.get("LOG_TARGET", "")
+
+# TFTP opcodes
+_RRQ = 1
+_WRQ = 2
+_ERROR = 5
+
+# TFTP Error packet: opcode(2) + error_code(2) + error_msg + NUL
+def _error_pkt(code: int, msg: str) -> bytes:
+    return struct.pack(">HH", _ERROR, code) + msg.encode() + b"\x00"
+
+
+def _forward(event: dict) -> None:
+    if not LOG_TARGET:
+        return
+    try:
+        host, port = LOG_TARGET.rsplit(":", 1)
+        with socket.create_connection((host, int(port)), timeout=3) as s:
+            s.sendall((json.dumps(event) + "\n").encode())
+    except Exception:
+        pass
+
+
+def _log(event_type: str, **kwargs) -> None:
+    event = {
+        "ts": datetime.now(timezone.utc).isoformat(),
+        "service": "tftp",
+        "host": HONEYPOT_NAME,
+        "event": event_type,
+        **kwargs,
+    }
+    print(json.dumps(event), flush=True)
+    _forward(event)
+
+
+class TFTPProtocol(asyncio.DatagramProtocol):
+    def __init__(self):
+        self._transport = None
+
+    def connection_made(self, transport):
+        self._transport = transport
+
+    def datagram_received(self, data: bytes, addr):
+        if len(data) < 4:
+            return
+        opcode = struct.unpack(">H", data[:2])[0]
+        if opcode in (_RRQ, _WRQ):
+            # Filename and mode are NUL-terminated strings after the opcode
+            parts = data[2:].split(b"\x00")
+            filename = parts[0].decode(errors="replace") if parts else ""
+            mode = parts[1].decode(errors="replace") if len(parts) > 1 else ""
+            _log(
+                "request",
+                src=addr[0],
+                src_port=addr[1],
+                op="RRQ" if opcode == _RRQ else "WRQ",
+                filename=filename,
+                mode=mode,
+            )
+            self._transport.sendto(_error_pkt(2, "Access violation"), addr)
+        else:
+            _log("unknown_opcode", src=addr[0], opcode=opcode, data=data[:32].hex())
+
+    def error_received(self, exc):
+        pass
+
+
+async def main():
+    _log("startup", msg=f"TFTP honeypot starting as {HONEYPOT_NAME}")
+    loop = asyncio.get_running_loop()
+    transport, _ = await loop.create_datagram_endpoint(
+        TFTPProtocol, local_addr=("0.0.0.0", 69)
+    )
+    try:
+        await asyncio.sleep(float("inf"))
+    finally:
+        transport.close()
+
+
+if __name__ == "__main__":
+    asyncio.run(main())

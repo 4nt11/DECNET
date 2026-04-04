@@ -1,0 +1,148 @@
+#!/usr/bin/env python3
+"""
+MSSQL (TDS) honeypot.
+Reads TDS pre-login and login7 packets, extracts username, responds with
+a login failed error. Logs auth attempts as JSON.
+"""
+
+import asyncio
+import json
+import os
+import socket
+import struct
+from datetime import datetime, timezone
+
+HONEYPOT_NAME = os.environ.get("HONEYPOT_NAME", "dbserver")
+LOG_TARGET = os.environ.get("LOG_TARGET", "")
+
+# Minimal TDS pre-login response
+_PRELOGIN_RESP = bytes([
+    0x04, 0x01, 0x00, 0x2b, 0x00, 0x00, 0x01, 0x00,  # TDS header type=4, status=1, len=43
+    # VERSION option
+    0x00, 0x00, 0x1a, 0x00, 0x06,
+    # ENCRYPTION option (not supported = 0x02)
+    0x01, 0x00, 0x20, 0x00, 0x01,
+    # INSTOPT
+    0x02, 0x00, 0x21, 0x00, 0x01,
+    # THREADID
+    0x03, 0x00, 0x22, 0x00, 0x04,
+    # TERMINATOR
+    0xff,
+    # version data: 16.00.1000
+    0x10, 0x00, 0x03, 0xe8, 0x00, 0x00,
+    # encryption: NOT_SUP
+    0x02,
+    # instance name NUL
+    0x00,
+    # thread id
+    0x00, 0x00, 0x00, 0x01,
+])
+
+
+def _forward(event: dict) -> None:
+    if not LOG_TARGET:
+        return
+    try:
+        host, port = LOG_TARGET.rsplit(":", 1)
+        with socket.create_connection((host, int(port)), timeout=3) as s:
+            s.sendall((json.dumps(event) + "\n").encode())
+    except Exception:
+        pass
+
+
+def _log(event_type: str, **kwargs) -> None:
+    event = {
+        "ts": datetime.now(timezone.utc).isoformat(),
+        "service": "mssql",
+        "host": HONEYPOT_NAME,
+        "event": event_type,
+        **kwargs,
+    }
+    print(json.dumps(event), flush=True)
+    _forward(event)
+
+
+def _tds_error_packet(message: str) -> bytes:
+    msg_enc = message.encode("utf-16-le")
+    # Token type 0xAA = ERROR, followed by length, error number, state, class, msg_len, msg
+    token = (
+        b"\xaa"
+        + struct.pack("<H", 4 + 1 + 1 + 2 + len(msg_enc) + 1 + 1 + 1 + 1 + 4)
+        + struct.pack("<I", 18456)   # SQL error number: login failed
+        + b"\x01"                    # state
+        + b"\x0e"                    # class
+        + struct.pack("<H", len(message))
+        + msg_enc
+        + b"\x00"                    # server name length
+        + b"\x00"                    # proc name length
+        + struct.pack("<I", 1)       # line number
+    )
+    done = b"\xfd\x02\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00"
+    payload = token + done
+    header = struct.pack(">BBHBBBB", 0x04, 0x01, len(payload) + 8, 0x00, 0x00, 0x01, 0x00)
+    return header + payload
+
+
+class MSSQLProtocol(asyncio.Protocol):
+    def __init__(self):
+        self._transport = None
+        self._peer = None
+        self._buf = b""
+        self._prelogin_done = False
+
+    def connection_made(self, transport):
+        self._transport = transport
+        self._peer = transport.get_extra_info("peername", ("?", 0))
+        _log("connect", src=self._peer[0], src_port=self._peer[1])
+
+    def data_received(self, data):
+        self._buf += data
+        while len(self._buf) >= 8:
+            pkt_type = self._buf[0]
+            pkt_len = struct.unpack(">H", self._buf[2:4])[0]
+            if len(self._buf) < pkt_len:
+                break
+            payload = self._buf[8:pkt_len]
+            self._buf = self._buf[pkt_len:]
+            self._handle_packet(pkt_type, payload)
+
+    def _handle_packet(self, pkt_type: int, payload: bytes):
+        if pkt_type == 0x12:  # Pre-login
+            self._transport.write(_PRELOGIN_RESP)
+            self._prelogin_done = True
+        elif pkt_type == 0x10:  # Login7
+            username = self._parse_login7_username(payload)
+            _log("auth", src=self._peer[0], username=username)
+            self._transport.write(_tds_error_packet("Login failed for user."))
+            self._transport.close()
+        else:
+            _log("unknown_packet", src=self._peer[0], pkt_type=hex(pkt_type))
+            self._transport.close()
+
+    def _parse_login7_username(self, payload: bytes) -> str:
+        try:
+            # Login7 layout: fixed header 36 bytes, then offsets
+            # Username offset at bytes 36-37, length at 38-39
+            if len(payload) < 40:
+                return "<short_packet>"
+            offset = struct.unpack("<H", payload[36:38])[0]
+            length = struct.unpack("<H", payload[38:40])[0]
+            username = payload[offset:offset + length * 2].decode("utf-16-le", errors="replace")
+            return username
+        except Exception:
+            return "<parse_error>"
+
+    def connection_lost(self, exc):
+        _log("disconnect", src=self._peer[0] if self._peer else "?")
+
+
+async def main():
+    _log("startup", msg=f"MSSQL honeypot starting as {HONEYPOT_NAME}")
+    loop = asyncio.get_running_loop()
+    server = await loop.create_server(MSSQLProtocol, "0.0.0.0", 1433)
+    async with server:
+        await server.serve_forever()
+
+
+if __name__ == "__main__":
+    asyncio.run(main())

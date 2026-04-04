@@ -1,0 +1,13 @@
+FROM debian:bookworm-slim
+
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    python3 \
+    && rm -rf /var/lib/apt/lists/*
+
+COPY sip_honeypot.py /opt/sip_honeypot.py
+COPY entrypoint.sh /entrypoint.sh
+RUN chmod +x /entrypoint.sh
+
+EXPOSE 5060/udp
+EXPOSE 5060/tcp
+ENTRYPOINT ["/entrypoint.sh"]
