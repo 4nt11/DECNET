@@ -14,6 +14,7 @@ import yaml
 
 from decnet.config import DecnetConfig
 from decnet.network import MACVLAN_NETWORK_NAME
+from decnet.os_fingerprint import get_os_sysctls
 from decnet.services.registry import get_service
 
 _CONTAINER_LOG_DIR = "/var/log/decnet"
@@ -63,6 +64,13 @@ def generate_compose(config: DecnetConfig) -> dict:
         }
         if config.log_target:
             base["networks"][_LOG_NETWORK] = {}
+
+        # Inject TCP/IP stack sysctls to spoof the claimed OS fingerprint.
+        # Only the base container needs this — service containers inherit the
+        # same network namespace via network_mode: "service:<base>".
+        base["sysctls"] = get_os_sysctls(decky.nmap_os)
+        base["cap_add"] = ["NET_ADMIN"]
+
         services[base_key] = base
 
         # --- Service containers: share base network namespace ---

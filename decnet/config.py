@@ -28,6 +28,7 @@ class DeckyConfig(BaseModel):
     hostname: str
     archetype: str | None = None  # archetype slug if spawned from an archetype profile
     service_config: dict[str, dict] = {}  # optional per-service persona config
+    nmap_os: str = "linux"        # OS family for TCP/IP stack spoofing (see os_fingerprint.py)
 
     @field_validator("services")
     @classmethod

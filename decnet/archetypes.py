@@ -28,6 +28,7 @@ class Archetype:
     description: str
     services: list[str]           # default service set for this machine type
     preferred_distros: list[str]  # distro slugs to rotate through
+    nmap_os: str = "linux"        # OS family slug for TCP/IP stack spoofing (see os_fingerprint.py)
 
 
 ARCHETYPES: dict[str, Archetype] = {
@@ -37,6 +38,7 @@ ARCHETYPES: dict[str, Archetype] = {
         description="Corporate Windows desktop: SMB shares + RDP access",
         services=["smb", "rdp"],
         preferred_distros=["debian", "ubuntu22"],
+        nmap_os="windows",
     ),
     "windows-server": Archetype(
         slug="windows-server",
@@ -44,6 +46,7 @@ ARCHETYPES: dict[str, Archetype] = {
         description="Windows domain member: SMB, RDP, and LDAP directory",
         services=["smb", "rdp", "ldap"],
         preferred_distros=["debian", "ubuntu22"],
+        nmap_os="windows",
     ),
     "domain-controller": Archetype(
         slug="domain-controller",
@@ -51,6 +54,7 @@ ARCHETYPES: dict[str, Archetype] = {
         description="Active Directory DC: LDAP, SMB, RDP, LLMNR",
         services=["ldap", "smb", "rdp", "llmnr"],
         preferred_distros=["debian", "ubuntu22"],
+        nmap_os="windows",
     ),
     "linux-server": Archetype(
         slug="linux-server",
@@ -58,6 +62,7 @@ ARCHETYPES: dict[str, Archetype] = {
         description="General-purpose Linux host: SSH + HTTP",
         services=["ssh", "http"],
         preferred_distros=["debian", "ubuntu22", "rocky9", "fedora"],
+        nmap_os="linux",
     ),
     "web-server": Archetype(
         slug="web-server",
@@ -65,6 +70,7 @@ ARCHETYPES: dict[str, Archetype] = {
         description="Public-facing web host: HTTP + FTP",
         services=["http", "ftp"],
         preferred_distros=["debian", "ubuntu22", "ubuntu20"],
+        nmap_os="linux",
     ),
     "database-server": Archetype(
         slug="database-server",
@@ -72,6 +78,7 @@ ARCHETYPES: dict[str, Archetype] = {
         description="Data tier host: MySQL, PostgreSQL, Redis",
         services=["mysql", "postgres", "redis"],
         preferred_distros=["debian", "ubuntu22"],
+        nmap_os="linux",
     ),
     "mail-server": Archetype(
         slug="mail-server",
@@ -79,6 +86,7 @@ ARCHETYPES: dict[str, Archetype] = {
         description="SMTP/IMAP/POP3 mail relay",
         services=["smtp", "pop3", "imap"],
         preferred_distros=["debian", "ubuntu22"],
+        nmap_os="linux",
     ),
     "file-server": Archetype(
         slug="file-server",
@@ -86,6 +94,7 @@ ARCHETYPES: dict[str, Archetype] = {
         description="SMB/FTP/SFTP file storage node",
         services=["smb", "ftp", "ssh"],
         preferred_distros=["debian", "ubuntu22", "rocky9"],
+        nmap_os="linux",
     ),
     "printer": Archetype(
         slug="printer",
@@ -93,6 +102,7 @@ ARCHETYPES: dict[str, Archetype] = {
         description="Network-attached printer: SNMP + FTP",
         services=["snmp", "ftp"],
         preferred_distros=["alpine", "debian"],
+        nmap_os="embedded",
     ),
     "iot-device": Archetype(
         slug="iot-device",
@@ -100,6 +110,7 @@ ARCHETYPES: dict[str, Archetype] = {
         description="Embedded/IoT device: MQTT, SNMP, Telnet",
         services=["mqtt", "snmp", "telnet"],
         preferred_distros=["alpine"],
+        nmap_os="embedded",
     ),
     "industrial-control": Archetype(
         slug="industrial-control",
@@ -107,6 +118,7 @@ ARCHETYPES: dict[str, Archetype] = {
         description="ICS/SCADA node: Conpot (Modbus/S7/DNP3) + SNMP",
         services=["conpot", "snmp"],
         preferred_distros=["debian"],
+        nmap_os="embedded",
     ),
     "voip-server": Archetype(
         slug="voip-server",
@@ -114,6 +126,7 @@ ARCHETYPES: dict[str, Archetype] = {
         description="SIP PBX / VoIP gateway",
         services=["sip"],
         preferred_distros=["debian", "ubuntu22"],
+        nmap_os="linux",
     ),
     "monitoring-node": Archetype(
         slug="monitoring-node",
@@ -121,6 +134,7 @@ ARCHETYPES: dict[str, Archetype] = {
         description="Infrastructure monitoring host: SNMP + SSH",
         services=["snmp", "ssh"],
         preferred_distros=["debian", "rocky9"],
+        nmap_os="linux",
     ),
     "devops-host": Archetype(
         slug="devops-host",
@@ -128,6 +142,7 @@ ARCHETYPES: dict[str, Archetype] = {
         description="CI/CD or container host: Docker API + SSH + K8s",
         services=["docker_api", "ssh", "k8s"],
         preferred_distros=["ubuntu22", "debian"],
+        nmap_os="linux",
     ),
 }
 

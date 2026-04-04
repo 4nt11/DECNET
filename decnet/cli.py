@@ -104,6 +104,7 @@ def _build_deckies(
                 build_base=distro.build_base,
                 hostname=hostname,
                 archetype=archetype.slug if archetype else None,
+                nmap_os=archetype.nmap_os if archetype else "linux",
             )
         )
     return deckies
@@ -188,6 +189,7 @@ def _build_deckies_from_ini(
             hostname=hostname,
             archetype=arch.slug if arch else None,
             service_config=spec.service_config,
+            nmap_os=arch.nmap_os if arch else "linux",
         ))
     return deckies
 
