@@ -61,15 +61,19 @@ jobs:
     steps:
       - name: Open PR via Gitea API
         run: |
-          EXISTING=$(curl -s \
+          echo "--- Checking for existing open PRs ---"
+          LIST_RESPONSE=$(curl -s \
             -H "Authorization: token ${{ secrets.DECNET_PR_TOKEN }}" \
-            "https://git.resacachile.cl/api/v1/repos/anti/DECNET/pulls?state=open&head=dev&base=main" \
-            | python3 -c "import sys, json; print(len(json.load(sys.stdin)))")
+            "https://git.resacachile.cl/api/v1/repos/anti/DECNET/pulls?state=open&head=anti:dev&base=main&limit=5")
+          echo "$LIST_RESPONSE"
+          EXISTING=$(echo "$LIST_RESPONSE" | python3 -c "import sys, json; print(len(json.load(sys.stdin)))")
+          echo "Open PRs found: $EXISTING"
           if [ "$EXISTING" -gt "0" ]; then
             echo "PR already open, skipping."
             exit 0
           fi
-          curl -s -X POST \
+          echo "--- Creating PR ---"
+          CREATE_RESPONSE=$(curl -s -X POST \
             -H "Authorization: token ${{ secrets.DECNET_PR_TOKEN }}" \
             -H "Content-Type: application/json" \
             -d '{
@@ -78,4 +82,5 @@ jobs:
               "base": "main",
               "body": "All CI and security checks passed. Review and merge when ready."
             }' \
-            "https://git.resacachile.cl/api/v1/repos/anti/DECNET/pulls"
+            "https://git.resacachile.cl/api/v1/repos/anti/DECNET/pulls")
+          echo "$CREATE_RESPONSE"
