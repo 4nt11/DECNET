@@ -20,13 +20,13 @@ APT_COMPATIBLE = {
 }
 
 BUILD_SERVICES = [
-    "http", "rdp", "smb", "ftp", "pop3", "imap",
-    "mysql", "mssql", "redis", "mongodb", "postgres",
+    "http", "rdp", "smb", "ftp", "smtp", "elasticsearch",
+    "pop3", "imap", "mysql", "mssql", "redis", "mongodb", "postgres",
     "ldap", "vnc", "docker_api", "k8s", "sip",
     "mqtt", "llmnr", "snmp", "tftp",
 ]
 
-UPSTREAM_SERVICES = ["ssh", "telnet", "smtp", "elasticsearch", "conpot"]
+UPSTREAM_SERVICES = ["ssh", "telnet", "conpot"]
 
 
 def _make_config(services, distro="debian", base_image=None, build_base=None):

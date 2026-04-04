@@ -1,25 +1,28 @@
+from pathlib import Path
+
 from decnet.services.base import BaseService
+
+TEMPLATES_DIR = Path(__file__).parent.parent.parent / "templates" / "smtp"
 
 
 class SMTPService(BaseService):
     name = "smtp"
     ports = [25, 587]
-    default_image = "dtagdevsec/mailoney"
+    default_image = "build"
 
     def compose_fragment(self, decky_name: str, log_target: str | None = None) -> dict:
-        env: dict = {
-            "MAILONEY_HOSTNAME": decky_name,
-            "MAILONEY_PORTS": "25,587",
-        }
-        if log_target:
-            env["MAILONEY_LOG_TARGET"] = log_target
-        return {
-            "image": "dtagdevsec/mailoney",
+        fragment: dict = {
+            "build": {"context": str(TEMPLATES_DIR)},
             "container_name": f"{decky_name}-smtp",
             "restart": "unless-stopped",
             "cap_add": ["NET_BIND_SERVICE"],
-            "environment": env,
+            "environment": {
+                "HONEYPOT_NAME": decky_name,
+            },
         }
+        if log_target:
+            fragment["environment"]["LOG_TARGET"] = log_target
+        return fragment
 
-    def dockerfile_context(self):
-        return None
+    def dockerfile_context(self) -> Path:
+        return TEMPLATES_DIR

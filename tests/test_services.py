@@ -31,11 +31,9 @@ def _is_build_service(name: str) -> bool:
 # ---------------------------------------------------------------------------
 
 UPSTREAM_SERVICES = {
-    "ssh":           ("cowrie/cowrie",       [22, 2222]),
-    "telnet":        ("cowrie/cowrie",       [23]),
-    "smtp":          ("dtagdevsec/mailoney", [25, 587]),
-    "elasticsearch": ("dtagdevsec/elasticpot", [9200]),
-    "conpot":        ("honeynet/conpot",     [502, 161, 80]),
+    "ssh":    ("cowrie/cowrie",  [22, 2222]),
+    "telnet": ("cowrie/cowrie",  [23]),
+    "conpot": ("honeynet/conpot", [502, 161, 80]),
 }
 
 # ---------------------------------------------------------------------------
@@ -43,26 +41,28 @@ UPSTREAM_SERVICES = {
 # ---------------------------------------------------------------------------
 
 BUILD_SERVICES = {
-    "http":       ([80, 443],    "http"),
-    "rdp":        ([3389],       "rdp"),
-    "smb":        ([445, 139],   "smb"),
-    "ftp":        ([21],         "ftp"),
-    "pop3":       ([110, 995],   "pop3"),
-    "imap":       ([143, 993],   "imap"),
-    "mysql":      ([3306],       "mysql"),
-    "mssql":      ([1433],       "mssql"),
-    "redis":      ([6379],       "redis"),
-    "mongodb":    ([27017],      "mongodb"),
-    "postgres":   ([5432],       "postgres"),
-    "ldap":       ([389, 636],   "ldap"),
-    "vnc":        ([5900],       "vnc"),
-    "docker_api": ([2375, 2376], "docker_api"),
-    "k8s":        ([6443, 8080], "k8s"),
-    "sip":        ([5060],       "sip"),
-    "mqtt":       ([1883],       "mqtt"),
-    "llmnr":      ([5355, 5353], "llmnr"),
-    "snmp":       ([161],        "snmp"),
-    "tftp":       ([69],         "tftp"),
+    "http":          ([80, 443],    "http"),
+    "rdp":           ([3389],       "rdp"),
+    "smb":           ([445, 139],   "smb"),
+    "ftp":           ([21],         "ftp"),
+    "smtp":          ([25, 587],    "smtp"),
+    "elasticsearch": ([9200],       "elasticsearch"),
+    "pop3":          ([110, 995],   "pop3"),
+    "imap":          ([143, 993],   "imap"),
+    "mysql":         ([3306],       "mysql"),
+    "mssql":         ([1433],       "mssql"),
+    "redis":         ([6379],       "redis"),
+    "mongodb":       ([27017],      "mongodb"),
+    "postgres":      ([5432],       "postgres"),
+    "ldap":          ([389, 636],   "ldap"),
+    "vnc":           ([5900],       "vnc"),
+    "docker_api":    ([2375, 2376], "docker_api"),
+    "k8s":           ([6443, 8080], "k8s"),
+    "sip":           ([5060],       "sip"),
+    "mqtt":          ([1883],       "mqtt"),
+    "llmnr":         ([5355, 5353], "llmnr"),
+    "snmp":          ([161],        "snmp"),
+    "tftp":          ([69],         "tftp"),
 }
 
 ALL_SERVICE_NAMES = list(UPSTREAM_SERVICES) + list(BUILD_SERVICES)

@@ -3,6 +3,7 @@ Deploy, teardown, and status via Docker SDK + subprocess docker compose.
 """
 
 import subprocess
+import time
 from pathlib import Path
 
 import docker
@@ -31,6 +32,52 @@ COMPOSE_FILE = Path("decnet-compose.yml")
 def _compose(*args: str, compose_file: Path = COMPOSE_FILE) -> None:
     cmd = ["docker", "compose", "-f", str(compose_file), *args]
     subprocess.run(cmd, check=True)
+
+
+_PERMANENT_ERRORS = (
+    "manifest unknown",
+    "manifest for",
+    "not found",
+    "pull access denied",
+    "repository does not exist",
+)
+
+
+def _compose_with_retry(
+    *args: str,
+    compose_file: Path = COMPOSE_FILE,
+    retries: int = 3,
+    delay: float = 5.0,
+) -> None:
+    """Run a docker compose command, retrying on transient failures."""
+    last_exc: subprocess.CalledProcessError | None = None
+    cmd = ["docker", "compose", "-f", str(compose_file), *args]
+    for attempt in range(1, retries + 1):
+        result = subprocess.run(cmd, capture_output=True, text=True)
+        if result.returncode == 0:
+            if result.stdout:
+                print(result.stdout, end="")
+            return
+        last_exc = subprocess.CalledProcessError(
+            result.returncode, cmd, result.stdout, result.stderr
+        )
+        stderr_lower = (result.stderr or "").lower()
+        if any(pat in stderr_lower for pat in _PERMANENT_ERRORS):
+            console.print(f"[red]Permanent Docker error — not retrying:[/]\n{result.stderr.strip()}")
+            raise last_exc
+        if attempt < retries:
+            console.print(
+                f"[yellow]docker compose {' '.join(args)} failed "
+                f"(attempt {attempt}/{retries}), retrying in {delay:.0f}s…[/]"
+            )
+            if result.stderr:
+                console.print(f"[dim]{result.stderr.strip()}[/]")
+            time.sleep(delay)
+            delay *= 2
+        else:
+            if result.stderr:
+                console.print(f"[red]{result.stderr.strip()}[/]")
+    raise last_exc
 
 
 def deploy(config: DecnetConfig, dry_run: bool = False, no_cache: bool = False) -> None:
@@ -66,8 +113,8 @@ def deploy(config: DecnetConfig, dry_run: bool = False, no_cache: bool = False) 
     # --- Bring up ---
     console.print("[bold cyan]Building images and starting deckies...[/]")
     if no_cache:
-        _compose("build", "--no-cache", compose_file=compose_path)
-    _compose("up", "--build", "-d", compose_file=compose_path)
+        _compose_with_retry("build", "--no-cache", compose_file=compose_path)
+    _compose_with_retry("up", "--build", "-d", compose_file=compose_path)
 
     # --- Status summary ---
     _print_status(config)
