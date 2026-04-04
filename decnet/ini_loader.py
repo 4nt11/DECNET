@@ -11,6 +11,8 @@ Format:
     [hostname-1]
     ip=192.168.1.82               # optional
     services=ssh,smb              # optional; falls back to --randomize-services
+    archetype=linux-server        # optional; sets services+distros automatically
+    amount=3                      # optional; spawn N deckies from this config (default: 1)
 
     [hostname-1.ssh]              # optional per-service persona config
     kernel_version=5.15.0-76-generic
@@ -25,6 +27,11 @@ Format:
 
     [hostname-3]
     ip=192.168.1.32
+
+    # Archetype shorthand — spin up 5 windows workstations:
+    [corp-workstations]
+    archetype=windows-workstation
+    amount=5
 
     # Custom (bring-your-own) service definitions:
     [custom-myservice]
@@ -44,6 +51,7 @@ class DeckySpec:
     name: str
     ip: str | None = None
     services: list[str] | None = None
+    archetype: str | None = None
     service_config: dict[str, dict] = field(default_factory=dict)
 
 
@@ -104,18 +112,54 @@ def load_ini(path: str | Path) -> IniConfig:
         ip = s.get("ip")
         svc_raw = s.get("services")
         services = [sv.strip() for sv in svc_raw.split(",")] if svc_raw else None
-        cfg.deckies.append(DeckySpec(name=section, ip=ip, services=services))
+        archetype = s.get("archetype")
+        amount_raw = s.get("amount", "1")
+        try:
+            amount = int(amount_raw)
+            if amount < 1:
+                raise ValueError
+        except ValueError:
+            raise ValueError(f"[{section}] amount= must be a positive integer, got '{amount_raw}'")
+
+        if amount == 1:
+            cfg.deckies.append(DeckySpec(
+                name=section, ip=ip, services=services, archetype=archetype,
+            ))
+        else:
+            # Expand into N deckies; explicit ip is ignored (can't share one IP)
+            if ip:
+                raise ValueError(
+                    f"[{section}] Cannot combine ip= with amount={amount}. "
+                    "Remove ip= or use amount=1."
+                )
+            for idx in range(1, amount + 1):
+                cfg.deckies.append(DeckySpec(
+                    name=f"{section}-{idx:02d}",
+                    ip=None,
+                    services=services,
+                    archetype=archetype,
+                ))
 
     # Second pass: collect per-service subsections [decky-name.service]
-    decky_names = {d.name for d in cfg.deckies}
+    # Also propagates to expanded deckies: [group.ssh] applies to group-01, group-02, ...
     decky_map = {d.name: d for d in cfg.deckies}
     for section in cp.sections():
         if "." not in section:
             continue
         decky_name, _, svc_name = section.partition(".")
-        if decky_name not in decky_names:
-            continue  # orphaned subsection — ignore
         svc_cfg = {k: v for k, v in cp[section].items()}
-        decky_map[decky_name].service_config[svc_name] = svc_cfg
+        if decky_name in decky_map:
+            # Direct match — single decky
+            decky_map[decky_name].service_config[svc_name] = svc_cfg
+        else:
+            # Try to find expanded deckies with prefix "{decky_name}-NN"
+            matched = [
+                d for d in cfg.deckies
+                if d.name.startswith(f"{decky_name}-")
+            ]
+            if not matched:
+                continue  # orphaned subsection — ignore
+            for d in matched:
+                d.service_config[svc_name] = svc_cfg
 
     return cfg

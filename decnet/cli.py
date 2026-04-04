@@ -15,6 +15,7 @@ import typer
 from rich.console import Console
 from rich.table import Table
 
+from decnet.archetypes import Archetype, all_archetypes, get_archetype
 from decnet.config import (
     DeckyConfig,
     DecnetConfig,
@@ -41,13 +42,16 @@ def _resolve_distros(
     distros_explicit: list[str] | None,
     randomize_distros: bool,
     n: int,
+    archetype: Archetype | None = None,
 ) -> list[str]:
-    """Return a list of n distro slugs based on CLI flags."""
+    """Return a list of n distro slugs based on CLI flags or archetype preference."""
     if distros_explicit:
-        # Round-robin the provided list to fill n slots
         return [distros_explicit[i % len(distros_explicit)] for i in range(n)]
     if randomize_distros:
         return [random_distro().slug for _ in range(n)]
+    if archetype:
+        pool = archetype.preferred_distros
+        return [pool[i % len(pool)] for i in range(n)]
     # Default: cycle through all distros to maximize heterogeneity
     slugs = list(all_distros().keys())
     return [slugs[i % len(slugs)] for i in range(n)]
@@ -60,10 +64,11 @@ def _build_deckies(
     randomize_services: bool,
     distros_explicit: list[str] | None = None,
     randomize_distros: bool = False,
+    archetype: Archetype | None = None,
 ) -> list[DeckyConfig]:
     deckies = []
     used_combos: set[frozenset] = set()
-    distro_slugs = _resolve_distros(distros_explicit, randomize_distros, n)
+    distro_slugs = _resolve_distros(distros_explicit, randomize_distros, n, archetype)
 
     for i, ip in enumerate(ips):
         name = f"decky-{i + 1:02d}"
@@ -72,8 +77,9 @@ def _build_deckies(
 
         if services_explicit:
             svc_list = services_explicit
+        elif archetype:
+            svc_list = list(archetype.services)
         elif randomize_services:
-            # Pick 1-3 random services from the full registry, avoid exact duplicates
             svc_pool = _all_service_names()
             attempts = 0
             while True:
@@ -85,7 +91,7 @@ def _build_deckies(
             svc_list = list(chosen)
             used_combos.add(chosen)
         else:
-            typer.echo("Error: provide --services or --randomize-services.", err=True)
+            typer.echo("Error: provide --services, --archetype, or --randomize-services.", err=True)
             raise typer.Exit(1)
 
         deckies.append(
@@ -97,6 +103,7 @@ def _build_deckies(
                 base_image=distro.image,
                 build_base=distro.build_base,
                 hostname=hostname,
+                archetype=archetype.slug if archetype else None,
             )
         )
     return deckies
@@ -116,7 +123,6 @@ def _build_deckies_from_ini(
         IPv4Address(s.ip) for s in ini.deckies if s.ip
     }
 
-    # Build an IP iterator that skips reserved + explicit addresses
     net = IPv4Network(subnet_cidr, strict=False)
     reserved = {
         net.network_address,
@@ -127,10 +133,20 @@ def _build_deckies_from_ini(
 
     auto_pool = (str(addr) for addr in net.hosts() if addr not in reserved)
 
-    distro_slugs = _resolve_distros(None, randomize, len(ini.deckies))
     deckies: list[DeckyConfig] = []
-    for i, spec in enumerate(ini.deckies):
-        distro = get_distro(distro_slugs[i])
+    for spec in ini.deckies:
+        # Resolve archetype (if any) — explicit services/distro override it
+        arch: Archetype | None = None
+        if spec.archetype:
+            try:
+                arch = get_archetype(spec.archetype)
+            except ValueError as e:
+                console.print(f"[red]{e}[/]")
+                raise typer.Exit(1)
+
+        # Distro: archetype preferred list → random → global cycle
+        distro_pool = arch.preferred_distros if arch else list(all_distros().keys())
+        distro = get_distro(distro_pool[len(deckies) % len(distro_pool)])
         hostname = random_hostname(distro.slug)
 
         ip = spec.ip or next(auto_pool, None)
@@ -149,6 +165,8 @@ def _build_deckies_from_ini(
                 )
                 raise typer.Exit(1)
             svc_list = spec.services
+        elif arch:
+            svc_list = list(arch.services)
         elif randomize:
             svc_pool = _all_service_names()
             count = random.randint(1, min(3, len(svc_pool)))
@@ -156,7 +174,7 @@ def _build_deckies_from_ini(
         else:
             console.print(
                 f"[red]Decky '[{spec.name}]' has no services= in config. "
-                "Add services= or use --randomize-services.[/]"
+                "Add services=, archetype=, or use --randomize-services.[/]"
             )
             raise typer.Exit(1)
 
@@ -168,6 +186,7 @@ def _build_deckies_from_ini(
             base_image=distro.image,
             build_base=distro.build_base,
             hostname=hostname,
+            archetype=arch.slug if arch else None,
             service_config=spec.service_config,
         ))
     return deckies
@@ -186,6 +205,7 @@ def deploy(
     randomize_distros: bool = typer.Option(False, "--randomize-distros", help="Assign a random distro to each decky"),
     log_target: Optional[str] = typer.Option(None, "--log-target", help="Forward logs to ip:port (e.g. 192.168.1.5:5140)"),
     log_file: Optional[str] = typer.Option(None, "--log-file", help="Write RFC 5424 syslog to this path inside containers (e.g. /var/log/decnet/decnet.log)"),
+    archetype_name: Optional[str] = typer.Option(None, "--archetype", "-a", help="Machine archetype slug (e.g. linux-server, windows-workstation)"),
     dry_run: bool = typer.Option(False, "--dry-run", help="Generate compose file without starting containers"),
     no_cache: bool = typer.Option(False, "--no-cache", help="Force rebuild all images, ignoring Docker layer cache"),
     ipvlan: bool = typer.Option(False, "--ipvlan", help="Use IPvlan L2 instead of MACVLAN (required on WiFi interfaces)"),
@@ -255,8 +275,17 @@ def deploy(
                 console.print(f"[red]Unknown service(s): {unknown}. Available: {_all_service_names()}[/]")
                 raise typer.Exit(1)
 
-        if not services_list and not randomize_services:
-            console.print("[red]Specify --services or --randomize-services.[/]")
+        # Resolve archetype if provided
+        arch: Archetype | None = None
+        if archetype_name:
+            try:
+                arch = get_archetype(archetype_name)
+            except ValueError as e:
+                console.print(f"[red]{e}[/]")
+                raise typer.Exit(1)
+
+        if not services_list and not randomize_services and not arch:
+            console.print("[red]Specify --services, --archetype, or --randomize-services.[/]")
             raise typer.Exit(1)
 
         iface = interface or detect_interface()
@@ -283,6 +312,7 @@ def deploy(
         decky_configs = _build_deckies(
             deckies, ips, services_list, randomize_services,
             distros_explicit=distros_list, randomize_distros=randomize_distros,
+            archetype=arch,
         )
         effective_log_target = log_target
         effective_log_file = log_file
@@ -351,4 +381,22 @@ def list_distros() -> None:
     table.add_column("Docker Image", style="dim")
     for slug, profile in sorted(all_distros().items()):
         table.add_row(slug, profile.display_name, profile.image)
+    console.print(table)
+
+
+@app.command(name="archetypes")
+def list_archetypes() -> None:
+    """List all machine archetype profiles."""
+    table = Table(title="Machine Archetypes", show_lines=True)
+    table.add_column("Slug", style="bold cyan")
+    table.add_column("Display Name")
+    table.add_column("Default Services", style="green")
+    table.add_column("Description", style="dim")
+    for slug, arch in sorted(all_archetypes().items()):
+        table.add_row(
+            slug,
+            arch.display_name,
+            ", ".join(arch.services),
+            arch.description,
+        )
     console.print(table)
