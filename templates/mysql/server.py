@@ -12,8 +12,10 @@ import os
 import socket
 import struct
 from datetime import datetime, timezone
+from decnet_logging import syslog_line, write_syslog_file, forward_syslog
 
 NODE_NAME     = os.environ.get("NODE_NAME", "dbserver")
+SERVICE_NAME   = "mysql"
 LOG_TARGET    = os.environ.get("LOG_TARGET", "")
 _MYSQL_VER    = os.environ.get("MYSQL_VERSION", "5.7.38-log")
 
@@ -40,27 +42,13 @@ def _make_packet(payload: bytes, seq: int = 0) -> bytes:
     return struct.pack("<I", length)[:3] + bytes([seq]) + payload
 
 
-def _forward(event: dict) -> None:
-    if not LOG_TARGET:
-        return
-    try:
-        host, port = LOG_TARGET.rsplit(":", 1)
-        with socket.create_connection((host, int(port)), timeout=3) as s:
-            s.sendall((json.dumps(event) + "\n").encode())
-    except Exception:
-        pass
 
 
-def _log(event_type: str, **kwargs) -> None:
-    event = {
-        "ts": datetime.now(timezone.utc).isoformat(),
-        "service": "mysql",
-        "host": NODE_NAME,
-        "event": event_type,
-        **kwargs,
-    }
-    print(json.dumps(event), flush=True)
-    _forward(event)
+def _log(event_type: str, severity: int = 6, **kwargs) -> None:
+    line = syslog_line(SERVICE_NAME, NODE_NAME, event_type, severity, **kwargs)
+    print(line, flush=True)
+    write_syslog_file(line)
+    forward_syslog(line, LOG_TARGET)
 
 
 class MySQLProtocol(asyncio.Protocol):

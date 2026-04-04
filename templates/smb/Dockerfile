@@ -8,6 +8,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 ENV PIP_BREAK_SYSTEM_PACKAGES=1
 RUN pip3 install --no-cache-dir impacket jinja2
 
+COPY decnet_logging.py /opt/decnet_logging.py
 COPY server.py /opt/server.py
 COPY entrypoint.sh /entrypoint.sh
 RUN chmod +x /entrypoint.sh

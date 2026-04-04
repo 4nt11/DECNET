@@ -185,6 +185,7 @@ def deploy(
     distro: Optional[str] = typer.Option(None, "--distro", help="Comma-separated distro slugs, e.g. debian,ubuntu22,rocky9"),
     randomize_distros: bool = typer.Option(False, "--randomize-distros", help="Assign a random distro to each decky"),
     log_target: Optional[str] = typer.Option(None, "--log-target", help="Forward logs to ip:port (e.g. 192.168.1.5:5140)"),
+    log_file: Optional[str] = typer.Option(None, "--log-file", help="Write RFC 5424 syslog to this path inside containers (e.g. /var/log/decnet/decnet.log)"),
     dry_run: bool = typer.Option(False, "--dry-run", help="Generate compose file without starting containers"),
     no_cache: bool = typer.Option(False, "--no-cache", help="Force rebuild all images, ignoring Docker layer cache"),
     config_file: Optional[str] = typer.Option(None, "--config", "-c", help="Path to INI config file"),
@@ -233,6 +234,7 @@ def deploy(
                 )
 
         effective_log_target = log_target or ini.log_target
+        effective_log_file = log_file
         decky_configs = _build_deckies_from_ini(
             ini, subnet_cidr, effective_gateway, host_ip, randomize_services
         )
@@ -282,6 +284,7 @@ def deploy(
             distros_explicit=distros_list, randomize_distros=randomize_distros,
         )
         effective_log_target = log_target
+        effective_log_file = log_file
 
     config = DecnetConfig(
         mode=mode,
@@ -290,6 +293,7 @@ def deploy(
         gateway=effective_gateway,
         deckies=decky_configs,
         log_target=effective_log_target,
+        log_file=effective_log_file,
     )
 
     if effective_log_target and not dry_run:

@@ -5,7 +5,8 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     python3 \
     && rm -rf /var/lib/apt/lists/*
 
-COPY pop3_honeypot.py /opt/pop3_honeypot.py
+COPY decnet_logging.py /opt/decnet_logging.py
+COPY server.py /opt/server.py
 COPY entrypoint.sh /entrypoint.sh
 RUN chmod +x /entrypoint.sh
 

@@ -58,6 +58,8 @@ def generate_compose(config: DecnetConfig) -> dict:
 
             fragment.setdefault("environment", {})
             fragment["environment"]["HOSTNAME"] = decky.hostname
+            if config.log_file:
+                fragment["environment"]["DECNET_LOG_FILE"] = config.log_file
 
             # Share the base container's network — no own IP needed
             fragment["network_mode"] = f"service:{base_key}"
