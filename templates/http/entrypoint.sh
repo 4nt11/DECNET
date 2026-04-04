@@ -1,3 +1,3 @@
 #!/bin/bash
 set -e
-exec python3 /opt/http_honeypot.py
+exec python3 /opt/server.py

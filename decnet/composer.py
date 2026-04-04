@@ -46,7 +46,10 @@ def generate_compose(config: DecnetConfig) -> dict:
         # --- Service containers: share base network namespace ---
         for svc_name in decky.services:
             svc = get_service(svc_name)
-            fragment = svc.compose_fragment(decky.name, log_target=config.log_target)
+            svc_cfg = decky.service_config.get(svc_name, {})
+            fragment = svc.compose_fragment(
+                decky.name, log_target=config.log_target, service_cfg=svc_cfg
+            )
 
             # Inject the per-decky base image into build services so containers
             # vary by distro and don't all fingerprint as debian:bookworm-slim.

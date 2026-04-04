@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-MQTT honeypot (port 1883).
+MQTT server (port 1883).
 Parses MQTT CONNECT packets, extracts client_id, username, and password,
 then returns CONNACK with return code 5 (not authorized). Logs all
 interactions as JSON.
@@ -13,7 +13,7 @@ import socket
 import struct
 from datetime import datetime, timezone
 
-HONEYPOT_NAME = os.environ.get("HONEYPOT_NAME", "mqtt-broker")
+NODE_NAME = os.environ.get("NODE_NAME", "mqtt-broker")
 LOG_TARGET = os.environ.get("LOG_TARGET", "")
 
 # CONNACK: packet type 0x20, remaining length 2, session_present=0, return_code=5
@@ -35,7 +35,7 @@ def _log(event_type: str, **kwargs) -> None:
     event = {
         "ts": datetime.now(timezone.utc).isoformat(),
         "service": "mqtt",
-        "host": HONEYPOT_NAME,
+        "host": NODE_NAME,
         "event": event_type,
         **kwargs,
     }
@@ -137,7 +137,7 @@ class MQTTProtocol(asyncio.Protocol):
 
 
 async def main():
-    _log("startup", msg=f"MQTT honeypot starting as {HONEYPOT_NAME}")
+    _log("startup", msg=f"MQTT server starting as {NODE_NAME}")
     loop = asyncio.get_running_loop()
     server = await loop.create_server(MQTTProtocol, "0.0.0.0", 1883)
     async with server:

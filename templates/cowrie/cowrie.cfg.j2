@@ -1,10 +1,14 @@
 [honeypot]
 hostname = {{ COWRIE_HOSTNAME | default('svr01') }}
 listen_endpoints = tcp:2222:interface=0.0.0.0
+kernel_version = {{ COWRIE_HONEYPOT_KERNEL_VERSION | default('5.15.0-76-generic') }}
+kernel_build_string = {{ COWRIE_HONEYPOT_KERNEL_BUILD_STRING | default('#83-Ubuntu SMP Thu Jun 15 19:16:32 UTC 2023') }}
+hardware_platform = {{ COWRIE_HONEYPOT_HARDWARE_PLATFORM | default('x86_64') }}
 
 [ssh]
 enabled = true
 listen_endpoints = tcp:2222:interface=0.0.0.0
+version = {{ COWRIE_SSH_VERSION | default('SSH-2.0-OpenSSH_8.2p1 Ubuntu-4ubuntu0.5') }}
 
 {% if COWRIE_LOG_HOST is defined and COWRIE_LOG_HOST %}
 [output_jsonlog]

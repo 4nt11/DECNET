@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-SNMP honeypot (UDP 161).
+SNMP server (UDP 161).
 Parses SNMPv1/v2c GetRequest PDUs, logs the community string and OID list,
 then responds with a GetResponse containing plausible system OID values.
 Logs all requests as JSON.
@@ -13,16 +13,16 @@ import socket
 import struct
 from datetime import datetime, timezone
 
-HONEYPOT_NAME = os.environ.get("HONEYPOT_NAME", "switch")
+NODE_NAME = os.environ.get("NODE_NAME", "switch")
 LOG_TARGET = os.environ.get("LOG_TARGET", "")
 
 # OID value map — fake but plausible
 _OID_VALUES = {
-    "1.3.6.1.2.1.1.1.0": f"Linux {HONEYPOT_NAME} 5.15.0-76-generic #83-Ubuntu SMP x86_64",
+    "1.3.6.1.2.1.1.1.0": f"Linux {NODE_NAME} 5.15.0-76-generic #83-Ubuntu SMP x86_64",
     "1.3.6.1.2.1.1.2.0": "1.3.6.1.4.1.8072.3.2.10",
     "1.3.6.1.2.1.1.3.0": "12345678",  # sysUpTime
     "1.3.6.1.2.1.1.4.0": "admin@localhost",
-    "1.3.6.1.2.1.1.5.0": HONEYPOT_NAME,
+    "1.3.6.1.2.1.1.5.0": NODE_NAME,
     "1.3.6.1.2.1.1.6.0": "Server Room",
     "1.3.6.1.2.1.1.7.0": "72",
 }
@@ -43,7 +43,7 @@ def _log(event_type: str, **kwargs) -> None:
     event = {
         "ts": datetime.now(timezone.utc).isoformat(),
         "service": "snmp",
-        "host": HONEYPOT_NAME,
+        "host": NODE_NAME,
         "event": event_type,
         **kwargs,
     }
@@ -180,7 +180,7 @@ class SNMPProtocol(asyncio.DatagramProtocol):
 
 
 async def main():
-    _log("startup", msg=f"SNMP honeypot starting as {HONEYPOT_NAME}")
+    _log("startup", msg=f"SNMP server starting as {NODE_NAME}")
     loop = asyncio.get_running_loop()
     transport, _ = await loop.create_datagram_endpoint(
         SNMPProtocol, local_addr=("0.0.0.0", 161)

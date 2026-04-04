@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-Elasticsearch honeypot — presents a convincing ES 7.x HTTP API on port 9200.
+Elasticsearch server — presents a convincing ES 7.x HTTP API on port 9200.
 Logs all requests (especially recon probes like /_cat/, /_cluster/, /_nodes/)
 as JSON. Designed to attract automated scanners and credential stuffers.
 """
@@ -11,14 +11,14 @@ import socket
 from datetime import datetime, timezone
 from http.server import BaseHTTPRequestHandler, HTTPServer
 
-HONEYPOT_NAME = os.environ.get("HONEYPOT_NAME", "esserver")
+NODE_NAME = os.environ.get("NODE_NAME", "esserver")
 LOG_TARGET = os.environ.get("LOG_TARGET", "")
 
 _CLUSTER_UUID = "xC3Pr9abTq2mNkOeLvXwYA"
 _NODE_UUID = "dJH7Lm2sRqWvPn0kFiEtBo"
 
 _ROOT_RESPONSE = {
-    "name": HONEYPOT_NAME,
+    "name": NODE_NAME,
     "cluster_name": "elasticsearch",
     "cluster_uuid": _CLUSTER_UUID,
     "version": {
@@ -51,7 +51,7 @@ def _log(event_type: str, **kwargs) -> None:
     event = {
         "ts": datetime.now(timezone.utc).isoformat(),
         "service": "elasticsearch",
-        "host": HONEYPOT_NAME,
+        "host": NODE_NAME,
         "event": event_type,
         **kwargs,
     }
@@ -110,7 +110,7 @@ class ESHandler(BaseHTTPRequestHandler):
         if "_search" in path or "_bulk" in path:
             self._send_json(200, {"took": 1, "timed_out": False, "hits": {"total": {"value": 0}, "hits": []}})
         else:
-            self._send_json(200, {"result": "created", "_id": "1", "_index": "honeypot"})
+            self._send_json(200, {"result": "created", "_id": "1", "_index": "server"})
 
     def do_PUT(self):
         src = self.client_address[0]
@@ -133,6 +133,6 @@ class ESHandler(BaseHTTPRequestHandler):
 
 
 if __name__ == "__main__":
-    _log("startup", msg=f"Elasticsearch honeypot starting as {HONEYPOT_NAME}")
+    _log("startup", msg=f"Elasticsearch server starting as {NODE_NAME}")
     server = HTTPServer(("0.0.0.0", 9200), ESHandler)
     server.serve_forever()

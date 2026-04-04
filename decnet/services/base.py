@@ -15,7 +15,12 @@ class BaseService(ABC):
     default_image: str  # Docker image tag, or "build" if a Dockerfile is needed
 
     @abstractmethod
-    def compose_fragment(self, decky_name: str, log_target: str | None = None) -> dict:
+    def compose_fragment(
+        self,
+        decky_name: str,
+        log_target: str | None = None,
+        service_cfg: dict | None = None,
+    ) -> dict:
         """
         Return the docker-compose service dict for this service on a given decky.
 
@@ -26,6 +31,7 @@ class BaseService(ABC):
         Args:
             decky_name: unique identifier for the decky (e.g. "decky-01")
             log_target: "ip:port" string if log forwarding is enabled, else None
+            service_cfg: optional per-service persona config from INI subsection
         """
 
     def dockerfile_context(self) -> Path | None:

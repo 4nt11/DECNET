@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-TFTP honeypot (UDP 69).
+TFTP server (UDP 69).
 Parses RRQ (read) and WRQ (write) requests, logs filename and transfer mode,
 then responds with an error packet. Logs all requests as JSON.
 """
@@ -12,7 +12,7 @@ import socket
 import struct
 from datetime import datetime, timezone
 
-HONEYPOT_NAME = os.environ.get("HONEYPOT_NAME", "tftpserver")
+NODE_NAME = os.environ.get("NODE_NAME", "tftpserver")
 LOG_TARGET = os.environ.get("LOG_TARGET", "")
 
 # TFTP opcodes
@@ -40,7 +40,7 @@ def _log(event_type: str, **kwargs) -> None:
     event = {
         "ts": datetime.now(timezone.utc).isoformat(),
         "service": "tftp",
-        "host": HONEYPOT_NAME,
+        "host": NODE_NAME,
         "event": event_type,
         **kwargs,
     }
@@ -81,7 +81,7 @@ class TFTPProtocol(asyncio.DatagramProtocol):
 
 
 async def main():
-    _log("startup", msg=f"TFTP honeypot starting as {HONEYPOT_NAME}")
+    _log("startup", msg=f"TFTP server starting as {NODE_NAME}")
     loop = asyncio.get_running_loop()
     transport, _ = await loop.create_datagram_endpoint(
         TFTPProtocol, local_addr=("0.0.0.0", 69)

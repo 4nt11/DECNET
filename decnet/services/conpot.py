@@ -12,7 +12,7 @@ class ConpotService(BaseService):
     ports = [502, 161, 80]
     default_image = "honeynet/conpot"
 
-    def compose_fragment(self, decky_name: str, log_target: str | None = None) -> dict:
+    def compose_fragment(self, decky_name: str, log_target: str | None = None, service_cfg: dict | None = None) -> dict:
         return {
             "image": "honeynet/conpot",
             "container_name": f"{decky_name}-conpot",

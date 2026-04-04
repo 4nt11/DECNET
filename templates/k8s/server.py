@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-Kubernetes API honeypot.
+Kubernetes APIserver.
 Serves a fake K8s REST API on port 6443 (HTTPS-ish, plain HTTP) and 8080.
 Responds to recon endpoints (/version, /api, /apis, /api/v1/namespaces,
 /api/v1/pods) with plausible but fake data. Logs all requests as JSON.
@@ -13,7 +13,7 @@ from datetime import datetime, timezone
 
 from flask import Flask, request
 
-HONEYPOT_NAME = os.environ.get("HONEYPOT_NAME", "k8s-master")
+NODE_NAME = os.environ.get("NODE_NAME", "k8s-master")
 LOG_TARGET = os.environ.get("LOG_TARGET", "")
 
 app = Flask(__name__)
@@ -33,7 +33,7 @@ _VERSION = {
 _API_VERSIONS = {
     "kind": "APIVersions",
     "versions": ["v1"],
-    "serverAddressByClientCIDRs": [{"clientCIDR": "0.0.0.0/0", "serverAddress": f"{HONEYPOT_NAME}:6443"}],
+    "serverAddressByClientCIDRs": [{"clientCIDR": "0.0.0.0/0", "serverAddress": f"{NODE_NAME}:6443"}],
 }
 
 _NAMESPACES = {
@@ -80,7 +80,7 @@ def _log(event_type: str, **kwargs) -> None:
     event = {
         "ts": datetime.now(timezone.utc).isoformat(),
         "service": "k8s",
-        "host": HONEYPOT_NAME,
+        "host": NODE_NAME,
         "event": event_type,
         **kwargs,
     }
@@ -138,5 +138,5 @@ def catch_all(path):
 
 
 if __name__ == "__main__":
-    _log("startup", msg=f"Kubernetes API honeypot starting as {HONEYPOT_NAME}")
+    _log("startup", msg=f"Kubernetes API server starting as {NODE_NAME}")
     app.run(host="0.0.0.0", port=6443, debug=False)

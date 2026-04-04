@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-Redis honeypot.
+Redisserver.
 Implements enough of the RESP protocol to respond to AUTH, INFO, CONFIG GET,
 KEYS, and arbitrary commands. Logs every command and argument as JSON.
 """
@@ -11,19 +11,22 @@ import os
 import socket
 from datetime import datetime, timezone
 
-HONEYPOT_NAME = os.environ.get("HONEYPOT_NAME", "cache-server")
-LOG_TARGET = os.environ.get("LOG_TARGET", "")
+NODE_NAME    = os.environ.get("NODE_NAME", "cache-server")
+LOG_TARGET   = os.environ.get("LOG_TARGET", "")
+_REDIS_VER   = os.environ.get("REDIS_VERSION", "7.0.12")
+_REDIS_OS    = os.environ.get("REDIS_OS", "Linux 5.15.0")
 
-_INFO = f"""# Server
-redis_version:7.0.12
-redis_mode:standalone
-os:Linux 5.15.0
-arch_bits:64
-tcp_port:6379
-uptime_in_seconds:864000
-connected_clients:1
-# Keyspace
-""".encode()
+_INFO = (
+    f"# Server\n"
+    f"redis_version:{_REDIS_VER}\n"
+    f"redis_mode:standalone\n"
+    f"os:{_REDIS_OS}\n"
+    f"arch_bits:64\n"
+    f"tcp_port:6379\n"
+    f"uptime_in_seconds:864000\n"
+    f"connected_clients:1\n"
+    f"# Keyspace\n"
+).encode()
 
 
 def _forward(event: dict) -> None:
@@ -41,7 +44,7 @@ def _log(event_type: str, **kwargs) -> None:
     event = {
         "ts": datetime.now(timezone.utc).isoformat(),
         "service": "redis",
-        "host": HONEYPOT_NAME,
+        "host": NODE_NAME,
         "event": event_type,
         **kwargs,
     }
@@ -158,7 +161,7 @@ class RedisProtocol(asyncio.Protocol):
 
 
 async def main():
-    _log("startup", msg=f"Redis honeypot starting as {HONEYPOT_NAME}")
+    _log("startup", msg=f"Redis server starting as {NODE_NAME}")
     loop = asyncio.get_running_loop()
     server = await loop.create_server(RedisProtocol, "0.0.0.0", 6379)
     async with server:

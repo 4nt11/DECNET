@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-SIP honeypot (UDP + TCP port 5060).
+SIP server (UDP + TCP port 5060).
 Parses SIP REGISTER and INVITE messages, logs credentials from the
 Authorization header and call metadata, then responds with 401 Unauthorized.
 """
@@ -12,7 +12,7 @@ import re
 import socket
 from datetime import datetime, timezone
 
-HONEYPOT_NAME = os.environ.get("HONEYPOT_NAME", "pbx")
+NODE_NAME = os.environ.get("NODE_NAME", "pbx")
 LOG_TARGET = os.environ.get("LOG_TARGET", "")
 
 _401 = (
@@ -42,7 +42,7 @@ def _log(event_type: str, **kwargs) -> None:
     event = {
         "ts": datetime.now(timezone.utc).isoformat(),
         "service": "sip",
-        "host": HONEYPOT_NAME,
+        "host": NODE_NAME,
         "event": event_type,
         **kwargs,
     }
@@ -92,7 +92,7 @@ def _handle_message(data: bytes, src_addr) -> bytes | None:
             to=headers.get("to", ""),
             call_id=headers.get("call-id", ""),
             cseq=headers.get("cseq", ""),
-            host=HONEYPOT_NAME,
+            host=NODE_NAME,
         )
         return response.encode()
     return None
@@ -134,7 +134,7 @@ class SIPTCPProtocol(asyncio.Protocol):
 
 
 async def main():
-    _log("startup", msg=f"SIP honeypot starting as {HONEYPOT_NAME}")
+    _log("startup", msg=f"SIP server starting as {NODE_NAME}")
     loop = asyncio.get_running_loop()
     udp_transport, _ = await loop.create_datagram_endpoint(
         SIPUDPProtocol, local_addr=("0.0.0.0", 5060)

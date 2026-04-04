@@ -20,13 +20,13 @@ APT_COMPATIBLE = {
 }
 
 BUILD_SERVICES = [
-    "http", "rdp", "smb", "ftp", "smtp", "elasticsearch",
+    "ssh", "http", "rdp", "smb", "ftp", "smtp", "elasticsearch",
     "pop3", "imap", "mysql", "mssql", "redis", "mongodb", "postgres",
     "ldap", "vnc", "docker_api", "k8s", "sip",
     "mqtt", "llmnr", "snmp", "tftp",
 ]
 
-UPSTREAM_SERVICES = ["ssh", "telnet", "conpot"]
+UPSTREAM_SERVICES = ["telnet", "conpot"]
 
 
 def _make_config(services, distro="debian", base_image=None, build_base=None):
@@ -93,6 +93,86 @@ def test_upstream_service_has_no_build_section(svc):
     fragment = compose["services"][f"decky-01-{svc}"]
     assert "build" not in fragment
     assert "image" in fragment
+
+
+# ---------------------------------------------------------------------------
+# service_config propagation tests
+# ---------------------------------------------------------------------------
+
+def test_service_config_http_server_header():
+    """service_config for http must inject SERVER_HEADER into compose env."""
+    from decnet.config import DeckyConfig, DecnetConfig
+    from decnet.distros import DISTROS
+    profile = DISTROS["debian"]
+    decky = DeckyConfig(
+        name="decky-01", ip="10.0.0.10",
+        services=["http"], distro="debian",
+        base_image=profile.image, build_base=profile.build_base,
+        hostname="test-host",
+        service_config={"http": {"server_header": "nginx/1.18.0"}},
+    )
+    config = DecnetConfig(
+        mode="unihost", interface="eth0",
+        subnet="10.0.0.0/24", gateway="10.0.0.1",
+        deckies=[decky],
+    )
+    compose = generate_compose(config)
+    env = compose["services"]["decky-01-http"]["environment"]
+    assert env.get("SERVER_HEADER") == "nginx/1.18.0"
+
+
+def test_service_config_ssh_kernel_version():
+    """service_config for ssh must inject COWRIE_HONEYPOT_KERNEL_VERSION."""
+    from decnet.config import DeckyConfig, DecnetConfig
+    from decnet.distros import DISTROS
+    profile = DISTROS["debian"]
+    decky = DeckyConfig(
+        name="decky-01", ip="10.0.0.10",
+        services=["ssh"], distro="debian",
+        base_image=profile.image, build_base=profile.build_base,
+        hostname="test-host",
+        service_config={"ssh": {"kernel_version": "5.15.0-76-generic"}},
+    )
+    config = DecnetConfig(
+        mode="unihost", interface="eth0",
+        subnet="10.0.0.0/24", gateway="10.0.0.1",
+        deckies=[decky],
+    )
+    compose = generate_compose(config)
+    env = compose["services"]["decky-01-ssh"]["environment"]
+    assert env.get("COWRIE_HONEYPOT_KERNEL_VERSION") == "5.15.0-76-generic"
+
+
+def test_service_config_for_one_service_does_not_affect_another():
+    """service_config for http must not bleed into ftp fragment."""
+    from decnet.config import DeckyConfig, DecnetConfig
+    from decnet.distros import DISTROS
+    profile = DISTROS["debian"]
+    decky = DeckyConfig(
+        name="decky-01", ip="10.0.0.10",
+        services=["http", "ftp"], distro="debian",
+        base_image=profile.image, build_base=profile.build_base,
+        hostname="test-host",
+        service_config={"http": {"server_header": "nginx/1.18.0"}},
+    )
+    config = DecnetConfig(
+        mode="unihost", interface="eth0",
+        subnet="10.0.0.0/24", gateway="10.0.0.1",
+        deckies=[decky],
+    )
+    compose = generate_compose(config)
+    ftp_env = compose["services"]["decky-01-ftp"]["environment"]
+    assert "SERVER_HEADER" not in ftp_env
+
+
+def test_no_service_config_produces_no_extra_env():
+    """A decky with no service_config must not have new persona env vars."""
+    config = _make_config(["http", "mysql"])
+    compose = generate_compose(config)
+    for svc in ("http", "mysql"):
+        env = compose["services"][f"decky-01-{svc}"]["environment"]
+        assert "SERVER_HEADER" not in env
+        assert "MYSQL_VERSION" not in env
 
 
 # ---------------------------------------------------------------------------

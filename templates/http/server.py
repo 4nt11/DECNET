@@ -1,0 +1,118 @@
+#!/usr/bin/env python3
+"""
+HTTP service emulator using Flask.
+Accepts all requests, logs every detail (method, path, headers, body),
+and responds with configurable pages. Forwards events as JSON to LOG_TARGET if set.
+"""
+
+import json
+import os
+import socket
+from datetime import datetime, timezone
+from pathlib import Path
+
+from flask import Flask, request, send_from_directory
+
+NODE_NAME     = os.environ.get("NODE_NAME", "webserver")
+LOG_TARGET    = os.environ.get("LOG_TARGET", "")
+SERVER_HEADER = os.environ.get("SERVER_HEADER", "Apache/2.4.54 (Debian)")
+RESPONSE_CODE = int(os.environ.get("RESPONSE_CODE", "403"))
+FAKE_APP      = os.environ.get("FAKE_APP", "")
+EXTRA_HEADERS = json.loads(os.environ.get("EXTRA_HEADERS", "{}"))
+CUSTOM_BODY   = os.environ.get("CUSTOM_BODY", "")
+FILES_DIR     = os.environ.get("FILES_DIR", "")
+
+_FAKE_APP_BODIES: dict[str, str] = {
+    "apache_default": (
+        "<!DOCTYPE HTML PUBLIC \"-//IETF//DTD HTML 2.0//EN\">\n"
+        "<html><head><title>Apache2 Debian Default Page</title></head>\n"
+        "<body><h1>Apache2 Debian Default Page</h1>\n"
+        "<p>It works!</p></body></html>"
+    ),
+    "nginx_default": (
+        "<!DOCTYPE html><html><head><title>Welcome to nginx!</title></head>\n"
+        "<body><h1>Welcome to nginx!</h1>\n"
+        "<p>If you see this page, the nginx web server is successfully installed.</p>\n"
+        "</body></html>"
+    ),
+    "wordpress": (
+        "<!DOCTYPE html><html><head><title>WordPress &rsaquo; Error</title></head>\n"
+        "<body id=\"error-page\"><div class=\"wp-die-message\">\n"
+        "<h1>Error establishing a database connection</h1></div></body></html>"
+    ),
+    "phpmyadmin": (
+        "<!DOCTYPE html><html><head><title>phpMyAdmin</title></head>\n"
+        "<body><form method=\"post\" action=\"index.php\">\n"
+        "<input type=\"text\" name=\"pma_username\" />\n"
+        "<input type=\"password\" name=\"pma_password\" />\n"
+        "<input type=\"submit\" value=\"Go\" /></form></body></html>"
+    ),
+    "iis_default": (
+        "<!DOCTYPE html><html><head><title>IIS Windows Server</title></head>\n"
+        "<body><h1>IIS Windows Server</h1>\n"
+        "<p>Welcome to Internet Information Services</p></body></html>"
+    ),
+}
+
+app = Flask(__name__)
+
+
+def _forward(event: dict) -> None:
+    if not LOG_TARGET:
+        return
+    try:
+        host, port = LOG_TARGET.rsplit(":", 1)
+        with socket.create_connection((host, int(port)), timeout=3) as s:
+            s.sendall((json.dumps(event) + "\n").encode())
+    except Exception:
+        pass
+
+
+def _log(event_type: str, **kwargs) -> None:
+    event = {
+        "ts": datetime.now(timezone.utc).isoformat(),
+        "service": "http",
+        "host": NODE_NAME,
+        "event": event_type,
+        **kwargs,
+    }
+    print(json.dumps(event), flush=True)
+    _forward(event)
+
+
+@app.before_request
+def log_request():
+    _log(
+        "request",
+        method=request.method,
+        path=request.path,
+        remote_addr=request.remote_addr,
+        headers=dict(request.headers),
+        body=request.get_data(as_text=True)[:512],
+    )
+
+
+@app.route("/", defaults={"path": ""})
+@app.route("/<path:path>", methods=["GET", "POST", "PUT", "DELETE", "PATCH", "OPTIONS", "HEAD"])
+def catch_all(path):
+    # Serve static files directory if configured
+    if FILES_DIR and path:
+        files_path = Path(FILES_DIR) / path
+        if files_path.is_file():
+            return send_from_directory(FILES_DIR, path)
+
+    # Select response body: custom > fake_app preset > default 403
+    if CUSTOM_BODY:
+        body = CUSTOM_BODY
+    elif FAKE_APP and FAKE_APP in _FAKE_APP_BODIES:
+        body = _FAKE_APP_BODIES[FAKE_APP]
+    else:
+        body = "<html><body><h1>403 Forbidden</h1></body></html>"
+
+    headers = {"Server": SERVER_HEADER, "Content-Type": "text/html", **EXTRA_HEADERS}
+    return body, RESPONSE_CODE, headers
+
+
+if __name__ == "__main__":
+    _log("startup", msg=f"HTTP server starting as {NODE_NAME}")
+    app.run(host="0.0.0.0", port=80, debug=False)

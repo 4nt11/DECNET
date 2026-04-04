@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-Minimal SMB honeypot using Impacket's SimpleSMBServer.
+Minimal SMB server using Impacket's SimpleSMBServer.
 Logs all connection attempts, optionally forwarding them as JSON to LOG_TARGET.
 """
 
@@ -11,7 +11,7 @@ from datetime import datetime, timezone
 
 from impacket import smbserver
 
-HONEYPOT_NAME = os.environ.get("HONEYPOT_NAME", "WORKSTATION")
+NODE_NAME = os.environ.get("NODE_NAME", "WORKSTATION")
 LOG_TARGET = os.environ.get("LOG_TARGET", "")
 
 
@@ -30,7 +30,7 @@ def _log(event_type: str, **kwargs) -> None:
     event = {
         "ts": datetime.now(timezone.utc).isoformat(),
         "service": "smb",
-        "host": HONEYPOT_NAME,
+        "host": NODE_NAME,
         "event": event_type,
         **kwargs,
     }
@@ -39,7 +39,7 @@ def _log(event_type: str, **kwargs) -> None:
 
 
 if __name__ == "__main__":
-    _log("startup", msg=f"SMB honeypot starting as {HONEYPOT_NAME}")
+    _log("startup", msg=f"SMB server starting as {NODE_NAME}")
     os.makedirs("/tmp/smb_share", exist_ok=True)
 
     server = smbserver.SimpleSMBServer(listenAddress="0.0.0.0", listenPort=445)

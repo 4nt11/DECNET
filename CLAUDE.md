@@ -46,3 +46,11 @@ DECNET is a honeypot/deception network framework. It deploys fake machines (call
 - The logging/aggregation network must be isolated from the decoy network.
 - A publicly accessible real server acts as the bridge between the two networks.
 - Deckies should differ in exposed services and OS fingerprints to appear as a heterogeneous network.
+
+## Development and testing
+
+- For every new feature, pytests must me made.
+- Pytest is the main testing framework in use.
+- NEVER pass broken code to the user.
+    - Broken means: not running, not passing 100% tests, etc.
+- After tests pass with 100%, always git commit your changes.

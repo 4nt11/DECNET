@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-Minimal RDP honeypot using Twisted.
+Minimal RDP server using Twisted.
 Listens on port 3389, logs connection attempts and any credentials sent
 in the initial RDP negotiation request. Forwards events as JSON to
 LOG_TARGET if set.
@@ -15,7 +15,7 @@ from datetime import datetime, timezone
 from twisted.internet import protocol, reactor
 from twisted.python import log as twisted_log
 
-HONEYPOT_NAME = os.environ.get("HONEYPOT_NAME", "WORKSTATION")
+NODE_NAME = os.environ.get("NODE_NAME", "WORKSTATION")
 LOG_TARGET = os.environ.get("LOG_TARGET", "")
 
 
@@ -34,7 +34,7 @@ def _log(event_type: str, **kwargs) -> None:
     event = {
         "ts": datetime.now(timezone.utc).isoformat(),
         "service": "rdp",
-        "host": HONEYPOT_NAME,
+        "host": NODE_NAME,
         "event": event_type,
         **kwargs,
     }
@@ -42,7 +42,7 @@ def _log(event_type: str, **kwargs) -> None:
     _forward(event)
 
 
-class RDPHoneypotProtocol(protocol.Protocol):
+class RDPServerProtocol(protocol.Protocol):
     def connectionMade(self):
         peer = self.transport.getPeer()
         _log("connection", src_ip=peer.host, src_port=peer.port)
@@ -61,12 +61,12 @@ class RDPHoneypotProtocol(protocol.Protocol):
         _log("disconnect", src_ip=peer.host, src_port=peer.port)
 
 
-class RDPHoneypotFactory(protocol.ServerFactory):
-    protocol = RDPHoneypotProtocol
+class RDPServerFactory(protocol.ServerFactory):
+    protocol = RDPServerProtocol
 
 
 if __name__ == "__main__":
     twisted_log.startLogging(sys.stdout)
-    _log("startup", msg=f"RDP honeypot starting as {HONEYPOT_NAME} on port 3389")
-    reactor.listenTCP(3389, RDPHoneypotFactory())
+    _log("startup", msg=f"RDP server starting as {NODE_NAME} on port 3389")
+    reactor.listenTCP(3389, RDPServerFactory())
     reactor.run()

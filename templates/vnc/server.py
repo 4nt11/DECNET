@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-VNC (RFB) honeypot.
+VNC (RFB)server.
 Performs the RFB 3.8 handshake, offers VNC authentication, captures the
 24-byte DES-encrypted challenge response, then rejects with "Authentication
 failed". Logs the raw response for offline cracking.
@@ -12,7 +12,7 @@ import os
 import socket
 from datetime import datetime, timezone
 
-HONEYPOT_NAME = os.environ.get("HONEYPOT_NAME", "desktop")
+NODE_NAME = os.environ.get("NODE_NAME", "desktop")
 LOG_TARGET = os.environ.get("LOG_TARGET", "")
 
 # RFB challenge — fixed so captured responses are reproducible
@@ -34,7 +34,7 @@ def _log(event_type: str, **kwargs) -> None:
     event = {
         "ts": datetime.now(timezone.utc).isoformat(),
         "service": "vnc",
-        "host": HONEYPOT_NAME,
+        "host": NODE_NAME,
         "event": event_type,
         **kwargs,
     }
@@ -100,7 +100,7 @@ class VNCProtocol(asyncio.Protocol):
 
 
 async def main():
-    _log("startup", msg=f"VNC honeypot starting as {HONEYPOT_NAME}")
+    _log("startup", msg=f"VNC server starting as {NODE_NAME}")
     loop = asyncio.get_running_loop()
     server = await loop.create_server(VNCProtocol, "0.0.0.0", 5900)
     async with server:

@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-MSSQL (TDS) honeypot.
+MSSQL (TDS)server.
 Reads TDS pre-login and login7 packets, extracts username, responds with
 a login failed error. Logs auth attempts as JSON.
 """
@@ -12,7 +12,7 @@ import socket
 import struct
 from datetime import datetime, timezone
 
-HONEYPOT_NAME = os.environ.get("HONEYPOT_NAME", "dbserver")
+NODE_NAME = os.environ.get("NODE_NAME", "dbserver")
 LOG_TARGET = os.environ.get("LOG_TARGET", "")
 
 # Minimal TDS pre-login response
@@ -54,7 +54,7 @@ def _log(event_type: str, **kwargs) -> None:
     event = {
         "ts": datetime.now(timezone.utc).isoformat(),
         "service": "mssql",
-        "host": HONEYPOT_NAME,
+        "host": NODE_NAME,
         "event": event_type,
         **kwargs,
     }
@@ -137,7 +137,7 @@ class MSSQLProtocol(asyncio.Protocol):
 
 
 async def main():
-    _log("startup", msg=f"MSSQL honeypot starting as {HONEYPOT_NAME}")
+    _log("startup", msg=f"MSSQL server starting as {NODE_NAME}")
     loop = asyncio.get_running_loop()
     server = await loop.create_server(MSSQLProtocol, "0.0.0.0", 1433)
     async with server:

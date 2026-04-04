@@ -6,7 +6,7 @@ class TelnetService(BaseService):
     ports = [23]
     default_image = "cowrie/cowrie"
 
-    def compose_fragment(self, decky_name: str, log_target: str | None = None) -> dict:
+    def compose_fragment(self, decky_name: str, log_target: str | None = None, service_cfg: dict | None = None) -> dict:
         env: dict = {
             "COWRIE_HONEYPOT_HOSTNAME": decky_name,
             "COWRIE_TELNET_ENABLED": "true",

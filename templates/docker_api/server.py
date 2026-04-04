@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-Docker API honeypot.
+Docker APIserver.
 Serves a fake Docker REST API on port 2375. Responds to common recon
 endpoints (/version, /info, /containers/json, /images/json) with plausible
 but fake data. Logs all requests as JSON.
@@ -13,7 +13,7 @@ from datetime import datetime, timezone
 
 from flask import Flask, request
 
-HONEYPOT_NAME = os.environ.get("HONEYPOT_NAME", "docker-host")
+NODE_NAME = os.environ.get("NODE_NAME", "docker-host")
 LOG_TARGET = os.environ.get("LOG_TARGET", "")
 
 app = Flask(__name__)
@@ -38,7 +38,7 @@ _INFO = {
     "MemoryLimit": True,
     "SwapLimit": True,
     "KernelMemory": False,
-    "Name": HONEYPOT_NAME,
+    "Name": NODE_NAME,
     "DockerRootDir": "/var/lib/docker",
     "HttpProxy": "",
     "HttpsProxy": "",
@@ -73,7 +73,7 @@ def _log(event_type: str, **kwargs) -> None:
     event = {
         "ts": datetime.now(timezone.utc).isoformat(),
         "service": "docker_api",
-        "host": HONEYPOT_NAME,
+        "host": NODE_NAME,
         "event": event_type,
         **kwargs,
     }
@@ -127,5 +127,5 @@ def catch_all(path):
 
 
 if __name__ == "__main__":
-    _log("startup", msg=f"Docker API honeypot starting as {HONEYPOT_NAME}")
+    _log("startup", msg=f"Docker API server starting as {NODE_NAME}")
     app.run(host="0.0.0.0", port=2375, debug=False)

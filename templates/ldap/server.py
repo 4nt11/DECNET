@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-LDAP honeypot.
+LDAPserver.
 Parses BER-encoded BindRequest messages, logs DN and password, returns an
 invalidCredentials error. Logs all interactions as JSON.
 """
@@ -11,7 +11,7 @@ import os
 import socket
 from datetime import datetime, timezone
 
-HONEYPOT_NAME = os.environ.get("HONEYPOT_NAME", "ldapserver")
+NODE_NAME = os.environ.get("NODE_NAME", "ldapserver")
 LOG_TARGET = os.environ.get("LOG_TARGET", "")
 
 
@@ -30,7 +30,7 @@ def _log(event_type: str, **kwargs) -> None:
     event = {
         "ts": datetime.now(timezone.utc).isoformat(),
         "service": "ldap",
-        "host": HONEYPOT_NAME,
+        "host": NODE_NAME,
         "event": event_type,
         **kwargs,
     }
@@ -154,7 +154,7 @@ class LDAPProtocol(asyncio.Protocol):
 
 
 async def main():
-    _log("startup", msg=f"LDAP honeypot starting as {HONEYPOT_NAME}")
+    _log("startup", msg=f"LDAP server starting as {NODE_NAME}")
     loop = asyncio.get_running_loop()
     server = await loop.create_server(LDAPProtocol, "0.0.0.0", 389)
     async with server:

@@ -26,6 +26,7 @@ class DeckyConfig(BaseModel):
     base_image: str      # Docker image for the base/IP-holder container
     build_base: str = "debian:bookworm-slim"  # apt-compatible image for service Dockerfiles
     hostname: str
+    service_config: dict[str, dict] = {}  # optional per-service persona config
 
     @field_validator("services")
     @classmethod

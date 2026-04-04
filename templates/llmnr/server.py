@@ -13,7 +13,7 @@ import socket
 import struct
 from datetime import datetime, timezone
 
-HONEYPOT_NAME = os.environ.get("HONEYPOT_NAME", "lan-host")
+NODE_NAME = os.environ.get("NODE_NAME", "lan-host")
 LOG_TARGET = os.environ.get("LOG_TARGET", "")
 
 
@@ -32,7 +32,7 @@ def _log(event_type: str, **kwargs) -> None:
     event = {
         "ts": datetime.now(timezone.utc).isoformat(),
         "service": "llmnr",
-        "host": HONEYPOT_NAME,
+        "host": NODE_NAME,
         "event": event_type,
         **kwargs,
     }
@@ -104,7 +104,7 @@ class LLMNRProtocol(asyncio.DatagramProtocol):
 
 
 async def main():
-    _log("startup", msg=f"LLMNR/mDNS honeypot starting as {HONEYPOT_NAME}")
+    _log("startup", msg=f"LLMNR/mDNS server starting as {NODE_NAME}")
     loop = asyncio.get_running_loop()
 
     # LLMNR: UDP 5355

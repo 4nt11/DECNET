@@ -168,6 +168,7 @@ def _build_deckies_from_ini(
             base_image=distro.image,
             build_base=distro.build_base,
             hostname=hostname,
+            service_config=spec.service_config,
         ))
     return deckies
 
@@ -216,6 +217,20 @@ def deploy(
         console.print(f"[dim]Config:[/] {config_file}  [dim]Interface:[/] {iface}  "
                       f"[dim]Subnet:[/] {subnet_cidr}  [dim]Gateway:[/] {effective_gateway}  "
                       f"[dim]Host IP:[/] {host_ip}")
+
+        # Register bring-your-own services from INI before validation
+        if ini.custom_services:
+            from decnet.custom_service import CustomService
+            from decnet.services.registry import register_custom_service
+            for cs in ini.custom_services:
+                register_custom_service(
+                    CustomService(
+                        name=cs.name,
+                        image=cs.image,
+                        exec_cmd=cs.exec_cmd,
+                        ports=cs.ports,
+                    )
+                )
 
         effective_log_target = log_target or ini.log_target
         decky_configs = _build_deckies_from_ini(

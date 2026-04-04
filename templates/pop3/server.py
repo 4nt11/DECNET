@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-POP3 honeypot.
+POP3server.
 Presents a convincing POP3 banner, collects USER/PASS credentials, then
 stalls with a generic error. Logs every interaction as JSON and forwards
 to LOG_TARGET if set.
@@ -12,9 +12,9 @@ import os
 import socket
 from datetime import datetime, timezone
 
-HONEYPOT_NAME = os.environ.get("HONEYPOT_NAME", "mailserver")
+NODE_NAME = os.environ.get("NODE_NAME", "mailserver")
 LOG_TARGET = os.environ.get("LOG_TARGET", "")
-BANNER = f"+OK {HONEYPOT_NAME} POP3 server ready\r\n"
+BANNER = f"+OK {NODE_NAME} POP3 server ready\r\n"
 
 
 def _forward(event: dict) -> None:
@@ -32,7 +32,7 @@ def _log(event_type: str, **kwargs) -> None:
     event = {
         "ts": datetime.now(timezone.utc).isoformat(),
         "service": "pop3",
-        "host": HONEYPOT_NAME,
+        "host": NODE_NAME,
         "event": event_type,
         **kwargs,
     }
@@ -83,7 +83,7 @@ class POP3Protocol(asyncio.Protocol):
 
 
 async def main():
-    _log("startup", msg=f"POP3 honeypot starting as {HONEYPOT_NAME}")
+    _log("startup", msg=f"POP3 server starting as {NODE_NAME}")
     loop = asyncio.get_running_loop()
     server = await loop.create_server(POP3Protocol, "0.0.0.0", 110)
     async with server:

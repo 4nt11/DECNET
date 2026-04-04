@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-MySQL honeypot.
+MySQLserver.
 Sends a realistic MySQL 5.7 server handshake, reads the client login
 packet, extracts username, then closes with Access Denied. Logs auth
 attempts as JSON.
@@ -13,24 +13,25 @@ import socket
 import struct
 from datetime import datetime, timezone
 
-HONEYPOT_NAME = os.environ.get("HONEYPOT_NAME", "dbserver")
-LOG_TARGET = os.environ.get("LOG_TARGET", "")
+NODE_NAME     = os.environ.get("NODE_NAME", "dbserver")
+LOG_TARGET    = os.environ.get("LOG_TARGET", "")
+_MYSQL_VER    = os.environ.get("MYSQL_VERSION", "5.7.38-log")
 
-# Minimal MySQL 5.7 server greeting (protocol v10)
+# Minimal MySQL server greeting (protocol v10) — version string is configurable
 _GREETING = (
     b"\x0a"                              # protocol version 10
-    b"5.7.38-honeypot\x00"              # server version + NUL
-    b"\x01\x00\x00\x00"                 # connection id = 1
-    b"\x70\x76\x21\x6d\x61\x67\x69\x63"  # auth-plugin-data part 1
-    b"\x00"                              # filler
-    b"\xff\xf7"                          # capability flags low
-    b"\x21"                              # charset utf8
-    b"\x02\x00"                          # status flags
-    b"\xff\x81"                          # capability flags high
-    b"\x15"                              # auth plugin data length
-    b"\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00"  # reserved (10 bytes)
-    b"\x21\x4f\x7d\x25\x3e\x55\x4d\x7c\x67\x75\x5e\x31\x00"  # auth part 2
-    b"mysql_native_password\x00"        # auth plugin name
+    + _MYSQL_VER.encode() + b"\x00"     # server version + NUL
+    + b"\x01\x00\x00\x00"               # connection id = 1
+    + b"\x70\x76\x21\x6d\x61\x67\x69\x63"  # auth-plugin-data part 1
+    + b"\x00"                            # filler
+    + b"\xff\xf7"                        # capability flags low
+    + b"\x21"                            # charset utf8
+    + b"\x02\x00"                        # status flags
+    + b"\xff\x81"                        # capability flags high
+    + b"\x15"                            # auth plugin data length
+    + b"\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00"  # reserved (10 bytes)
+    + b"\x21\x4f\x7d\x25\x3e\x55\x4d\x7c\x67\x75\x5e\x31\x00"  # auth part 2
+    + b"mysql_native_password\x00"       # auth plugin name
 )
 
 
@@ -54,7 +55,7 @@ def _log(event_type: str, **kwargs) -> None:
     event = {
         "ts": datetime.now(timezone.utc).isoformat(),
         "service": "mysql",
-        "host": HONEYPOT_NAME,
+        "host": NODE_NAME,
         "event": event_type,
         **kwargs,
     }
@@ -110,7 +111,7 @@ class MySQLProtocol(asyncio.Protocol):
 
 
 async def main():
-    _log("startup", msg=f"MySQL honeypot starting as {HONEYPOT_NAME}")
+    _log("startup", msg=f"MySQL server starting as {NODE_NAME}")
     loop = asyncio.get_running_loop()
     server = await loop.create_server(MySQLProtocol, "0.0.0.0", 3306)
     async with server:

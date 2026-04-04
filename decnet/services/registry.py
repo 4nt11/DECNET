@@ -31,6 +31,12 @@ def _load_plugins() -> None:
     _loaded = True
 
 
+def register_custom_service(instance: BaseService) -> None:
+    """Register a dynamically created service (e.g. BYOS from INI)."""
+    _load_plugins()
+    _registry[instance.name] = instance
+
+
 def get_service(name: str) -> BaseService:
     _load_plugins()
     if name not in _registry:

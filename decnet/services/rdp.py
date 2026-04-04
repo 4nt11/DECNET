@@ -9,13 +9,13 @@ class RDPService(BaseService):
     ports = [3389]
     default_image = "build"
 
-    def compose_fragment(self, decky_name: str, log_target: str | None = None) -> dict:
+    def compose_fragment(self, decky_name: str, log_target: str | None = None, service_cfg: dict | None = None) -> dict:
         fragment: dict = {
             "build": {"context": str(TEMPLATES_DIR)},
             "container_name": f"{decky_name}-rdp",
             "restart": "unless-stopped",
             "environment": {
-                "HONEYPOT_NAME": decky_name,
+                "NODE_NAME": decky_name,
             },
         }
         if log_target:

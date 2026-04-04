@@ -8,7 +8,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 ENV PIP_BREAK_SYSTEM_PACKAGES=1
 RUN pip3 install --no-cache-dir impacket jinja2
 
-COPY smb_honeypot.py /opt/smb_honeypot.py
+COPY server.py /opt/server.py
 COPY entrypoint.sh /entrypoint.sh
 RUN chmod +x /entrypoint.sh
 

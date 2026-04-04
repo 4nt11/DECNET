@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-SMTP honeypot — emulates a realistic ESMTP server (Postfix-style).
+SMTP server — emulates a realistic ESMTP server (Postfix-style).
 Logs EHLO/AUTH/MAIL FROM/RCPT TO attempts as JSON, then denies auth.
 """
 
@@ -10,8 +10,10 @@ import os
 import socket
 from datetime import datetime, timezone
 
-HONEYPOT_NAME = os.environ.get("HONEYPOT_NAME", "mailserver")
-LOG_TARGET = os.environ.get("LOG_TARGET", "")
+NODE_NAME   = os.environ.get("NODE_NAME", "mailserver")
+LOG_TARGET  = os.environ.get("LOG_TARGET", "")
+_SMTP_BANNER = os.environ.get("SMTP_BANNER", f"220 {NODE_NAME} ESMTP Postfix (Debian/GNU)")
+_SMTP_MTA    = os.environ.get("SMTP_MTA", NODE_NAME)
 
 
 def _forward(event: dict) -> None:
@@ -29,7 +31,7 @@ def _log(event_type: str, **kwargs) -> None:
     event = {
         "ts": datetime.now(timezone.utc).isoformat(),
         "service": "smtp",
-        "host": HONEYPOT_NAME,
+        "host": NODE_NAME,
         "event": event_type,
         **kwargs,
     }
@@ -47,7 +49,7 @@ class SMTPProtocol(asyncio.Protocol):
         self._transport = transport
         self._peer = transport.get_extra_info("peername", ("?", 0))
         _log("connect", src=self._peer[0], src_port=self._peer[1])
-        transport.write(f"220 {HONEYPOT_NAME} ESMTP Postfix (Debian/GNU)\r\n".encode())
+        transport.write(f"{_SMTP_BANNER}\r\n".encode())
 
     def data_received(self, data):
         self._buf += data
@@ -62,7 +64,7 @@ class SMTPProtocol(asyncio.Protocol):
             domain = line.split(None, 1)[1] if " " in line else ""
             _log("ehlo", src=self._peer[0], domain=domain)
             self._transport.write(
-                f"250-{HONEYPOT_NAME}\r\n"
+                f"250-{_SMTP_MTA}\r\n"
                 f"250-PIPELINING\r\n"
                 f"250-SIZE 10240000\r\n"
                 f"250-VRFY\r\n"
@@ -106,7 +108,7 @@ class SMTPProtocol(asyncio.Protocol):
 
 
 async def main():
-    _log("startup", msg=f"SMTP honeypot starting as {HONEYPOT_NAME}")
+    _log("startup", msg=f"SMTP server starting as {NODE_NAME}")
     loop = asyncio.get_running_loop()
     server = await loop.create_server(SMTPProtocol, "0.0.0.0", 25)
     async with server:

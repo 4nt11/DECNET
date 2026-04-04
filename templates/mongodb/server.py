@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-MongoDB honeypot.
+MongoDBserver.
 Implements the MongoDB wire protocol OP_MSG/OP_QUERY handshake. Responds
 to isMaster/hello, listDatabases, and authenticate commands. Logs all
 received messages as JSON.
@@ -13,7 +13,7 @@ import socket
 import struct
 from datetime import datetime, timezone
 
-HONEYPOT_NAME = os.environ.get("HONEYPOT_NAME", "mongodb")
+NODE_NAME = os.environ.get("NODE_NAME", "mongodb")
 LOG_TARGET = os.environ.get("LOG_TARGET", "")
 
 # Minimal BSON helpers
@@ -64,7 +64,7 @@ def _log(event_type: str, **kwargs) -> None:
     event = {
         "ts": datetime.now(timezone.utc).isoformat(),
         "service": "mongodb",
-        "host": HONEYPOT_NAME,
+        "host": NODE_NAME,
         "event": event_type,
         **kwargs,
     }
@@ -115,7 +115,7 @@ class MongoDBProtocol(asyncio.Protocol):
 
 
 async def main():
-    _log("startup", msg=f"MongoDB honeypot starting as {HONEYPOT_NAME}")
+    _log("startup", msg=f"MongoDB server starting as {NODE_NAME}")
     loop = asyncio.get_running_loop()
     server = await loop.create_server(MongoDBProtocol, "0.0.0.0", 27017)
     async with server:

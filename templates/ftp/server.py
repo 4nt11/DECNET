@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-FTP honeypot using Twisted's FTP server infrastructure.
+FTP server using Twisted's FTP server infrastructure.
 Accepts any credentials, logs all commands and file requests,
 forwards events as JSON to LOG_TARGET if set.
 """
@@ -15,7 +15,7 @@ from twisted.internet import defer, protocol, reactor
 from twisted.protocols.ftp import FTP, FTPFactory
 from twisted.python import log as twisted_log
 
-HONEYPOT_NAME = os.environ.get("HONEYPOT_NAME", "ftpserver")
+NODE_NAME = os.environ.get("NODE_NAME", "ftpserver")
 LOG_TARGET = os.environ.get("LOG_TARGET", "")
 
 
@@ -34,7 +34,7 @@ def _log(event_type: str, **kwargs) -> None:
     event = {
         "ts": datetime.now(timezone.utc).isoformat(),
         "service": "ftp",
-        "host": HONEYPOT_NAME,
+        "host": NODE_NAME,
         "event": event_type,
         **kwargs,
     }
@@ -42,22 +42,22 @@ def _log(event_type: str, **kwargs) -> None:
     _forward(event)
 
 
-class HoneypotFTP(FTP):
+class ServerFTP(FTP):
     def connectionMade(self):
         peer = self.transport.getPeer()
         _log("connection", src_ip=peer.host, src_port=peer.port)
         super().connectionMade()
 
     def ftp_USER(self, username):
-        self._honeypot_user = username
+        self._server_user = username
         _log("user", username=username)
         return super().ftp_USER(username)
 
     def ftp_PASS(self, password):
-        _log("auth_attempt", username=getattr(self, "_honeypot_user", "?"), password=password)
-        # Accept everything — we're a honeypot
+        _log("auth_attempt", username=getattr(self, "_server_user", "?"), password=password)
+        # Accept everything — we're a server
         self.state = self.AUTHED
-        self._user = getattr(self, "_honeypot_user", "anonymous")
+        self._user = getattr(self, "_server_user", "anonymous")
         return defer.succeed((230, "Login successful."))
 
     def ftp_RETR(self, path):
@@ -71,12 +71,12 @@ class HoneypotFTP(FTP):
         super().connectionLost(reason)
 
 
-class HoneypotFTPFactory(FTPFactory):
-    protocol = HoneypotFTP
+class ServerFTPFactory(FTPFactory):
+    protocol = ServerFTP
 
 
 if __name__ == "__main__":
     twisted_log.startLogging(sys.stdout)
-    _log("startup", msg=f"FTP honeypot starting as {HONEYPOT_NAME} on port 21")
-    reactor.listenTCP(21, HoneypotFTPFactory())
+    _log("startup", msg=f"FTP server starting as {NODE_NAME} on port 21")
+    reactor.listenTCP(21, ServerFTPFactory())
     reactor.run()

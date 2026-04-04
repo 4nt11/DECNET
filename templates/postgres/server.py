@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-PostgreSQL honeypot.
+PostgreSQLserver.
 Reads the startup message, extracts username and database, responds with
 an AuthenticationMD5Password challenge, logs the hash sent back, then
 returns an error. Logs all interactions as JSON.
@@ -13,7 +13,7 @@ import socket
 import struct
 from datetime import datetime, timezone
 
-HONEYPOT_NAME = os.environ.get("HONEYPOT_NAME", "pgserver")
+NODE_NAME = os.environ.get("NODE_NAME", "pgserver")
 LOG_TARGET = os.environ.get("LOG_TARGET", "")
 SALT = b"\xde\xad\xbe\xef"
 
@@ -40,7 +40,7 @@ def _log(event_type: str, **kwargs) -> None:
     event = {
         "ts": datetime.now(timezone.utc).isoformat(),
         "service": "postgres",
-        "host": HONEYPOT_NAME,
+        "host": NODE_NAME,
         "event": event_type,
         **kwargs,
     }
@@ -118,7 +118,7 @@ class PostgresProtocol(asyncio.Protocol):
 
 
 async def main():
-    _log("startup", msg=f"PostgreSQL honeypot starting as {HONEYPOT_NAME}")
+    _log("startup", msg=f"PostgreSQL server starting as {NODE_NAME}")
     loop = asyncio.get_running_loop()
     server = await loop.create_server(PostgresProtocol, "0.0.0.0", 5432)
     async with server:
