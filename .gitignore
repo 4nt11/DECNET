@@ -9,3 +9,10 @@ decnet-compose.yml
 decnet-state.json
 *.ini
 .env
+decnet.log*
+*.loggy
+*.nmap
+linterfails.log
+test-scan
+webmail
+windows1
