@@ -188,6 +188,7 @@ def deploy(
     log_file: Optional[str] = typer.Option(None, "--log-file", help="Write RFC 5424 syslog to this path inside containers (e.g. /var/log/decnet/decnet.log)"),
     dry_run: bool = typer.Option(False, "--dry-run", help="Generate compose file without starting containers"),
     no_cache: bool = typer.Option(False, "--no-cache", help="Force rebuild all images, ignoring Docker layer cache"),
+    ipvlan: bool = typer.Option(False, "--ipvlan", help="Use IPvlan L2 instead of MACVLAN (required on WiFi interfaces)"),
     config_file: Optional[str] = typer.Option(None, "--config", "-c", help="Path to INI config file"),
 ) -> None:
     """Deploy deckies to the LAN."""
@@ -294,6 +295,7 @@ def deploy(
         deckies=decky_configs,
         log_target=effective_log_target,
         log_file=effective_log_file,
+        ipvlan=ipvlan,
     )
 
     if effective_log_target and not dry_run:

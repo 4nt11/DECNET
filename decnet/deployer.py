@@ -15,13 +15,16 @@ from decnet.composer import write_compose
 from decnet.network import (
     MACVLAN_NETWORK_NAME,
     allocate_ips,
+    create_ipvlan_network,
     create_macvlan_network,
     detect_interface,
     detect_subnet,
     get_host_ip,
     ips_to_range,
     remove_macvlan_network,
+    setup_host_ipvlan,
     setup_host_macvlan,
+    teardown_host_ipvlan,
     teardown_host_macvlan,
 )
 
@@ -88,16 +91,27 @@ def deploy(config: DecnetConfig, dry_run: bool = False, no_cache: bool = False) 
     decky_range = ips_to_range(ip_list)
     host_ip = get_host_ip(config.interface)
 
-    console.print(f"[bold cyan]Creating MACVLAN network[/] ({MACVLAN_NETWORK_NAME}) on {config.interface}")
+    net_driver = "IPvlan L2" if config.ipvlan else "MACVLAN"
+    console.print(f"[bold cyan]Creating {net_driver} network[/] ({MACVLAN_NETWORK_NAME}) on {config.interface}")
     if not dry_run:
-        create_macvlan_network(
-            client,
-            interface=config.interface,
-            subnet=config.subnet,
-            gateway=config.gateway,
-            ip_range=decky_range,
-        )
-        setup_host_macvlan(config.interface, host_ip, decky_range)
+        if config.ipvlan:
+            create_ipvlan_network(
+                client,
+                interface=config.interface,
+                subnet=config.subnet,
+                gateway=config.gateway,
+                ip_range=decky_range,
+            )
+            setup_host_ipvlan(config.interface, host_ip, decky_range)
+        else:
+            create_macvlan_network(
+                client,
+                interface=config.interface,
+                subnet=config.subnet,
+                gateway=config.gateway,
+                ip_range=decky_range,
+            )
+            setup_host_macvlan(config.interface, host_ip, decky_range)
 
     # --- Compose generation ---
     compose_path = write_compose(config, COMPOSE_FILE)
@@ -142,10 +156,14 @@ def teardown(decky_id: str | None = None) -> None:
 
         ip_list = [d.ip for d in config.deckies]
         decky_range = ips_to_range(ip_list)
-        teardown_host_macvlan(decky_range)
+        if config.ipvlan:
+            teardown_host_ipvlan(decky_range)
+        else:
+            teardown_host_macvlan(decky_range)
         remove_macvlan_network(client)
         clear_state()
-        console.print("[green]All deckies torn down. MACVLAN network removed.[/]")
+        net_driver = "IPvlan" if config.ipvlan else "MACVLAN"
+        console.print(f"[green]All deckies torn down. {net_driver} network removed.[/]")
 
 
 def status() -> None:

@@ -44,6 +44,7 @@ class DecnetConfig(BaseModel):
     deckies: list[DeckyConfig]
     log_target: str | None = None  # "ip:port" or None
     log_file: str | None = None    # path for RFC 5424 syslog file output
+    ipvlan: bool = False           # use IPvlan L2 instead of MACVLAN (WiFi-friendly)
 
     @field_validator("log_target")
     @classmethod

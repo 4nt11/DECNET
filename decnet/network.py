@@ -19,6 +19,7 @@ import docker
 
 MACVLAN_NETWORK_NAME = "decnet_lan"
 HOST_MACVLAN_IFACE = "decnet_macvlan0"
+HOST_IPVLAN_IFACE = "decnet_ipvlan0"
 
 
 # ---------------------------------------------------------------------------
@@ -157,6 +158,35 @@ def create_macvlan_network(
     )
 
 
+def create_ipvlan_network(
+    client: docker.DockerClient,
+    interface: str,
+    subnet: str,
+    gateway: str,
+    ip_range: str,
+) -> None:
+    """Create an IPvlan L2 Docker network. No-op if it already exists."""
+    existing = [n.name for n in client.networks.list()]
+    if MACVLAN_NETWORK_NAME in existing:
+        return
+
+    client.networks.create(
+        name=MACVLAN_NETWORK_NAME,
+        driver="ipvlan",
+        options={"parent": interface, "ipvlan_mode": "l2"},
+        ipam=docker.types.IPAMConfig(
+            driver="default",
+            pool_configs=[
+                docker.types.IPAMPool(
+                    subnet=subnet,
+                    gateway=gateway,
+                    iprange=ip_range,
+                )
+            ],
+        ),
+    )
+
+
 def remove_macvlan_network(client: docker.DockerClient) -> None:
     nets = [n for n in client.networks.list() if n.name == MACVLAN_NETWORK_NAME]
     for n in nets:
@@ -195,6 +225,28 @@ def teardown_host_macvlan(decky_ip_range: str) -> None:
     _require_root()
     _run(["ip", "route", "del", decky_ip_range, "dev", HOST_MACVLAN_IFACE], check=False)
     _run(["ip", "link", "del", HOST_MACVLAN_IFACE], check=False)
+
+
+def setup_host_ipvlan(interface: str, host_ipvlan_ip: str, decky_ip_range: str) -> None:
+    """
+    Create an IPvlan interface on the host so the deployer can reach deckies.
+    Idempotent — skips steps that are already done.
+    """
+    _require_root()
+
+    result = _run(["ip", "link", "show", HOST_IPVLAN_IFACE], check=False)
+    if result.returncode != 0:
+        _run(["ip", "link", "add", HOST_IPVLAN_IFACE, "link", interface, "type", "ipvlan", "mode", "l2"])
+
+    _run(["ip", "addr", "add", f"{host_ipvlan_ip}/32", "dev", HOST_IPVLAN_IFACE], check=False)
+    _run(["ip", "link", "set", HOST_IPVLAN_IFACE, "up"])
+    _run(["ip", "route", "add", decky_ip_range, "dev", HOST_IPVLAN_IFACE], check=False)
+
+
+def teardown_host_ipvlan(decky_ip_range: str) -> None:
+    _require_root()
+    _run(["ip", "route", "del", decky_ip_range, "dev", HOST_IPVLAN_IFACE], check=False)
+    _run(["ip", "link", "del", HOST_IPVLAN_IFACE], check=False)
 
 
 # ---------------------------------------------------------------------------
