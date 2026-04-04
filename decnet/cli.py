@@ -32,7 +32,9 @@ app = typer.Typer(
 )
 console = Console()
 
-ALL_SERVICE_NAMES = ["ssh", "smb", "rdp", "http", "ftp"]
+def _all_service_names() -> list[str]:
+    """Return all registered service names from the live plugin registry."""
+    return sorted(all_services().keys())
 
 
 def _resolve_distros(
@@ -71,11 +73,12 @@ def _build_deckies(
         if services_explicit:
             svc_list = services_explicit
         elif randomize_services:
-            # Pick 1-3 random services, try to avoid exact duplicates
+            # Pick 1-3 random services from the full registry, avoid exact duplicates
+            svc_pool = _all_service_names()
             attempts = 0
             while True:
-                count = random.randint(1, min(3, len(ALL_SERVICE_NAMES)))
-                chosen = frozenset(random.sample(ALL_SERVICE_NAMES, count))
+                count = random.randint(1, min(3, len(svc_pool)))
+                chosen = frozenset(random.sample(svc_pool, count))
                 attempts += 1
                 if chosen not in used_combos or attempts > 20:
                     break
@@ -92,6 +95,7 @@ def _build_deckies(
                 services=svc_list,
                 distro=distro.slug,
                 base_image=distro.image,
+                build_base=distro.build_base,
                 hostname=hostname,
             )
         )
@@ -136,18 +140,19 @@ def _build_deckies_from_ini(
             )
 
         if spec.services:
-            known = set(ALL_SERVICE_NAMES)
+            known = set(_all_service_names())
             unknown = [s for s in spec.services if s not in known]
             if unknown:
                 console.print(
                     f"[red]Unknown service(s) in [{spec.name}]: {unknown}. "
-                    f"Available: {ALL_SERVICE_NAMES}[/]"
+                    f"Available: {_all_service_names()}[/]"
                 )
                 raise typer.Exit(1)
             svc_list = spec.services
         elif randomize:
-            count = random.randint(1, min(3, len(ALL_SERVICE_NAMES)))
-            svc_list = random.sample(ALL_SERVICE_NAMES, count)
+            svc_pool = _all_service_names()
+            count = random.randint(1, min(3, len(svc_pool)))
+            svc_list = random.sample(svc_pool, count)
         else:
             console.print(
                 f"[red]Decky '[{spec.name}]' has no services= in config. "
@@ -161,6 +166,7 @@ def _build_deckies_from_ini(
             services=svc_list,
             distro=distro.slug,
             base_image=distro.image,
+            build_base=distro.build_base,
             hostname=hostname,
         ))
     return deckies
@@ -225,10 +231,10 @@ def deploy(
 
         services_list = [s.strip() for s in services.split(",")] if services else None
         if services_list:
-            known = set(ALL_SERVICE_NAMES)
+            known = set(_all_service_names())
             unknown = [s for s in services_list if s not in known]
             if unknown:
-                console.print(f"[red]Unknown service(s): {unknown}. Available: {ALL_SERVICE_NAMES}[/]")
+                console.print(f"[red]Unknown service(s): {unknown}. Available: {_all_service_names()}[/]")
                 raise typer.Exit(1)
 
         if not services_list and not randomize_services:

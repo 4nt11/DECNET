@@ -12,9 +12,10 @@ from dataclasses import dataclass
 @dataclass(frozen=True)
 class DistroProfile:
     slug: str           # CLI-facing identifier, e.g. "debian", "rocky9"
-    image: str          # Docker image tag
+    image: str          # Docker image tag (used for the base/IP-holder container)
     display_name: str   # Human-readable label shown in tables
     hostname_style: str # "generic" | "rhel" | "minimal" | "rolling"
+    build_base: str     # apt-compatible image for service Dockerfiles (FROM ${BASE_IMAGE})
 
 
 DISTROS: dict[str, DistroProfile] = {
@@ -23,54 +24,63 @@ DISTROS: dict[str, DistroProfile] = {
         image="debian:bookworm-slim",
         display_name="Debian 12 (Bookworm)",
         hostname_style="generic",
+        build_base="debian:bookworm-slim",
     ),
     "ubuntu22": DistroProfile(
         slug="ubuntu22",
         image="ubuntu:22.04",
         display_name="Ubuntu 22.04 LTS (Jammy)",
         hostname_style="generic",
+        build_base="ubuntu:22.04",
     ),
     "ubuntu20": DistroProfile(
         slug="ubuntu20",
         image="ubuntu:20.04",
         display_name="Ubuntu 20.04 LTS (Focal)",
         hostname_style="generic",
+        build_base="ubuntu:20.04",
     ),
     "rocky9": DistroProfile(
         slug="rocky9",
         image="rockylinux:9-minimal",
         display_name="Rocky Linux 9",
         hostname_style="rhel",
+        build_base="debian:bookworm-slim",  # Dockerfiles use apt-get; fall back to debian
     ),
     "centos7": DistroProfile(
         slug="centos7",
         image="centos:7",
         display_name="CentOS 7",
         hostname_style="rhel",
+        build_base="debian:bookworm-slim",  # Dockerfiles use apt-get; fall back to debian
     ),
     "alpine": DistroProfile(
         slug="alpine",
         image="alpine:3.19",
         display_name="Alpine Linux 3.19",
         hostname_style="minimal",
+        build_base="debian:bookworm-slim",  # Dockerfiles use apt-get; fall back to debian
     ),
     "fedora": DistroProfile(
         slug="fedora",
         image="fedora:39",
         display_name="Fedora 39",
         hostname_style="rhel",
+        build_base="debian:bookworm-slim",  # Dockerfiles use apt-get; fall back to debian
     ),
     "kali": DistroProfile(
         slug="kali",
         image="kalilinux/kali-rolling",
         display_name="Kali Linux (Rolling)",
         hostname_style="rolling",
+        build_base="kalilinux/kali-rolling",  # Debian-based, apt-get compatible
     ),
     "arch": DistroProfile(
         slug="arch",
         image="archlinux:latest",
         display_name="Arch Linux",
         hostname_style="rolling",
+        build_base="debian:bookworm-slim",  # Dockerfiles use apt-get; fall back to debian
     ),
 }
 

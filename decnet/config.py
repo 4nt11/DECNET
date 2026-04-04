@@ -23,7 +23,8 @@ class DeckyConfig(BaseModel):
     ip: str
     services: list[str]
     distro: str          # slug from distros.DISTROS, e.g. "debian", "ubuntu22"
-    base_image: str      # resolved Docker image tag
+    base_image: str      # Docker image for the base/IP-holder container
+    build_base: str = "debian:bookworm-slim"  # apt-compatible image for service Dockerfiles
     hostname: str
 
     @field_validator("services")

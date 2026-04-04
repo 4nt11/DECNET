@@ -48,6 +48,11 @@ def generate_compose(config: DecnetConfig) -> dict:
             svc = get_service(svc_name)
             fragment = svc.compose_fragment(decky.name, log_target=config.log_target)
 
+            # Inject the per-decky base image into build services so containers
+            # vary by distro and don't all fingerprint as debian:bookworm-slim.
+            if "build" in fragment:
+                fragment["build"].setdefault("args", {})["BASE_IMAGE"] = decky.build_base
+
             fragment.setdefault("environment", {})
             fragment["environment"]["HOSTNAME"] = decky.hostname
 
