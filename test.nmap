@@ -1,0 +1,236 @@
+# Nmap 7.92 scan initiated Sat Apr  4 05:27:23 2026 as: nmap -sS -sV -oN test.nmap 192.168.1.110-119
+Nmap scan report for 192.168.1.110
+Host is up (0.000010s latency).
+Not shown: 996 closed tcp ports (reset)
+PORT    STATE SERVICE VERSION
+25/tcp  open  smtp    Postfix smtpd
+80/tcp  open  http    Apache httpd 2.4.54 ((Debian))
+110/tcp open  pop3
+143/tcp open  imap
+2 services unrecognized despite returning data. If you know the service/version, please submit the following fingerprints at https://nmap.org/cgi-bin/submit.cgi?new-service :
+==============NEXT SERVICE FINGERPRINT (SUBMIT INDIVIDUALLY)==============
+SF-Port110-TCP:V=7.92%I=7%D=4/4%Time=69D0CB72%P=x86_64-redhat-linux-gnu%r(
+SF:NULL,25,"\+OK\x20decky-webmail\x20POP3\x20server\x20ready\r\n")%r(Gener
+SF:icLines,51,"\+OK\x20decky-webmail\x20POP3\x20server\x20ready\r\n-ERR\x2
+SF:0Unknown\x20command\r\n-ERR\x20Unknown\x20command\r\n")%r(HTTPOptions,5
+SF:1,"\+OK\x20decky-webmail\x20POP3\x20server\x20ready\r\n-ERR\x20Unknown\
+SF:x20command\r\n-ERR\x20Unknown\x20command\r\n");
+==============NEXT SERVICE FINGERPRINT (SUBMIT INDIVIDUALLY)==============
+SF-Port143-TCP:V=7.92%I=7%D=4/4%Time=69D0CB72%P=x86_64-redhat-linux-gnu%r(
+SF:NULL,2E,"\*\x20OK\x20\[decky-webmail\]\x20IMAP4rev1\x20Service\x20Ready
+SF:\r\n")%r(GetRequest,4E,"\*\x20OK\x20\[decky-webmail\]\x20IMAP4rev1\x20S
+SF:ervice\x20Ready\r\nGET\x20BAD\x20Command\x20not\x20recognized\r\n")%r(G
+SF:enericLines,2E,"\*\x20OK\x20\[decky-webmail\]\x20IMAP4rev1\x20Service\x
+SF:20Ready\r\n");
+MAC Address: 92:2A:C1:19:C1:D0 (Unknown)
+Service Info: Host:  decky-webmail
+
+Nmap scan report for 192.168.1.111
+Host is up (0.000011s latency).
+Not shown: 998 closed tcp ports (reset)
+PORT    STATE SERVICE      VERSION
+21/tcp  open  ftp          vsftpd (before 2.0.8) or WU-FTPD
+445/tcp open  microsoft-ds
+1 service unrecognized despite returning data. If you know the service/version, please submit the following fingerprint at https://nmap.org/cgi-bin/submit.cgi?new-service :
+SF-Port445-TCP:V=7.92%I=7%D=4/4%Time=69D0CB77%P=x86_64-redhat-linux-gnu%r(
+SF:SMBProgNeg,51,"\0\0\0M\xffSMBr\0\0\0\0\x80\0\xc0\0\0\0\0\0\0\0\0\0\0\0\
+SF:0\0\0@\x06\0\0\x01\0\x11\x07\0\x03\x01\0\x01\0\0\xfa\0\0\0\0\x01\0\0\0\
+SF:0\0p\0\0\0\0\0\0\0\0\0\0\0\0\0\x08\x08\0\x11\"3DUfw\x88");
+MAC Address: 92:2A:C1:19:C1:D0 (Unknown)
+Service Info: Host: Twisted
+
+Nmap scan report for 192.168.1.112
+Host is up (0.0000080s latency).
+Not shown: 999 closed tcp ports (reset)
+PORT     STATE SERVICE VERSION
+3306/tcp open  mysql   MySQL 5.7.38-log
+MAC Address: 92:2A:C1:19:C1:D0 (Unknown)
+
+Nmap scan report for 192.168.1.113
+Host is up (0.0000090s latency).
+Not shown: 998 closed tcp ports (reset)
+PORT     STATE SERVICE     VERSION
+5432/tcp open  postgresql?
+9200/tcp open  wap-wsp?
+2 services unrecognized despite returning data. If you know the service/version, please submit the following fingerprints at https://nmap.org/cgi-bin/submit.cgi?new-service :
+==============NEXT SERVICE FINGERPRINT (SUBMIT INDIVIDUALLY)==============
+SF-Port5432-TCP:V=7.92%I=7%D=4/4%Time=69D0CB81%P=x86_64-redhat-linux-gnu%r
+SF:(SMBProgNeg,D,"R\0\0\0\x0c\0\0\0\x05\xde\xad\xbe\xef")%r(Kerberos,D,"R\
+SF:0\0\0\x0c\0\0\0\x05\xde\xad\xbe\xef");
+==============NEXT SERVICE FINGERPRINT (SUBMIT INDIVIDUALLY)==============
+SF-Port9200-TCP:V=7.92%I=7%D=4/4%Time=69D0CB72%P=x86_64-redhat-linux-gnu%r
+SF:(GetRequest,295,"HTTP/1\.0\x20200\x20OK\r\nServer:\x20elasticsearch\x20
+SF:\r\nDate:\x20Sat,\x2004\x20Apr\x202026\x2008:27:30\x20GMT\r\nContent-Ty
+SF:pe:\x20application/json;\x20charset=UTF-8\r\nContent-Length:\x20479\r\n
+SF:X-elastic-product:\x20Elasticsearch\r\n\r\n{\"name\":\x20\"decky-dbsrv0
+SF:2\",\x20\"cluster_name\":\x20\"elasticsearch\",\x20\"cluster_uuid\":\x2
+SF:0\"xC3Pr9abTq2mNkOeLvXwYA\",\x20\"version\":\x20{\"number\":\x20\"7\.17
+SF:\.9\",\x20\"build_flavor\":\x20\"default\",\x20\"build_type\":\x20\"doc
+SF:ker\",\x20\"build_hash\":\x20\"ef48222227ee6b9e70e502f0f0daa52435ee634d
+SF:\",\x20\"build_date\":\x20\"2023-01-31T05:34:43\.305517834Z\",\x20\"bui
+SF:ld_snapshot\":\x20false,\x20\"lucene_version\":\x20\"8\.11\.1\",\x20\"m
+SF:inimum_wire_compatibility_version\":\x20\"6\.8\.0\",\x20\"minimum_index
+SF:_compatibility_version\":\x20\"6\.0\.0-beta1\"},\x20\"tagline\":\x20\"Y
+SF:ou\x20Know,\x20for\x20Search\"}")%r(HTTPOptions,223,"HTTP/1\.0\x20501\x
+SF:20Unsupported\x20method\x20\('OPTIONS'\)\r\nServer:\x20elasticsearch\x2
+SF:0\r\nDate:\x20Sat,\x2004\x20Apr\x202026\x2008:27:30\x20GMT\r\nConnectio
+SF:n:\x20close\r\nContent-Type:\x20text/html;charset=utf-8\r\nContent-Leng
+SF:th:\x20360\r\n\r\n<!DOCTYPE\x20HTML>\n<html\x20lang=\"en\">\n\x20\x20\x
+SF:20\x20<head>\n\x20\x20\x20\x20\x20\x20\x20\x20<meta\x20charset=\"utf-8\
+SF:">\n\x20\x20\x20\x20\x20\x20\x20\x20<title>Error\x20response</title>\n\
+SF:x20\x20\x20\x20</head>\n\x20\x20\x20\x20<body>\n\x20\x20\x20\x20\x20\x2
+SF:0\x20\x20<h1>Error\x20response</h1>\n\x20\x20\x20\x20\x20\x20\x20\x20<p
+SF:>Error\x20code:\x20501</p>\n\x20\x20\x20\x20\x20\x20\x20\x20<p>Message:
+SF:\x20Unsupported\x20method\x20\('OPTIONS'\)\.</p>\n\x20\x20\x20\x20\x20\
+SF:x20\x20\x20<p>Error\x20code\x20explanation:\x20501\x20-\x20Server\x20do
+SF:es\x20not\x20support\x20this\x20operation\.</p>\n\x20\x20\x20\x20</body
+SF:>\n</html>\n")%r(RTSPRequest,16C,"<!DOCTYPE\x20HTML>\n<html\x20lang=\"e
+SF:n\">\n\x20\x20\x20\x20<head>\n\x20\x20\x20\x20\x20\x20\x20\x20<meta\x20
+SF:charset=\"utf-8\">\n\x20\x20\x20\x20\x20\x20\x20\x20<title>Error\x20res
+SF:ponse</title>\n\x20\x20\x20\x20</head>\n\x20\x20\x20\x20<body>\n\x20\x2
+SF:0\x20\x20\x20\x20\x20\x20<h1>Error\x20response</h1>\n\x20\x20\x20\x20\x
+SF:20\x20\x20\x20<p>Error\x20code:\x20400</p>\n\x20\x20\x20\x20\x20\x20\x2
+SF:0\x20<p>Message:\x20Bad\x20request\x20version\x20\('RTSP/1\.0'\)\.</p>\
+SF:n\x20\x20\x20\x20\x20\x20\x20\x20<p>Error\x20code\x20explanation:\x2040
+SF:0\x20-\x20Bad\x20request\x20syntax\x20or\x20unsupported\x20method\.</p>
+SF:\n\x20\x20\x20\x20</body>\n</html>\n");
+MAC Address: 92:2A:C1:19:C1:D0 (Unknown)
+
+Nmap scan report for 192.168.1.114
+Host is up (0.000010s latency).
+Not shown: 997 closed tcp ports (reset)
+PORT     STATE SERVICE       VERSION
+445/tcp  open  microsoft-ds
+1433/tcp open  ms-sql-s?
+3389/tcp open  ms-wbt-server xrdp
+2 services unrecognized despite returning data. If you know the service/version, please submit the following fingerprints at https://nmap.org/cgi-bin/submit.cgi?new-service :
+==============NEXT SERVICE FINGERPRINT (SUBMIT INDIVIDUALLY)==============
+SF-Port445-TCP:V=7.92%I=7%D=4/4%Time=69D0CB77%P=x86_64-redhat-linux-gnu%r(
+SF:SMBProgNeg,51,"\0\0\0M\xffSMBr\0\0\0\0\x80\0\xc0\0\0\0\0\0\0\0\0\0\0\0\
+SF:0\0\0@\x06\0\0\x01\0\x11\x07\0\x03\x01\0\x01\0\0\xfa\0\0\0\0\x01\0\0\0\
+SF:0\0p\0\0\0\0\0\0\0\0\0\0\0\0\0\x08\x08\0\x11\"3DUfw\x88");
+==============NEXT SERVICE FINGERPRINT (SUBMIT INDIVIDUALLY)==============
+SF-Port1433-TCP:V=7.92%I=7%D=4/4%Time=69D0CB77%P=x86_64-redhat-linux-gnu%r
+SF:(ms-sql-s,29,"\x04\x01\0\+\0\0\x01\0\0\0\x1a\0\x06\x01\0\x20\0\x01\x02\
+SF:0!\0\x01\x03\0\"\0\x04\xff\x10\0\x03\xe8\0\0\x02\0\0\0\0\x01");
+MAC Address: 92:2A:C1:19:C1:D0 (Unknown)
+
+Nmap scan report for 192.168.1.115
+Host is up (0.000010s latency).
+All 1000 scanned ports on 192.168.1.115 are in ignored states.
+Not shown: 1000 closed tcp ports (reset)
+MAC Address: 92:2A:C1:19:C1:D0 (Unknown)
+
+Nmap scan report for 192.168.1.116
+Host is up (0.000010s latency).
+Not shown: 999 closed tcp ports (reset)
+PORT    STATE SERVICE VERSION
+389/tcp open  ldap    Cisco LDAP server
+MAC Address: 92:2A:C1:19:C1:D0 (Unknown)
+
+Nmap scan report for 192.168.1.117
+Host is up (0.000010s latency).
+Not shown: 998 closed tcp ports (reset)
+PORT     STATE SERVICE      VERSION
+2121/tcp open  ccproxy-ftp?
+8800/tcp open  sunwebadmin?
+2 services unrecognized despite returning data. If you know the service/version, please submit the following fingerprints at https://nmap.org/cgi-bin/submit.cgi?new-service :
+==============NEXT SERVICE FINGERPRINT (SUBMIT INDIVIDUALLY)==============
+SF-Port2121-TCP:V=7.92%I=7%D=4/4%Time=69D0CB72%P=x86_64-redhat-linux-gnu%r
+SF:(NULL,17,"200\x20FTP\x20server\x20ready\.\r\n")%r(GenericLines,3A,"200\
+SF:x20FTP\x20server\x20ready\.\r\n500\x20Command\x20'\\r\\n'\x20not\x20und
+SF:erstood\r\n")%r(GetRequest,39,"200\x20FTP\x20server\x20ready\.\r\n500\x
+SF:20Command\x20'GET'\x20not\x20understood\r\n")%r(HTTPOptions,3D,"200\x20
+SF:FTP\x20server\x20ready\.\r\n500\x20Command\x20'OPTIONS'\x20not\x20under
+SF:stood\r\n")%r(RTSPRequest,3D,"200\x20FTP\x20server\x20ready\.\r\n500\x2
+SF:0Command\x20'OPTIONS'\x20not\x20understood\r\n")%r(RPCCheck,32,"200\x20
+SF:FTP\x20server\x20ready\.\r\n501\x20can't\x20decode\x20command\.\r\n")%r
+SF:(DNSVersionBindReqTCP,95,"200\x20FTP\x20server\x20ready\.\r\n500\x20Com
+SF:mand\x20'\\x00\\x1e\\x00\\x06\\x01\\x00\\x00\\x01\\x00\\x00\\x00\\x00\\
+SF:x00\\x00\\x07VERSION\\x04BIND\\x00\\x00\\x10\\x00\\x03'\x20not\x20under
+SF:stood\r\n")%r(DNSStatusRequestTCP,6E,"200\x20FTP\x20server\x20ready\.\r
+SF:\n500\x20Command\x20'\\x00\\x0c\\x00\\x00\\x10\\x00\\x00\\x00\\x00\\x00
+SF:\\x00\\x00\\x00\\x00'\x20not\x20understood\r\n")%r(Help,152,"200\x20FTP
+SF:\x20server\x20ready\.\r\n214-The\x20following\x20commands\x20are\x20rec
+SF:ognized:\r\n\x20'ABOR'\x20'ALLO'\x20'APPE'\x20'CDUP'\x20'CWD'\x20\x20'D
+SF:ELE'\x20'HELP'\x20'LIST'\r\n\x20'MDTM'\x20'MKD'\x20\x20'MODE'\x20'NLST'
+SF:\x20'NOOP'\x20'PASS'\x20'PASV'\x20'PORT'\r\n\x20'PWD'\x20\x20'QUIT'\x20
+SF:'REIN'\x20'REST'\x20'RETR'\x20'RMD'\x20\x20'RNFR'\x20'RNTO'\r\n\x20'SIT
+SF:E'\x20'SIZE'\x20'STAT'\x20'STOR'\x20'STOU'\x20'STRU'\x20'SYST'\x20'TYPE
+SF:'\r\n\x20'USER'\r\n214\x20Help\x20command\x20successful\.\r\n")%r(SSLSe
+SF:ssionReq,32,"200\x20FTP\x20server\x20ready\.\r\n501\x20can't\x20decode\
+SF:x20command\.\r\n")%r(TerminalServerCookie,32,"200\x20FTP\x20server\x20r
+SF:eady\.\r\n501\x20can't\x20decode\x20command\.\r\n")%r(TLSSessionReq,32,
+SF:"200\x20FTP\x20server\x20ready\.\r\n501\x20can't\x20decode\x20command\.
+SF:\r\n")%r(Kerberos,32,"200\x20FTP\x20server\x20ready\.\r\n501\x20can't\x
+SF:20decode\x20command\.\r\n")%r(SMBProgNeg,32,"200\x20FTP\x20server\x20re
+SF:ady\.\r\n501\x20can't\x20decode\x20command\.\r\n")%r(X11Probe,63,"200\x
+SF:20FTP\x20server\x20ready\.\r\n500\x20Command\x20'L\\x00\\x0b\\x00\\x00\
+SF:\x00\\x00\\x00\\x00\\x00\\x00\\x00'\x20not\x20understood\r\n");
+==============NEXT SERVICE FINGERPRINT (SUBMIT INDIVIDUALLY)==============
+SF-Port8800-TCP:V=7.92%I=7%D=4/4%Time=69D0CB72%P=x86_64-redhat-linux-gnu%r
+SF:(GetRequest,7E,"HTTP/1\.1\x20302\x20Found\r\nDate:\x20Sat,\x2004\x20Apr
+SF:\x202026\x2008:27:09\x20GMT\r\nContent-Type:\x20text/html\r\nLocation:\
+SF:x20/index\.html\r\nContent-Length:\x200\r\n\r\n")%r(HTTPOptions,9B,"HTT
+SF:P/1\.1\x20200\x20OK\r\nDate:\x20Sat,\x2004\x20Apr\x202026\x2008:27:09\x
+SF:20GMT\r\nAllow:\x20GET,HEAD,POST,OPTIONS,TRACE\r\nContent-Length:\x200\
+SF:r\nConnection:\x20close\r\nContent-Type:\x20text/html\r\n\r\n")%r(FourO
+SF:hFourRequest,13C,"HTTP/1\.1\x20404\x20Not\x20Found\r\nDate:\x20Sat,\x20
+SF:04\x20Apr\x202026\x2008:27:09\x20GMT\r\nContent-Length:\x20232\r\n\r\n<
+SF:HTML>\n\n\x20\x20\x20\x20<HEAD>\n\x20\x20\x20\x20\x20\x20\x20\x20<TITLE
+SF:>Not\x20found\x20-\x20Siemens,\x20SIMATIC,\x20S7-200</TITLE>\n\x20\x20\
+SF:x20\x20</HEAD>\n\n\x20\x20\x20\x20<BODY>\n\x20\x20\x20\x20\x20\x20\x20\
+SF:x20<h2>CP\x20443-1\x20EX40</h2>\n\x20\x20\x20\x20\x20\x20\x20\x20<hr>\n
+SF:\x20\x20\x20\x20\x20\x20\x20\x20&nbsp;<br>\n\x20\x20\x20\x20\x20\x20\x2
+SF:0\x20This\x20resource\x20could\x20not\x20be\x20found\.<br>\n\x20\x20\x2
+SF:0\x20</BODY>\n\n</HTML>");
+MAC Address: 92:2A:C1:19:C1:D0 (Unknown)
+
+Nmap scan report for 192.168.1.118
+Host is up (0.0000080s latency).
+Not shown: 999 closed tcp ports (reset)
+PORT     STATE SERVICE VERSION
+5060/tcp open  sip     (SIP end point; Status: 401 Unauthorized)
+1 service unrecognized despite returning data. If you know the service/version, please submit the following fingerprint at https://nmap.org/cgi-bin/submit.cgi?new-service :
+SF-Port5060-TCP:V=7.92%I=7%D=4/4%Time=69D0CB7E%P=x86_64-redhat-linux-gnu%r
+SF:(SIPOptions,F0,"SIP/2\.0\x20401\x20Unauthorized\r\nVia:\x20SIP/2\.0/TCP
+SF:\x20nm;branch=foo\r\nFrom:\x20<sip:nm@nm>;tag=root\r\nTo:\x20<sip:nm2@n
+SF:m2>\r\nCall-ID:\x2050000\r\nCSeq:\x2042\x20OPTIONS\r\nWWW-Authenticate:
+SF:\x20Digest\x20realm=\"decky-voip\",\x20nonce=\"decnet0000\",\x20algorit
+SF:hm=MD5\r\nContent-Length:\x200\r\n\r\n");
+MAC Address: 92:2A:C1:19:C1:D0 (Unknown)
+
+Nmap scan report for 192.168.1.119
+Host is up (0.000011s latency).
+Not shown: 998 closed tcp ports (reset)
+PORT     STATE SERVICE VERSION
+23/tcp   open  telnet?
+5900/tcp open  vnc     VNC (protocol 3.8)
+1 service unrecognized despite returning data. If you know the service/version, please submit the following fingerprint at https://nmap.org/cgi-bin/submit.cgi?new-service :
+SF-Port23-TCP:V=7.92%I=7%D=4/4%Time=69D0CB72%P=x86_64-redhat-linux-gnu%r(N
+SF:ULL,7,"login:\x20")%r(GenericLines,2C,"login:\x20\xff\xfb\x01Password:\
+SF:x20\nLogin\x20incorrect\nlogin:\x20")%r(tn3270,16,"login:\x20\xff\xfe\x
+SF:18\xff\xfe\x19\xff\xfc\x19\xff\xfe\0\xff\xfc\0")%r(GetRequest,2C,"login
+SF::\x20\xff\xfb\x01Password:\x20\nLogin\x20incorrect\nlogin:\x20")%r(HTTP
+SF:Options,2C,"login:\x20\xff\xfb\x01Password:\x20\nLogin\x20incorrect\nlo
+SF:gin:\x20")%r(RTSPRequest,2C,"login:\x20\xff\xfb\x01Password:\x20\nLogin
+SF:\x20incorrect\nlogin:\x20")%r(RPCCheck,7,"login:\x20")%r(DNSVersionBind
+SF:ReqTCP,7,"login:\x20")%r(DNSStatusRequestTCP,7,"login:\x20")%r(Help,14,
+SF:"login:\x20\xff\xfb\x01Password:\x20")%r(SSLSessionReq,14,"login:\x20\x
+SF:ff\xfb\x01Password:\x20")%r(TerminalServerCookie,14,"login:\x20\xff\xfb
+SF:\x01Password:\x20")%r(Kerberos,14,"login:\x20\xff\xfb\x01Password:\x20"
+SF:)%r(X11Probe,7,"login:\x20")%r(FourOhFourRequest,2C,"login:\x20\xff\xfb
+SF:\x01Password:\x20\nLogin\x20incorrect\nlogin:\x20")%r(LPDString,14,"log
+SF:in:\x20\xff\xfb\x01Password:\x20")%r(LDAPSearchReq,2C,"login:\x20\xff\x
+SF:fb\x01Password:\x20\nLogin\x20incorrect\nlogin:\x20")%r(LDAPBindReq,7,"
+SF:login:\x20")%r(SIPOptions,BE,"login:\x20\xff\xfb\x01Password:\x20\nLogi
+SF:n\x20incorrect\nlogin:\x20Password:\x20\nLogin\x20incorrect\nlogin:\x20
+SF:Password:\x20\nLogin\x20incorrect\nlogin:\x20Password:\x20\nLogin\x20in
+SF:correct\nlogin:\x20Password:\x20\nLogin\x20incorrect\nlogin:\x20Passwor
+SF:d:\x20")%r(LANDesk-RC,7,"login:\x20")%r(TerminalServer,7,"login:\x20")%
+SF:r(NotesRPC,7,"login:\x20")%r(JavaRMI,7,"login:\x20")%r(WMSRequest,7,"lo
+SF:gin:\x20")%r(afp,7,"login:\x20")%r(giop,7,"login:\x20");
+MAC Address: 92:2A:C1:19:C1:D0 (Unknown)
+
+Service detection performed. Please report any incorrect results at https://nmap.org/submit/ .
+# Nmap done at Sat Apr  4 05:30:01 2026 -- 10 IP addresses (10 hosts up) scanned in 157.69 seconds

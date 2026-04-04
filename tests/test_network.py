@@ -2,7 +2,7 @@
 Tests for decnet.network utility functions.
 """
 
-from unittest.mock import MagicMock, call, patch
+from unittest.mock import MagicMock, patch
 
 import pytest
 
@@ -16,7 +16,6 @@ from decnet.network import (
     setup_host_ipvlan,
     setup_host_macvlan,
     teardown_host_ipvlan,
-    teardown_host_macvlan,
 )
 
 

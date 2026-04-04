@@ -11,7 +11,7 @@ Covers:
 
 import pytest
 
-from decnet.archetypes import ARCHETYPES, all_archetypes
+from decnet.archetypes import ARCHETYPES
 from decnet.composer import generate_compose
 from decnet.config import DeckyConfig, DecnetConfig
 from decnet.os_fingerprint import OS_SYSCTLS, all_os_families, get_os_sysctls

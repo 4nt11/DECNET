@@ -1,0 +1,54 @@
+# Nmap 7.92 scan initiated Sat Apr  4 13:35:16 2026 as: nmap -sS -sV -A -O -oN windows1 192.168.1.2
+Nmap scan report for 192.168.1.2
+Host is up (0.000049s latency).
+Not shown: 997 closed tcp ports (reset)
+PORT     STATE SERVICE       VERSION
+389/tcp  open  ldap          Cisco LDAP server
+445/tcp  open  microsoft-ds
+| fingerprint-strings: 
+|   SMBProgNeg: 
+|     SMBr
+|_    "3DUfw
+3389/tcp open  ms-wbt-server xrdp
+1 service unrecognized despite returning data. If you know the service/version, please submit the following fingerprint at https://nmap.org/cgi-bin/submit.cgi?new-service :
+SF-Port445-TCP:V=7.92%I=7%D=4/4%Time=69D13DD0%P=x86_64-redhat-linux-gnu%r(
+SF:SMBProgNeg,51,"\0\0\0M\xffSMBr\0\0\0\0\x80\0\xc0\0\0\0\0\0\0\0\0\0\0\0\
+SF:0\0\0@\x06\0\0\x01\0\x11\x07\0\x03\x01\0\x01\0\0\xfa\0\0\0\0\x01\0\0\0\
+SF:0\0p\0\0\0\0\0\0\0\0\0\0\0\0\0\x08\x08\0\x11\"3DUfw\x88");
+MAC Address: 6E:ED:78:84:44:93 (Unknown)
+No exact OS matches for host (If you know what OS is running on it, see https://nmap.org/submit/ ).
+TCP/IP fingerprint:
+OS:SCAN(V=7.92%E=4%D=4/4%OT=389%CT=1%CU=43132%PV=Y%DS=1%DC=D%G=Y%M=6EED78%T
+OS:M=69D13E1C%P=x86_64-redhat-linux-gnu)SEQ(SP=101%GCD=1%ISR=104%TI=Z%CI=Z%
+OS:II=I%TS=A)SEQ(SP=101%GCD=1%ISR=104%TI=Z%CI=Z%TS=A)OPS(O1=M5B4ST11NWA%O2=
+OS:M5B4ST11NWA%O3=M5B4NNT11NWA%O4=M5B4ST11NWA%O5=M5B4ST11NWA%O6=M5B4ST11)WI
+OS:N(W1=FE88%W2=FE88%W3=FE88%W4=FE88%W5=FE88%W6=FE88)ECN(R=Y%DF=Y%T=80%W=FA
+OS:F0%O=M5B4NNSNWA%CC=Y%Q=)T1(R=Y%DF=Y%T=80%S=O%A=S+%F=AS%RD=0%Q=)T2(R=N)T3
+OS:(R=N)T4(R=Y%DF=Y%T=80%W=0%S=A%A=Z%F=R%O=%RD=0%Q=)T5(R=Y%DF=Y%T=80%W=0%S=
+OS:Z%A=S+%F=AR%O=%RD=0%Q=)T6(R=Y%DF=Y%T=80%W=0%S=A%A=Z%F=R%O=%RD=0%Q=)T7(R=
+OS:Y%DF=Y%T=80%W=0%S=Z%A=S+%F=AR%O=%RD=0%Q=)U1(R=Y%DF=N%T=80%IPL=164%UN=0%R
+OS:IPL=G%RID=G%RIPCK=G%RUCK=G%RUD=G)IE(R=Y%DFI=N%T=80%CD=S)
+
+Network Distance: 1 hop
+
+Host script results:
+| smb2-time: 
+|   date: 2026-04-04T16:35:39
+|_  start_date: 2026-04-04T16:35:39
+| smb-security-mode: 
+|   account_used: guest
+|   authentication_level: user
+|   challenge_response: supported
+|_  message_signing: disabled (dangerous, but default)
+| smb2-security-mode: 
+|   2.0.2: 
+|_    Message signing enabled but not required
+|_ms-sql-info: ERROR: Script execution failed (use -d to debug)
+|_clock-skew: mean: -77660d20h17m50s, deviation: 109829d00h30m38s, median: -155321d16h35m40s
+
+TRACEROUTE
+HOP RTT     ADDRESS
+1   0.05 ms 192.168.1.2
+
+OS and Service detection performed. Please report any incorrect results at https://nmap.org/submit/ .
+# Nmap done at Sat Apr  4 13:36:44 2026 -- 1 IP address (1 host up) scanned in 87.61 seconds

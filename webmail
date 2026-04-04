@@ -1,0 +1,29 @@
+# Nmap 7.92 scan initiated Sat Apr  4 13:52:08 2026 as: nmap -sS -sV -oN webmail 192.168.1.110
+Nmap scan report for 192.168.1.110
+Host is up (0.000010s latency).
+Not shown: 996 closed tcp ports (reset)
+PORT    STATE SERVICE VERSION
+25/tcp  open  smtp    Postfix smtpd
+80/tcp  open  http    Apache httpd 2.4.54 ((Debian))
+110/tcp open  pop3
+143/tcp open  imap
+2 services unrecognized despite returning data. If you know the service/version, please submit the following fingerprints at https://nmap.org/cgi-bin/submit.cgi?new-service :
+==============NEXT SERVICE FINGERPRINT (SUBMIT INDIVIDUALLY)==============
+SF-Port110-TCP:V=7.92%I=7%D=4/4%Time=69D141BE%P=x86_64-redhat-linux-gnu%r(
+SF:NULL,25,"\+OK\x20decky-webmail\x20POP3\x20server\x20ready\r\n")%r(Gener
+SF:icLines,51,"\+OK\x20decky-webmail\x20POP3\x20server\x20ready\r\n-ERR\x2
+SF:0Unknown\x20command\r\n-ERR\x20Unknown\x20command\r\n")%r(HTTPOptions,5
+SF:1,"\+OK\x20decky-webmail\x20POP3\x20server\x20ready\r\n-ERR\x20Unknown\
+SF:x20command\r\n-ERR\x20Unknown\x20command\r\n");
+==============NEXT SERVICE FINGERPRINT (SUBMIT INDIVIDUALLY)==============
+SF-Port143-TCP:V=7.92%I=7%D=4/4%Time=69D141BE%P=x86_64-redhat-linux-gnu%r(
+SF:NULL,2E,"\*\x20OK\x20\[decky-webmail\]\x20IMAP4rev1\x20Service\x20Ready
+SF:\r\n")%r(GetRequest,4E,"\*\x20OK\x20\[decky-webmail\]\x20IMAP4rev1\x20S
+SF:ervice\x20Ready\r\nGET\x20BAD\x20Command\x20not\x20recognized\r\n")%r(G
+SF:enericLines,2E,"\*\x20OK\x20\[decky-webmail\]\x20IMAP4rev1\x20Service\x
+SF:20Ready\r\n");
+MAC Address: 1A:2C:33:F9:51:0A (Unknown)
+Service Info: Host:  decky-webmail
+
+Service detection performed. Please report any incorrect results at https://nmap.org/submit/ .
+# Nmap done at Sat Apr  4 13:52:24 2026 -- 1 IP address (1 host up) scanned in 16.41 seconds

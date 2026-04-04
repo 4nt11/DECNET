@@ -2,8 +2,6 @@
 Tests for the RealSSHService plugin and the deaddeck archetype.
 """
 
-import pytest
-from pathlib import Path
 
 from decnet.services.registry import all_services, get_service
 from decnet.archetypes import get_archetype

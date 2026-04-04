@@ -4,10 +4,7 @@ Minimal SMB server using Impacket's SimpleSMBServer.
 Logs all connection attempts, optionally forwarding them as JSON to LOG_TARGET.
 """
 
-import json
 import os
-import socket
-from datetime import datetime, timezone
 
 from impacket import smbserver
 from decnet_logging import syslog_line, write_syslog_file, forward_syslog

@@ -2,7 +2,6 @@
 
 from pathlib import Path
 
-import pytest
 
 from decnet.composer import _CONTAINER_LOG_DIR, _resolve_log_file, generate_compose
 from decnet.config import DeckyConfig, DecnetConfig

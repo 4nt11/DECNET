@@ -14,11 +14,8 @@ from decnet.config import DecnetConfig, clear_state, load_state, save_state
 from decnet.composer import write_compose
 from decnet.network import (
     MACVLAN_NETWORK_NAME,
-    allocate_ips,
     create_ipvlan_network,
     create_macvlan_network,
-    detect_interface,
-    detect_subnet,
     get_host_ip,
     ips_to_range,
     remove_macvlan_network,

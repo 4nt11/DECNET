@@ -15,7 +15,7 @@ from decnet.archetypes import (
     get_archetype,
     random_archetype,
 )
-from decnet.ini_loader import load_ini, DeckySpec
+from decnet.ini_loader import load_ini
 from decnet.distros import DISTROS
 
 

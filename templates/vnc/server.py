@@ -7,10 +7,7 @@ failed". Logs the raw response for offline cracking.
 """
 
 import asyncio
-import json
 import os
-import socket
-from datetime import datetime, timezone
 from decnet_logging import syslog_line, write_syslog_file, forward_syslog
 
 NODE_NAME = os.environ.get("NODE_NAME", "desktop")

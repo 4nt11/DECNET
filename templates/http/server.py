@@ -7,8 +7,6 @@ and responds with configurable pages. Forwards events as JSON to LOG_TARGET if s
 
 import json
 import os
-import socket
-from datetime import datetime, timezone
 from pathlib import Path
 
 from flask import Flask, request, send_from_directory

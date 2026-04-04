@@ -3,7 +3,6 @@ Tests for the CLI service pool — verifies that --randomize-services draws
 from all registered services, not just the original hardcoded 5.
 """
 
-import pytest
 from decnet.cli import _all_service_names, _build_deckies
 from decnet.services.registry import all_services
 

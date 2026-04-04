@@ -5,13 +5,10 @@ Accepts any credentials, logs all commands and file requests,
 forwards events as JSON to LOG_TARGET if set.
 """
 
-import json
 import os
-import socket
 import sys
-from datetime import datetime, timezone
 
-from twisted.internet import defer, protocol, reactor
+from twisted.internet import defer, reactor
 from twisted.protocols.ftp import FTP, FTPFactory
 from twisted.python import log as twisted_log
 from decnet_logging import syslog_line, write_syslog_file, forward_syslog

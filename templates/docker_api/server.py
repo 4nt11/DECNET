@@ -8,8 +8,6 @@ but fake data. Logs all requests as JSON.
 
 import json
 import os
-import socket
-from datetime import datetime, timezone
 
 from flask import Flask, request
 from decnet_logging import syslog_line, write_syslog_file, forward_syslog

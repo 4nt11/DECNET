@@ -3,7 +3,6 @@
 import re
 from datetime import datetime, timezone
 
-import pytest
 
 from decnet.logging.syslog_formatter import (
     SEVERITY_ERROR,

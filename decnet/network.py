@@ -8,10 +8,7 @@ Handles:
   - IP allocation (sequential, skipping reserved addresses)
 """
 
-import ipaddress
 import os
-import shutil
-import socket
 import subprocess
 from ipaddress import IPv4Address, IPv4Interface, IPv4Network
 

@@ -1,4 +1,3 @@
-from __future__ import annotations
 """
 Rotating file handler for DECNET syslog output.
 
@@ -6,6 +5,8 @@ Writes RFC 5424 syslog lines to a local file.
 Path is controlled by the DECNET_LOG_FILE environment variable
 (default: /var/log/decnet/decnet.log).
 """
+
+from __future__ import annotations
 
 import logging
 import logging.handlers

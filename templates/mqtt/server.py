@@ -7,11 +7,8 @@ interactions as JSON.
 """
 
 import asyncio
-import json
 import os
-import socket
 import struct
-from datetime import datetime, timezone
 from decnet_logging import syslog_line, write_syslog_file, forward_syslog
 
 NODE_NAME = os.environ.get("NODE_NAME", "mqtt-broker")
@@ -48,11 +45,13 @@ def _parse_connect(payload: bytes):
     # Protocol level (1 byte)
     if pos >= len(payload):
         return {}, pos
-    _proto_level = payload[pos]; pos += 1
+    _proto_level = payload[pos]
+    pos += 1
     # Connect flags (1 byte)
     if pos >= len(payload):
         return {}, pos
-    flags = payload[pos]; pos += 1
+    flags = payload[pos]
+    pos += 1
     # Keep alive (2 bytes)
     pos += 2
     # Client ID
