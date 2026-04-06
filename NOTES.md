@@ -108,6 +108,6 @@ This initial test doesn't seem to be working. Might be that I'm using WSL, so I 
 - [ ] **Plugin SDK docs** — Full documentation and an example plugin for adding custom services. Lower the barrier for community contributions.
 - [ ] **Integration tests** — Full deploy/teardown cycle tests against a real Docker daemon (not just unit tests).
 - [ ] **Per-service tests** — Each of the 29 service implementations deserves its own test coverage.
-- [ ] **CI/CD pipeline** — GitHub/Gitea Actions: run tests on push, lint, build Docker images, publish releases.
+- [x] **CI/CD pipeline** — GitHub/Gitea Actions: run tests on push, lint, build Docker images, publish releases.
 - [ ] **Config validation CLI** — `decnet validate my.ini` to dry-check an INI config before deploying.
 - [ ] **Config generator wizard** — `decnet wizard` interactive prompt to generate an INI config without writing one by hand.
