@@ -631,3 +631,9 @@ The test suite covers:
 | `test_cli_service_pool.py` | CLI service resolution |
 
 Every new feature requires passing tests before merging.
+
+# AI Disclosure
+
+This project has been made with lots, and I mean lots of help from AIs. While most of the design was made by me, most of the coding was done by AI models.
+
+Nevertheless, this project will be kept under high scrutiny by humans.

@@ -3,6 +3,9 @@ name: CI
 on:
   push:
     branches: [dev, testing]
+    paths-ignore:
+      - "**/*.md"
+      - "docs/**"
 
 jobs:
   lint:
