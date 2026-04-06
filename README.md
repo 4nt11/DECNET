@@ -180,6 +180,7 @@ Archetypes are pre-packaged machine identities. One slug sets services, preferre
 
 | Slug | Services | OS Fingerprint | Description |
 |---|---|---|---|
+| `deaddeck` | ssh | linux | Initial machine to be exploited. Real SSH container. |
 | `windows-workstation` | smb, rdp | windows | Corporate Windows desktop |
 | `windows-server` | smb, rdp, ldap | windows | Windows domain member |
 | `domain-controller` | ldap, smb, rdp, llmnr | windows | Active Directory DC |
@@ -250,6 +251,11 @@ List live at any time with `decnet services`.
 Most services accept persona configuration to make honeypot responses more convincing. Config is passed via INI subsections (`[decky-name.service]`) or the `service_config` field in code.
 
 ```ini
+[deaddeck-1]
+amount=1
+archetype=deaddeck
+ssh.password=admin
+
 [decky-webmail.http]
 server_header = Apache/2.4.54 (Debian)
 fake_app      = wordpress
