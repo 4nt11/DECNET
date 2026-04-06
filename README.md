@@ -69,7 +69,7 @@ From the outside a decky looks identical to a real machine: it has its own MAC a
 ## Installation
 
 ```bash
-git clone <repo-url> DECNET
+git clone https://git.resacachile.cl/anti/DECNET
 cd DECNET
 pip install -e .
 ```
@@ -207,6 +207,26 @@ sudo decnet deploy --deckies 4 --archetype windows-workstation
 [corp-workstations]
 archetype = windows-workstation
 amount    = 4
+
+[win-fileserver]
+services   = ftp
+nmap_os    = windows
+os_version = Windows Server 2019
+
+[dbsrv01]
+ip       = 192.168.1.112
+services = mysql, http
+nmap_os  = linux
+
+[dbsrv01.http]
+server_header = Apache/2.4.54 (Debian)
+response_code = 200
+fake_app      = wordpress
+
+[dbsrv01.mysql]
+mysql_version = 5.7.38-log
+mysql_banner  = MySQL Community Server
+
 ```
 
 ---
