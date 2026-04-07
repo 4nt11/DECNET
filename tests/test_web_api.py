@@ -72,3 +72,26 @@ def test_get_logs_success() -> None:
         assert "data" in data
         assert data["total"] >= 0
         assert isinstance(data["data"], list)
+
+def test_get_stats_unauthorized() -> None:
+    with TestClient(app) as client:
+        response = client.get("/api/v1/stats")
+        assert response.status_code == 401
+
+def test_get_stats_success() -> None:
+    with TestClient(app) as client:
+        login_response = client.post(
+            "/api/v1/auth/login",
+            json={"username": "admin", "password": "admin"}
+        )
+        token = login_response.json()["access_token"]
+        
+        response = client.get(
+            "/api/v1/stats",
+            headers={"Authorization": f"Bearer {token}"}
+        )
+        assert response.status_code == 200
+        data = response.json()
+        assert "total_logs" in data
+        assert "unique_attackers" in data
+        assert "active_deckies" in data

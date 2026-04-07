@@ -95,9 +95,14 @@ class SQLiteRepository(BaseRepository):
                 row = await cursor.fetchone()
                 unique_attackers: int = row["unique_attackers"] if row else 0
 
+            async with db.execute("SELECT COUNT(DISTINCT decky) as active_deckies FROM logs") as cursor:
+                row = await cursor.fetchone()
+                active_deckies: int = row["active_deckies"] if row else 0
+
             return {
                 "total_logs": total_logs,
-                "unique_attackers": unique_attackers
+                "unique_attackers": unique_attackers,
+                "active_deckies": active_deckies
             }
 
     async def get_user_by_username(self, username: str) -> Optional[dict[str, Any]]:
