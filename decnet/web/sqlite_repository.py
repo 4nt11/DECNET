@@ -20,9 +20,19 @@ class SQLiteRepository(BaseRepository):
                     service TEXT,
                     event_type TEXT,
                     attacker_ip TEXT,
-                    raw_line TEXT
+                    raw_line TEXT,
+                    fields TEXT,
+                    msg TEXT
                 )
             """)
+            try:
+                await db.execute("ALTER TABLE logs ADD COLUMN fields TEXT")
+            except aiosqlite.OperationalError:
+                pass
+            try:
+                await db.execute("ALTER TABLE logs ADD COLUMN msg TEXT")
+            except aiosqlite.OperationalError:
+                pass
             # Users table (internal RBAC)
             await db.execute("""
                 CREATE TABLE IF NOT EXISTS users (
@@ -44,25 +54,29 @@ class SQLiteRepository(BaseRepository):
             timestamp = log_data.get("timestamp")
             if timestamp:
                 await db.execute(
-                    "INSERT INTO logs (timestamp, decky, service, event_type, attacker_ip, raw_line) VALUES (?, ?, ?, ?, ?, ?)",
+                    "INSERT INTO logs (timestamp, decky, service, event_type, attacker_ip, raw_line, fields, msg) VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
                     (
                         timestamp,
                         log_data.get("decky"),
                         log_data.get("service"),
                         log_data.get("event_type"),
                         log_data.get("attacker_ip"),
-                        log_data.get("raw_line")
+                        log_data.get("raw_line"),
+                        log_data.get("fields"),
+                        log_data.get("msg")
                     )
                 )
             else:
                 await db.execute(
-                    "INSERT INTO logs (decky, service, event_type, attacker_ip, raw_line) VALUES (?, ?, ?, ?, ?)",
+                    "INSERT INTO logs (decky, service, event_type, attacker_ip, raw_line, fields, msg) VALUES (?, ?, ?, ?, ?, ?, ?)",
                     (
                         log_data.get("decky"),
                         log_data.get("service"),
                         log_data.get("event_type"),
                         log_data.get("attacker_ip"),
-                        log_data.get("raw_line")
+                        log_data.get("raw_line"),
+                        log_data.get("fields"),
+                        log_data.get("msg")
                     )
                 )
             await db.commit()

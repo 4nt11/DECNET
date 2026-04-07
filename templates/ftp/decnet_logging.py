@@ -149,6 +149,7 @@ def _get_json_logger() -> logging.Logger:
     return _json_logger
 
 
+
 def write_syslog_file(line: str) -> None:
     """Append a syslog line to the rotating log file."""
     try:
@@ -176,11 +177,23 @@ def write_syslog_file(line: str) -> None:
         if m:
             ts_raw, decky, service, event_type, sd_rest = m.groups()
             
-            block = _SD_BLOCK_RE.search(sd_rest)
             fields = {}
-            if block:
-                for k, v in _PARAM_RE.findall(block.group(1)):
-                    fields[k] = v.replace('\\"', '"').replace("\\\\", "\\").replace("\\]", "]")
+            msg = ""
+            
+            if sd_rest.startswith("-"):
+                msg = sd_rest[1:].lstrip()
+            elif sd_rest.startswith("["):
+                block = _SD_BLOCK_RE.search(sd_rest)
+                if block:
+                    for k, v in _PARAM_RE.findall(block.group(1)):
+                        fields[k] = v.replace('\\"', '"').replace("\\\\", "\\").replace("\\]", "]")
+                    
+                    # extract msg after the block
+                    msg_match = re.search(r'\]\s+(.+)$', sd_rest)
+                    if msg_match:
+                        msg = msg_match.group(1).strip()
+            else:
+                msg = sd_rest
                     
             attacker_ip = "Unknown"
             for fname in _IP_FIELDS:
@@ -200,6 +213,8 @@ def write_syslog_file(line: str) -> None:
                 "service": service,
                 "event_type": event_type,
                 "attacker_ip": attacker_ip,
+                "fields": json.dumps(fields),
+                "msg": msg,
                 "raw_line": line
             }
             _get_json_logger().info(json.dumps(payload))
