@@ -353,12 +353,12 @@ def deploy(
         import subprocess
         import sys
         console.print(f"[green]Starting DECNET API on port {api_port}...[/]")
-        env = os.environ.copy()
-        env["DECNET_INGEST_LOG_FILE"] = effective_log_file
+        _env: dict[str, str] = os.environ.copy()
+        _env["DECNET_INGEST_LOG_FILE"] = str(effective_log_file)
         try:
             subprocess.Popen(
                 [sys.executable, "-m", "uvicorn", "decnet.web.api:app", "--host", "0.0.0.0", "--port", str(api_port)],
-                env=env,
+                env=_env,
                 stdout=subprocess.DEVNULL,
                 stderr=subprocess.STDOUT
             )

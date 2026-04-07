@@ -1,7 +1,7 @@
 import uuid
 from contextlib import asynccontextmanager
 from datetime import timedelta
-from typing import Any, AsyncGenerator
+from typing import Any, AsyncGenerator, Optional
 
 import jwt
 from fastapi import Depends, FastAPI, HTTPException, Query, status
@@ -22,7 +22,7 @@ from decnet.web.ingester import log_ingestion_worker
 import asyncio
 
 repo: SQLiteRepository = SQLiteRepository()
-ingestion_task: asyncio.Task | None = None
+ingestion_task: Optional[asyncio.Task[Any]] = None
 
 
 @asynccontextmanager
@@ -30,8 +30,8 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
     global ingestion_task
     await repo.initialize()
     # Create default admin if no users exist
-    admin_user: dict[str, Any] | None = await repo.get_user_by_username("admin")
-    if not admin_user:
+    _admin_user: Optional[dict[str, Any]] = await repo.get_user_by_username("admin")
+    if not _admin_user:
         await repo.create_user(
             {
                 "uuid": str(uuid.uuid4()),
@@ -71,19 +71,19 @@ oauth2_scheme: OAuth2PasswordBearer = OAuth2PasswordBearer(tokenUrl="/api/v1/aut
 
 
 async def get_current_user(token: str = Depends(oauth2_scheme)) -> str:
-    credentials_exception = HTTPException(
+    _credentials_exception: HTTPException = HTTPException(
         status_code=status.HTTP_401_UNAUTHORIZED,
         detail="Could not validate credentials",
         headers={"WWW-Authenticate": "Bearer"},
     )
     try:
-        payload: dict[str, Any] = jwt.decode(token, SECRET_KEY, algorithms=[ALGORITHM])
-        user_uuid: str | None = payload.get("uuid")
-        if user_uuid is None:
-            raise credentials_exception
+        _payload: dict[str, Any] = jwt.decode(token, SECRET_KEY, algorithms=[ALGORITHM])
+        _user_uuid: Optional[str] = _payload.get("uuid")
+        if _user_uuid is None:
+            raise _credentials_exception
+        return _user_uuid
     except jwt.PyJWTError:
-        raise credentials_exception
-    return user_uuid
+        raise _credentials_exception
 
 
 class Token(BaseModel):
@@ -111,37 +111,37 @@ class LogsResponse(BaseModel):
 
 @app.post("/api/v1/auth/login", response_model=Token)
 async def login(request: LoginRequest) -> dict[str, Any]:
-    user: dict[str, Any] | None = await repo.get_user_by_username(request.username)
-    if not user or not verify_password(request.password, user["password_hash"]):
+    _user: Optional[dict[str, Any]] = await repo.get_user_by_username(request.username)
+    if not _user or not verify_password(request.password, _user["password_hash"]):
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Incorrect username or password",
             headers={"WWW-Authenticate": "Bearer"},
         )
 
-    access_token_expires: timedelta = timedelta(minutes=ACCESS_TOKEN_EXPIRE_MINUTES)
+    _access_token_expires: timedelta = timedelta(minutes=ACCESS_TOKEN_EXPIRE_MINUTES)
     # Token uses uuid instead of sub
-    access_token: str = create_access_token(
-        data={"uuid": user["uuid"]}, expires_delta=access_token_expires
+    _access_token: str = create_access_token(
+        data={"uuid": _user["uuid"]}, expires_delta=_access_token_expires
     )
     return {
-        "access_token": access_token, 
+        "access_token": _access_token, 
         "token_type": "bearer",
-        "must_change_password": bool(user.get("must_change_password", False))
+        "must_change_password": bool(_user.get("must_change_password", False))
     }
 
 
 @app.post("/api/v1/auth/change-password")
 async def change_password(request: ChangePasswordRequest, current_user: str = Depends(get_current_user)) -> dict[str, str]:
-    user: dict[str, Any] | None = await repo.get_user_by_uuid(current_user)
-    if not user or not verify_password(request.old_password, user["password_hash"]):
+    _user: Optional[dict[str, Any]] = await repo.get_user_by_uuid(current_user)
+    if not _user or not verify_password(request.old_password, _user["password_hash"]):
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Incorrect old password",
         )
     
-    new_hash = get_password_hash(request.new_password)
-    await repo.update_user_password(current_user, new_hash, must_change_password=False)
+    _new_hash: str = get_password_hash(request.new_password)
+    await repo.update_user_password(current_user, _new_hash, must_change_password=False)
     return {"message": "Password updated successfully"}
 
 
@@ -149,16 +149,16 @@ async def change_password(request: ChangePasswordRequest, current_user: str = De
 async def get_logs(
     limit: int = Query(50, ge=1, le=1000),
     offset: int = Query(0, ge=0),
-    search: str | None = None,
+    search: Optional[str] = None,
     current_user: str = Depends(get_current_user)
 ) -> dict[str, Any]:
-    logs: list[dict[str, Any]] = await repo.get_logs(limit=limit, offset=offset, search=search)
-    total: int = await repo.get_total_logs(search=search)
+    _logs: list[dict[str, Any]] = await repo.get_logs(limit=limit, offset=offset, search=search)
+    _total: int = await repo.get_total_logs(search=search)
     return {
-        "total": total,
+        "total": _total,
         "limit": limit,
         "offset": offset,
-        "data": logs
+        "data": _logs
     }
 
 

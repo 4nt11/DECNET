@@ -157,3 +157,69 @@
 <134>1 2026-04-04T07:41:33.751968+00:00 decky-fileserv ftp - connection [decnet@55555 src_ip="192.168.1.5" src_port="44630"]
 <134>1 2026-04-04T07:41:33.752086+00:00 decky-fileserv ftp - disconnect [decnet@55555 src_ip="192.168.1.5" src_port="44630"]
 <134>1 2026-04-04T07:41:33.752162+00:00 decky-fileserv ftp - disconnect [decnet@55555 src_ip="192.168.1.5" src_port="44614"]
+<134>1 2026-04-07T19:34:47.857994+00:00 decky-webmail imap - startup - IMAP server starting as decky-webmail
+<134>1 2026-04-07T19:34:47.861786+00:00 decky-webmail smtp - startup - SMTP server starting as decky-webmail
+<134>1 2026-04-07T19:34:47.863785+00:00 decky-webmail pop3 - startup - POP3 server starting as decky-webmail
+<134>1 2026-04-07T19:34:47.928625+00:00 decky-webmail http - startup - HTTP server starting as decky-webmail
+<134>1 2026-04-07T19:35:17.828230+00:00 decky-webmail imap - startup - IMAP server starting as decky-webmail
+<134>1 2026-04-07T19:35:17.855831+00:00 decky-webmail smtp - startup - SMTP server starting as decky-webmail
+<134>1 2026-04-07T19:35:17.860387+00:00 decky-webmail pop3 - startup - POP3 server starting as decky-webmail
+<134>1 2026-04-07T19:35:17.879879+00:00 decky-webmail http - startup - HTTP server starting as decky-webmail
+<134>1 2026-04-07T19:40:42.159239+00:00 decky-webmail imap - startup - IMAP server starting as decky-webmail
+<134>1 2026-04-07T19:40:42.170590+00:00 decky-webmail smtp - startup - SMTP server starting as decky-webmail
+<134>1 2026-04-07T19:40:42.174154+00:00 decky-webmail pop3 - startup - POP3 server starting as decky-webmail
+<134>1 2026-04-07T19:40:42.219612+00:00 decky-webmail http - startup - HTTP server starting as decky-webmail
+<134>1 2026-04-07T19:41:33.471561+00:00 decky-webmail imap - connect [decnet@55555 src="192.168.1.5" src_port="37206"]
+<134>1 2026-04-07T19:41:33.471553+00:00 decky-webmail pop3 - connect [decnet@55555 src="192.168.1.5" src_port="47186"]
+<134>1 2026-04-07T19:41:33.471534+00:00 decky-webmail smtp - connect [decnet@55555 src="192.168.1.5" src_port="34592"]
+<134>1 2026-04-07T19:41:33.474811+00:00 decky-webmail smtp - disconnect [decnet@55555 src="192.168.1.5"]
+<134>1 2026-04-07T19:41:39.477713+00:00 decky-webmail imap - command [decnet@55555 src="192.168.1.5" cmd="GET / HTTP/1.0"]
+<134>1 2026-04-07T19:41:39.477712+00:00 decky-webmail pop3 - command [decnet@55555 src="192.168.1.5" cmd=""]
+<134>1 2026-04-07T19:41:39.477920+00:00 decky-webmail pop3 - command [decnet@55555 src="192.168.1.5" cmd=""]
+<134>1 2026-04-07T19:41:39.477994+00:00 decky-webmail http - request [decnet@55555 method="GET" path="/" remote_addr="192.168.1.5" headers="{}" body=""]
+<134>1 2026-04-07T19:41:44.483244+00:00 decky-webmail imap - disconnect [decnet@55555 src="192.168.1.5"]
+<134>1 2026-04-07T19:41:44.483352+00:00 decky-webmail pop3 - disconnect [decnet@55555 src="192.168.1.5"]
+<134>1 2026-04-07T19:41:44.483592+00:00 decky-webmail pop3 - connect [decnet@55555 src="192.168.1.5" src_port="47662"]
+<134>1 2026-04-07T19:41:44.483583+00:00 decky-webmail imap - connect [decnet@55555 src="192.168.1.5" src_port="33210"]
+<134>1 2026-04-07T19:41:44.483686+00:00 decky-webmail pop3 - command [decnet@55555 src="192.168.1.5" cmd="OPTIONS / HTTP/1.0"]
+<134>1 2026-04-07T19:41:44.483727+00:00 decky-webmail pop3 - command [decnet@55555 src="192.168.1.5" cmd=""]
+<134>1 2026-04-07T19:41:49.488857+00:00 decky-webmail pop3 - disconnect [decnet@55555 src="192.168.1.5"]
+<134>1 2026-04-07T19:41:49.488842+00:00 decky-webmail imap - disconnect [decnet@55555 src="192.168.1.5"]
+<134>1 2026-04-07T19:41:49.492686+00:00 decky-webmail http - request [decnet@55555 method="GET" path="/" remote_addr="192.168.1.5" headers="{}" body=""]
+<134>1 2026-04-07T19:41:49.493022+00:00 decky-webmail http - request [decnet@55555 method="POST" path="/sdk" remote_addr="192.168.1.5" headers="{'User-Agent': 'Mozilla/5.0 (compatible; Nmap Scripting Engine; https://nmap.org/book/nse.html)', 'Connection': 'close', 'Content-Length': '441', 'Host': '192.168.1.110'}" body="<soap:Envelope xmlns:xsd=\"http://www.w3.org/2001/XMLSchema\" xmlns:xsi=\"http://www.w3.org/2001/XMLSchema-instance\" xmlns:soap=\"http://schemas.xmlsoap.org/soap/envelope/\"><soap:Header><operationID>00000001-00000001</operationID></soap:Header><soap:Body><RetrieveServiceContent xmlns=\"urn:internalvim25\"><_this xsi:type=\"ManagedObjectReference\" type=\"ServiceInstance\">ServiceInstance</_this></RetrieveServiceContent></soap:Body></soap:Envelope>"]
+<134>1 2026-04-07T19:41:49.493181+00:00 decky-webmail http - request [decnet@55555 method="GET" path="/nmaplowercheck1775590909" remote_addr="192.168.1.5" headers="{'User-Agent': 'Mozilla/5.0 (compatible; Nmap Scripting Engine; https://nmap.org/book/nse.html)', 'Connection': 'close', 'Host': '192.168.1.110'}" body=""]
+<134>1 2026-04-07T19:41:49.494290+00:00 decky-webmail http - request [decnet@55555 method="GET" path="/NmapUpperCheck1775590909" remote_addr="192.168.1.5" headers="{'User-Agent': 'Mozilla/5.0 (compatible; Nmap Scripting Engine; https://nmap.org/book/nse.html)', 'Connection': 'close', 'Host': '192.168.1.110'}" body=""]
+<134>1 2026-04-07T19:41:49.494718+00:00 decky-webmail http - request [decnet@55555 method="GET" path="/Nmap/folder/check1775590909" remote_addr="192.168.1.5" headers="{'User-Agent': 'Mozilla/5.0 (compatible; Nmap Scripting Engine; https://nmap.org/book/nse.html)', 'Connection': 'close', 'Host': '192.168.1.110'}" body=""]
+<134>1 2026-04-07T19:41:49.495656+00:00 decky-webmail http - request [decnet@55555 method="GET" path="/" remote_addr="192.168.1.5" headers="{}" body=""]
+<134>1 2026-04-07T19:41:49.496032+00:00 decky-webmail http - request [decnet@55555 method="GET" path="/" remote_addr="192.168.1.5" headers="{'Host': '192.168.1.110'}" body=""]
+<134>1 2026-04-07T19:48:29.520153+00:00 decky-webmail smtp - startup - SMTP server starting as decky-webmail
+<134>1 2026-04-07T19:48:29.525953+00:00 decky-webmail imap - startup - IMAP server starting as decky-webmail
+<134>1 2026-04-07T19:48:29.531525+00:00 decky-webmail pop3 - startup - POP3 server starting as decky-webmail
+<134>1 2026-04-07T19:48:29.562070+00:00 decky-webmail http - startup - HTTP server starting as decky-webmail
+<134>1 2026-04-07T19:53:05.202133+00:00 decky-webmail pop3 - connect [decnet@55555 src="192.168.1.5" src_port="56394"]
+<134>1 2026-04-07T19:53:05.202095+00:00 decky-webmail smtp - connect [decnet@55555 src="192.168.1.5" src_port="44836"]
+<134>1 2026-04-07T19:53:05.202120+00:00 decky-webmail imap - connect [decnet@55555 src="192.168.1.5" src_port="49892"]
+<134>1 2026-04-07T19:53:05.204537+00:00 decky-webmail smtp - disconnect [decnet@55555 src="192.168.1.5"]
+<134>1 2026-04-07T19:53:11.208384+00:00 decky-webmail pop3 - command [decnet@55555 src="192.168.1.5" cmd=""]
+<134>1 2026-04-07T19:53:11.208384+00:00 decky-webmail imap - command [decnet@55555 src="192.168.1.5" cmd="GET / HTTP/1.0"]
+<134>1 2026-04-07T19:53:11.208646+00:00 decky-webmail pop3 - command [decnet@55555 src="192.168.1.5" cmd=""]
+<134>1 2026-04-07T19:53:11.208787+00:00 decky-webmail http - request [decnet@55555 method="GET" path="/" remote_addr="192.168.1.5" headers="{}" body=""]
+<134>1 2026-04-07T19:53:16.213731+00:00 decky-webmail pop3 - disconnect [decnet@55555 src="192.168.1.5"]
+<134>1 2026-04-07T19:53:16.213827+00:00 decky-webmail imap - disconnect [decnet@55555 src="192.168.1.5"]
+<134>1 2026-04-07T19:53:16.214094+00:00 decky-webmail pop3 - connect [decnet@55555 src="192.168.1.5" src_port="51296"]
+<134>1 2026-04-07T19:53:16.214133+00:00 decky-webmail imap - connect [decnet@55555 src="192.168.1.5" src_port="50426"]
+<134>1 2026-04-07T19:53:16.214228+00:00 decky-webmail pop3 - command [decnet@55555 src="192.168.1.5" cmd="OPTIONS / HTTP/1.0"]
+<134>1 2026-04-07T19:53:16.214301+00:00 decky-webmail pop3 - command [decnet@55555 src="192.168.1.5" cmd=""]
+<134>1 2026-04-07T19:53:21.219340+00:00 decky-webmail imap - disconnect [decnet@55555 src="192.168.1.5"]
+<134>1 2026-04-07T19:53:21.219334+00:00 decky-webmail pop3 - disconnect [decnet@55555 src="192.168.1.5"]
+<134>1 2026-04-07T19:53:21.222956+00:00 decky-webmail http - request [decnet@55555 method="GET" path="/" remote_addr="192.168.1.5" headers="{}" body=""]
+<134>1 2026-04-07T19:53:21.223266+00:00 decky-webmail http - request [decnet@55555 method="POST" path="/sdk" remote_addr="192.168.1.5" headers="{'Host': '192.168.1.110', 'Connection': 'close', 'Content-Length': '441', 'User-Agent': 'Mozilla/5.0 (compatible; Nmap Scripting Engine; https://nmap.org/book/nse.html)'}" body="<soap:Envelope xmlns:xsd=\"http://www.w3.org/2001/XMLSchema\" xmlns:xsi=\"http://www.w3.org/2001/XMLSchema-instance\" xmlns:soap=\"http://schemas.xmlsoap.org/soap/envelope/\"><soap:Header><operationID>00000001-00000001</operationID></soap:Header><soap:Body><RetrieveServiceContent xmlns=\"urn:internalvim25\"><_this xsi:type=\"ManagedObjectReference\" type=\"ServiceInstance\">ServiceInstance</_this></RetrieveServiceContent></soap:Body></soap:Envelope>"]
+<134>1 2026-04-07T19:53:21.223437+00:00 decky-webmail http - request [decnet@55555 method="GET" path="/nmaplowercheck1775591601" remote_addr="192.168.1.5" headers="{'Host': '192.168.1.110', 'Connection': 'close', 'User-Agent': 'Mozilla/5.0 (compatible; Nmap Scripting Engine; https://nmap.org/book/nse.html)'}" body=""]
+<134>1 2026-04-07T19:53:21.224651+00:00 decky-webmail http - request [decnet@55555 method="GET" path="/NmapUpperCheck1775591601" remote_addr="192.168.1.5" headers="{'Host': '192.168.1.110', 'Connection': 'close', 'User-Agent': 'Mozilla/5.0 (compatible; Nmap Scripting Engine; https://nmap.org/book/nse.html)'}" body=""]
+<134>1 2026-04-07T19:53:21.225177+00:00 decky-webmail http - request [decnet@55555 method="GET" path="/Nmap/folder/check1775591601" remote_addr="192.168.1.5" headers="{'Host': '192.168.1.110', 'Connection': 'close', 'User-Agent': 'Mozilla/5.0 (compatible; Nmap Scripting Engine; https://nmap.org/book/nse.html)'}" body=""]
+<134>1 2026-04-07T19:53:21.225909+00:00 decky-webmail http - request [decnet@55555 method="GET" path="/" remote_addr="192.168.1.5" headers="{}" body=""]
+<134>1 2026-04-07T19:53:21.226287+00:00 decky-webmail http - request [decnet@55555 method="GET" path="/" remote_addr="192.168.1.5" headers="{'Host': '192.168.1.110'}" body=""]
+<134>1 2026-04-07T20:24:03.279954+00:00 decky-webmail imap - startup - IMAP server starting as decky-webmail
+<134>1 2026-04-07T20:24:03.279897+00:00 decky-webmail smtp - startup - SMTP server starting as decky-webmail
+<134>1 2026-04-07T20:24:03.283256+00:00 decky-webmail pop3 - startup - POP3 server starting as decky-webmail
+<134>1 2026-04-07T20:24:03.297543+00:00 decky-webmail http - startup - HTTP server starting as decky-webmail

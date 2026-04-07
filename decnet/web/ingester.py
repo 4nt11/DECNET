@@ -7,62 +7,62 @@ from pathlib import Path
 
 from decnet.web.repository import BaseRepository
 
-logger = logging.getLogger("decnet.web.ingester")
+logger: logging.Logger = logging.getLogger("decnet.web.ingester")
 
 async def log_ingestion_worker(repo: BaseRepository) -> None:
     """
     Background task that tails the DECNET_INGEST_LOG_FILE.json and
     inserts structured JSON logs into the SQLite repository.
     """
-    base_log_file = os.environ.get("DECNET_INGEST_LOG_FILE")
-    if not base_log_file:
+    _base_log_file: str | None = os.environ.get("DECNET_INGEST_LOG_FILE")
+    if not _base_log_file:
         logger.warning("DECNET_INGEST_LOG_FILE not set. Log ingestion disabled.")
         return
 
-    json_log_path = Path(base_log_file).with_suffix(".json")
-    position = 0
+    _json_log_path: Path = Path(_base_log_file).with_suffix(".json")
+    _position: int = 0
     
-    logger.info(f"Starting JSON log ingestion from {json_log_path}")
+    logger.info(f"Starting JSON log ingestion from {_json_log_path}")
 
     while True:
         try:
-            if not json_log_path.exists():
+            if not _json_log_path.exists():
                 await asyncio.sleep(2)
                 continue
                 
-            stat = json_log_path.stat()
-            if stat.st_size < position:
+            _stat: os.stat_result = _json_log_path.stat()
+            if _stat.st_size < _position:
                 # File rotated or truncated
-                position = 0
+                _position = 0
                 
-            if stat.st_size == position:
+            if _stat.st_size == _position:
                 # No new data
                 await asyncio.sleep(1)
                 continue
                 
-            with open(json_log_path, "r", encoding="utf-8", errors="replace") as f:
-                f.seek(position)
+            with open(_json_log_path, "r", encoding="utf-8", errors="replace") as _f:
+                _f.seek(_position)
                 while True:
-                    line = f.readline()
-                    if not line:
+                    _line: str = _f.readline()
+                    if not _line:
                         break # EOF reached
                     
-                    if not line.endswith('\n'):
+                    if not _line.endswith('\n'):
                         # Partial line read, don't process yet, don't advance position
                         break
 
                     try:
-                        log_data = json.loads(line.strip())
-                        await repo.add_log(log_data)
+                        _log_data: dict[str, Any] = json.loads(_line.strip())
+                        await repo.add_log(_log_data)
                     except json.JSONDecodeError:
-                        logger.error(f"Failed to decode JSON log line: {line}")
+                        logger.error(f"Failed to decode JSON log line: {_line}")
                         continue
                     
                     # Update position after successful line read
-                    position = f.tell()
+                    _position = _f.tell()
                 
-        except Exception as e:
-            logger.error(f"Error in log ingestion worker: {e}")
+        except Exception as _e:
+            logger.error(f"Error in log ingestion worker: {_e}")
             await asyncio.sleep(5)
             
         await asyncio.sleep(1)
