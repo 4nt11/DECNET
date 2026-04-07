@@ -351,19 +351,20 @@ def deploy(
     
     if api and not dry_run:
         import subprocess
+        import sys
         console.print(f"[green]Starting DECNET API on port {api_port}...[/]")
         env = os.environ.copy()
         env["DECNET_INGEST_LOG_FILE"] = effective_log_file
         try:
             subprocess.Popen(
-                ["uvicorn", "decnet.web.api:app", "--host", "0.0.0.0", "--port", str(api_port)],
+                [sys.executable, "-m", "uvicorn", "decnet.web.api:app", "--host", "0.0.0.0", "--port", str(api_port)],
                 env=env,
                 stdout=subprocess.DEVNULL,
                 stderr=subprocess.STDOUT
             )
             console.print(f"[dim]API running at http://0.0.0.0:{api_port}[/]")
-        except FileNotFoundError:
-            console.print("[red]Failed to start API: 'uvicorn' not found. Is it installed?[/]")
+        except (FileNotFoundError, subprocess.SubprocessError):
+            console.print("[red]Failed to start API. Ensure 'uvicorn' is installed in the current environment.[/]")
 
 
 @app.command()
