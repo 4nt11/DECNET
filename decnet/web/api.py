@@ -18,12 +18,16 @@ from decnet.web.auth import (
     verify_password,
 )
 from decnet.web.sqlite_repository import SQLiteRepository
+from decnet.web.ingester import log_ingestion_worker
+import asyncio
 
 repo: SQLiteRepository = SQLiteRepository()
+ingestion_task: asyncio.Task | None = None
 
 
 @asynccontextmanager
 async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
+    global ingestion_task
     await repo.initialize()
     # Create default admin if no users exist
     admin_user: dict[str, Any] | None = await repo.get_user_by_username("admin")
@@ -37,7 +41,15 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
                 "must_change_password": True
             }
         )
+    
+    # Start background ingestion task
+    ingestion_task = asyncio.create_task(log_ingestion_worker(repo))
+    
     yield
+    
+    # Shutdown ingestion task
+    if ingestion_task:
+        ingestion_task.cancel()
 
 
 app: FastAPI = FastAPI(

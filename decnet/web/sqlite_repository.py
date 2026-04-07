@@ -41,16 +41,30 @@ class SQLiteRepository(BaseRepository):
 
     async def add_log(self, log_data: dict[str, Any]) -> None:
         async with aiosqlite.connect(self.db_path) as db:
-            await db.execute(
-                "INSERT INTO logs (decky, service, event_type, attacker_ip, raw_line) VALUES (?, ?, ?, ?, ?)",
-                (
-                    log_data.get("decky"),
-                    log_data.get("service"),
-                    log_data.get("event_type"),
-                    log_data.get("attacker_ip"),
-                    log_data.get("raw_line")
+            timestamp = log_data.get("timestamp")
+            if timestamp:
+                await db.execute(
+                    "INSERT INTO logs (timestamp, decky, service, event_type, attacker_ip, raw_line) VALUES (?, ?, ?, ?, ?, ?)",
+                    (
+                        timestamp,
+                        log_data.get("decky"),
+                        log_data.get("service"),
+                        log_data.get("event_type"),
+                        log_data.get("attacker_ip"),
+                        log_data.get("raw_line")
+                    )
                 )
-            )
+            else:
+                await db.execute(
+                    "INSERT INTO logs (decky, service, event_type, attacker_ip, raw_line) VALUES (?, ?, ?, ?, ?)",
+                    (
+                        log_data.get("decky"),
+                        log_data.get("service"),
+                        log_data.get("event_type"),
+                        log_data.get("attacker_ip"),
+                        log_data.get("raw_line")
+                    )
+                )
             await db.commit()
 
     async def get_logs(
