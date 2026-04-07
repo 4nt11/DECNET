@@ -120,10 +120,90 @@ def _get_file_logger() -> logging.Logger:
     return _file_logger
 
 
+
+_json_logger: logging.Logger | None = None
+
+def _get_json_logger() -> logging.Logger:
+    global _json_logger
+    if _json_logger is not None:
+        return _json_logger
+
+    log_path_str = os.environ.get(_LOG_FILE_ENV, _DEFAULT_LOG_FILE)
+    json_path = Path(log_path_str).with_suffix(".json")
+    try:
+        json_path.parent.mkdir(parents=True, exist_ok=True)
+        handler = logging.handlers.RotatingFileHandler(
+            json_path,
+            maxBytes=_MAX_BYTES,
+            backupCount=_BACKUP_COUNT,
+            encoding="utf-8",
+        )
+    except OSError:
+        handler = logging.StreamHandler()
+
+    handler.setFormatter(logging.Formatter("%(message)s"))
+    _json_logger = logging.getLogger("decnet.json")
+    _json_logger.setLevel(logging.DEBUG)
+    _json_logger.propagate = False
+    _json_logger.addHandler(handler)
+    return _json_logger
+
+
 def write_syslog_file(line: str) -> None:
     """Append a syslog line to the rotating log file."""
     try:
         _get_file_logger().info(line)
+        
+        # Also parse and write JSON log
+        import json
+        import re
+        from datetime import datetime
+        
+        _RFC5424_RE = re.compile(
+            r"^<\d+>1 "
+            r"(\S+) "       # 1: TIMESTAMP
+            r"(\S+) "       # 2: HOSTNAME (decky name)
+            r"(\S+) "       # 3: APP-NAME (service)
+            r"- "           # PROCID always NILVALUE
+            r"(\S+) "       # 4: MSGID (event_type)
+            r"(.+)$",       # 5: SD element + optional MSG
+        )
+        _SD_BLOCK_RE = re.compile(r'\[decnet@55555\s+(.*?)\]', re.DOTALL)
+        _PARAM_RE = re.compile(r'(\w+)="((?:[^"\\]|\\.)*)"')
+        _IP_FIELDS = ("src_ip", "src", "client_ip", "remote_ip", "ip")
+        
+        m = _RFC5424_RE.match(line)
+        if m:
+            ts_raw, decky, service, event_type, sd_rest = m.groups()
+            
+            block = _SD_BLOCK_RE.search(sd_rest)
+            fields = {}
+            if block:
+                for k, v in _PARAM_RE.findall(block.group(1)):
+                    fields[k] = v.replace('\\"', '"').replace("\\\\", "\\").replace("\\]", "]")
+                    
+            attacker_ip = "Unknown"
+            for fname in _IP_FIELDS:
+                if fname in fields:
+                    attacker_ip = fields[fname]
+                    break
+                    
+            # Parse timestamp to normalize it
+            try:
+                ts = datetime.fromisoformat(ts_raw).strftime("%Y-%m-%d %H:%M:%S")
+            except ValueError:
+                ts = ts_raw
+                
+            payload = {
+                "timestamp": ts,
+                "decky": decky,
+                "service": service,
+                "event_type": event_type,
+                "attacker_ip": attacker_ip,
+                "raw_line": line
+            }
+            _get_json_logger().info(json.dumps(payload))
+            
     except Exception:
         pass
 
