@@ -214,8 +214,11 @@ def deploy(
     no_cache: bool = typer.Option(False, "--no-cache", help="Force rebuild all images, ignoring Docker layer cache"),
     ipvlan: bool = typer.Option(False, "--ipvlan", help="Use IPvlan L2 instead of MACVLAN (required on WiFi interfaces)"),
     config_file: Optional[str] = typer.Option(None, "--config", "-c", help="Path to INI config file"),
+    api: bool = typer.Option(False, "--api", help="Start the FastAPI backend to ingest and serve logs"),
+    api_port: int = typer.Option(8000, "--api-port", help="Port for the backend API"),
 ) -> None:
     """Deploy deckies to the LAN."""
+    import os
     if mode not in ("unihost", "swarm"):
         console.print("[red]--mode must be 'unihost' or 'swarm'[/]")
         raise typer.Exit(1)
@@ -321,6 +324,11 @@ def deploy(
         effective_log_target = log_target
         effective_log_file = log_file
 
+    # Handle automatic log file for API
+    if api and not effective_log_file:
+        effective_log_file = os.path.join(os.getcwd(), "decnet.log")
+        console.print(f"[cyan]API mode enabled: defaulting log-file to {effective_log_file}[/]")
+
     config = DecnetConfig(
         mode=mode,
         interface=iface,
@@ -340,6 +348,22 @@ def deploy(
 
     from decnet.deployer import deploy as _deploy
     _deploy(config, dry_run=dry_run, no_cache=no_cache)
+    
+    if api and not dry_run:
+        import subprocess
+        console.print(f"[green]Starting DECNET API on port {api_port}...[/]")
+        env = os.environ.copy()
+        env["DECNET_INGEST_LOG_FILE"] = effective_log_file
+        try:
+            subprocess.Popen(
+                ["uvicorn", "decnet.web.api:app", "--host", "0.0.0.0", "--port", str(api_port)],
+                env=env,
+                stdout=subprocess.DEVNULL,
+                stderr=subprocess.STDOUT
+            )
+            console.print(f"[dim]API running at http://0.0.0.0:{api_port}[/]")
+        except FileNotFoundError:
+            console.print("[red]Failed to start API: 'uvicorn' not found. Is it installed?[/]")
 
 
 @app.command()
@@ -459,3 +483,39 @@ def list_archetypes() -> None:
             arch.description,
         )
     console.print(table)
+
+
+@app.command(name="web")
+def serve_web(
+    web_port: int = typer.Option(5173, "--web-port", help="Port to serve the DECNET Web Dashboard"),
+) -> None:
+    """Serve the DECNET Web Dashboard frontend."""
+    import http.server
+    import socketserver
+    from pathlib import Path
+    
+    # Assuming decnet_web/dist is relative to the project root
+    dist_dir = Path(__file__).parent.parent / "decnet_web" / "dist"
+    
+    if not dist_dir.exists():
+        console.print(f"[red]Frontend build not found at {dist_dir}. Make sure you run 'npm run build' inside 'decnet_web'.[/]")
+        raise typer.Exit(1)
+        
+    class SPAHTTPRequestHandler(http.server.SimpleHTTPRequestHandler):
+        def do_GET(self):
+            # Try to serve the requested file
+            path = self.translate_path(self.path)
+            if not Path(path).exists() or Path(path).is_dir():
+                # If not found or is a directory, serve index.html (for React Router)
+                self.path = "/index.html"
+            return super().do_GET()
+            
+    import os
+    os.chdir(dist_dir)
+            
+    with socketserver.TCPServer(("", web_port), SPAHTTPRequestHandler) as httpd:
+        console.print(f"[green]Serving DECNET Web Dashboard on http://0.0.0.0:{web_port}[/]")
+        try:
+            httpd.serve_forever()
+        except KeyboardInterrupt:
+            console.print("\n[dim]Shutting down dashboard server.[/]")
