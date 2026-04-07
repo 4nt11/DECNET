@@ -17,6 +17,11 @@ dependencies = [
     "ruff>=0.4",
     "bandit>=1.7",
     "pip-audit>=2.0",
+    "fastapi>=0.110.0",
+    "uvicorn>=0.29.0",
+    "aiosqlite>=0.20.0",
+    "PyJWT>=2.8.0",
+    "passlib[bcrypt]>=1.7.4",
 ]
 
 [project.scripts]
