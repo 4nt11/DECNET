@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+import { NavLink } from 'react-router-dom';
 import { Menu, X, Search, Activity, LayoutDashboard, Terminal, Settings, LogOut } from 'lucide-react';
 import './Layout.css';
 
@@ -30,10 +31,10 @@ const Layout: React.FC<LayoutProps> = ({ children, onLogout, onSearch }) => {
         </div>
         
         <nav className="sidebar-nav">
-          <NavItem icon={<LayoutDashboard size={20} />} label="Dashboard" active open={sidebarOpen} />
-          <NavItem icon={<Terminal size={20} />} label="Live Logs" open={sidebarOpen} />
-          <NavItem icon={<Activity size={20} />} label="Attackers" open={sidebarOpen} />
-          <NavItem icon={<Settings size={20} />} label="Config" open={sidebarOpen} />
+          <NavItem to="/" icon={<LayoutDashboard size={20} />} label="Dashboard" open={sidebarOpen} />
+          <NavItem to="/live-logs" icon={<Terminal size={20} />} label="Live Logs" open={sidebarOpen} />
+          <NavItem to="/attackers" icon={<Activity size={20} />} label="Attackers" open={sidebarOpen} />
+          <NavItem to="/config" icon={<Settings size={20} />} label="Config" open={sidebarOpen} />
         </nav>
 
         <div className="sidebar-footer">
@@ -72,17 +73,17 @@ const Layout: React.FC<LayoutProps> = ({ children, onLogout, onSearch }) => {
 };
 
 interface NavItemProps {
+  to: string;
   icon: React.ReactNode;
   label: string;
-  active?: boolean;
   open: boolean;
 }
 
-const NavItem: React.FC<NavItemProps> = ({ icon, label, active, open }) => (
-  <div className={`nav-item ${active ? 'active' : ''}`}>
+const NavItem: React.FC<NavItemProps> = ({ to, icon, label, open }) => (
+  <NavLink to={to} className={({ isActive }) => `nav-item ${isActive ? 'active' : ''}`} end={to === '/'}>
     {icon}
     {open && <span className="nav-label">{label}</span>}
-  </div>
+  </NavLink>
 );
 
 export default Layout;
