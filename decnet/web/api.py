@@ -34,6 +34,7 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
                 "username": "admin",
                 "password_hash": get_password_hash("admin"),
                 "role": "admin",
+                "must_change_password": True
             }
         )
     yield
@@ -76,11 +77,17 @@ async def get_current_user(token: str = Depends(oauth2_scheme)) -> str:
 class Token(BaseModel):
     access_token: str
     token_type: str
+    must_change_password: bool = False
 
 
 class LoginRequest(BaseModel):
     username: str
     password: str
+
+
+class ChangePasswordRequest(BaseModel):
+    old_password: str
+    new_password: str
 
 
 class LogsResponse(BaseModel):
@@ -91,7 +98,7 @@ class LogsResponse(BaseModel):
 
 
 @app.post("/api/v1/auth/login", response_model=Token)
-async def login(request: LoginRequest) -> dict[str, str]:
+async def login(request: LoginRequest) -> dict[str, Any]:
     user: dict[str, Any] | None = await repo.get_user_by_username(request.username)
     if not user or not verify_password(request.password, user["password_hash"]):
         raise HTTPException(
@@ -105,7 +112,25 @@ async def login(request: LoginRequest) -> dict[str, str]:
     access_token: str = create_access_token(
         data={"uuid": user["uuid"]}, expires_delta=access_token_expires
     )
-    return {"access_token": access_token, "token_type": "bearer"}
+    return {
+        "access_token": access_token, 
+        "token_type": "bearer",
+        "must_change_password": bool(user.get("must_change_password", False))
+    }
+
+
+@app.post("/api/v1/auth/change-password")
+async def change_password(request: ChangePasswordRequest, current_user: str = Depends(get_current_user)) -> dict[str, str]:
+    user: dict[str, Any] | None = await repo.get_user_by_uuid(current_user)
+    if not user or not verify_password(request.old_password, user["password_hash"]):
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Incorrect old password",
+        )
+    
+    new_hash = get_password_hash(request.new_password)
+    await repo.update_user_password(current_user, new_hash, must_change_password=False)
+    return {"message": "Password updated successfully"}
 
 
 @app.get("/api/v1/logs", response_model=LogsResponse)

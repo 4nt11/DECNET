@@ -41,6 +41,16 @@ class BaseRepository(ABC):
         pass
 
     @abstractmethod
+    async def get_user_by_uuid(self, uuid: str) -> Optional[dict[str, Any]]:
+        """Retrieve a user by their UUID."""
+        pass
+
+    @abstractmethod
     async def create_user(self, user_data: dict[str, Any]) -> None:
         """Create a new dashboard user."""
+        pass
+
+    @abstractmethod
+    async def update_user_password(self, uuid: str, password_hash: str, must_change_password: bool = False) -> None:
+        """Update a user's password and change the must_change_password flag."""
         pass

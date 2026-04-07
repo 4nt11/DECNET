@@ -29,9 +29,14 @@ class SQLiteRepository(BaseRepository):
                     uuid TEXT PRIMARY KEY,
                     username TEXT UNIQUE,
                     password_hash TEXT,
-                    role TEXT DEFAULT 'viewer'
+                    role TEXT DEFAULT 'viewer',
+                    must_change_password BOOLEAN DEFAULT 0
                 )
             """)
+            try:
+                await db.execute("ALTER TABLE users ADD COLUMN must_change_password BOOLEAN DEFAULT 0")
+            except aiosqlite.OperationalError:
+                pass  # Column already exists
             await db.commit()
 
     async def add_log(self, log_data: dict[str, Any]) -> None:
@@ -112,15 +117,31 @@ class SQLiteRepository(BaseRepository):
                 row = await cursor.fetchone()
                 return dict(row) if row else None
 
+    async def get_user_by_uuid(self, uuid: str) -> Optional[dict[str, Any]]:
+        async with aiosqlite.connect(self.db_path) as db:
+            db.row_factory = aiosqlite.Row
+            async with db.execute("SELECT * FROM users WHERE uuid = ?", (uuid,)) as cursor:
+                row = await cursor.fetchone()
+                return dict(row) if row else None
+
     async def create_user(self, user_data: dict[str, Any]) -> None:
         async with aiosqlite.connect(self.db_path) as db:
             await db.execute(
-                "INSERT INTO users (uuid, username, password_hash, role) VALUES (?, ?, ?, ?)",
+                "INSERT INTO users (uuid, username, password_hash, role, must_change_password) VALUES (?, ?, ?, ?, ?)",
                 (
                     user_data["uuid"],
                     user_data["username"],
                     user_data["password_hash"],
-                    user_data["role"]
+                    user_data["role"],
+                    user_data.get("must_change_password", False)
                 )
+            )
+            await db.commit()
+
+    async def update_user_password(self, uuid: str, password_hash: str, must_change_password: bool = False) -> None:
+        async with aiosqlite.connect(self.db_path) as db:
+            await db.execute(
+                "UPDATE users SET password_hash = ?, must_change_password = ? WHERE uuid = ?",
+                (password_hash, must_change_password, uuid)
             )
             await db.commit()

@@ -32,6 +32,8 @@ def test_login_success() -> None:
         data = response.json()
         assert "access_token" in data
         assert data["token_type"] == "bearer"
+        assert "must_change_password" in data
+        assert data["must_change_password"] is True
 
 
 def test_login_failure() -> None:
@@ -47,6 +49,38 @@ def test_login_failure() -> None:
             json={"username": "nonexistent", "password": "wrongpassword"}
         )
         assert response.status_code == 401
+
+
+def test_change_password() -> None:
+    with TestClient(app) as client:
+        # First login to get token
+        login_resp = client.post("/api/v1/auth/login", json={"username": "admin", "password": "admin"})
+        token = login_resp.json()["access_token"]
+
+        # Try changing password with wrong old password
+        resp1 = client.post(
+            "/api/v1/auth/change-password",
+            json={"old_password": "wrong", "new_password": "new_secure_password"},
+            headers={"Authorization": f"Bearer {token}"}
+        )
+        assert resp1.status_code == 401
+
+        # Change password successfully
+        resp2 = client.post(
+            "/api/v1/auth/change-password",
+            json={"old_password": "admin", "new_password": "new_secure_password"},
+            headers={"Authorization": f"Bearer {token}"}
+        )
+        assert resp2.status_code == 200
+
+        # Verify old password no longer works
+        resp3 = client.post("/api/v1/auth/login", json={"username": "admin", "password": "admin"})
+        assert resp3.status_code == 401
+
+        # Verify new password works and must_change_password is False
+        resp4 = client.post("/api/v1/auth/login", json={"username": "admin", "password": "new_secure_password"})
+        assert resp4.status_code == 200
+        assert resp4.json()["must_change_password"] is False
 
 
 def test_get_logs_unauthorized() -> None:
