@@ -17,6 +17,8 @@ interface LogEntry {
   event_type: string | null;
   attacker_ip: string;
   raw_line: string;
+  fields: string | null;
+  msg: string | null;
 }
 
 interface DashboardProps {
@@ -88,15 +90,47 @@ const Dashboard: React.FC<DashboardProps> = ({ searchQuery }) => {
               </tr>
             </thead>
             <tbody>
-              {logs.length > 0 ? logs.map(log => (
-                <tr key={log.id}>
-                  <td className="dim">{new Date(log.timestamp).toLocaleString()}</td>
-                  <td className="violet-accent">{log.decky}</td>
-                  <td className="matrix-text">{log.service}</td>
-                  <td>{log.attacker_ip}</td>
-                  <td className="raw-line">{log.raw_line}</td>
-                </tr>
-              )) : (
+              {logs.length > 0 ? logs.map(log => {
+                let parsedFields: Record<string, string> = {};
+                if (log.fields) {
+                  try {
+                    parsedFields = JSON.parse(log.fields);
+                  } catch (e) {
+                    // Ignore parsing errors
+                  }
+                }
+
+                return (
+                  <tr key={log.id}>
+                    <td className="dim">{new Date(log.timestamp).toLocaleString()}</td>
+                    <td className="violet-accent">{log.decky}</td>
+                    <td className="matrix-text">{log.service}</td>
+                    <td>{log.attacker_ip}</td>
+                    <td>
+                      <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                        <div style={{ fontWeight: 'bold', color: 'var(--text-color)' }}>
+                          {log.event_type} {log.msg && log.msg !== '-' && <span style={{ fontWeight: 'normal', opacity: 0.8 }}>— {log.msg}</span>}
+                        </div>
+                        {Object.keys(parsedFields).length > 0 && (
+                          <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
+                            {Object.entries(parsedFields).map(([k, v]) => (
+                              <span key={k} style={{ 
+                                fontSize: '0.7rem', 
+                                backgroundColor: 'rgba(0, 255, 65, 0.1)', 
+                                padding: '2px 8px', 
+                                borderRadius: '4px', 
+                                border: '1px solid rgba(0, 255, 65, 0.3)' 
+                              }}>
+                                <span style={{ opacity: 0.6 }}>{k}:</span> {v}
+                              </span>
+                            ))}
+                          </div>
+                        )}
+                      </div>
+                    </td>
+                  </tr>
+                );
+              }) : (
                 <tr>
                   <td colSpan={5} style={{textAlign: 'center', padding: '40px'}}>NO INTERACTION DETECTED</td>
                 </tr>
