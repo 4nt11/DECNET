@@ -353,3 +353,11 @@
 <134>1 2026-04-08T03:05:15.848949+00:00 decky-webmail pop3 - command [decnet@55555 src="192.168.1.5" cmd=" / "]
 <134>1 2026-04-08T03:05:15.849007+00:00 decky-webmail pop3 - disconnect [decnet@55555 src="192.168.1.5"]
 <134>1 2026-04-08T03:05:15.849061+00:00 decky-webmail pop3 - disconnect [decnet@55555 src="192.168.1.5"]
+<134>1 2026-04-08T03:21:44.871598+00:00 decky-webmail http - startup - HTTP server starting as decky-webmail
+<134>1 2026-04-08T03:21:44.905490+00:00 decky-webmail smtp - startup - SMTP server starting as decky-webmail
+<134>1 2026-04-08T03:21:44.944053+00:00 decky-webmail imap - startup - IMAP server starting as decky-webmail
+<134>1 2026-04-08T03:21:45.112633+00:00 decky-webmail pop3 - startup - POP3 server starting as decky-webmail
+<134>1 2026-04-08T03:29:47.393300+00:00 decky-webmail smtp - startup - SMTP server starting as decky-webmail
+<134>1 2026-04-08T03:29:47.490394+00:00 decky-webmail pop3 - startup - POP3 server starting as decky-webmail
+<134>1 2026-04-08T03:29:47.642795+00:00 decky-webmail imap - startup - IMAP server starting as decky-webmail
+<134>1 2026-04-08T03:29:47.694889+00:00 decky-webmail http - startup - HTTP server starting as decky-webmail
