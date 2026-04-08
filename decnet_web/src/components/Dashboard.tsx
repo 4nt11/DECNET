@@ -47,9 +47,43 @@ const Dashboard: React.FC<DashboardProps> = ({ searchQuery }) => {
   };
 
   useEffect(() => {
+    // Initial fetch to populate UI immediately
     fetchData();
-    const interval = setInterval(fetchData, 5000); // Live update every 5s
-    return () => clearInterval(interval);
+
+    // Setup SSE connection
+    const token = localStorage.getItem('token');
+    const baseUrl = 'http://localhost:8000/api/v1'; // Or extract from api.defaults.baseURL
+    let url = `${baseUrl}/stream?token=${token}`;
+    if (searchQuery) {
+      url += `&search=${encodeURIComponent(searchQuery)}`;
+    }
+
+    const eventSource = new EventSource(url);
+
+    eventSource.onmessage = (event) => {
+      try {
+        const payload = JSON.parse(event.data);
+        if (payload.type === 'logs') {
+          setLogs(prev => {
+            const newLogs = payload.data;
+            // Prepend new logs, keep up to 100 in UI to prevent infinite DOM growth
+            return [...newLogs, ...prev].slice(0, 100);
+          });
+        } else if (payload.type === 'stats') {
+          setStats(payload.data);
+        }
+      } catch (err) {
+        console.error('Failed to parse SSE payload', err);
+      }
+    };
+
+    eventSource.onerror = (err) => {
+      console.error('SSE connection error, attempting to reconnect...', err);
+    };
+
+    return () => {
+      eventSource.close();
+    };
   }, [searchQuery]);
 
   if (loading && !stats) return <div className="loader">INITIALIZING SENSORS...</div>;

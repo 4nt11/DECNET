@@ -104,6 +104,32 @@ class SQLiteRepository(BaseRepository):
                 _rows: list[aiosqlite.Row] = await _cursor.fetchall()
                 return [dict(_row) for _row in _rows]
                 
+    async def get_max_log_id(self) -> int:
+        _query: str = "SELECT MAX(id) as max_id FROM logs"
+        async with aiosqlite.connect(self.db_path) as _db:
+            _db.row_factory = aiosqlite.Row
+            async with _db.execute(_query) as _cursor:
+                _row: aiosqlite.Row | None = await _cursor.fetchone()
+                return _row["max_id"] if _row and _row["max_id"] is not None else 0
+
+    async def get_logs_after_id(self, last_id: int, limit: int = 50, search: Optional[str] = None) -> list[dict[str, Any]]:
+        _query: str = "SELECT * FROM logs WHERE id > ?"
+        _params: list[Any] = [last_id]
+
+        if search:
+            _query += " AND (raw_line LIKE ? OR decky LIKE ? OR service LIKE ? OR attacker_ip LIKE ?)"
+            _like_val: str = f"%{search}%"
+            _params.extend([_like_val, _like_val, _like_val, _like_val])
+
+        _query += " ORDER BY id ASC LIMIT ?"
+        _params.append(limit)
+
+        async with aiosqlite.connect(self.db_path) as _db:
+            _db.row_factory = aiosqlite.Row
+            async with _db.execute(_query, _params) as _cursor:
+                _rows: list[aiosqlite.Row] = await _cursor.fetchall()
+                return [dict(_row) for _row in _rows]
+
     async def get_total_logs(self, search: Optional[str] = None) -> int:
         _query: str = "SELECT COUNT(*) as total FROM logs"
         _params: list[Any] = []
