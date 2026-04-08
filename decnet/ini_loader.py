@@ -83,7 +83,17 @@ def load_ini(path: str | Path) -> IniConfig:
     read = cp.read(str(path))
     if not read:
         raise FileNotFoundError(f"Config file not found: {path}")
+    return _parse_configparser(cp)
 
+
+def load_ini_from_string(content: str) -> IniConfig:
+    """Parse a DECNET INI string and return an IniConfig."""
+    cp = configparser.ConfigParser()
+    cp.read_string(content)
+    return _parse_configparser(cp)
+
+
+def _parse_configparser(cp: configparser.ConfigParser) -> IniConfig:
     cfg = IniConfig()
 
     if cp.has_section("general"):

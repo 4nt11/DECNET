@@ -142,11 +142,7 @@ def _build_deckies_from_ini(
         # Resolve archetype (if any) — explicit services/distro override it
         arch: Archetype | None = None
         if spec.archetype:
-            try:
-                arch = get_archetype(spec.archetype)
-            except ValueError as e:
-                console.print(f"[red]{e}[/]")
-                raise typer.Exit(1)
+            arch = get_archetype(spec.archetype)
 
         # Distro: archetype preferred list → random → global cycle
         distro_pool = arch.preferred_distros if arch else list(all_distros().keys())
@@ -155,19 +151,16 @@ def _build_deckies_from_ini(
 
         ip = spec.ip or next(auto_pool, None)
         if ip is None:
-            raise RuntimeError(
-                f"Not enough free IPs in {subnet_cidr} while assigning IP for '{spec.name}'."
-            )
+            raise ValueError(f"Not enough free IPs in {subnet_cidr} while assigning IP for '{spec.name}'.")
 
         if spec.services:
             known = set(_all_service_names())
             unknown = [s for s in spec.services if s not in known]
             if unknown:
-                console.print(
-                    f"[red]Unknown service(s) in [{spec.name}]: {unknown}. "
-                    f"Available: {_all_service_names()}[/]"
+                raise ValueError(
+                    f"Unknown service(s) in [{spec.name}]: {unknown}. "
+                    f"Available: {_all_service_names()}"
                 )
-                raise typer.Exit(1)
             svc_list = spec.services
         elif arch:
             svc_list = list(arch.services)
@@ -176,11 +169,10 @@ def _build_deckies_from_ini(
             count = random.randint(1, min(3, len(svc_pool)))
             svc_list = random.sample(svc_pool, count)
         else:
-            console.print(
-                f"[red]Decky '[{spec.name}]' has no services= in config. "
-                "Add services=, archetype=, or use --randomize-services.[/]"
+            raise ValueError(
+                f"Decky '[{spec.name}]' has no services= in config. "
+                "Add services=, archetype=, or use --randomize-services."
             )
-            raise typer.Exit(1)
 
         # nmap_os priority: explicit INI key > archetype default > "linux"
         resolved_nmap_os = spec.nmap_os or (arch.nmap_os if arch else "linux")
@@ -205,6 +197,30 @@ def _build_deckies_from_ini(
             last_mutated=now,
         ))
     return deckies
+
+
+@app.command()
+def api(
+    port: int = typer.Option(8000, "--port", help="Port for the backend API"),
+    log_file: str = typer.Option("/var/log/decnet/decnet.log", "--log-file", help="Path to the DECNET log file to monitor"),
+) -> None:
+    """Run the DECNET API and Web Dashboard in standalone mode."""
+    import subprocess
+    import sys
+    import os
+
+    console.print(f"[green]Starting DECNET API on port {port}...[/]")
+    _env: dict[str, str] = os.environ.copy()
+    _env["DECNET_INGEST_LOG_FILE"] = str(log_file)
+    try:
+        subprocess.run(
+            [sys.executable, "-m", "uvicorn", "decnet.web.api:app", "--host", "0.0.0.0", "--port", str(port)],
+            env=_env
+        )
+    except KeyboardInterrupt:
+        pass
+    except (FileNotFoundError, subprocess.SubprocessError):
+        console.print("[red]Failed to start API. Ensure 'uvicorn' is installed in the current environment.[/]")
 
 
 @app.command()
@@ -275,9 +291,13 @@ def deploy(
 
         effective_log_target = log_target or ini.log_target
         effective_log_file = log_file
-        decky_configs = _build_deckies_from_ini(
-            ini, subnet_cidr, effective_gateway, host_ip, randomize_services, cli_mutate_interval=mutate_interval
-        )
+        try:
+            decky_configs = _build_deckies_from_ini(
+                ini, subnet_cidr, effective_gateway, host_ip, randomize_services, cli_mutate_interval=mutate_interval
+            )
+        except ValueError as e:
+            console.print(f"[red]{e}[/]")
+            raise typer.Exit(1)
     # ------------------------------------------------------------------ #
     # Classic CLI path                                                     #
     # ------------------------------------------------------------------ #

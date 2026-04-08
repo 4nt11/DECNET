@@ -265,3 +265,74 @@ async def stream_events(
             await asyncio.sleep(1)
 
     return StreamingResponse(event_generator(), media_type="text/event-stream")
+
+
+class DeployIniRequest(BaseModel):
+    ini_content: str
+
+@app.post("/api/v1/deckies/deploy")
+async def api_deploy_deckies(req: DeployIniRequest, current_user: str = Depends(get_current_user)) -> dict[str, str]:
+    from decnet.ini_loader import load_ini_from_string
+    from decnet.cli import _build_deckies_from_ini
+    from decnet.config import load_state, DecnetConfig, DEFAULT_MUTATE_INTERVAL
+    from decnet.network import detect_interface, detect_subnet, get_host_ip
+    from decnet.deployer import deploy as _deploy
+    import logging
+
+    try:
+        ini = load_ini_from_string(req.ini_content)
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=f"Failed to parse INI: {e}")
+
+    state = load_state()
+    
+    if state:
+        config, _ = state
+        subnet_cidr = ini.subnet or config.subnet
+        gateway = ini.gateway or config.gateway
+        host_ip = get_host_ip(config.interface)
+        randomize_services = False
+    else:
+        # If no state exists, we need to infer network details
+        iface = ini.interface or detect_interface()
+        subnet_cidr, gateway = ini.subnet, ini.gateway
+        if not subnet_cidr or not gateway:
+            detected_subnet, detected_gateway = detect_subnet(iface)
+            subnet_cidr = subnet_cidr or detected_subnet
+            gateway = gateway or detected_gateway
+        host_ip = get_host_ip(iface)
+        randomize_services = False
+        config = DecnetConfig(
+            mode="unihost",
+            interface=iface,
+            subnet=subnet_cidr,
+            gateway=gateway,
+            deckies=[],
+            log_target=ini.log_target,
+            log_file=None, # In API mode, uvicorn usually handles this
+            ipvlan=False,
+            mutate_interval=ini.mutate_interval or DEFAULT_MUTATE_INTERVAL
+        )
+
+    try:
+        new_decky_configs = _build_deckies_from_ini(
+            ini, subnet_cidr, gateway, host_ip, randomize_services, cli_mutate_interval=None
+        )
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
+    # Merge deckies
+    existing_deckies_map = {d.name: d for d in config.deckies}
+    for new_decky in new_decky_configs:
+        existing_deckies_map[new_decky.name] = new_decky
+    
+    config.deckies = list(existing_deckies_map.values())
+    
+    # We call deploy(config) which regenerates docker-compose and runs `up -d --remove-orphans`.
+    try:
+        _deploy(config)
+    except Exception as e:
+        logging.getLogger("decnet.web.api").error(f"Deployment failed: {e}")
+        raise HTTPException(status_code=500, detail=f"Deployment failed: {e}")
+
+    return {"message": "Deckies deployed successfully"}

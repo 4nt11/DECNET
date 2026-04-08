@@ -19,6 +19,9 @@ const DeckyFleet: React.FC = () => {
   const [deckies, setDeckies] = useState<Decky[]>([]);
   const [loading, setLoading] = useState(true);
   const [mutating, setMutating] = useState<string | null>(null);
+  const [showDeploy, setShowDeploy] = useState(false);
+  const [iniContent, setIniContent] = useState('');
+  const [deploying, setDeploying] = useState(false);
 
   const fetchDeckies = async () => {
     try {
@@ -61,6 +64,22 @@ const DeckyFleet: React.FC = () => {
     }
   };
 
+  const handleDeploy = async () => {
+    if (!iniContent.trim()) return;
+    setDeploying(true);
+    try {
+      await api.post('/deckies/deploy', { ini_content: iniContent }, { timeout: 120000 });
+      setIniContent('');
+      setShowDeploy(false);
+      fetchDeckies();
+    } catch (err: any) {
+      console.error('Deploy failed', err);
+      alert(`Deploy failed: ${err.response?.data?.detail || err.message}`);
+    } finally {
+      setDeploying(false);
+    }
+  };
+
   useEffect(() => {
     fetchDeckies();
     const _interval = setInterval(fetchDeckies, 10000); // Fleet state updates less frequently than logs
@@ -71,10 +90,37 @@ const DeckyFleet: React.FC = () => {
 
   return (
     <div className="dashboard">
-      <div className="section-header" style={{ border: '1px solid var(--border-color)', backgroundColor: 'var(--secondary-color)', marginBottom: '24px' }}>
-        <Server size={20} />
-        <h2 style={{ margin: 0 }}>DECOY FLEET ASSET INVENTORY</h2>
+      <div className="section-header" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', border: '1px solid var(--border-color)', backgroundColor: 'var(--secondary-color)', marginBottom: '24px' }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+          <Server size={20} />
+          <h2 style={{ margin: 0 }}>DECOY FLEET ASSET INVENTORY</h2>
+        </div>
+        <button 
+          onClick={() => setShowDeploy(!showDeploy)}
+          style={{ display: 'flex', alignItems: 'center', gap: '8px', border: '1px solid var(--accent-color)', color: 'var(--accent-color)' }}
+        >
+          + DEPLOY DECKIES
+        </button>
       </div>
+
+      {showDeploy && (
+        <div style={{ marginBottom: '24px', padding: '24px', backgroundColor: 'var(--secondary-color)', border: '1px solid var(--accent-color)', display: 'flex', flexDirection: 'column', gap: '16px' }}>
+          <h3 style={{ fontSize: '1rem', color: 'var(--text-color)' }}>Deploy via INI Configuration</h3>
+          <textarea 
+            value={iniContent}
+            onChange={(e) => setIniContent(e.target.value)}
+            placeholder="[decky-01]&#10;archetype=linux-server&#10;services=ssh,http"
+            style={{ width: '100%', height: '200px', backgroundColor: '#000', color: 'var(--text-color)', border: '1px solid var(--border-color)', padding: '12px', fontFamily: 'monospace' }}
+          />
+          <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '12px' }}>
+            <button onClick={() => setShowDeploy(false)} style={{ border: '1px solid var(--border-color)', color: 'var(--dim-color)' }}>CANCEL</button>
+            <button onClick={handleDeploy} disabled={deploying} style={{ background: 'var(--accent-color)', color: '#000', border: 'none', display: 'flex', alignItems: 'center', gap: '8px' }}>
+              {deploying && <RefreshCw size={14} className="spin" />}
+              {deploying ? 'DEPLOYING...' : 'DEPLOY'}
+            </button>
+          </div>
+        </div>
+      )}
 
       <div className="deckies-grid" style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(350px, 1fr))', gap: '24px' }}>
         {deckies.length > 0 ? deckies.map(decky => (
