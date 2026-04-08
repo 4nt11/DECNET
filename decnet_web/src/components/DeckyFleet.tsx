@@ -32,7 +32,7 @@ const DeckyFleet: React.FC = () => {
 
   const handleMutate = async (name: string) => {
     try {
-      await api.post(`/deckies/${name}/mutate`);
+      await api.post(`/deckies/${name}/mutate`, {}, { timeout: 120000 });
       fetchDeckies();
     } catch (err) {
       console.error('Failed to mutate', err);
