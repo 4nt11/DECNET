@@ -6,7 +6,7 @@
 - [ ] **Canary tokens** — Embed fake AWS keys and honeydocs into decky filesystems.
 - [ ] **Tarpit mode** — Slow down attackers by drip-feeding bytes or delaying responses.
 - [x] **Dynamic decky mutation** — Rotate exposed services or OS fingerprints over time.
-- [ ] **Credential harvesting DB** — Centralized database for all username/password attempts.
+- [x] **Credential harvesting DB** — Centralized database for all username/password attempts.
 - [ ] **Session recording** — Full capture for SSH/Telnet sessions.
 - [ ] **Payload capture** — Store and hash files uploaded by attackers.
 
@@ -23,7 +23,7 @@
 - [x] **Web dashboard** — Real-time React SPA + FastAPI backend for logs and fleet status.
 - [x] **Decky Inventory** — Dedicated "Decoy Fleet" page showing all deployed assets.
 - [ ] **Pre-built Kibana/Grafana dashboards** — Ship JSON exports for ELK/Grafana.
-- [ ] **CLI live feed** — `decnet watch` command for a unified, colored terminal stream.
+- [x] **CLI live feed** — `decnet watch` command for a unified, colored terminal stream.
 - [ ] **Traversal graph export** — Export attacker movement as DOT or JSON.
 
 ## Deployment & Infrastructure
