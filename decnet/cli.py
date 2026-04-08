@@ -204,7 +204,7 @@ def _build_deckies_from_ini(
             mutate_interval=decky_mutate_interval,
             last_mutated=now,
         ))
-        return deckies
+    return deckies
 
 
 @app.command()
