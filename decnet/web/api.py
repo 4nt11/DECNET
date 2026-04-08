@@ -8,7 +8,7 @@ from fastapi import Depends, FastAPI, HTTPException, Query, status, Request
 from fastapi.responses import StreamingResponse
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.security import OAuth2PasswordBearer
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 from decnet.web.auth import (
     ACCESS_TOKEN_EXPIRE_MINUTES,
@@ -268,7 +268,7 @@ async def stream_events(
 
 
 class DeployIniRequest(BaseModel):
-    ini_content: str
+    ini_content: str = Field(..., min_length=5, max_length=512 * 1024)
 
 @app.post("/api/v1/deckies/deploy")
 async def api_deploy_deckies(req: DeployIniRequest, current_user: str = Depends(get_current_user)) -> dict[str, str]:

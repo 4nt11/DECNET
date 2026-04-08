@@ -88,9 +88,25 @@ def load_ini(path: str | Path) -> IniConfig:
 
 def load_ini_from_string(content: str) -> IniConfig:
     """Parse a DECNET INI string and return an IniConfig."""
+    validate_ini_string(content)
     cp = configparser.ConfigParser()
     cp.read_string(content)
     return _parse_configparser(cp)
+
+
+def validate_ini_string(content: str) -> None:
+    """Perform safety and sanity checks on raw INI content string."""
+    # 1. Size limit (e.g. 512KB)
+    if len(content) > 512 * 1024:
+        raise ValueError("INI content too large (max 512KB).")
+
+    # 2. Ensure it's not empty
+    if not content.strip():
+        raise ValueError("INI content is empty.")
+
+    # 3. Basic structure check (must contain at least one section header)
+    if "[" not in content or "]" not in content:
+        raise ValueError("Invalid INI format: no sections found.")
 
 
 def _parse_configparser(cp: configparser.ConfigParser) -> IniConfig:
@@ -152,7 +168,11 @@ def _parse_configparser(cp: configparser.ConfigParser) -> IniConfig:
             amount = int(amount_raw)
             if amount < 1:
                 raise ValueError
-        except ValueError:
+            if amount > 100:
+                raise ValueError(f"[{section}] amount={amount} exceeds maximum allowed (100).")
+        except ValueError as e:
+            if "exceeds maximum" in str(e):
+                raise e
             raise ValueError(f"[{section}] amount= must be a positive integer, got '{amount_raw}'")
 
         if amount == 1:
