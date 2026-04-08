@@ -30,7 +30,7 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: ${{ matrix.python-version }}
-      - run: pip install -e .[optional-dependencies]
+      - run: pip install -e .[dev]
       - run: pytest tests/ -v --tb=short
 
   bandit:
@@ -53,7 +53,7 @@ jobs:
         with:
           python-version: "3.11"
       - run: pip install pip-audit
-      - run: pip install -e .[optional-dependencies]
+      - run: pip install -e .[dev]
       - run: pip-audit --skip-editable
 
   open-pr:
