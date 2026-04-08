@@ -20,6 +20,7 @@ from decnet.web.auth import (
 )
 from decnet.web.sqlite_repository import SQLiteRepository
 from decnet.web.ingester import log_ingestion_worker
+from decnet.env import DECNET_ADMIN_USER, DECNET_ADMIN_PASSWORD
 import asyncio
 
 repo: SQLiteRepository = SQLiteRepository()
@@ -31,13 +32,13 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
     global ingestion_task
     await repo.initialize()
     # Create default admin if no users exist
-    _admin_user: Optional[dict[str, Any]] = await repo.get_user_by_username("admin")
+    _admin_user: Optional[dict[str, Any]] = await repo.get_user_by_username(DECNET_ADMIN_USER)
     if not _admin_user:
         await repo.create_user(
             {
                 "uuid": str(uuid.uuid4()),
-                "username": "admin",
-                "password_hash": get_password_hash("admin"),
+                "username": DECNET_ADMIN_USER,
+                "password_hash": get_password_hash(DECNET_ADMIN_PASSWORD),
                 "role": "admin",
                 "must_change_password": True
             }

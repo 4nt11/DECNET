@@ -490,6 +490,30 @@ See [`test-full.ini`](test-full.ini) — covers all 25 services across 10 role-t
 
 ---
 
+## Environment Configuration (.env)
+
+DECNET supports loading configuration from `.env.local` and `.env` files located in the project root. This is useful for securing secrets like the JWT key and configuring default ports without passing flags every time.
+
+An example `.env.example` is provided:
+
+```ini
+# API Options
+DECNET_API_HOST=0.0.0.0
+DECNET_API_PORT=8000
+DECNET_JWT_SECRET=supersecretkey12345
+DECNET_INGEST_LOG_FILE=/var/log/decnet/decnet.log
+
+# Web Dashboard Options
+DECNET_WEB_HOST=0.0.0.0
+DECNET_WEB_PORT=8080
+DECNET_ADMIN_USER=admin
+DECNET_ADMIN_PASSWORD=admin
+```
+
+Copy `.env.example` to `.env.local` and modify it to suit your environment.
+
+---
+
 ## Logging
 
 All attacker interactions are forwarded off the decoy network to an isolated logging sink. The log pipeline lives on a separate internal Docker bridge (`decnet_logs`) that is not reachable from the fake LAN.

@@ -15,6 +15,13 @@ import typer
 from rich.console import Console
 from rich.table import Table
 
+from decnet.env import (
+    DECNET_API_HOST,
+    DECNET_API_PORT,
+    DECNET_INGEST_LOG_FILE,
+    DECNET_WEB_HOST,
+    DECNET_WEB_PORT,
+)
 from decnet.archetypes import Archetype, all_archetypes, get_archetype
 from decnet.config import (
     DeckyConfig,
@@ -199,22 +206,24 @@ def _build_deckies_from_ini(
     return deckies
 
 
+
 @app.command()
 def api(
-    port: int = typer.Option(8000, "--port", help="Port for the backend API"),
-    log_file: str = typer.Option("/var/log/decnet/decnet.log", "--log-file", help="Path to the DECNET log file to monitor"),
+    port: int = typer.Option(DECNET_API_PORT, "--port", help="Port for the backend API"),
+    host: str = typer.Option(DECNET_API_HOST, "--host", help="Host IP for the backend API"),
+    log_file: str = typer.Option(DECNET_INGEST_LOG_FILE, "--log-file", help="Path to the DECNET log file to monitor"),
 ) -> None:
     """Run the DECNET API and Web Dashboard in standalone mode."""
     import subprocess
     import sys
     import os
 
-    console.print(f"[green]Starting DECNET API on port {port}...[/]")
+    console.print(f"[green]Starting DECNET API on {host}:{port}...[/]")
     _env: dict[str, str] = os.environ.copy()
     _env["DECNET_INGEST_LOG_FILE"] = str(log_file)
     try:
         subprocess.run(
-            [sys.executable, "-m", "uvicorn", "decnet.web.api:app", "--host", "0.0.0.0", "--port", str(port)],
+            [sys.executable, "-m", "uvicorn", "decnet.web.api:app", "--host", host, "--port", str(port)],
             env=_env
         )
     except KeyboardInterrupt:
@@ -555,20 +564,21 @@ def list_archetypes() -> None:
 
 @app.command(name="web")
 def serve_web(
-    web_port: int = typer.Option(5173, "--web-port", help="Port to serve the DECNET Web Dashboard"),
+    web_port: int = typer.Option(DECNET_WEB_PORT, "--web-port", help="Port to serve the DECNET Web Dashboard"),
+    host: str = typer.Option(DECNET_WEB_HOST, "--host", help="Host IP to serve the Web Dashboard"),
 ) -> None:
     """Serve the DECNET Web Dashboard frontend."""
     import http.server
     import socketserver
     from pathlib import Path
-    
+
     # Assuming decnet_web/dist is relative to the project root
     dist_dir = Path(__file__).parent.parent / "decnet_web" / "dist"
-    
+
     if not dist_dir.exists():
         console.print(f"[red]Frontend build not found at {dist_dir}. Make sure you run 'npm run build' inside 'decnet_web'.[/]")
         raise typer.Exit(1)
-        
+
     class SPAHTTPRequestHandler(http.server.SimpleHTTPRequestHandler):
         def do_GET(self):
             # Try to serve the requested file
@@ -577,12 +587,12 @@ def serve_web(
                 # If not found or is a directory, serve index.html (for React Router)
                 self.path = "/index.html"
             return super().do_GET()
-            
+
     import os
     os.chdir(dist_dir)
-            
-    with socketserver.TCPServer(("", web_port), SPAHTTPRequestHandler) as httpd:
-        console.print(f"[green]Serving DECNET Web Dashboard on http://0.0.0.0:{web_port}[/]")
+
+    with socketserver.TCPServer((host, web_port), SPAHTTPRequestHandler) as httpd:
+        console.print(f"[green]Serving DECNET Web Dashboard on http://{host}:{web_port}[/]")
         try:
             httpd.serve_forever()
         except KeyboardInterrupt:

@@ -52,7 +52,7 @@ const Dashboard: React.FC<DashboardProps> = ({ searchQuery }) => {
 
     // Setup SSE connection
     const token = localStorage.getItem('token');
-    const baseUrl = 'http://localhost:8000/api/v1'; // Or extract from api.defaults.baseURL
+    const baseUrl = import.meta.env.VITE_API_URL || 'http://localhost:8000/api/v1';
     let url = `${baseUrl}/stream?token=${token}`;
     if (searchQuery) {
       url += `&search=${encodeURIComponent(searchQuery)}`;

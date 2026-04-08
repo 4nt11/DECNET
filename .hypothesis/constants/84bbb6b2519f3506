@@ -1,0 +1,4 @@
+# file: /home/anti/Tools/DECNET/decnet/web/api.py
+# hypothesis_version: 6.151.11
+
+[400, 404, 500, 1000, '*', '/api/v1/auth/login', '/api/v1/deckies', '/api/v1/logs', '/api/v1/stats', '/api/v1/stream', '1.0.0', 'Authorization', 'Bearer', 'Bearer ', 'Decky not found', 'No active deployment', 'WWW-Authenticate', 'access_token', 'admin', 'bearer', 'data', 'decnet.web.api', 'id', 'lastEventId', 'limit', 'logs', 'message', 'must_change_password', 'offset', 'password_hash', 'role', 'stats', 'text/event-stream', 'token', 'token_type', 'total', 'type', 'unihost', 'username', 'uuid']

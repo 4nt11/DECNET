@@ -1,10 +1,11 @@
-import os
 from datetime import datetime, timedelta, timezone
 from typing import Optional, Any
 import jwt
 import bcrypt
 
-SECRET_KEY: str = os.environ.get("DECNET_SECRET_KEY", "super-secret-key-change-me")
+from decnet.env import DECNET_JWT_SECRET
+
+SECRET_KEY: str = DECNET_JWT_SECRET
 ALGORITHM: str = "HS256"
 ACCESS_TOKEN_EXPIRE_MINUTES: int = 1440
 

@@ -17,3 +17,5 @@ webmail
 windows1
 *.db
 decnet.json
+.env
+.env.local
