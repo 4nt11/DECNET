@@ -13,6 +13,7 @@ decnet.log*
 *.loggy
 *.nmap
 linterfails.log
-test-scan
 webmail
 windows1
+*.db
+decnet.json
