@@ -18,6 +18,7 @@ interface Decky {
 const DeckyFleet: React.FC = () => {
   const [deckies, setDeckies] = useState<Decky[]>([]);
   const [loading, setLoading] = useState(true);
+  const [mutating, setMutating] = useState<string | null>(null);
 
   const fetchDeckies = async () => {
     try {
@@ -31,12 +32,19 @@ const DeckyFleet: React.FC = () => {
   };
 
   const handleMutate = async (name: string) => {
+    setMutating(name);
     try {
       await api.post(`/deckies/${name}/mutate`, {}, { timeout: 120000 });
-      fetchDeckies();
-    } catch (err) {
+      await fetchDeckies();
+    } catch (err: any) {
       console.error('Failed to mutate', err);
-      alert('Mutation failed');
+      if (err.code === 'ECONNABORTED') {
+        alert('Mutation is still running in the background but the UI timed out.');
+      } else {
+        alert('Mutation failed');
+      }
+    } finally {
+      setMutating(null);
     }
   };
 
@@ -102,13 +110,15 @@ const DeckyFleet: React.FC = () => {
                 </span>
                 <button 
                   onClick={() => handleMutate(decky.name)}
+                  disabled={!!mutating}
                   style={{
                     background: 'transparent', border: '1px solid var(--accent-color)', 
                     color: 'var(--accent-color)', padding: '2px 8px', fontSize: '0.7rem', 
-                    cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '4px', marginLeft: 'auto'
+                    cursor: mutating ? 'not-allowed' : 'pointer', display: 'flex', alignItems: 'center', gap: '4px', marginLeft: 'auto',
+                    opacity: mutating ? 0.5 : 1
                   }}
                 >
-                  <RefreshCw size={10} /> FORCE
+                  <RefreshCw size={10} className={mutating === decky.name ? "spin" : ""} /> {mutating === decky.name ? 'MUTATING...' : 'FORCE'}
                 </button>
               </div>
               {decky.last_mutated > 0 && (
