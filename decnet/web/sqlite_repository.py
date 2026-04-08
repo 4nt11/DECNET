@@ -1,6 +1,7 @@
 import aiosqlite
 from typing import Any, Optional
 from decnet.web.repository import BaseRepository
+from decnet.config import load_state
 
 
 class SQLiteRepository(BaseRepository):
@@ -128,15 +129,35 @@ class SQLiteRepository(BaseRepository):
                 _row = await _cursor.fetchone()
                 _unique_attackers: int = _row["unique_attackers"] if _row else 0
 
+            # Active deckies are those that HAVE interaction logs
             async with _db.execute("SELECT COUNT(DISTINCT decky) as active_deckies FROM logs") as _cursor:
                 _row = await _cursor.fetchone()
                 _active_deckies: int = _row["active_deckies"] if _row else 0
 
+            # Deployed deckies are all those in the state file
+            _state = load_state()
+            _deployed_deckies: int = 0
+            if _state:
+                _deployed_deckies = len(_state[0].deckies)
+
             return {
                 "total_logs": _total_logs,
                 "unique_attackers": _unique_attackers,
-                "active_deckies": _active_deckies
+                "active_deckies": _active_deckies,
+                "deployed_deckies": _deployed_deckies
             }
+
+    async def get_deckies(self) -> list[dict[str, Any]]:
+        _state = load_state()
+        if not _state:
+            return []
+        
+        # We can also enrich this with interaction counts/last seen from DB
+        _deckies: list[dict[str, Any]] = []
+        for _d in _state[0].deckies:
+            _deckies.append(_d.model_dump())
+        
+        return _deckies
 
     async def get_user_by_username(self, username: str) -> Optional[dict[str, Any]]:
         async with aiosqlite.connect(self.db_path) as _db:

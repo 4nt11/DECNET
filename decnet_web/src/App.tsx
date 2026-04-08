@@ -3,6 +3,7 @@ import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-d
 import Login from './components/Login';
 import Layout from './components/Layout';
 import Dashboard from './components/Dashboard';
+import DeckyFleet from './components/DeckyFleet';
 import LiveLogs from './components/LiveLogs';
 import Attackers from './components/Attackers';
 import Config from './components/Config';
@@ -40,6 +41,7 @@ function App() {
       <Layout onLogout={handleLogout} onSearch={handleSearch}>
         <Routes>
           <Route path="/" element={<Dashboard searchQuery={searchQuery} />} />
+          <Route path="/fleet" element={<DeckyFleet />} />
           <Route path="/live-logs" element={<LiveLogs />} />
           <Route path="/attackers" element={<Attackers />} />
           <Route path="/config" element={<Config />} />

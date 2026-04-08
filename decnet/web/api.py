@@ -166,8 +166,14 @@ class StatsResponse(BaseModel):
     total_logs: int
     unique_attackers: int
     active_deckies: int
+    deployed_deckies: int
 
 
 @app.get("/api/v1/stats", response_model=StatsResponse)
 async def get_stats(current_user: str = Depends(get_current_user)) -> dict[str, Any]:
     return await repo.get_stats_summary()
+
+
+@app.get("/api/v1/deckies")
+async def get_deckies(current_user: str = Depends(get_current_user)) -> list[dict[str, Any]]:
+    return await repo.get_deckies()

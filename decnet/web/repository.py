@@ -36,6 +36,11 @@ class BaseRepository(ABC):
         pass
 
     @abstractmethod
+    async def get_deckies(self) -> list[dict[str, Any]]:
+        """Retrieve the list of currently deployed deckies."""
+        pass
+
+    @abstractmethod
     async def get_user_by_username(self, username: str) -> Optional[dict[str, Any]]:
         """Retrieve a user by their username."""
         pass

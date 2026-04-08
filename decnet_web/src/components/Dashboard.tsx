@@ -7,6 +7,7 @@ interface Stats {
   total_logs: number;
   unique_attackers: number;
   active_deckies: number;
+  deployed_deckies: number;
 }
 
 interface LogEntry {
@@ -69,7 +70,7 @@ const Dashboard: React.FC<DashboardProps> = ({ searchQuery }) => {
         <StatCard 
           icon={<Shield size={32} />} 
           label="ACTIVE DECKIES" 
-          value={stats?.active_deckies || 0} 
+          value={`${stats?.active_deckies || 0} / ${stats?.deployed_deckies || 0}`} 
         />
       </div>
 
@@ -146,7 +147,7 @@ const Dashboard: React.FC<DashboardProps> = ({ searchQuery }) => {
 interface StatCardProps {
   icon: React.ReactNode;
   label: string;
-  value: number;
+  value: string | number;
 }
 
 const StatCard: React.FC<StatCardProps> = ({ icon, label, value }) => (
