@@ -244,7 +244,7 @@ def deploy(
     distro: Optional[str] = typer.Option(None, "--distro", help="Comma-separated distro slugs, e.g. debian,ubuntu22,rocky9"),
     randomize_distros: bool = typer.Option(False, "--randomize-distros", help="Assign a random distro to each decky"),
     log_target: Optional[str] = typer.Option(None, "--log-target", help="Forward logs to ip:port (e.g. 192.168.1.5:5140)"),
-    log_file: Optional[str] = typer.Option(None, "--log-file", help="Write RFC 5424 syslog to this path inside containers (e.g. /var/log/decnet/decnet.log)"),
+    log_file: Optional[str] = typer.Option(DECNET_INGEST_LOG_FILE, "--log-file", help="Write RFC 5424 syslog to this path inside containers (e.g. /var/log/decnet/decnet.log)"),
     archetype_name: Optional[str] = typer.Option(None, "--archetype", "-a", help="Machine archetype slug (e.g. linux-server, windows-workstation)"),
     mutate_interval: Optional[int] = typer.Option(30, "--mutate-interval", help="Automatically rotate services every N minutes"),
     dry_run: bool = typer.Option(False, "--dry-run", help="Generate compose file without starting containers"),
