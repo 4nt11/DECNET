@@ -11,7 +11,9 @@ from pydantic import BaseModel, field_validator
 
 from decnet.distros import random_hostname as _random_hostname
 
-STATE_FILE = Path("decnet-state.json")
+# Calculate absolute path to the project root (where the config file resides)
+_ROOT: Path = Path(__file__).parent.parent.absolute()
+STATE_FILE: Path = _ROOT / "decnet-state.json"
 
 
 def random_hostname(distro_slug: str = "debian") -> str:

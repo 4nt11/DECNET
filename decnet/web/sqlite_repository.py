@@ -1,13 +1,13 @@
 import aiosqlite
 from typing import Any, Optional
 from decnet.web.repository import BaseRepository
-from decnet.config import load_state
+from decnet.config import load_state, _ROOT
 
 
 class SQLiteRepository(BaseRepository):
     """SQLite implementation of the DECNET web repository."""
 
-    def __init__(self, db_path: str = "decnet.db") -> None:
+    def __init__(self, db_path: str = str(_ROOT / "decnet.db")) -> None:
         self.db_path: str = db_path
 
     async def initialize(self) -> None:

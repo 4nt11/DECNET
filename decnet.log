@@ -223,3 +223,133 @@
 <134>1 2026-04-07T20:24:03.279897+00:00 decky-webmail smtp - startup - SMTP server starting as decky-webmail
 <134>1 2026-04-07T20:24:03.283256+00:00 decky-webmail pop3 - startup - POP3 server starting as decky-webmail
 <134>1 2026-04-07T20:24:03.297543+00:00 decky-webmail http - startup - HTTP server starting as decky-webmail
+<134>1 2026-04-08T02:34:14.252618+00:00 decky-webmail http - startup - HTTP server starting as decky-webmail
+<134>1 2026-04-08T02:34:14.394371+00:00 decky-webmail smtp - startup - SMTP server starting as decky-webmail
+<134>1 2026-04-08T02:34:14.544200+00:00 decky-webmail imap - startup - IMAP server starting as decky-webmail
+<134>1 2026-04-08T02:34:14.613141+00:00 decky-webmail pop3 - startup - POP3 server starting as decky-webmail
+<134>1 2026-04-08T02:41:44.704390+00:00 decky-webmail smtp - startup - SMTP server starting as decky-webmail
+<134>1 2026-04-08T02:41:44.712319+00:00 decky-webmail pop3 - startup - POP3 server starting as decky-webmail
+<134>1 2026-04-08T02:41:44.715798+00:00 decky-webmail imap - startup - IMAP server starting as decky-webmail
+<134>1 2026-04-08T02:41:44.761105+00:00 decky-webmail http - startup - HTTP server starting as decky-webmail
+<134>1 2026-04-08T03:04:58.479955+00:00 decky-webmail pop3 - connect [decnet@55555 src="192.168.1.5" src_port="59596"]
+<134>1 2026-04-08T03:04:58.479944+00:00 decky-webmail imap - connect [decnet@55555 src="192.168.1.5" src_port="60948"]
+<134>1 2026-04-08T03:04:58.479908+00:00 decky-webmail smtp - connect [decnet@55555 src="192.168.1.5" src_port="50740"]
+<134>1 2026-04-08T03:04:58.482589+00:00 decky-webmail smtp - disconnect [decnet@55555 src="192.168.1.5"]
+<134>1 2026-04-08T03:05:04.485896+00:00 decky-webmail pop3 - command [decnet@55555 src="192.168.1.5" cmd=""]
+<134>1 2026-04-08T03:05:04.485896+00:00 decky-webmail imap - command [decnet@55555 src="192.168.1.5" cmd="GET / HTTP/1.0"]
+<134>1 2026-04-08T03:05:04.486195+00:00 decky-webmail pop3 - command [decnet@55555 src="192.168.1.5" cmd=""]
+<134>1 2026-04-08T03:05:04.486265+00:00 decky-webmail http - request [decnet@55555 method="GET" path="/" remote_addr="192.168.1.5" headers="{}" body=""]
+<134>1 2026-04-08T03:05:09.490954+00:00 decky-webmail pop3 - disconnect [decnet@55555 src="192.168.1.5"]
+<134>1 2026-04-08T03:05:09.491082+00:00 decky-webmail imap - disconnect [decnet@55555 src="192.168.1.5"]
+<134>1 2026-04-08T03:05:09.491362+00:00 decky-webmail pop3 - connect [decnet@55555 src="192.168.1.5" src_port="50502"]
+<134>1 2026-04-08T03:05:09.491458+00:00 decky-webmail imap - connect [decnet@55555 src="192.168.1.5" src_port="36034"]
+<134>1 2026-04-08T03:05:09.491503+00:00 decky-webmail pop3 - command [decnet@55555 src="192.168.1.5" cmd="OPTIONS / HTTP/1.0"]
+<134>1 2026-04-08T03:05:09.491587+00:00 decky-webmail pop3 - command [decnet@55555 src="192.168.1.5" cmd=""]
+<134>1 2026-04-08T03:05:14.497117+00:00 decky-webmail imap - disconnect [decnet@55555 src="192.168.1.5"]
+<134>1 2026-04-08T03:05:14.497128+00:00 decky-webmail pop3 - disconnect [decnet@55555 src="192.168.1.5"]
+<134>1 2026-04-08T03:05:15.778507+00:00 decky-webmail smtp - connect [decnet@55555 src="192.168.1.5" src_port="57398"]
+<134>1 2026-04-08T03:05:15.778969+00:00 decky-webmail smtp - connect [decnet@55555 src="192.168.1.5" src_port="57412"]
+<134>1 2026-04-08T03:05:15.780606+00:00 decky-webmail imap - connect [decnet@55555 src="192.168.1.5" src_port="36044"]
+<134>1 2026-04-08T03:05:15.786241+00:00 decky-webmail pop3 - connect [decnet@55555 src="192.168.1.5" src_port="50504"]
+<134>1 2026-04-08T03:05:15.786522+00:00 decky-webmail pop3 - connect [decnet@55555 src="192.168.1.5" src_port="50510"]
+<134>1 2026-04-08T03:05:15.787287+00:00 decky-webmail smtp - connect [decnet@55555 src="192.168.1.5" src_port="57414"]
+<134>1 2026-04-08T03:05:15.788057+00:00 decky-webmail http - request [decnet@55555 method="POST" path="/sdk" remote_addr="192.168.1.5" headers="{'Host': '192.168.1.110', 'Content-Length': '441', 'Connection': 'close', 'User-Agent': 'Mozilla/5.0 (compatible; Nmap Scripting Engine; https://nmap.org/book/nse.html)'}" body="<soap:Envelope xmlns:xsd=\"http://www.w3.org/2001/XMLSchema\" xmlns:xsi=\"http://www.w3.org/2001/XMLSchema-instance\" xmlns:soap=\"http://schemas.xmlsoap.org/soap/envelope/\"><soap:Header><operationID>00000001-00000001</operationID></soap:Header><soap:Body><RetrieveServiceContent xmlns=\"urn:internalvim25\"><_this xsi:type=\"ManagedObjectReference\" type=\"ServiceInstance\">ServiceInstance</_this></RetrieveServiceContent></soap:Body></soap:Envelope>"]
+<134>1 2026-04-08T03:05:15.788277+00:00 decky-webmail http - request [decnet@55555 method="PROPFIND" path="/" remote_addr="192.168.1.5" headers="{'Host': '192.168.1.110', 'Depth': '0', 'Connection': 'close', 'User-Agent': 'Mozilla/5.0 (compatible; Nmap Scripting Engine; https://nmap.org/book/nse.html)'}" body=""]
+<134>1 2026-04-08T03:05:15.788579+00:00 decky-webmail http - request [decnet@55555 method="GET" path="/" remote_addr="192.168.1.5" headers="{'Host': '192.168.1.110', 'Connection': 'close', 'User-Agent': 'Mozilla/5.0 (compatible; Nmap Scripting Engine; https://nmap.org/book/nse.html)'}" body=""]
+<134>1 2026-04-08T03:05:15.788832+00:00 decky-webmail http - request [decnet@55555 method="OPTIONS" path="/" remote_addr="192.168.1.5" headers="{'Host': '192.168.1.110', 'Connection': 'close', 'User-Agent': 'Mozilla/5.0 (compatible; Nmap Scripting Engine; https://nmap.org/book/nse.html)'}" body=""]
+<134>1 2026-04-08T03:05:15.789126+00:00 decky-webmail http - request [decnet@55555 method="PROPFIND" path="/" remote_addr="192.168.1.5" headers="{'Host': '192.168.1.110', 'Depth': '0', 'Connection': 'close', 'User-Agent': 'Mozilla/5.0 (compatible; Nmap Scripting Engine; https://nmap.org/book/nse.html)'}" body=""]
+<134>1 2026-04-08T03:05:15.789433+00:00 decky-webmail http - request [decnet@55555 method="GET" path="/.git/HEAD" remote_addr="192.168.1.5" headers="{'Host': '192.168.1.110', 'Connection': 'close', 'User-Agent': 'Mozilla/5.0 (compatible; Nmap Scripting Engine; https://nmap.org/book/nse.html)'}" body=""]
+<134>1 2026-04-08T03:05:15.791597+00:00 decky-webmail pop3 - command [decnet@55555 src="192.168.1.5" cmd="STLS"]
+<134>1 2026-04-08T03:05:15.789747+00:00 decky-webmail http - request [decnet@55555 method="OPTIONS" path="/" remote_addr="192.168.1.5" headers="{'Host': '192.168.1.110', 'Connection': 'close', 'User-Agent': 'Mozilla/5.0 (compatible; Nmap Scripting Engine; https://nmap.org/book/nse.html)'}" body=""]
+<134>1 2026-04-08T03:05:15.788454+00:00 decky-webmail http - request [decnet@55555 method="OPTIONS" path="/" remote_addr="192.168.1.5" headers="{'Host': '192.168.1.110', 'Origin': 'example.com', 'User-Agent': 'Mozilla/5.0 (compatible; Nmap Scripting Engine; https://nmap.org/book/nse.html)', 'Connection': 'close', 'Access-Control-Request-Method': 'HEAD'}" body=""]
+<134>1 2026-04-08T03:05:15.789250+00:00 decky-webmail http - request [decnet@55555 method="GET" path="/nmaplowercheck1775617515" remote_addr="192.168.1.5" headers="{'Host': '192.168.1.110', 'Connection': 'close', 'User-Agent': 'Mozilla/5.0 (compatible; Nmap Scripting Engine; https://nmap.org/book/nse.html)'}" body=""]
+<134>1 2026-04-08T03:05:15.788723+00:00 decky-webmail http - request [decnet@55555 method="POST" path="/" remote_addr="192.168.1.5" headers="{'Host': '192.168.1.110', 'User-Agent': 'Mozilla/5.0 (compatible; Nmap Scripting Engine; https://nmap.org/book/nse.html)', 'Content-Type': 'application/x-www-form-urlencoded', 'Connection': 'close', 'Content-Length': '88'}" body="<methodCall> <methodName>system.listMethods</methodName> <params></params> </methodCall>"]
+<134>1 2026-04-08T03:05:15.789635+00:00 decky-webmail http - request [decnet@55555 method="GET" path="/" remote_addr="192.168.1.5" headers="{}" body=""]
+<134>1 2026-04-08T03:05:15.788996+00:00 decky-webmail http - request [decnet@55555 method="GET" path="/robots.txt" remote_addr="192.168.1.5" headers="{'Host': '192.168.1.110', 'Connection': 'close', 'User-Agent': 'Mozilla/5.0 (compatible; Nmap Scripting Engine; https://nmap.org/book/nse.html)'}" body=""]
+<134>1 2026-04-08T03:05:15.795508+00:00 decky-webmail smtp - ehlo [decnet@55555 src="192.168.1.5" domain="nmap.scanme.org"]
+<134>1 2026-04-08T03:05:15.795759+00:00 decky-webmail smtp - ehlo [decnet@55555 src="192.168.1.5" domain="nmap.scanme.org"]
+<134>1 2026-04-08T03:05:15.795842+00:00 decky-webmail smtp - ehlo [decnet@55555 src="192.168.1.5" domain="nmap.scanme.org"]
+<134>1 2026-04-08T03:05:15.796119+00:00 decky-webmail imap - disconnect [decnet@55555 src="192.168.1.5"]
+<134>1 2026-04-08T03:05:15.796206+00:00 decky-webmail pop3 - disconnect [decnet@55555 src="192.168.1.5"]
+<134>1 2026-04-08T03:05:15.796294+00:00 decky-webmail smtp - unknown_command [decnet@55555 src="192.168.1.5" command="HELP"]
+<134>1 2026-04-08T03:05:15.796361+00:00 decky-webmail pop3 - command [decnet@55555 src="192.168.1.5" cmd="AUTH NTLM"]
+<134>1 2026-04-08T03:05:15.796438+00:00 decky-webmail http - request [decnet@55555 method="OPTIONS" path="/" remote_addr="192.168.1.5" headers="{'Host': '192.168.1.110', 'Origin': 'example.com', 'User-Agent': 'Mozilla/5.0 (compatible; Nmap Scripting Engine; https://nmap.org/book/nse.html)', 'Connection': 'close', 'Access-Control-Request-Method': 'GET'}" body=""]
+<134>1 2026-04-08T03:05:15.796615+00:00 decky-webmail http - request [decnet@55555 method="PROPFIND" path="/" remote_addr="192.168.1.5" headers="{'Depth': '1', 'User-Agent': 'Mozilla/5.0 (compatible; Nmap Scripting Engine; https://nmap.org/book/nse.html)', 'Content-Length': '0', 'Connection': 'close', 'Host': '192.168.1.110'}" body=""]
+<134>1 2026-04-08T03:05:15.796792+00:00 decky-webmail http - request [decnet@55555 method="GET" path="/NmapUpperCheck1775617515" remote_addr="192.168.1.5" headers="{'Host': '192.168.1.110', 'Connection': 'close', 'User-Agent': 'Mozilla/5.0 (compatible; Nmap Scripting Engine; https://nmap.org/book/nse.html)'}" body=""]
+<134>1 2026-04-08T03:05:15.796942+00:00 decky-webmail http - request [decnet@55555 method="PLEU" path="/" remote_addr="192.168.1.5" headers="{'Host': '192.168.1.110', 'Connection': 'close', 'User-Agent': 'Mozilla/5.0 (compatible; Nmap Scripting Engine; https://nmap.org/book/nse.html)'}" body=""]
+<134>1 2026-04-08T03:05:15.798121+00:00 decky-webmail pop3 - command [decnet@55555 src="192.168.1.5" cmd="TlRMTVNTUAABAAAAB4IIoAAAAAAAAAAAAAAAAAAAAAA="]
+<134>1 2026-04-08T03:05:15.798138+00:00 decky-webmail smtp - disconnect [decnet@55555 src="192.168.1.5"]
+<134>1 2026-04-08T03:05:15.798209+00:00 decky-webmail http - request [decnet@55555 method="GET" path="/" remote_addr="192.168.1.5" headers="{'Host': '192.168.1.110', 'Connection': 'close', 'User-Agent': 'Mozilla/5.0 (compatible; Nmap Scripting Engine; https://nmap.org/book/nse.html)'}" body=""]
+<134>1 2026-04-08T03:05:15.798273+00:00 decky-webmail smtp - disconnect [decnet@55555 src="192.168.1.5"]
+<134>1 2026-04-08T03:05:15.798346+00:00 decky-webmail smtp - disconnect [decnet@55555 src="192.168.1.5"]
+<134>1 2026-04-08T03:05:15.800770+00:00 decky-webmail imap - connect [decnet@55555 src="192.168.1.5" src_port="36046"]
+<134>1 2026-04-08T03:05:15.800943+00:00 decky-webmail smtp - connect [decnet@55555 src="192.168.1.5" src_port="57418"]
+<134>1 2026-04-08T03:05:15.800994+00:00 decky-webmail http - request [decnet@55555 method="OPTIONS" path="/" remote_addr="192.168.1.5" headers="{'Host': '192.168.1.110', 'Origin': 'example.com', 'User-Agent': 'Mozilla/5.0 (compatible; Nmap Scripting Engine; https://nmap.org/book/nse.html)', 'Connection': 'close', 'Access-Control-Request-Method': 'POST'}" body=""]
+<134>1 2026-04-08T03:05:15.801454+00:00 decky-webmail pop3 - disconnect [decnet@55555 src="192.168.1.5"]
+<134>1 2026-04-08T03:05:15.801656+00:00 decky-webmail smtp - ehlo [decnet@55555 src="192.168.1.5" domain="nmap.scanme.org"]
+<134>1 2026-04-08T03:05:15.801600+00:00 decky-webmail http - request [decnet@55555 method="GET" path="/Nmap/folder/check1775617515" remote_addr="192.168.1.5" headers="{'Host': '192.168.1.110', 'Connection': 'close', 'User-Agent': 'Mozilla/5.0 (compatible; Nmap Scripting Engine; https://nmap.org/book/nse.html)'}" body=""]
+<134>1 2026-04-08T03:05:15.801764+00:00 decky-webmail http - request [decnet@55555 method="POST" path="/" remote_addr="192.168.1.5" headers="{'Host': '192.168.1.110', 'Content-Length': '0', 'Connection': 'close', 'User-Agent': 'Mozilla/5.0 (compatible; Nmap Scripting Engine; https://nmap.org/book/nse.html)'}" body=""]
+<134>1 2026-04-08T03:05:15.802579+00:00 decky-webmail imap - connect [decnet@55555 src="192.168.1.5" src_port="36056"]
+<134>1 2026-04-08T03:05:15.802672+00:00 decky-webmail smtp - auth_attempt [decnet@55555 src="192.168.1.5" command="AUTH NTLM"]
+<134>1 2026-04-08T03:05:15.802794+00:00 decky-webmail smtp - disconnect [decnet@55555 src="192.168.1.5"]
+<134>1 2026-04-08T03:05:15.802586+00:00 decky-webmail http - request [decnet@55555 method="OPTIONS" path="/" remote_addr="192.168.1.5" headers="{'Host': '192.168.1.110', 'Origin': 'example.com', 'User-Agent': 'Mozilla/5.0 (compatible; Nmap Scripting Engine; https://nmap.org/book/nse.html)', 'Connection': 'close', 'Access-Control-Request-Method': 'PUT'}" body=""]
+<134>1 2026-04-08T03:05:15.802776+00:00 decky-webmail http - request [decnet@55555 method="GET" path="/favicon.ico" remote_addr="192.168.1.5" headers="{'Host': '192.168.1.110', 'Connection': 'close', 'User-Agent': 'Mozilla/5.0 (compatible; Nmap Scripting Engine; https://nmap.org/book/nse.html)'}" body=""]
+<134>1 2026-04-08T03:05:15.806436+00:00 decky-webmail imap - command [decnet@55555 src="192.168.1.5" cmd="000b AUTHENTICATE NTLM"]
+<134>1 2026-04-08T03:05:15.806511+00:00 decky-webmail pop3 - connect [decnet@55555 src="192.168.1.5" src_port="50526"]
+<134>1 2026-04-08T03:05:15.806571+00:00 decky-webmail http - request [decnet@55555 method="OPTIONS" path="/" remote_addr="192.168.1.5" headers="{'Host': '192.168.1.110', 'Origin': 'example.com', 'User-Agent': 'Mozilla/5.0 (compatible; Nmap Scripting Engine; https://nmap.org/book/nse.html)', 'Connection': 'close', 'Access-Control-Request-Method': 'DELETE'}" body=""]
+<134>1 2026-04-08T03:05:15.806924+00:00 decky-webmail pop3 - command [decnet@55555 src="192.168.1.5" cmd="STLS"]
+<134>1 2026-04-08T03:05:15.806923+00:00 decky-webmail imap - command [decnet@55555 src="192.168.1.5" cmd="TlRMTVNTUAABAAAAB4IIoAAAAAAAAAAAAAAAAAAAAAA="]
+<134>1 2026-04-08T03:05:15.807082+00:00 decky-webmail http - request [decnet@55555 method="OPTIONS" path="/" remote_addr="192.168.1.5" headers="{'Host': '192.168.1.110', 'Origin': 'example.com', 'User-Agent': 'Mozilla/5.0 (compatible; Nmap Scripting Engine; https://nmap.org/book/nse.html)', 'Connection': 'close', 'Access-Control-Request-Method': 'TRACE'}" body=""]
+<134>1 2026-04-08T03:05:15.810419+00:00 decky-webmail imap - disconnect [decnet@55555 src="192.168.1.5"]
+<134>1 2026-04-08T03:05:15.810466+00:00 decky-webmail pop3 - disconnect [decnet@55555 src="192.168.1.5"]
+<134>1 2026-04-08T03:05:15.810532+00:00 decky-webmail imap - disconnect [decnet@55555 src="192.168.1.5"]
+<134>1 2026-04-08T03:05:15.810761+00:00 decky-webmail http - request [decnet@55555 method="OPTIONS" path="/" remote_addr="192.168.1.5" headers="{'Host': '192.168.1.110', 'Origin': 'example.com', 'User-Agent': 'Mozilla/5.0 (compatible; Nmap Scripting Engine; https://nmap.org/book/nse.html)', 'Connection': 'close', 'Access-Control-Request-Method': 'OPTIONS'}" body=""]
+<134>1 2026-04-08T03:05:15.813097+00:00 decky-webmail http - request [decnet@55555 method="OPTIONS" path="/" remote_addr="192.168.1.5" headers="{'Host': '192.168.1.110', 'Origin': 'example.com', 'User-Agent': 'Mozilla/5.0 (compatible; Nmap Scripting Engine; https://nmap.org/book/nse.html)', 'Connection': 'close', 'Access-Control-Request-Method': 'CONNECT'}" body=""]
+<134>1 2026-04-08T03:05:15.817009+00:00 decky-webmail http - request [decnet@55555 method="OPTIONS" path="/" remote_addr="192.168.1.5" headers="{'Host': '192.168.1.110', 'Origin': 'example.com', 'User-Agent': 'Mozilla/5.0 (compatible; Nmap Scripting Engine; https://nmap.org/book/nse.html)', 'Connection': 'close', 'Access-Control-Request-Method': 'PATCH'}" body=""]
+<134>1 2026-04-08T03:05:15.828253+00:00 decky-webmail smtp - connect [decnet@55555 src="192.168.1.5" src_port="57434"]
+<134>1 2026-04-08T03:05:15.828499+00:00 decky-webmail smtp - ehlo [decnet@55555 src="192.168.1.5" domain="nmap.scanme.org"]
+<134>1 2026-04-08T03:05:15.828518+00:00 decky-webmail http - request [decnet@55555 method="GET" path="/" remote_addr="192.168.1.5" headers="{}" body=""]
+<134>1 2026-04-08T03:05:15.829131+00:00 decky-webmail http - request [decnet@55555 method="GET" path="/" remote_addr="192.168.1.5" headers="{'Host': '192.168.1.110'}" body=""]
+<134>1 2026-04-08T03:05:15.829468+00:00 decky-webmail smtp - disconnect [decnet@55555 src="192.168.1.5"]
+<134>1 2026-04-08T03:05:15.829643+00:00 decky-webmail smtp - connect [decnet@55555 src="192.168.1.5" src_port="57444"]
+<134>1 2026-04-08T03:05:15.844265+00:00 decky-webmail smtp - connect [decnet@55555 src="192.168.1.5" src_port="57454"]
+<134>1 2026-04-08T03:05:15.844481+00:00 decky-webmail smtp - disconnect [decnet@55555 src="192.168.1.5"]
+<134>1 2026-04-08T03:05:15.844597+00:00 decky-webmail smtp - disconnect [decnet@55555 src="192.168.1.5"]
+<134>1 2026-04-08T03:05:15.844682+00:00 decky-webmail imap - connect [decnet@55555 src="192.168.1.5" src_port="36068"]
+<134>1 2026-04-08T03:05:15.845057+00:00 decky-webmail imap - connect [decnet@55555 src="192.168.1.5" src_port="36082"]
+<134>1 2026-04-08T03:05:15.845197+00:00 decky-webmail imap - command [decnet@55555 src="192.168.1.5" cmd="( $9���OX1��U�:5u���>�+7�%�  II=%b�Tz��_�/���[�o�Q� r 3 9 5 /�,�0 �̨̩̪�����\]�a�S�+�/ ������\\�`�R"]
+<134>1 2026-04-08T03:05:15.845325+00:00 decky-webmail imap - command [decnet@55555 src="192.168.1.5" cmd="� ��	� E ����Q ����P = � < � � A i�      "]
+<134>1 2026-04-08T03:05:15.845403+00:00 decky-webmail imap - command [decnet@55555 src="192.168.1.5" cmd="  ���       #          ( &				"]
+<134>1 2026-04-08T03:05:15.845469+00:00 decky-webmail imap - command [decnet@55555 src="192.168.1.5" cmd=" +  -  3����"]
+<134>1 2026-04-08T03:05:15.845543+00:00 decky-webmail imap - command [decnet@55555 src="192.168.1.5" cmd="�Y���B���!rt�'�-^Pz��V���F��I���٫l��y;�v�Vv%���ɛ�jF�/E������7\"2�4[��1ʲ&�0l�?*%��LUt$ATVV�E���Ӗ�+���\]��+�'(�"]
+<134>1 2026-04-08T03:05:15.845624+00:00 decky-webmail imap - command [decnet@55555 src="192.168.1.5" cmd="�yP�RG���fI��NY����ovpЈ�[:�G�����"]
+<134>1 2026-04-08T03:05:15.845689+00:00 decky-webmail imap - command [decnet@55555 src="192.168.1.5" cmd="	*�b/O��v�`x\";t$*;l�B\"��*�)��Ȣ�a�q��Ō��A��+��d��Ie�mÚ� {Q��y����24�~��V�`B�!��W\"��/zʿ(��f��	����8jU��Rw5�CR��4����"]
+<134>1 2026-04-08T03:05:15.846888+00:00 decky-webmail imap - command [decnet@55555 src="192.168.1.5" cmd="�AU��`��R/S2��:�hB˦��Wz@%E��v\"c���mcW��Q{�Y_X��mz"]
+<134>1 2026-04-08T03:05:15.846967+00:00 decky-webmail imap - command [decnet@55555 src="192.168.1.5" cmd="���?ʐ����'*U<w<�#u��"]
+<134>1 2026-04-08T03:05:15.847038+00:00 decky-webmail imap - command [decnet@55555 src="192.168.1.5" cmd="qT�D��%�ɴ�o�Z�H7Zҹ\\���*g�P~����^���^*�)9�8{jt�(stÓ@b�PWO�$�	�иn�	CqiC�TVlu��cK�Y3�IR5�P��y��y���h�k ���iBj"]
+<134>1 2026-04-08T03:05:15.847122+00:00 decky-webmail imap - command [decnet@55555 src="192.168.1.5" cmd="�C~ �w�;mz�f���_�0�d��ԅͣ�a2���ba��x�\]aE}�@�}��Yqf\";��|�����?�W豇����*�e I�d�9@�	�O�0��ft�8UG\"���\]i�!o��m�!��E�0�up�"]
+<134>1 2026-04-08T03:05:15.847257+00:00 decky-webmail imap - connect [decnet@55555 src="192.168.1.5" src_port="36088"]
+<134>1 2026-04-08T03:05:15.847363+00:00 decky-webmail imap - command [decnet@55555 src="192.168.1.5" cmd=" W  Si����iI��,��R�?�g�{MG���Xӛ  "]
+<134>1 2026-04-08T03:05:15.847455+00:00 decky-webmail imap - command [decnet@55555 src="192.168.1.5" cmd=" / "]
+<134>1 2026-04-08T03:05:15.847548+00:00 decky-webmail imap - disconnect [decnet@55555 src="192.168.1.5"]
+<134>1 2026-04-08T03:05:15.847643+00:00 decky-webmail imap - disconnect [decnet@55555 src="192.168.1.5"]
+<134>1 2026-04-08T03:05:15.847592+00:00 decky-webmail pop3 - connect [decnet@55555 src="192.168.1.5" src_port="50528"]
+<134>1 2026-04-08T03:05:15.847712+00:00 decky-webmail imap - disconnect [decnet@55555 src="192.168.1.5"]
+<134>1 2026-04-08T03:05:15.847858+00:00 decky-webmail pop3 - command [decnet@55555 src="192.168.1.5" cmd="STLS"]
+<134>1 2026-04-08T03:05:15.847971+00:00 decky-webmail pop3 - disconnect [decnet@55555 src="192.168.1.5"]
+<134>1 2026-04-08T03:05:15.848073+00:00 decky-webmail pop3 - connect [decnet@55555 src="192.168.1.5" src_port="50534"]
+<134>1 2026-04-08T03:05:15.848153+00:00 decky-webmail pop3 - command [decnet@55555 src="192.168.1.5" cmd="( $6�Ě�57�П8�~)��L��\\\"97�_� ;?�\\a@�Z:�i�Ĵo����)P�v����x r 3 9 5 /�,�0 �̨̩̪�����\]�a�S�+�/ ������\\�`�R�$�"]
+<134>1 2026-04-08T03:05:15.848241+00:00 decky-webmail pop3 - command [decnet@55555 src="192.168.1.5" cmd="� ��	� E ����Q ����P = � < � � A i�      "]
+<134>1 2026-04-08T03:05:15.848301+00:00 decky-webmail pop3 - command [decnet@55555 src="192.168.1.5" cmd="  ���       #          ( &				"]
+<134>1 2026-04-08T03:05:15.848356+00:00 decky-webmail pop3 - command [decnet@55555 src="192.168.1.5" cmd=" +  -  3�����O����V�j!x[%�D��<��2�9��8M�Q��������es!?�7����j�	��6@"]
+<134>1 2026-04-08T03:05:15.848415+00:00 decky-webmail pop3 - command [decnet@55555 src="192.168.1.5" cmd="��^V�l��t݄�(e=I+'C��)���B��LH.	w_	ԝ��	�rN���1�Q-v���O�5�Fi.$� �C/��ޢ5�~��RИu\"j�d4���[�!�"]
+<134>1 2026-04-08T03:05:15.848468+00:00 decky-webmail pop3 - command [decnet@55555 src="192.168.1.5" cmd="�E��F;�wn�i���Ta���G�vA��+�:��:�a[��'8"]
+<134>1 2026-04-08T03:05:15.848525+00:00 decky-webmail pop3 - command [decnet@55555 src="192.168.1.5" cmd="?�F�ϖ!\"�aԖ/��B���\\��i�񛼷-xo��ƥU.a�{=Eb�B\]�498�-�J?{����'DiZ)	E�ۦ��P�'�丹24���VV��.Д&^���V�bZ������)2@r� �,"]
+<134>1 2026-04-08T03:05:15.848594+00:00 decky-webmail pop3 - command [decnet@55555 src="192.168.1.5" cmd="'t ��� ��>����iw�`�ɇ�eIh�TFf,'���a0'�n���kGc�!J3�v�j��2[��PP��:�z���*�����y,��ʞJ�[RX�A��`��!̓���+���kiޔ;,�8*ߡw���z�2�"]
+<134>1 2026-04-08T03:05:15.848649+00:00 decky-webmail pop3 - command [decnet@55555 src="192.168.1.5" cmd="1v�����:�5�VP�t�Ѳ��a[z�z�{B~cm�2Q,x>"]
+<134>1 2026-04-08T03:05:15.848705+00:00 decky-webmail pop3 - command [decnet@55555 src="192.168.1.5" cmd="-T�'��+$������,-Nѹ$v2���sĳ¶��B��%���Ĺ�9P�'%Q�p�qk�s/���@D8I|M�z�ທ疓�l���;�˪���E<�i�q�8?ͺ�?)^q0��J�#���u���F#\\b�|���{�"]
+<134>1 2026-04-08T03:05:15.848801+00:00 decky-webmail pop3 - connect [decnet@55555 src="192.168.1.5" src_port="50550"]
+<134>1 2026-04-08T03:05:15.848882+00:00 decky-webmail pop3 - command [decnet@55555 src="192.168.1.5" cmd=" W  Si��뎱sr�`	�B@�&��cG|$G�͒�/�  "]
+<134>1 2026-04-08T03:05:15.848949+00:00 decky-webmail pop3 - command [decnet@55555 src="192.168.1.5" cmd=" / "]
+<134>1 2026-04-08T03:05:15.849007+00:00 decky-webmail pop3 - disconnect [decnet@55555 src="192.168.1.5"]
+<134>1 2026-04-08T03:05:15.849061+00:00 decky-webmail pop3 - disconnect [decnet@55555 src="192.168.1.5"]
