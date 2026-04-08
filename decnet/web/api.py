@@ -278,6 +278,7 @@ async def api_deploy_deckies(req: DeployIniRequest, current_user: str = Depends(
     from decnet.network import detect_interface, detect_subnet, get_host_ip
     from decnet.deployer import deploy as _deploy
     import logging
+    import os
 
     try:
         ini = load_ini_from_string(req.ini_content)
@@ -285,6 +286,7 @@ async def api_deploy_deckies(req: DeployIniRequest, current_user: str = Depends(
         raise HTTPException(status_code=400, detail=f"Failed to parse INI: {e}")
 
     state = load_state()
+    ingest_log_file = os.environ.get("DECNET_INGEST_LOG_FILE")
     
     if state:
         config, _ = state
@@ -292,6 +294,9 @@ async def api_deploy_deckies(req: DeployIniRequest, current_user: str = Depends(
         gateway = ini.gateway or config.gateway
         host_ip = get_host_ip(config.interface)
         randomize_services = False
+        # Always sync config log_file with current API ingestion target
+        if ingest_log_file:
+            config.log_file = ingest_log_file
     else:
         # If no state exists, we need to infer network details
         iface = ini.interface or detect_interface()
@@ -309,7 +314,7 @@ async def api_deploy_deckies(req: DeployIniRequest, current_user: str = Depends(
             gateway=gateway,
             deckies=[],
             log_target=ini.log_target,
-            log_file=None, # In API mode, uvicorn usually handles this
+            log_file=ingest_log_file,
             ipvlan=False,
             mutate_interval=ini.mutate_interval or DEFAULT_MUTATE_INTERVAL
         )
