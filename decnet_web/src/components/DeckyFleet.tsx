@@ -1,7 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import api from '../utils/api';
 import './Dashboard.css'; // Re-use common dashboard styles
-import { Server, Cpu, Globe, Database, Clock, RefreshCw } from 'lucide-react';
+import { Server, Cpu, Globe, Database, Clock, RefreshCw, Upload } from 'lucide-react';
 
 interface Decky {
   name: string;
@@ -80,6 +80,18 @@ const DeckyFleet: React.FC = () => {
     }
   };
 
+  const handleFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    const reader = new FileReader();
+    reader.onload = (event) => {
+      const content = event.target?.result as string;
+      setIniContent(content);
+    };
+    reader.readAsText(file);
+  };
+
   useEffect(() => {
     fetchDeckies();
     const _interval = setInterval(fetchDeckies, 10000); // Fleet state updates less frequently than logs
@@ -105,7 +117,33 @@ const DeckyFleet: React.FC = () => {
 
       {showDeploy && (
         <div style={{ marginBottom: '24px', padding: '24px', backgroundColor: 'var(--secondary-color)', border: '1px solid var(--accent-color)', display: 'flex', flexDirection: 'column', gap: '16px' }}>
-          <h3 style={{ fontSize: '1rem', color: 'var(--text-color)' }}>Deploy via INI Configuration</h3>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+            <h3 style={{ fontSize: '1rem', color: 'var(--text-color)' }}>Deploy via INI Configuration</h3>
+            <div>
+              <input 
+                type="file" 
+                id="ini-upload" 
+                accept=".ini" 
+                onChange={handleFileUpload} 
+                style={{ display: 'none' }} 
+              />
+              <label 
+                htmlFor="ini-upload" 
+                style={{ 
+                  cursor: 'pointer', 
+                  display: 'flex', 
+                  alignItems: 'center', 
+                  gap: '8px', 
+                  fontSize: '0.8rem', 
+                  color: 'var(--accent-color)',
+                  border: '1px solid var(--accent-color)',
+                  padding: '4px 12px'
+                }}
+              >
+                <Upload size={14} /> UPLOAD FILE
+              </label>
+            </div>
+          </div>
           <textarea 
             value={iniContent}
             onChange={(e) => setIniContent(e.target.value)}
