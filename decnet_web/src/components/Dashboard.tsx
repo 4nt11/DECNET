@@ -154,7 +154,8 @@ const Dashboard: React.FC<DashboardProps> = ({ searchQuery }) => {
                                 backgroundColor: 'rgba(0, 255, 65, 0.1)', 
                                 padding: '2px 8px', 
                                 borderRadius: '4px', 
-                                border: '1px solid rgba(0, 255, 65, 0.3)' 
+                                border: '1px solid rgba(0, 255, 65, 0.3)',
+                                wordBreak: 'break-all'
                               }}>
                                 <span style={{ opacity: 0.6 }}>{k}:</span> {v}
                               </span>
