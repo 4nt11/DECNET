@@ -1,0 +1,4 @@
+# file: /home/anti/Tools/DECNET/decnet/services/mysql.py
+# hypothesis_version: 6.151.11
+
+[3306, 'LOG_TARGET', 'MYSQL_VERSION', 'NODE_NAME', 'build', 'container_name', 'context', 'environment', 'mysql', 'restart', 'templates', 'unless-stopped', 'version']

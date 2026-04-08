@@ -177,3 +177,31 @@ async def get_stats(current_user: str = Depends(get_current_user)) -> dict[str, 
 @app.get("/api/v1/deckies")
 async def get_deckies(current_user: str = Depends(get_current_user)) -> list[dict[str, Any]]:
     return await repo.get_deckies()
+
+
+class MutateIntervalRequest(BaseModel):
+    mutate_interval: int | None
+
+
+@app.post("/api/v1/deckies/{decky_name}/mutate")
+async def api_mutate_decky(decky_name: str, current_user: str = Depends(get_current_user)) -> dict[str, str]:
+    from decnet.mutator import mutate_decky
+    success = mutate_decky(decky_name)
+    if success:
+        return {"message": f"Successfully mutated {decky_name}"}
+    raise HTTPException(status_code=404, detail=f"Decky {decky_name} not found or failed to mutate")
+
+
+@app.put("/api/v1/deckies/{decky_name}/mutate-interval")
+async def api_update_mutate_interval(decky_name: str, req: MutateIntervalRequest, current_user: str = Depends(get_current_user)) -> dict[str, str]:
+    from decnet.config import load_state, save_state
+    state = load_state()
+    if not state:
+        raise HTTPException(status_code=500, detail="No active deployment")
+    config, compose_path = state
+    decky = next((d for d in config.deckies if d.name == decky_name), None)
+    if not decky:
+        raise HTTPException(status_code=404, detail="Decky not found")
+    decky.mutate_interval = req.mutate_interval
+    save_state(config, compose_path)
+    return {"message": "Mutation interval updated"}

@@ -1,0 +1,4 @@
+# file: /home/anti/Tools/DECNET/decnet/cli.py
+# hypothesis_version: 6.151.11
+
+[5173, 8000, ',', ', ', '--all', '--api', '--api-port', '--archetype', '--config', '--deckies', '--decky', '--distro', '--dry-run', '--emit-syslog', '--host', '--id', '--interface', '--ip-start', '--ipvlan', '--log-file', '--log-target', '--min-deckies', '--mode', '--no-cache', '--output', '--port', '--randomize-distros', '--randomize-services', '--services', '--subnet', '--watch', '--web-port', '-a', '-c', '-d', '-f', '-i', '-m', '-n', '-o', '-w', '/index.html', '0.0.0.0', 'Available Services', 'Default Services', 'Description', 'Display Name', 'Docker Image', 'Image', 'Machine Archetypes', 'Name', 'Ports', 'Slug', 'archetypes', 'bold cyan', 'correlate', 'decnet', 'decnet.cli', 'decnet.log', 'decnet.web.api:app', 'decnet_web', 'dim', 'dist', 'distros', 'green', 'json', 'linux', 'mutate', 'services', 'swarm', 'syslog', 'table', 'unihost', 'uvicorn', 'web']

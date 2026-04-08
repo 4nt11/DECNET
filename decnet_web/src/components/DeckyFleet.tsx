@@ -1,7 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import api from '../utils/api';
 import './Dashboard.css'; // Re-use common dashboard styles
-import { Server, Cpu, Globe, Database } from 'lucide-react';
+import { Server, Cpu, Globe, Database, Clock, RefreshCw } from 'lucide-react';
 
 interface Decky {
   name: string;
@@ -11,6 +11,8 @@ interface Decky {
   hostname: string;
   archetype: string | null;
   service_config: Record<string, Record<string, any>>;
+  mutate_interval: number | null;
+  last_mutated: number;
 }
 
 const DeckyFleet: React.FC = () => {
@@ -25,6 +27,29 @@ const DeckyFleet: React.FC = () => {
       console.error('Failed to fetch decky fleet', err);
     } finally {
       setLoading(false);
+    }
+  };
+
+  const handleMutate = async (name: string) => {
+    try {
+      await api.post(`/deckies/${name}/mutate`);
+      fetchDeckies();
+    } catch (err) {
+      console.error('Failed to mutate', err);
+      alert('Mutation failed');
+    }
+  };
+
+  const handleIntervalChange = async (name: string, current: number | null) => {
+    const _val = prompt(`Enter new mutation interval in minutes for ${name} (leave empty to disable):`, current?.toString() || '');
+    if (_val === null) return;
+    const mutate_interval = _val.trim() === '' ? null : parseInt(_val);
+    try {
+      await api.put(`/deckies/${name}/mutate-interval`, { mutate_interval });
+      fetchDeckies();
+    } catch (err) {
+      console.error('Failed to update interval', err);
+      alert('Update failed');
     }
   };
 
@@ -64,6 +89,31 @@ const DeckyFleet: React.FC = () => {
                 <div style={{ display: 'flex', alignItems: 'center', gap: '8px', fontSize: '0.85rem' }}>
                   <Database size={14} className="dim" />
                   <span className="dim">ARCHETYPE:</span> <span style={{ color: 'var(--highlight-color)' }}>{decky.archetype}</span>
+                </div>
+              )}
+              <div style={{ display: 'flex', alignItems: 'center', gap: '8px', fontSize: '0.85rem', marginTop: '8px' }}>
+                <Clock size={14} className="dim" />
+                <span className="dim">MUTATION:</span>
+                <span 
+                  style={{ color: 'var(--accent-color)', cursor: 'pointer', textDecoration: 'underline' }}
+                  onClick={() => handleIntervalChange(decky.name, decky.mutate_interval)}
+                >
+                  {decky.mutate_interval ? `EVERY ${decky.mutate_interval}m` : 'DISABLED'}
+                </span>
+                <button 
+                  onClick={() => handleMutate(decky.name)}
+                  style={{
+                    background: 'transparent', border: '1px solid var(--accent-color)', 
+                    color: 'var(--accent-color)', padding: '2px 8px', fontSize: '0.7rem', 
+                    cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '4px', marginLeft: 'auto'
+                  }}
+                >
+                  <RefreshCw size={10} /> FORCE
+                </button>
+              </div>
+              {decky.last_mutated > 0 && (
+                <div style={{ fontSize: '0.7rem', color: 'var(--dim-color)', fontStyle: 'italic', marginTop: '4px' }}>
+                  Last mutated: {new Date(decky.last_mutated * 1000).toLocaleString()}
                 </div>
               )}
             </div>

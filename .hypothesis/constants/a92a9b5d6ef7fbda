@@ -1,0 +1,4 @@
+# file: /home/anti/Tools/DECNET/decnet/os_fingerprint.py
+# hypothesis_version: 6.151.11
+
+['128', '2', '255', '3', '6', '64', 'bsd', 'cisco', 'embedded', 'linux', 'windows']

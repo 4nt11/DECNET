@@ -14,6 +14,7 @@ from decnet.distros import random_hostname as _random_hostname
 # Calculate absolute path to the project root (where the config file resides)
 _ROOT: Path = Path(__file__).parent.parent.absolute()
 STATE_FILE: Path = _ROOT / "decnet-state.json"
+DEFAULT_MUTATE_INTERVAL: int = 30  # default rotation interval in minutes
 
 
 def random_hostname(distro_slug: str = "debian") -> str:
@@ -31,6 +32,8 @@ class DeckyConfig(BaseModel):
     archetype: str | None = None  # archetype slug if spawned from an archetype profile
     service_config: dict[str, dict] = {}  # optional per-service persona config
     nmap_os: str = "linux"        # OS family for TCP/IP stack spoofing (see os_fingerprint.py)
+    mutate_interval: int | None = None  # automatic rotation interval in minutes
+    last_mutated: float = 0.0     # timestamp of last mutation
 
     @field_validator("services")
     @classmethod
@@ -49,6 +52,7 @@ class DecnetConfig(BaseModel):
     log_target: str | None = None  # "ip:port" or None
     log_file: str | None = None    # path for RFC 5424 syslog file output
     ipvlan: bool = False           # use IPvlan L2 instead of MACVLAN (WiFi-friendly)
+    mutate_interval: int | None = DEFAULT_MUTATE_INTERVAL # global automatic rotation interval in minutes
 
     @field_validator("log_target")
     @classmethod

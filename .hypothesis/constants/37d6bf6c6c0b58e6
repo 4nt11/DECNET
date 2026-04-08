@@ -1,0 +1,4 @@
+# file: /home/anti/Tools/DECNET/decnet/services/elasticsearch.py
+# hypothesis_version: 6.151.11
+
+[9200, 'LOG_TARGET', 'NODE_NAME', 'build', 'container_name', 'context', 'elasticsearch', 'environment', 'restart', 'templates', 'unless-stopped']

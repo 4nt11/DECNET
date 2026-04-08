@@ -116,9 +116,12 @@ def _build_deckies_from_ini(
     gateway: str,
     host_ip: str,
     randomize: bool,
+    cli_mutate_interval: int | None = None,
 ) -> list[DeckyConfig]:
     """Build DeckyConfig list from an IniConfig, auto-allocating missing IPs."""
     from ipaddress import IPv4Address, IPv4Network
+    import time
+    now = time.time()
 
     explicit_ips: set[IPv4Address] = {
         IPv4Address(s.ip) for s in ini.deckies if s.ip
@@ -181,6 +184,12 @@ def _build_deckies_from_ini(
 
         # nmap_os priority: explicit INI key > archetype default > "linux"
         resolved_nmap_os = spec.nmap_os or (arch.nmap_os if arch else "linux")
+        
+        # mutation interval priority: CLI > per-decky INI > global INI
+        decky_mutate_interval = cli_mutate_interval
+        if decky_mutate_interval is None:
+            decky_mutate_interval = spec.mutate_interval if spec.mutate_interval is not None else ini.mutate_interval
+
         deckies.append(DeckyConfig(
             name=spec.name,
             ip=ip,
@@ -192,8 +201,10 @@ def _build_deckies_from_ini(
             archetype=arch.slug if arch else None,
             service_config=spec.service_config,
             nmap_os=resolved_nmap_os,
+            mutate_interval=decky_mutate_interval,
+            last_mutated=now,
         ))
-    return deckies
+        return deckies
 
 
 @app.command()
@@ -210,6 +221,7 @@ def deploy(
     log_target: Optional[str] = typer.Option(None, "--log-target", help="Forward logs to ip:port (e.g. 192.168.1.5:5140)"),
     log_file: Optional[str] = typer.Option(None, "--log-file", help="Write RFC 5424 syslog to this path inside containers (e.g. /var/log/decnet/decnet.log)"),
     archetype_name: Optional[str] = typer.Option(None, "--archetype", "-a", help="Machine archetype slug (e.g. linux-server, windows-workstation)"),
+    mutate_interval: Optional[int] = typer.Option(30, "--mutate-interval", help="Automatically rotate services every N minutes"),
     dry_run: bool = typer.Option(False, "--dry-run", help="Generate compose file without starting containers"),
     no_cache: bool = typer.Option(False, "--no-cache", help="Force rebuild all images, ignoring Docker layer cache"),
     ipvlan: bool = typer.Option(False, "--ipvlan", help="Use IPvlan L2 instead of MACVLAN (required on WiFi interfaces)"),
@@ -264,7 +276,7 @@ def deploy(
         effective_log_target = log_target or ini.log_target
         effective_log_file = log_file
         decky_configs = _build_deckies_from_ini(
-            ini, subnet_cidr, effective_gateway, host_ip, randomize_services
+            ini, subnet_cidr, effective_gateway, host_ip, randomize_services, cli_mutate_interval=mutate_interval
         )
     # ------------------------------------------------------------------ #
     # Classic CLI path                                                     #
@@ -319,7 +331,7 @@ def deploy(
         decky_configs = _build_deckies(
             deckies, ips, services_list, randomize_services,
             distros_explicit=distros_list, randomize_distros=randomize_distros,
-            archetype=arch,
+            archetype=arch, mutate_interval=mutate_interval,
         )
         effective_log_target = log_target
         effective_log_file = log_file
@@ -338,6 +350,7 @@ def deploy(
         log_target=effective_log_target,
         log_file=effective_log_file,
         ipvlan=ipvlan,
+        mutate_interval=mutate_interval,
     )
 
     if effective_log_target and not dry_run:
@@ -349,6 +362,19 @@ def deploy(
     from decnet.deployer import deploy as _deploy
     _deploy(config, dry_run=dry_run, no_cache=no_cache)
     
+    if mutate_interval is not None and not dry_run:
+        import subprocess
+        import sys
+        console.print(f"[green]Starting DECNET Mutator watcher in the background (interval: {mutate_interval}m)...[/]")
+        try:
+            subprocess.Popen(
+                [sys.executable, "-m", "decnet.cli", "mutate", "--watch"],
+                stdout=subprocess.DEVNULL,
+                stderr=subprocess.STDOUT
+            )
+        except (FileNotFoundError, subprocess.SubprocessError):
+            console.print("[red]Failed to start mutator watcher.[/]")
+
     if api and not dry_run:
         import subprocess
         import sys
@@ -365,6 +391,27 @@ def deploy(
             console.print(f"[dim]API running at http://0.0.0.0:{api_port}[/]")
         except (FileNotFoundError, subprocess.SubprocessError):
             console.print("[red]Failed to start API. Ensure 'uvicorn' is installed in the current environment.[/]")
+
+
+@app.command()
+def mutate(
+    watch: bool = typer.Option(False, "--watch", "-w", help="Run continuously and mutate deckies according to their interval"),
+    decky_name: Optional[str] = typer.Option(None, "--decky", "-d", help="Force mutate a specific decky immediately"),
+    force_all: bool = typer.Option(False, "--all", help="Force mutate all deckies immediately"),
+) -> None:
+    """Manually trigger or continuously watch for decky mutation."""
+    from decnet.mutator import mutate_decky, mutate_all, run_watch_loop
+
+    if watch:
+        run_watch_loop()
+        return
+
+    if decky_name:
+        mutate_decky(decky_name)
+    elif force_all:
+        mutate_all(force=True)
+    else:
+        mutate_all(force=False)
 
 
 @app.command()

@@ -132,7 +132,7 @@ def deploy(config: DecnetConfig, dry_run: bool = False, no_cache: bool = False) 
 
 
 def _kill_api() -> None:
-    """Find and kill any running DECNET API (uvicorn) processes."""
+    """Find and kill any running DECNET API (uvicorn) or mutator processes."""
     import psutil
     import signal
     import os
@@ -141,15 +141,21 @@ def _kill_api() -> None:
     for _proc in psutil.process_iter(['pid', 'name', 'cmdline']):
         try:
             _cmd = _proc.info['cmdline']
-            if _cmd and "uvicorn" in _cmd and "decnet.web.api:app" in _cmd:
+            if not _cmd:
+                continue
+            if "uvicorn" in _cmd and "decnet.web.api:app" in _cmd:
                 console.print(f"[yellow]Stopping DECNET API (PID {_proc.info['pid']})...[/]")
+                os.kill(_proc.info['pid'], signal.SIGTERM)
+                _killed = True
+            elif "decnet.cli" in _cmd and "mutate" in _cmd and "--watch" in _cmd:
+                console.print(f"[yellow]Stopping DECNET Mutator Watcher (PID {_proc.info['pid']})...[/]")
                 os.kill(_proc.info['pid'], signal.SIGTERM)
                 _killed = True
         except (psutil.NoSuchProcess, psutil.AccessDenied):
             continue
     
     if _killed:
-        console.print("[green]API stopped.[/]")
+        console.print("[green]Background processes stopped.[/]")
 
 
 def teardown(decky_id: str | None = None) -> None:

@@ -1,0 +1,4 @@
+# file: /home/anti/Tools/DECNET/decnet/services/http.py
+# hypothesis_version: 6.151.11
+
+[443, '/opt/html_files', 'CUSTOM_BODY', 'EXTRA_HEADERS', 'FAKE_APP', 'FILES_DIR', 'LOG_TARGET', 'NODE_NAME', 'RESPONSE_CODE', 'SERVER_HEADER', 'build', 'container_name', 'context', 'custom_body', 'environment', 'extra_headers', 'fake_app', 'files', 'http', 'response_code', 'restart', 'server_header', 'templates', 'unless-stopped', 'volumes']

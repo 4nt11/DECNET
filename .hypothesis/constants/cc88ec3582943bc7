@@ -1,0 +1,4 @@
+# file: /home/anti/Tools/DECNET/decnet/distros.py
+# hypothesis_version: 6.151.11
+
+['Alpine Linux 3.19', 'Arch Linux', 'CentOS 7', 'Debian 12 (Bookworm)', 'Fedora 39', 'Kali Linux (Rolling)', 'Rocky Linux 9', 'alpha', 'alpine', 'alpine:3.19', 'arch', 'archlinux:latest', 'backup', 'bravo', 'centos7', 'centos:7', 'charlie', 'db', 'debian', 'debian:bookworm-slim', 'delta', 'dev', 'echo', 'fedora', 'fedora:39', 'files', 'foxtrot', 'generic', 'golf', 'hotel', 'india', 'juliet', 'kali', 'kilo', 'lima', 'mail', 'mike', 'minimal', 'monitor', 'nova', 'oscar', 'prod', 'proxy', 'rhel', 'rocky9', 'rockylinux:9-minimal', 'rolling', 'stage', 'ubuntu20', 'ubuntu22', 'ubuntu:20.04', 'ubuntu:22.04', 'web']

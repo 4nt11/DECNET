@@ -1,0 +1,4 @@
+# file: /home/anti/Tools/DECNET/decnet/config.py
+# hypothesis_version: 6.151.11
+
+[':', 'compose_path', 'config', 'debian', 'debian:bookworm-slim', 'decnet-state.json', 'linux', 'log_target', 'services', 'swarm', 'unihost']
