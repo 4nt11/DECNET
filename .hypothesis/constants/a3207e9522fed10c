@@ -1,4 +1,0 @@
-# file: /home/anti/Tools/DECNET/decnet/web/api.py
-# hypothesis_version: 6.151.11
-
-[1000, '*', '/api/v1/auth/login', '/api/v1/logs', '/api/v1/stats', '1.0.0', 'Bearer', 'WWW-Authenticate', 'access_token', 'admin', 'bearer', 'data', 'limit', 'message', 'must_change_password', 'offset', 'password_hash', 'role', 'token_type', 'total', 'username', 'uuid']

@@ -1,4 +1,0 @@
-# file: /home/anti/Tools/DECNET/decnet/services/real_ssh.py
-# hypothesis_version: 6.151.11
-
-['NET_BIND_SERVICE', 'SSH_HOSTNAME', 'SSH_ROOT_PASSWORD', 'admin', 'build', 'cap_add', 'container_name', 'context', 'environment', 'hostname', 'password', 'real_ssh', 'restart', 'templates', 'unless-stopped']

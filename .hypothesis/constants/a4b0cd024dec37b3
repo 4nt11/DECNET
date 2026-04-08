@@ -1,4 +1,0 @@
-# file: /home/anti/Tools/DECNET/decnet/services/pop3.py
-# hypothesis_version: 6.151.11
-
-[110, 995, 'LOG_TARGET', 'NODE_NAME', 'build', 'container_name', 'context', 'environment', 'pop3', 'restart', 'templates', 'unless-stopped']

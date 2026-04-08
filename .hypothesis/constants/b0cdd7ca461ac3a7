@@ -1,4 +1,0 @@
-# file: /home/anti/Tools/DECNET/decnet/services/k8s.py
-# hypothesis_version: 6.151.11
-
-[6443, 8080, 'LOG_TARGET', 'NODE_NAME', 'build', 'container_name', 'context', 'environment', 'k8s', 'restart', 'templates', 'unless-stopped']

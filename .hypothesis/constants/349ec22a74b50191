@@ -1,4 +1,0 @@
-# file: /home/anti/Tools/DECNET/decnet/composer.py
-# hypothesis_version: 6.151.11
-
-['/var/log/decnet', '3.8', 'BASE_IMAGE', 'DECNET_LOG_FILE', 'HOSTNAME', 'NET_ADMIN', 'args', 'bridge', 'build', 'cap_add', 'command', 'container_name', 'decnet_logs', 'depends_on', 'driver', 'environment', 'external', 'hostname', 'image', 'infinity', 'internal', 'ipv4_address', 'network_mode', 'networks', 'restart', 'services', 'sleep', 'sysctls', 'unless-stopped', 'version', 'volumes']

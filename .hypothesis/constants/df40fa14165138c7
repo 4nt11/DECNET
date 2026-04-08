@@ -1,4 +1,0 @@
-# file: /home/anti/Tools/DECNET/decnet/web/auth.py
-# hypothesis_version: 6.151.11
-
-[1440, 'DECNET_SECRET_KEY', 'HS256', 'exp', 'iat', 'utf-8']

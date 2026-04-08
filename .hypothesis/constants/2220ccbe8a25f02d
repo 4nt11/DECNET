@@ -1,4 +1,0 @@
-# file: /home/anti/Tools/DECNET/decnet/services/snmp.py
-# hypothesis_version: 6.151.11
-
-[161, 'LOG_TARGET', 'NODE_NAME', 'build', 'container_name', 'context', 'environment', 'restart', 'snmp', 'templates', 'unless-stopped']
