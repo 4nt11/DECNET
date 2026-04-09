@@ -145,7 +145,7 @@ class BountyResponse(BaseModel):
     data: list[dict[str, Any]]
 
 
-@app.post("/api/v1/auth/login", response_model=Token)
+@app.post("/api/v1/auth/login", response_model=Token, tags=["Authentication"])
 async def login(request: LoginRequest) -> dict[str, Any]:
     _user: Optional[dict[str, Any]] = await repo.get_user_by_username(request.username)
     if not _user or not verify_password(request.password, _user["password_hash"]):
@@ -167,7 +167,7 @@ async def login(request: LoginRequest) -> dict[str, Any]:
     }
 
 
-@app.post("/api/v1/auth/change-password")
+@app.post("/api/v1/auth/change-password", tags=["Authentication"])
 async def change_password(request: ChangePasswordRequest, current_user: str = Depends(get_current_user)) -> dict[str, str]:
     _user: Optional[dict[str, Any]] = await repo.get_user_by_uuid(current_user)
     if not _user or not verify_password(request.old_password, _user["password_hash"]):
@@ -181,7 +181,7 @@ async def change_password(request: ChangePasswordRequest, current_user: str = De
     return {"message": "Password updated successfully"}
 
 
-@app.get("/api/v1/logs", response_model=LogsResponse)
+@app.get("/api/v1/logs", response_model=LogsResponse, tags=["Logs"])
 async def get_logs(
     limit: int = Query(50, ge=1, le=1000),
     offset: int = Query(0, ge=0),
@@ -200,7 +200,7 @@ async def get_logs(
     }
 
 
-@app.get("/api/v1/bounty", response_model=BountyResponse)
+@app.get("/api/v1/bounty", response_model=BountyResponse, tags=["Bounty Vault"])
 async def get_bounties(
     limit: int = Query(50, ge=1, le=1000),
     offset: int = Query(0, ge=0),
@@ -219,7 +219,7 @@ async def get_bounties(
     }
 
 
-@app.get("/api/v1/logs/histogram")
+@app.get("/api/v1/logs/histogram", tags=["Logs"])
 async def get_logs_histogram(
     search: Optional[str] = None,
     start_time: Optional[str] = None,
@@ -237,12 +237,12 @@ class StatsResponse(BaseModel):
     deployed_deckies: int
 
 
-@app.get("/api/v1/stats", response_model=StatsResponse)
+@app.get("/api/v1/stats", response_model=StatsResponse, tags=["Observability"])
 async def get_stats(current_user: str = Depends(get_current_user)) -> dict[str, Any]:
     return await repo.get_stats_summary()
 
 
-@app.get("/api/v1/deckies")
+@app.get("/api/v1/deckies", tags=["Fleet Management"])
 async def get_deckies(current_user: str = Depends(get_current_user)) -> list[dict[str, Any]]:
     return await repo.get_deckies()
 
@@ -251,7 +251,7 @@ class MutateIntervalRequest(BaseModel):
     mutate_interval: int | None
 
 
-@app.post("/api/v1/deckies/{decky_name}/mutate")
+@app.post("/api/v1/deckies/{decky_name}/mutate", tags=["Fleet Management"])
 async def api_mutate_decky(decky_name: str, current_user: str = Depends(get_current_user)) -> dict[str, str]:
     from decnet.mutator import mutate_decky
     success = mutate_decky(decky_name)
@@ -260,7 +260,7 @@ async def api_mutate_decky(decky_name: str, current_user: str = Depends(get_curr
     raise HTTPException(status_code=404, detail=f"Decky {decky_name} not found or failed to mutate")
 
 
-@app.put("/api/v1/deckies/{decky_name}/mutate-interval")
+@app.put("/api/v1/deckies/{decky_name}/mutate-interval", tags=["Fleet Management"])
 async def api_update_mutate_interval(decky_name: str, req: MutateIntervalRequest, current_user: str = Depends(get_current_user)) -> dict[str, str]:
     from decnet.config import load_state, save_state
     state = load_state()
@@ -275,7 +275,7 @@ async def api_update_mutate_interval(decky_name: str, req: MutateIntervalRequest
     return {"message": "Mutation interval updated"}
 
 
-@app.get("/api/v1/stream")
+@app.get("/api/v1/stream", tags=["Observability"])
 async def stream_events(
     request: Request, 
     last_event_id: int = Query(0, alias="lastEventId"), 
@@ -333,7 +333,7 @@ async def stream_events(
 class DeployIniRequest(BaseModel):
     ini_content: str = Field(..., min_length=5, max_length=512 * 1024)
 
-@app.post("/api/v1/deckies/deploy")
+@app.post("/api/v1/deckies/deploy", tags=["Fleet Management"])
 async def api_deploy_deckies(req: DeployIniRequest, current_user: str = Depends(get_current_user)) -> dict[str, str]:
     from decnet.ini_loader import load_ini_from_string
     from decnet.cli import _build_deckies_from_ini
