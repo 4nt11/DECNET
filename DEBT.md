@@ -11,9 +11,8 @@
 ~~**File:** `decnet/env.py:15`~~  
 Fixed in commit `b6b046c`. `DECNET_JWT_SECRET` is now required; startup raises `ValueError` if unset or set to a known-bad value.
 
-### ~~DEBT-002 — Default admin credentials in code~~ ✅ RESOLVED
-~~**File:** `decnet/env.py:21-22`, `decnet/web/sqlite_repository.py:71`~~  
-Fixed in commit `b6b046c`. `DECNET_ADMIN_PASSWORD` is now required via `_require_env()`; known-bad defaults are rejected at startup.
+### ~~DEBT-002 — Default admin credentials in code~~ ✅ CLOSED (by design)
+`DECNET_ADMIN_PASSWORD` defaults to `"admin"` intentionally — the web dashboard enforces a password change on first login (`must_change_password=1`). Startup enforcement removed as it broke tooling without adding meaningful security.
 
 ### ~~DEBT-003 — Hardcoded LDAP password placeholder~~ ✅ CLOSED (false positive)
 `templates/ldap/server.py:73` — `"<sasl_or_unknown>"` is a log label for SASL auth attempts, not an operational credential. The LDAP template is a honeypot; it has no bind password of its own.
