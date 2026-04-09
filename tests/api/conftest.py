@@ -25,9 +25,12 @@ import decnet.config
 
 @pytest.fixture(scope="function", autouse=True)
 async def setup_db(monkeypatch) -> AsyncGenerator[None, None]:
-    # Unique in-memory DB per test — no file I/O, no WAL/SHM side-cars
-    db_url = f"sqlite+aiosqlite:///file:testdb_{_uuid.uuid4().hex}?mode=memory&cache=shared"
-    engine = create_async_engine(db_url, connect_args={"uri": True}, poolclass=StaticPool)
+    # StaticPool holds one connection forever — :memory: stays alive for the whole test
+    engine = create_async_engine(
+        "sqlite+aiosqlite:///:memory:",
+        connect_args={"check_same_thread": False},
+        poolclass=StaticPool,
+    )
     session_factory = async_sessionmaker(engine, class_=AsyncSession, expire_on_commit=False)
 
     # Patch BOTH — session_factory is what all queries actually use
