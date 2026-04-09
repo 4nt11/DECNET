@@ -56,6 +56,9 @@ DECNET_ADMIN_PASSWORD: str = os.environ.get("DECNET_ADMIN_PASSWORD", "admin")
 DECNET_DEVELOPER: bool = os.environ.get("DECNET_DEVELOPER", "False").lower() == "true"
 
 # CORS — comma-separated list of allowed origins for the web dashboard API.
-# Example: DECNET_CORS_ORIGINS=http://localhost:8080,https://dashboard.example.com
-_cors_raw: str = os.environ.get("DECNET_CORS_ORIGINS", "http://localhost:8080,http://localhost:5173,http://localhost:9090")
+# Defaults to the configured web host/port. Override with DECNET_CORS_ORIGINS if needed.
+# Example: DECNET_CORS_ORIGINS=http://192.168.1.50:9090,https://dashboard.example.com
+_web_hostname: str = "localhost" if DECNET_WEB_HOST in ("0.0.0.0", "127.0.0.1", "::") else DECNET_WEB_HOST  # nosec B104
+_cors_default: str = f"http://{_web_hostname}:{DECNET_WEB_PORT}"
+_cors_raw: str = os.environ.get("DECNET_CORS_ORIGINS", _cors_default)
 DECNET_CORS_ORIGINS: list[str] = [o.strip() for o in _cors_raw.split(",") if o.strip()]
