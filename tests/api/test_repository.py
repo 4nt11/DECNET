@@ -5,7 +5,7 @@ covering DEBT-006 (zero test coverage on the database layer).
 """
 import json
 import pytest
-from decnet.web.sqlite_repository import SQLiteRepository
+from decnet.web.db.sqlite.repository import SQLiteRepository
 
 
 @pytest.fixture
@@ -13,6 +13,7 @@ def repo(tmp_path):
     return SQLiteRepository(db_path=str(tmp_path / "test.db"))
 
 
+@pytest.mark.anyio
 async def test_add_and_get_log(repo):
     await repo.add_log({
         "decky": "decky-01",
@@ -30,6 +31,7 @@ async def test_add_and_get_log(repo):
     assert logs[0]["attacker_ip"] == "10.0.0.1"
 
 
+@pytest.mark.anyio
 async def test_get_total_logs(repo):
     for i in range(5):
         await repo.add_log({
@@ -45,6 +47,7 @@ async def test_get_total_logs(repo):
     assert total == 5
 
 
+@pytest.mark.anyio
 async def test_search_filter_by_decky(repo):
     await repo.add_log({"decky": "target", "service": "ssh", "event_type": "connect",
                         "attacker_ip": "1.1.1.1", "raw_line": "x", "fields": "{}", "msg": ""})
@@ -56,6 +59,7 @@ async def test_search_filter_by_decky(repo):
     assert logs[0]["decky"] == "target"
 
 
+@pytest.mark.anyio
 async def test_search_filter_by_service(repo):
     await repo.add_log({"decky": "d1", "service": "rdp",  "event_type": "connect",
                         "attacker_ip": "1.1.1.1", "raw_line": "x", "fields": "{}", "msg": ""})
@@ -67,6 +71,7 @@ async def test_search_filter_by_service(repo):
     assert logs[0]["service"] == "rdp"
 
 
+@pytest.mark.anyio
 async def test_search_filter_by_json_field(repo):
     await repo.add_log({"decky": "d1", "service": "ssh", "event_type": "connect",
                         "attacker_ip": "1.1.1.1", "raw_line": "x",
@@ -80,6 +85,7 @@ async def test_search_filter_by_json_field(repo):
     assert json.loads(logs[0]["fields"])["username"] == "root"
 
 
+@pytest.mark.anyio
 async def test_get_logs_after_id(repo):
     for i in range(4):
         await repo.add_log({"decky": "d", "service": "ssh", "event_type": "connect",
@@ -97,6 +103,7 @@ async def test_get_logs_after_id(repo):
     assert len(new_logs) == 1
 
 
+@pytest.mark.anyio
 async def test_full_text_search(repo):
     await repo.add_log({"decky": "d1", "service": "ssh", "event_type": "connect",
                         "attacker_ip": "1.1.1.1", "raw_line": "supersecretstring",
@@ -109,6 +116,7 @@ async def test_full_text_search(repo):
     assert len(logs) == 1
 
 
+@pytest.mark.anyio
 async def test_pagination(repo):
     for i in range(10):
         await repo.add_log({"decky": "d", "service": "ssh", "event_type": "connect",
@@ -128,6 +136,7 @@ async def test_pagination(repo):
     assert ids1.isdisjoint(ids2)
 
 
+@pytest.mark.anyio
 async def test_add_and_get_bounty(repo):
     await repo.add_bounty({
         "decky": "decky-01",
@@ -142,6 +151,7 @@ async def test_add_and_get_bounty(repo):
     assert bounties[0]["bounty_type"] == "credentials"
 
 
+@pytest.mark.anyio
 async def test_user_lifecycle(repo):
     import uuid
     uid = str(uuid.uuid4())

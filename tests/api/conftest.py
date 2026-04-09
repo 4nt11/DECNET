@@ -1,41 +1,58 @@
 import os
 import json
 import pytest
-from typing import Generator, Any
+from typing import Generator, Any, AsyncGenerator
 from pathlib import Path
-from fastapi.testclient import TestClient
+import httpx
 from hypothesis import HealthCheck
+from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
+
+# Ensure required env vars are set to non-bad values for tests before anything imports decnet.env
+os.environ["DECNET_JWT_SECRET"] = "test-secret-key-at-least-32-chars-long!!"
+os.environ["DECNET_ADMIN_PASSWORD"] = "test-password-123"
 
 from decnet.web.api import app
 from decnet.web.dependencies import repo
+from decnet.web.db.sqlite.database import get_async_engine
 from decnet.env import DECNET_ADMIN_USER, DECNET_ADMIN_PASSWORD
 import decnet.config
 
 TEST_STATE_FILE = Path("test-decnet-state.json")
 
 @pytest.fixture(scope="function", autouse=True)
-def setup_db() -> Generator[None, None, None]:
-    # Use a unique DB for each test process/thread if possible, but for now just one
-    repo.db_path = "test_api_decnet.db"
-    if os.path.exists(repo.db_path):
-        try:
-            os.remove(repo.db_path)
-        except OSError:
-            pass
+async def setup_db(worker_id, monkeypatch) -> AsyncGenerator[None, None]:
+    import uuid
+    # Use worker-specific in-memory DB with shared cache for maximum speed
+    unique_id = uuid.uuid4().hex
+    db_path = f"file:memdb_{worker_id}_{unique_id}?mode=memory&cache=shared"
     
+    # Patch the global repo singleton
+    monkeypatch.setattr(repo, "db_path", db_path)
+    
+    engine = get_async_engine(db_path)
+    session_factory = async_sessionmaker(
+        engine, class_=AsyncSession, expire_on_commit=False
+    )
+    
+    monkeypatch.setattr(repo, "engine", engine)
+    monkeypatch.setattr(repo, "session_factory", session_factory)
+    
+    # Initialize the in-memory DB (tables + admin)
     repo.reinitialize()
+    
     yield
-    if os.path.exists(repo.db_path):
-        try:
-            os.remove(repo.db_path)
-        except OSError:
-            pass
+    
+    await engine.dispose()
 
 @pytest.fixture
-def auth_token() -> str:
-    with TestClient(app) as client:
-        resp = client.post("/api/v1/auth/login", json={"username": DECNET_ADMIN_USER, "password": DECNET_ADMIN_PASSWORD})
-        return resp.json()["access_token"]
+async def client() -> AsyncGenerator[httpx.AsyncClient, None]:
+    async with httpx.AsyncClient(transport=httpx.ASGITransport(app=app), base_url="http://test") as ac:
+        yield ac
+
+@pytest.fixture
+async def auth_token(client: httpx.AsyncClient) -> str:
+    resp = await client.post("/api/v1/auth/login", json={"username": DECNET_ADMIN_USER, "password": DECNET_ADMIN_PASSWORD})
+    return resp.json()["access_token"]
 
 @pytest.fixture(autouse=True)
 def patch_state_file(monkeypatch):

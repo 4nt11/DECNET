@@ -20,6 +20,7 @@ dependencies = [
     "bcrypt>=4.1.0",
     "psutil>=5.9.0",
     "python-dotenv>=1.0.0",
+    "sqlmodel>=0.0.16",
 ]
 
 [project.optional-dependencies]
@@ -34,6 +35,7 @@ dev = [
     "pytest-asyncio>=1.0",
     "freezegun>=1.5",
     "schemathesis>=4.0",
+    "pytest-xdist>=3.8.0",
 ]
 
 [project.scripts]
@@ -49,6 +51,7 @@ filterwarnings = [
 [tool.coverage.run]
 source = ["decnet"]
 omit = ["*/tests/*", "templates/*"]
+parallel = true
 
 [tool.coverage.report]
 show_missing = true

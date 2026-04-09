@@ -9,7 +9,7 @@ import json
 import pytest
 from datetime import datetime, timedelta
 from freezegun import freeze_time
-from decnet.web.sqlite_repository import SQLiteRepository
+from decnet.web.db.sqlite.repository import SQLiteRepository
 
 
 @pytest.fixture
@@ -30,11 +30,13 @@ def _log(decky="d", service="ssh", ip="1.2.3.4", timestamp=None):
     }
 
 
+@pytest.mark.anyio
 async def test_histogram_empty_db(repo):
     result = await repo.get_log_histogram()
     assert result == []
 
 
+@pytest.mark.anyio
 @freeze_time("2026-04-09 12:00:00")
 async def test_histogram_single_bucket(repo):
     now = datetime.now()
@@ -48,6 +50,7 @@ async def test_histogram_single_bucket(repo):
     assert result[0]["count"] == 5
 
 
+@pytest.mark.anyio
 @freeze_time("2026-04-09 12:00:00")
 async def test_histogram_two_buckets(repo):
     now = datetime.now()
@@ -65,6 +68,7 @@ async def test_histogram_two_buckets(repo):
     assert counts == {3, 7}
 
 
+@pytest.mark.anyio
 @freeze_time("2026-04-09 12:00:00")
 async def test_histogram_respects_start_end_filter(repo):
     now = datetime.now()
@@ -82,6 +86,7 @@ async def test_histogram_respects_start_end_filter(repo):
     assert total == 1
 
 
+@pytest.mark.anyio
 @freeze_time("2026-04-09 12:00:00")
 async def test_histogram_search_filter(repo):
     now = datetime.now()
