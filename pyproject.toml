@@ -30,15 +30,30 @@ dev = [
     "pip-audit>=2.0",
     "httpx>=0.27.0",
     "hypothesis>=6.0",
+    "pytest-cov>=7.0",
+    "pytest-asyncio>=1.0",
+    "freezegun>=1.5",
+    "schemathesis>=4.0",
 ]
 
 [project.scripts]
 decnet = "decnet.cli:app"
 
 [tool.pytest.ini_options]
+asyncio_mode = "auto"
 filterwarnings = [
     "ignore::pytest.PytestUnhandledThreadExceptionWarning",
+    "ignore::DeprecationWarning",
 ]
+
+[tool.coverage.run]
+source = ["decnet"]
+omit = ["*/tests/*", "templates/*"]
+
+[tool.coverage.report]
+show_missing = true
+skip_covered = false
+# Run with: pytest --cov --cov-report=term-missing
 
 [tool.setuptools.packages.find]
 where = ["."]
