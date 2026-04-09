@@ -1,6 +1,6 @@
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import Optional, Any, List
-from sqlmodel import SQLModel, Field, Column, JSON
+from sqlmodel import SQLModel, Field
 from pydantic import BaseModel, Field as PydanticField
 
 # --- Database Tables (SQLModel) ---
@@ -16,7 +16,7 @@ class User(SQLModel, table=True):
 class Log(SQLModel, table=True):
     __tablename__ = "logs"
     id: Optional[int] = Field(default=None, primary_key=True)
-    timestamp: datetime = Field(default_factory=datetime.utcnow, index=True)
+    timestamp: datetime = Field(default_factory=lambda: datetime.now(timezone.utc), index=True)
     decky: str = Field(index=True)
     service: str = Field(index=True)
     event_type: str = Field(index=True)
@@ -28,7 +28,7 @@ class Log(SQLModel, table=True):
 class Bounty(SQLModel, table=True):
     __tablename__ = "bounty"
     id: Optional[int] = Field(default=None, primary_key=True)
-    timestamp: datetime = Field(default_factory=datetime.utcnow, index=True)
+    timestamp: datetime = Field(default_factory=lambda: datetime.now(timezone.utc), index=True)
     decky: str = Field(index=True)
     service: str = Field(index=True)
     attacker_ip: str = Field(index=True)
