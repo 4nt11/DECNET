@@ -1,0 +1,4 @@
+# file: /home/anti/Tools/DECNET/decnet/network.py
+# hypothesis_version: 6.151.11
+
+['/', 'add', 'addr', 'bridge', 'decnet_ipvlan0', 'decnet_lan', 'decnet_macvlan0', 'default', 'del', 'dev', 'inet ', 'inet6', 'ip', 'ipvlan', 'ipvlan_mode', 'l2', 'link', 'macvlan', 'mode', 'parent', 'route', 'set', 'show', 'type', 'up', 'via']

@@ -1,0 +1,4 @@
+# file: /home/anti/Tools/DECNET/decnet/services/docker_api.py
+# hypothesis_version: 6.151.12
+
+[2375, 2376, 'LOG_TARGET', 'NODE_NAME', 'build', 'container_name', 'context', 'docker_api', 'environment', 'restart', 'templates', 'unless-stopped']

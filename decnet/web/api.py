@@ -1,4 +1,3 @@
-import uuid
 from contextlib import asynccontextmanager
 from datetime import timedelta
 from typing import Any, AsyncGenerator, Optional
@@ -20,7 +19,7 @@ from decnet.web.auth import (
 )
 from decnet.web.sqlite_repository import SQLiteRepository
 from decnet.web.ingester import log_ingestion_worker
-from decnet.env import DECNET_ADMIN_USER, DECNET_ADMIN_PASSWORD, DECNET_DEVELOPER
+from decnet.env import DECNET_DEVELOPER
 import asyncio
 
 repo: SQLiteRepository = SQLiteRepository()
@@ -38,22 +37,6 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
             break
         except Exception:
             await asyncio.sleep(0.5)
-    
-    # Create default admin if no users exist
-    try:
-        _admin_user: Optional[dict[str, Any]] = await repo.get_user_by_username(DECNET_ADMIN_USER)
-        if not _admin_user:
-            await repo.create_user(
-                {
-                    "uuid": str(uuid.uuid4()),
-                    "username": DECNET_ADMIN_USER,
-                    "password_hash": get_password_hash(DECNET_ADMIN_PASSWORD),
-                    "role": "admin",
-                    "must_change_password": True  # nosec B105
-                }
-            )
-    except Exception:  # nosec B110
-        pass
     
     # Start background ingestion task
     if ingestion_task is None or ingestion_task.done():

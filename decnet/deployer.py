@@ -210,7 +210,7 @@ def status() -> None:
     table.add_column("Hostname")
     table.add_column("Status")
 
-    running = {c.name: c.status for c in client.containers.list(all=True)}
+    running = {c.name: c.status for c in client.containers.list(all=True, ignore_removed=True)}
 
     for decky in config.deckies:
         statuses = []

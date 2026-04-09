@@ -1,5 +1,48 @@
 # DECNET Development Roadmap
 
+## 🛠️ Service Realism & Interaction (First Release Path)
+*Goal: Ensure every service is interactive enough to feel real during manual exploration.*
+
+### Remote Access & Shells
+- [ ] **SSH (Cowrie)** — Custom filesystem, realistic user database, and command execution.
+- [ ] **Telnet (Cowrie)** — Realistic banner and command emulation.
+- [ ] **RDP** — Realistic NLA authentication and screen capture (where possible).
+- [ ] **VNC** — Realistic RFB protocol handshake and authentication.
+- [ ] **Real SSH** — Pass-through or high-interaction proxying.
+
+### Databases
+- [ ] **MySQL** — Support for common SQL queries and realistic schema.
+- [ ] **Postgres** — Realistic version strings and basic query support.
+- [ ] **MSSQL** — Realistic TDS protocol handshake.
+- [ ] **MongoDB** — Support for common Mongo wire protocol commands.
+- [ ] **Redis** — Support for basic GET/SET/INFO commands.
+- [ ] **Elasticsearch** — Realistic REST API responses for `/_cluster/health` etc.
+
+### Web & APIs
+- [ ] **HTTP** — Flexible templates (WordPress, phpMyAdmin, etc.) with logging.
+- [ ] **Docker API** — Realistic responses for `docker version` and `docker ps`.
+- [ ] **Kubernetes (K8s)** — Mocked kubectl responses and basic API exploration.
+
+### File Transfer & Storage
+- [ ] **SMB** — Realistic share discovery and basic file browsing.
+- [ ] **FTP** — Support for common FTP commands and directory listing.
+- [ ] **TFTP** — Basic block-based file transfer emulation.
+
+### Directory & Mail
+- [ ] **LDAP** — Basic directory search and authentication responses.
+- [ ] **SMTP** — Mail server banners and basic EHLO/MAIL FROM support.
+- [ ] **IMAP** — Realistic mail folder structure and auth.
+- [ ] **POP3** — Basic mail retrieval protocol emulation.
+
+### Industrial & IoT (ICS)
+- [ ] **MQTT** — Basic topic subscription and publishing support.
+- [ ] **SNMP** — Realistic MIB responses for common OIDs.
+- [ ] **SIP** — Basic VoIP protocol handshake and registration.
+- [ ] **LLMNR** — Realistic local name resolution responses.
+- [ ] **Conpot** — SCADA/ICS protocol emulation (Modbus, etc.).
+
+---
+
 ## Core / Hardening
 
 - [ ] **Attacker fingerprinting** — Capture TLS JA3/JA4 hashes, TCP window sizes, User-Agent strings, and SSH client banners.

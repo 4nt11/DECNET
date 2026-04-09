@@ -5,6 +5,18 @@ from decnet.web.api import app
 import decnet.config
 from pathlib import Path
 from decnet.env import DECNET_ADMIN_USER, DECNET_ADMIN_PASSWORD
+from decnet.web.api import repo
+
+@pytest.fixture(autouse=True)
+def setup_db():
+    repo.db_path = "test_fleet_decnet.db"
+    import os
+    if os.path.exists(repo.db_path):
+        os.remove(repo.db_path)
+    repo.reinitialize()
+    yield
+    if os.path.exists(repo.db_path):
+        os.remove(repo.db_path)
 
 TEST_STATE_FILE = Path("test-decnet-state.json")
 

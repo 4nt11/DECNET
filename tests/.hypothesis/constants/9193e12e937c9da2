@@ -1,0 +1,4 @@
+# file: /home/anti/Tools/DECNET/decnet/logging/syslog_formatter.py
+# hypothesis_version: 6.151.11
+
+[255, '"', '-', '1', '\\', '\\"', '\\\\', '\\]', ']', 'decnet@55555']

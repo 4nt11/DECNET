@@ -1,0 +1,4 @@
+# file: /home/anti/Tools/DECNET/decnet/services/rdp.py
+# hypothesis_version: 6.151.12
+
+[3389, 'LOG_TARGET', 'NODE_NAME', 'build', 'container_name', 'context', 'environment', 'rdp', 'restart', 'templates', 'unless-stopped']

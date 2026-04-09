@@ -14,6 +14,8 @@ def setup_db() -> Generator[None, None, None]:
     repo.db_path = "test_fuzz_decnet.db"
     if os.path.exists(repo.db_path):
         os.remove(repo.db_path)
+    
+    repo.reinitialize()
     yield
     if os.path.exists(repo.db_path):
         os.remove(repo.db_path)

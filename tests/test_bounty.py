@@ -1,7 +1,19 @@
+import os
+from typing import Generator
 import pytest
 from fastapi.testclient import TestClient
-from decnet.web.api import app
+from decnet.web.api import app, repo
 from decnet.env import DECNET_ADMIN_USER, DECNET_ADMIN_PASSWORD
+
+@pytest.fixture(autouse=True)
+def setup_db() -> Generator[None, None, None]:
+    repo.db_path = "test_bounty_decnet.db"
+    if os.path.exists(repo.db_path):
+        os.remove(repo.db_path)
+    repo.reinitialize()
+    yield
+    if os.path.exists(repo.db_path):
+        os.remove(repo.db_path)
 
 @pytest.fixture
 def auth_token():

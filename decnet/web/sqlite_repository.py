@@ -1,4 +1,5 @@
 import aiosqlite
+import asyncio
 from typing import Any, Optional
 from decnet.web.repository import BaseRepository
 from decnet.config import load_state, _ROOT
@@ -9,46 +10,85 @@ class SQLiteRepository(BaseRepository):
 
     def __init__(self, db_path: str = str(_ROOT / "decnet.db")) -> None:
         self.db_path: str = db_path
+        self._initialize_sync()
 
-    async def initialize(self) -> None:
+    def _initialize_sync(self) -> None:
         """Initialize the database schema synchronously to ensure reliability."""
         import sqlite3
-        with sqlite3.connect(self.db_path) as _conn:
+        import uuid
+        import os
+        from decnet.env import DECNET_ADMIN_USER, DECNET_ADMIN_PASSWORD
+        from decnet.web.auth import get_password_hash
+
+        # Ensure directory exists
+        os.makedirs(os.path.dirname(os.path.abspath(self.db_path)), exist_ok=True)
+
+        with sqlite3.connect(self.db_path, isolation_level=None) as _conn:
             _conn.execute("PRAGMA journal_mode=WAL")
-            _conn.execute("""
-                CREATE TABLE IF NOT EXISTS logs (
-                    id INTEGER PRIMARY KEY AUTOINCREMENT,
-                    timestamp DATETIME DEFAULT CURRENT_TIMESTAMP,
-                    decky TEXT,
-                    service TEXT,
-                    event_type TEXT,
-                    attacker_ip TEXT,
-                    raw_line TEXT,
-                    fields TEXT,
-                    msg TEXT
-                )
-            """)
-            _conn.execute("""
-                CREATE TABLE IF NOT EXISTS users (
-                    uuid TEXT PRIMARY KEY,
-                    username TEXT UNIQUE,
-                    password_hash TEXT,
-                    role TEXT DEFAULT 'viewer',
-                    must_change_password BOOLEAN DEFAULT 0
-                )
-            """)
-            _conn.execute("""
-                CREATE TABLE IF NOT EXISTS bounty (
-                    id INTEGER PRIMARY KEY AUTOINCREMENT,
-                    timestamp DATETIME DEFAULT CURRENT_TIMESTAMP,
-                    decky TEXT,
-                    service TEXT,
-                    attacker_ip TEXT,
-                    bounty_type TEXT,
-                    payload TEXT
-                )
-            """)
-            _conn.commit()
+            _conn.execute("PRAGMA synchronous=NORMAL")
+            
+            _conn.execute("BEGIN IMMEDIATE")
+            try:
+                _conn.execute("""
+                    CREATE TABLE IF NOT EXISTS logs (
+                        id INTEGER PRIMARY KEY AUTOINCREMENT,
+                        timestamp DATETIME DEFAULT CURRENT_TIMESTAMP,
+                        decky TEXT,
+                        service TEXT,
+                        event_type TEXT,
+                        attacker_ip TEXT,
+                        raw_line TEXT,
+                        fields TEXT,
+                        msg TEXT
+                    )
+                """)
+                _conn.execute("""
+                    CREATE TABLE IF NOT EXISTS users (
+                        uuid TEXT PRIMARY KEY,
+                        username TEXT UNIQUE,
+                        password_hash TEXT,
+                        role TEXT DEFAULT 'viewer',
+                        must_change_password BOOLEAN DEFAULT 0
+                    )
+                """)
+                _conn.execute("""
+                    CREATE TABLE IF NOT EXISTS bounty (
+                        id INTEGER PRIMARY KEY AUTOINCREMENT,
+                        timestamp DATETIME DEFAULT CURRENT_TIMESTAMP,
+                        decky TEXT,
+                        service TEXT,
+                        attacker_ip TEXT,
+                        bounty_type TEXT,
+                        payload TEXT
+                    )
+                """)
+                
+                # Ensure admin exists
+                _cursor = _conn.execute("SELECT uuid FROM users WHERE username = ?", (DECNET_ADMIN_USER,))
+                if not _cursor.fetchone():
+                    _conn.execute(
+                        "INSERT INTO users (uuid, username, password_hash, role, must_change_password) VALUES (?, ?, ?, ?, ?)",
+                        (str(uuid.uuid4()), DECNET_ADMIN_USER, get_password_hash(DECNET_ADMIN_PASSWORD), "admin", 1)
+                    )
+                _conn.execute("COMMIT")
+            except Exception:
+                _conn.execute("ROLLBACK")
+                raise
+
+    async def initialize(self) -> None:
+        """Initialize the database schema and verify it exists."""
+        # Schema already initialized in __init__ via _initialize_sync
+        # But we do a synchronous 'warm up' query here to ensure the file is ready for async threads
+        import sqlite3
+        with sqlite3.connect(self.db_path) as _conn:
+            _conn.execute("SELECT count(*) FROM users")
+            _conn.execute("SELECT count(*) FROM logs")
+            _conn.execute("SELECT count(*) FROM bounty")
+        pass
+
+    def reinitialize(self) -> None:
+        """Force a re-initialization of the schema (useful for tests)."""
+        self._initialize_sync()
 
     async def add_log(self, log_data: dict[str, Any]) -> None:
         async with aiosqlite.connect(self.db_path) as _db:
@@ -273,11 +313,16 @@ class SQLiteRepository(BaseRepository):
         return _deckies
 
     async def get_user_by_username(self, username: str) -> Optional[dict[str, Any]]:
-        async with aiosqlite.connect(self.db_path) as _db:
-            _db.row_factory = aiosqlite.Row
-            async with _db.execute("SELECT * FROM users WHERE username = ?", (username,)) as _cursor:
-                _row: Optional[aiosqlite.Row] = await _cursor.fetchone()
-                return dict(_row) if _row else None
+        for _ in range(3):
+            try:
+                async with aiosqlite.connect(self.db_path) as _db:
+                    _db.row_factory = aiosqlite.Row
+                    async with _db.execute("SELECT * FROM users WHERE username = ?", (username,)) as _cursor:
+                        _row = await _cursor.fetchone()
+                        return dict(_row) if _row else None
+            except aiosqlite.OperationalError:
+                await asyncio.sleep(0.1)
+        return None
 
     async def get_user_by_uuid(self, uuid: str) -> Optional[dict[str, Any]]:
         async with aiosqlite.connect(self.db_path) as _db:

@@ -13,6 +13,8 @@ def setup_db() -> Generator[None, None, None]:
     if os.path.exists(repo.db_path):
         os.remove(repo.db_path)
     
+    repo.reinitialize()
+    
     # Yield control to the test function
     yield
     

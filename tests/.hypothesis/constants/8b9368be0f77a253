@@ -1,0 +1,4 @@
+# file: /home/anti/Tools/DECNET/decnet/custom_service.py
+# hypothesis_version: 6.151.12
+
+['-', 'LOG_TARGET', 'NODE_NAME', '_', 'command', 'container_name', 'environment', 'image', 'restart', 'unless-stopped']
