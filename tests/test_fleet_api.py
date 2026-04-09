@@ -5,7 +5,7 @@ from decnet.web.api import app
 import decnet.config
 from pathlib import Path
 from decnet.env import DECNET_ADMIN_USER, DECNET_ADMIN_PASSWORD
-from decnet.web.api import repo
+from decnet.web.dependencies import repo
 
 @pytest.fixture(autouse=True)
 def setup_db():

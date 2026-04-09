@@ -1,0 +1,4 @@
+# file: /home/anti/Tools/DECNET/decnet/mutator.py
+# hypothesis_version: 6.151.12
+
+[5.0, '--remove-orphans', '-d', '-f', 'compose', 'docker', 'up']

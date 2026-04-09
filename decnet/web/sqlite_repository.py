@@ -410,7 +410,7 @@ class SQLiteRepository(BaseRepository):
                     _d = dict(_row)
                     try:
                         _d["payload"] = json.loads(_d["payload"])
-                    except Exception:
+                    except Exception:  # nosec B110
                         pass
                     _results.append(_d)
                 return _results

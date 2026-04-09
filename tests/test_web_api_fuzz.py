@@ -6,7 +6,8 @@ from fastapi.testclient import TestClient
 from hypothesis import given, strategies as st, settings, HealthCheck
 import httpx
 
-from decnet.web.api import app, repo
+from decnet.web.api import app
+from decnet.web.dependencies import repo
 
 # Re-use setup from test_web_api
 @pytest.fixture(scope="function", autouse=True)
