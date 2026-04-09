@@ -2,7 +2,7 @@ from fastapi import APIRouter, Depends, HTTPException
 
 from decnet.config import load_state, save_state
 from decnet.web.dependencies import get_current_user
-from decnet.web.models import MutateIntervalRequest
+from decnet.web.db.models import MutateIntervalRequest
 
 router = APIRouter()
 

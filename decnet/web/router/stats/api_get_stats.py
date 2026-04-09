@@ -3,7 +3,7 @@ from typing import Any
 from fastapi import APIRouter, Depends
 
 from decnet.web.dependencies import get_current_user, repo
-from decnet.web.models import StatsResponse
+from decnet.web.db.models import StatsResponse
 
 router = APIRouter()
 

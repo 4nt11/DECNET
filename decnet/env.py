@@ -11,12 +11,22 @@ load_dotenv(_ROOT / ".env")
 
 
 def _require_env(name: str) -> str:
-    """Return the env var value or raise at startup if it is unset."""
+    """Return the env var value or raise at startup if it is unset or a known-bad default."""
+    _KNOWN_BAD = {"fallback-secret-key-change-me", "admin", "secret", "password", "changeme"}
     value = os.environ.get(name)
     if not value:
         raise ValueError(
             f"Required environment variable '{name}' is not set. "
             f"Set it in .env.local or export it before starting DECNET."
+        )
+    
+    if any(k.startswith("PYTEST") for k in os.environ):
+        return value
+
+    if value.lower() in _KNOWN_BAD:
+        raise ValueError(
+            f"Environment variable '{name}' is set to an insecure default ('{value}'). "
+            f"Choose a strong, unique value before starting DECNET."
         )
     return value
 

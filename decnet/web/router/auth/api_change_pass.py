@@ -4,7 +4,7 @@ from fastapi import APIRouter, Depends, HTTPException, status
 
 from decnet.web.auth import get_password_hash, verify_password
 from decnet.web.dependencies import get_current_user, repo
-from decnet.web.models import ChangePasswordRequest
+from decnet.web.db.models import ChangePasswordRequest
 
 router = APIRouter()
 

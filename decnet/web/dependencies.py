@@ -6,7 +6,7 @@ from fastapi import HTTPException, status, Request
 from fastapi.security import OAuth2PasswordBearer
 
 from decnet.web.auth import ALGORITHM, SECRET_KEY
-from decnet.web.sqlite_repository import SQLiteRepository
+from decnet.web.db.sqlite.repository import SQLiteRepository
 
 # Root directory for database
 _ROOT_DIR = Path(__file__).parent.parent.parent.absolute()

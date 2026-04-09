@@ -8,7 +8,7 @@ from decnet.deployer import deploy as _deploy
 from decnet.ini_loader import load_ini_from_string
 from decnet.network import detect_interface, detect_subnet, get_host_ip
 from decnet.web.dependencies import get_current_user
-from decnet.web.models import DeployIniRequest
+from decnet.web.db.models import DeployIniRequest
 
 router = APIRouter()
 

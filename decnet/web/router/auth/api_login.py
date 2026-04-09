@@ -9,7 +9,7 @@ from decnet.web.auth import (
     verify_password,
 )
 from decnet.web.dependencies import repo
-from decnet.web.models import LoginRequest, Token
+from decnet.web.db.models import LoginRequest, Token
 
 router = APIRouter()
 

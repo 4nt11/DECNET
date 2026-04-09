@@ -5,7 +5,7 @@ import json
 from typing import Any
 from pathlib import Path
 
-from decnet.web.repository import BaseRepository
+from decnet.web.db.repository import BaseRepository
 
 logger: logging.Logger = logging.getLogger("decnet.web.ingester")
 
