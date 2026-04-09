@@ -166,7 +166,7 @@ class SQLiteRepository(BaseRepository):
 
         async with self.session_factory() as session:
             results = await session.execute(statement)
-            return [log.model_dump() for log in results.scalars().all()]
+            return [log.model_dump(mode='json') for log in results.scalars().all()]
 
     async def get_max_log_id(self) -> int:
         async with self.session_factory() as session:
@@ -189,7 +189,7 @@ class SQLiteRepository(BaseRepository):
 
         async with self.session_factory() as session:
             results = await session.execute(statement)
-            return [log.model_dump() for log in results.scalars().all()]
+            return [log.model_dump(mode='json') for log in results.scalars().all()]
 
     async def get_total_logs(
         self,
@@ -338,7 +338,7 @@ class SQLiteRepository(BaseRepository):
             results = await session.execute(statement)
             final = []
             for item in results.scalars().all():
-                d = item.model_dump()
+                d = item.model_dump(mode='json')
                 try:
                     d["payload"] = json.loads(d["payload"])
                 except (json.JSONDecodeError, TypeError):
