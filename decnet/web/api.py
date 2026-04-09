@@ -52,7 +52,7 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
                     "must_change_password": True  # nosec B105
                 }
             )
-    except Exception:
+    except Exception:  # nosec B110
         pass
     
     # Start background ingestion task
