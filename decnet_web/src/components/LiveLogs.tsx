@@ -66,7 +66,7 @@ const LiveLogs: React.FC = () => {
       if (timeRange !== 'all') {
         const minutes = timeRange === '15m' ? 15 : timeRange === '1h' ? 60 : timeRange === '24h' ? 1440 : 0;
         if (minutes > 0) {
-          startTime = new Date(now.getTime() - minutes * 60000).toISOString();
+          startTime = new Date(now.getTime() - minutes * 60000).toISOString().replace('T', ' ').substring(0, 19);
           url += `&start_time=${startTime}`;
         }
       }
@@ -76,7 +76,8 @@ const LiveLogs: React.FC = () => {
       setTotalLogs(res.data.total);
 
       // Fetch histogram for historical view
-      const histUrl = `/logs/histogram?search=${encodeURIComponent(query)}` + (startTime ? `&start_time=${startTime}` : '');
+      let histUrl = `/logs/histogram?search=${encodeURIComponent(query)}`;
+      if (startTime) histUrl += `&start_time=${startTime}`;
       const histRes = await api.get(histUrl);
       setHistogram(histRes.data);
 
@@ -206,7 +207,7 @@ const LiveLogs: React.FC = () => {
       </div>
 
       {/* Histogram Chart */}
-      <div className="logs-section" style={{ height: '200px', padding: '20px', marginBottom: '24px' }}>
+      <div className="logs-section" style={{ height: '200px', padding: '20px', marginBottom: '24px', minWidth: 0 }}>
         <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '10px' }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: '8px', fontSize: '0.7rem', color: 'var(--dim-color)' }}>
             <Activity size={12} /> ATTACK VOLUME OVER TIME

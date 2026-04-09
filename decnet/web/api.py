@@ -164,16 +164,29 @@ async def get_logs(
     limit: int = Query(50, ge=1, le=1000),
     offset: int = Query(0, ge=0),
     search: Optional[str] = None,
+    start_time: Optional[str] = None,
+    end_time: Optional[str] = None,
     current_user: str = Depends(get_current_user)
 ) -> dict[str, Any]:
-    _logs: list[dict[str, Any]] = await repo.get_logs(limit=limit, offset=offset, search=search)
-    _total: int = await repo.get_total_logs(search=search)
+    _logs: list[dict[str, Any]] = await repo.get_logs(limit=limit, offset=offset, search=search, start_time=start_time, end_time=end_time)
+    _total: int = await repo.get_total_logs(search=search, start_time=start_time, end_time=end_time)
     return {
         "total": _total,
         "limit": limit,
         "offset": offset,
         "data": _logs
     }
+
+
+@app.get("/api/v1/logs/histogram")
+async def get_logs_histogram(
+    search: Optional[str] = None,
+    start_time: Optional[str] = None,
+    end_time: Optional[str] = None,
+    interval_minutes: int = Query(15, ge=1),
+    current_user: str = Depends(get_current_user)
+) -> list[dict[str, Any]]:
+    return await repo.get_log_histogram(search=search, start_time=start_time, end_time=end_time, interval_minutes=interval_minutes)
 
 
 class StatsResponse(BaseModel):
