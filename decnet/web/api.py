@@ -54,7 +54,7 @@ app.add_middleware(
     allow_origins=DECNET_CORS_ORIGINS,
     allow_credentials=False,
     allow_methods=["GET", "POST", "PUT", "DELETE", "OPTIONS"],
-    allow_headers=["Authorization", "Content-Type"],
+    allow_headers=["Authorization", "Content-Type", "Last-Event-ID"],
 )
 
 # Include the modular API router
