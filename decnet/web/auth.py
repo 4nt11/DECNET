@@ -12,7 +12,7 @@ ACCESS_TOKEN_EXPIRE_MINUTES: int = 1440
 
 def verify_password(plain_password: str, hashed_password: str) -> bool:
     return bcrypt.checkpw(
-        plain_password.encode("utf-8"), 
+        plain_password.encode("utf-8")[:72], 
         hashed_password.encode("utf-8")
     )
 
@@ -20,7 +20,7 @@ def verify_password(plain_password: str, hashed_password: str) -> bool:
 def get_password_hash(password: str) -> str:
     # Use a cost factor of 12 (default for passlib/bcrypt)
     _salt: bytes = bcrypt.gensalt(rounds=12)
-    _hashed: bytes = bcrypt.hashpw(password.encode("utf-8"), _salt)
+    _hashed: bytes = bcrypt.hashpw(password.encode("utf-8")[:72], _salt)
     return _hashed.decode("utf-8")
 
 

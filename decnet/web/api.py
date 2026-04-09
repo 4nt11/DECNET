@@ -108,12 +108,12 @@ class Token(BaseModel):
 
 class LoginRequest(BaseModel):
     username: str
-    password: str
+    password: str = Field(..., max_length=72)
 
 
 class ChangePasswordRequest(BaseModel):
-    old_password: str
-    new_password: str
+    old_password: str = Field(..., max_length=72)
+    new_password: str = Field(..., max_length=72)
 
 
 class LogsResponse(BaseModel):
