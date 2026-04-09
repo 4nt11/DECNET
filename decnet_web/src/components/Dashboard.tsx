@@ -1,5 +1,4 @@
 import React, { useEffect, useState } from 'react';
-import api from '../utils/api';
 import './Dashboard.css';
 import { Shield, Users, Activity, Clock } from 'lucide-react';
 
@@ -31,26 +30,7 @@ const Dashboard: React.FC<DashboardProps> = ({ searchQuery }) => {
   const [logs, setLogs] = useState<LogEntry[]>([]);
   const [loading, setLoading] = useState(true);
 
-  const fetchData = async () => {
-    try {
-      const [statsRes, logsRes] = await Promise.all([
-        api.get('/stats'),
-        api.get('/logs', { params: { limit: 50, search: searchQuery } })
-      ]);
-      setStats(statsRes.data);
-      setLogs(logsRes.data.data);
-    } catch (err) {
-      console.error('Failed to fetch dashboard data', err);
-    } finally {
-      setLoading(false);
-    }
-  };
-
   useEffect(() => {
-    // Initial fetch to populate UI immediately
-    fetchData();
-
-    // Setup SSE connection
     const token = localStorage.getItem('token');
     const baseUrl = import.meta.env.VITE_API_URL || 'http://localhost:8000/api/v1';
     let url = `${baseUrl}/stream?token=${token}`;
@@ -64,13 +44,10 @@ const Dashboard: React.FC<DashboardProps> = ({ searchQuery }) => {
       try {
         const payload = JSON.parse(event.data);
         if (payload.type === 'logs') {
-          setLogs(prev => {
-            const newLogs = payload.data;
-            // Prepend new logs, keep up to 100 in UI to prevent infinite DOM growth
-            return [...newLogs, ...prev].slice(0, 100);
-          });
+          setLogs(prev => [...payload.data, ...prev].slice(0, 100));
         } else if (payload.type === 'stats') {
           setStats(payload.data);
+          setLoading(false);
         }
       } catch (err) {
         console.error('Failed to parse SSE payload', err);

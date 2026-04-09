@@ -32,6 +32,15 @@ async def stream_events(
             if last_id == 0:
                 last_id = await repo.get_max_log_id()
 
+            # Emit initial snapshot immediately so the client never needs to poll /stats
+            stats = await repo.get_stats_summary()
+            yield f"event: message\ndata: {json.dumps({'type': 'stats', 'data': stats})}\n\n"
+            histogram = await repo.get_log_histogram(
+                search=search, start_time=start_time,
+                end_time=end_time, interval_minutes=15,
+            )
+            yield f"event: message\ndata: {json.dumps({'type': 'histogram', 'data': histogram})}\n\n"
+
             while True:
                 if await request.is_disconnected():
                     break
