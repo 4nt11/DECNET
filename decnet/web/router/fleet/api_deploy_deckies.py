@@ -74,7 +74,7 @@ async def api_deploy_deckies(req: DeployIniRequest, current_user: str = Depends(
     try:
         _deploy(config)
     except Exception as e:
-        logging.getLogger("decnet.web.api").error(f"Deployment failed: {e}")
-        raise HTTPException(status_code=500, detail=f"Deployment failed: {e}")
+        logging.getLogger("decnet.web.api").exception("Deployment failed: %s", e)
+        raise HTTPException(status_code=500, detail="Deployment failed. Check server logs for details.")
 
     return {"message": "Deckies deployed successfully"}

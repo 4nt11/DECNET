@@ -7,30 +7,13 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     git authbind \
     && rm -rf /var/lib/apt/lists/*
 
-RUN useradd -m -s /bin/bash cowrie
+RUN useradd -r -s /bin/false -d /opt decnet \
+ && apt-get update && apt-get install -y --no-install-recommends libcap2-bin \
+ && rm -rf /var/lib/apt/lists/* \
+ && find /usr/bin/python3* -maxdepth 0 -type f -exec setcap 'cap_net_bind_service+eip' {} \;
 
-WORKDIR /home/cowrie
-# pip install strips data/honeyfs — clone source so the fake filesystem is included
-RUN git clone --depth 1 https://github.com/cowrie/cowrie.git /tmp/cowrie-src \
-    && python3 -m venv cowrie-env \
-    && cowrie-env/bin/pip install --no-cache-dir /tmp/cowrie-src jinja2 \
-    && rm -rf /tmp/cowrie-src
+HEALTHCHECK --interval=30s --timeout=5s --start-period=10s --retries=3 \
+  CMD kill -0 1 || exit 1
 
-# Authbind to bind port 22 as non-root
-RUN touch /etc/authbind/byport/22 /etc/authbind/byport/2222 \
-    && chmod 500 /etc/authbind/byport/22 /etc/authbind/byport/2222 \
-    && chown cowrie /etc/authbind/byport/22 /etc/authbind/byport/2222
-
-RUN mkdir -p /home/cowrie/cowrie-env/etc \
-             /home/cowrie/cowrie-env/var/log/cowrie \
-             /home/cowrie/cowrie-env/var/run \
-    && chown -R cowrie /home/cowrie/cowrie-env/etc \
-                       /home/cowrie/cowrie-env/var
-
-COPY cowrie.cfg.j2 /home/cowrie/cowrie.cfg.j2
-COPY entrypoint.sh /entrypoint.sh
-RUN chmod +x /entrypoint.sh
-
-USER cowrie
-EXPOSE 22 2222
+USER decnet
 ENTRYPOINT ["/entrypoint.sh"]

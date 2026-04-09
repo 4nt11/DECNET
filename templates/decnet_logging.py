@@ -103,8 +103,10 @@ def _get_file_logger() -> logging.Logger:
     log_path = Path(os.environ.get(_LOG_FILE_ENV, _DEFAULT_LOG_FILE))
     try:
         log_path.parent.mkdir(parents=True, exist_ok=True)
-        handler = logging.FileHandler(
+        handler = logging.handlers.RotatingFileHandler(
             log_path,
+            maxBytes=_MAX_BYTES,
+            backupCount=_BACKUP_COUNT,
             encoding="utf-8",
         )
     except OSError:
@@ -130,8 +132,10 @@ def _get_json_logger() -> logging.Logger:
     json_path = Path(log_path_str).with_suffix(".json")
     try:
         json_path.parent.mkdir(parents=True, exist_ok=True)
-        handler = logging.FileHandler(
+        handler = logging.handlers.RotatingFileHandler(
             json_path,
+            maxBytes=_MAX_BYTES,
+            backupCount=_BACKUP_COUNT,
             encoding="utf-8",
         )
     except OSError:

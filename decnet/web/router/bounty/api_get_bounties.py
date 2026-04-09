@@ -8,7 +8,8 @@ from decnet.web.db.models import BountyResponse
 router = APIRouter()
 
 
-@router.get("/bounty", response_model=BountyResponse, tags=["Bounty Vault"])
+@router.get("/bounty", response_model=BountyResponse, tags=["Bounty Vault"],
+    responses={401: {"description": "Not authenticated"}, 422: {"description": "Validation error"}},)
 async def get_bounties(
     limit: int = Query(50, ge=1, le=1000),
     offset: int = Query(0, ge=0),

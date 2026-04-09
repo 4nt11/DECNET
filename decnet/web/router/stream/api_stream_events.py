@@ -1,5 +1,6 @@
 import json
 import asyncio
+import logging
 from typing import AsyncGenerator, Optional
 
 from fastapi import APIRouter, Depends, Query, Request
@@ -7,10 +8,13 @@ from fastapi.responses import StreamingResponse
 
 from decnet.web.dependencies import get_current_user, repo
 
+log = logging.getLogger(__name__)
+
 router = APIRouter()
 
 
-@router.get("/stream", tags=["Observability"])
+@router.get("/stream", tags=["Observability"],
+    responses={401: {"description": "Not authenticated"}, 422: {"description": "Validation error"}},)
 async def stream_events(
     request: Request, 
     last_event_id: int = Query(0, alias="lastEventId"), 
@@ -21,43 +25,42 @@ async def stream_events(
 ) -> StreamingResponse:
     
     async def event_generator() -> AsyncGenerator[str, None]:
-        # Start tracking from the provided ID, or current max if 0
         last_id = last_event_id
-        if last_id == 0:
-            last_id = await repo.get_max_log_id()
-            
         stats_interval_sec = 10
         loops_since_stats = 0
-        
-        while True:
-            if await request.is_disconnected():
-                break
+        try:
+            if last_id == 0:
+                last_id = await repo.get_max_log_id()
 
-            # Poll for new logs
-            new_logs = await repo.get_logs_after_id(last_id, limit=50, search=search, start_time=start_time, end_time=end_time)
-            if new_logs:
-                # Update last_id to the max id in the fetched batch
-                last_id = max(log["id"] for log in new_logs)
-                payload = json.dumps({"type": "logs", "data": new_logs})
-                yield f"event: message\ndata: {payload}\n\n"
-                
-                # If we have new logs, stats probably changed, so force a stats update
-                loops_since_stats = stats_interval_sec
-            
-            # Periodically poll for stats
-            if loops_since_stats >= stats_interval_sec:
-                stats = await repo.get_stats_summary()
-                payload = json.dumps({"type": "stats", "data": stats})
-                yield f"event: message\ndata: {payload}\n\n"
+            while True:
+                if await request.is_disconnected():
+                    break
 
-                # Also yield histogram
-                histogram = await repo.get_log_histogram(search=search, start_time=start_time, end_time=end_time, interval_minutes=15)
-                hist_payload = json.dumps({"type": "histogram", "data": histogram})
-                yield f"event: message\ndata: {hist_payload}\n\n"
+                new_logs = await repo.get_logs_after_id(
+                    last_id, limit=50, search=search,
+                    start_time=start_time, end_time=end_time,
+                )
+                if new_logs:
+                    last_id = max(entry["id"] for entry in new_logs)
+                    yield f"event: message\ndata: {json.dumps({'type': 'logs', 'data': new_logs})}\n\n"
+                    loops_since_stats = stats_interval_sec
 
-                loops_since_stats = 0
-                
-            loops_since_stats += 1
-            await asyncio.sleep(1)
+                if loops_since_stats >= stats_interval_sec:
+                    stats = await repo.get_stats_summary()
+                    yield f"event: message\ndata: {json.dumps({'type': 'stats', 'data': stats})}\n\n"
+                    histogram = await repo.get_log_histogram(
+                        search=search, start_time=start_time,
+                        end_time=end_time, interval_minutes=15,
+                    )
+                    yield f"event: message\ndata: {json.dumps({'type': 'histogram', 'data': histogram})}\n\n"
+                    loops_since_stats = 0
+
+                loops_since_stats += 1
+                await asyncio.sleep(1)
+        except asyncio.CancelledError:
+            pass
+        except Exception:
+            log.exception("SSE stream error for user %s", last_event_id)
+            yield f"event: error\ndata: {json.dumps({'type': 'error', 'message': 'Stream interrupted'})}\n\n"
 
     return StreamingResponse(event_generator(), media_type="text/event-stream")

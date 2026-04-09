@@ -9,7 +9,11 @@ from decnet.web.db.models import ChangePasswordRequest
 router = APIRouter()
 
 
-@router.post("/auth/change-password", tags=["Authentication"])
+@router.post(
+    "/auth/change-password",
+    tags=["Authentication"],
+    responses={401: {"description": "Invalid or expired token / wrong old password"}, 422: {"description": "Validation error"}},
+)
 async def change_password(request: ChangePasswordRequest, current_user: str = Depends(get_current_user)) -> dict[str, str]:
     _user: Optional[dict[str, Any]] = await repo.get_user_by_uuid(current_user)
     if not _user or not verify_password(request.old_password, _user["password_hash"]):

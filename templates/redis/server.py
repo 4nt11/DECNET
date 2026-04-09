@@ -12,7 +12,7 @@ from decnet_logging import syslog_line, write_syslog_file, forward_syslog
 NODE_NAME    = os.environ.get("NODE_NAME", "cache-server")
 SERVICE_NAME   = "redis"
 LOG_TARGET   = os.environ.get("LOG_TARGET", "")
-_REDIS_VER   = os.environ.get("REDIS_VERSION", "7.0.12")
+_REDIS_VER   = os.environ.get("REDIS_VERSION", "7.2.7")
 _REDIS_OS    = os.environ.get("REDIS_OS", "Linux 5.15.0")
 
 _INFO = (

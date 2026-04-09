@@ -10,6 +10,17 @@ load_dotenv(_ROOT / ".env.local")
 load_dotenv(_ROOT / ".env")
 
 
+def _port(name: str, default: int) -> int:
+    raw = os.environ.get(name, str(default))
+    try:
+        value = int(raw)
+    except ValueError:
+        raise ValueError(f"Environment variable '{name}' must be an integer, got '{raw}'.")
+    if not (1 <= value <= 65535):
+        raise ValueError(f"Environment variable '{name}' must be 1–65535, got {value}.")
+    return value
+
+
 def _require_env(name: str) -> str:
     """Return the env var value or raise at startup if it is unset or a known-bad default."""
     _KNOWN_BAD = {"fallback-secret-key-change-me", "admin", "secret", "password", "changeme"}
@@ -33,13 +44,13 @@ def _require_env(name: str) -> str:
 
 # API Options
 DECNET_API_HOST: str = os.environ.get("DECNET_API_HOST", "0.0.0.0")  # nosec B104
-DECNET_API_PORT: int = int(os.environ.get("DECNET_API_PORT", "8000"))
+DECNET_API_PORT: int = _port("DECNET_API_PORT", 8000)
 DECNET_JWT_SECRET: str = _require_env("DECNET_JWT_SECRET")
 DECNET_INGEST_LOG_FILE: str | None = os.environ.get("DECNET_INGEST_LOG_FILE", "/var/log/decnet/decnet.log")
 
 # Web Dashboard Options
 DECNET_WEB_HOST: str = os.environ.get("DECNET_WEB_HOST", "0.0.0.0")  # nosec B104
-DECNET_WEB_PORT: int = int(os.environ.get("DECNET_WEB_PORT", "8080"))
+DECNET_WEB_PORT: int = _port("DECNET_WEB_PORT", 8080)
 DECNET_ADMIN_USER: str = os.environ.get("DECNET_ADMIN_USER", "admin")
 DECNET_ADMIN_PASSWORD: str = os.environ.get("DECNET_ADMIN_PASSWORD", "admin")
 DECNET_DEVELOPER: bool = os.environ.get("DECNET_DEVELOPER", "False").lower() == "true"

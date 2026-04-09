@@ -14,7 +14,12 @@ from decnet.web.db.models import LoginRequest, Token
 router = APIRouter()
 
 
-@router.post("/auth/login", response_model=Token, tags=["Authentication"])
+@router.post(
+    "/auth/login",
+    response_model=Token,
+    tags=["Authentication"],
+    responses={401: {"description": "Incorrect username or password"}, 422: {"description": "Validation error"}},
+)
 async def login(request: LoginRequest) -> dict[str, Any]:
     _user: Optional[dict[str, Any]] = await repo.get_user_by_username(request.username)
     if not _user or not verify_password(request.password, _user["password_hash"]):

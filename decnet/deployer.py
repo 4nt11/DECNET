@@ -2,6 +2,7 @@
 Deploy, teardown, and status via Docker SDK + subprocess docker compose.
 """
 
+import shutil
 import subprocess  # nosec B404
 import time
 from pathlib import Path
@@ -27,6 +28,25 @@ from decnet.network import (
 
 console = Console()
 COMPOSE_FILE = Path("decnet-compose.yml")
+_CANONICAL_LOGGING = Path(__file__).parent.parent / "templates" / "decnet_logging.py"
+
+
+def _sync_logging_helper(config: DecnetConfig) -> None:
+    """Copy the canonical decnet_logging.py into every active template build context."""
+    from decnet.services.registry import get_service
+    seen: set[Path] = set()
+    for decky in config.deckies:
+        for svc_name in decky.services:
+            svc = get_service(svc_name)
+            if svc is None:
+                continue
+            ctx = svc.dockerfile_context()
+            if ctx is None or ctx in seen:
+                continue
+            seen.add(ctx)
+            dest = ctx / "decnet_logging.py"
+            if not dest.exists() or dest.read_bytes() != _CANONICAL_LOGGING.read_bytes():
+                shutil.copy2(_CANONICAL_LOGGING, dest)
 
 
 def _compose(*args: str, compose_file: Path = COMPOSE_FILE) -> None:
@@ -109,6 +129,9 @@ def deploy(config: DecnetConfig, dry_run: bool = False, no_cache: bool = False) 
                 ip_range=decky_range,
             )
             setup_host_macvlan(config.interface, host_ip, decky_range)
+
+    # --- Sync shared logging helper into each template build context ---
+    _sync_logging_helper(config)
 
     # --- Compose generation ---
     compose_path = write_compose(config, COMPOSE_FILE)

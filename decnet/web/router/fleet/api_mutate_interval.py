@@ -7,7 +7,8 @@ from decnet.web.db.models import MutateIntervalRequest
 router = APIRouter()
 
 
-@router.put("/deckies/{decky_name}/mutate-interval", tags=["Fleet Management"])
+@router.put("/deckies/{decky_name}/mutate-interval", tags=["Fleet Management"],
+    responses={401: {"description": "Not authenticated"}, 422: {"description": "Validation error"}},)
 async def api_update_mutate_interval(decky_name: str, req: MutateIntervalRequest, current_user: str = Depends(get_current_user)) -> dict[str, str]:
     state = load_state()
     if not state:

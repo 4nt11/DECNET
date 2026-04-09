@@ -25,14 +25,12 @@ async def get_current_user(request: Request) -> str:
         headers={"WWW-Authenticate": "Bearer"},
     )
     
-    # Extract token from header or query param
-    token: str | None = None
     auth_header = request.headers.get("Authorization")
-    if auth_header and auth_header.startswith("Bearer "):
-        token = auth_header.split(" ")[1]
-    elif request.query_params.get("token"):
-        token = request.query_params.get("token")
-        
+    token: str | None = (
+        auth_header.split(" ", 1)[1]
+        if auth_header and auth_header.startswith("Bearer ")
+        else None
+    )
     if not token:
         raise _credentials_exception
 

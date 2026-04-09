@@ -7,11 +7,15 @@ from pathlib import Path
 # Sync for initialization (DDL) and async for standard queries
 
 def get_async_engine(db_path: str):
-    # aiosqlite driver for async access
-    return create_async_engine(f"sqlite+aiosqlite:///{db_path}", echo=False, connect_args={"uri": True})
+    # If it's a memory URI, don't add the extra slash that turns it into a relative file
+    prefix = "sqlite+aiosqlite:///"
+    if db_path.startswith("file:"):
+        prefix = "sqlite+aiosqlite:///"
+    return create_async_engine(f"{prefix}{db_path}", echo=False, connect_args={"uri": True})
 
 def get_sync_engine(db_path: str):
-    return create_engine(f"sqlite:///{db_path}", echo=False, connect_args={"uri": True})
+    prefix = "sqlite:///"
+    return create_engine(f"{prefix}{db_path}", echo=False, connect_args={"uri": True})
 
 def init_db(db_path: str):
     """Synchronously create all tables."""

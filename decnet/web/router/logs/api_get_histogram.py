@@ -7,7 +7,8 @@ from decnet.web.dependencies import get_current_user, repo
 router = APIRouter()
 
 
-@router.get("/logs/histogram", tags=["Logs"])
+@router.get("/logs/histogram", tags=["Logs"],
+    responses={401: {"description": "Not authenticated"}, 422: {"description": "Validation error"}},)
 async def get_logs_histogram(
     search: Optional[str] = None,
     start_time: Optional[str] = None,

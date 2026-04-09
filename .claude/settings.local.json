@@ -4,7 +4,12 @@
       "mcp__plugin_context-mode_context-mode__ctx_batch_execute",
       "mcp__plugin_context-mode_context-mode__ctx_search",
       "Bash(grep:*)",
-      "Bash(python -m pytest --tb=short -q)"
+      "Bash(python -m pytest --tb=short -q)",
+      "Bash(pip install:*)",
+      "Bash(pip show:*)",
+      "Bash(python:*)",
+      "Bash(DECNET_JWT_SECRET=\"test-secret-xyz-1234!\" DECNET_ADMIN_PASSWORD=\"test-pass-xyz-1234!\" python:*)",
+      "Bash(ls /home/anti/Tools/DECNET/*.db* /home/anti/Tools/DECNET/test_*.db*)"
     ]
   }
 }

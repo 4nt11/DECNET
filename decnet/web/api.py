@@ -1,4 +1,5 @@
 import asyncio
+import logging
 from contextlib import asynccontextmanager
 from typing import Any, AsyncGenerator, Optional
 
@@ -10,19 +11,22 @@ from decnet.web.dependencies import repo
 from decnet.web.ingester import log_ingestion_worker
 from decnet.web.router import api_router
 
+log = logging.getLogger(__name__)
 ingestion_task: Optional[asyncio.Task[Any]] = None
 
 
 @asynccontextmanager
 async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
     global ingestion_task
-    
-    # Retry initialization a few times if DB is locked (common in tests)
-    for _ in range(5):
+
+    for attempt in range(1, 6):
         try:
             await repo.initialize()
             break
-        except Exception:
+        except Exception as exc:
+            log.warning("DB init attempt %d/5 failed: %s", attempt, exc)
+            if attempt == 5:
+                log.error("DB failed to initialize after 5 attempts — startup may be degraded")
             await asyncio.sleep(0.5)
     
     # Start background ingestion task
