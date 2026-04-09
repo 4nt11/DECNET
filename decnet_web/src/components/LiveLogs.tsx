@@ -99,7 +99,7 @@ const LiveLogs: React.FC = () => {
     if (timeRange !== 'all') {
       const minutes = timeRange === '15m' ? 15 : timeRange === '1h' ? 60 : timeRange === '24h' ? 1440 : 0;
       if (minutes > 0) {
-        const startTime = new Date(Date.now() - minutes * 60000).toISOString();
+        const startTime = new Date(Date.now() - minutes * 60000).toISOString().replace('T', ' ').substring(0, 19);
         url += `&start_time=${startTime}`;
       }
     }
