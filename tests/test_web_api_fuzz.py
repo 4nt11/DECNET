@@ -8,6 +8,7 @@ import httpx
 
 from decnet.web.api import app
 from decnet.web.dependencies import repo
+from decnet.env import DECNET_ADMIN_USER, DECNET_ADMIN_PASSWORD
 
 # Re-use setup from test_web_api
 @pytest.fixture(scope="function", autouse=True)
@@ -53,7 +54,7 @@ def test_fuzz_change_password(old_password: str, new_password: str) -> None:
     """Fuzz the change-password endpoint with random strings."""
     with TestClient(app) as _client:
         # Get valid token first
-        _login_resp: httpx.Response = _client.post("/api/v1/auth/login", json={"username": "admin", "password": "admin"})
+        _login_resp: httpx.Response = _client.post("/api/v1/auth/login", json={"username": DECNET_ADMIN_USER, "password": DECNET_ADMIN_PASSWORD})
         _token: str = _login_resp.json()["access_token"]
         
         _payload: dict[str, str] = {"old_password": old_password, "new_password": new_password}
@@ -76,7 +77,7 @@ def test_fuzz_change_password(old_password: str, new_password: str) -> None:
 def test_fuzz_get_logs(limit: int, offset: int, search: Optional[str]) -> None:
     """Fuzz the logs pagination and search."""
     with TestClient(app) as _client:
-        _login_resp: httpx.Response = _client.post("/api/v1/auth/login", json={"username": "admin", "password": "admin"})
+        _login_resp: httpx.Response = _client.post("/api/v1/auth/login", json={"username": DECNET_ADMIN_USER, "password": DECNET_ADMIN_PASSWORD})
         _token: str = _login_resp.json()["access_token"]
         
         _params: dict[str, Any] = {"limit": limit, "offset": offset}

@@ -5,7 +5,7 @@ from typing import Any, AsyncGenerator, Optional
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
-from decnet.env import DECNET_DEVELOPER
+from decnet.env import DECNET_CORS_ORIGINS, DECNET_DEVELOPER
 from decnet.web.dependencies import repo
 from decnet.web.ingester import log_ingestion_worker
 from decnet.web.router import api_router
@@ -47,10 +47,10 @@ app: FastAPI = FastAPI(
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
+    allow_origins=DECNET_CORS_ORIGINS,
     allow_credentials=False,
-    allow_methods=["*"],
-    allow_headers=["*"],
+    allow_methods=["GET", "POST", "PUT", "DELETE", "OPTIONS"],
+    allow_headers=["Authorization", "Content-Type"],
 )
 
 # Include the modular API router

@@ -9,15 +9,38 @@ _ROOT: Path = Path(__file__).parent.parent.absolute()
 load_dotenv(_ROOT / ".env.local")
 load_dotenv(_ROOT / ".env")
 
+
+def _require_env(name: str) -> str:
+    """Return the env var value or raise at startup if it is unset or a known-bad default."""
+    _KNOWN_BAD = {"fallback-secret-key-change-me", "admin", "secret", "password", "changeme"}
+    value = os.environ.get(name)
+    if not value:
+        raise ValueError(
+            f"Required environment variable '{name}' is not set. "
+            f"Set it in .env.local or export it before starting DECNET."
+        )
+    if value.lower() in _KNOWN_BAD:
+        raise ValueError(
+            f"Environment variable '{name}' is set to an insecure default ('{value}'). "
+            f"Choose a strong, unique value before starting DECNET."
+        )
+    return value
+
+
 # API Options
 DECNET_API_HOST: str = os.environ.get("DECNET_API_HOST", "0.0.0.0")  # nosec B104
 DECNET_API_PORT: int = int(os.environ.get("DECNET_API_PORT", "8000"))
-DECNET_JWT_SECRET: str = os.environ.get("DECNET_JWT_SECRET", "fallback-secret-key-change-me")
+DECNET_JWT_SECRET: str = _require_env("DECNET_JWT_SECRET")
 DECNET_INGEST_LOG_FILE: str | None = os.environ.get("DECNET_INGEST_LOG_FILE", "/var/log/decnet/decnet.log")
 
 # Web Dashboard Options
 DECNET_WEB_HOST: str = os.environ.get("DECNET_WEB_HOST", "0.0.0.0")  # nosec B104
 DECNET_WEB_PORT: int = int(os.environ.get("DECNET_WEB_PORT", "8080"))
 DECNET_ADMIN_USER: str = os.environ.get("DECNET_ADMIN_USER", "admin")
-DECNET_ADMIN_PASSWORD: str = os.environ.get("DECNET_ADMIN_PASSWORD", "admin")
+DECNET_ADMIN_PASSWORD: str = _require_env("DECNET_ADMIN_PASSWORD")
 DECNET_DEVELOPER: bool = os.environ.get("DECNET_DEVELOPER", "False").lower() == "true"
+
+# CORS — comma-separated list of allowed origins for the web dashboard API.
+# Example: DECNET_CORS_ORIGINS=http://localhost:8080,https://dashboard.example.com
+_cors_raw: str = os.environ.get("DECNET_CORS_ORIGINS", "http://localhost:8080")
+DECNET_CORS_ORIGINS: list[str] = [o.strip() for o in _cors_raw.split(",") if o.strip()]
