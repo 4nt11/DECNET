@@ -4,6 +4,7 @@ from fastapi.testclient import TestClient
 from decnet.web.api import app
 import decnet.config
 from pathlib import Path
+from decnet.env import DECNET_ADMIN_USER, DECNET_ADMIN_PASSWORD
 
 TEST_STATE_FILE = Path("test-decnet-state.json")
 
@@ -64,7 +65,7 @@ def mock_state_file():
 def test_get_deckies_endpoint(mock_state_file):
     with TestClient(app) as _client:
         # Login to get token
-        _login_resp = _client.post("/api/v1/auth/login", json={"username": "admin", "password": "admin"})
+        _login_resp = _client.post("/api/v1/auth/login", json={"username": DECNET_ADMIN_USER, "password": DECNET_ADMIN_PASSWORD})
         _token = _login_resp.json()["access_token"]
         
         _response = _client.get("/api/v1/deckies", headers={"Authorization": f"Bearer {_token}"})
@@ -76,7 +77,7 @@ def test_get_deckies_endpoint(mock_state_file):
 
 def test_stats_includes_deployed_count(mock_state_file):
     with TestClient(app) as _client:
-        _login_resp = _client.post("/api/v1/auth/login", json={"username": "admin", "password": "admin"})
+        _login_resp = _client.post("/api/v1/auth/login", json={"username": DECNET_ADMIN_USER, "password": DECNET_ADMIN_PASSWORD})
         _token = _login_resp.json()["access_token"]
         
         _response = _client.get("/api/v1/stats", headers={"Authorization": f"Bearer {_token}"})

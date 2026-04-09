@@ -35,6 +35,11 @@ dev = [
 [project.scripts]
 decnet = "decnet.cli:app"
 
+[tool.pytest.ini_options]
+filterwarnings = [
+    "ignore::pytest.PytestUnhandledThreadExceptionWarning",
+]
+
 [tool.setuptools.packages.find]
 where = ["."]
 include = ["decnet*"]

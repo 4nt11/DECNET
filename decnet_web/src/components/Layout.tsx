@@ -1,6 +1,7 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { NavLink } from 'react-router-dom';
 import { Menu, X, Search, Activity, LayoutDashboard, Terminal, Settings, LogOut, Server } from 'lucide-react';
+import api from '../utils/api';
 import './Layout.css';
 
 interface LayoutProps {
@@ -12,11 +13,26 @@ interface LayoutProps {
 const Layout: React.FC<LayoutProps> = ({ children, onLogout, onSearch }) => {
   const [sidebarOpen, setSidebarOpen] = useState(true);
   const [search, setSearch] = useState('');
+  const [systemActive, setSystemActive] = useState(false);
 
   const handleSearchSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     onSearch(search);
   };
+
+  useEffect(() => {
+    const fetchStatus = async () => {
+      try {
+        const res = await api.get('/stats');
+        setSystemActive(res.data.deployed_deckies > 0);
+      } catch (err) {
+        console.error('Failed to fetch system status', err);
+      }
+    };
+    fetchStatus();
+    const interval = setInterval(fetchStatus, 10000);
+    return () => clearInterval(interval);
+  }, []);
 
   return (
     <div className="layout-container">
@@ -60,7 +76,9 @@ const Layout: React.FC<LayoutProps> = ({ children, onLogout, onSearch }) => {
             />
           </form>
           <div className="topbar-status">
-             <span className="matrix-text neon-blink">SYSTEM: ACTIVE</span>
+             <span className="matrix-text" style={{ color: systemActive ? 'var(--text-color)' : 'var(--accent-color)' }}>
+               SYSTEM: {systemActive ? 'ACTIVE' : 'INACTIVE'}
+             </span>
           </div>
         </header>
 

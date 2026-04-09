@@ -196,8 +196,8 @@ const LiveLogs: React.FC = () => {
             onClick={handleToggleLive}
             style={{ 
               display: 'flex', alignItems: 'center', gap: '8px', 
-              border: `1px solid ${streaming ? 'var(--text-color)' : 'var(--border-color)'}`,
-              color: streaming ? 'var(--text-color)' : 'var(--dim-color)',
+              border: `1px solid ${streaming ? 'var(--text-color)' : 'var(--accent-color)'}`,
+              color: streaming ? 'var(--text-color)' : 'var(--accent-color)',
               minWidth: '120px', justifyContent: 'center'
             }}
           >
