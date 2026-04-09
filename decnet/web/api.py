@@ -20,7 +20,7 @@ from decnet.web.auth import (
 )
 from decnet.web.sqlite_repository import SQLiteRepository
 from decnet.web.ingester import log_ingestion_worker
-from decnet.env import DECNET_ADMIN_USER, DECNET_ADMIN_PASSWORD
+from decnet.env import DECNET_ADMIN_USER, DECNET_ADMIN_PASSWORD, DECNET_DEVELOPER
 import asyncio
 
 repo: SQLiteRepository = SQLiteRepository()
@@ -69,7 +69,10 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
 app: FastAPI = FastAPI(
     title="DECNET Web Dashboard API", 
     version="1.0.0", 
-    lifespan=lifespan
+    lifespan=lifespan,
+    docs_url="/docs" if DECNET_DEVELOPER else None,
+    redoc_url="/redoc" if DECNET_DEVELOPER else None,
+    openapi_url="/openapi.json" if DECNET_DEVELOPER else None
 )
 
 app.add_middleware(

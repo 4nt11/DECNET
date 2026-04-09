@@ -20,3 +20,4 @@ DECNET_WEB_HOST: str = os.environ.get("DECNET_WEB_HOST", "0.0.0.0")  # nosec B10
 DECNET_WEB_PORT: int = int(os.environ.get("DECNET_WEB_PORT", "8080"))
 DECNET_ADMIN_USER: str = os.environ.get("DECNET_ADMIN_USER", "admin")
 DECNET_ADMIN_PASSWORD: str = os.environ.get("DECNET_ADMIN_PASSWORD", "admin")
+DECNET_DEVELOPER: bool = os.environ.get("DECNET_DEVELOPER", "False").lower() == "true"
