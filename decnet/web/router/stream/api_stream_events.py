@@ -6,7 +6,7 @@ from typing import AsyncGenerator, Optional
 from fastapi import APIRouter, Depends, Query, Request
 from fastapi.responses import StreamingResponse
 
-from decnet.web.dependencies import get_current_user, repo
+from decnet.web.dependencies import get_stream_user, repo
 
 log = logging.getLogger(__name__)
 
@@ -21,7 +21,7 @@ async def stream_events(
     search: Optional[str] = None,
     start_time: Optional[str] = None,
     end_time: Optional[str] = None,
-    current_user: str = Depends(get_current_user)
+    current_user: str = Depends(get_stream_user)
 ) -> StreamingResponse:
     
     async def event_generator() -> AsyncGenerator[str, None]:
