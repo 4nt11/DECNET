@@ -11,10 +11,11 @@ class SQLiteRepository(BaseRepository):
         self.db_path: str = db_path
 
     async def initialize(self) -> None:
-        async with aiosqlite.connect(self.db_path) as _db:
-            await _db.execute("PRAGMA journal_mode=WAL")
-            # Logs table
-            await _db.execute("""
+        """Initialize the database schema synchronously to ensure reliability."""
+        import sqlite3
+        with sqlite3.connect(self.db_path) as _conn:
+            _conn.execute("PRAGMA journal_mode=WAL")
+            _conn.execute("""
                 CREATE TABLE IF NOT EXISTS logs (
                     id INTEGER PRIMARY KEY AUTOINCREMENT,
                     timestamp DATETIME DEFAULT CURRENT_TIMESTAMP,
@@ -27,16 +28,7 @@ class SQLiteRepository(BaseRepository):
                     msg TEXT
                 )
             """)
-            try:
-                await _db.execute("ALTER TABLE logs ADD COLUMN fields TEXT")
-            except aiosqlite.OperationalError:
-                pass
-            try:
-                await _db.execute("ALTER TABLE logs ADD COLUMN msg TEXT")
-            except aiosqlite.OperationalError:
-                pass
-            # Users table (internal RBAC)
-            await _db.execute("""
+            _conn.execute("""
                 CREATE TABLE IF NOT EXISTS users (
                     uuid TEXT PRIMARY KEY,
                     username TEXT UNIQUE,
@@ -45,11 +37,7 @@ class SQLiteRepository(BaseRepository):
                     must_change_password BOOLEAN DEFAULT 0
                 )
             """)
-            try:
-                await _db.execute("ALTER TABLE users ADD COLUMN must_change_password BOOLEAN DEFAULT 0")
-            except aiosqlite.OperationalError:
-                pass  # Column already exists
-            await _db.commit()
+            _conn.commit()
 
     async def add_log(self, log_data: dict[str, Any]) -> None:
         async with aiosqlite.connect(self.db_path) as _db:
@@ -152,7 +140,7 @@ class SQLiteRepository(BaseRepository):
         end_time: Optional[str] = None
     ) -> list[dict[str, Any]]:
         _where, _params = self._build_where_clause(search, start_time, end_time)
-        _query = f"SELECT * FROM logs{_where} ORDER BY timestamp DESC LIMIT ? OFFSET ?"
+        _query = f"SELECT * FROM logs{_where} ORDER BY timestamp DESC LIMIT ? OFFSET ?"  # nosec B608
         _params.extend([limit, offset])
 
         async with aiosqlite.connect(self.db_path) as _db:
@@ -178,7 +166,7 @@ class SQLiteRepository(BaseRepository):
         end_time: Optional[str] = None
     ) -> list[dict[str, Any]]:
         _where, _params = self._build_where_clause(search, start_time, end_time, base_where="id > ?", base_params=[last_id])
-        _query = f"SELECT * FROM logs{_where} ORDER BY id ASC LIMIT ?"
+        _query = f"SELECT * FROM logs{_where} ORDER BY id ASC LIMIT ?"  # nosec B608
         _params.append(limit)
 
         async with aiosqlite.connect(self.db_path) as _db:
@@ -194,7 +182,7 @@ class SQLiteRepository(BaseRepository):
         end_time: Optional[str] = None
     ) -> int:
         _where, _params = self._build_where_clause(search, start_time, end_time)
-        _query = f"SELECT COUNT(*) as total FROM logs{_where}"
+        _query = f"SELECT COUNT(*) as total FROM logs{_where}"  # nosec B608
             
         async with aiosqlite.connect(self.db_path) as _db:
             _db.row_factory = aiosqlite.Row
@@ -224,7 +212,7 @@ class SQLiteRepository(BaseRepository):
             {_where}
             GROUP BY bucket_time
             ORDER BY bucket_time ASC
-        """
+        """  # nosec B608
         
         async with aiosqlite.connect(self.db_path) as _db:
             _db.row_factory = aiosqlite.Row

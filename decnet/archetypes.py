@@ -167,4 +167,4 @@ def all_archetypes() -> dict[str, Archetype]:
 
 
 def random_archetype() -> Archetype:
-    return random.choice(list(ARCHETYPES.values()))
+    return random.choice(list(ARCHETYPES.values()))  # nosec B311

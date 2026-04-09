@@ -82,7 +82,7 @@ Host NIC (eth0)
   - Runtime state is persisted in `decnet-state.json`.
   - Do not modify this file manually.
 - **General Development Guidelines**:
-  - **Never** commit broken code.
+  - **Never** commit broken code, or before running `pytest`s or `bandit` at the project level.
   - **No matter how small** the changes, they must be committed.
   - **If new features are addedd** new tests must be added, too.
   - **Never present broken code to the user**. Test, validate, then present.

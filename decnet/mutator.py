@@ -4,7 +4,7 @@ Handles dynamic rotation of exposed honeypot services over time.
 """
 
 import random
-import subprocess
+import subprocess  # nosec B404
 import time
 from pathlib import Path
 from typing import Optional
@@ -29,7 +29,7 @@ def _compose_with_retry(
     last_exc: subprocess.CalledProcessError | None = None
     cmd = ["docker", "compose", "-f", str(compose_file), *args]
     for attempt in range(1, retries + 1):
-        result = subprocess.run(cmd, capture_output=True, text=True)
+        result = subprocess.run(cmd, capture_output=True, text=True)  # nosec B603
         if result.returncode == 0:
             if result.stdout:
                 print(result.stdout, end="")
@@ -78,8 +78,8 @@ def mutate_decky(decky_name: str) -> bool:
     
     attempts = 0
     while True:
-        count = random.randint(1, min(3, len(svc_pool)))
-        chosen = set(random.sample(svc_pool, count))
+        count = random.randint(1, min(3, len(svc_pool)))  # nosec B311
+        chosen = set(random.sample(svc_pool, count))  # nosec B311
         attempts += 1
         if chosen != current_services or attempts > 20:
             break

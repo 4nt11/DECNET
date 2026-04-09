@@ -90,8 +90,8 @@ def _build_deckies(
             svc_pool = _all_service_names()
             attempts = 0
             while True:
-                count = random.randint(1, min(3, len(svc_pool)))
-                chosen = frozenset(random.sample(svc_pool, count))
+                count = random.randint(1, min(3, len(svc_pool)))  # nosec B311
+                chosen = frozenset(random.sample(svc_pool, count))  # nosec B311
                 attempts += 1
                 if chosen not in used_combos or attempts > 20:
                     break
@@ -173,8 +173,8 @@ def _build_deckies_from_ini(
             svc_list = list(arch.services)
         elif randomize:
             svc_pool = _all_service_names()
-            count = random.randint(1, min(3, len(svc_pool)))
-            svc_list = random.sample(svc_pool, count)
+            count = random.randint(1, min(3, len(svc_pool)))  # nosec B311
+            svc_list = random.sample(svc_pool, count)  # nosec B311
         else:
             raise ValueError(
                 f"Decky '[{spec.name}]' has no services= in config. "
@@ -214,7 +214,7 @@ def api(
     log_file: str = typer.Option(DECNET_INGEST_LOG_FILE, "--log-file", help="Path to the DECNET log file to monitor"),
 ) -> None:
     """Run the DECNET API and Web Dashboard in standalone mode."""
-    import subprocess
+    import subprocess  # nosec B404
     import sys
     import os
 
@@ -222,7 +222,7 @@ def api(
     _env: dict[str, str] = os.environ.copy()
     _env["DECNET_INGEST_LOG_FILE"] = str(log_file)
     try:
-        subprocess.run(
+        subprocess.run(  # nosec B603 B404
             [sys.executable, "-m", "uvicorn", "decnet.web.api:app", "--host", host, "--port", str(port)],
             env=_env
         )
@@ -392,11 +392,11 @@ def deploy(
     _deploy(config, dry_run=dry_run, no_cache=no_cache)
     
     if mutate_interval is not None and not dry_run:
-        import subprocess
+        import subprocess  # nosec B404
         import sys
         console.print(f"[green]Starting DECNET Mutator watcher in the background (interval: {mutate_interval}m)...[/]")
         try:
-            subprocess.Popen(
+            subprocess.Popen(  # nosec B603
                 [sys.executable, "-m", "decnet.cli", "mutate", "--watch"],
                 stdout=subprocess.DEVNULL,
                 stderr=subprocess.STDOUT
@@ -405,19 +405,19 @@ def deploy(
             console.print("[red]Failed to start mutator watcher.[/]")
 
     if api and not dry_run:
-        import subprocess
+        import subprocess  # nosec B404
         import sys
         console.print(f"[green]Starting DECNET API on port {api_port}...[/]")
         _env: dict[str, str] = os.environ.copy()
-        _env["DECNET_INGEST_LOG_FILE"] = str(effective_log_file)
+        _env["DECNET_INGEST_LOG_FILE"] = str(effective_log_file or "")
         try:
-            subprocess.Popen(
-                [sys.executable, "-m", "uvicorn", "decnet.web.api:app", "--host", "0.0.0.0", "--port", str(api_port)],
+            subprocess.Popen(  # nosec B603
+                [sys.executable, "-m", "uvicorn", "decnet.web.api:app", "--host", DECNET_API_HOST, "--port", str(api_port)],
                 env=_env,
                 stdout=subprocess.DEVNULL,
                 stderr=subprocess.STDOUT
             )
-            console.print(f"[dim]API running at http://0.0.0.0:{api_port}[/]")
+            console.print(f"[dim]API running at http://{DECNET_API_HOST}:{api_port}[/]")
         except (FileNotFoundError, subprocess.SubprocessError):
             console.print("[red]Failed to start API. Ensure 'uvicorn' is installed in the current environment.[/]")
 

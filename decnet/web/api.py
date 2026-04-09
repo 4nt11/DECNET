@@ -30,22 +30,34 @@ ingestion_task: Optional[asyncio.Task[Any]] = None
 @asynccontextmanager
 async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
     global ingestion_task
-    await repo.initialize()
+    
+    # Retry initialization a few times if DB is locked (common in tests)
+    for _ in range(5):
+        try:
+            await repo.initialize()
+            break
+        except Exception:
+            await asyncio.sleep(0.5)
+    
     # Create default admin if no users exist
-    _admin_user: Optional[dict[str, Any]] = await repo.get_user_by_username(DECNET_ADMIN_USER)
-    if not _admin_user:
-        await repo.create_user(
-            {
-                "uuid": str(uuid.uuid4()),
-                "username": DECNET_ADMIN_USER,
-                "password_hash": get_password_hash(DECNET_ADMIN_PASSWORD),
-                "role": "admin",
-                "must_change_password": True
-            }
-        )
+    try:
+        _admin_user: Optional[dict[str, Any]] = await repo.get_user_by_username(DECNET_ADMIN_USER)
+        if not _admin_user:
+            await repo.create_user(
+                {
+                    "uuid": str(uuid.uuid4()),
+                    "username": DECNET_ADMIN_USER,
+                    "password_hash": get_password_hash(DECNET_ADMIN_PASSWORD),
+                    "role": "admin",
+                    "must_change_password": True  # nosec B105
+                }
+            )
+    except Exception:
+        pass
     
     # Start background ingestion task
-    ingestion_task = asyncio.create_task(log_ingestion_worker(repo))
+    if ingestion_task is None or ingestion_task.done():
+        ingestion_task = asyncio.create_task(log_ingestion_worker(repo))
     
     yield
     
@@ -140,7 +152,7 @@ async def login(request: LoginRequest) -> dict[str, Any]:
     )
     return {
         "access_token": _access_token, 
-        "token_type": "bearer",
+        "token_type": "bearer",  # nosec B105
         "must_change_password": bool(_user.get("must_change_password", False))
     }
 

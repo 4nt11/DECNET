@@ -2,7 +2,7 @@
 Deploy, teardown, and status via Docker SDK + subprocess docker compose.
 """
 
-import subprocess
+import subprocess  # nosec B404
 import time
 from pathlib import Path
 
@@ -31,7 +31,7 @@ COMPOSE_FILE = Path("decnet-compose.yml")
 
 def _compose(*args: str, compose_file: Path = COMPOSE_FILE) -> None:
     cmd = ["docker", "compose", "-f", str(compose_file), *args]
-    subprocess.run(cmd, check=True)
+    subprocess.run(cmd, check=True)  # nosec B603
 
 
 _PERMANENT_ERRORS = (
@@ -53,7 +53,7 @@ def _compose_with_retry(
     last_exc: subprocess.CalledProcessError | None = None
     cmd = ["docker", "compose", "-f", str(compose_file), *args]
     for attempt in range(1, retries + 1):
-        result = subprocess.run(cmd, capture_output=True, text=True)
+        result = subprocess.run(cmd, capture_output=True, text=True)  # nosec B603
         if result.returncode == 0:
             if result.stdout:
                 print(result.stdout, end="")
