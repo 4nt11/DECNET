@@ -339,3 +339,25 @@ def test_redis_default_no_extra_env():
     env = _fragment("redis").get("environment", {})
     assert "REDIS_VERSION" not in env
     assert "REDIS_OS" not in env
+
+
+# Telnet ---------------------------------------------------------------------
+
+def test_telnet_log_target_uses_cowrie_tcp_output():
+    """Telnet forwards logs via Cowrie TCP output, same pattern as SSH."""
+    env = _fragment("telnet", log_target="10.0.0.1:5140").get("environment", {})
+    assert env.get("COWRIE_OUTPUT_TCP_ENABLED") == "true"
+    assert env.get("COWRIE_OUTPUT_TCP_HOST") == "10.0.0.1"
+    assert env.get("COWRIE_OUTPUT_TCP_PORT") == "5140"
+
+
+def test_telnet_no_log_target_omits_tcp_output():
+    env = _fragment("telnet").get("environment", {})
+    assert "COWRIE_OUTPUT_TCP_ENABLED" not in env
+    assert "COWRIE_OUTPUT_TCP_HOST" not in env
+
+
+def test_telnet_ssh_disabled_in_telnet_only_container():
+    env = _fragment("telnet").get("environment", {})
+    assert env.get("COWRIE_SSH_ENABLED") == "false"
+    assert env.get("COWRIE_TELNET_ENABLED") == "true"
