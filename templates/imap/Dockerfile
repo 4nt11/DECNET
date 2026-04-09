@@ -14,7 +14,7 @@ EXPOSE 143 993
 RUN useradd -r -s /bin/false -d /opt decnet \
  && apt-get update && apt-get install -y --no-install-recommends libcap2-bin \
  && rm -rf /var/lib/apt/lists/* \
- && find /usr/bin/python3* -maxdepth 0 -type f -exec setcap 'cap_net_bind_service+eip' {} \;
+ && (find /usr/bin/ -maxdepth 1 -name 'python3*' -type f -exec setcap 'cap_net_bind_service+eip' {} \; 2>/dev/null || true)
 
 HEALTHCHECK --interval=30s --timeout=5s --start-period=10s --retries=3 \
   CMD kill -0 1 || exit 1
