@@ -43,8 +43,11 @@ def generate_compose(config: DecnetConfig) -> dict:
     log_container_path: str | None = None
     if config.log_file:
         log_host_dir, log_container_path = _resolve_log_file(config.log_file)
-        # Ensure the host log directory exists so Docker doesn't create it as root-owned
-        Path(log_host_dir).mkdir(parents=True, exist_ok=True)
+        # Ensure the host log directory exists and is writable by the container's
+        # non-root 'decnet' user (DEBT-019).  mkdir respects umask, so chmod explicitly.
+        _log_dir = Path(log_host_dir)
+        _log_dir.mkdir(parents=True, exist_ok=True)
+        _log_dir.chmod(0o777)
 
     for decky in config.deckies:
         base_key = decky.name  # e.g. "decky-01"
