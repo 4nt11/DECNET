@@ -135,6 +135,13 @@ class LogsResponse(BaseModel):
     data: list[dict[str, Any]]
 
 
+class BountyResponse(BaseModel):
+    total: int
+    limit: int
+    offset: int
+    data: list[dict[str, Any]]
+
+
 @app.post("/api/v1/auth/login", response_model=Token)
 async def login(request: LoginRequest) -> dict[str, Any]:
     _user: Optional[dict[str, Any]] = await repo.get_user_by_username(request.username)
@@ -187,6 +194,25 @@ async def get_logs(
         "limit": limit,
         "offset": offset,
         "data": _logs
+    }
+
+
+@app.get("/api/v1/bounty", response_model=BountyResponse)
+async def get_bounties(
+    limit: int = Query(50, ge=1, le=1000),
+    offset: int = Query(0, ge=0),
+    bounty_type: Optional[str] = None,
+    search: Optional[str] = None,
+    current_user: str = Depends(get_current_user)
+) -> dict[str, Any]:
+    """Retrieve collected bounties (harvested credentials, payloads, etc.)."""
+    _data = await repo.get_bounties(limit=limit, offset=offset, bounty_type=bounty_type, search=search)
+    _total = await repo.get_total_bounties(bounty_type=bounty_type, search=search)
+    return {
+        "total": _total,
+        "limit": limit,
+        "offset": offset,
+        "data": _data
     }
 
 

@@ -59,3 +59,24 @@ class BaseRepository(ABC):
     async def update_user_password(self, uuid: str, password_hash: str, must_change_password: bool = False) -> None:
         """Update a user's password and change the must_change_password flag."""
         pass
+
+    @abstractmethod
+    async def add_bounty(self, bounty_data: dict[str, Any]) -> None:
+        """Add a new harvested artifact (bounty) to the database."""
+        pass
+
+    @abstractmethod
+    async def get_bounties(
+        self, 
+        limit: int = 50, 
+        offset: int = 0, 
+        bounty_type: Optional[str] = None,
+        search: Optional[str] = None
+    ) -> list[dict[str, Any]]:
+        """Retrieve paginated bounty entries."""
+        pass
+
+    @abstractmethod
+    async def get_total_bounties(self, bounty_type: Optional[str] = None, search: Optional[str] = None) -> int:
+        """Retrieve the total count of bounties, optionally filtered."""
+        pass

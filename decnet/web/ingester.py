@@ -54,6 +54,7 @@ async def log_ingestion_worker(repo: BaseRepository) -> None:
                     try:
                         _log_data: dict[str, Any] = json.loads(_line.strip())
                         await repo.add_log(_log_data)
+                        await _extract_bounty(repo, _log_data)
                     except json.JSONDecodeError:
                         logger.error(f"Failed to decode JSON log line: {_line}")
                         continue
@@ -66,3 +67,28 @@ async def log_ingestion_worker(repo: BaseRepository) -> None:
             await asyncio.sleep(5)
             
         await asyncio.sleep(1)
+
+
+async def _extract_bounty(repo: BaseRepository, log_data: dict[str, Any]) -> None:
+    """Detect and extract valuable artifacts (bounties) from log entries."""
+    _fields = log_data.get("fields")
+    if not isinstance(_fields, dict):
+        return
+
+    # 1. Credentials (User/Pass)
+    _user = _fields.get("username")
+    _pass = _fields.get("password")
+    
+    if _user and _pass:
+        await repo.add_bounty({
+            "decky": log_data.get("decky"),
+            "service": log_data.get("service"),
+            "attacker_ip": log_data.get("attacker_ip"),
+            "bounty_type": "credential",
+            "payload": {
+                "username": _user,
+                "password": _pass
+            }
+        })
+    
+    # 2. Add more extractors here later (e.g. file hashes, crypto keys)

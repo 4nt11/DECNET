@@ -7,6 +7,7 @@ import DeckyFleet from './components/DeckyFleet';
 import LiveLogs from './components/LiveLogs';
 import Attackers from './components/Attackers';
 import Config from './components/Config';
+import Bounty from './components/Bounty';
 
 function App() {
   const [token, setToken] = useState<string | null>(localStorage.getItem('token'));
@@ -43,6 +44,7 @@ function App() {
           <Route path="/" element={<Dashboard searchQuery={searchQuery} />} />
           <Route path="/fleet" element={<DeckyFleet />} />
           <Route path="/live-logs" element={<LiveLogs />} />
+          <Route path="/bounty" element={<Bounty />} />
           <Route path="/attackers" element={<Attackers />} />
           <Route path="/config" element={<Config />} />
           <Route path="*" element={<Navigate to="/" replace />} />

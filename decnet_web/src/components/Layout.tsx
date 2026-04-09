@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { NavLink } from 'react-router-dom';
-import { Menu, X, Search, Activity, LayoutDashboard, Terminal, Settings, LogOut, Server } from 'lucide-react';
+import { Menu, X, Search, Activity, LayoutDashboard, Terminal, Settings, LogOut, Server, Archive } from 'lucide-react';
 import api from '../utils/api';
 import './Layout.css';
 
@@ -50,6 +50,7 @@ const Layout: React.FC<LayoutProps> = ({ children, onLogout, onSearch }) => {
           <NavItem to="/" icon={<LayoutDashboard size={20} />} label="Dashboard" open={sidebarOpen} />
           <NavItem to="/fleet" icon={<Server size={20} />} label="Decoy Fleet" open={sidebarOpen} />
           <NavItem to="/live-logs" icon={<Terminal size={20} />} label="Live Logs" open={sidebarOpen} />
+          <NavItem to="/bounty" icon={<Archive size={20} />} label="Bounty" open={sidebarOpen} />
           <NavItem to="/attackers" icon={<Activity size={20} />} label="Attackers" open={sidebarOpen} />
           <NavItem to="/config" icon={<Settings size={20} />} label="Config" open={sidebarOpen} />
         </nav>
