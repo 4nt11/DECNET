@@ -57,5 +57,5 @@ DECNET_DEVELOPER: bool = os.environ.get("DECNET_DEVELOPER", "False").lower() == 
 
 # CORS — comma-separated list of allowed origins for the web dashboard API.
 # Example: DECNET_CORS_ORIGINS=http://localhost:8080,https://dashboard.example.com
-_cors_raw: str = os.environ.get("DECNET_CORS_ORIGINS", "http://localhost:8080")
+_cors_raw: str = os.environ.get("DECNET_CORS_ORIGINS", "http://localhost:8080,http://localhost:5173")
 DECNET_CORS_ORIGINS: list[str] = [o.strip() for o in _cors_raw.split(",") if o.strip()]
