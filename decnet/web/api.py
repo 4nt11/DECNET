@@ -226,6 +226,8 @@ async def stream_events(
     request: Request, 
     last_event_id: int = Query(0, alias="lastEventId"), 
     search: Optional[str] = None,
+    start_time: Optional[str] = None,
+    end_time: Optional[str] = None,
     current_user: str = Depends(get_current_user)
 ) -> StreamingResponse:
     import json
@@ -245,7 +247,7 @@ async def stream_events(
                 break
 
             # Poll for new logs
-            new_logs = await repo.get_logs_after_id(last_id, limit=50, search=search)
+            new_logs = await repo.get_logs_after_id(last_id, limit=50, search=search, start_time=start_time, end_time=end_time)
             if new_logs:
                 # Update last_id to the max id in the fetched batch
                 last_id = max(log["id"] for log in new_logs)
@@ -260,6 +262,12 @@ async def stream_events(
                 stats = await repo.get_stats_summary()
                 payload = json.dumps({"type": "stats", "data": stats})
                 yield f"event: message\ndata: {payload}\n\n"
+
+                # Also yield histogram
+                histogram = await repo.get_log_histogram(search=search, start_time=start_time, end_time=end_time, interval_minutes=15)
+                hist_payload = json.dumps({"type": "histogram", "data": histogram})
+                yield f"event: message\ndata: {hist_payload}\n\n"
+
                 loops_since_stats = 0
                 
             loops_since_stats += 1

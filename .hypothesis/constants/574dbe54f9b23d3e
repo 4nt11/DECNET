@@ -1,0 +1,4 @@
+# file: /home/anti/Tools/DECNET/decnet/correlation/engine.py
+# hypothesis_version: 6.151.11
+
+[3600, ',', 'Attacker IP', 'Deckies', 'Duration', 'Events', 'First Seen', 'Traversal Path', 'bold red', 'correlator', 'cyan', 'decnet-correlator', 'dim', 'events_indexed', 'lines_parsed', 'right', 'stats', 'traversal_detected', 'traversals', 'unique_ips', 'yellow']
