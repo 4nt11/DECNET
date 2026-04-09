@@ -1,0 +1,4 @@
+# file: /home/anti/Tools/DECNET/decnet/web/api.py
+# hypothesis_version: 6.151.11
+
+[0.5, '/api/v1', '/docs', '/openapi.json', '/redoc', '1.0.0', 'Authorization', 'Content-Type', 'DELETE', 'GET', 'OPTIONS', 'POST', 'PUT']
