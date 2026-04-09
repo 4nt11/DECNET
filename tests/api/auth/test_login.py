@@ -35,13 +35,13 @@ async def test_login_failure(client: httpx.AsyncClient) -> None:
     assert response.status_code == 401
 
 @pytest.mark.anyio
+@pytest.mark.fuzz
+@pytest.mark.anyio
 @settings(**_FUZZ_SETTINGS)
 @given(
     username=st.text(min_size=0, max_size=2048),
     password=st.text(min_size=0, max_size=2048)
 )
-
-@pytest.mark.anyio
 async def test_fuzz_login(client: httpx.AsyncClient, username: str, password: str) -> None:
     """Fuzz the login endpoint with random strings (including non-ASCII)."""
     _payload: dict[str, str] = {"username": username, "password": password}

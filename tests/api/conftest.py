@@ -1,47 +1,57 @@
 import os
 import json
+import uuid as _uuid
 import pytest
-from typing import Generator, Any, AsyncGenerator
+from typing import Any, AsyncGenerator
 from pathlib import Path
+from sqlmodel import SQLModel
 import httpx
 from hypothesis import HealthCheck
-from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
+from sqlalchemy import select
+from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
+from sqlalchemy.pool import StaticPool
 
-# Ensure required env vars are set to non-bad values for tests before anything imports decnet.env
+# Must be set before any decnet import touches decnet.env
 os.environ["DECNET_JWT_SECRET"] = "test-secret-key-at-least-32-chars-long!!"
 os.environ["DECNET_ADMIN_PASSWORD"] = "test-password-123"
 
 from decnet.web.api import app
 from decnet.web.dependencies import repo
-from decnet.web.db.sqlite.database import get_async_engine
+from decnet.web.db.models import User
+from decnet.web.auth import get_password_hash
 from decnet.env import DECNET_ADMIN_USER, DECNET_ADMIN_PASSWORD
 import decnet.config
 
-TEST_STATE_FILE = Path("test-decnet-state.json")
 
 @pytest.fixture(scope="function", autouse=True)
-async def setup_db(worker_id, monkeypatch) -> AsyncGenerator[None, None]:
-    import uuid
-    # Use worker-specific in-memory DB with shared cache for maximum speed
-    unique_id = uuid.uuid4().hex
-    db_path = f"file:memdb_{worker_id}_{unique_id}?mode=memory&cache=shared"
-    
-    # Patch the global repo singleton
-    monkeypatch.setattr(repo, "db_path", db_path)
-    
-    engine = get_async_engine(db_path)
-    session_factory = async_sessionmaker(
-        engine, class_=AsyncSession, expire_on_commit=False
-    )
-    
+async def setup_db(monkeypatch) -> AsyncGenerator[None, None]:
+    # Unique in-memory DB per test — no file I/O, no WAL/SHM side-cars
+    db_url = f"sqlite+aiosqlite:///file:testdb_{_uuid.uuid4().hex}?mode=memory&cache=shared"
+    engine = create_async_engine(db_url, connect_args={"uri": True}, poolclass=StaticPool)
+    session_factory = async_sessionmaker(engine, class_=AsyncSession, expire_on_commit=False)
+
+    # Patch BOTH — session_factory is what all queries actually use
     monkeypatch.setattr(repo, "engine", engine)
     monkeypatch.setattr(repo, "session_factory", session_factory)
-    
-    # Initialize the in-memory DB (tables + admin)
-    repo.reinitialize()
-    
+
+    # Create schema
+    async with engine.begin() as conn:
+        await conn.run_sync(SQLModel.metadata.create_all)
+
+    # Seed admin user
+    async with session_factory() as session:
+        if not (await session.execute(select(User).where(User.username == DECNET_ADMIN_USER))).scalar_one_or_none():
+            session.add(User(
+                uuid=str(_uuid.uuid4()),
+                username=DECNET_ADMIN_USER,
+                password_hash=get_password_hash(DECNET_ADMIN_PASSWORD),
+                role="admin",
+                must_change_password=True,
+            ))
+            await session.commit()
+
     yield
-    
+
     await engine.dispose()
 
 @pytest.fixture
@@ -55,11 +65,13 @@ async def auth_token(client: httpx.AsyncClient) -> str:
     return resp.json()["access_token"]
 
 @pytest.fixture(autouse=True)
-def patch_state_file(monkeypatch):
-    monkeypatch.setattr(decnet.config, "STATE_FILE", TEST_STATE_FILE)
+def patch_state_file(monkeypatch, tmp_path) -> Path:
+    state_file = tmp_path / "decnet-state.json"
+    monkeypatch.setattr(decnet.config, "STATE_FILE", state_file)
+    return state_file
 
 @pytest.fixture
-def mock_state_file():
+def mock_state_file(patch_state_file: Path):
     _test_state = {
         "config": {
             "mode": "unihost",
@@ -103,14 +115,15 @@ def mock_state_file():
         },
         "compose_path": "test-compose.yml"
     }
-    TEST_STATE_FILE.write_text(json.dumps(_test_state))
+    patch_state_file.write_text(json.dumps(_test_state))
     yield _test_state
-    if TEST_STATE_FILE.exists():
-        TEST_STATE_FILE.unlink()
 
 # Share fuzz settings across API tests
+# FUZZ_EXAMPLES: keep low for dev speed; bump via HYPOTHESIS_MAX_EXAMPLES env var in CI
+import os as _os
+_FUZZ_EXAMPLES = int(_os.environ.get("HYPOTHESIS_MAX_EXAMPLES", "10"))
 _FUZZ_SETTINGS: dict[str, Any] = {
-    "max_examples": 50,
+    "max_examples": _FUZZ_EXAMPLES,
     "deadline": None,
-    "suppress_health_check": [HealthCheck.function_scoped_fixture]
+    "suppress_health_check": [HealthCheck.function_scoped_fixture],
 }

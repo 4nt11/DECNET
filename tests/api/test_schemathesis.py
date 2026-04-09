@@ -10,6 +10,7 @@ replace the checks list with the default (remove the argument) for full complian
 
 Requires DECNET_DEVELOPER=true (set in tests/conftest.py) to expose /openapi.json.
 """
+import pytest
 import schemathesis
 from hypothesis import settings
 from schemathesis.checks import not_a_server_error
@@ -18,6 +19,7 @@ from decnet.web.api import app
 schema = schemathesis.openapi.from_asgi("/openapi.json", app)
 
 
+@pytest.mark.fuzz
 @schemathesis.pytest.parametrize(api=schema)
 @settings(max_examples=5, deadline=None)
 def test_schema_compliance(case):

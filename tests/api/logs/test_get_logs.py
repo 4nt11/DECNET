@@ -22,6 +22,7 @@ async def test_get_logs_success(client: httpx.AsyncClient, auth_token: str) -> N
     assert data["total"] >= 0
     assert isinstance(data["data"], list)
 
+@pytest.mark.fuzz
 @pytest.mark.anyio
 @settings(**_FUZZ_SETTINGS)
 @given(

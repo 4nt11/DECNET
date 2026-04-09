@@ -30,6 +30,7 @@ async def test_stats_includes_deployed_count(mock_state_file, client: httpx.Asyn
     assert "deployed_deckies" in _data
     assert _data["deployed_deckies"] == 2
 
+@pytest.mark.fuzz
 @pytest.mark.anyio
 @settings(**_FUZZ_SETTINGS)
 @given(

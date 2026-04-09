@@ -5,7 +5,9 @@ covering DEBT-006 (zero test coverage on the database layer).
 """
 import json
 import pytest
+from hypothesis import given, settings, strategies as st
 from decnet.web.db.sqlite.repository import SQLiteRepository
+from .conftest import _FUZZ_SETTINGS
 
 
 @pytest.fixture
@@ -172,3 +174,27 @@ async def test_user_lifecycle(repo):
     updated = await repo.get_user_by_uuid(uid)
     assert updated["password_hash"] == "new_hashed_pw"
     assert updated["must_change_password"] == 0
+
+
+@pytest.mark.fuzz
+@pytest.mark.anyio
+@settings(**_FUZZ_SETTINGS)
+@given(
+    raw_line=st.text(max_size=2048),
+    fields=st.text(max_size=2048),
+    attacker_ip=st.text(max_size=128),
+)
+async def test_fuzz_add_log(repo, raw_line: str, fields: str, attacker_ip: str) -> None:
+    """Fuzz add_log with arbitrary strings — must never raise uncaught exceptions."""
+    try:
+        await repo.add_log({
+            "decky": "fuzz-decky",
+            "service": "ssh",
+            "event_type": "connect",
+            "attacker_ip": attacker_ip,
+            "raw_line": raw_line,
+            "fields": fields,
+            "msg": "",
+        })
+    except Exception as exc:
+        pytest.fail(f"add_log raised unexpectedly: {exc}")

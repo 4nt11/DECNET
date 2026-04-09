@@ -36,6 +36,7 @@ async def test_change_password(client: httpx.AsyncClient) -> None:
     assert resp4.status_code == 200
     assert resp4.json()["must_change_password"] is False
 
+@pytest.mark.fuzz
 @pytest.mark.anyio
 @settings(**_FUZZ_SETTINGS)
 @given(

@@ -9,7 +9,9 @@ import json
 import pytest
 from datetime import datetime, timedelta
 from freezegun import freeze_time
+from hypothesis import given, settings, strategies as st
 from decnet.web.db.sqlite.repository import SQLiteRepository
+from ..conftest import _FUZZ_SETTINGS
 
 
 @pytest.fixture
@@ -98,3 +100,18 @@ async def test_histogram_search_filter(repo):
     result = await repo.get_log_histogram(search="service:ssh", interval_minutes=15)
     total = sum(r["count"] for r in result)
     assert total == 1
+
+
+@pytest.mark.fuzz
+@pytest.mark.anyio
+@settings(**_FUZZ_SETTINGS)
+@given(
+    search=st.one_of(st.none(), st.text(max_size=512)),
+    interval_minutes=st.integers(min_value=1, max_value=10000),
+)
+async def test_fuzz_histogram(repo, search: str | None, interval_minutes: int) -> None:
+    """Fuzz histogram params — must never raise uncaught exceptions."""
+    try:
+        await repo.get_log_histogram(search=search, interval_minutes=interval_minutes)
+    except Exception as exc:
+        pytest.fail(f"get_log_histogram raised unexpectedly: {exc}")

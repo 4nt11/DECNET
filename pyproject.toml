@@ -43,6 +43,10 @@ decnet = "decnet.cli:app"
 
 [tool.pytest.ini_options]
 asyncio_mode = "auto"
+addopts = "-m 'not fuzz' -v -q -x -n logical"
+markers = [
+    "fuzz: hypothesis-based fuzz tests (slow, run with -m fuzz or -m '' for all)",
+]
 filterwarnings = [
     "ignore::pytest.PytestUnhandledThreadExceptionWarning",
     "ignore::DeprecationWarning",
