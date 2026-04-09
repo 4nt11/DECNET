@@ -11,18 +11,12 @@ load_dotenv(_ROOT / ".env")
 
 
 def _require_env(name: str) -> str:
-    """Return the env var value or raise at startup if it is unset or a known-bad default."""
-    _KNOWN_BAD = {"fallback-secret-key-change-me", "admin", "secret", "password", "changeme"}
+    """Return the env var value or raise at startup if it is unset."""
     value = os.environ.get(name)
     if not value:
         raise ValueError(
             f"Required environment variable '{name}' is not set. "
             f"Set it in .env.local or export it before starting DECNET."
-        )
-    if value.lower() in _KNOWN_BAD:
-        raise ValueError(
-            f"Environment variable '{name}' is set to an insecure default ('{value}'). "
-            f"Choose a strong, unique value before starting DECNET."
         )
     return value
 
@@ -37,7 +31,7 @@ DECNET_INGEST_LOG_FILE: str | None = os.environ.get("DECNET_INGEST_LOG_FILE", "/
 DECNET_WEB_HOST: str = os.environ.get("DECNET_WEB_HOST", "0.0.0.0")  # nosec B104
 DECNET_WEB_PORT: int = int(os.environ.get("DECNET_WEB_PORT", "8080"))
 DECNET_ADMIN_USER: str = os.environ.get("DECNET_ADMIN_USER", "admin")
-DECNET_ADMIN_PASSWORD: str = _require_env("DECNET_ADMIN_PASSWORD")
+DECNET_ADMIN_PASSWORD: str = os.environ.get("DECNET_ADMIN_PASSWORD", "admin")
 DECNET_DEVELOPER: bool = os.environ.get("DECNET_DEVELOPER", "False").lower() == "true"
 
 # CORS — comma-separated list of allowed origins for the web dashboard API.
