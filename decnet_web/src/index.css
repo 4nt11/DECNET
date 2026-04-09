@@ -24,6 +24,10 @@ body {
   overflow-x: hidden;
 }
 
+input, button, textarea, select {
+  font-family: inherit;
+}
+
 button {
   cursor: pointer;
   background: transparent;
