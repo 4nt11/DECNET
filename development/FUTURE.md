@@ -40,3 +40,24 @@ By procedurally generating `tc` rules as the network scales, we can inject mathe
 tc qdisc add dev eth1 root netem delay 45ms 10ms distribution normal loss 0.1%
 ```
 As an attacker pivots deeper into the "Spider Network," this injected latency compounds automatically. A proxy chain going 4 levels deep would realistically suffer from 150ms+ of latency and erratic jitter, perfectly mimicking the experience of routing over slow, multi-site corporate VPNs.
+
+---
+
+## Distributed Scale: Swarm Overlay Architecture
+
+To scale DECNET across multiple physical racks or sites, DECNET can leverage **Docker Swarm Overlay Networks** to create a unified L2/L3 backbone without surrendering control to Swarm's "Orchestration" scheduler. 
+
+### The `--attachable` Paradigm
+By default, Docker's `overlay` driver requires Swarm mode but tightly couples it to `docker service` (which abstracts and randomizes container placement to balance loads). In honeypot deployments, absolute control over physical placement is critical (e.g., placing the `scada-archetype` explicitly on bare-metal node C in the DMZ).
+
+To solve this, DECNET will initialize the swarm control plane simply to construct the backend VXLAN, but completely ignore the service scheduler in favor of `--attachable` networks:
+
+1. **Initialize the Control Plane** (manager node + remote worker joins):
+   ```bash
+   docker swarm init
+   ```
+2. **Create the Attachable Backbone**:
+   ```bash
+   docker network create -d overlay --attachable decnet-backbone
+   ```
+3. **Deploy Standalone**: Keep relying entirely on local `decnet deploy` scripts on the individual physical nodes. Because the network is `attachable`, standalone container instances can seamlessly attach to it and communicate with containers running on completely different hardware across the globe as if they were on a local layer 2 switch!
