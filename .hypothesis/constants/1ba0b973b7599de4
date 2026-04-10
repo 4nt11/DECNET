@@ -1,0 +1,4 @@
+# file: /home/anti/Tools/DECNET/decnet/web/router/fleet/api_get_deckies.py
+# hypothesis_version: 6.151.12
+
+[401, 422, '/deckies', 'Fleet Management', 'Not authenticated', 'Validation error', 'description']

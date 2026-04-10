@@ -2,10 +2,7 @@
 Tests for decnet.config — Pydantic models, save/load/clear state.
 Covers the uncovered lines: validators, save_state, load_state, clear_state.
 """
-import json
 import pytest
-from pathlib import Path
-from unittest.mock import patch
 
 import decnet.config as config_module
 from decnet.config import (

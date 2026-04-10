@@ -1,7 +1,5 @@
 import json
 import pytest
-from fastapi.testclient import TestClient
-from decnet.web.api import app
 from hypothesis import given, strategies as st, settings
 import httpx
 from decnet.env import DECNET_ADMIN_USER, DECNET_ADMIN_PASSWORD

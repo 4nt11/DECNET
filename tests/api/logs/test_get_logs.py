@@ -1,7 +1,6 @@
 import pytest
 import httpx
 from typing import Any, Optional
-from decnet.env import DECNET_ADMIN_USER, DECNET_ADMIN_PASSWORD
 from ..conftest import _FUZZ_SETTINGS
 from hypothesis import given, strategies as st, settings
 

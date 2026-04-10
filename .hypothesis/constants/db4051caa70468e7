@@ -1,0 +1,4 @@
+# file: /home/anti/Tools/DECNET/decnet/web/db/models.py
+# hypothesis_version: 6.151.11
+
+['bounty', 'logs', 'users', 'viewer']

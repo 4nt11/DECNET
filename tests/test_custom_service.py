@@ -1,7 +1,6 @@
 """
 Tests for decnet.custom_service — BYOS (bring-your-own-service) support.
 """
-import pytest
 from decnet.custom_service import CustomService
 
 

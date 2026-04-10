@@ -474,7 +474,7 @@ Key/value pairs are passed directly to the service plugin as persona config. Com
 | `mongodb` | `mongo_version` |
 | `elasticsearch` | `es_version`, `cluster_name` |
 | `ldap` | `base_dn`, `domain` |
-| `snmp` | `snmp_community`, `sys_descr` |
+| `snmp` | `snmp_community`, `sys_descr`, `snmp_archetype` (picks predefined sysDescr for `water_plant`, `hospital`, etc.) |
 | `mqtt` | `mqtt_version` |
 | `sip` | `sip_server`, `sip_domain` |
 | `k8s` | `k8s_version` |

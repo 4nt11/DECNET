@@ -1,0 +1,4 @@
+# file: /home/anti/Tools/DECNET/decnet/web/router/bounty/api_get_bounties.py
+# hypothesis_version: 6.151.12
+
+[401, 422, 1000, '/bounty', 'Bounty Vault', 'Not authenticated', 'Validation error', 'data', 'description', 'limit', 'offset', 'total']

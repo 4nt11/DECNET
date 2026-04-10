@@ -9,7 +9,15 @@
       "Bash(pip show:*)",
       "Bash(python:*)",
       "Bash(DECNET_JWT_SECRET=\"test-secret-xyz-1234!\" DECNET_ADMIN_PASSWORD=\"test-pass-xyz-1234!\" python:*)",
-      "Bash(ls /home/anti/Tools/DECNET/*.db* /home/anti/Tools/DECNET/test_*.db*)"
+      "Bash(ls /home/anti/Tools/DECNET/*.db* /home/anti/Tools/DECNET/test_*.db*)",
+      "mcp__plugin_context-mode_context-mode__ctx_execute_file",
+      "Bash(nc)",
+      "Bash(nmap:*)",
+      "Bash(ping -c1 -W2 192.168.1.200)",
+      "Bash(xxd)",
+      "Bash(curl -s http://192.168.1.200:2375/version)",
+      "Bash(python3 -m json.tool)",
+      "Bash(curl -s http://192.168.1.200:9200/)"
     ]
   }
 }

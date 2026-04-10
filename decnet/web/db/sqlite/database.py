@@ -1,7 +1,6 @@
 from sqlalchemy.ext.asyncio import create_async_engine, AsyncSession, async_sessionmaker
 from sqlalchemy import create_engine
 from sqlmodel import SQLModel
-from pathlib import Path
 
 # We need both sync and async engines for SQLite
 # Sync for initialization (DDL) and async for standard queries

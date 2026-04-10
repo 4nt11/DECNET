@@ -101,6 +101,11 @@ All route decorators now declare `responses={401: {"description": "Not authentic
 ~~**File:** `decnet/web/sqlite_repository.py` (~400 lines)~~  
 Fully refactored to `decnet/web/db/` modular layout: `models.py` (SQLModel schema), `repository.py` (abstract base), `sqlite/repository.py` (SQLite implementation), `sqlite/database.py` (engine/session factory). Commit `de84cc6`.
 
+### DEBT-026 — IMAP/POP3 bait emails are hardcoded
+**Files:** `templates/imap/server.py`, `templates/pop3/server.py`  
+Bait emails are hardcoded strings. A modular framework to dynamically inject personalized mailboxes, custom mails, and dynamic users should be implemented in the future for a more personalized feel.  
+**Status:** Deferred — out of current scope.
+
 ---
 
 ## 🟢 Low
@@ -152,6 +157,7 @@ Fully refactored to `decnet/web/db/` modular layout: `models.py` (SQLModel schem
 | DEBT-023 | 🟢 Low | Infra | deferred (needs docker pull) |
 | ~~DEBT-024~~ | ✅ | Infra | resolved |
 | ~~DEBT-025~~ | ✅ | Build | resolved |
+| DEBT-026 | 🟡 Medium | Features | deferred (out of scope) |
 
-**Remaining open:** DEBT-011 (Alembic migrations), DEBT-023 (image digest pinning)  
-**Estimated remaining effort:** ~7 hours
+**Remaining open:** DEBT-011 (Alembic migrations), DEBT-023 (image digest pinning), DEBT-026 (modular mailboxes)  
+**Estimated remaining effort:** ~10 hours

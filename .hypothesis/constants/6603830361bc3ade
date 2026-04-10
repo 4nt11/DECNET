@@ -1,0 +1,4 @@
+# file: /home/anti/Tools/DECNET/decnet/web/router/stats/api_get_stats.py
+# hypothesis_version: 6.151.12
+
+[401, 422, '/stats', 'Not authenticated', 'Observability', 'Validation error', 'description']

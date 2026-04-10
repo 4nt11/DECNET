@@ -1,7 +1,6 @@
 import pytest
 import httpx
 from hypothesis import given, settings, strategies as st
-from decnet.env import DECNET_ADMIN_USER, DECNET_ADMIN_PASSWORD
 from ..conftest import _FUZZ_SETTINGS
 
 @pytest.mark.anyio

@@ -10,6 +10,7 @@ from hypothesis import HealthCheck
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
 from sqlalchemy.pool import StaticPool
+import os as _os
 
 # Must be set before any decnet import touches decnet.env
 os.environ["DECNET_JWT_SECRET"] = "test-secret-key-at-least-32-chars-long!!"
@@ -123,7 +124,6 @@ def mock_state_file(patch_state_file: Path):
 
 # Share fuzz settings across API tests
 # FUZZ_EXAMPLES: keep low for dev speed; bump via HYPOTHESIS_MAX_EXAMPLES env var in CI
-import os as _os
 _FUZZ_EXAMPLES = int(_os.environ.get("HYPOTHESIS_MAX_EXAMPLES", "10"))
 _FUZZ_SETTINGS: dict[str, Any] = {
     "max_examples": _FUZZ_EXAMPLES,

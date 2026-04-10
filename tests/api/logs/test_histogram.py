@@ -5,7 +5,6 @@ freeze_time controls Python's datetime.now() so we can compute
 explicit bucket timestamps deterministically, then pass them to
 add_log and verify SQLite groups them into the right buckets.
 """
-import json
 import pytest
 from datetime import datetime, timedelta
 from freezegun import freeze_time

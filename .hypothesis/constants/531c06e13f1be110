@@ -1,0 +1,4 @@
+# file: /home/anti/Tools/DECNET/decnet/composer.py
+# hypothesis_version: 6.151.12
+
+['10m', '3.8', '5', 'BASE_IMAGE', 'HOSTNAME', 'NET_ADMIN', 'args', 'build', 'cap_add', 'command', 'container_name', 'depends_on', 'driver', 'environment', 'external', 'hostname', 'image', 'infinity', 'ipv4_address', 'json-file', 'logging', 'max-file', 'max-size', 'network_mode', 'networks', 'options', 'restart', 'services', 'sleep', 'sysctls', 'unless-stopped', 'version']

@@ -33,7 +33,6 @@ def _is_build_service(name: str) -> bool:
 
 UPSTREAM_SERVICES = {
     "telnet": ("cowrie/cowrie",  [23]),
-    "conpot": ("honeynet/conpot", [502, 161, 80]),
 }
 
 # ---------------------------------------------------------------------------
@@ -64,6 +63,7 @@ BUILD_SERVICES = {
     "llmnr":         ([5355, 5353], "llmnr"),
     "snmp":          ([161],        "snmp"),
     "tftp":          ([69],         "tftp"),
+    "conpot":        ([502, 161, 80], "conpot"),
 }
 
 ALL_SERVICE_NAMES = list(UPSTREAM_SERVICES) + list(BUILD_SERVICES)

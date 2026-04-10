@@ -1,0 +1,4 @@
+# file: /home/anti/Tools/DECNET/decnet/web/router/auth/api_change_pass.py
+# hypothesis_version: 6.151.12
+
+['Authentication', 'message', 'password_hash']

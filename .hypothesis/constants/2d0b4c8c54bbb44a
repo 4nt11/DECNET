@@ -1,0 +1,4 @@
+# file: /home/anti/Tools/DECNET/decnet/web/dependencies.py
+# hypothesis_version: 6.151.12
+
+['/api/v1/auth/login', 'Authorization', 'Bearer', 'Bearer ', 'WWW-Authenticate', 'decnet.db', 'uuid']

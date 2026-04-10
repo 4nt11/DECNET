@@ -1,7 +1,6 @@
 """
 Tests for decnet.logging.forwarder — parse_log_target, probe_log_target.
 """
-import socket
 from unittest.mock import MagicMock, patch
 
 import pytest

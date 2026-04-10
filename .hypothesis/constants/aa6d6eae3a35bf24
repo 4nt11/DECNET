@@ -1,0 +1,4 @@
+# file: /home/anti/Tools/DECNET/decnet/web/collector.py
+# hypothesis_version: 6.151.12
+
+['"', '%Y-%m-%d %H:%M:%S', '-', '.json', '/', 'Actor', 'Attributes', 'Collector error: %s', 'Unknown', '[', '\\', '\\"', '\\\\', '\\]', '\\]\\s+(.+)$', ']', '^decky-\\d+-\\w', 'a', 'attacker_ip', 'client_ip', 'container', 'decky', 'decnet.web.collector', 'event', 'event_type', 'fields', 'id', 'ip', 'msg', 'name', 'raw_line', 'remote_ip', 'replace', 'service', 'src', 'src_ip', 'start', 'timestamp', 'type', 'utf-8']
