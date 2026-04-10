@@ -23,9 +23,13 @@ Secondary discriminators (nmap OPS / WIN / ECN / T2–T6 probe groups):
   net.ipv4.ip_no_pmtu_disc    – DF bit in ICMP replies (IE probes); embedded on
   net.ipv4.tcp_fin_timeout    – FIN_WAIT_2 seconds (T2–T6 timing); Windows shorter
 
+ICMP tuning (nmap IE / U1 probe groups):
+  net.ipv4.icmp_ratelimit     – Min ms between ICMP error replies; Windows = 0 (none)
+  net.ipv4.icmp_ratemask      – Bitmask of ICMP types subject to rate limiting
+
 Note: net.core.rmem_default is a global (non-namespaced) sysctl and cannot be
-set per-container without --privileged; TCP window size mangling is deferred to
-Phase 2 (iptables entrypoint).
+set per-container without --privileged; TCP window size is already correct for
+Windows (64240) from the kernel's default tcp_rmem settings.
 """
 
 from __future__ import annotations
@@ -40,6 +44,8 @@ OS_SYSCTLS: dict[str, dict[str, str]] = {
         "net.ipv4.tcp_ecn": "2",
         "net.ipv4.ip_no_pmtu_disc": "0",
         "net.ipv4.tcp_fin_timeout": "60",
+        "net.ipv4.icmp_ratelimit": "1000",
+        "net.ipv4.icmp_ratemask": "6168",
     },
     "windows": {
         "net.ipv4.ip_default_ttl": "128",
@@ -50,6 +56,8 @@ OS_SYSCTLS: dict[str, dict[str, str]] = {
         "net.ipv4.tcp_ecn": "0",
         "net.ipv4.ip_no_pmtu_disc": "0",
         "net.ipv4.tcp_fin_timeout": "30",
+        "net.ipv4.icmp_ratelimit": "0",
+        "net.ipv4.icmp_ratemask": "0",
     },
     "bsd": {
         "net.ipv4.ip_default_ttl": "64",
@@ -60,6 +68,8 @@ OS_SYSCTLS: dict[str, dict[str, str]] = {
         "net.ipv4.tcp_ecn": "0",
         "net.ipv4.ip_no_pmtu_disc": "0",
         "net.ipv4.tcp_fin_timeout": "60",
+        "net.ipv4.icmp_ratelimit": "250",
+        "net.ipv4.icmp_ratemask": "6168",
     },
     "embedded": {
         "net.ipv4.ip_default_ttl": "255",
@@ -70,6 +80,8 @@ OS_SYSCTLS: dict[str, dict[str, str]] = {
         "net.ipv4.tcp_ecn": "0",
         "net.ipv4.ip_no_pmtu_disc": "1",
         "net.ipv4.tcp_fin_timeout": "15",
+        "net.ipv4.icmp_ratelimit": "0",
+        "net.ipv4.icmp_ratemask": "0",
     },
     "cisco": {
         "net.ipv4.ip_default_ttl": "255",
@@ -80,6 +92,8 @@ OS_SYSCTLS: dict[str, dict[str, str]] = {
         "net.ipv4.tcp_ecn": "0",
         "net.ipv4.ip_no_pmtu_disc": "1",
         "net.ipv4.tcp_fin_timeout": "15",
+        "net.ipv4.icmp_ratelimit": "0",
+        "net.ipv4.icmp_ratemask": "0",
     },
 }
 

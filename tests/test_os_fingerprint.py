@@ -164,6 +164,53 @@ def test_embedded_tcp_fin_timeout_is_15():
 def test_cisco_tcp_fin_timeout_is_15():
     assert get_os_sysctls("cisco")["net.ipv4.tcp_fin_timeout"] == "15"
 
+# ---------------------------------------------------------------------------
+# os_fingerprint module — icmp_ratelimit
+# ---------------------------------------------------------------------------
+
+def test_linux_icmp_ratelimit_is_1000():
+    assert get_os_sysctls("linux")["net.ipv4.icmp_ratelimit"] == "1000"
+
+
+def test_windows_icmp_ratelimit_is_0():
+    assert get_os_sysctls("windows")["net.ipv4.icmp_ratelimit"] == "0"
+
+
+def test_bsd_icmp_ratelimit_is_250():
+    assert get_os_sysctls("bsd")["net.ipv4.icmp_ratelimit"] == "250"
+
+
+def test_embedded_icmp_ratelimit_is_0():
+    assert get_os_sysctls("embedded")["net.ipv4.icmp_ratelimit"] == "0"
+
+
+def test_cisco_icmp_ratelimit_is_0():
+    assert get_os_sysctls("cisco")["net.ipv4.icmp_ratelimit"] == "0"
+
+
+# ---------------------------------------------------------------------------
+# os_fingerprint module — icmp_ratemask
+# ---------------------------------------------------------------------------
+
+def test_linux_icmp_ratemask_is_6168():
+    assert get_os_sysctls("linux")["net.ipv4.icmp_ratemask"] == "6168"
+
+
+def test_windows_icmp_ratemask_is_0():
+    assert get_os_sysctls("windows")["net.ipv4.icmp_ratemask"] == "0"
+
+
+def test_bsd_icmp_ratemask_is_6168():
+    assert get_os_sysctls("bsd")["net.ipv4.icmp_ratemask"] == "6168"
+
+
+def test_embedded_icmp_ratemask_is_0():
+    assert get_os_sysctls("embedded")["net.ipv4.icmp_ratemask"] == "0"
+
+
+def test_cisco_icmp_ratemask_is_0():
+    assert get_os_sysctls("cisco")["net.ipv4.icmp_ratemask"] == "0"
+
 
 # ---------------------------------------------------------------------------
 # os_fingerprint module — structural / completeness
