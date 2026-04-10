@@ -3,12 +3,18 @@ FROM ${BASE_IMAGE}
 
 USER root
 
-# Temporary fix: Conpot's default config binds Modbus to a non-privileged port (like 5020).
-# DECNET requires it to bind directly to 502 for the honeypot to work as expected.
-# We search the template directories and replace the port configuration.
-# This is a temporary fix pending an upstream PR from the Conpot maintainers.
+# Replace 5020 with 502 in all templates
 RUN find /opt /usr /etc /home -name "*.xml" -exec sed -i 's/<port>5020<\/port>/<port>502<\/port>/g' {} + 2>/dev/null || true
 RUN find /opt /usr /etc /home -name "*.xml" -exec sed -i 's/port="5020"/port="502"/g' {} + 2>/dev/null || true
 
-# Switching back to the internal user if standard in conpot (falling back to nobody/conpot as appropriate)
-# End of Dockerfile
+# Install libcap to allow binding to 502
+RUN (apt-get update && apt-get install -y --no-install-recommends libcap2-bin 2>/dev/null) || (apk add --no-cache libcap 2>/dev/null) || true
+
+# Apply setcap to python binaries
+RUN find /usr /opt -type f -name 'python*' -exec setcap 'cap_net_bind_service+eip' {} \; 2>/dev/null || true
+
+# Make sure all conpot-related directories are writable by everyone so 'nobody' can run it
+RUN chmod -R 777 /var/log/conpot /opt/conpot /home/conpot /usr/local/lib/python*/site-packages/conpot/tests/data /tmp 2>/dev/null || true
+
+# Run as nobody, which avoids the root-check failure and the missing 'conpot' user error
+USER nobody
