@@ -11,5 +11,4 @@ RUN find /opt /usr /etc /home -name "*.xml" -exec sed -i 's/<port>5020<\/port>/<
 RUN find /opt /usr /etc /home -name "*.xml" -exec sed -i 's/port="5020"/port="502"/g' {} + 2>/dev/null || true
 
 # Switching back to the internal user if standard in conpot (falling back to nobody/conpot as appropriate)
-# Conpot image usually runs as 'conpot' user
-USER conpot
+# End of Dockerfile
