@@ -13,8 +13,11 @@ RUN (apt-get update && apt-get install -y --no-install-recommends libcap2-bin 2>
 # Apply setcap to python binaries
 RUN find /usr /opt -type f -name 'python*' -exec setcap 'cap_net_bind_service+eip' {} \; 2>/dev/null || true
 
-# Make sure all conpot-related directories are writable by everyone so 'nobody' can run it
-RUN chmod -R 777 /var/log/conpot /opt/conpot /home/conpot /usr/local/lib/python*/site-packages/conpot/tests/data /tmp 2>/dev/null || true
+# Create the decnet user following repository conventions
+RUN (addgroup -S decnet && adduser -S decnet -G decnet 2>/dev/null) || useradd -r -s /bin/false decnet 2>/dev/null || true
 
-# Run as nobody, which avoids the root-check failure and the missing 'conpot' user error
-USER nobody
+# Make sure all conpot-related directories are owned by decnet so it can run it
+RUN chown -R decnet:decnet /var/log/conpot /opt/conpot /home/conpot /usr/local/lib/python*/site-packages/conpot/tests/data /tmp 2>/dev/null || true
+
+# Run as decnet user, avoiding the root-check failure and 777 hacks
+USER decnet
