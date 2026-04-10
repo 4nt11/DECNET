@@ -102,7 +102,7 @@ class MongoDBProtocol(asyncio.Protocol):
 async def main():
     _log("startup", msg=f"MongoDB server starting as {NODE_NAME}")
     loop = asyncio.get_running_loop()
-    server = await loop.create_server(MongoDBProtocol, "0.0.0.0", 27017)
+    server = await loop.create_server(MongoDBProtocol, "0.0.0.0", 27017)  # nosec B104
     async with server:
         await server.serve_forever()
 

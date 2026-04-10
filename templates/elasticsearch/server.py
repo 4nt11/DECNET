@@ -120,5 +120,5 @@ class ESHandler(BaseHTTPRequestHandler):
 
 if __name__ == "__main__":
     _log("startup", msg=f"Elasticsearch server starting as {NODE_NAME}")
-    server = HTTPServer(("0.0.0.0", 9200), ESHandler)
+    server = HTTPServer(("0.0.0.0", 9200), ESHandler)  # nosec B104
     server.serve_forever()

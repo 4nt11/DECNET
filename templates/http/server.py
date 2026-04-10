@@ -101,4 +101,4 @@ def catch_all(path):
 
 if __name__ == "__main__":
     _log("startup", msg=f"HTTP server starting as {NODE_NAME}")
-    app.run(host="0.0.0.0", port=80, debug=False)
+    app.run(host="0.0.0.0", port=80, debug=False)  # nosec B104

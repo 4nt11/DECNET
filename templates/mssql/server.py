@@ -124,7 +124,7 @@ class MSSQLProtocol(asyncio.Protocol):
 async def main():
     _log("startup", msg=f"MSSQL server starting as {NODE_NAME}")
     loop = asyncio.get_running_loop()
-    server = await loop.create_server(MSSQLProtocol, "0.0.0.0", 1433)
+    server = await loop.create_server(MSSQLProtocol, "0.0.0.0", 1433)  # nosec B104
     async with server:
         await server.serve_forever()
 

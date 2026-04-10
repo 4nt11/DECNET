@@ -125,4 +125,4 @@ def catch_all(path):
 
 if __name__ == "__main__":
     _log("startup", msg=f"Kubernetes API server starting as {NODE_NAME}")
-    app.run(host="0.0.0.0", port=6443, debug=False)
+    app.run(host="0.0.0.0", port=6443, debug=False)  # nosec B104

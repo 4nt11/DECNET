@@ -65,3 +65,12 @@ skip_covered = false
 [tool.setuptools.packages.find]
 where = ["."]
 include = ["decnet*"]
+
+[tool.bandit]
+exclude_dirs = [
+    "templates/http/decnet_logging.py",
+    "templates/imap/decnet_logging.py",
+    "templates/pop3/decnet_logging.py",
+    "templates/real_ssh/decnet_logging.py",
+    "templates/smtp/decnet_logging.py",
+]

@@ -98,7 +98,7 @@ class MySQLProtocol(asyncio.Protocol):
 async def main():
     _log("startup", msg=f"MySQL server starting as {NODE_NAME}")
     loop = asyncio.get_running_loop()
-    server = await loop.create_server(MySQLProtocol, "0.0.0.0", 3306)
+    server = await loop.create_server(MySQLProtocol, "0.0.0.0", 3306)  # nosec B104
     async with server:
         await server.serve_forever()
 

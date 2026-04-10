@@ -74,7 +74,7 @@ class IMAPProtocol(asyncio.Protocol):
 async def main():
     _log("startup", msg=f"IMAP server starting as {NODE_NAME}")
     loop = asyncio.get_running_loop()
-    server = await loop.create_server(IMAPProtocol, "0.0.0.0", 143)
+    server = await loop.create_server(IMAPProtocol, "0.0.0.0", 143)  # nosec B104
     async with server:
         await server.serve_forever()
 

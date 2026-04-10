@@ -122,9 +122,9 @@ async def main():
     _log("startup", msg=f"SIP server starting as {NODE_NAME}")
     loop = asyncio.get_running_loop()
     udp_transport, _ = await loop.create_datagram_endpoint(
-        SIPUDPProtocol, local_addr=("0.0.0.0", 5060)
+        SIPUDPProtocol, local_addr=("0.0.0.0", 5060)  # nosec B104
     )
-    tcp_server = await loop.create_server(SIPTCPProtocol, "0.0.0.0", 5060)
+    tcp_server = await loop.create_server(SIPTCPProtocol, "0.0.0.0", 5060)  # nosec B104
     async with tcp_server:
         await tcp_server.serve_forever()
     udp_transport.close()

@@ -87,7 +87,7 @@ class VNCProtocol(asyncio.Protocol):
 async def main():
     _log("startup", msg=f"VNC server starting as {NODE_NAME}")
     loop = asyncio.get_running_loop()
-    server = await loop.create_server(VNCProtocol, "0.0.0.0", 5900)
+    server = await loop.create_server(VNCProtocol, "0.0.0.0", 5900)  # nosec B104
     async with server:
         await server.serve_forever()
 

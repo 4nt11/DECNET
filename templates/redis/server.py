@@ -148,7 +148,7 @@ class RedisProtocol(asyncio.Protocol):
 async def main():
     _log("startup", msg=f"Redis server starting as {NODE_NAME}")
     loop = asyncio.get_running_loop()
-    server = await loop.create_server(RedisProtocol, "0.0.0.0", 6379)
+    server = await loop.create_server(RedisProtocol, "0.0.0.0", 6379)  # nosec B104
     async with server:
         await server.serve_forever()
 

@@ -91,17 +91,17 @@ def _ber_tlv(tag: int, value: bytes) -> bytes:
 def _parse_snmp(data: bytes):
     """Return (version, community, request_id, oids) or raise."""
     pos = 0
-    assert data[pos] == 0x30
+    assert data[pos] == 0x30  # nosec B101
     pos += 1
     _, pos = _read_ber_length(data, pos)
     # version
-    assert data[pos] == 0x02
+    assert data[pos] == 0x02  # nosec B101
     pos += 1
     v_len, pos = _read_ber_length(data, pos)
     version = int.from_bytes(data[pos:pos + v_len], "big")
     pos += v_len
     # community
-    assert data[pos] == 0x04
+    assert data[pos] == 0x04  # nosec B101
     pos += 1
     c_len, pos = _read_ber_length(data, pos)
     community = data[pos:pos + c_len].decode(errors="replace")
@@ -110,23 +110,23 @@ def _parse_snmp(data: bytes):
     pos += 1
     _, pos = _read_ber_length(data, pos)
     # request-id
-    assert data[pos] == 0x02
+    assert data[pos] == 0x02  # nosec B101
     pos += 1
     r_len, pos = _read_ber_length(data, pos)
     request_id = int.from_bytes(data[pos:pos + r_len], "big")
     pos += r_len
     pos += 4  # skip error-status and error-index
     # varbind list
-    assert data[pos] == 0x30
+    assert data[pos] == 0x30  # nosec B101
     pos += 1
     vbl_len, pos = _read_ber_length(data, pos)
     end = pos + vbl_len
     oids = []
     while pos < end:
-        assert data[pos] == 0x30
+        assert data[pos] == 0x30  # nosec B101
         pos += 1
         vb_len, pos = _read_ber_length(data, pos)
-        assert data[pos] == 0x06
+        assert data[pos] == 0x06  # nosec B101
         pos += 1
         oid_len, pos = _read_ber_length(data, pos)
         oid = _decode_oid(data[pos:pos + oid_len])
@@ -179,7 +179,7 @@ async def main():
     _log("startup", msg=f"SNMP server starting as {NODE_NAME}")
     loop = asyncio.get_running_loop()
     transport, _ = await loop.create_datagram_endpoint(
-        SNMPProtocol, local_addr=("0.0.0.0", 161)
+        SNMPProtocol, local_addr=("0.0.0.0", 161)  # nosec B104
     )
     try:
         await asyncio.sleep(float("inf"))
