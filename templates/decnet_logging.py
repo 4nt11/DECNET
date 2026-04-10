@@ -82,3 +82,8 @@ def syslog_line(
 def write_syslog_file(line: str) -> None:
     """Emit a syslog line to stdout for Docker log capture."""
     print(line, flush=True)
+
+
+def forward_syslog(line: str, log_target: str) -> None:
+    """No-op stub. TCP forwarding is now handled by rsyslog, not by service containers."""
+    pass
