@@ -133,10 +133,8 @@ def test_linux_ip_no_pmtu_disc_is_0():
     assert get_os_sysctls("linux")["net.ipv4.ip_no_pmtu_disc"] == "0"
 
 
-def test_windows_ip_no_pmtu_disc_is_1():
-    # Set to 1 (not 0) to avoid TI=Z IP ID signal: when ip_no_pmtu_disc=0 the
-    # kernel uses IP ID=0 for DF packets, which nmap classifies as Linux embedded.
-    assert get_os_sysctls("windows")["net.ipv4.ip_no_pmtu_disc"] == "1"
+def test_windows_ip_no_pmtu_disc_is_0():
+    assert get_os_sysctls("windows")["net.ipv4.ip_no_pmtu_disc"] == "0"
 
 
 def test_embedded_ip_no_pmtu_disc_is_1():

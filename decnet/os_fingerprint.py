@@ -48,7 +48,7 @@ OS_SYSCTLS: dict[str, dict[str, str]] = {
         "net.ipv4.tcp_window_scaling": "1",
         "net.ipv4.tcp_sack": "1",
         "net.ipv4.tcp_ecn": "0",
-        "net.ipv4.ip_no_pmtu_disc": "1",   # avoid TI=Z: forces non-zero IP IDs
+        "net.ipv4.ip_no_pmtu_disc": "0",
         "net.ipv4.tcp_fin_timeout": "30",
     },
     "bsd": {
