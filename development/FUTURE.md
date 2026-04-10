@@ -28,3 +28,15 @@ To prevent the topology from feeling artificial or obviously simulated:
 Deeply nested, air-gapped machines present a logging challenge: if `decky-50` has no route to the internet or the logging network, how can it forward telemetry stealthily? 
 
 **Solution**: DECNET completely bypasses the container networking stack by relying purely on Docker's native `stdout` and daemon-level logging drivers. Because the host daemon handles the extraction, the attacker can completely destroy the container's virtual interfaces or be 50 layers deep in an air-gap without ever noticing a magic route, and the telemetry will still perfectly reach the SIEM out-of-band.
+
+### Simulated Topographical Latency
+If an attacker proxies 5 subnets deep into what is supposed to be a secure, physically segmented enclave, and `ping` returns a flat `0.05ms` response time, they will instantly realize it's a local simulation on a single host.
+
+To maintain the illusion of depth, DECNET can utilize the **Linux Traffic Control (`tc`)** subsystem and its **Network Emulator (`netem`)** module on the virtual bridge interfaces (`veth` pairs). 
+
+By procedurally generating `tc` rules as the network scales, we can inject mathematical latency penalties per hop:
+```bash
+# Example: Add 45ms latency, +/- 10ms jitter on a normal curve, with 0.1% packet loss
+tc qdisc add dev eth1 root netem delay 45ms 10ms distribution normal loss 0.1%
+```
+As an attacker pivots deeper into the "Spider Network," this injected latency compounds automatically. A proxy chain going 4 levels deep would realistically suffer from 150ms+ of latency and erratic jitter, perfectly mimicking the experience of routing over slow, multi-site corporate VPNs.
