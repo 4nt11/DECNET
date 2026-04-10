@@ -372,3 +372,13 @@ Login incorrect   ← for all tried credentials
 - [`IMAP_BAIT.md`](IMAP_BAIT.md) — Auth + seeded mailboxes + POP3 parity
 - [`ICS_SCADA.md`](ICS_SCADA.md) — MQTT water plant, SNMP tuning, Conpot
 - [`BUG_FIXES.md`](BUG_FIXES.md) — HTTP header leak, FTP banner, MSSQL, MongoDB, Redis keys
+
+---
+
+## Progress Updates
+
+### [2026-04-10] ICS/SCADA & IMAP Bait Completion
+The following infrastructure gaps from the Bug Ledger have been successfully resolved:
+* **#7 (IMAP/POP3):** Both services now implement full protocol state machines (authentication, selection/transactions, fetching) and serve realistic hardcoded bait payloads (AWS keys, DB passwords).
+* **#10 (MQTT):** The service now issues successful `CONNACK` responses, presents interactive persona-driven topic trees, and logs attacker `PUBLISH` events.
+* **#11 (Conpot):** Wrapped in a custom build context that correctly binds Modbus to port `502` using a temporary template overwrite, resolving the missing Modbus response issue.
