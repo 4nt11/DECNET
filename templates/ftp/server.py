@@ -7,18 +7,18 @@ forwards events as JSON to LOG_TARGET if set.
 
 import os
 import sys
+from pathlib import Path
 
 from twisted.internet import defer, reactor
-from twisted.protocols.ftp import FTP, FTPFactory
+from twisted.protocols.ftp import FTP, FTPFactory, FTPAnonymousShell
+from twisted.python.filepath import FilePath
 from twisted.python import log as twisted_log
 from decnet_logging import syslog_line, write_syslog_file, forward_syslog
 
 NODE_NAME = os.environ.get("NODE_NAME", "ftpserver")
 SERVICE_NAME   = "ftp"
 LOG_TARGET = os.environ.get("LOG_TARGET", "")
-
-
-
+BANNER = os.environ.get("FTP_BANNER", "220 (vsFTPd 3.0.3)")
 
 def _log(event_type: str, severity: int = 6, **kwargs) -> None:
     line = syslog_line(SERVICE_NAME, NODE_NAME, event_type, severity, **kwargs)
@@ -26,6 +26,16 @@ def _log(event_type: str, severity: int = 6, **kwargs) -> None:
     write_syslog_file(line)
     forward_syslog(line, LOG_TARGET)
 
+def _setup_bait_fs() -> str:
+    bait_dir = Path("/tmp/ftp_bait")
+    bait_dir.mkdir(parents=True, exist_ok=True)
+    
+    (bait_dir / "backup.tar.gz").write_bytes(b"\x1f\x8b\x08\x00\x00\x00\x00\x00\x00\x03\x03\x00\x00\x00\x00\x00\x00\x00\x00\x00")
+    (bait_dir / "db_dump.sql").write_text("CREATE TABLE users (id INT, username VARCHAR(50), password VARCHAR(50));\nINSERT INTO users VALUES (1, 'admin', 'pbkdf2:sha256:5000$...');\n")
+    (bait_dir / "config.ini").write_text("[database]\nuser = dbadmin\npassword = db_super_admin_pass_!\nhost = localhost\n")
+    (bait_dir / "credentials.txt").write_text("admin:super_secret_admin_pw\nroot:toor\nalice:wonderland\n")
+    
+    return str(bait_dir)
 
 class ServerFTP(FTP):
     def connectionMade(self):
@@ -40,25 +50,24 @@ class ServerFTP(FTP):
 
     def ftp_PASS(self, password):
         _log("auth_attempt", username=getattr(self, "_server_user", "?"), password=password)
-        # Accept everything — we're a server
+        # Accept everything — we're a honeypot server
         self.state = self.AUTHED
         self._user = getattr(self, "_server_user", "anonymous")
+        self.shell = FTPAnonymousShell(FilePath(_setup_bait_fs()))
         return defer.succeed((230, "Login successful."))
 
     def ftp_RETR(self, path):
         _log("download_attempt", path=path)
-        self.sendLine(b"550 File unavailable.")
-        return defer.succeed(None)
+        return super().ftp_RETR(path)
 
     def connectionLost(self, reason):
         peer = self.transport.getPeer()
         _log("disconnect", src_ip=peer.host, src_port=peer.port)
         super().connectionLost(reason)
 
-
 class ServerFTPFactory(FTPFactory):
     protocol = ServerFTP
-
+    welcomeMessage = BANNER
 
 if __name__ == "__main__":
     twisted_log.startLogging(sys.stdout)

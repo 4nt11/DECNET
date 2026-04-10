@@ -21,7 +21,7 @@ _401 = (
     "To: {to}\r\n"
     "Call-ID: {call_id}\r\n"
     "CSeq: {cseq}\r\n"
-    'WWW-Authenticate: Digest realm="{host}", nonce="decnet0000", algorithm=MD5\r\n'
+    'WWW-Authenticate: Digest realm="{host}", nonce="{nonce}", algorithm=MD5\r\n'
     "Content-Length: 0\r\n\r\n"
 )
 
@@ -71,6 +71,7 @@ def _handle_message(data: bytes, src_addr) -> bytes | None:
     )
 
     if method in ("REGISTER", "INVITE", "OPTIONS"):
+        nonce = os.urandom(8).hex()
         response = _401.format(
             via=headers.get("via", ""),
             from_=headers.get("from", ""),
@@ -78,6 +79,7 @@ def _handle_message(data: bytes, src_addr) -> bytes | None:
             call_id=headers.get("call-id", ""),
             cseq=headers.get("cseq", ""),
             host=NODE_NAME,
+            nonce=nonce,
         )
         return response.encode()
     return None

@@ -14,8 +14,6 @@ NODE_NAME = os.environ.get("NODE_NAME", "desktop")
 SERVICE_NAME   = "vnc"
 LOG_TARGET = os.environ.get("LOG_TARGET", "")
 
-# RFB challenge — fixed so captured responses are reproducible
-_CHALLENGE = bytes(range(16)) * 1 + b"\x10\x11\x12\x13\x14\x15\x16\x17"  # 24 bytes
 
 
 
@@ -63,7 +61,7 @@ class VNCProtocol(asyncio.Protocol):
             self._buf = self._buf[1:]
             _log("security_choice", src=self._peer[0], type=chosen)
             # Send 16-byte challenge
-            self._transport.write(_CHALLENGE[:16])
+            self._transport.write(os.urandom(16))
             self._state = "auth_response"
 
         elif self._state == "auth_response":

@@ -47,8 +47,17 @@ def _op_reply(request_id: int, doc: bytes) -> bytes:
     )
     return header + doc
 
-
-
+def _op_msg(request_id: int, doc: bytes) -> bytes:
+    payload = b"\x00" + doc
+    flag_bits = struct.pack("<I", 0)
+    msg_body = flag_bits + payload
+    header = struct.pack("<iiii",
+        16 + len(msg_body),
+        1,
+        request_id,
+        2013,
+    )
+    return header + msg_body
 
 def _log(event_type: str, severity: int = 6, **kwargs) -> None:
     line = syslog_line(SERVICE_NAME, NODE_NAME, event_type, severity, **kwargs)
@@ -93,7 +102,10 @@ class MongoDBProtocol(asyncio.Protocol):
             _bson_str("version", "6.0.5"),
             _bson_int32("ok", 1),
         )
-        self._transport.write(_op_reply(request_id, reply_doc))
+        if opcode == 2013:  # OP_MSG
+            self._transport.write(_op_msg(request_id, reply_doc))
+        else:
+            self._transport.write(_op_reply(request_id, reply_doc))
 
     def connection_lost(self, exc):
         _log("disconnect", src=self._peer[0] if self._peer else "?")

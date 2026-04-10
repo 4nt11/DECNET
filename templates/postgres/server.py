@@ -14,11 +14,6 @@ from decnet_logging import syslog_line, write_syslog_file, forward_syslog
 NODE_NAME = os.environ.get("NODE_NAME", "pgserver")
 SERVICE_NAME   = "postgres"
 LOG_TARGET = os.environ.get("LOG_TARGET", "")
-SALT = b"\xde\xad\xbe\xef"
-
-# AuthenticationMD5Password: 'R' + length(12) + auth_type(5) + salt(4)
-_AUTH_MD5 = b"R" + struct.pack(">I", 12) + struct.pack(">I", 5) + SALT
-
 def _error_response(message: str) -> bytes:
     body = b"S" + b"FATAL\x00" + b"M" + message.encode() + b"\x00\x00"
     return b"E" + struct.pack(">I", len(body) + 4) + body
@@ -90,7 +85,9 @@ class PostgresProtocol(asyncio.Protocol):
         database = params.get("database", "")
         _log("startup", src=self._peer[0], username=username, database=database)
         self._state = "auth"
-        self._transport.write(_AUTH_MD5)
+        salt = os.urandom(4)
+        auth_md5 = b"R" + struct.pack(">I", 12) + struct.pack(">I", 5) + salt
+        self._transport.write(auth_md5)
 
     def _handle_password(self, payload: bytes):
         pw_hash = payload.rstrip(b"\x00").decode(errors="replace")

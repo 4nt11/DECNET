@@ -56,8 +56,10 @@ _FAKE_APP_BODIES: dict[str, str] = {
 
 app = Flask(__name__)
 
-
-
+@app.after_request
+def _fix_server_header(response):
+    response.headers["Server"] = SERVER_HEADER
+    return response
 
 def _log(event_type: str, severity: int = 6, **kwargs) -> None:
     line = syslog_line(SERVICE_NAME, NODE_NAME, event_type, severity, **kwargs)
@@ -93,9 +95,19 @@ def catch_all(path):
     elif FAKE_APP and FAKE_APP in _FAKE_APP_BODIES:
         body = _FAKE_APP_BODIES[FAKE_APP]
     else:
-        body = "<html><body><h1>403 Forbidden</h1></body></html>"
+        body = (
+            "<!DOCTYPE HTML PUBLIC \"-//IETF//DTD HTML 2.0//EN\">\n"
+            "<html><head>\n"
+            "<title>403 Forbidden</title>\n"
+            "</head><body>\n"
+            "<h1>Forbidden</h1>\n"
+            "<p>You don't have permission to access this resource.</p>\n"
+            "<hr>\n"
+            f"<address>{SERVER_HEADER} Server at {NODE_NAME} Port 80</address>\n"
+            "</body></html>\n"
+        )
 
-    headers = {"Server": SERVER_HEADER, "Content-Type": "text/html", **EXTRA_HEADERS}
+    headers = {"Content-Type": "text/html", **EXTRA_HEADERS}
     return body, RESPONSE_CODE, headers
 
 

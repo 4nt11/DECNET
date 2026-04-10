@@ -108,6 +108,13 @@ Bait emails are hardcoded strings. A modular framework to dynamically inject per
 
 ---
 
+### DEBT-027 — Dynamic Bait Store
+**Files:** `templates/redis/server.py`, `templates/ftp/server.py`
+The bait store and honeypot files are hardcoded. A dynamic injection framework should be created to populate this payload across different honeypots.
+**Status:** Deferred — out of current scope.
+
+---
+
 ## 🟢 Low
 
 ### ~~DEBT-022 — Debug `print()` in correlation engine~~ ✅ CLOSED (false positive)
@@ -158,6 +165,7 @@ Bait emails are hardcoded strings. A modular framework to dynamically inject per
 | ~~DEBT-024~~ | ✅ | Infra | resolved |
 | ~~DEBT-025~~ | ✅ | Build | resolved |
 | DEBT-026 | 🟡 Medium | Features | deferred (out of scope) |
+| DEBT-027 | 🟡 Medium | Features | deferred (out of scope) |
 
-**Remaining open:** DEBT-011 (Alembic migrations), DEBT-023 (image digest pinning), DEBT-026 (modular mailboxes)  
+**Remaining open:** DEBT-011 (Alembic), DEBT-023 (image pinning), DEBT-026 (modular mailboxes), DEBT-027 (Dynamic bait store)
 **Estimated remaining effort:** ~10 hours

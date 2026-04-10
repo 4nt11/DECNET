@@ -27,6 +27,19 @@ _INFO = (
     f"# Keyspace\n"
 ).encode()
 
+_FAKE_STORE = {
+    b"sessions:user:1234":     b'{"id":1234,"user":"admin","token":"eyJhbGciOiJIUzI1NiJ9..."}',
+    b"sessions:user:5678":     b'{"id":5678,"user":"alice","token":"eyJhbGciOiJIUzI1NiJ9..."}',
+    b"cache:api_key":          b"sk_live_9mK3xF2aP7qR1bN8cT4dW6vE0yU5hJ",
+    b"jwt:secret":             b"super_secret_jwt_signing_key_do_not_share_2024",
+    b"user:admin":             b'{"username":"admin","password":"$2b$12$LQv3c1yqBWVHxkd0LHAkC.","role":"superadmin"}',
+    b"user:alice":             b'{"username":"alice","password":"$2b$12$XKLDm3vT8nPqR4sY2hE6fO","role":"user"}',
+    b"config:db_password":     b"Pr0dDB!2024#Secure",
+    b"config:aws_access_key":  b"AKIAIOSFODNN7EXAMPLE",
+    b"config:aws_secret_key":  b"wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY",
+    b"rate_limit:192.168.1.1": b"42",
+}
+
 
 
 
@@ -134,7 +147,31 @@ class RedisProtocol(asyncio.Protocol):
         elif verb == "CONFIG":
             self._transport.write(b"*0\r\n")
         elif verb == "KEYS":
-            self._transport.write(b"*0\r\n")
+            pattern = args[0] if args else "*"
+            keys = list(_FAKE_STORE.keys())
+            if pattern.endswith('*') and pattern != '*':
+                prefix = pattern[:-1].encode()
+                keys = [k for k in keys if k.startswith(prefix)]
+            elif pattern != '*':
+                pat = pattern.encode()
+                keys = [k for k in keys if k == pat]
+            
+            resp = f"*{len(keys)}\r\n".encode() + b"".join(_bulk(k.decode()) for k in keys)
+            self._transport.write(resp)
+        elif verb == "GET":
+            key = args[0].encode() if args else b""
+            if key in _FAKE_STORE:
+                self._transport.write(_bulk(_FAKE_STORE[key].decode()))
+            else:
+                self._transport.write(b"$-1\r\n")
+        elif verb == "SCAN":
+            keys = list(_FAKE_STORE.keys())
+            resp = b"*2\r\n$1\r\n0\r\n" + f"*{len(keys)}\r\n".encode() + b"".join(_bulk(k.decode()) for k in keys)
+            self._transport.write(resp)
+        elif verb == "TYPE":
+            self._transport.write(b"+string\r\n")
+        elif verb == "TTL":
+            self._transport.write(b":-1\r\n")
         elif verb == "QUIT":
             self._transport.write(b"+OK\r\n")
             self._transport.close()
