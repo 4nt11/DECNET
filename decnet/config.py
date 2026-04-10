@@ -7,7 +7,7 @@ import json
 from pathlib import Path
 from typing import Literal
 
-from pydantic import BaseModel, field_validator
+from pydantic import BaseModel, field_validator  # field_validator used by DeckyConfig
 
 from decnet.distros import random_hostname as _random_hostname
 
@@ -49,20 +49,9 @@ class DecnetConfig(BaseModel):
     subnet: str
     gateway: str
     deckies: list[DeckyConfig]
-    log_target: str | None = None  # "ip:port" or None
-    log_file: str | None = None    # path for RFC 5424 syslog file output
+    log_file: str | None = None    # host path where the collector writes the log file
     ipvlan: bool = False           # use IPvlan L2 instead of MACVLAN (WiFi-friendly)
     mutate_interval: int | None = DEFAULT_MUTATE_INTERVAL # global automatic rotation interval in minutes
-
-    @field_validator("log_target")
-    @classmethod
-    def validate_log_target(cls, v: str | None) -> str | None:
-        if v is None:
-            return v
-        parts = v.rsplit(":", 1)
-        if len(parts) != 2 or not parts[1].isdigit():
-            raise ValueError("log_target must be in ip:port format, e.g. 192.168.1.5:5140")
-        return v
 
 
 def save_state(config: DecnetConfig, compose_path: Path) -> None:

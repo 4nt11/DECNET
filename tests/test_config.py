@@ -62,41 +62,22 @@ class TestDecnetConfig:
         )
         assert cfg.mode == "unihost"
 
-    def test_valid_log_target(self):
+    def test_log_file_field(self):
         cfg = DecnetConfig(
             mode="unihost", interface="eth0",
             subnet="10.0.0.0/24", gateway="10.0.0.1",
             deckies=[self._base_decky()],
-            log_target="192.168.1.5:5140",
+            log_file="/var/log/decnet/decnet.log",
         )
-        assert cfg.log_target == "192.168.1.5:5140"
+        assert cfg.log_file == "/var/log/decnet/decnet.log"
 
-    def test_none_log_target_ok(self):
+    def test_log_file_defaults_to_none(self):
         cfg = DecnetConfig(
             mode="unihost", interface="eth0",
             subnet="10.0.0.0/24", gateway="10.0.0.1",
             deckies=[self._base_decky()],
-            log_target=None,
         )
-        assert cfg.log_target is None
-
-    def test_invalid_log_target_no_port(self):
-        with pytest.raises(Exception):
-            DecnetConfig(
-                mode="unihost", interface="eth0",
-                subnet="10.0.0.0/24", gateway="10.0.0.1",
-                deckies=[self._base_decky()],
-                log_target="192.168.1.5",
-            )
-
-    def test_invalid_log_target_non_digit_port(self):
-        with pytest.raises(Exception):
-            DecnetConfig(
-                mode="unihost", interface="eth0",
-                subnet="10.0.0.0/24", gateway="10.0.0.1",
-                deckies=[self._base_decky()],
-                log_target="192.168.1.5:abc",
-            )
+        assert cfg.log_file is None
 
 
 # ---------------------------------------------------------------------------
@@ -118,7 +99,6 @@ def _sample_config():
                 distro="debian", base_image="debian", hostname="host-01",
             )
         ],
-        log_target="10.0.0.1:5140",
     )
 
 
@@ -132,7 +112,6 @@ def test_save_and_load_state(tmp_path):
     loaded_cfg, loaded_compose = result
     assert loaded_cfg.mode == "unihost"
     assert loaded_cfg.deckies[0].name == "decky-01"
-    assert loaded_cfg.log_target == "10.0.0.1:5140"
     assert loaded_compose == compose
 
 

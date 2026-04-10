@@ -50,7 +50,6 @@ async def api_deploy_deckies(req: DeployIniRequest, current_user: str = Depends(
             subnet=subnet_cidr,
             gateway=gateway,
             deckies=[],
-            log_target=ini.log_target,
             log_file=ingest_log_file,
             ipvlan=False,
             mutate_interval=ini.mutate_interval or DEFAULT_MUTATE_INTERVAL

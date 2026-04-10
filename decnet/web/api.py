@@ -1,23 +1,26 @@
 import asyncio
 import logging
+import os
 from contextlib import asynccontextmanager
 from typing import Any, AsyncGenerator, Optional
 
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
-from decnet.env import DECNET_CORS_ORIGINS, DECNET_DEVELOPER
+from decnet.env import DECNET_CORS_ORIGINS, DECNET_DEVELOPER, DECNET_INGEST_LOG_FILE
 from decnet.web.dependencies import repo
+from decnet.web.collector import log_collector_worker
 from decnet.web.ingester import log_ingestion_worker
 from decnet.web.router import api_router
 
 log = logging.getLogger(__name__)
 ingestion_task: Optional[asyncio.Task[Any]] = None
+collector_task: Optional[asyncio.Task[Any]] = None
 
 
 @asynccontextmanager
 async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
-    global ingestion_task
+    global ingestion_task, collector_task
 
     for attempt in range(1, 6):
         try:
@@ -28,16 +31,24 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
             if attempt == 5:
                 log.error("DB failed to initialize after 5 attempts — startup may be degraded")
             await asyncio.sleep(0.5)
-    
+
     # Start background ingestion task
     if ingestion_task is None or ingestion_task.done():
         ingestion_task = asyncio.create_task(log_ingestion_worker(repo))
-    
+
+    # Start Docker log collector (writes to log file; ingester reads from it)
+    _log_file = os.environ.get("DECNET_INGEST_LOG_FILE", DECNET_INGEST_LOG_FILE)
+    if _log_file and (collector_task is None or collector_task.done()):
+        collector_task = asyncio.create_task(log_collector_worker(_log_file))
+    else:
+        log.warning("DECNET_INGEST_LOG_FILE not set — Docker log collection disabled.")
+
     yield
-    
-    # Shutdown ingestion task
-    if ingestion_task:
-        ingestion_task.cancel()
+
+    # Shutdown background tasks
+    for task in (ingestion_task, collector_task):
+        if task:
+            task.cancel()
 
 
 app: FastAPI = FastAPI(

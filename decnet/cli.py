@@ -243,8 +243,7 @@ def deploy(
     randomize_services: bool = typer.Option(False, "--randomize-services", help="Assign random services to each decky"),
     distro: Optional[str] = typer.Option(None, "--distro", help="Comma-separated distro slugs, e.g. debian,ubuntu22,rocky9"),
     randomize_distros: bool = typer.Option(False, "--randomize-distros", help="Assign a random distro to each decky"),
-    log_target: Optional[str] = typer.Option(None, "--log-target", help="Forward logs to ip:port (e.g. 192.168.1.5:5140)"),
-    log_file: Optional[str] = typer.Option(DECNET_INGEST_LOG_FILE, "--log-file", help="Write RFC 5424 syslog to this path inside containers (e.g. /var/log/decnet/decnet.log)"),
+    log_file: Optional[str] = typer.Option(DECNET_INGEST_LOG_FILE, "--log-file", help="Host path for the collector to write RFC 5424 logs (e.g. /var/log/decnet/decnet.log)"),
     archetype_name: Optional[str] = typer.Option(None, "--archetype", "-a", help="Machine archetype slug (e.g. linux-server, windows-workstation)"),
     mutate_interval: Optional[int] = typer.Option(30, "--mutate-interval", help="Automatically rotate services every N minutes"),
     dry_run: bool = typer.Option(False, "--dry-run", help="Generate compose file without starting containers"),
@@ -298,7 +297,6 @@ def deploy(
                     )
                 )
 
-        effective_log_target = log_target or ini.log_target
         effective_log_file = log_file
         try:
             decky_configs = _build_deckies_from_ini(
@@ -362,7 +360,6 @@ def deploy(
             distros_explicit=distros_list, randomize_distros=randomize_distros,
             archetype=arch, mutate_interval=mutate_interval,
         )
-        effective_log_target = log_target
         effective_log_file = log_file
 
     # Handle automatic log file for API
@@ -376,17 +373,10 @@ def deploy(
         subnet=subnet_cidr,
         gateway=effective_gateway,
         deckies=decky_configs,
-        log_target=effective_log_target,
         log_file=effective_log_file,
         ipvlan=ipvlan,
         mutate_interval=mutate_interval,
     )
-
-    if effective_log_target and not dry_run:
-        from decnet.logging.forwarder import probe_log_target
-        if not probe_log_target(effective_log_target):
-            console.print(f"[yellow]Warning: log target {effective_log_target} is unreachable. "
-                          "Logs will be lost if it stays down.[/]")
 
     from decnet.deployer import deploy as _deploy
     _deploy(config, dry_run=dry_run, no_cache=no_cache)

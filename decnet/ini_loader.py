@@ -6,7 +6,6 @@ Format:
     net=192.168.1.0/24
     gw=192.168.1.1
     interface=wlp6s0
-    log_target=192.168.1.5:5140   # optional
 
     [hostname-1]
     ip=192.168.1.82               # optional
@@ -71,7 +70,6 @@ class IniConfig:
     subnet: str | None = None
     gateway: str | None = None
     interface: str | None = None
-    log_target: str | None = None
     mutate_interval: int | None = None
     deckies: list[DeckySpec] = field(default_factory=list)
     custom_services: list[CustomServiceSpec] = field(default_factory=list)
@@ -117,7 +115,6 @@ def _parse_configparser(cp: configparser.ConfigParser) -> IniConfig:
         cfg.subnet = g.get("net")
         cfg.gateway = g.get("gw")
         cfg.interface = g.get("interface")
-        cfg.log_target = g.get("log_target") or g.get("log-target")
 
     from decnet.services.registry import all_services
     known_services = set(all_services().keys())
