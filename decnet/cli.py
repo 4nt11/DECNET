@@ -401,10 +401,12 @@ def deploy(
     if effective_log_file and not dry_run and not api:
         import subprocess  # noqa: F811  # nosec B404
         import sys
+        _collector_err = Path(effective_log_file).with_suffix(".collector.log")
         console.print(f"[bold cyan]Starting log collector[/] → {effective_log_file}")
         subprocess.Popen(  # nosec B603
             [sys.executable, "-m", "decnet.cli", "collect", "--log-file", str(effective_log_file)],
-            stdout=subprocess.DEVNULL,
+            stdin=subprocess.DEVNULL,
+            stdout=open(_collector_err, "a"),  # nosec B603
             stderr=subprocess.STDOUT,
             start_new_session=True,
         )
@@ -613,3 +615,6 @@ def serve_web(
             httpd.serve_forever()
         except KeyboardInterrupt:
             console.print("\n[dim]Shutting down dashboard server.[/]")
+
+if __name__ == '__main__':  # pragma: no cover
+    app()
