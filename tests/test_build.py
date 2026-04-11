@@ -51,7 +51,6 @@ MODULES = [
     "decnet.services.imap",
     "decnet.services.pop3",
     "decnet.services.conpot",
-    "decnet.services.real_ssh",
     "decnet.services.registry",
 ]
 

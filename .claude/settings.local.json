@@ -17,7 +17,11 @@
       "Bash(xxd)",
       "Bash(curl -s http://192.168.1.200:2375/version)",
       "Bash(python3 -m json.tool)",
-      "Bash(curl -s http://192.168.1.200:9200/)"
+      "Bash(curl -s http://192.168.1.200:9200/)",
+      "Bash(docker image:*)",
+      "Read(//home/anti/Tools/cowrie/src/cowrie/data/txtcmds/**)",
+      "Read(//home/anti/Tools/cowrie/src/cowrie/data/txtcmds/bin/**)",
+      "mcp__plugin_context-mode_context-mode__ctx_index"
     ]
   }
 }

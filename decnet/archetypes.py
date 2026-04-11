@@ -148,7 +148,7 @@ ARCHETYPES: dict[str, Archetype] = {
         slug="deaddeck",
         display_name="Deaddeck (Entry Point)",
         description="Internet-facing entry point with real interactive SSH — no honeypot emulation",
-        services=["real_ssh"],
+        services=["ssh"],
         preferred_distros=["debian", "ubuntu22"],
         nmap_os="linux",
     ),

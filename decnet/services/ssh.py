@@ -2,7 +2,7 @@ from pathlib import Path
 
 from decnet.services.base import BaseService
 
-TEMPLATES_DIR = Path(__file__).parent.parent.parent / "templates" / "real_ssh"
+TEMPLATES_DIR = Path(__file__).parent.parent.parent / "templates" / "ssh"
 
 
 class SSHService(BaseService):

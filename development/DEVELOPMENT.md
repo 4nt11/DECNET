@@ -4,7 +4,7 @@
 *Goal: Ensure every service is interactive enough to feel real during manual exploration.*
 
 ### Remote Access & Shells
-- [x] **SSH (Cowrie)** — Custom filesystem, realistic user database, and command execution.
+- [ ] **SSH (Cowrie)** — Custom filesystem, realistic user database, and command execution.
 - [ ] **Telnet (Cowrie)** — Realistic banner and command emulation.
 - [ ] **RDP** — Realistic NLA authentication and screen capture (where possible).
 - [ ] **VNC** — Realistic RFB protocol handshake and authentication.

@@ -3,6 +3,7 @@ Tests for the SSHService plugin (real OpenSSH, Cowrie removed).
 """
 
 from decnet.services.registry import all_services, get_service
+from decnet.archetypes import get_archetype
 
 
 # ---------------------------------------------------------------------------
@@ -15,12 +16,24 @@ def _fragment(service_cfg: dict | None = None, log_target: str | None = None) ->
     )
 
 
+def _dockerfile_text() -> str:
+    return (get_service("ssh").dockerfile_context() / "Dockerfile").read_text()
+
+
+def _entrypoint_text() -> str:
+    return (get_service("ssh").dockerfile_context() / "entrypoint.sh").read_text()
+
+
 # ---------------------------------------------------------------------------
 # Registration
 # ---------------------------------------------------------------------------
 
 def test_ssh_registered():
     assert "ssh" in all_services()
+
+
+def test_real_ssh_not_registered():
+    assert "real_ssh" not in all_services()
 
 
 def test_ssh_ports():
@@ -88,3 +101,68 @@ def test_no_hostname_by_default():
 
 def test_no_log_target_in_env():
     assert "LOG_TARGET" not in _fragment(log_target="10.0.0.1:5140").get("environment", {})
+
+
+# ---------------------------------------------------------------------------
+# Logging pipeline wiring (Dockerfile + entrypoint)
+# ---------------------------------------------------------------------------
+
+def test_dockerfile_has_rsyslog():
+    assert "rsyslog" in _dockerfile_text()
+
+
+def test_dockerfile_runs_as_root():
+    lines = [l.strip() for l in _dockerfile_text().splitlines()]
+    user_lines = [l for l in lines if l.startswith("USER ")]
+    assert user_lines == [], f"Unexpected USER directive(s): {user_lines}"
+
+
+def test_dockerfile_rsyslog_conf_created():
+    df = _dockerfile_text()
+    assert "99-decnet.conf" in df
+    assert "RFC5424fmt" in df
+
+
+def test_dockerfile_sudoers_syslog():
+    df = _dockerfile_text()
+    assert "syslog=auth" in df
+    assert "log_input" in df
+    assert "log_output" in df
+
+
+def test_dockerfile_prompt_command_logger():
+    df = _dockerfile_text()
+    assert "PROMPT_COMMAND" in df
+    assert "logger" in df
+
+
+def test_entrypoint_creates_named_pipe():
+    assert "mkfifo" in _entrypoint_text()
+
+
+def test_entrypoint_starts_rsyslogd():
+    assert "rsyslogd" in _entrypoint_text()
+
+
+def test_entrypoint_sshd_no_dash_e():
+    ep = _entrypoint_text()
+    assert "sshd -D" in ep
+    assert "sshd -D -e" not in ep
+
+
+# ---------------------------------------------------------------------------
+# Deaddeck archetype
+# ---------------------------------------------------------------------------
+
+def test_deaddeck_uses_ssh():
+    arch = get_archetype("deaddeck")
+    assert "ssh" in arch.services
+    assert "real_ssh" not in arch.services
+
+
+def test_deaddeck_nmap_os():
+    assert get_archetype("deaddeck").nmap_os == "linux"
+
+
+def test_deaddeck_preferred_distros_not_empty():
+    assert len(get_archetype("deaddeck").preferred_distros) >= 1

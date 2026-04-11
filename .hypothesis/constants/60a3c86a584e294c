@@ -1,0 +1,4 @@
+# file: /home/anti/Tools/DECNET/decnet/archetypes.py
+# hypothesis_version: 6.151.11
+
+[', ', 'Database Server', 'DevOps Host', 'Domain Controller', 'File Server', 'IoT Device', 'Linux Server', 'Mail Server', 'Monitoring Node', 'Network Printer', 'VoIP Server', 'Web Server', 'Windows Server', 'Windows Workstation', 'alpine', 'conpot', 'database-server', 'deaddeck', 'debian', 'devops-host', 'docker_api', 'domain-controller', 'embedded', 'fedora', 'file-server', 'ftp', 'http', 'imap', 'industrial-control', 'iot-device', 'k8s', 'ldap', 'linux', 'linux-server', 'llmnr', 'mail-server', 'monitoring-node', 'mqtt', 'mysql', 'pop3', 'postgres', 'printer', 'rdp', 'redis', 'rocky9', 'sip', 'smb', 'smtp', 'snmp', 'ssh', 'telnet', 'ubuntu20', 'ubuntu22', 'voip-server', 'web-server', 'windows', 'windows-server', 'windows-workstation']
