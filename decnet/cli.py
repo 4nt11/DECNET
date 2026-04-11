@@ -395,6 +395,18 @@ def deploy(
         except (FileNotFoundError, subprocess.SubprocessError):
             console.print("[red]Failed to start mutator watcher.[/]")
 
+    # Start the log collector as a background process unless --api is handling it.
+    # The collector streams Docker logs → log_file (RFC 5424) + log_file.json.
+    if effective_log_file and not dry_run and not api:
+        import subprocess  # noqa: F811  # nosec B404
+        import sys
+        console.print(f"[bold cyan]Starting log collector[/] → {effective_log_file}")
+        subprocess.Popen(  # nosec B603
+            [sys.executable, "-m", "decnet.cli", "collect", "--log-file", str(effective_log_file)],
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.STDOUT,
+        )
+
     if api and not dry_run:
         import subprocess  # nosec B404
         import sys
@@ -411,6 +423,17 @@ def deploy(
             console.print(f"[dim]API running at http://{DECNET_API_HOST}:{api_port}[/]")
         except (FileNotFoundError, subprocess.SubprocessError):
             console.print("[red]Failed to start API. Ensure 'uvicorn' is installed in the current environment.[/]")
+
+
+@app.command()
+def collect(
+    log_file: str = typer.Option(DECNET_INGEST_LOG_FILE, "--log-file", "-f", help="Path to write RFC 5424 syslog lines and .json records"),
+) -> None:
+    """Stream Docker logs from all running decky service containers to a log file."""
+    import asyncio
+    from decnet.web.collector import log_collector_worker
+    console.print(f"[bold cyan]Collector starting[/] → {log_file}")
+    asyncio.run(log_collector_worker(log_file))
 
 
 @app.command()

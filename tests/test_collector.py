@@ -1,7 +1,30 @@
 """Tests for the host-side Docker log collector."""
 
 import json
-from decnet.web.collector import parse_rfc5424, is_service_container
+from types import SimpleNamespace
+from decnet.web.collector import parse_rfc5424, is_service_container, is_service_event
+
+
+def _make_container(project="decnet", depends_on="omega-decky:service_started:false"):
+    """Return a mock container object with Compose labels."""
+    return SimpleNamespace(
+        name="omega-decky-http",
+        labels={
+            "com.docker.compose.project": project,
+            "com.docker.compose.depends_on": depends_on,
+        },
+    )
+
+
+def _make_base_container():
+    """Return a mock base container (no depends_on)."""
+    return SimpleNamespace(
+        name="omega-decky",
+        labels={
+            "com.docker.compose.project": "decnet",
+            "com.docker.compose.depends_on": "",
+        },
+    )
 
 
 class TestParseRfc5424:
@@ -83,19 +106,41 @@ class TestParseRfc5424:
 
 class TestIsServiceContainer:
     def test_service_container_returns_true(self):
-        assert is_service_container("decky-01-http") is True
-        assert is_service_container("decky-02-mysql") is True
-        assert is_service_container("decky-99-ssh") is True
+        assert is_service_container(_make_container()) is True
 
     def test_base_container_returns_false(self):
-        assert is_service_container("decky-01") is False
-        assert is_service_container("decky-02") is False
+        assert is_service_container(_make_base_container()) is False
 
-    def test_unrelated_container_returns_false(self):
-        assert is_service_container("nginx") is False
-        assert is_service_container("postgres") is False
-        assert is_service_container("") is False
+    def test_different_decky_name_styles(self):
+        # omega-decky style (ini section name)
+        assert is_service_container(_make_container(depends_on="omega-decky:service_started:false")) is True
+        # relay-decky style
+        assert is_service_container(_make_container(depends_on="relay-decky:service_started:false")) is True
 
-    def test_strips_leading_slash(self):
-        assert is_service_container("/decky-01-http") is True
-        assert is_service_container("/decky-01") is False
+    def test_wrong_project_returns_false(self):
+        assert is_service_container(_make_container(project="someother")) is False
+
+    def test_no_labels_returns_false(self):
+        c = SimpleNamespace(name="nginx", labels={})
+        assert is_service_container(c) is False
+
+
+class TestIsServiceEvent:
+    def _make_attrs(self, project="decnet", depends_on="omega-decky:service_started:false"):
+        return {
+            "com.docker.compose.project": project,
+            "com.docker.compose.depends_on": depends_on,
+            "name": "omega-decky-smtp",
+        }
+
+    def test_service_event_returns_true(self):
+        assert is_service_event(self._make_attrs()) is True
+
+    def test_base_event_returns_false(self):
+        assert is_service_event(self._make_attrs(depends_on="")) is False
+
+    def test_wrong_project_returns_false(self):
+        assert is_service_event(self._make_attrs(project="other")) is False
+
+    def test_unrelated_event_returns_false(self):
+        assert is_service_event({"name": "nginx"}) is False

@@ -83,12 +83,43 @@ def parse_rfc5424(line: str) -> Optional[dict[str, Any]]:
 
 # ─── Container helpers ────────────────────────────────────────────────────────
 
-def is_service_container(name: str) -> bool:
+def _is_decnet_service_labels(labels: dict) -> bool:
     """
-    Return True for decky service containers (decky-NN-service).
-    Base containers (decky-NN, which run sleep infinity) return False.
+    Return True if the Compose labels indicate a DECNET service container.
+
+    Discriminator: base containers have no depends_on (they own the IP);
+    service containers all declare depends_on pointing at their base.
+    Both sets carry com.docker.compose.project=decnet.
     """
-    return bool(re.match(r'^decky-\d+-\w', name.lstrip("/")))
+    if labels.get("com.docker.compose.project") != "decnet":
+        return False
+    return bool(labels.get("com.docker.compose.depends_on", "").strip())
+
+
+def is_service_container(container) -> bool:
+    """
+    Return True for DECNET service containers.
+
+    Accepts either a Docker SDK container object or a plain name string
+    (legacy path — falls back to label-free heuristic when only a name
+    is available, which is always less reliable).
+    """
+    if isinstance(container, str):
+        # Called with a name only (e.g. from event stream before full inspect).
+        # Best-effort: a base container name has no service suffix, so it won't
+        # contain a hyphen after the decky name. We can't be certain without
+        # labels, so this path is only kept for the event fast-path and is
+        # superseded by the label check in the initial scan.
+        name = container.lstrip("/")
+        # Filter out anything not from our project (best effort via name)
+        return "-" in name  # will be re-checked via labels on _spawn
+    labels = container.labels or {}
+    return _is_decnet_service_labels(labels)
+
+
+def is_service_event(attrs: dict) -> bool:
+    """Return True if a Docker event's Actor.Attributes are for a DECNET service container."""
+    return _is_decnet_service_labels(attrs)
 
 
 # ─── Blocking stream worker (runs in a thread) ────────────────────────────────
@@ -155,9 +186,8 @@ async def log_collector_worker(log_file: str) -> None:
 
         # Collect from already-running containers
         for container in client.containers.list():
-            name = container.name.lstrip("/")
-            if is_service_container(name):
-                _spawn(container.id, name)
+            if is_service_container(container):
+                _spawn(container.id, container.name.lstrip("/"))
 
         # Watch for new containers starting
         def _watch_events() -> None:
@@ -165,9 +195,10 @@ async def log_collector_worker(log_file: str) -> None:
                 decode=True,
                 filters={"type": "container", "event": "start"},
             ):
-                name = event.get("Actor", {}).get("Attributes", {}).get("name", "")
-                cid = event.get("id", "")
-                if cid and is_service_container(name):
+                attrs = event.get("Actor", {}).get("Attributes", {})
+                cid  = event.get("id", "")
+                name = attrs.get("name", "")
+                if cid and is_service_event(attrs):
                     loop.call_soon_threadsafe(_spawn, cid, name)
 
         await asyncio.to_thread(_watch_events)
