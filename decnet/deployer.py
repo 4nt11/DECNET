@@ -49,9 +49,11 @@ def _sync_logging_helper(config: DecnetConfig) -> None:
                 shutil.copy2(_CANONICAL_LOGGING, dest)
 
 
-def _compose(*args: str, compose_file: Path = COMPOSE_FILE) -> None:
+def _compose(*args: str, compose_file: Path = COMPOSE_FILE, env: dict | None = None) -> None:
+    import os
     cmd = ["docker", "compose", "-f", str(compose_file), *args]
-    subprocess.run(cmd, check=True)  # nosec B603
+    merged = {**os.environ, **(env or {})}
+    subprocess.run(cmd, check=True, env=merged)  # nosec B603
 
 
 _PERMANENT_ERRORS = (
@@ -68,12 +70,15 @@ def _compose_with_retry(
     compose_file: Path = COMPOSE_FILE,
     retries: int = 3,
     delay: float = 5.0,
+    env: dict | None = None,
 ) -> None:
     """Run a docker compose command, retrying on transient failures."""
+    import os
     last_exc: subprocess.CalledProcessError | None = None
     cmd = ["docker", "compose", "-f", str(compose_file), *args]
+    merged = {**os.environ, **(env or {})}
     for attempt in range(1, retries + 1):
-        result = subprocess.run(cmd, capture_output=True, text=True)  # nosec B603
+        result = subprocess.run(cmd, capture_output=True, text=True, env=merged)  # nosec B603
         if result.returncode == 0:
             if result.stdout:
                 print(result.stdout, end="")
@@ -100,7 +105,7 @@ def _compose_with_retry(
     raise last_exc
 
 
-def deploy(config: DecnetConfig, dry_run: bool = False, no_cache: bool = False) -> None:
+def deploy(config: DecnetConfig, dry_run: bool = False, no_cache: bool = False, parallel: bool = False) -> None:
     client = docker.from_env()
 
     # --- Network setup ---
@@ -145,10 +150,24 @@ def deploy(config: DecnetConfig, dry_run: bool = False, no_cache: bool = False) 
     save_state(config, compose_path)
 
     # --- Bring up ---
+    # With --parallel: force BuildKit, run build explicitly (so all images are
+    # built concurrently before any container starts), then up without --build.
+    # Without --parallel: keep the original up --build path.
+    build_env = {"DOCKER_BUILDKIT": "1"} if parallel else {}
+
     console.print("[bold cyan]Building images and starting deckies...[/]")
+    build_args = ["build"]
     if no_cache:
-        _compose_with_retry("build", "--no-cache", compose_file=compose_path)
-    _compose_with_retry("up", "--build", "-d", compose_file=compose_path)
+        build_args.append("--no-cache")
+
+    if parallel:
+        console.print("[bold cyan]Parallel build enabled — building all images concurrently...[/]")
+        _compose_with_retry(*build_args, compose_file=compose_path, env=build_env)
+        _compose_with_retry("up", "-d", compose_file=compose_path, env=build_env)
+    else:
+        if no_cache:
+            _compose_with_retry("build", "--no-cache", compose_file=compose_path)
+        _compose_with_retry("up", "--build", "-d", compose_file=compose_path)
 
     # --- Status summary ---
     _print_status(config)

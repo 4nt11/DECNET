@@ -248,6 +248,7 @@ def deploy(
     mutate_interval: Optional[int] = typer.Option(30, "--mutate-interval", help="Automatically rotate services every N minutes"),
     dry_run: bool = typer.Option(False, "--dry-run", help="Generate compose file without starting containers"),
     no_cache: bool = typer.Option(False, "--no-cache", help="Force rebuild all images, ignoring Docker layer cache"),
+    parallel: bool = typer.Option(False, "--parallel", help="Build all images concurrently (enables BuildKit, separates build from up)"),
     ipvlan: bool = typer.Option(False, "--ipvlan", help="Use IPvlan L2 instead of MACVLAN (required on WiFi interfaces)"),
     config_file: Optional[str] = typer.Option(None, "--config", "-c", help="Path to INI config file"),
     api: bool = typer.Option(False, "--api", help="Start the FastAPI backend to ingest and serve logs"),
@@ -379,7 +380,7 @@ def deploy(
     )
 
     from decnet.deployer import deploy as _deploy
-    _deploy(config, dry_run=dry_run, no_cache=no_cache)
+    _deploy(config, dry_run=dry_run, no_cache=no_cache, parallel=parallel)
     
     if mutate_interval is not None and not dry_run:
         import subprocess  # nosec B404
