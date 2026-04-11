@@ -83,43 +83,34 @@ def parse_rfc5424(line: str) -> Optional[dict[str, Any]]:
 
 # ─── Container helpers ────────────────────────────────────────────────────────
 
-def _is_decnet_service_labels(labels: dict) -> bool:
+def _load_service_container_names() -> set[str]:
     """
-    Return True if the Compose labels indicate a DECNET service container.
-
-    Discriminator: base containers have no depends_on (they own the IP);
-    service containers all declare depends_on pointing at their base.
-    Both sets carry com.docker.compose.project=decnet.
+    Return the exact set of service container names from decnet-state.json.
+    Format: {decky_name}-{service_name}, e.g. 'omega-decky-smtp'.
+    Returns an empty set if no state file exists.
     """
-    if labels.get("com.docker.compose.project") != "decnet":
-        return False
-    return bool(labels.get("com.docker.compose.depends_on", "").strip())
+    from decnet.config import load_state
+    state = load_state()
+    if state is None:
+        return set()
+    config, _ = state
+    names: set[str] = set()
+    for decky in config.deckies:
+        for svc in decky.services:
+            names.add(f"{decky.name}-{svc.replace('_', '-')}")
+    return names
 
 
 def is_service_container(container) -> bool:
-    """
-    Return True for DECNET service containers.
-
-    Accepts either a Docker SDK container object or a plain name string
-    (legacy path — falls back to label-free heuristic when only a name
-    is available, which is always less reliable).
-    """
-    if isinstance(container, str):
-        # Called with a name only (e.g. from event stream before full inspect).
-        # Best-effort: a base container name has no service suffix, so it won't
-        # contain a hyphen after the decky name. We can't be certain without
-        # labels, so this path is only kept for the event fast-path and is
-        # superseded by the label check in the initial scan.
-        name = container.lstrip("/")
-        # Filter out anything not from our project (best effort via name)
-        return "-" in name  # will be re-checked via labels on _spawn
-    labels = container.labels or {}
-    return _is_decnet_service_labels(labels)
+    """Return True if this Docker container is a known DECNET service container."""
+    name = (container if isinstance(container, str) else container.name).lstrip("/")
+    return name in _load_service_container_names()
 
 
 def is_service_event(attrs: dict) -> bool:
-    """Return True if a Docker event's Actor.Attributes are for a DECNET service container."""
-    return _is_decnet_service_labels(attrs)
+    """Return True if a Docker start event is for a known DECNET service container."""
+    name = attrs.get("name", "").lstrip("/")
+    return name in _load_service_container_names()
 
 
 # ─── Blocking stream worker (runs in a thread) ────────────────────────────────
