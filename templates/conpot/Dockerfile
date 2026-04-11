@@ -11,8 +11,18 @@ RUN find /opt /usr /etc /home -name "*.xml" -exec sed -i 's/port="5020"/port="50
 RUN (apt-get update && apt-get install -y --no-install-recommends libcap2-bin 2>/dev/null) || (apk add --no-cache libcap 2>/dev/null) || true
 RUN find /home/conpot/.local/bin /usr /opt -type f -name 'python*' -exec setcap 'cap_net_bind_service+eip' {} \; 2>/dev/null || true
 
-# The upstream image already runs as the non-root 'conpot' user.
-# We do NOT switch to a 'decnet' user here — doing so breaks pkg_resources
-# because conpot's eggs live under /home/conpot/.local and are only on the
-# Python path when the interpreter runs as 'conpot'.
+# Bridge conpot's own logger into DECNET's RFC 5424 syslog pipeline.
+# entrypoint.py is self-contained (inlines the formatter) because the
+# conpot base image runs Python 3.6, which cannot import the shared
+# decnet_logging.py (that file uses 3.9+ / 3.10+ type syntax).
+COPY entrypoint.py /home/conpot/entrypoint.py
+RUN chown conpot:conpot /home/conpot/entrypoint.py \
+    && chmod +x /home/conpot/entrypoint.py
+
+# The upstream image already runs as non-root 'conpot'.
+# We do NOT switch to a 'decnet' user — doing so breaks pkg_resources
+# because conpot's eggs live under /home/conpot/.local and are only on
+# the Python path for that user.
 USER conpot
+
+ENTRYPOINT ["/usr/bin/python3", "/home/conpot/entrypoint.py"]
