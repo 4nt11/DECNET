@@ -31,4 +31,14 @@ ls /var/www/html
 HIST
 fi
 
-exec /usr/sbin/sshd -D -e
+# Logging pipeline: named pipe → rsyslogd (RFC 5424) → stdout → Docker log capture
+mkfifo /var/run/decnet-logs
+
+# Relay pipe to stdout so Docker captures all syslog events
+cat /var/run/decnet-logs &
+
+# Start rsyslog (reads /etc/rsyslog.d/99-decnet.conf, writes to the pipe above)
+rsyslogd
+
+# sshd logs via syslog — no -e flag, so auth events flow through rsyslog → pipe → stdout
+exec /usr/sbin/sshd -D

@@ -2,6 +2,7 @@
 Tests for the RealSSHService plugin and the deaddeck archetype.
 """
 
+from pathlib import Path
 
 from decnet.services.registry import all_services, get_service
 from decnet.archetypes import get_archetype
@@ -126,3 +127,62 @@ def test_deaddeck_nmap_os():
 def test_deaddeck_preferred_distros_not_empty():
     arch = get_archetype("deaddeck")
     assert len(arch.preferred_distros) >= 1
+
+
+# ---------------------------------------------------------------------------
+# Logging pipeline wiring (Dockerfile + entrypoint)
+# ---------------------------------------------------------------------------
+
+def _dockerfile_text() -> str:
+    svc = get_service("real_ssh")
+    return (svc.dockerfile_context() / "Dockerfile").read_text()
+
+
+def _entrypoint_text() -> str:
+    svc = get_service("real_ssh")
+    return (svc.dockerfile_context() / "entrypoint.sh").read_text()
+
+
+def test_dockerfile_has_rsyslog():
+    assert "rsyslog" in _dockerfile_text()
+
+
+def test_dockerfile_runs_as_root():
+    """sshd requires root — no USER directive should appear after setup."""
+    lines = [l.strip() for l in _dockerfile_text().splitlines()]
+    user_lines = [l for l in lines if l.startswith("USER ")]
+    assert user_lines == [], f"Unexpected USER directive(s): {user_lines}"
+
+
+def test_dockerfile_rsyslog_conf_created():
+    df = _dockerfile_text()
+    assert "99-decnet.conf" in df
+    assert "RFC5424fmt" in df
+
+
+def test_dockerfile_sudoers_syslog():
+    df = _dockerfile_text()
+    assert "syslog=auth" in df
+    assert "log_input" in df
+    assert "log_output" in df
+
+
+def test_dockerfile_prompt_command_logger():
+    df = _dockerfile_text()
+    assert "PROMPT_COMMAND" in df
+    assert "logger" in df
+
+
+def test_entrypoint_creates_named_pipe():
+    assert "mkfifo" in _entrypoint_text()
+
+
+def test_entrypoint_starts_rsyslogd():
+    assert "rsyslogd" in _entrypoint_text()
+
+
+def test_entrypoint_sshd_no_dash_e():
+    ep = _entrypoint_text()
+    assert "sshd -D" in ep
+    # -e flag would bypass syslog; must not be present
+    assert "sshd -D -e" not in ep

@@ -1,12 +1,26 @@
 from pathlib import Path
+
 from decnet.services.base import BaseService
 
-TEMPLATES_DIR = Path(__file__).parent.parent.parent / "templates" / "cowrie"
+TEMPLATES_DIR = Path(__file__).parent.parent.parent / "templates" / "real_ssh"
 
 
 class SSHService(BaseService):
+    """
+    Interactive OpenSSH server for general-purpose deckies.
+
+    Replaced Cowrie emulation with a real sshd so fingerprinting tools and
+    experienced attackers cannot trivially identify the honeypot.  Auth events,
+    sudo activity, and interactive commands are all forwarded to stdout as
+    RFC 5424 via the rsyslog bridge baked into the image.
+
+    service_cfg keys:
+        password      Root password (default: "admin")
+        hostname      Override container hostname
+    """
+
     name = "ssh"
-    ports = [22, 2222]
+    ports = [22]
     default_image = "build"
 
     def compose_fragment(
@@ -17,28 +31,10 @@ class SSHService(BaseService):
     ) -> dict:
         cfg = service_cfg or {}
         env: dict = {
-            "NODE_NAME": decky_name,
-            "COWRIE_HOSTNAME": decky_name,
-            "COWRIE_HONEYPOT_LISTEN_ENDPOINTS": "tcp:22:interface=0.0.0.0 tcp:2222:interface=0.0.0.0",
-            "COWRIE_SSH_LISTEN_ENDPOINTS": "tcp:22:interface=0.0.0.0 tcp:2222:interface=0.0.0.0",
+            "SSH_ROOT_PASSWORD": cfg.get("password", "admin"),
         }
-        if log_target:
-            host, port = log_target.rsplit(":", 1)
-            env["COWRIE_OUTPUT_TCP_ENABLED"] = "true"
-            env["COWRIE_OUTPUT_TCP_HOST"] = host
-            env["COWRIE_OUTPUT_TCP_PORT"] = port
-
-        # Optional persona overrides
-        if "kernel_version" in cfg:
-            env["COWRIE_HONEYPOT_KERNEL_VERSION"] = cfg["kernel_version"]
-        if "kernel_build_string" in cfg:
-            env["COWRIE_HONEYPOT_KERNEL_BUILD_STRING"] = cfg["kernel_build_string"]
-        if "hardware_platform" in cfg:
-            env["COWRIE_HONEYPOT_HARDWARE_PLATFORM"] = cfg["hardware_platform"]
-        if "ssh_banner" in cfg:
-            env["COWRIE_SSH_VERSION"] = cfg["ssh_banner"]
-        if "users" in cfg:
-            env["COWRIE_USERDB_ENTRIES"] = cfg["users"]
+        if "hostname" in cfg:
+            env["SSH_HOSTNAME"] = cfg["hostname"]
 
         return {
             "build": {"context": str(TEMPLATES_DIR)},
