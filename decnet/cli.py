@@ -390,7 +390,8 @@ def deploy(
             subprocess.Popen(  # nosec B603
                 [sys.executable, "-m", "decnet.cli", "mutate", "--watch"],
                 stdout=subprocess.DEVNULL,
-                stderr=subprocess.STDOUT
+                stderr=subprocess.STDOUT,
+                start_new_session=True,
             )
         except (FileNotFoundError, subprocess.SubprocessError):
             console.print("[red]Failed to start mutator watcher.[/]")
@@ -405,6 +406,7 @@ def deploy(
             [sys.executable, "-m", "decnet.cli", "collect", "--log-file", str(effective_log_file)],
             stdout=subprocess.DEVNULL,
             stderr=subprocess.STDOUT,
+            start_new_session=True,
         )
 
     if api and not dry_run:

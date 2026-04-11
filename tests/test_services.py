@@ -40,7 +40,7 @@ UPSTREAM_SERVICES = {
 # ---------------------------------------------------------------------------
 
 BUILD_SERVICES = {
-    "ssh":           ([22, 2222],   "ssh"),
+    "ssh":           ([22],         "ssh"),
     "http":          ([80, 443],    "http"),
     "rdp":           ([3389],       "rdp"),
     "smb":           ([445, 139],   "smb"),
@@ -155,7 +155,10 @@ def test_build_service_restart_policy(name):
     assert frag.get("restart") == "unless-stopped"
 
 
-@pytest.mark.parametrize("name", BUILD_SERVICES)
+_NODE_NAME_SERVICES = [n for n in BUILD_SERVICES if n not in ("ssh", "real_ssh")]
+
+
+@pytest.mark.parametrize("name", _NODE_NAME_SERVICES)
 def test_build_service_node_name_env(name):
     frag = _fragment(name)
     env = frag.get("environment", {})
@@ -163,8 +166,8 @@ def test_build_service_node_name_env(name):
     assert env["NODE_NAME"] == "test-decky"
 
 
-# SSH uses COWRIE_OUTPUT_TCP_* instead of LOG_TARGET — exclude from generic tests
-_LOG_TARGET_SERVICES = [n for n in BUILD_SERVICES if n != "ssh"]
+# ssh and real_ssh do not use LOG_TARGET (rsyslog handles log forwarding inside the container)
+_LOG_TARGET_SERVICES = [n for n in BUILD_SERVICES if n not in ("ssh", "real_ssh")]
 
 
 @pytest.mark.parametrize("name", _LOG_TARGET_SERVICES)
@@ -181,13 +184,11 @@ def test_build_service_no_log_target_by_default(name):
     assert "LOG_TARGET" not in env
 
 
-def test_ssh_log_target_uses_cowrie_tcp_output():
-    """SSH forwards logs via Cowrie TCP output, not LOG_TARGET."""
+def test_ssh_no_log_target_env():
+    """SSH uses rsyslog internally — no LOG_TARGET or COWRIE_* vars."""
     env = _fragment("ssh", log_target="10.0.0.1:5140").get("environment", {})
-    assert env.get("COWRIE_OUTPUT_TCP_ENABLED") == "true"
-    assert env.get("COWRIE_OUTPUT_TCP_HOST") == "10.0.0.1"
-    assert env.get("COWRIE_OUTPUT_TCP_PORT") == "5140"
     assert "LOG_TARGET" not in env
+    assert not any(k.startswith("COWRIE_") for k in env)
 
 
 # ---------------------------------------------------------------------------
@@ -266,31 +267,26 @@ def test_http_empty_service_cfg_no_extra_env():
 
 # SSH ------------------------------------------------------------------------
 
-def test_ssh_default_no_persona_env():
+def test_ssh_default_env():
     env = _fragment("ssh").get("environment", {})
-    for key in ("COWRIE_HONEYPOT_KERNEL_VERSION", "COWRIE_HONEYPOT_HARDWARE_PLATFORM",
-                "COWRIE_SSH_VERSION", "COWRIE_USERDB_ENTRIES"):
-        assert key not in env, f"Expected {key} absent by default"
+    assert env.get("SSH_ROOT_PASSWORD") == "admin"
+    assert not any(k.startswith("COWRIE_") for k in env)
+    assert "NODE_NAME" not in env
 
 
-def test_ssh_kernel_version():
-    env = _fragment("ssh", service_cfg={"kernel_version": "5.15.0-76-generic"}).get("environment", {})
-    assert env.get("COWRIE_HONEYPOT_KERNEL_VERSION") == "5.15.0-76-generic"
+def test_ssh_custom_password():
+    env = _fragment("ssh", service_cfg={"password": "h4x!"}).get("environment", {})
+    assert env.get("SSH_ROOT_PASSWORD") == "h4x!"
 
 
-def test_ssh_hardware_platform():
-    env = _fragment("ssh", service_cfg={"hardware_platform": "aarch64"}).get("environment", {})
-    assert env.get("COWRIE_HONEYPOT_HARDWARE_PLATFORM") == "aarch64"
+def test_ssh_custom_hostname():
+    env = _fragment("ssh", service_cfg={"hostname": "prod-db"}).get("environment", {})
+    assert env.get("SSH_HOSTNAME") == "prod-db"
 
 
-def test_ssh_banner():
-    env = _fragment("ssh", service_cfg={"ssh_banner": "SSH-2.0-OpenSSH_8.9p1 Ubuntu-3ubuntu0.3"}).get("environment", {})
-    assert env.get("COWRIE_SSH_VERSION") == "SSH-2.0-OpenSSH_8.9p1 Ubuntu-3ubuntu0.3"
-
-
-def test_ssh_users():
-    env = _fragment("ssh", service_cfg={"users": "root:toor,admin:admin123"}).get("environment", {})
-    assert env.get("COWRIE_USERDB_ENTRIES") == "root:toor,admin:admin123"
+def test_ssh_no_hostname_by_default():
+    env = _fragment("ssh").get("environment", {})
+    assert "SSH_HOSTNAME" not in env
 
 
 # SMTP -----------------------------------------------------------------------
