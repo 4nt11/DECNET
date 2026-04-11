@@ -1,4 +1,3 @@
-import os
 from pathlib import Path
 from decnet.services.base import BaseService
 
@@ -24,7 +23,8 @@ class ConpotService(BaseService):
 
         return {
             "build": {
-                "context": str(self.dockerfile_context())
+                "context": str(self.dockerfile_context()),
+                "args": {"BASE_IMAGE": "honeynet/conpot:latest"},
             },
             "container_name": f"{decky_name}-conpot",
             "restart": "unless-stopped",

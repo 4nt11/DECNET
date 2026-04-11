@@ -69,8 +69,11 @@ def generate_compose(config: DecnetConfig) -> dict:
 
             # Inject the per-decky base image into build services so containers
             # vary by distro and don't all fingerprint as debian:bookworm-slim.
+            # Services that need a fixed upstream image (e.g. conpot) can pre-set
+            # build.args.BASE_IMAGE in their compose_fragment() to opt out.
             if "build" in fragment:
-                fragment["build"].setdefault("args", {})["BASE_IMAGE"] = decky.build_base
+                args = fragment["build"].setdefault("args", {})
+                args.setdefault("BASE_IMAGE", decky.build_base)
 
             fragment.setdefault("environment", {})
             fragment["environment"]["HOSTNAME"] = decky.hostname
