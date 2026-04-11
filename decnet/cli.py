@@ -401,7 +401,8 @@ def deploy(
     if effective_log_file and not dry_run and not api:
         import subprocess  # noqa: F811  # nosec B404
         import sys
-        _collector_err = Path(effective_log_file).with_suffix(".collector.log")
+        from pathlib import Path as _Path
+        _collector_err = _Path(effective_log_file).with_suffix(".collector.log")
         console.print(f"[bold cyan]Starting log collector[/] → {effective_log_file}")
         subprocess.Popen(  # nosec B603
             [sys.executable, "-m", "decnet.cli", "collect", "--log-file", str(effective_log_file)],
