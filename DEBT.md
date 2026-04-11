@@ -101,10 +101,14 @@ All route decorators now declare `responses={401: {"description": "Not authentic
 ~~**File:** `decnet/web/sqlite_repository.py` (~400 lines)~~  
 Fully refactored to `decnet/web/db/` modular layout: `models.py` (SQLModel schema), `repository.py` (abstract base), `sqlite/repository.py` (SQLite implementation), `sqlite/database.py` (engine/session factory). Commit `de84cc6`.
 
-### DEBT-026 — IMAP/POP3 bait emails are hardcoded
-**Files:** `templates/imap/server.py`, `templates/pop3/server.py`  
-Bait emails are hardcoded strings. A modular framework to dynamically inject personalized mailboxes, custom mails, and dynamic users should be implemented in the future for a more personalized feel.  
-**Status:** Deferred — out of current scope.
+### DEBT-026 — IMAP/POP3 bait emails not configurable via service config
+**Files:** `templates/imap/server.py`, `templates/pop3/server.py`, `decnet/services/imap.py`, `decnet/services/pop3.py`  
+Bait emails are hardcoded. A stub env var `IMAP_EMAIL_SEED` is read but currently ignored. Full implementation requires:
+1. `IMAP_EMAIL_SEED` points to a JSON file with a list of `{from_, to, subject, date, body}` dicts.
+2. `templates/imap/server.py` loads and merges/replaces `_BAIT_EMAILS` from that file at startup.
+3. `decnet/services/imap.py` `compose_fragment()` reads `service_cfg["email_seed"]` and injects `IMAP_EMAIL_SEED` + a bind-mount for the seed file into the compose fragment.
+4. Same pattern for POP3 (`POP3_EMAIL_SEED`).  
+**Status:** Stub in place — full wiring deferred to next session.
 
 ---
 
