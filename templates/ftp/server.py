@@ -71,7 +71,7 @@ class ServerFTPFactory(FTPFactory):
     welcomeMessage = BANNER
 
 if __name__ == "__main__":
-    twisted_log.startLogging(sys.stdout)
+    twisted_log.startLoggingWithObserver(lambda e: None, setStdout=False)
     _log("startup", msg=f"FTP server starting as {NODE_NAME} on port {PORT}")
     reactor.listenTCP(PORT, ServerFTPFactory())
     reactor.run()

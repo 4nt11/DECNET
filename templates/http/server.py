@@ -6,12 +6,15 @@ and responds with configurable pages. Forwards events as JSON to LOG_TARGET if s
 """
 
 import json
+import logging
 import os
 from pathlib import Path
 
 from flask import Flask, request, send_from_directory
 from werkzeug.serving import make_server, WSGIRequestHandler
 from decnet_logging import syslog_line, write_syslog_file, forward_syslog
+
+logging.getLogger("werkzeug").setLevel(logging.ERROR)
 
 NODE_NAME     = os.environ.get("NODE_NAME", "webserver")
 SERVICE_NAME   = "http"
