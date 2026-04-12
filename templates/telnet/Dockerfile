@@ -16,6 +16,9 @@ RUN printf '%s\n' \
     'user.*           |/var/run/decnet-logs;RFC5424fmt' \
     > /etc/rsyslog.d/99-decnet.conf
 
+# Disable imklog — containers can't read /proc/kmsg
+RUN sed -i 's/^\(module(load="imklog"\)/# \1/' /etc/rsyslog.conf
+
 # Silence default catch-all rules
 RUN sed -i \
     -e 's|^\(\*\.\*;auth,authpriv\.none\)|#\1|' \
