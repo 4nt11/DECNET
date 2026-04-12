@@ -6,12 +6,13 @@ from typing import Any, Optional, List
 
 from sqlalchemy import func, select, desc, asc, text, or_, update, literal_column
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
+from sqlmodel.sql.expression import SelectOfScalar
 
 from decnet.config import load_state, _ROOT
 from decnet.env import DECNET_ADMIN_USER, DECNET_ADMIN_PASSWORD
 from decnet.web.auth import get_password_hash
 from decnet.web.db.repository import BaseRepository
-from decnet.web.db.models import User, Log, Bounty
+from decnet.web.db.models import User, Log, Bounty, State
 from decnet.web.db.sqlite.database import get_async_engine, init_db
 
 
@@ -93,11 +94,11 @@ class SQLiteRepository(BaseRepository):
 
     def _apply_filters(
         self,
-        statement,
+        statement: SelectOfScalar,
         search: Optional[str],
         start_time: Optional[str],
         end_time: Optional[str],
-    ):
+    ) -> SelectOfScalar:
         import re
         import shlex
 
@@ -128,9 +129,10 @@ class SQLiteRepository(BaseRepository):
                         statement = statement.where(core_fields[key] == val)
                     else:
                         key_safe = re.sub(r"[^a-zA-Z0-9_]", "", key)
-                        statement = statement.where(
-                            text(f"json_extract(fields, '$.{key_safe}') = :val")
-                        ).params(val=val)
+                        if key_safe:
+                            statement = statement.where(
+                                text(f"json_extract(fields, '$.{key_safe}') = :val")
+                            ).params(val=val)
                 else:
                     lk = f"%{token}%"
                     statement = statement.where(
@@ -206,7 +208,7 @@ class SQLiteRepository(BaseRepository):
         end_time: Optional[str] = None,
         interval_minutes: int = 15,
     ) -> List[dict]:
-        bucket_seconds = interval_minutes * 60
+        bucket_seconds = max(interval_minutes, 1) * 60
         bucket_expr = literal_column(
             f"datetime((strftime('%s', timestamp) / {bucket_seconds}) * {bucket_seconds}, 'unixepoch')"
         ).label("bucket_time")
@@ -299,7 +301,12 @@ class SQLiteRepository(BaseRepository):
             session.add(Bounty(**data))
             await session.commit()
 
-    def _apply_bounty_filters(self, statement, bounty_type: Optional[str], search: Optional[str]):
+    def _apply_bounty_filters(
+        self,
+        statement: SelectOfScalar,
+        bounty_type: Optional[str],
+        search: Optional[str]
+    ) -> SelectOfScalar:
         if bounty_type:
             statement = statement.where(Bounty.bounty_type == bounty_type)
         if search:
@@ -350,3 +357,29 @@ class SQLiteRepository(BaseRepository):
         async with self.session_factory() as session:
             result = await session.execute(statement)
             return result.scalar() or 0
+
+    async def get_state(self, key: str) -> Optional[dict[str, Any]]:
+        async with self.session_factory() as session:
+            statement = select(State).where(State.key == key)
+            result = await session.execute(statement)
+            state = result.scalar_one_none()
+            if state:
+                return json.loads(state.value)
+            return None
+
+    async def set_state(self, key: str, value: Any) -> None:  # noqa: ANN401
+        async with self.session_factory() as session:
+            # Check if exists
+            statement = select(State).where(State.key == key)
+            result = await session.execute(statement)
+            state = result.scalar_one_none()
+
+            value_json = json.dumps(value)
+            if state:
+                state.value = value_json
+                session.add(state)
+            else:
+                new_state = State(key=key, value=value_json)
+                session.add(new_state)
+
+            await session.commit()

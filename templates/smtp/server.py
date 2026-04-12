@@ -45,7 +45,7 @@ def _log(event_type: str, severity: int = 6, **kwargs) -> None:
 def _rand_msg_id() -> str:
     """Return a Postfix-style 12-char alphanumeric queue ID."""
     chars = string.ascii_uppercase + string.digits
-    return "".join(random.choices(chars, k=12))  # noqa: S311
+    return "".join(random.choices(chars, k=12))
 
 
 def _decode_auth_plain(blob: str) -> tuple[str, str]:

@@ -32,28 +32,38 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
                 log.error("DB failed to initialize after 5 attempts — startup may be degraded")
             await asyncio.sleep(0.5)
 
-    # Start background ingestion task
-    if ingestion_task is None or ingestion_task.done():
-        ingestion_task = asyncio.create_task(log_ingestion_worker(repo))
+    # Start background tasks only if not in contract test mode
+    if os.environ.get("DECNET_CONTRACT_TEST") != "true":
+        # Start background ingestion task
+        if ingestion_task is None or ingestion_task.done():
+            ingestion_task = asyncio.create_task(log_ingestion_worker(repo))
 
-    # Start Docker log collector (writes to log file; ingester reads from it)
-    _log_file = os.environ.get("DECNET_INGEST_LOG_FILE", DECNET_INGEST_LOG_FILE)
-    if _log_file and (collector_task is None or collector_task.done()):
-        collector_task = asyncio.create_task(log_collector_worker(_log_file))
+        # Start Docker log collector (writes to log file; ingester reads from it)
+        _log_file = os.environ.get("DECNET_INGEST_LOG_FILE", DECNET_INGEST_LOG_FILE)
+        if _log_file and (collector_task is None or collector_task.done()):
+            collector_task = asyncio.create_task(log_collector_worker(_log_file))
+        elif not _log_file:
+            log.warning("DECNET_INGEST_LOG_FILE not set — Docker log collection disabled.")
     else:
-        log.warning("DECNET_INGEST_LOG_FILE not set — Docker log collection disabled.")
+        log.info("Contract Test Mode: skipping background worker startup")
 
     yield
 
     # Shutdown background tasks
     for task in (ingestion_task, collector_task):
-        if task:
+        if task and not task.done():
             task.cancel()
+            try:
+                await task
+            except asyncio.CancelledError:
+                pass
+            except Exception as exc:
+                log.warning("Task shutdown error: %s", exc)
 
 
 app: FastAPI = FastAPI(
-    title="DECNET Web Dashboard API", 
-    version="1.0.0", 
+    title="DECNET Web Dashboard API",
+    version="1.0.0",
     lifespan=lifespan,
     docs_url="/docs" if DECNET_DEVELOPER else None,
     redoc_url="/redoc" if DECNET_DEVELOPER else None,

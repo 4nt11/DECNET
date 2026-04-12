@@ -22,7 +22,7 @@ class Log(SQLModel, table=True):
     event_type: str = Field(index=True)
     attacker_ip: str = Field(index=True)
     raw_line: str
-    fields: str 
+    fields: str
     msg: Optional[str] = None
 
 class Bounty(SQLModel, table=True):
@@ -34,6 +34,12 @@ class Bounty(SQLModel, table=True):
     attacker_ip: str = Field(index=True)
     bounty_type: str = Field(index=True)
     payload: str
+
+
+class State(SQLModel, table=True):
+    __tablename__ = "state"
+    key: str = Field(primary_key=True)
+    value: str  # Stores JSON serialized DecnetConfig or other state blobs
 
 # --- API Request/Response Models (Pydantic) ---
 

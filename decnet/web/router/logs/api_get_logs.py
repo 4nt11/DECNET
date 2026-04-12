@@ -7,10 +7,11 @@ from decnet.web.db.models import LogsResponse
 
 router = APIRouter()
 
-_DATETIME_RE = r"^\d{4}-\d{2}-\d{2}[ T]\d{2}:\d{2}:\d{2}$"
+_DATETIME_RE = r"^(\d{4}-\d{2}-\d{2}[ T]\d{2}:\d{2}:\d{2})?$"
 
 
-@router.get("/logs", response_model=LogsResponse, tags=["Logs"])
+@router.get("/logs", response_model=LogsResponse, tags=["Logs"],
+    responses={401: {"description": "Could not validate credentials"}, 422: {"description": "Validation error"}})
 async def get_logs(
     limit: int = Query(50, ge=1, le=1000),
     offset: int = Query(0, ge=0),

@@ -252,7 +252,7 @@ def deploy(
             console.print("[red]Failed to start mutator watcher.[/]")
 
     if effective_log_file and not dry_run and not api:
-        import subprocess  # noqa: F811  # nosec B404
+        import subprocess  # nosec B404
         import sys
         from pathlib import Path as _Path
         _collector_err = _Path(effective_log_file).with_suffix(".collector.log")
@@ -301,18 +301,20 @@ def mutate(
     force_all: bool = typer.Option(False, "--all", help="Force mutate all deckies immediately"),
 ) -> None:
     """Manually trigger or continuously watch for decky mutation."""
+    import asyncio
     from decnet.mutator import mutate_decky, mutate_all, run_watch_loop
+    from decnet.web.dependencies import repo
 
     if watch:
-        run_watch_loop()
+        asyncio.run(run_watch_loop(repo))
         return
 
     if decky_name:
-        mutate_decky(decky_name)
+        asyncio.run(mutate_decky(decky_name, repo))
     elif force_all:
-        mutate_all(force=True)
+        asyncio.run(mutate_all(force=True, repo=repo))
     else:
-        mutate_all(force=False)
+        asyncio.run(mutate_all(force=False, repo=repo))
 
 
 @app.command()

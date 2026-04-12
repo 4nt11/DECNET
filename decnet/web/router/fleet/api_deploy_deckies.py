@@ -3,17 +3,21 @@ import os
 
 from fastapi import APIRouter, Depends, HTTPException
 
-from decnet.config import DEFAULT_MUTATE_INTERVAL, DecnetConfig, load_state
+from decnet.config import DEFAULT_MUTATE_INTERVAL, DecnetConfig, _ROOT
 from decnet.engine import deploy as _deploy
 from decnet.ini_loader import load_ini_from_string
 from decnet.network import detect_interface, detect_subnet, get_host_ip
-from decnet.web.dependencies import get_current_user
+from decnet.web.dependencies import get_current_user, repo
 from decnet.web.db.models import DeployIniRequest
 
 router = APIRouter()
 
 
-@router.post("/deckies/deploy", tags=["Fleet Management"])
+@router.post(
+    "/deckies/deploy",
+    tags=["Fleet Management"],
+    responses={401: {"description": "Could not validate credentials"}, 400: {"description": "Validation error or INI parsing failed"}, 500: {"description": "Deployment failed"}}
+)
 async def api_deploy_deckies(req: DeployIniRequest, current_user: str = Depends(get_current_user)) -> dict[str, str]:
     from decnet.fleet import build_deckies_from_ini
 
@@ -22,11 +26,11 @@ async def api_deploy_deckies(req: DeployIniRequest, current_user: str = Depends(
     except Exception as e:
         raise HTTPException(status_code=400, detail=f"Failed to parse INI: {e}")
 
-    state = load_state()
+    state_dict = await repo.get_state("deployment")
     ingest_log_file = os.environ.get("DECNET_INGEST_LOG_FILE")
-    
-    if state:
-        config, _ = state
+
+    if state_dict:
+        config = DecnetConfig(**state_dict["config"])
         subnet_cidr = ini.subnet or config.subnet
         gateway = ini.gateway or config.gateway
         host_ip = get_host_ip(config.interface)
@@ -66,12 +70,20 @@ async def api_deploy_deckies(req: DeployIniRequest, current_user: str = Depends(
     existing_deckies_map = {d.name: d for d in config.deckies}
     for new_decky in new_decky_configs:
         existing_deckies_map[new_decky.name] = new_decky
-    
+
     config.deckies = list(existing_deckies_map.values())
-    
+
     # We call deploy(config) which regenerates docker-compose and runs `up -d --remove-orphans`.
     try:
-        _deploy(config)
+        if os.environ.get("DECNET_CONTRACT_TEST") != "true":
+            _deploy(config)
+
+        # Persist new state to DB
+        new_state_payload = {
+            "config": config.model_dump(),
+            "compose_path": str(_ROOT / "docker-compose.yml") if not state_dict else state_dict["compose_path"]
+        }
+        await repo.set_state("deployment", new_state_payload)
     except Exception as e:
         logging.getLogger("decnet.web.api").exception("Deployment failed: %s", e)
         raise HTTPException(status_code=500, detail="Deployment failed. Check server logs for details.")

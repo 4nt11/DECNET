@@ -1,19 +1,19 @@
 from typing import Any, Optional
-from pathlib import Path
 
 import jwt
 from fastapi import HTTPException, status, Request
 from fastapi.security import OAuth2PasswordBearer
 
 from decnet.web.auth import ALGORITHM, SECRET_KEY
-from decnet.web.db.sqlite.repository import SQLiteRepository
+from decnet.web.db.repository import BaseRepository
+from decnet.web.db.factory import get_repository
 
-# Root directory for database
-_ROOT_DIR = Path(__file__).parent.parent.parent.absolute()
-DB_PATH = _ROOT_DIR / "decnet.db"
+# Shared repository singleton
+repo: BaseRepository = get_repository()
 
-# Shared repository instance
-repo = SQLiteRepository(db_path=str(DB_PATH))
+def get_repo() -> BaseRepository:
+    """FastAPI dependency to inject the configured repository."""
+    return repo
 
 oauth2_scheme = OAuth2PasswordBearer(tokenUrl="/api/v1/auth/login")
 
@@ -53,7 +53,7 @@ async def get_current_user(request: Request) -> str:
         detail="Could not validate credentials",
         headers={"WWW-Authenticate": "Bearer"},
     )
-    
+
     auth_header = request.headers.get("Authorization")
     token: str | None = (
         auth_header.split(" ", 1)[1]

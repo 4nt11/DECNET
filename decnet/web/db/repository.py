@@ -17,9 +17,9 @@ class BaseRepository(ABC):
 
     @abstractmethod
     async def get_logs(
-        self, 
-        limit: int = 50, 
-        offset: int = 0, 
+        self,
+        limit: int = 50,
+        offset: int = 0,
         search: Optional[str] = None
     ) -> list[dict[str, Any]]:
         """Retrieve paginated log entries."""
@@ -67,9 +67,9 @@ class BaseRepository(ABC):
 
     @abstractmethod
     async def get_bounties(
-        self, 
-        limit: int = 50, 
-        offset: int = 0, 
+        self,
+        limit: int = 50,
+        offset: int = 0,
         bounty_type: Optional[str] = None,
         search: Optional[str] = None
     ) -> list[dict[str, Any]]:
@@ -79,4 +79,14 @@ class BaseRepository(ABC):
     @abstractmethod
     async def get_total_bounties(self, bounty_type: Optional[str] = None, search: Optional[str] = None) -> int:
         """Retrieve the total count of bounties, optionally filtered."""
+        pass
+
+    @abstractmethod
+    async def get_state(self, key: str) -> Optional[dict[str, Any]]:
+        """Retrieve a specific state entry by key."""
+        pass
+
+    @abstractmethod
+    async def set_state(self, key: str, value: Any) -> None:
+        """Store a specific state entry by key."""
         pass

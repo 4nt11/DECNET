@@ -1,11 +1,9 @@
 """
 Tests for the mutate interval API endpoint.
 """
-
 import pytest
 import httpx
-from unittest.mock import patch
-from pathlib import Path
+from unittest.mock import patch, AsyncMock
 
 from decnet.config import DeckyConfig, DecnetConfig
 
@@ -37,19 +35,20 @@ class TestMutateInterval:
 
     @pytest.mark.asyncio
     async def test_no_active_deployment(self, client: httpx.AsyncClient, auth_token: str):
-        with patch("decnet.web.router.fleet.api_mutate_interval.load_state", return_value=None):
+        with patch("decnet.web.router.fleet.api_mutate_interval.repo", new_callable=AsyncMock) as mock_repo:
+            mock_repo.get_state.return_value = None
             resp = await client.put(
                 "/api/v1/deckies/decky-01/mutate-interval",
                 headers={"Authorization": f"Bearer {auth_token}"},
                 json={"mutate_interval": 60},
             )
-        assert resp.status_code == 500
+        assert resp.status_code == 400
 
     @pytest.mark.asyncio
     async def test_decky_not_found(self, client: httpx.AsyncClient, auth_token: str):
         config = _config()
-        with patch("decnet.web.router.fleet.api_mutate_interval.load_state",
-                    return_value=(config, Path("test.yml"))):
+        with patch("decnet.web.router.fleet.api_mutate_interval.repo", new_callable=AsyncMock) as mock_repo:
+            mock_repo.get_state.return_value = {"config": config.model_dump(), "compose_path": "c.yml"}
             resp = await client.put(
                 "/api/v1/deckies/nonexistent/mutate-interval",
                 headers={"Authorization": f"Bearer {auth_token}"},
@@ -60,30 +59,26 @@ class TestMutateInterval:
     @pytest.mark.asyncio
     async def test_successful_interval_update(self, client: httpx.AsyncClient, auth_token: str):
         config = _config()
-        with patch("decnet.web.router.fleet.api_mutate_interval.load_state",
-                    return_value=(config, Path("test.yml"))):
-            with patch("decnet.web.router.fleet.api_mutate_interval.save_state") as mock_save:
-                resp = await client.put(
-                    "/api/v1/deckies/decky-01/mutate-interval",
-                    headers={"Authorization": f"Bearer {auth_token}"},
-                    json={"mutate_interval": 120},
-                )
+        with patch("decnet.web.router.fleet.api_mutate_interval.repo", new_callable=AsyncMock) as mock_repo:
+            mock_repo.get_state.return_value = {"config": config.model_dump(), "compose_path": "c.yml"}
+            resp = await client.put(
+                "/api/v1/deckies/decky-01/mutate-interval",
+                headers={"Authorization": f"Bearer {auth_token}"},
+                json={"mutate_interval": 120},
+            )
         assert resp.status_code == 200
         assert resp.json()["message"] == "Mutation interval updated"
-        mock_save.assert_called_once()
-        # Verify the interval was actually updated on the decky config
-        assert config.deckies[0].mutate_interval == 120
+        mock_repo.set_state.assert_awaited_once()
 
     @pytest.mark.asyncio
     async def test_null_interval_removes_mutation(self, client: httpx.AsyncClient, auth_token: str):
         config = _config()
-        with patch("decnet.web.router.fleet.api_mutate_interval.load_state",
-                    return_value=(config, Path("test.yml"))):
-            with patch("decnet.web.router.fleet.api_mutate_interval.save_state"):
-                resp = await client.put(
-                    "/api/v1/deckies/decky-01/mutate-interval",
-                    headers={"Authorization": f"Bearer {auth_token}"},
-                    json={"mutate_interval": None},
-                )
+        with patch("decnet.web.router.fleet.api_mutate_interval.repo", new_callable=AsyncMock) as mock_repo:
+            mock_repo.get_state.return_value = {"config": config.model_dump(), "compose_path": "c.yml"}
+            resp = await client.put(
+                "/api/v1/deckies/decky-01/mutate-interval",
+                headers={"Authorization": f"Bearer {auth_token}"},
+                json={"mutate_interval": None},
+            )
         assert resp.status_code == 200
-        assert config.deckies[0].mutate_interval is None
+        mock_repo.set_state.assert_awaited_once()

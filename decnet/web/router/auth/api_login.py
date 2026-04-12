@@ -18,7 +18,11 @@ router = APIRouter()
     "/auth/login",
     response_model=Token,
     tags=["Authentication"],
-    responses={401: {"description": "Incorrect username or password"}, 422: {"description": "Validation error"}},
+    responses={
+        400: {"description": "Bad Request (e.g. malformed JSON)"},
+        401: {"description": "Incorrect username or password"},
+        422: {"description": "Validation error"}
+    },
 )
 async def login(request: LoginRequest) -> dict[str, Any]:
     _user: Optional[dict[str, Any]] = await repo.get_user_by_username(request.username)
@@ -35,7 +39,7 @@ async def login(request: LoginRequest) -> dict[str, Any]:
         data={"uuid": _user["uuid"]}, expires_delta=_access_token_expires
     )
     return {
-        "access_token": _access_token, 
+        "access_token": _access_token,
         "token_type": "bearer",  # nosec B105
         "must_change_password": bool(_user.get("must_change_password", False))
     }

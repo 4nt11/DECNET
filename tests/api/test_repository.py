@@ -1,18 +1,17 @@
 """
-Direct async tests for SQLiteRepository.
-These exercise the DB layer without going through the HTTP stack,
-covering DEBT-006 (zero test coverage on the database layer).
+Direct async tests for the configured Repository implementation.
+These exercise the DB layer without going through the HTTP stack.
 """
 import json
 import pytest
 from hypothesis import given, settings, strategies as st
-from decnet.web.db.sqlite.repository import SQLiteRepository
+from decnet.web.db.factory import get_repository
 from .conftest import _FUZZ_SETTINGS
 
 
 @pytest.fixture
 def repo(tmp_path):
-    return SQLiteRepository(db_path=str(tmp_path / "test.db"))
+    return get_repository(db_path=str(tmp_path / "test.db"))
 
 
 @pytest.mark.anyio

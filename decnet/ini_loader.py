@@ -123,7 +123,7 @@ def _parse_configparser(cp: configparser.ConfigParser) -> IniConfig:
     for section in cp.sections():
         if section == "general":
             continue
-        
+
         # A service sub-section is identified if the section name has at least one dot
         # AND the last segment is a known service name.
         # e.g. "decky-01.ssh" -> sub-section
@@ -151,7 +151,7 @@ def _parse_configparser(cp: configparser.ConfigParser) -> IniConfig:
         services = [sv.strip() for sv in svc_raw.split(",")] if svc_raw else None
         archetype = s.get("archetype")
         nmap_os = s.get("nmap_os") or s.get("nmap-os") or None
-        
+
         mi_raw = s.get("mutate_interval") or s.get("mutate-interval")
         mutate_interval = None
         if mi_raw:
@@ -199,11 +199,11 @@ def _parse_configparser(cp: configparser.ConfigParser) -> IniConfig:
     for section in cp.sections():
         if "." not in section:
             continue
-        
+
         decky_name, dot, svc_name = section.rpartition(".")
         if svc_name not in known_services:
             continue # not a service sub-section
-            
+
         svc_cfg = {k: v for k, v in cp[section].items()}
         if decky_name in decky_map:
             # Direct match — single decky

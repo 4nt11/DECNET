@@ -1,5 +1,6 @@
 import os
 from pathlib import Path
+from typing import Optional
 from dotenv import load_dotenv
 
 # Calculate absolute path to the project root
@@ -30,7 +31,7 @@ def _require_env(name: str) -> str:
             f"Required environment variable '{name}' is not set. "
             f"Set it in .env.local or export it before starting DECNET."
         )
-    
+
     if any(k.startswith("PYTEST") for k in os.environ):
         return value
 
@@ -54,6 +55,10 @@ DECNET_WEB_PORT: int = _port("DECNET_WEB_PORT", 8080)
 DECNET_ADMIN_USER: str = os.environ.get("DECNET_ADMIN_USER", "admin")
 DECNET_ADMIN_PASSWORD: str = os.environ.get("DECNET_ADMIN_PASSWORD", "admin")
 DECNET_DEVELOPER: bool = os.environ.get("DECNET_DEVELOPER", "False").lower() == "true"
+
+# Database Options
+DECNET_DB_TYPE: str = os.environ.get("DECNET_DB_TYPE", "sqlite").lower()
+DECNET_DB_URL: Optional[str] = os.environ.get("DECNET_DB_URL")
 
 # CORS — comma-separated list of allowed origins for the web dashboard API.
 # Defaults to the configured web host/port. Override with DECNET_CORS_ORIGINS if needed.
