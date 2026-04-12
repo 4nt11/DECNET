@@ -36,8 +36,6 @@ dev = [
     "freezegun>=1.5",
     "schemathesis>=4.0",
     "pytest-xdist>=3.8.0",
-]
-live = [
     "flask>=3.0",
     "twisted>=24.0",
     "requests>=2.32",
