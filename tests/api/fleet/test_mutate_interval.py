@@ -2,13 +2,11 @@
 Tests for the mutate interval API endpoint.
 """
 
-import json
 import pytest
 import httpx
-from unittest.mock import patch, MagicMock
+from unittest.mock import patch
 from pathlib import Path
 
-import decnet.config
 from decnet.config import DeckyConfig, DecnetConfig
 
 

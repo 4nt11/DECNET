@@ -8,7 +8,7 @@
 - [ ] **Telnet (Cowrie)** — Realistic banner and command emulation.
 - [ ] **RDP** — Realistic NLA authentication and screen capture (where possible).
 - [ ] **VNC** — Realistic RFB protocol handshake and authentication.
-- [ ] **Real SSH** — Pass-through or high-interaction proxying.
+- [x] **Real SSH** — High-interaction sshd with shell logging.
 
 ### Databases
 - [ ] **MySQL** — Support for common SQL queries and realistic schema.
@@ -22,6 +22,7 @@
 - [x] **HTTP** — Flexible templates (WordPress, phpMyAdmin, etc.) with logging.
 - [ ] **Docker API** — Realistic responses for `docker version` and `docker ps`.
 - [ ] **Kubernetes (K8s)** — Mocked kubectl responses and basic API exploration.
+- [x] **LLMNR** — Realistic local name resolution responses via responder-style emulation.
 
 ### File Transfer & Storage
 - [ ] **SMB** — Realistic share discovery and basic file browsing.
@@ -38,7 +39,6 @@
 - [x] **MQTT** — Basic topic subscription and publishing support.
 - [x] **SNMP** — Realistic MIB responses for common OIDs.
 - [ ] **SIP** — Basic VoIP protocol handshake and registration.
-- [ ] **LLMNR** — Realistic local name resolution responses.
 - [x] **Conpot** — SCADA/ICS protocol emulation (Modbus, etc.).
 
 ---
@@ -49,7 +49,7 @@
 - [ ] **Canary tokens** — Embed fake AWS keys and honeydocs into decky filesystems.
 - [ ] **Tarpit mode** — Slow down attackers by drip-feeding bytes or delaying responses.
 - [x] **Dynamic decky mutation** — Rotate exposed services or OS fingerprints over time.
-- [ ] **Credential harvesting DB** — Centralized database for all username/password attempts.
+- [x] **Credential harvesting DB** — Centralized database for all username/password attempts.
 - [ ] **Session recording** — Full capture for SSH/Telnet sessions.
 - [ ] **Payload capture** — Store and hash files uploaded by attackers.
 
@@ -67,7 +67,7 @@
 - [x] **Decky Inventory** — Dedicated "Decoy Fleet" page showing all deployed assets.
 - [ ] **Pre-built Kibana/Grafana dashboards** — Ship JSON exports for ELK/Grafana.
 - [ ] **CLI live feed** — `decnet watch` command for a unified, colored terminal stream.
-- [ ] **Traversal graph export** — Export attacker movement as DOT or JSON.
+- [x] **Traversal graph export** — Export attacker movement as JSON (via CLI).
 
 ## Deployment & Infrastructure
 

@@ -3,9 +3,8 @@
 import json
 import asyncio
 import pytest
-from pathlib import Path
 from types import SimpleNamespace
-from unittest.mock import patch, MagicMock, AsyncMock
+from unittest.mock import patch, MagicMock
 from decnet.collector import parse_rfc5424, is_service_container, is_service_event
 from decnet.collector.worker import (
     _stream_container, 

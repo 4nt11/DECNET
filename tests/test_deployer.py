@@ -8,8 +8,7 @@ All Docker and subprocess calls are mocked.
 
 import subprocess
 from pathlib import Path
-from types import SimpleNamespace
-from unittest.mock import MagicMock, patch, call
+from unittest.mock import MagicMock, patch
 
 import pytest
 

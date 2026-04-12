@@ -2,12 +2,10 @@
 Tests for the SSE stream endpoint (decnet/web/router/stream/api_stream_events.py).
 """
 
-import json
 import pytest
 import httpx
-import asyncio
 
-from unittest.mock import AsyncMock, MagicMock, patch
+from unittest.mock import AsyncMock, patch
 
 
 # ── Stream endpoint tests ─────────────────────────────────────────────────────

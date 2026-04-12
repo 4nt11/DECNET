@@ -2,14 +2,8 @@
 Tests for decnet/cli.py — CLI commands via Typer's CliRunner.
 """
 
-import subprocess
-import os
-import socketserver
-from pathlib import Path
-from unittest.mock import MagicMock, patch, AsyncMock
+from unittest.mock import MagicMock, patch
 
-import pytest
-import psutil
 from typer.testing import CliRunner
 
 from decnet.cli import app

@@ -3,14 +3,11 @@ Tests for decnet/web/api.py lifespan and decnet/web/dependencies.py auth helpers
 """
 
 import asyncio
-import os
 from unittest.mock import AsyncMock, MagicMock, patch
 
-import jwt
 import pytest
-import httpx
 
-from decnet.web.auth import SECRET_KEY, ALGORITHM, create_access_token
+from decnet.web.auth import create_access_token
 
 
 # ── get_current_user ──────────────────────────────────────────────────────────

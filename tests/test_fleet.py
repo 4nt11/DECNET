@@ -9,7 +9,6 @@ import pytest
 
 from decnet.archetypes import get_archetype
 from decnet.fleet import (
-    all_service_names,
     build_deckies,
     build_deckies_from_ini,
     resolve_distros,

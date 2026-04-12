@@ -8,7 +8,6 @@ async tests using temporary files.
 import asyncio
 import json
 import os
-from pathlib import Path
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
