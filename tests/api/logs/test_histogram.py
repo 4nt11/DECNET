@@ -14,8 +14,10 @@ from ..conftest import _FUZZ_SETTINGS
 
 
 @pytest.fixture
-def repo(tmp_path):
-    return get_repository(db_path=str(tmp_path / "histogram_test.db"))
+async def repo(tmp_path):
+    r = get_repository(db_path=str(tmp_path / "histogram_test.db"))
+    await r.initialize()
+    return r
 
 
 def _log(decky="d", service="ssh", ip="1.2.3.4", timestamp=None):
