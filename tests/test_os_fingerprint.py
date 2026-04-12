@@ -434,7 +434,7 @@ def test_compose_embedded_sysctls_full_set():
 
 def test_build_deckies_windows_archetype_sets_nmap_os():
     from decnet.archetypes import get_archetype
-    from decnet.cli import _build_deckies
+    from decnet.fleet import build_deckies as _build_deckies
 
     arch = get_archetype("windows-workstation")
     deckies = _build_deckies(
@@ -448,7 +448,7 @@ def test_build_deckies_windows_archetype_sets_nmap_os():
 
 
 def test_build_deckies_no_archetype_defaults_linux():
-    from decnet.cli import _build_deckies
+    from decnet.fleet import build_deckies as _build_deckies
 
     deckies = _build_deckies(
         n=1,
@@ -462,7 +462,7 @@ def test_build_deckies_no_archetype_defaults_linux():
 
 def test_build_deckies_embedded_archetype_sets_nmap_os():
     from decnet.archetypes import get_archetype
-    from decnet.cli import _build_deckies
+    from decnet.fleet import build_deckies as _build_deckies
 
     arch = get_archetype("iot-device")
     deckies = _build_deckies(

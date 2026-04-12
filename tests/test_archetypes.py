@@ -266,7 +266,7 @@ def test_ini_subsection_direct_match_unaffected():
 # ---------------------------------------------------------------------------
 
 def test_build_deckies_archetype_sets_services():
-    from decnet.cli import _build_deckies
+    from decnet.fleet import build_deckies as _build_deckies
     from decnet.archetypes import get_archetype
     arch = get_archetype("mail-server")
     result = _build_deckies(
@@ -283,7 +283,7 @@ def test_build_deckies_archetype_sets_services():
 
 
 def test_build_deckies_archetype_preferred_distros():
-    from decnet.cli import _build_deckies
+    from decnet.fleet import build_deckies as _build_deckies
     from decnet.archetypes import get_archetype
     arch = get_archetype("iot-device")  # preferred_distros=["alpine"]
     result = _build_deckies(
@@ -298,7 +298,7 @@ def test_build_deckies_archetype_preferred_distros():
 
 
 def test_build_deckies_explicit_services_override_archetype():
-    from decnet.cli import _build_deckies
+    from decnet.fleet import build_deckies as _build_deckies
     from decnet.archetypes import get_archetype
     arch = get_archetype("linux-server")
     result = _build_deckies(

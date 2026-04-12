@@ -28,7 +28,7 @@ from decnet.network import (
 
 console = Console()
 COMPOSE_FILE = Path("decnet-compose.yml")
-_CANONICAL_LOGGING = Path(__file__).parent.parent / "templates" / "decnet_logging.py"
+_CANONICAL_LOGGING = Path(__file__).parent.parent.parent / "templates" / "decnet_logging.py"
 
 
 def _sync_logging_helper(config: DecnetConfig) -> None:
@@ -108,7 +108,6 @@ def _compose_with_retry(
 def deploy(config: DecnetConfig, dry_run: bool = False, no_cache: bool = False, parallel: bool = False) -> None:
     client = docker.from_env()
 
-    # --- Network setup ---
     ip_list = [d.ip for d in config.deckies]
     decky_range = ips_to_range(ip_list)
     host_ip = get_host_ip(config.interface)
@@ -135,10 +134,8 @@ def deploy(config: DecnetConfig, dry_run: bool = False, no_cache: bool = False, 
             )
             setup_host_macvlan(config.interface, host_ip, decky_range)
 
-    # --- Sync shared logging helper into each template build context ---
     _sync_logging_helper(config)
 
-    # --- Compose generation ---
     compose_path = write_compose(config, COMPOSE_FILE)
     console.print(f"[bold cyan]Compose file written[/] → {compose_path}")
 
@@ -146,13 +143,8 @@ def deploy(config: DecnetConfig, dry_run: bool = False, no_cache: bool = False, 
         console.print("[yellow]Dry run — no containers started.[/]")
         return
 
-    # --- Save state before bring-up ---
     save_state(config, compose_path)
 
-    # --- Bring up ---
-    # With --parallel: force BuildKit, run build explicitly (so all images are
-    # built concurrently before any container starts), then up without --build.
-    # Without --parallel: keep the original up --build path.
     build_env = {"DOCKER_BUILDKIT": "1"} if parallel else {}
 
     console.print("[bold cyan]Building images and starting deckies...[/]")
@@ -169,35 +161,7 @@ def deploy(config: DecnetConfig, dry_run: bool = False, no_cache: bool = False, 
             _compose_with_retry("build", "--no-cache", compose_file=compose_path)
         _compose_with_retry("up", "--build", "-d", compose_file=compose_path)
 
-    # --- Status summary ---
     _print_status(config)
-
-
-def _kill_api() -> None:
-    """Find and kill any running DECNET API (uvicorn) or mutator processes."""
-    import psutil
-    import signal
-    import os
-
-    _killed: bool = False
-    for _proc in psutil.process_iter(['pid', 'name', 'cmdline']):
-        try:
-            _cmd = _proc.info['cmdline']
-            if not _cmd:
-                continue
-            if "uvicorn" in _cmd and "decnet.web.api:app" in _cmd:
-                console.print(f"[yellow]Stopping DECNET API (PID {_proc.info['pid']})...[/]")
-                os.kill(_proc.info['pid'], signal.SIGTERM)
-                _killed = True
-            elif "decnet.cli" in _cmd and "mutate" in _cmd and "--watch" in _cmd:
-                console.print(f"[yellow]Stopping DECNET Mutator Watcher (PID {_proc.info['pid']})...[/]")
-                os.kill(_proc.info['pid'], signal.SIGTERM)
-                _killed = True
-        except (psutil.NoSuchProcess, psutil.AccessDenied):
-            continue
-    
-    if _killed:
-        console.print("[green]Background processes stopped.[/]")
 
 
 def teardown(decky_id: str | None = None) -> None:
@@ -210,7 +174,6 @@ def teardown(decky_id: str | None = None) -> None:
     client = docker.from_env()
 
     if decky_id:
-        # Bring down only the services matching this decky
         svc_names = [f"{decky_id}-{svc}" for svc in [d.services for d in config.deckies if d.name == decky_id]]
         if not svc_names:
             console.print(f"[red]Decky '{decky_id}' not found in current deployment.[/]")
@@ -228,10 +191,7 @@ def teardown(decky_id: str | None = None) -> None:
             teardown_host_macvlan(decky_range)
         remove_macvlan_network(client)
         clear_state()
-        
-        # Kill API when doing full teardown
-        _kill_api()
-        
+
         net_driver = "IPvlan" if config.ipvlan else "MACVLAN"
         console.print(f"[green]All deckies torn down. {net_driver} network removed.[/]")
 

@@ -8,7 +8,7 @@ Usage:
   decnet services
 """
 
-import random
+import signal
 from typing import Optional
 
 import typer
@@ -28,7 +28,8 @@ from decnet.config import (
     DecnetConfig,
     random_hostname,
 )
-from decnet.distros import all_distros, get_distro, random_distro
+from decnet.distros import all_distros, get_distro
+from decnet.fleet import all_service_names, build_deckies, build_deckies_from_ini
 from decnet.ini_loader import IniConfig, load_ini
 from decnet.network import detect_interface, detect_subnet, allocate_ips, get_host_ip
 from decnet.services.registry import all_services
@@ -40,171 +41,31 @@ app = typer.Typer(
 )
 console = Console()
 
-def _all_service_names() -> list[str]:
-    """Return all registered service names from the live plugin registry."""
-    return sorted(all_services().keys())
 
+def _kill_api() -> None:
+    """Find and kill any running DECNET API (uvicorn) or mutator processes."""
+    import psutil
+    import os
 
-def _resolve_distros(
-    distros_explicit: list[str] | None,
-    randomize_distros: bool,
-    n: int,
-    archetype: Archetype | None = None,
-) -> list[str]:
-    """Return a list of n distro slugs based on CLI flags or archetype preference."""
-    if distros_explicit:
-        return [distros_explicit[i % len(distros_explicit)] for i in range(n)]
-    if randomize_distros:
-        return [random_distro().slug for _ in range(n)]
-    if archetype:
-        pool = archetype.preferred_distros
-        return [pool[i % len(pool)] for i in range(n)]
-    # Default: cycle through all distros to maximize heterogeneity
-    slugs = list(all_distros().keys())
-    return [slugs[i % len(slugs)] for i in range(n)]
+    _killed: bool = False
+    for _proc in psutil.process_iter(['pid', 'name', 'cmdline']):
+        try:
+            _cmd = _proc.info['cmdline']
+            if not _cmd:
+                continue
+            if "uvicorn" in _cmd and "decnet.web.api:app" in _cmd:
+                console.print(f"[yellow]Stopping DECNET API (PID {_proc.info['pid']})...[/]")
+                os.kill(_proc.info['pid'], signal.SIGTERM)
+                _killed = True
+            elif "decnet.cli" in _cmd and "mutate" in _cmd and "--watch" in _cmd:
+                console.print(f"[yellow]Stopping DECNET Mutator Watcher (PID {_proc.info['pid']})...[/]")
+                os.kill(_proc.info['pid'], signal.SIGTERM)
+                _killed = True
+        except (psutil.NoSuchProcess, psutil.AccessDenied):
+            continue
 
-
-def _build_deckies(
-    n: int,
-    ips: list[str],
-    services_explicit: list[str] | None,
-    randomize_services: bool,
-    distros_explicit: list[str] | None = None,
-    randomize_distros: bool = False,
-    archetype: Archetype | None = None,
-) -> list[DeckyConfig]:
-    deckies = []
-    used_combos: set[frozenset] = set()
-    distro_slugs = _resolve_distros(distros_explicit, randomize_distros, n, archetype)
-
-    for i, ip in enumerate(ips):
-        name = f"decky-{i + 1:02d}"
-        distro = get_distro(distro_slugs[i])
-        hostname = random_hostname(distro.slug)
-
-        if services_explicit:
-            svc_list = services_explicit
-        elif archetype:
-            svc_list = list(archetype.services)
-        elif randomize_services:
-            svc_pool = _all_service_names()
-            attempts = 0
-            while True:
-                count = random.randint(1, min(3, len(svc_pool)))  # nosec B311
-                chosen = frozenset(random.sample(svc_pool, count))  # nosec B311
-                attempts += 1
-                if chosen not in used_combos or attempts > 20:
-                    break
-            svc_list = list(chosen)
-            used_combos.add(chosen)
-        else:
-            typer.echo("Error: provide --services, --archetype, or --randomize-services.", err=True)
-            raise typer.Exit(1)
-
-        deckies.append(
-            DeckyConfig(
-                name=name,
-                ip=ip,
-                services=svc_list,
-                distro=distro.slug,
-                base_image=distro.image,
-                build_base=distro.build_base,
-                hostname=hostname,
-                archetype=archetype.slug if archetype else None,
-                nmap_os=archetype.nmap_os if archetype else "linux",
-            )
-        )
-    return deckies
-
-
-def _build_deckies_from_ini(
-    ini: IniConfig,
-    subnet_cidr: str,
-    gateway: str,
-    host_ip: str,
-    randomize: bool,
-    cli_mutate_interval: int | None = None,
-) -> list[DeckyConfig]:
-    """Build DeckyConfig list from an IniConfig, auto-allocating missing IPs."""
-    from ipaddress import IPv4Address, IPv4Network
-    import time
-    now = time.time()
-
-    explicit_ips: set[IPv4Address] = {
-        IPv4Address(s.ip) for s in ini.deckies if s.ip
-    }
-
-    net = IPv4Network(subnet_cidr, strict=False)
-    reserved = {
-        net.network_address,
-        net.broadcast_address,
-        IPv4Address(gateway),
-        IPv4Address(host_ip),
-    } | explicit_ips
-
-    auto_pool = (str(addr) for addr in net.hosts() if addr not in reserved)
-
-    deckies: list[DeckyConfig] = []
-    for spec in ini.deckies:
-        # Resolve archetype (if any) — explicit services/distro override it
-        arch: Archetype | None = None
-        if spec.archetype:
-            arch = get_archetype(spec.archetype)
-
-        # Distro: archetype preferred list → random → global cycle
-        distro_pool = arch.preferred_distros if arch else list(all_distros().keys())
-        distro = get_distro(distro_pool[len(deckies) % len(distro_pool)])
-        hostname = random_hostname(distro.slug)
-
-        ip = spec.ip or next(auto_pool, None)
-        if ip is None:
-            raise ValueError(f"Not enough free IPs in {subnet_cidr} while assigning IP for '{spec.name}'.")
-
-        if spec.services:
-            known = set(_all_service_names())
-            unknown = [s for s in spec.services if s not in known]
-            if unknown:
-                raise ValueError(
-                    f"Unknown service(s) in [{spec.name}]: {unknown}. "
-                    f"Available: {_all_service_names()}"
-                )
-            svc_list = spec.services
-        elif arch:
-            svc_list = list(arch.services)
-        elif randomize:
-            svc_pool = _all_service_names()
-            count = random.randint(1, min(3, len(svc_pool)))  # nosec B311
-            svc_list = random.sample(svc_pool, count)  # nosec B311
-        else:
-            raise ValueError(
-                f"Decky '[{spec.name}]' has no services= in config. "
-                "Add services=, archetype=, or use --randomize-services."
-            )
-
-        # nmap_os priority: explicit INI key > archetype default > "linux"
-        resolved_nmap_os = spec.nmap_os or (arch.nmap_os if arch else "linux")
-        
-        # mutation interval priority: CLI > per-decky INI > global INI
-        decky_mutate_interval = cli_mutate_interval
-        if decky_mutate_interval is None:
-            decky_mutate_interval = spec.mutate_interval if spec.mutate_interval is not None else ini.mutate_interval
-
-        deckies.append(DeckyConfig(
-            name=spec.name,
-            ip=ip,
-            services=svc_list,
-            distro=distro.slug,
-            base_image=distro.image,
-            build_base=distro.build_base,
-            hostname=hostname,
-            archetype=arch.slug if arch else None,
-            service_config=spec.service_config,
-            nmap_os=resolved_nmap_os,
-            mutate_interval=decky_mutate_interval,
-            last_mutated=now,
-        ))
-    return deckies
-
+    if _killed:
+        console.print("[green]Background processes stopped.[/]")
 
 
 @app.command()
@@ -270,7 +131,6 @@ def deploy(
             console.print(f"[red]{e}[/]")
             raise typer.Exit(1)
 
-        # CLI flags override INI values when explicitly provided
         iface = interface or ini.interface or detect_interface()
         subnet_cidr = subnet or ini.subnet
         effective_gateway = ini.gateway
@@ -284,7 +144,6 @@ def deploy(
                       f"[dim]Subnet:[/] {subnet_cidr}  [dim]Gateway:[/] {effective_gateway}  "
                       f"[dim]Host IP:[/] {host_ip}")
 
-        # Register bring-your-own services from INI before validation
         if ini.custom_services:
             from decnet.custom_service import CustomService
             from decnet.services.registry import register_custom_service
@@ -300,7 +159,7 @@ def deploy(
 
         effective_log_file = log_file
         try:
-            decky_configs = _build_deckies_from_ini(
+            decky_configs = build_deckies_from_ini(
                 ini, subnet_cidr, effective_gateway, host_ip, randomize_services, cli_mutate_interval=mutate_interval
             )
         except ValueError as e:
@@ -316,13 +175,12 @@ def deploy(
 
         services_list = [s.strip() for s in services.split(",")] if services else None
         if services_list:
-            known = set(_all_service_names())
+            known = set(all_service_names())
             unknown = [s for s in services_list if s not in known]
             if unknown:
-                console.print(f"[red]Unknown service(s): {unknown}. Available: {_all_service_names()}[/]")
+                console.print(f"[red]Unknown service(s): {unknown}. Available: {all_service_names()}[/]")
                 raise typer.Exit(1)
 
-        # Resolve archetype if provided
         arch: Archetype | None = None
         if archetype_name:
             try:
@@ -356,14 +214,13 @@ def deploy(
                 raise typer.Exit(1)
 
         ips = allocate_ips(subnet_cidr, effective_gateway, host_ip, deckies, ip_start)
-        decky_configs = _build_deckies(
+        decky_configs = build_deckies(
             deckies, ips, services_list, randomize_services,
             distros_explicit=distros_list, randomize_distros=randomize_distros,
             archetype=arch, mutate_interval=mutate_interval,
         )
         effective_log_file = log_file
 
-    # Handle automatic log file for API
     if api and not effective_log_file:
         effective_log_file = os.path.join(os.getcwd(), "decnet.log")
         console.print(f"[cyan]API mode enabled: defaulting log-file to {effective_log_file}[/]")
@@ -379,9 +236,9 @@ def deploy(
         mutate_interval=mutate_interval,
     )
 
-    from decnet.deployer import deploy as _deploy
+    from decnet.engine import deploy as _deploy
     _deploy(config, dry_run=dry_run, no_cache=no_cache, parallel=parallel)
-    
+
     if mutate_interval is not None and not dry_run:
         import subprocess  # nosec B404
         import sys
@@ -396,8 +253,6 @@ def deploy(
         except (FileNotFoundError, subprocess.SubprocessError):
             console.print("[red]Failed to start mutator watcher.[/]")
 
-    # Start the log collector as a background process unless --api is handling it.
-    # The collector streams Docker logs → log_file (RFC 5424) + log_file.json.
     if effective_log_file and not dry_run and not api:
         import subprocess  # noqa: F811  # nosec B404
         import sys
@@ -436,7 +291,7 @@ def collect(
 ) -> None:
     """Stream Docker logs from all running decky service containers to a log file."""
     import asyncio
-    from decnet.web.collector import log_collector_worker
+    from decnet.collector import log_collector_worker
     console.print(f"[bold cyan]Collector starting[/] → {log_file}")
     asyncio.run(log_collector_worker(log_file))
 
@@ -465,7 +320,7 @@ def mutate(
 @app.command()
 def status() -> None:
     """Show running deckies and their status."""
-    from decnet.deployer import status as _status
+    from decnet.engine import status as _status
     _status()
 
 
@@ -479,8 +334,11 @@ def teardown(
         console.print("[red]Specify --all or --id <name>.[/]")
         raise typer.Exit(1)
 
-    from decnet.deployer import teardown as _teardown
+    from decnet.engine import teardown as _teardown
     _teardown(decky_id=id_)
+
+    if all_:
+        _kill_api()
 
 
 @app.command(name="services")
@@ -591,7 +449,6 @@ def serve_web(
     import socketserver
     from pathlib import Path
 
-    # Assuming decnet_web/dist is relative to the project root
     dist_dir = Path(__file__).parent.parent / "decnet_web" / "dist"
 
     if not dist_dir.exists():
@@ -600,10 +457,8 @@ def serve_web(
 
     class SPAHTTPRequestHandler(http.server.SimpleHTTPRequestHandler):
         def do_GET(self):
-            # Try to serve the requested file
             path = self.translate_path(self.path)
             if not Path(path).exists() or Path(path).is_dir():
-                # If not found or is a directory, serve index.html (for React Router)
                 self.path = "/index.html"
             return super().do_GET()
 

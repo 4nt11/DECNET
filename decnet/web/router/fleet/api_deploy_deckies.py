@@ -4,7 +4,7 @@ import os
 from fastapi import APIRouter, Depends, HTTPException
 
 from decnet.config import DEFAULT_MUTATE_INTERVAL, DecnetConfig, load_state
-from decnet.deployer import deploy as _deploy
+from decnet.engine import deploy as _deploy
 from decnet.ini_loader import load_ini_from_string
 from decnet.network import detect_interface, detect_subnet, get_host_ip
 from decnet.web.dependencies import get_current_user
@@ -15,7 +15,7 @@ router = APIRouter()
 
 @router.post("/deckies/deploy", tags=["Fleet Management"])
 async def api_deploy_deckies(req: DeployIniRequest, current_user: str = Depends(get_current_user)) -> dict[str, str]:
-    from decnet.cli import _build_deckies_from_ini
+    from decnet.fleet import build_deckies_from_ini
 
     try:
         ini = load_ini_from_string(req.ini_content)
@@ -56,7 +56,7 @@ async def api_deploy_deckies(req: DeployIniRequest, current_user: str = Depends(
         )
 
     try:
-        new_decky_configs = _build_deckies_from_ini(
+        new_decky_configs = build_deckies_from_ini(
             ini, subnet_cidr, gateway, host_ip, randomize_services, cli_mutate_interval=None
         )
     except ValueError as e:

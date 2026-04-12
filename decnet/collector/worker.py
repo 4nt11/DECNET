@@ -14,7 +14,7 @@ from datetime import datetime
 from pathlib import Path
 from typing import Any, Optional
 
-logger = logging.getLogger("decnet.web.collector")
+logger = logging.getLogger("decnet.collector")
 
 # ─── RFC 5424 parser ──────────────────────────────────────────────────────────
 
@@ -175,12 +175,10 @@ async def log_collector_worker(log_file: str) -> None:
     try:
         client = docker.from_env()
 
-        # Collect from already-running containers
         for container in client.containers.list():
             if is_service_container(container):
                 _spawn(container.id, container.name.lstrip("/"))
 
-        # Watch for new containers starting
         def _watch_events() -> None:
             for event in client.events(
                 decode=True,

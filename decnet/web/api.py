@@ -9,7 +9,7 @@ from fastapi.middleware.cors import CORSMiddleware
 
 from decnet.env import DECNET_CORS_ORIGINS, DECNET_DEVELOPER, DECNET_INGEST_LOG_FILE
 from decnet.web.dependencies import repo
-from decnet.web.collector import log_collector_worker
+from decnet.collector import log_collector_worker
 from decnet.web.ingester import log_ingestion_worker
 from decnet.web.router import api_router
 

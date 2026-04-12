@@ -10,7 +10,8 @@ from unittest.mock import MagicMock, patch
 import pytest
 
 from decnet.config import DeckyConfig, DecnetConfig
-from decnet.mutator import _compose_with_retry, mutate_all, mutate_decky
+from decnet.engine import _compose_with_retry
+from decnet.mutator import mutate_all, mutate_decky
 
 
 # ---------------------------------------------------------------------------
@@ -48,37 +49,37 @@ def _make_config(deckies=None, mutate_interval=30):
 class TestComposeWithRetry:
     def test_succeeds_on_first_attempt(self):
         result = MagicMock(returncode=0, stdout="done\n")
-        with patch("decnet.mutator.subprocess.run", return_value=result) as mock_run:
+        with patch("decnet.engine.deployer.subprocess.run", return_value=result) as mock_run:
             _compose_with_retry("up", "-d", compose_file=Path("compose.yml"))
         mock_run.assert_called_once()
 
     def test_retries_on_failure_then_succeeds(self):
         fail = MagicMock(returncode=1, stdout="", stderr="transient error")
         ok   = MagicMock(returncode=0, stdout="", stderr="")
-        with patch("decnet.mutator.subprocess.run", side_effect=[fail, ok]) as mock_run, \
-             patch("decnet.mutator.time.sleep"):
+        with patch("decnet.engine.deployer.subprocess.run", side_effect=[fail, ok]) as mock_run, \
+             patch("decnet.engine.deployer.time.sleep"):
             _compose_with_retry("up", "-d", compose_file=Path("compose.yml"), retries=3)
         assert mock_run.call_count == 2
 
     def test_raises_after_all_retries_exhausted(self):
         fail = MagicMock(returncode=1, stdout="", stderr="hard error")
-        with patch("decnet.mutator.subprocess.run", return_value=fail), \
-             patch("decnet.mutator.time.sleep"):
+        with patch("decnet.engine.deployer.subprocess.run", return_value=fail), \
+             patch("decnet.engine.deployer.time.sleep"):
             with pytest.raises(subprocess.CalledProcessError):
                 _compose_with_retry("up", "-d", compose_file=Path("compose.yml"), retries=3)
 
     def test_exponential_backoff(self):
         fail = MagicMock(returncode=1, stdout="", stderr="")
         sleep_calls = []
-        with patch("decnet.mutator.subprocess.run", return_value=fail), \
-             patch("decnet.mutator.time.sleep", side_effect=lambda d: sleep_calls.append(d)):
+        with patch("decnet.engine.deployer.subprocess.run", return_value=fail), \
+             patch("decnet.engine.deployer.time.sleep", side_effect=lambda d: sleep_calls.append(d)):
             with pytest.raises(subprocess.CalledProcessError):
                 _compose_with_retry("up", compose_file=Path("c.yml"), retries=3, delay=1.0)
         assert sleep_calls == [1.0, 2.0]
 
     def test_correct_command_structure(self):
         ok = MagicMock(returncode=0, stdout="")
-        with patch("decnet.mutator.subprocess.run", return_value=ok) as mock_run:
+        with patch("decnet.engine.deployer.subprocess.run", return_value=ok) as mock_run:
             _compose_with_retry("up", "-d", "--remove-orphans",
                                 compose_file=Path("/tmp/compose.yml"))
         cmd = mock_run.call_args[0][0]
@@ -96,14 +97,14 @@ class TestMutateDecky:
         """Return a context manager that mocks all I/O in mutate_decky."""
         cfg = config or _make_config()
         return (
-            patch("decnet.mutator.load_state", return_value=(cfg, compose_path)),
-            patch("decnet.mutator.save_state"),
-            patch("decnet.mutator.write_compose"),
-            patch("decnet.mutator._compose_with_retry"),
+            patch("decnet.mutator.engine.load_state", return_value=(cfg, compose_path)),
+            patch("decnet.mutator.engine.save_state"),
+            patch("decnet.mutator.engine.write_compose"),
+            patch("decnet.mutator.engine._compose_with_retry"),
         )
 
     def test_returns_false_when_no_state(self):
-        with patch("decnet.mutator.load_state", return_value=None):
+        with patch("decnet.mutator.engine.load_state", return_value=None):
             assert mutate_decky("decky-01") is False
 
     def test_returns_false_when_decky_not_found(self):
@@ -118,20 +119,20 @@ class TestMutateDecky:
 
     def test_saves_state_after_mutation(self):
         p = self._patch()
-        with p[0], patch("decnet.mutator.save_state") as mock_save, p[2], p[3]:
+        with p[0], patch("decnet.mutator.engine.save_state") as mock_save, p[2], p[3]:
             mutate_decky("decky-01")
         mock_save.assert_called_once()
 
     def test_regenerates_compose_after_mutation(self):
         p = self._patch()
-        with p[0], p[1], patch("decnet.mutator.write_compose") as mock_compose, p[3]:
+        with p[0], p[1], patch("decnet.mutator.engine.write_compose") as mock_compose, p[3]:
             mutate_decky("decky-01")
         mock_compose.assert_called_once()
 
     def test_returns_false_on_compose_failure(self):
         p = self._patch()
         err = subprocess.CalledProcessError(1, "docker", "", "compose failed")
-        with p[0], p[1], p[2], patch("decnet.mutator._compose_with_retry", side_effect=err):
+        with p[0], p[1], p[2], patch("decnet.mutator.engine._compose_with_retry", side_effect=err):
             assert mutate_decky("decky-01") is False
 
     def test_mutation_changes_services(self):
@@ -166,15 +167,15 @@ class TestMutateDecky:
 
 class TestMutateAll:
     def test_no_state_returns_early(self):
-        with patch("decnet.mutator.load_state", return_value=None), \
-             patch("decnet.mutator.mutate_decky") as mock_mutate:
+        with patch("decnet.mutator.engine.load_state", return_value=None), \
+             patch("decnet.mutator.engine.mutate_decky") as mock_mutate:
             mutate_all()
         mock_mutate.assert_not_called()
 
     def test_force_mutates_all_deckies(self):
         cfg = _make_config(deckies=[_make_decky("d1"), _make_decky("d2")])
-        with patch("decnet.mutator.load_state", return_value=(cfg, Path("c.yml"))), \
-             patch("decnet.mutator.mutate_decky", return_value=True) as mock_mutate:
+        with patch("decnet.mutator.engine.load_state", return_value=(cfg, Path("c.yml"))), \
+             patch("decnet.mutator.engine.mutate_decky", return_value=True) as mock_mutate:
             mutate_all(force=True)
         assert mock_mutate.call_count == 2
 
@@ -182,8 +183,8 @@ class TestMutateAll:
         # last_mutated = now, interval = 30 min → not due
         now = time.time()
         cfg = _make_config(deckies=[_make_decky(mutate_interval=30, last_mutated=now)])
-        with patch("decnet.mutator.load_state", return_value=(cfg, Path("c.yml"))), \
-             patch("decnet.mutator.mutate_decky") as mock_mutate:
+        with patch("decnet.mutator.engine.load_state", return_value=(cfg, Path("c.yml"))), \
+             patch("decnet.mutator.engine.mutate_decky") as mock_mutate:
             mutate_all(force=False)
         mock_mutate.assert_not_called()
 
@@ -191,8 +192,8 @@ class TestMutateAll:
         # last_mutated = 2 hours ago, interval = 30 min → due
         old_ts = time.time() - 7200
         cfg = _make_config(deckies=[_make_decky(mutate_interval=30, last_mutated=old_ts)])
-        with patch("decnet.mutator.load_state", return_value=(cfg, Path("c.yml"))), \
-             patch("decnet.mutator.mutate_decky", return_value=True) as mock_mutate:
+        with patch("decnet.mutator.engine.load_state", return_value=(cfg, Path("c.yml"))), \
+             patch("decnet.mutator.engine.mutate_decky", return_value=True) as mock_mutate:
             mutate_all(force=False)
         mock_mutate.assert_called_once_with("decky-01")
 
@@ -201,7 +202,7 @@ class TestMutateAll:
             deckies=[_make_decky(mutate_interval=None)],
             mutate_interval=None,
         )
-        with patch("decnet.mutator.load_state", return_value=(cfg, Path("c.yml"))), \
-             patch("decnet.mutator.mutate_decky") as mock_mutate:
+        with patch("decnet.mutator.engine.load_state", return_value=(cfg, Path("c.yml"))), \
+             patch("decnet.mutator.engine.mutate_decky") as mock_mutate:
             mutate_all(force=False)
         mock_mutate.assert_not_called()
