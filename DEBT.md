@@ -117,6 +117,11 @@ Bait emails are hardcoded. A stub env var `IMAP_EMAIL_SEED` is read but currentl
 The bait store and honeypot files are hardcoded. A dynamic injection framework should be created to populate this payload across different honeypots.
 **Status:** Deferred — out of current scope.
 
+### DEBT-028 — Test coverage for `api_deploy_deckies.py`
+**File:** `decnet/web/router/fleet/api_deploy_deckies.py` (24% coverage)
+The deploy endpoint exercises Docker Compose orchestration via `decnet.engine.deploy`, which creates MACVLAN/IPvlan networks and runs `docker compose up`. Meaningful tests require mocking the entire Docker SDK + subprocess layer, coupling tightly to implementation details.
+**Status:** Deferred — test after Docker-in-Docker CI is available.
+
 ---
 
 ## 🟢 Low
@@ -170,6 +175,7 @@ The bait store and honeypot files are hardcoded. A dynamic injection framework s
 | ~~DEBT-025~~ | ✅ | Build | resolved |
 | DEBT-026 | 🟡 Medium | Features | deferred (out of scope) |
 | DEBT-027 | 🟡 Medium | Features | deferred (out of scope) |
+| DEBT-028 | 🟡 Medium | Testing | deferred (needs DinD CI) |
 
-**Remaining open:** DEBT-011 (Alembic), DEBT-023 (image pinning), DEBT-026 (modular mailboxes), DEBT-027 (Dynamic bait store)
-**Estimated remaining effort:** ~10 hours
+**Remaining open:** DEBT-011 (Alembic), DEBT-023 (image pinning), DEBT-026 (modular mailboxes), DEBT-027 (Dynamic bait store), DEBT-028 (deploy endpoint tests)
+**Estimated remaining effort:** ~12 hours

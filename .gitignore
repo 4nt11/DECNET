@@ -20,3 +20,5 @@ windows1
 decnet.json
 .env
 .env.local
+.coverage
+.hypothesis/

@@ -21,7 +21,8 @@
       "Bash(docker image:*)",
       "Read(//home/anti/Tools/cowrie/src/cowrie/data/txtcmds/**)",
       "Read(//home/anti/Tools/cowrie/src/cowrie/data/txtcmds/bin/**)",
-      "mcp__plugin_context-mode_context-mode__ctx_index"
+      "mcp__plugin_context-mode_context-mode__ctx_index",
+      "Bash(ls:*)"
     ]
   }
 }
