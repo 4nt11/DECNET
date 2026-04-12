@@ -83,7 +83,7 @@ def assert_rfc5424(
     criteria = {"service": service, "event_type": event_type, **fields}
     raise AssertionError(
         f"No RFC 5424 line matching {criteria!r} found among {len(lines)} lines:\n"
-        + "\n".join(f"  {l!r}" for l in lines[:20])
+        + "\n".join(f"  {line!r}" for line in lines[:20])
     )
 
 

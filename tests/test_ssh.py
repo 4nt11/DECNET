@@ -112,8 +112,8 @@ def test_dockerfile_has_rsyslog():
 
 
 def test_dockerfile_runs_as_root():
-    lines = [l.strip() for l in _dockerfile_text().splitlines()]
-    user_lines = [l for l in lines if l.startswith("USER ")]
+    lines = [line.strip() for line in _dockerfile_text().splitlines()]
+    user_lines = [line for line in lines if line.startswith("USER ")]
     assert user_lines == [], f"Unexpected USER directive(s): {user_lines}"
 
 

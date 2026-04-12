@@ -8,7 +8,7 @@ tests for zero/tiny/huge msg_len in both the startup and auth states.
 import importlib.util
 import struct
 import sys
-from unittest.mock import MagicMock, patch
+from unittest.mock import MagicMock
 
 import pytest
 from hypothesis import given, settings

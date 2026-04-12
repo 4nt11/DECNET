@@ -6,7 +6,6 @@ forwards events as JSON to LOG_TARGET if set.
 """
 
 import os
-import sys
 from pathlib import Path
 
 from twisted.internet import defer, reactor

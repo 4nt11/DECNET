@@ -176,7 +176,7 @@ def test_pop3_list_returns_10_entries(pop3_mod):
     resp = _replies(written).decode()
     assert resp.startswith("+OK 10")
     # Count individual message lines: "N size\r\n"
-    entries = [l for l in resp.split("\r\n") if l and l[0].isdigit()]
+    entries = [entry for entry in resp.split("\r\n") if entry and entry[0].isdigit()]
     assert len(entries) == 10
 
 
@@ -225,7 +225,7 @@ def test_pop3_top_3_body_lines_count(pop3_mod):
     parts = resp.split("\r\n\r\n", 1)
     assert len(parts) == 2
     body_section = parts[1].rstrip("\r\n.")
-    body_lines = [l for l in body_section.split("\r\n") if l != "."]
+    body_lines = [part for part in body_section.split("\r\n") if part != "."]
     assert len(body_lines) <= 3
 
 
@@ -235,7 +235,7 @@ def test_pop3_uidl_returns_10_entries(pop3_mod):
     _send(proto, "UIDL")
     resp = _replies(written).decode()
     assert resp.startswith("+OK")
-    entries = [l for l in resp.split("\r\n") if l and l[0].isdigit()]
+    entries = [entry for entry in resp.split("\r\n") if entry and entry[0].isdigit()]
     assert len(entries) == 10
 
 

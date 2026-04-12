@@ -13,7 +13,7 @@ from decnet.archetypes import get_archetype
 from decnet.fleet import all_service_names
 from decnet.composer import write_compose
 from decnet.config import DeckyConfig, load_state, save_state
-from decnet.engine import COMPOSE_FILE, _compose_with_retry
+from decnet.engine import _compose_with_retry
 
 import subprocess  # nosec B404
 

@@ -33,25 +33,20 @@ class SQLiteRepository(BaseRepository):
         from decnet.web.db.sqlite.database import get_sync_engine
         engine = get_sync_engine(self.db_path)
         with engine.connect() as conn:
-            result = conn.execute(
-                text("SELECT uuid FROM users WHERE username = :u"),
-                {"u": DECNET_ADMIN_USER},
+            conn.execute(
+                text(
+                    "INSERT OR IGNORE INTO users (uuid, username, password_hash, role, must_change_password) "
+                    "VALUES (:uuid, :u, :p, :r, :m)"
+                ),
+                {
+                    "uuid": str(uuid.uuid4()),
+                    "u": DECNET_ADMIN_USER,
+                    "p": get_password_hash(DECNET_ADMIN_PASSWORD),
+                    "r": "admin",
+                    "m": 1,
+                },
             )
-            if not result.fetchone():
-                conn.execute(
-                    text(
-                        "INSERT INTO users (uuid, username, password_hash, role, must_change_password) "
-                        "VALUES (:uuid, :u, :p, :r, :m)"
-                    ),
-                    {
-                        "uuid": str(uuid.uuid4()),
-                        "u": DECNET_ADMIN_USER,
-                        "p": get_password_hash(DECNET_ADMIN_PASSWORD),
-                        "r": "admin",
-                        "m": 1,
-                    },
-                )
-                conn.commit()
+            conn.commit()
 
     async def initialize(self) -> None:
         """Async warm-up / verification."""

@@ -28,8 +28,8 @@ class TestHTTPLive:
         )
         lines = drain()
         # body field present in log line
-        assert any("body=" in l for l in lines if "request" in l), (
-            f"Expected 'body=' in request log line. Got:\n" + "\n".join(lines[:10])
+        assert any("body=" in line for line in lines if "request" in line), (
+            "Expected 'body=' in request log line. Got:\n" + "\n".join(lines[:10])
         )
 
     def test_method_and_path_in_log(self, live_service):

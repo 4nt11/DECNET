@@ -35,5 +35,5 @@ class TestFTPLive:
         ftp.close()
         lines = drain()
         # At least one RFC 5424 line from the ftp service
-        rfc_lines = [l for l in lines if "<" in l and ">1 " in l and "ftp" in l]
-        assert rfc_lines, f"No ftp RFC 5424 lines found. stdout:\n" + "\n".join(lines[:15])
+        rfc_lines = [line for line in lines if "<" in line and ">1 " in line and "ftp" in line]
+        assert rfc_lines, "No ftp RFC 5424 lines found. stdout:\n" + "\n".join(lines[:15])

@@ -8,7 +8,7 @@ length fields that could cause huge buffer allocations.
 import importlib.util
 import struct
 import sys
-from unittest.mock import MagicMock, patch
+from unittest.mock import MagicMock
 
 import pytest
 from hypothesis import given, settings

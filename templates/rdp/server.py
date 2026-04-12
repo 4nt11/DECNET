@@ -7,7 +7,6 @@ LOG_TARGET if set.
 """
 
 import os
-import sys
 
 from twisted.internet import protocol, reactor
 from twisted.python import log as twisted_log

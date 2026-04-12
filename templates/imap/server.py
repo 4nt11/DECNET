@@ -18,7 +18,7 @@ NODE_NAME   = os.environ.get("NODE_NAME", "mailserver")
 SERVICE_NAME = "imap"
 LOG_TARGET  = os.environ.get("LOG_TARGET", "")
 PORT        = int(os.environ.get("PORT", "143"))
-IMAP_BANNER = os.environ.get("IMAP_BANNER", f"* OK Dovecot ready.\r\n")
+IMAP_BANNER = os.environ.get("IMAP_BANNER", "* OK Dovecot ready.\r\n")
 _RAW_USERS  = os.environ.get("IMAP_USERS", "admin:admin123,root:toor,mail:mail,user:user")
 
 VALID_USERS: dict[str, str] = {

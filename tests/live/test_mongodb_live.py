@@ -65,6 +65,6 @@ class TestMongoDBLive:
             client.close()
         lines = drain()
         # At least one message was exchanged
-        assert any("mongodb" in l for l in lines), (
+        assert any("mongodb" in line for line in lines), (
             "Expected at least one mongodb log line"
         )

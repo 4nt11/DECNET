@@ -24,13 +24,11 @@ from decnet.env import (
 )
 from decnet.archetypes import Archetype, all_archetypes, get_archetype
 from decnet.config import (
-    DeckyConfig,
     DecnetConfig,
-    random_hostname,
 )
 from decnet.distros import all_distros, get_distro
 from decnet.fleet import all_service_names, build_deckies, build_deckies_from_ini
-from decnet.ini_loader import IniConfig, load_ini
+from decnet.ini_loader import load_ini
 from decnet.network import detect_interface, detect_subnet, allocate_ips, get_host_ip
 from decnet.services.registry import all_services
 
