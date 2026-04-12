@@ -1,4 +1,0 @@
-# file: /home/anti/Tools/DECNET/decnet/services/llmnr.py
-# hypothesis_version: 6.151.12
-
-[5353, 5355, 'LOG_TARGET', 'NODE_NAME', 'build', 'container_name', 'context', 'environment', 'llmnr', 'restart', 'templates', 'unless-stopped']

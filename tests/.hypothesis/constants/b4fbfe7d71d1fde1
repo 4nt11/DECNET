@@ -1,4 +1,0 @@
-# file: /home/anti/Tools/DECNET/decnet/correlation/graph.py
-# hypothesis_version: 6.151.11
-
-[' → ', 'attacker_ip', 'deckies', 'decky', 'decky_count', 'duration_seconds', 'event_type', 'first_seen', 'hop_count', 'hops', 'last_seen', 'path', 'service', 'timestamp']

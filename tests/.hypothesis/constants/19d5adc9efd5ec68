@@ -1,4 +1,0 @@
-# file: /home/anti/Tools/DECNET/decnet/web/ingester.py
-# hypothesis_version: 6.151.11
-
-['.json', 'decnet.web.ingester', 'r', 'replace', 'utf-8']

@@ -1,4 +1,0 @@
-# file: /home/anti/Tools/DECNET/decnet/web/sqlite_repository.py
-# hypothesis_version: 6.151.11
-
-['SELECT * FROM logs', 'active_deckies', 'attacker_ip', 'decky', 'decnet.db', 'event_type', 'fields', 'msg', 'must_change_password', 'password_hash', 'raw_line', 'role', 'service', 'timestamp', 'total', 'total_logs', 'unique_attackers', 'username', 'uuid']

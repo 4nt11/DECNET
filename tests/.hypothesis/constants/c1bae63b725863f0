@@ -1,4 +1,0 @@
-# file: /home/anti/Tools/DECNET/decnet/services/imap.py
-# hypothesis_version: 6.151.12
-
-[143, 993, 'LOG_TARGET', 'NODE_NAME', 'build', 'container_name', 'context', 'environment', 'imap', 'restart', 'templates', 'unless-stopped']

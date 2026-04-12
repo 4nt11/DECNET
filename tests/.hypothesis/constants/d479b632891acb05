@@ -1,4 +1,0 @@
-# file: /home/anti/Tools/DECNET/decnet/logging/file_handler.py
-# hypothesis_version: 6.151.11
-
-[1024, '%(message)s', 'DECNET_LOG_FILE', 'decnet.syslog', 'utf-8']

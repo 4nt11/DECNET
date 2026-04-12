@@ -1,4 +1,0 @@
-# file: /home/anti/Tools/DECNET/decnet/services/mssql.py
-# hypothesis_version: 6.151.12
-
-[1433, 'LOG_TARGET', 'NODE_NAME', 'build', 'container_name', 'context', 'environment', 'mssql', 'restart', 'templates', 'unless-stopped']

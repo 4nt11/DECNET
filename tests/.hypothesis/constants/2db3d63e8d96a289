@@ -1,4 +1,0 @@
-# file: /home/anti/Tools/DECNET/decnet/deployer.py
-# hypothesis_version: 6.151.12
-
-[5.0, ', ', '--build', '--no-cache', '--watch', '-d', '-f', 'DECNET Deckies', 'Decky', 'Deployed Deckies', 'Hostname', 'IP', 'IPvlan', 'IPvlan L2', 'MACVLAN', 'Services', 'Status', '[green]up[/]', '[red]degraded[/]', 'absent', 'bold', 'build', 'cmdline', 'compose', 'decnet-compose.yml', 'decnet.cli', 'decnet.web.api:app', 'docker', 'down', 'green', 'manifest for', 'manifest unknown', 'mutate', 'name', 'not found', 'pid', 'pull access denied', 'red', 'rm', 'running', 'stop', 'up', 'uvicorn']

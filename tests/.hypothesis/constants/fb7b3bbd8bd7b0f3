@@ -1,4 +1,0 @@
-# file: /home/anti/Tools/DECNET/decnet/services/conpot.py
-# hypothesis_version: 6.151.12
-
-[161, 502, 'CONPOT_TEMPLATE', 'conpot', 'container_name', 'default', 'environment', 'honeynet/conpot', 'image', 'restart', 'unless-stopped']

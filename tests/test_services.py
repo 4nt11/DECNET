@@ -31,9 +31,7 @@ def _is_build_service(name: str) -> bool:
 # Tier 1: upstream-image services (non-build)
 # ---------------------------------------------------------------------------
 
-UPSTREAM_SERVICES = {
-    "telnet": ("cowrie/cowrie",  [23]),
-}
+UPSTREAM_SERVICES: dict = {}
 
 # ---------------------------------------------------------------------------
 # Tier 2: custom-build services (including ssh, which now uses build)
@@ -41,6 +39,7 @@ UPSTREAM_SERVICES = {
 
 BUILD_SERVICES = {
     "ssh":           ([22],         "ssh"),
+    "telnet":        ([23],         "telnet"),
     "http":          ([80, 443],    "http"),
     "rdp":           ([3389],       "rdp"),
     "smb":           ([445, 139],   "smb"),
@@ -155,7 +154,8 @@ def test_build_service_restart_policy(name):
     assert frag.get("restart") == "unless-stopped"
 
 
-_NODE_NAME_SERVICES = [n for n in BUILD_SERVICES if n not in ("ssh", "real_ssh")]
+_RSYSLOG_SERVICES = {"ssh", "real_ssh", "telnet"}
+_NODE_NAME_SERVICES = [n for n in BUILD_SERVICES if n not in _RSYSLOG_SERVICES]
 
 
 @pytest.mark.parametrize("name", _NODE_NAME_SERVICES)
@@ -166,8 +166,8 @@ def test_build_service_node_name_env(name):
     assert env["NODE_NAME"] == "test-decky"
 
 
-# ssh and real_ssh do not use LOG_TARGET (rsyslog handles log forwarding inside the container)
-_LOG_TARGET_SERVICES = [n for n in BUILD_SERVICES if n not in ("ssh", "real_ssh")]
+# ssh, real_ssh, and telnet do not use LOG_TARGET (rsyslog handles log forwarding inside the container)
+_LOG_TARGET_SERVICES = [n for n in BUILD_SERVICES if n not in _RSYSLOG_SERVICES]
 
 
 @pytest.mark.parametrize("name", _LOG_TARGET_SERVICES)
@@ -339,21 +339,24 @@ def test_redis_default_no_extra_env():
 
 # Telnet ---------------------------------------------------------------------
 
-def test_telnet_log_target_uses_cowrie_tcp_output():
-    """Telnet forwards logs via Cowrie TCP output, same pattern as SSH."""
-    env = _fragment("telnet", log_target="10.0.0.1:5140").get("environment", {})
-    assert env.get("COWRIE_OUTPUT_TCP_ENABLED") == "true"
-    assert env.get("COWRIE_OUTPUT_TCP_HOST") == "10.0.0.1"
-    assert env.get("COWRIE_OUTPUT_TCP_PORT") == "5140"
+def test_telnet_uses_build_context():
+    """Telnet uses a build context (no Cowrie image)."""
+    frag = _fragment("telnet")
+    assert "build" in frag
+    assert "image" not in frag
 
 
-def test_telnet_no_log_target_omits_tcp_output():
+def test_telnet_default_password():
     env = _fragment("telnet").get("environment", {})
-    assert "COWRIE_OUTPUT_TCP_ENABLED" not in env
-    assert "COWRIE_OUTPUT_TCP_HOST" not in env
+    assert env.get("TELNET_ROOT_PASSWORD") == "admin"
 
 
-def test_telnet_ssh_disabled_in_telnet_only_container():
+def test_telnet_custom_password():
+    env = _fragment("telnet", service_cfg={"password": "s3cr3t"}).get("environment", {})
+    assert env.get("TELNET_ROOT_PASSWORD") == "s3cr3t"
+
+
+def test_telnet_no_cowrie_env_vars():
+    """Ensure no Cowrie env vars bleed into the real telnet service."""
     env = _fragment("telnet").get("environment", {})
-    assert env.get("COWRIE_SSH_ENABLED") == "false"
-    assert env.get("COWRIE_TELNET_ENABLED") == "true"
+    assert not any(k.startswith("COWRIE_") for k in env)

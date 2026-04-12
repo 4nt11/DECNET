@@ -1,4 +1,0 @@
-# file: /home/anti/Tools/DECNET/decnet/correlation/parser.py
-# hypothesis_version: 6.151.11
-
-['"', '-', '\\', '\\"', '\\\\', '\\]', ']', 'client_ip', 'ip', 'remote_ip', 'src', 'src_ip']

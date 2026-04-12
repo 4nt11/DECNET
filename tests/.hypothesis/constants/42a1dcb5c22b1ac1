@@ -1,4 +1,0 @@
-# file: /home/anti/Tools/DECNET/decnet/ini_loader.py
-# hypothesis_version: 6.151.11
-
-[100, 512, 1024, ',', '.', '1', '[', ']', 'amount', 'archetype', 'binary', 'custom-', 'exceeds maximum', 'exec', 'general', 'gw', 'interface', 'ip', 'log-target', 'log_target', 'mutate-interval', 'mutate_interval', 'net', 'nmap-os', 'nmap_os', 'ports', 'services']
