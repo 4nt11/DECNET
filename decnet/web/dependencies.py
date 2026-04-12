@@ -9,11 +9,16 @@ from decnet.web.db.repository import BaseRepository
 from decnet.web.db.factory import get_repository
 
 # Shared repository singleton
-repo: BaseRepository = get_repository()
+_repo: Optional[BaseRepository] = None
 
 def get_repo() -> BaseRepository:
     """FastAPI dependency to inject the configured repository."""
-    return repo
+    global _repo
+    if _repo is None:
+        _repo = get_repository()
+    return _repo
+
+repo = get_repo()
 
 oauth2_scheme = OAuth2PasswordBearer(tokenUrl="/api/v1/auth/login")
 

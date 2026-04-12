@@ -10,8 +10,10 @@ from .conftest import _FUZZ_SETTINGS
 
 
 @pytest.fixture
-def repo(tmp_path):
-    return get_repository(db_path=str(tmp_path / "test.db"))
+async def repo(tmp_path):
+    r = get_repository(db_path=str(tmp_path / "test.db"))
+    await r.initialize()
+    return r
 
 
 @pytest.mark.anyio

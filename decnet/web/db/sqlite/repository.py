@@ -13,7 +13,7 @@ from decnet.env import DECNET_ADMIN_USER, DECNET_ADMIN_PASSWORD
 from decnet.web.auth import get_password_hash
 from decnet.web.db.repository import BaseRepository
 from decnet.web.db.models import User, Log, Bounty, State
-from decnet.web.db.sqlite.database import get_async_engine, init_db
+from decnet.web.db.sqlite.database import get_async_engine
 
 
 class SQLiteRepository(BaseRepository):
@@ -25,34 +25,27 @@ class SQLiteRepository(BaseRepository):
         self.session_factory = async_sessionmaker(
             self.engine, class_=AsyncSession, expire_on_commit=False
         )
-        self._initialize_sync()
-
-    def _initialize_sync(self) -> None:
-        """Initialize the database schema synchronously."""
-        init_db(self.db_path)
-
-        from decnet.web.db.sqlite.database import get_sync_engine
-        engine = get_sync_engine(self.db_path)
-        with engine.connect() as conn:
-            conn.execute(
-                text(
-                    "INSERT OR IGNORE INTO users (uuid, username, password_hash, role, must_change_password) "
-                    "VALUES (:uuid, :u, :p, :r, :m)"
-                ),
-                {
-                    "uuid": str(uuid.uuid4()),
-                    "u": DECNET_ADMIN_USER,
-                    "p": get_password_hash(DECNET_ADMIN_PASSWORD),
-                    "r": "admin",
-                    "m": 1,
-                },
-            )
-            conn.commit()
 
     async def initialize(self) -> None:
-        """Async warm-up / verification."""
+        """Async warm-up / verification. Creates tables if they don't exist."""
+        from sqlmodel import SQLModel
+        async with self.engine.begin() as conn:
+            await conn.run_sync(SQLModel.metadata.create_all)
+
         async with self.session_factory() as session:
-            await session.execute(text("SELECT 1"))
+            # Check if admin exists
+            result = await session.execute(
+                select(User).where(User.username == DECNET_ADMIN_USER)
+            )
+            if not result.scalar_one_or_none():
+                session.add(User(
+                    uuid=str(uuid.uuid4()),
+                    username=DECNET_ADMIN_USER,
+                    password_hash=get_password_hash(DECNET_ADMIN_PASSWORD),
+                    role="admin",
+                    must_change_password=True,
+                ))
+                await session.commit()
 
     async def reinitialize(self) -> None:
         """Initialize the database schema asynchronously (useful for tests)."""
