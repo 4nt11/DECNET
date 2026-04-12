@@ -88,11 +88,19 @@ class MSSQLProtocol(asyncio.Protocol):
         while len(self._buf) >= 8:
             pkt_type = self._buf[0]
             pkt_len = struct.unpack(">H", self._buf[2:4])[0]
+            if pkt_len < 8:
+                _log("unknown_packet", src=self._peer[0], pkt_type=hex(pkt_type))
+                self._transport.close()
+                self._buf = b""
+                return
             if len(self._buf) < pkt_len:
                 break
             payload = self._buf[8:pkt_len]
             self._buf = self._buf[pkt_len:]
             self._handle_packet(pkt_type, payload)
+            if self._transport.is_closing():
+                self._buf = b""
+                break
 
     def _handle_packet(self, pkt_type: int, payload: bytes):
         if pkt_type == 0x12:  # Pre-login
