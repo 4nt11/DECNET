@@ -97,8 +97,8 @@ def random_hostname(distro_slug: str = "debian") -> str:
     """Generate a plausible hostname for the given distro style."""
     profile = DISTROS.get(distro_slug)
     style = profile.hostname_style if profile else "generic"
-    word = random.choice(_NAME_WORDS)
-    num = random.randint(10, 99)
+    word = random.choice(_NAME_WORDS)  # nosec B311
+    num = random.randint(10, 99)  # nosec B311
 
     if style == "rhel":
         # RHEL/CentOS/Fedora convention: word+num.localdomain
@@ -107,7 +107,7 @@ def random_hostname(distro_slug: str = "debian") -> str:
         return f"{word}-{num}"
     elif style == "rolling":
         # Kali/Arch: just a word, no suffix
-        return f"{word}-{random.choice(_NAME_WORDS)}"
+        return f"{word}-{random.choice(_NAME_WORDS)}"  # nosec B311
     else:
         # Debian/Ubuntu: SRV-WORD-nn
         return f"SRV-{word.upper()}-{num}"
@@ -122,7 +122,7 @@ def get_distro(slug: str) -> DistroProfile:
 
 
 def random_distro() -> DistroProfile:
-    return random.choice(list(DISTROS.values()))
+    return random.choice(list(DISTROS.values()))  # nosec B311
 
 
 def all_distros() -> dict[str, DistroProfile]:

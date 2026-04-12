@@ -1,0 +1,82 @@
+from abc import ABC, abstractmethod
+from typing import Any, Optional
+
+
+class BaseRepository(ABC):
+    """Abstract base class for DECNET web dashboard data storage."""
+
+    @abstractmethod
+    async def initialize(self) -> None:
+        """Initialize the database schema."""
+        pass
+
+    @abstractmethod
+    async def add_log(self, log_data: dict[str, Any]) -> None:
+        """Add a new log entry to the database."""
+        pass
+
+    @abstractmethod
+    async def get_logs(
+        self, 
+        limit: int = 50, 
+        offset: int = 0, 
+        search: Optional[str] = None
+    ) -> list[dict[str, Any]]:
+        """Retrieve paginated log entries."""
+        pass
+
+    @abstractmethod
+    async def get_total_logs(self, search: Optional[str] = None) -> int:
+        """Retrieve the total count of logs, optionally filtered by search."""
+        pass
+
+    @abstractmethod
+    async def get_stats_summary(self) -> dict[str, Any]:
+        """Retrieve high-level dashboard metrics."""
+        pass
+
+    @abstractmethod
+    async def get_deckies(self) -> list[dict[str, Any]]:
+        """Retrieve the list of currently deployed deckies."""
+        pass
+
+    @abstractmethod
+    async def get_user_by_username(self, username: str) -> Optional[dict[str, Any]]:
+        """Retrieve a user by their username."""
+        pass
+
+    @abstractmethod
+    async def get_user_by_uuid(self, uuid: str) -> Optional[dict[str, Any]]:
+        """Retrieve a user by their UUID."""
+        pass
+
+    @abstractmethod
+    async def create_user(self, user_data: dict[str, Any]) -> None:
+        """Create a new dashboard user."""
+        pass
+
+    @abstractmethod
+    async def update_user_password(self, uuid: str, password_hash: str, must_change_password: bool = False) -> None:
+        """Update a user's password and change the must_change_password flag."""
+        pass
+
+    @abstractmethod
+    async def add_bounty(self, bounty_data: dict[str, Any]) -> None:
+        """Add a new harvested artifact (bounty) to the database."""
+        pass
+
+    @abstractmethod
+    async def get_bounties(
+        self, 
+        limit: int = 50, 
+        offset: int = 0, 
+        bounty_type: Optional[str] = None,
+        search: Optional[str] = None
+    ) -> list[dict[str, Any]]:
+        """Retrieve paginated bounty entries."""
+        pass
+
+    @abstractmethod
+    async def get_total_bounties(self, bounty_type: Optional[str] = None, search: Optional[str] = None) -> int:
+        """Retrieve the total count of bounties, optionally filtered."""
+        pass

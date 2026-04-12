@@ -1,0 +1,12 @@
+Jan 14 23:31:04 NODE_NAME sshd[1832]: Accepted publickey for admin from 10.0.0.1 port 54321 ssh2: RSA SHA256:xAmPlEkEyHaSh1234567890abcdefghijklmnop
+Jan 14 23:31:04 NODE_NAME sshd[1832]: pam_unix(sshd:session): session opened for user admin by (uid=0)
+Jan 14 23:31:46 NODE_NAME sudo[1901]:    admin : TTY=pts/0 ; PWD=/home/admin ; USER=root ; COMMAND=/usr/bin/systemctl restart nginx
+Jan 14 23:31:46 NODE_NAME sudo[1901]: pam_unix(sudo:session): session opened for user root by admin(uid=0)
+Jan 14 23:31:47 NODE_NAME sudo[1901]: pam_unix(sudo:session): session closed for user root
+Jan 14 23:45:01 NODE_NAME sshd[1832]: pam_unix(sshd:session): session closed for user admin
+Jan 15 00:02:14 NODE_NAME sshd[2104]: Failed password for invalid user oracle from 185.220.101.47 port 38291 ssh2
+Jan 15 00:02:16 NODE_NAME sshd[2106]: Failed password for invalid user postgres from 185.220.101.47 port 38295 ssh2
+Jan 15 00:02:19 NODE_NAME sshd[2108]: Failed password for root from 185.220.101.47 port 38301 ssh2
+Jan 15 00:02:19 NODE_NAME sshd[2108]: error: maximum authentication attempts exceeded for root from 185.220.101.47 port 38301 ssh2 [preauth]
+Jan 15 09:12:44 NODE_NAME sshd[2891]: Accepted password for admin from 10.0.0.5 port 51243 ssh2
+Jan 15 09:12:44 NODE_NAME sshd[2891]: pam_unix(sshd:session): session opened for user admin by (uid=0)

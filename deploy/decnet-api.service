@@ -1,0 +1,29 @@
+[Unit]
+Description=DECNET API Service
+After=network.target docker.service
+Requires=docker.service
+
+[Service]
+Type=simple
+User=decnet
+Group=decnet
+WorkingDirectory=/path/to/DECNET
+# Ensure environment is loaded from the .env file
+EnvironmentFile=/path/to/DECNET/.env
+# Use the virtualenv python to run the decnet api command
+ExecStart=/path/to/DECNET/.venv/bin/decnet api
+
+# Capabilities required to manage MACVLAN interfaces and network links without root
+CapabilityBoundingSet=CAP_NET_ADMIN CAP_NET_RAW
+AmbientCapabilities=CAP_NET_ADMIN CAP_NET_RAW
+
+# Security Hardening
+NoNewPrivileges=yes
+ProtectSystem=full
+ProtectHome=read-only
+
+Restart=on-failure
+RestartSec=5
+
+[Install]
+WantedBy=multi-user.target

@@ -69,7 +69,7 @@ async def main():
     _log("startup", msg=f"TFTP server starting as {NODE_NAME}")
     loop = asyncio.get_running_loop()
     transport, _ = await loop.create_datagram_endpoint(
-        TFTPProtocol, local_addr=("0.0.0.0", 69)
+        TFTPProtocol, local_addr=("0.0.0.0", 69)  # nosec B104
     )
     try:
         await asyncio.sleep(float("inf"))

@@ -8,21 +8,27 @@ Usage:
   decnet services
 """
 
-import random
+import signal
 from typing import Optional
 
 import typer
 from rich.console import Console
 from rich.table import Table
 
+from decnet.env import (
+    DECNET_API_HOST,
+    DECNET_API_PORT,
+    DECNET_INGEST_LOG_FILE,
+    DECNET_WEB_HOST,
+    DECNET_WEB_PORT,
+)
 from decnet.archetypes import Archetype, all_archetypes, get_archetype
 from decnet.config import (
-    DeckyConfig,
     DecnetConfig,
-    random_hostname,
 )
-from decnet.distros import all_distros, get_distro, random_distro
-from decnet.ini_loader import IniConfig, load_ini
+from decnet.distros import all_distros, get_distro
+from decnet.fleet import all_service_names, build_deckies, build_deckies_from_ini
+from decnet.ini_loader import load_ini
 from decnet.network import detect_interface, detect_subnet, allocate_ips, get_host_ip
 from decnet.services.registry import all_services
 
@@ -33,167 +39,56 @@ app = typer.Typer(
 )
 console = Console()
 
-def _all_service_names() -> list[str]:
-    """Return all registered service names from the live plugin registry."""
-    return sorted(all_services().keys())
+
+def _kill_api() -> None:
+    """Find and kill any running DECNET API (uvicorn) or mutator processes."""
+    import psutil
+    import os
+
+    _killed: bool = False
+    for _proc in psutil.process_iter(['pid', 'name', 'cmdline']):
+        try:
+            _cmd = _proc.info['cmdline']
+            if not _cmd:
+                continue
+            if "uvicorn" in _cmd and "decnet.web.api:app" in _cmd:
+                console.print(f"[yellow]Stopping DECNET API (PID {_proc.info['pid']})...[/]")
+                os.kill(_proc.info['pid'], signal.SIGTERM)
+                _killed = True
+            elif "decnet.cli" in _cmd and "mutate" in _cmd and "--watch" in _cmd:
+                console.print(f"[yellow]Stopping DECNET Mutator Watcher (PID {_proc.info['pid']})...[/]")
+                os.kill(_proc.info['pid'], signal.SIGTERM)
+                _killed = True
+        except (psutil.NoSuchProcess, psutil.AccessDenied):
+            continue
+
+    if _killed:
+        console.print("[green]Background processes stopped.[/]")
 
 
-def _resolve_distros(
-    distros_explicit: list[str] | None,
-    randomize_distros: bool,
-    n: int,
-    archetype: Archetype | None = None,
-) -> list[str]:
-    """Return a list of n distro slugs based on CLI flags or archetype preference."""
-    if distros_explicit:
-        return [distros_explicit[i % len(distros_explicit)] for i in range(n)]
-    if randomize_distros:
-        return [random_distro().slug for _ in range(n)]
-    if archetype:
-        pool = archetype.preferred_distros
-        return [pool[i % len(pool)] for i in range(n)]
-    # Default: cycle through all distros to maximize heterogeneity
-    slugs = list(all_distros().keys())
-    return [slugs[i % len(slugs)] for i in range(n)]
+@app.command()
+def api(
+    port: int = typer.Option(DECNET_API_PORT, "--port", help="Port for the backend API"),
+    host: str = typer.Option(DECNET_API_HOST, "--host", help="Host IP for the backend API"),
+    log_file: str = typer.Option(DECNET_INGEST_LOG_FILE, "--log-file", help="Path to the DECNET log file to monitor"),
+) -> None:
+    """Run the DECNET API and Web Dashboard in standalone mode."""
+    import subprocess  # nosec B404
+    import sys
+    import os
 
-
-def _build_deckies(
-    n: int,
-    ips: list[str],
-    services_explicit: list[str] | None,
-    randomize_services: bool,
-    distros_explicit: list[str] | None = None,
-    randomize_distros: bool = False,
-    archetype: Archetype | None = None,
-) -> list[DeckyConfig]:
-    deckies = []
-    used_combos: set[frozenset] = set()
-    distro_slugs = _resolve_distros(distros_explicit, randomize_distros, n, archetype)
-
-    for i, ip in enumerate(ips):
-        name = f"decky-{i + 1:02d}"
-        distro = get_distro(distro_slugs[i])
-        hostname = random_hostname(distro.slug)
-
-        if services_explicit:
-            svc_list = services_explicit
-        elif archetype:
-            svc_list = list(archetype.services)
-        elif randomize_services:
-            svc_pool = _all_service_names()
-            attempts = 0
-            while True:
-                count = random.randint(1, min(3, len(svc_pool)))
-                chosen = frozenset(random.sample(svc_pool, count))
-                attempts += 1
-                if chosen not in used_combos or attempts > 20:
-                    break
-            svc_list = list(chosen)
-            used_combos.add(chosen)
-        else:
-            typer.echo("Error: provide --services, --archetype, or --randomize-services.", err=True)
-            raise typer.Exit(1)
-
-        deckies.append(
-            DeckyConfig(
-                name=name,
-                ip=ip,
-                services=svc_list,
-                distro=distro.slug,
-                base_image=distro.image,
-                build_base=distro.build_base,
-                hostname=hostname,
-                archetype=archetype.slug if archetype else None,
-                nmap_os=archetype.nmap_os if archetype else "linux",
-            )
+    console.print(f"[green]Starting DECNET API on {host}:{port}...[/]")
+    _env: dict[str, str] = os.environ.copy()
+    _env["DECNET_INGEST_LOG_FILE"] = str(log_file)
+    try:
+        subprocess.run(  # nosec B603 B404
+            [sys.executable, "-m", "uvicorn", "decnet.web.api:app", "--host", host, "--port", str(port)],
+            env=_env
         )
-    return deckies
-
-
-def _build_deckies_from_ini(
-    ini: IniConfig,
-    subnet_cidr: str,
-    gateway: str,
-    host_ip: str,
-    randomize: bool,
-) -> list[DeckyConfig]:
-    """Build DeckyConfig list from an IniConfig, auto-allocating missing IPs."""
-    from ipaddress import IPv4Address, IPv4Network
-
-    explicit_ips: set[IPv4Address] = {
-        IPv4Address(s.ip) for s in ini.deckies if s.ip
-    }
-
-    net = IPv4Network(subnet_cidr, strict=False)
-    reserved = {
-        net.network_address,
-        net.broadcast_address,
-        IPv4Address(gateway),
-        IPv4Address(host_ip),
-    } | explicit_ips
-
-    auto_pool = (str(addr) for addr in net.hosts() if addr not in reserved)
-
-    deckies: list[DeckyConfig] = []
-    for spec in ini.deckies:
-        # Resolve archetype (if any) — explicit services/distro override it
-        arch: Archetype | None = None
-        if spec.archetype:
-            try:
-                arch = get_archetype(spec.archetype)
-            except ValueError as e:
-                console.print(f"[red]{e}[/]")
-                raise typer.Exit(1)
-
-        # Distro: archetype preferred list → random → global cycle
-        distro_pool = arch.preferred_distros if arch else list(all_distros().keys())
-        distro = get_distro(distro_pool[len(deckies) % len(distro_pool)])
-        hostname = random_hostname(distro.slug)
-
-        ip = spec.ip or next(auto_pool, None)
-        if ip is None:
-            raise RuntimeError(
-                f"Not enough free IPs in {subnet_cidr} while assigning IP for '{spec.name}'."
-            )
-
-        if spec.services:
-            known = set(_all_service_names())
-            unknown = [s for s in spec.services if s not in known]
-            if unknown:
-                console.print(
-                    f"[red]Unknown service(s) in [{spec.name}]: {unknown}. "
-                    f"Available: {_all_service_names()}[/]"
-                )
-                raise typer.Exit(1)
-            svc_list = spec.services
-        elif arch:
-            svc_list = list(arch.services)
-        elif randomize:
-            svc_pool = _all_service_names()
-            count = random.randint(1, min(3, len(svc_pool)))
-            svc_list = random.sample(svc_pool, count)
-        else:
-            console.print(
-                f"[red]Decky '[{spec.name}]' has no services= in config. "
-                "Add services=, archetype=, or use --randomize-services.[/]"
-            )
-            raise typer.Exit(1)
-
-        # nmap_os priority: explicit INI key > archetype default > "linux"
-        resolved_nmap_os = spec.nmap_os or (arch.nmap_os if arch else "linux")
-        deckies.append(DeckyConfig(
-            name=spec.name,
-            ip=ip,
-            services=svc_list,
-            distro=distro.slug,
-            base_image=distro.image,
-            build_base=distro.build_base,
-            hostname=hostname,
-            archetype=arch.slug if arch else None,
-            service_config=spec.service_config,
-            nmap_os=resolved_nmap_os,
-        ))
-    return deckies
+    except KeyboardInterrupt:
+        pass
+    except (FileNotFoundError, subprocess.SubprocessError):
+        console.print("[red]Failed to start API. Ensure 'uvicorn' is installed in the current environment.[/]")
 
 
 @app.command()
@@ -207,15 +102,19 @@ def deploy(
     randomize_services: bool = typer.Option(False, "--randomize-services", help="Assign random services to each decky"),
     distro: Optional[str] = typer.Option(None, "--distro", help="Comma-separated distro slugs, e.g. debian,ubuntu22,rocky9"),
     randomize_distros: bool = typer.Option(False, "--randomize-distros", help="Assign a random distro to each decky"),
-    log_target: Optional[str] = typer.Option(None, "--log-target", help="Forward logs to ip:port (e.g. 192.168.1.5:5140)"),
-    log_file: Optional[str] = typer.Option(None, "--log-file", help="Write RFC 5424 syslog to this path inside containers (e.g. /var/log/decnet/decnet.log)"),
+    log_file: Optional[str] = typer.Option(DECNET_INGEST_LOG_FILE, "--log-file", help="Host path for the collector to write RFC 5424 logs (e.g. /var/log/decnet/decnet.log)"),
     archetype_name: Optional[str] = typer.Option(None, "--archetype", "-a", help="Machine archetype slug (e.g. linux-server, windows-workstation)"),
+    mutate_interval: Optional[int] = typer.Option(30, "--mutate-interval", help="Automatically rotate services every N minutes"),
     dry_run: bool = typer.Option(False, "--dry-run", help="Generate compose file without starting containers"),
     no_cache: bool = typer.Option(False, "--no-cache", help="Force rebuild all images, ignoring Docker layer cache"),
+    parallel: bool = typer.Option(False, "--parallel", help="Build all images concurrently (enables BuildKit, separates build from up)"),
     ipvlan: bool = typer.Option(False, "--ipvlan", help="Use IPvlan L2 instead of MACVLAN (required on WiFi interfaces)"),
     config_file: Optional[str] = typer.Option(None, "--config", "-c", help="Path to INI config file"),
+    api: bool = typer.Option(False, "--api", help="Start the FastAPI backend to ingest and serve logs"),
+    api_port: int = typer.Option(8000, "--api-port", help="Port for the backend API"),
 ) -> None:
     """Deploy deckies to the LAN."""
+    import os
     if mode not in ("unihost", "swarm"):
         console.print("[red]--mode must be 'unihost' or 'swarm'[/]")
         raise typer.Exit(1)
@@ -230,7 +129,6 @@ def deploy(
             console.print(f"[red]{e}[/]")
             raise typer.Exit(1)
 
-        # CLI flags override INI values when explicitly provided
         iface = interface or ini.interface or detect_interface()
         subnet_cidr = subnet or ini.subnet
         effective_gateway = ini.gateway
@@ -244,7 +142,6 @@ def deploy(
                       f"[dim]Subnet:[/] {subnet_cidr}  [dim]Gateway:[/] {effective_gateway}  "
                       f"[dim]Host IP:[/] {host_ip}")
 
-        # Register bring-your-own services from INI before validation
         if ini.custom_services:
             from decnet.custom_service import CustomService
             from decnet.services.registry import register_custom_service
@@ -258,11 +155,14 @@ def deploy(
                     )
                 )
 
-        effective_log_target = log_target or ini.log_target
         effective_log_file = log_file
-        decky_configs = _build_deckies_from_ini(
-            ini, subnet_cidr, effective_gateway, host_ip, randomize_services
-        )
+        try:
+            decky_configs = build_deckies_from_ini(
+                ini, subnet_cidr, effective_gateway, host_ip, randomize_services, cli_mutate_interval=mutate_interval
+            )
+        except ValueError as e:
+            console.print(f"[red]{e}[/]")
+            raise typer.Exit(1)
     # ------------------------------------------------------------------ #
     # Classic CLI path                                                     #
     # ------------------------------------------------------------------ #
@@ -273,13 +173,12 @@ def deploy(
 
         services_list = [s.strip() for s in services.split(",")] if services else None
         if services_list:
-            known = set(_all_service_names())
+            known = set(all_service_names())
             unknown = [s for s in services_list if s not in known]
             if unknown:
-                console.print(f"[red]Unknown service(s): {unknown}. Available: {_all_service_names()}[/]")
+                console.print(f"[red]Unknown service(s): {unknown}. Available: {all_service_names()}[/]")
                 raise typer.Exit(1)
 
-        # Resolve archetype if provided
         arch: Archetype | None = None
         if archetype_name:
             try:
@@ -313,13 +212,16 @@ def deploy(
                 raise typer.Exit(1)
 
         ips = allocate_ips(subnet_cidr, effective_gateway, host_ip, deckies, ip_start)
-        decky_configs = _build_deckies(
+        decky_configs = build_deckies(
             deckies, ips, services_list, randomize_services,
             distros_explicit=distros_list, randomize_distros=randomize_distros,
-            archetype=arch,
+            archetype=arch, mutate_interval=mutate_interval,
         )
-        effective_log_target = log_target
         effective_log_file = log_file
+
+    if api and not effective_log_file:
+        effective_log_file = os.path.join(os.getcwd(), "decnet.log")
+        console.print(f"[cyan]API mode enabled: defaulting log-file to {effective_log_file}[/]")
 
     config = DecnetConfig(
         mode=mode,
@@ -327,25 +229,96 @@ def deploy(
         subnet=subnet_cidr,
         gateway=effective_gateway,
         deckies=decky_configs,
-        log_target=effective_log_target,
         log_file=effective_log_file,
         ipvlan=ipvlan,
+        mutate_interval=mutate_interval,
     )
 
-    if effective_log_target and not dry_run:
-        from decnet.logging.forwarder import probe_log_target
-        if not probe_log_target(effective_log_target):
-            console.print(f"[yellow]Warning: log target {effective_log_target} is unreachable. "
-                          "Logs will be lost if it stays down.[/]")
+    from decnet.engine import deploy as _deploy
+    _deploy(config, dry_run=dry_run, no_cache=no_cache, parallel=parallel)
 
-    from decnet.deployer import deploy as _deploy
-    _deploy(config, dry_run=dry_run, no_cache=no_cache)
+    if mutate_interval is not None and not dry_run:
+        import subprocess  # nosec B404
+        import sys
+        console.print(f"[green]Starting DECNET Mutator watcher in the background (interval: {mutate_interval}m)...[/]")
+        try:
+            subprocess.Popen(  # nosec B603
+                [sys.executable, "-m", "decnet.cli", "mutate", "--watch"],
+                stdout=subprocess.DEVNULL,
+                stderr=subprocess.STDOUT,
+                start_new_session=True,
+            )
+        except (FileNotFoundError, subprocess.SubprocessError):
+            console.print("[red]Failed to start mutator watcher.[/]")
+
+    if effective_log_file and not dry_run and not api:
+        import subprocess  # noqa: F811  # nosec B404
+        import sys
+        from pathlib import Path as _Path
+        _collector_err = _Path(effective_log_file).with_suffix(".collector.log")
+        console.print(f"[bold cyan]Starting log collector[/] → {effective_log_file}")
+        subprocess.Popen(  # nosec B603
+            [sys.executable, "-m", "decnet.cli", "collect", "--log-file", str(effective_log_file)],
+            stdin=subprocess.DEVNULL,
+            stdout=open(_collector_err, "a"),  # nosec B603
+            stderr=subprocess.STDOUT,
+            start_new_session=True,
+        )
+
+    if api and not dry_run:
+        import subprocess  # nosec B404
+        import sys
+        console.print(f"[green]Starting DECNET API on port {api_port}...[/]")
+        _env: dict[str, str] = os.environ.copy()
+        _env["DECNET_INGEST_LOG_FILE"] = str(effective_log_file or "")
+        try:
+            subprocess.Popen(  # nosec B603
+                [sys.executable, "-m", "uvicorn", "decnet.web.api:app", "--host", DECNET_API_HOST, "--port", str(api_port)],
+                env=_env,
+                stdout=subprocess.DEVNULL,
+                stderr=subprocess.STDOUT
+            )
+            console.print(f"[dim]API running at http://{DECNET_API_HOST}:{api_port}[/]")
+        except (FileNotFoundError, subprocess.SubprocessError):
+            console.print("[red]Failed to start API. Ensure 'uvicorn' is installed in the current environment.[/]")
+
+
+@app.command()
+def collect(
+    log_file: str = typer.Option(DECNET_INGEST_LOG_FILE, "--log-file", "-f", help="Path to write RFC 5424 syslog lines and .json records"),
+) -> None:
+    """Stream Docker logs from all running decky service containers to a log file."""
+    import asyncio
+    from decnet.collector import log_collector_worker
+    console.print(f"[bold cyan]Collector starting[/] → {log_file}")
+    asyncio.run(log_collector_worker(log_file))
+
+
+@app.command()
+def mutate(
+    watch: bool = typer.Option(False, "--watch", "-w", help="Run continuously and mutate deckies according to their interval"),
+    decky_name: Optional[str] = typer.Option(None, "--decky", "-d", help="Force mutate a specific decky immediately"),
+    force_all: bool = typer.Option(False, "--all", help="Force mutate all deckies immediately"),
+) -> None:
+    """Manually trigger or continuously watch for decky mutation."""
+    from decnet.mutator import mutate_decky, mutate_all, run_watch_loop
+
+    if watch:
+        run_watch_loop()
+        return
+
+    if decky_name:
+        mutate_decky(decky_name)
+    elif force_all:
+        mutate_all(force=True)
+    else:
+        mutate_all(force=False)
 
 
 @app.command()
 def status() -> None:
     """Show running deckies and their status."""
-    from decnet.deployer import status as _status
+    from decnet.engine import status as _status
     _status()
 
 
@@ -359,8 +332,11 @@ def teardown(
         console.print("[red]Specify --all or --id <name>.[/]")
         raise typer.Exit(1)
 
-    from decnet.deployer import teardown as _teardown
+    from decnet.engine import teardown as _teardown
     _teardown(decky_id=id_)
+
+    if all_:
+        _kill_api()
 
 
 @app.command(name="services")
@@ -459,3 +435,40 @@ def list_archetypes() -> None:
             arch.description,
         )
     console.print(table)
+
+
+@app.command(name="web")
+def serve_web(
+    web_port: int = typer.Option(DECNET_WEB_PORT, "--web-port", help="Port to serve the DECNET Web Dashboard"),
+    host: str = typer.Option(DECNET_WEB_HOST, "--host", help="Host IP to serve the Web Dashboard"),
+) -> None:
+    """Serve the DECNET Web Dashboard frontend."""
+    import http.server
+    import socketserver
+    from pathlib import Path
+
+    dist_dir = Path(__file__).parent.parent / "decnet_web" / "dist"
+
+    if not dist_dir.exists():
+        console.print(f"[red]Frontend build not found at {dist_dir}. Make sure you run 'npm run build' inside 'decnet_web'.[/]")
+        raise typer.Exit(1)
+
+    class SPAHTTPRequestHandler(http.server.SimpleHTTPRequestHandler):
+        def do_GET(self):
+            path = self.translate_path(self.path)
+            if not Path(path).exists() or Path(path).is_dir():
+                self.path = "/index.html"
+            return super().do_GET()
+
+    import os
+    os.chdir(dist_dir)
+
+    with socketserver.TCPServer((host, web_port), SPAHTTPRequestHandler) as httpd:
+        console.print(f"[green]Serving DECNET Web Dashboard on http://{host}:{web_port}[/]")
+        try:
+            httpd.serve_forever()
+        except KeyboardInterrupt:
+            console.print("\n[dim]Shutting down dashboard server.[/]")
+
+if __name__ == '__main__':  # pragma: no cover
+    app()

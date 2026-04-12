@@ -1,0 +1,75 @@
+@import url('https://fonts.googleapis.com/css2?family=Ubuntu+Mono:ital,wght@0,400;0,700;1,400;1,700&display=swap');
+
+:root {
+  --background-color: #000000;
+  --text-color: #00ff41;
+  --accent-color: #ee82ee;
+  --secondary-color: #0d1117;
+  --border-color: #30363d;
+  --matrix-green-glow: 0 0 10px rgba(0, 255, 65, 0.5);
+  --violet-glow: 0 0 10px rgba(238, 130, 238, 0.5);
+}
+
+* {
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+}
+
+body {
+  font-family: 'Ubuntu Mono', monospace;
+  background-color: var(--background-color);
+  color: var(--text-color);
+  line-height: 1.5;
+  overflow-x: hidden;
+}
+
+input, button, textarea, select {
+  font-family: inherit;
+}
+
+button {
+  cursor: pointer;
+  background: transparent;
+  border: 1px solid var(--text-color);
+  color: var(--text-color);
+  padding: 8px 16px;
+  transition: all 0.3s ease;
+}
+
+button:hover {
+  background: var(--text-color);
+  color: var(--background-color);
+  box-shadow: var(--matrix-green-glow);
+}
+
+input {
+  background: #0d1117;
+  border: 1px solid var(--border-color);
+  color: var(--text-color);
+  padding: 8px 12px;
+}
+
+input:focus {
+  outline: none;
+  border-color: var(--text-color);
+  box-shadow: var(--matrix-green-glow);
+}
+
+/* Custom scrollbar */
+::-webkit-scrollbar {
+  width: 8px;
+}
+
+::-webkit-scrollbar-track {
+  background: var(--background-color);
+}
+
+::-webkit-scrollbar-thumb {
+  background: var(--secondary-color);
+  border: 1px solid var(--border-color);
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: var(--border-color);
+}

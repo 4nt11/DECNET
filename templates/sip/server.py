@@ -21,7 +21,7 @@ _401 = (
     "To: {to}\r\n"
     "Call-ID: {call_id}\r\n"
     "CSeq: {cseq}\r\n"
-    'WWW-Authenticate: Digest realm="{host}", nonce="decnet0000", algorithm=MD5\r\n'
+    'WWW-Authenticate: Digest realm="{host}", nonce="{nonce}", algorithm=MD5\r\n'
     "Content-Length: 0\r\n\r\n"
 )
 
@@ -71,6 +71,7 @@ def _handle_message(data: bytes, src_addr) -> bytes | None:
     )
 
     if method in ("REGISTER", "INVITE", "OPTIONS"):
+        nonce = os.urandom(8).hex()
         response = _401.format(
             via=headers.get("via", ""),
             from_=headers.get("from", ""),
@@ -78,6 +79,7 @@ def _handle_message(data: bytes, src_addr) -> bytes | None:
             call_id=headers.get("call-id", ""),
             cseq=headers.get("cseq", ""),
             host=NODE_NAME,
+            nonce=nonce,
         )
         return response.encode()
     return None
@@ -122,9 +124,9 @@ async def main():
     _log("startup", msg=f"SIP server starting as {NODE_NAME}")
     loop = asyncio.get_running_loop()
     udp_transport, _ = await loop.create_datagram_endpoint(
-        SIPUDPProtocol, local_addr=("0.0.0.0", 5060)
+        SIPUDPProtocol, local_addr=("0.0.0.0", 5060)  # nosec B104
     )
-    tcp_server = await loop.create_server(SIPTCPProtocol, "0.0.0.0", 5060)
+    tcp_server = await loop.create_server(SIPTCPProtocol, "0.0.0.0", 5060)  # nosec B104
     async with tcp_server:
         await tcp_server.serve_forever()
     udp_transport.close()

@@ -8,7 +8,13 @@ MODULES = [
     "decnet.cli",
     "decnet.config",
     "decnet.composer",
-    "decnet.deployer",
+    "decnet.engine",
+    "decnet.engine.deployer",
+    "decnet.collector",
+    "decnet.collector.worker",
+    "decnet.mutator",
+    "decnet.mutator.engine",
+    "decnet.fleet",
     "decnet.network",
     "decnet.archetypes",
     "decnet.distros",
@@ -51,7 +57,6 @@ MODULES = [
     "decnet.services.imap",
     "decnet.services.pop3",
     "decnet.services.conpot",
-    "decnet.services.real_ssh",
     "decnet.services.registry",
 ]
 

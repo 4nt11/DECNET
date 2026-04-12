@@ -14,11 +14,7 @@ from decnet_logging import syslog_line, write_syslog_file, forward_syslog
 NODE_NAME = os.environ.get("NODE_NAME", "pgserver")
 SERVICE_NAME   = "postgres"
 LOG_TARGET = os.environ.get("LOG_TARGET", "")
-SALT = b"\xde\xad\xbe\xef"
-
-# AuthenticationMD5Password: 'R' + length(12) + auth_type(5) + salt(4)
-_AUTH_MD5 = b"R" + struct.pack(">I", 12) + struct.pack(">I", 5) + SALT
-
+PORT = int(os.environ.get("PORT", "5432"))
 def _error_response(message: str) -> bytes:
     body = b"S" + b"FATAL\x00" + b"M" + message.encode() + b"\x00\x00"
     return b"E" + struct.pack(">I", len(body) + 4) + body
@@ -54,6 +50,10 @@ class PostgresProtocol(asyncio.Protocol):
             if len(self._buf) < 4:
                 return
             msg_len = struct.unpack(">I", self._buf[:4])[0]
+            if msg_len < 8 or msg_len > 10_000:
+                self._transport.close()
+                self._buf = b""
+                return
             if len(self._buf) < msg_len:
                 return
             msg = self._buf[:msg_len]
@@ -64,6 +64,10 @@ class PostgresProtocol(asyncio.Protocol):
                 return
             msg_type = chr(self._buf[0])
             msg_len = struct.unpack(">I", self._buf[1:5])[0]
+            if msg_len < 4 or msg_len > 10_000:
+                self._transport.close()
+                self._buf = b""
+                return
             if len(self._buf) < msg_len + 1:
                 return
             payload = self._buf[5:msg_len + 1]
@@ -90,7 +94,9 @@ class PostgresProtocol(asyncio.Protocol):
         database = params.get("database", "")
         _log("startup", src=self._peer[0], username=username, database=database)
         self._state = "auth"
-        self._transport.write(_AUTH_MD5)
+        salt = os.urandom(4)
+        auth_md5 = b"R" + struct.pack(">I", 12) + struct.pack(">I", 5) + salt
+        self._transport.write(auth_md5)
 
     def _handle_password(self, payload: bytes):
         pw_hash = payload.rstrip(b"\x00").decode(errors="replace")
@@ -105,7 +111,7 @@ class PostgresProtocol(asyncio.Protocol):
 async def main():
     _log("startup", msg=f"PostgreSQL server starting as {NODE_NAME}")
     loop = asyncio.get_running_loop()
-    server = await loop.create_server(PostgresProtocol, "0.0.0.0", 5432)
+    server = await loop.create_server(PostgresProtocol, "0.0.0.0", PORT)  # nosec B104
     async with server:
         await server.serve_forever()
 
