@@ -14,6 +14,7 @@ from decnet_logging import syslog_line, write_syslog_file, forward_syslog
 NODE_NAME = os.environ.get("NODE_NAME", "mongodb")
 SERVICE_NAME   = "mongodb"
 LOG_TARGET = os.environ.get("LOG_TARGET", "")
+PORT = int(os.environ.get("PORT", "27017"))
 
 # Minimal BSON helpers
 def _bson_str(key: str, val: str) -> bytes:
@@ -118,7 +119,7 @@ class MongoDBProtocol(asyncio.Protocol):
 async def main():
     _log("startup", msg=f"MongoDB server starting as {NODE_NAME}")
     loop = asyncio.get_running_loop()
-    server = await loop.create_server(MongoDBProtocol, "0.0.0.0", 27017)  # nosec B104
+    server = await loop.create_server(MongoDBProtocol, "0.0.0.0", PORT)  # nosec B104
     async with server:
         await server.serve_forever()
 

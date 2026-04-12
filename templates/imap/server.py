@@ -17,6 +17,7 @@ from decnet_logging import SEVERITY_WARNING, syslog_line, write_syslog_file, for
 NODE_NAME   = os.environ.get("NODE_NAME", "mailserver")
 SERVICE_NAME = "imap"
 LOG_TARGET  = os.environ.get("LOG_TARGET", "")
+PORT        = int(os.environ.get("PORT", "143"))
 IMAP_BANNER = os.environ.get("IMAP_BANNER", f"* OK Dovecot ready.\r\n")
 _RAW_USERS  = os.environ.get("IMAP_USERS", "admin:admin123,root:toor,mail:mail,user:user")
 
@@ -532,7 +533,7 @@ class IMAPProtocol(asyncio.Protocol):
 async def main():
     _log("startup", msg=f"IMAP server starting as {NODE_NAME}")
     loop = asyncio.get_running_loop()
-    server = await loop.create_server(IMAPProtocol, "0.0.0.0", 143)  # nosec B104
+    server = await loop.create_server(IMAPProtocol, "0.0.0.0", PORT)  # nosec B104
     async with server:
         await server.serve_forever()
 

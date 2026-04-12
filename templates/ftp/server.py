@@ -18,6 +18,7 @@ from decnet_logging import syslog_line, write_syslog_file, forward_syslog
 NODE_NAME = os.environ.get("NODE_NAME", "ftpserver")
 SERVICE_NAME   = "ftp"
 LOG_TARGET = os.environ.get("LOG_TARGET", "")
+PORT = int(os.environ.get("PORT", "21"))
 BANNER = os.environ.get("FTP_BANNER", "220 (vsFTPd 3.0.3)")
 
 def _log(event_type: str, severity: int = 6, **kwargs) -> None:
@@ -71,6 +72,6 @@ class ServerFTPFactory(FTPFactory):
 
 if __name__ == "__main__":
     twisted_log.startLogging(sys.stdout)
-    _log("startup", msg=f"FTP server starting as {NODE_NAME} on port 21")
-    reactor.listenTCP(21, ServerFTPFactory())
+    _log("startup", msg=f"FTP server starting as {NODE_NAME} on port {PORT}")
+    reactor.listenTCP(PORT, ServerFTPFactory())
     reactor.run()

@@ -14,6 +14,7 @@ from decnet_logging import syslog_line, write_syslog_file, forward_syslog
 NODE_NAME = os.environ.get("NODE_NAME", "pgserver")
 SERVICE_NAME   = "postgres"
 LOG_TARGET = os.environ.get("LOG_TARGET", "")
+PORT = int(os.environ.get("PORT", "5432"))
 def _error_response(message: str) -> bytes:
     body = b"S" + b"FATAL\x00" + b"M" + message.encode() + b"\x00\x00"
     return b"E" + struct.pack(">I", len(body) + 4) + body
@@ -110,7 +111,7 @@ class PostgresProtocol(asyncio.Protocol):
 async def main():
     _log("startup", msg=f"PostgreSQL server starting as {NODE_NAME}")
     loop = asyncio.get_running_loop()
-    server = await loop.create_server(PostgresProtocol, "0.0.0.0", 5432)  # nosec B104
+    server = await loop.create_server(PostgresProtocol, "0.0.0.0", PORT)  # nosec B104
     async with server:
         await server.serve_forever()
 

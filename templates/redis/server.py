@@ -12,6 +12,7 @@ from decnet_logging import syslog_line, write_syslog_file, forward_syslog
 NODE_NAME    = os.environ.get("NODE_NAME", "cache-server")
 SERVICE_NAME   = "redis"
 LOG_TARGET   = os.environ.get("LOG_TARGET", "")
+PORT         = int(os.environ.get("PORT", "6379"))
 _REDIS_VER   = os.environ.get("REDIS_VERSION", "7.2.7")
 _REDIS_OS    = os.environ.get("REDIS_OS", "Linux 5.15.0")
 
@@ -185,7 +186,7 @@ class RedisProtocol(asyncio.Protocol):
 async def main():
     _log("startup", msg=f"Redis server starting as {NODE_NAME}")
     loop = asyncio.get_running_loop()
-    server = await loop.create_server(RedisProtocol, "0.0.0.0", 6379)  # nosec B104
+    server = await loop.create_server(RedisProtocol, "0.0.0.0", PORT)  # nosec B104
     async with server:
         await server.serve_forever()
 

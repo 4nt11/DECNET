@@ -17,6 +17,7 @@ from decnet_logging import syslog_line, write_syslog_file, forward_syslog
 NODE_NAME = os.environ.get("NODE_NAME", "mqtt-broker")
 SERVICE_NAME   = "mqtt"
 LOG_TARGET = os.environ.get("LOG_TARGET", "")
+PORT = int(os.environ.get("PORT", "1883"))
 MQTT_ACCEPT_ALL = os.environ.get("MQTT_ACCEPT_ALL", "1") == "1"
 MQTT_PERSONA = os.environ.get("MQTT_PERSONA", "water_plant")
 MQTT_CUSTOM_TOPICS = os.environ.get("MQTT_CUSTOM_TOPICS", "")
@@ -264,7 +265,7 @@ class MQTTProtocol(asyncio.Protocol):
 async def main():
     _log("startup", msg=f"MQTT server starting as {NODE_NAME}")
     loop = asyncio.get_running_loop()
-    server = await loop.create_server(MQTTProtocol, "0.0.0.0", 1883)  # nosec B104
+    server = await loop.create_server(MQTTProtocol, "0.0.0.0", PORT)  # nosec B104
     async with server:
         await server.serve_forever()
 

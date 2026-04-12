@@ -28,6 +28,7 @@ from decnet_logging import SEVERITY_WARNING, syslog_line, write_syslog_file, for
 NODE_NAME   = os.environ.get("NODE_NAME", "mailserver")
 SERVICE_NAME = "smtp"
 LOG_TARGET  = os.environ.get("LOG_TARGET", "")
+PORT        = int(os.environ.get("PORT", "25"))
 OPEN_RELAY  = os.environ.get("SMTP_OPEN_RELAY", "0").strip() == "1"
 
 _SMTP_BANNER = os.environ.get("SMTP_BANNER", f"220 {NODE_NAME} ESMTP Postfix (Debian/GNU)")
@@ -245,7 +246,7 @@ async def main():
     mode = "open-relay" if OPEN_RELAY else "credential-harvester"
     _log("startup", msg=f"SMTP server starting as {NODE_NAME} ({mode})")
     loop = asyncio.get_running_loop()
-    server = await loop.create_server(SMTPProtocol, "0.0.0.0", 25)  # nosec B104
+    server = await loop.create_server(SMTPProtocol, "0.0.0.0", PORT)  # nosec B104
     async with server:
         await server.serve_forever()
 

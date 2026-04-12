@@ -14,6 +14,7 @@ from decnet_logging import syslog_line, write_syslog_file, forward_syslog
 NODE_NAME     = os.environ.get("NODE_NAME", "dbserver")
 SERVICE_NAME   = "mysql"
 LOG_TARGET    = os.environ.get("LOG_TARGET", "")
+PORT          = int(os.environ.get("PORT", "3306"))
 _MYSQL_VER    = os.environ.get("MYSQL_VERSION", "5.7.38-log")
 
 # Minimal MySQL server greeting (protocol v10) — version string is configurable
@@ -102,7 +103,7 @@ class MySQLProtocol(asyncio.Protocol):
 async def main():
     _log("startup", msg=f"MySQL server starting as {NODE_NAME}")
     loop = asyncio.get_running_loop()
-    server = await loop.create_server(MySQLProtocol, "0.0.0.0", 3306)  # nosec B104
+    server = await loop.create_server(MySQLProtocol, "0.0.0.0", PORT)  # nosec B104
     async with server:
         await server.serve_forever()
 
