@@ -67,6 +67,10 @@ class MySQLProtocol(asyncio.Protocol):
         # MySQL packets: 3-byte length + 1-byte seq + payload
         while len(self._buf) >= 4:
             length = struct.unpack("<I", self._buf[:3] + b"\x00")[0]
+            if length > 1024 * 1024:
+                self._transport.close()
+                self._buf = b""
+                return
             if len(self._buf) < 4 + length:
                 break
             payload = self._buf[4:4 + length]

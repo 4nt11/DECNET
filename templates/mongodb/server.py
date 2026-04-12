@@ -35,13 +35,13 @@ def _op_reply(request_id: int, doc: bytes) -> bytes:
     # OP_REPLY header: total_len(4), req_id(4), response_to(4), opcode(4)=1,
     #                  flags(4), cursor_id(8), starting_from(4), number_returned(4), docs
     header = struct.pack(
-        "<iiiiiqqii",
+        "<iiiiiqii",
         16 + 20 + len(doc),  # total length
         0,                    # request id
         request_id,           # response to
         1,                    # OP_REPLY
         0,                    # flags
-        0,                    # cursor id
+        0,                    # cursor id (int64)
         0,                    # starting from
         1,                    # number returned
     )
@@ -81,6 +81,10 @@ class MongoDBProtocol(asyncio.Protocol):
         self._buf += data
         while len(self._buf) >= 16:
             msg_len = struct.unpack("<I", self._buf[:4])[0]
+            if msg_len < 16 or msg_len > 48 * 1024 * 1024:
+                self._transport.close()
+                self._buf = b""
+                return
             if len(self._buf) < msg_len:
                 break
             msg = self._buf[:msg_len]

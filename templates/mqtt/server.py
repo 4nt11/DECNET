@@ -191,6 +191,10 @@ class MQTTProtocol(asyncio.Protocol):
             remaining = 0
             multiplier = 1
             while pos < len(self._buf):
+                if pos > 4:  # MQTT spec: max 4 bytes for remaining length
+                    self._transport.close()
+                    self._buf = b""
+                    return
                 byte = self._buf[pos]
                 remaining += (byte & 0x7f) * multiplier
                 multiplier *= 128

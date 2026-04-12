@@ -49,6 +49,10 @@ class PostgresProtocol(asyncio.Protocol):
             if len(self._buf) < 4:
                 return
             msg_len = struct.unpack(">I", self._buf[:4])[0]
+            if msg_len < 8 or msg_len > 10_000:
+                self._transport.close()
+                self._buf = b""
+                return
             if len(self._buf) < msg_len:
                 return
             msg = self._buf[:msg_len]
@@ -59,6 +63,10 @@ class PostgresProtocol(asyncio.Protocol):
                 return
             msg_type = chr(self._buf[0])
             msg_len = struct.unpack(">I", self._buf[1:5])[0]
+            if msg_len < 4 or msg_len > 10_000:
+                self._transport.close()
+                self._buf = b""
+                return
             if len(self._buf) < msg_len + 1:
                 return
             payload = self._buf[5:msg_len + 1]
