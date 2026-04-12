@@ -1,4 +1,3 @@
-from __future__ import annotations
 """
 RFC 5424 syslog formatter for DECNET.
 
@@ -8,6 +7,8 @@ Produces fully-compliant syslog messages:
 Facility: local0 (16)
 PEN for structured data: decnet@55555
 """
+
+from __future__ import annotations
 
 from datetime import datetime, timezone
 from typing import Any

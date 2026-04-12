@@ -11,14 +11,14 @@ Covers:
 
 import pytest
 
-from decnet.archetypes import ARCHETYPES, all_archetypes
+from decnet.archetypes import ARCHETYPES
 from decnet.composer import generate_compose
 from decnet.config import DeckyConfig, DecnetConfig
 from decnet.os_fingerprint import OS_SYSCTLS, all_os_families, get_os_sysctls
 
 
 # ---------------------------------------------------------------------------
-# os_fingerprint module
+# os_fingerprint module — TTL
 # ---------------------------------------------------------------------------
 
 def test_linux_ttl_is_64():
@@ -41,6 +41,181 @@ def test_bsd_ttl_is_64():
     assert get_os_sysctls("bsd")["net.ipv4.ip_default_ttl"] == "64"
 
 
+# ---------------------------------------------------------------------------
+# os_fingerprint module — tcp_timestamps
+# ---------------------------------------------------------------------------
+
+def test_linux_tcp_timestamps_is_1():
+    assert get_os_sysctls("linux")["net.ipv4.tcp_timestamps"] == "1"
+
+
+def test_windows_tcp_timestamps_is_0():
+    assert get_os_sysctls("windows")["net.ipv4.tcp_timestamps"] == "0"
+
+
+def test_embedded_tcp_timestamps_is_0():
+    assert get_os_sysctls("embedded")["net.ipv4.tcp_timestamps"] == "0"
+
+
+def test_bsd_tcp_timestamps_is_1():
+    assert get_os_sysctls("bsd")["net.ipv4.tcp_timestamps"] == "1"
+
+
+def test_cisco_tcp_timestamps_is_0():
+    assert get_os_sysctls("cisco")["net.ipv4.tcp_timestamps"] == "0"
+
+
+# ---------------------------------------------------------------------------
+# os_fingerprint module — tcp_sack
+# ---------------------------------------------------------------------------
+
+def test_linux_tcp_sack_is_1():
+    assert get_os_sysctls("linux")["net.ipv4.tcp_sack"] == "1"
+
+
+def test_windows_tcp_sack_is_1():
+    assert get_os_sysctls("windows")["net.ipv4.tcp_sack"] == "1"
+
+
+def test_embedded_tcp_sack_is_0():
+    assert get_os_sysctls("embedded")["net.ipv4.tcp_sack"] == "0"
+
+
+def test_cisco_tcp_sack_is_0():
+    assert get_os_sysctls("cisco")["net.ipv4.tcp_sack"] == "0"
+
+
+# ---------------------------------------------------------------------------
+# os_fingerprint module — tcp_ecn
+# ---------------------------------------------------------------------------
+
+def test_linux_tcp_ecn_is_2():
+    assert get_os_sysctls("linux")["net.ipv4.tcp_ecn"] == "2"
+
+
+def test_windows_tcp_ecn_is_0():
+    assert get_os_sysctls("windows")["net.ipv4.tcp_ecn"] == "0"
+
+
+def test_embedded_tcp_ecn_is_0():
+    assert get_os_sysctls("embedded")["net.ipv4.tcp_ecn"] == "0"
+
+
+def test_bsd_tcp_ecn_is_0():
+    assert get_os_sysctls("bsd")["net.ipv4.tcp_ecn"] == "0"
+
+
+# ---------------------------------------------------------------------------
+# os_fingerprint module — tcp_window_scaling
+# ---------------------------------------------------------------------------
+
+def test_linux_tcp_window_scaling_is_1():
+    assert get_os_sysctls("linux")["net.ipv4.tcp_window_scaling"] == "1"
+
+
+def test_windows_tcp_window_scaling_is_1():
+    assert get_os_sysctls("windows")["net.ipv4.tcp_window_scaling"] == "1"
+
+
+def test_embedded_tcp_window_scaling_is_0():
+    assert get_os_sysctls("embedded")["net.ipv4.tcp_window_scaling"] == "0"
+
+
+def test_cisco_tcp_window_scaling_is_0():
+    assert get_os_sysctls("cisco")["net.ipv4.tcp_window_scaling"] == "0"
+
+
+# ---------------------------------------------------------------------------
+# os_fingerprint module — ip_no_pmtu_disc
+# ---------------------------------------------------------------------------
+
+def test_linux_ip_no_pmtu_disc_is_0():
+    assert get_os_sysctls("linux")["net.ipv4.ip_no_pmtu_disc"] == "0"
+
+
+def test_windows_ip_no_pmtu_disc_is_0():
+    assert get_os_sysctls("windows")["net.ipv4.ip_no_pmtu_disc"] == "0"
+
+
+def test_embedded_ip_no_pmtu_disc_is_1():
+    assert get_os_sysctls("embedded")["net.ipv4.ip_no_pmtu_disc"] == "1"
+
+
+def test_cisco_ip_no_pmtu_disc_is_1():
+    assert get_os_sysctls("cisco")["net.ipv4.ip_no_pmtu_disc"] == "1"
+
+
+# ---------------------------------------------------------------------------
+# os_fingerprint module — tcp_fin_timeout
+# ---------------------------------------------------------------------------
+
+def test_linux_tcp_fin_timeout_is_60():
+    assert get_os_sysctls("linux")["net.ipv4.tcp_fin_timeout"] == "60"
+
+
+def test_windows_tcp_fin_timeout_is_30():
+    assert get_os_sysctls("windows")["net.ipv4.tcp_fin_timeout"] == "30"
+
+
+def test_embedded_tcp_fin_timeout_is_15():
+    assert get_os_sysctls("embedded")["net.ipv4.tcp_fin_timeout"] == "15"
+
+
+def test_cisco_tcp_fin_timeout_is_15():
+    assert get_os_sysctls("cisco")["net.ipv4.tcp_fin_timeout"] == "15"
+
+# ---------------------------------------------------------------------------
+# os_fingerprint module — icmp_ratelimit
+# ---------------------------------------------------------------------------
+
+def test_linux_icmp_ratelimit_is_1000():
+    assert get_os_sysctls("linux")["net.ipv4.icmp_ratelimit"] == "1000"
+
+
+def test_windows_icmp_ratelimit_is_0():
+    assert get_os_sysctls("windows")["net.ipv4.icmp_ratelimit"] == "0"
+
+
+def test_bsd_icmp_ratelimit_is_250():
+    assert get_os_sysctls("bsd")["net.ipv4.icmp_ratelimit"] == "250"
+
+
+def test_embedded_icmp_ratelimit_is_0():
+    assert get_os_sysctls("embedded")["net.ipv4.icmp_ratelimit"] == "0"
+
+
+def test_cisco_icmp_ratelimit_is_0():
+    assert get_os_sysctls("cisco")["net.ipv4.icmp_ratelimit"] == "0"
+
+
+# ---------------------------------------------------------------------------
+# os_fingerprint module — icmp_ratemask
+# ---------------------------------------------------------------------------
+
+def test_linux_icmp_ratemask_is_6168():
+    assert get_os_sysctls("linux")["net.ipv4.icmp_ratemask"] == "6168"
+
+
+def test_windows_icmp_ratemask_is_0():
+    assert get_os_sysctls("windows")["net.ipv4.icmp_ratemask"] == "0"
+
+
+def test_bsd_icmp_ratemask_is_6168():
+    assert get_os_sysctls("bsd")["net.ipv4.icmp_ratemask"] == "6168"
+
+
+def test_embedded_icmp_ratemask_is_0():
+    assert get_os_sysctls("embedded")["net.ipv4.icmp_ratemask"] == "0"
+
+
+def test_cisco_icmp_ratemask_is_0():
+    assert get_os_sysctls("cisco")["net.ipv4.icmp_ratemask"] == "0"
+
+
+# ---------------------------------------------------------------------------
+# os_fingerprint module — structural / completeness
+# ---------------------------------------------------------------------------
+
 def test_unknown_os_falls_back_to_linux():
     result = get_os_sysctls("nonexistent-os")
     assert result == get_os_sysctls("linux")
@@ -59,6 +234,25 @@ def test_all_os_families_non_empty():
     assert "linux" in families
     assert "windows" in families
     assert "embedded" in families
+
+
+@pytest.mark.parametrize("family", ["linux", "windows", "bsd", "embedded", "cisco"])
+def test_all_os_profiles_have_required_sysctls(family: str):
+    """Every OS profile must define the full canonical sysctl set."""
+    from decnet.os_fingerprint import _REQUIRED_SYSCTLS
+    result = get_os_sysctls(family)
+    missing = _REQUIRED_SYSCTLS - result.keys()
+    assert not missing, f"OS profile '{family}' is missing sysctls: {missing}"
+
+
+@pytest.mark.parametrize("family", ["linux", "windows", "bsd", "embedded", "cisco"])
+def test_all_os_sysctl_values_are_strings(family: str):
+    """Docker Compose requires sysctl values to be strings, never ints."""
+    for _key, _val in get_os_sysctls(family).items():
+        assert isinstance(_val, str), (
+            f"OS profile '{family}': sysctl '{_key}' value {_val!r} is not a string"
+        )
+
 
 
 # ---------------------------------------------------------------------------
@@ -201,13 +395,46 @@ def test_compose_two_deckies_independent_nmap_os():
     assert compose["services"]["decky-02"]["sysctls"]["net.ipv4.ip_default_ttl"] == "64"
 
 
+def test_compose_linux_sysctls_include_timestamps():
+    """Linux compose output must have tcp_timestamps enabled (= 1)."""
+    compose = generate_compose(_make_config("linux"))
+    sysctls = compose["services"]["decky-01"]["sysctls"]
+    assert sysctls.get("net.ipv4.tcp_timestamps") == "1"
+
+
+def test_compose_windows_sysctls_no_timestamps():
+    """Windows compose output must have tcp_timestamps disabled (= 0)."""
+    compose = generate_compose(_make_config("windows"))
+    sysctls = compose["services"]["decky-01"]["sysctls"]
+    assert sysctls.get("net.ipv4.tcp_timestamps") == "0"
+
+
+def test_compose_linux_sysctls_full_set():
+    """Linux compose output must carry all 8 canonical sysctls."""
+    from decnet.os_fingerprint import _REQUIRED_SYSCTLS
+    compose = generate_compose(_make_config("linux"))
+    sysctls = compose["services"]["decky-01"]["sysctls"]
+    missing = _REQUIRED_SYSCTLS - sysctls.keys()
+    assert not missing, f"Compose output missing sysctls: {missing}"
+
+
+def test_compose_embedded_sysctls_full_set():
+    """Embedded compose output must carry all 8 canonical sysctls."""
+    from decnet.os_fingerprint import _REQUIRED_SYSCTLS
+    compose = generate_compose(_make_config("embedded"))
+    sysctls = compose["services"]["decky-01"]["sysctls"]
+    missing = _REQUIRED_SYSCTLS - sysctls.keys()
+    assert not missing, f"Compose output missing sysctls: {missing}"
+
+
+
 # ---------------------------------------------------------------------------
 # CLI helper: nmap_os flows from archetype into DeckyConfig
 # ---------------------------------------------------------------------------
 
 def test_build_deckies_windows_archetype_sets_nmap_os():
     from decnet.archetypes import get_archetype
-    from decnet.cli import _build_deckies
+    from decnet.fleet import build_deckies as _build_deckies
 
     arch = get_archetype("windows-workstation")
     deckies = _build_deckies(
@@ -221,7 +448,7 @@ def test_build_deckies_windows_archetype_sets_nmap_os():
 
 
 def test_build_deckies_no_archetype_defaults_linux():
-    from decnet.cli import _build_deckies
+    from decnet.fleet import build_deckies as _build_deckies
 
     deckies = _build_deckies(
         n=1,
@@ -235,7 +462,7 @@ def test_build_deckies_no_archetype_defaults_linux():
 
 def test_build_deckies_embedded_archetype_sets_nmap_os():
     from decnet.archetypes import get_archetype
-    from decnet.cli import _build_deckies
+    from decnet.fleet import build_deckies as _build_deckies
 
     arch = get_archetype("iot-device")
     deckies = _build_deckies(

@@ -7,16 +7,14 @@ attempts as JSON.
 """
 
 import asyncio
-import json
 import os
-import socket
 import struct
-from datetime import datetime, timezone
 from decnet_logging import syslog_line, write_syslog_file, forward_syslog
 
 NODE_NAME     = os.environ.get("NODE_NAME", "dbserver")
 SERVICE_NAME   = "mysql"
 LOG_TARGET    = os.environ.get("LOG_TARGET", "")
+PORT          = int(os.environ.get("PORT", "3306"))
 _MYSQL_VER    = os.environ.get("MYSQL_VERSION", "5.7.38-log")
 
 # Minimal MySQL server greeting (protocol v10) — version string is configurable
@@ -70,6 +68,10 @@ class MySQLProtocol(asyncio.Protocol):
         # MySQL packets: 3-byte length + 1-byte seq + payload
         while len(self._buf) >= 4:
             length = struct.unpack("<I", self._buf[:3] + b"\x00")[0]
+            if length > 1024 * 1024:
+                self._transport.close()
+                self._buf = b""
+                return
             if len(self._buf) < 4 + length:
                 break
             payload = self._buf[4:4 + length]
@@ -101,7 +103,7 @@ class MySQLProtocol(asyncio.Protocol):
 async def main():
     _log("startup", msg=f"MySQL server starting as {NODE_NAME}")
     loop = asyncio.get_running_loop()
-    server = await loop.create_server(MySQLProtocol, "0.0.0.0", 3306)
+    server = await loop.create_server(MySQLProtocol, "0.0.0.0", PORT)  # nosec B104
     async with server:
         await server.serve_forever()
 

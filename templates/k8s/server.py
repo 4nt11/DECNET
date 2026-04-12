@@ -8,8 +8,6 @@ Responds to recon endpoints (/version, /api, /apis, /api/v1/namespaces,
 
 import json
 import os
-import socket
-from datetime import datetime, timezone
 
 from flask import Flask, request
 from decnet_logging import syslog_line, write_syslog_file, forward_syslog
@@ -127,4 +125,4 @@ def catch_all(path):
 
 if __name__ == "__main__":
     _log("startup", msg=f"Kubernetes API server starting as {NODE_NAME}")
-    app.run(host="0.0.0.0", port=6443, debug=False)
+    app.run(host="0.0.0.0", port=6443, debug=False)  # nosec B104

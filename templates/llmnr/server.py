@@ -7,11 +7,8 @@ Logs every packet with source IP and decoded query name where possible.
 """
 
 import asyncio
-import json
 import os
-import socket
 import struct
-from datetime import datetime, timezone
 from decnet_logging import syslog_line, write_syslog_file, forward_syslog
 
 NODE_NAME = os.environ.get("NODE_NAME", "lan-host")
@@ -98,12 +95,12 @@ async def main():
     # LLMNR: UDP 5355
     llmnr_transport, _ = await loop.create_datagram_endpoint(
         lambda: LLMNRProtocol("LLMNR"),
-        local_addr=("0.0.0.0", 5355),
+        local_addr=("0.0.0.0", 5355),  # nosec B104
     )
     # mDNS: UDP 5353
     mdns_transport, _ = await loop.create_datagram_endpoint(
         lambda: LLMNRProtocol("mDNS"),
-        local_addr=("0.0.0.0", 5353),
+        local_addr=("0.0.0.0", 5353),  # nosec B104
     )
 
     try:

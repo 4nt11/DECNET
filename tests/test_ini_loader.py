@@ -6,7 +6,7 @@ and per-service config propagation.
 import pytest
 import textwrap
 from pathlib import Path
-from decnet.ini_loader import load_ini, IniConfig
+from decnet.ini_loader import load_ini
 
 
 def _write_ini(tmp_path: Path, content: str) -> Path:

@@ -1,4 +1,3 @@
-from __future__ import annotations
 """
 Rotating file handler for DECNET syslog output.
 
@@ -6,6 +5,8 @@ Writes RFC 5424 syslog lines to a local file.
 Path is controlled by the DECNET_LOG_FILE environment variable
 (default: /var/log/decnet/decnet.log).
 """
+
+from __future__ import annotations
 
 import logging
 import logging.handlers
@@ -48,10 +49,9 @@ def _get_logger() -> logging.Logger:
 def write_syslog(line: str) -> None:
     """Write a single RFC 5424 syslog line to the rotating log file."""
     try:
-        _get_logger().info(line)
-    except Exception:
+       _get_logger().info(line)
+    except Exception:  # nosec B110
         pass
-
 
 def get_log_path() -> Path:
     """Return the configured log file path (for tests/inspection)."""

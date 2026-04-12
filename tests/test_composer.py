@@ -20,13 +20,13 @@ APT_COMPATIBLE = {
 }
 
 BUILD_SERVICES = [
-    "ssh", "http", "rdp", "smb", "ftp", "smtp", "elasticsearch",
+    "ssh", "telnet", "http", "rdp", "smb", "ftp", "smtp", "elasticsearch",
     "pop3", "imap", "mysql", "mssql", "redis", "mongodb", "postgres",
     "ldap", "vnc", "docker_api", "k8s", "sip",
-    "mqtt", "llmnr", "snmp", "tftp",
+    "mqtt", "llmnr", "snmp", "tftp", "conpot"
 ]
 
-UPSTREAM_SERVICES = ["telnet", "conpot"]
+UPSTREAM_SERVICES: list = []
 
 
 def _make_config(services, distro="debian", base_image=None, build_base=None):
@@ -121,8 +121,8 @@ def test_service_config_http_server_header():
     assert env.get("SERVER_HEADER") == "nginx/1.18.0"
 
 
-def test_service_config_ssh_kernel_version():
-    """service_config for ssh must inject COWRIE_HONEYPOT_KERNEL_VERSION."""
+def test_service_config_ssh_password():
+    """service_config for ssh must inject SSH_ROOT_PASSWORD."""
     from decnet.config import DeckyConfig, DecnetConfig
     from decnet.distros import DISTROS
     profile = DISTROS["debian"]
@@ -131,7 +131,7 @@ def test_service_config_ssh_kernel_version():
         services=["ssh"], distro="debian",
         base_image=profile.image, build_base=profile.build_base,
         hostname="test-host",
-        service_config={"ssh": {"kernel_version": "5.15.0-76-generic"}},
+        service_config={"ssh": {"password": "s3cr3t!"}},
     )
     config = DecnetConfig(
         mode="unihost", interface="eth0",
@@ -140,7 +140,8 @@ def test_service_config_ssh_kernel_version():
     )
     compose = generate_compose(config)
     env = compose["services"]["decky-01-ssh"]["environment"]
-    assert env.get("COWRIE_HONEYPOT_KERNEL_VERSION") == "5.15.0-76-generic"
+    assert env.get("SSH_ROOT_PASSWORD") == "s3cr3t!"
+    assert not any(k.startswith("COWRIE_") for k in env)
 
 
 def test_service_config_for_one_service_does_not_affect_another():

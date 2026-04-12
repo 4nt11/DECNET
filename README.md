@@ -69,7 +69,7 @@ From the outside a decky looks identical to a real machine: it has its own MAC a
 ## Installation
 
 ```bash
-git clone <repo-url> DECNET
+git clone https://git.resacachile.cl/anti/DECNET
 cd DECNET
 pip install -e .
 ```
@@ -207,6 +207,26 @@ sudo decnet deploy --deckies 4 --archetype windows-workstation
 [corp-workstations]
 archetype = windows-workstation
 amount    = 4
+
+[win-fileserver]
+services   = ftp
+nmap_os    = windows
+os_version = Windows Server 2019
+
+[dbsrv01]
+ip       = 192.168.1.112
+services = mysql, http
+nmap_os  = linux
+
+[dbsrv01.http]
+server_header = Apache/2.4.54 (Debian)
+response_code = 200
+fake_app      = wordpress
+
+[dbsrv01.mysql]
+mysql_version = 5.7.38-log
+mysql_banner  = MySQL Community Server
+
 ```
 
 ---
@@ -454,7 +474,7 @@ Key/value pairs are passed directly to the service plugin as persona config. Com
 | `mongodb` | `mongo_version` |
 | `elasticsearch` | `es_version`, `cluster_name` |
 | `ldap` | `base_dn`, `domain` |
-| `snmp` | `snmp_community`, `sys_descr` |
+| `snmp` | `snmp_community`, `sys_descr`, `snmp_archetype` (picks predefined sysDescr for `water_plant`, `hospital`, etc.) |
 | `mqtt` | `mqtt_version` |
 | `sip` | `sip_server`, `sip_domain` |
 | `k8s` | `k8s_version` |
@@ -467,6 +487,30 @@ When using `amount=`, a subsection like `[group-name.ssh]` automatically propaga
 ### Full example
 
 See [`test-full.ini`](test-full.ini) — covers all 25 services across 10 role-themed deckies with per-service personas, archetype pools, OS fingerprint assignments, and inline comments explaining each choice.
+
+---
+
+## Environment Configuration (.env)
+
+DECNET supports loading configuration from `.env.local` and `.env` files located in the project root. This is useful for securing secrets like the JWT key and configuring default ports without passing flags every time.
+
+An example `.env.example` is provided:
+
+```ini
+# API Options
+DECNET_API_HOST=0.0.0.0
+DECNET_API_PORT=8000
+DECNET_JWT_SECRET=supersecretkey12345
+DECNET_INGEST_LOG_FILE=/var/log/decnet/decnet.log
+
+# Web Dashboard Options
+DECNET_WEB_HOST=0.0.0.0
+DECNET_WEB_PORT=8080
+DECNET_ADMIN_USER=admin
+DECNET_ADMIN_PASSWORD=admin
+```
+
+Copy `.env.example` to `.env.local` and modify it to suit your environment.
 
 ---
 
@@ -631,3 +675,9 @@ The test suite covers:
 | `test_cli_service_pool.py` | CLI service resolution |
 
 Every new feature requires passing tests before merging.
+
+# AI Disclosure
+
+This project has been made with lots, and I mean lots of help from AIs. While most of the design was made by me, most of the coding was done by AI models.
+
+Nevertheless, this project will be kept under high scrutiny by humans.

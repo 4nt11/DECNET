@@ -7,18 +7,13 @@ failed". Logs the raw response for offline cracking.
 """
 
 import asyncio
-import json
 import os
-import socket
-from datetime import datetime, timezone
 from decnet_logging import syslog_line, write_syslog_file, forward_syslog
 
 NODE_NAME = os.environ.get("NODE_NAME", "desktop")
 SERVICE_NAME   = "vnc"
 LOG_TARGET = os.environ.get("LOG_TARGET", "")
 
-# RFB challenge — fixed so captured responses are reproducible
-_CHALLENGE = bytes(range(16)) * 1 + b"\x10\x11\x12\x13\x14\x15\x16\x17"  # 24 bytes
 
 
 
@@ -66,7 +61,7 @@ class VNCProtocol(asyncio.Protocol):
             self._buf = self._buf[1:]
             _log("security_choice", src=self._peer[0], type=chosen)
             # Send 16-byte challenge
-            self._transport.write(_CHALLENGE[:16])
+            self._transport.write(os.urandom(16))
             self._state = "auth_response"
 
         elif self._state == "auth_response":
@@ -90,7 +85,7 @@ class VNCProtocol(asyncio.Protocol):
 async def main():
     _log("startup", msg=f"VNC server starting as {NODE_NAME}")
     loop = asyncio.get_running_loop()
-    server = await loop.create_server(VNCProtocol, "0.0.0.0", 5900)
+    server = await loop.create_server(VNCProtocol, "0.0.0.0", 5900)  # nosec B104
     async with server:
         await server.serve_forever()
 

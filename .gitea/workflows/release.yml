@@ -3,6 +3,9 @@ name: Release
 on:
   push:
     branches: [main]
+    paths-ignore:
+      - "**/*.md"
+      - "docs/**"
 
 env:
   REGISTRY: git.resacachile.cl
@@ -42,7 +45,7 @@ jobs:
           fi
 
   docker:
-    name: Build & push ${{ matrix.service }}
+    name: Build, scan & push ${{ matrix.service }}
     runs-on: ubuntu-latest
     needs: tag
     strategy:
@@ -76,6 +79,9 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
       - name: Log in to Gitea container registry
         uses: docker/login-action@v3
         with:
@@ -83,7 +89,26 @@ jobs:
           username: ${{ secrets.REGISTRY_USER }}
           password: ${{ secrets.REGISTRY_TOKEN }}
 
-      - name: Build and push
+      - name: Build image locally
+        uses: docker/build-push-action@v5
+        with:
+          context: templates/${{ matrix.service }}
+          load: true
+          push: false
+          tags: decnet-${{ matrix.service }}:scan
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+      - name: Scan with Trivy
+        uses: aquasecurity/trivy-action@master
+        with:
+          image-ref: decnet-${{ matrix.service }}:scan
+          exit-code: "1"
+          severity: CRITICAL
+          ignore-unfixed: true
+
+      - name: Push image
+        if: success()
         uses: docker/build-push-action@v5
         with:
           context: templates/${{ matrix.service }}
@@ -91,3 +116,4 @@ jobs:
           tags: |
             ${{ env.REGISTRY }}/${{ env.OWNER }}/decnet-${{ matrix.service }}:latest
             ${{ env.REGISTRY }}/${{ env.OWNER }}/decnet-${{ matrix.service }}:v${{ needs.tag.outputs.version }}
+          cache-from: type=gha

@@ -11,10 +11,8 @@ from __future__ import annotations
 
 import json
 import re
-from datetime import datetime, timezone
-from pathlib import Path
+from datetime import datetime
 
-import pytest
 
 from decnet.correlation.parser import LogEvent, parse_line
 from decnet.correlation.graph import AttackerTraversal, TraversalHop

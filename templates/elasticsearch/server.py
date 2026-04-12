@@ -7,8 +7,6 @@ as JSON. Designed to attract automated scanners and credential stuffers.
 
 import json
 import os
-import socket
-from datetime import datetime, timezone
 from http.server import BaseHTTPRequestHandler, HTTPServer
 from decnet_logging import syslog_line, write_syslog_file, forward_syslog
 
@@ -122,5 +120,5 @@ class ESHandler(BaseHTTPRequestHandler):
 
 if __name__ == "__main__":
     _log("startup", msg=f"Elasticsearch server starting as {NODE_NAME}")
-    server = HTTPServer(("0.0.0.0", 9200), ESHandler)
+    server = HTTPServer(("0.0.0.0", 9200), ESHandler)  # nosec B104
     server.serve_forever()

@@ -1,12 +1,10 @@
 #!/usr/bin/env python3
-from __future__ import annotations
 """
 Shared RFC 5424 syslog helper for DECNET service templates.
 
-Provides two functions consumed by every service's server.py:
-  - syslog_line(service, hostname, event_type, severity, **fields) -> str
-  - write_syslog_file(line: str) -> None
-  - forward_syslog(line: str, log_target: str) -> None
+Services call syslog_line() to format an RFC 5424 message, then
+write_syslog_file() to emit it to stdout — Docker captures it, and the
+host-side collector streams it into the log file.
 
 RFC 5424 structure:
   <PRI>1 TIMESTAMP HOSTNAME APP-NAME PROCID MSGID [SD-ELEMENT] MSG
@@ -14,12 +12,7 @@ RFC 5424 structure:
 Facility: local0 (16), PEN for SD element ID: decnet@55555
 """
 
-import logging
-import logging.handlers
-import os
-import socket
 from datetime import datetime, timezone
-from pathlib import Path
 from typing import Any
 
 # ─── Constants ────────────────────────────────────────────────────────────────
@@ -40,11 +33,6 @@ SEVERITY_DEBUG   = 7
 _MAX_HOSTNAME = 255
 _MAX_APPNAME  = 48
 _MAX_MSGID    = 32
-
-_LOG_FILE_ENV     = "DECNET_LOG_FILE"
-_DEFAULT_LOG_FILE = "/var/log/decnet/decnet.log"
-_MAX_BYTES        = 10 * 1024 * 1024  # 10 MB
-_BACKUP_COUNT     = 5
 
 # ─── Formatter ────────────────────────────────────────────────────────────────
 
@@ -91,53 +79,11 @@ def syslog_line(
     return f"{pri}1 {ts} {host} {appname} {_NILVALUE} {msgid} {sd}{message}"
 
 
-# ─── File handler ─────────────────────────────────────────────────────────────
-
-_file_logger: logging.Logger | None = None
-
-
-def _get_file_logger() -> logging.Logger:
-    global _file_logger
-    if _file_logger is not None:
-        return _file_logger
-
-    log_path = Path(os.environ.get(_LOG_FILE_ENV, _DEFAULT_LOG_FILE))
-    try:
-        log_path.parent.mkdir(parents=True, exist_ok=True)
-        handler = logging.handlers.RotatingFileHandler(
-            log_path,
-            maxBytes=_MAX_BYTES,
-            backupCount=_BACKUP_COUNT,
-            encoding="utf-8",
-        )
-    except OSError:
-        handler = logging.StreamHandler()
-
-    handler.setFormatter(logging.Formatter("%(message)s"))
-    _file_logger = logging.getLogger("decnet.syslog")
-    _file_logger.setLevel(logging.DEBUG)
-    _file_logger.propagate = False
-    _file_logger.addHandler(handler)
-    return _file_logger
-
-
 def write_syslog_file(line: str) -> None:
-    """Append a syslog line to the rotating log file."""
-    try:
-        _get_file_logger().info(line)
-    except Exception:
-        pass
+    """Emit a syslog line to stdout for Docker log capture."""
+    print(line, flush=True)
 
-
-# ─── TCP forwarding ───────────────────────────────────────────────────────────
 
 def forward_syslog(line: str, log_target: str) -> None:
-    """Forward a syslog line over TCP to log_target (ip:port)."""
-    if not log_target:
-        return
-    try:
-        host, port = log_target.rsplit(":", 1)
-        with socket.create_connection((host, int(port)), timeout=3) as s:
-            s.sendall((line + "\n").encode())
-    except Exception:
-        pass
+    """No-op stub. TCP forwarding is now handled by rsyslog, not by service containers."""
+    pass

@@ -1,4 +1,5 @@
 .venv/
+.claude/
 __pycache__/
 *.pyc
 *.pyo
@@ -9,3 +10,15 @@ decnet-compose.yml
 decnet-state.json
 *.ini
 .env
+decnet.log*
+*.loggy
+*.nmap
+linterfails.log
+webmail
+windows1
+*.db
+decnet.json
+.env
+.env.local
+.coverage
+.hypothesis/

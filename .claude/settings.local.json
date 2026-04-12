@@ -1,7 +1,28 @@
 {
   "permissions": {
     "allow": [
-      "mcp__plugin_context-mode_context-mode__ctx_batch_execute"
+      "mcp__plugin_context-mode_context-mode__ctx_batch_execute",
+      "mcp__plugin_context-mode_context-mode__ctx_search",
+      "Bash(grep:*)",
+      "Bash(python -m pytest --tb=short -q)",
+      "Bash(pip install:*)",
+      "Bash(pip show:*)",
+      "Bash(python:*)",
+      "Bash(DECNET_JWT_SECRET=\"test-secret-xyz-1234!\" DECNET_ADMIN_PASSWORD=\"test-pass-xyz-1234!\" python:*)",
+      "Bash(ls /home/anti/Tools/DECNET/*.db* /home/anti/Tools/DECNET/test_*.db*)",
+      "mcp__plugin_context-mode_context-mode__ctx_execute_file",
+      "Bash(nc)",
+      "Bash(nmap:*)",
+      "Bash(ping -c1 -W2 192.168.1.200)",
+      "Bash(xxd)",
+      "Bash(curl -s http://192.168.1.200:2375/version)",
+      "Bash(python3 -m json.tool)",
+      "Bash(curl -s http://192.168.1.200:9200/)",
+      "Bash(docker image:*)",
+      "Read(//home/anti/Tools/cowrie/src/cowrie/data/txtcmds/**)",
+      "Read(//home/anti/Tools/cowrie/src/cowrie/data/txtcmds/bin/**)",
+      "mcp__plugin_context-mode_context-mode__ctx_index",
+      "Bash(ls:*)"
     ]
   }
 }

@@ -8,8 +8,6 @@ but fake data. Logs all requests as JSON.
 
 import json
 import os
-import socket
-from datetime import datetime, timezone
 
 from flask import Flask, request
 from decnet_logging import syslog_line, write_syslog_file, forward_syslog
@@ -55,7 +53,7 @@ _CONTAINERS = [
         "Image": "nginx:latest",
         "State": "running",
         "Status": "Up 3 days",
-        "Ports": [{"IP": "0.0.0.0", "PrivatePort": 80, "PublicPort": 8080, "Type": "tcp"}],
+        "Ports": [{"IP": "0.0.0.0", "PrivatePort": 80, "PublicPort": 8080, "Type": "tcp"}],  # nosec B104
     }
 ]
 
@@ -116,4 +114,4 @@ def catch_all(path):
 
 if __name__ == "__main__":
     _log("startup", msg=f"Docker API server starting as {NODE_NAME}")
-    app.run(host="0.0.0.0", port=2375, debug=False)
+    app.run(host="0.0.0.0", port=2375, debug=False)  # nosec B104

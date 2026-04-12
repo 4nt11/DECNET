@@ -8,11 +8,8 @@ Handles:
   - IP allocation (sequential, skipping reserved addresses)
 """
 
-import ipaddress
 import os
-import shutil
-import socket
-import subprocess
+import subprocess  # nosec B404
 from ipaddress import IPv4Address, IPv4Interface, IPv4Network
 
 import docker
@@ -27,7 +24,7 @@ HOST_IPVLAN_IFACE = "decnet_ipvlan0"
 # ---------------------------------------------------------------------------
 
 def _run(cmd: list[str], check: bool = True) -> subprocess.CompletedProcess:
-    return subprocess.run(cmd, capture_output=True, text=True, check=check)
+    return subprocess.run(cmd, capture_output=True, text=True, check=check)  # nosec B603 B404
 
 
 def detect_interface() -> str:

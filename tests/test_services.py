@@ -31,17 +31,15 @@ def _is_build_service(name: str) -> bool:
 # Tier 1: upstream-image services (non-build)
 # ---------------------------------------------------------------------------
 
-UPSTREAM_SERVICES = {
-    "telnet": ("cowrie/cowrie",  [23]),
-    "conpot": ("honeynet/conpot", [502, 161, 80]),
-}
+UPSTREAM_SERVICES: dict = {}
 
 # ---------------------------------------------------------------------------
 # Tier 2: custom-build services (including ssh, which now uses build)
 # ---------------------------------------------------------------------------
 
 BUILD_SERVICES = {
-    "ssh":           ([22, 2222],   "ssh"),
+    "ssh":           ([22],         "ssh"),
+    "telnet":        ([23],         "telnet"),
     "http":          ([80, 443],    "http"),
     "rdp":           ([3389],       "rdp"),
     "smb":           ([445, 139],   "smb"),
@@ -64,6 +62,7 @@ BUILD_SERVICES = {
     "llmnr":         ([5355, 5353], "llmnr"),
     "snmp":          ([161],        "snmp"),
     "tftp":          ([69],         "tftp"),
+    "conpot":        ([502, 161, 80], "conpot"),
 }
 
 ALL_SERVICE_NAMES = list(UPSTREAM_SERVICES) + list(BUILD_SERVICES)
@@ -155,7 +154,11 @@ def test_build_service_restart_policy(name):
     assert frag.get("restart") == "unless-stopped"
 
 
-@pytest.mark.parametrize("name", BUILD_SERVICES)
+_RSYSLOG_SERVICES = {"ssh", "real_ssh", "telnet"}
+_NODE_NAME_SERVICES = [n for n in BUILD_SERVICES if n not in _RSYSLOG_SERVICES]
+
+
+@pytest.mark.parametrize("name", _NODE_NAME_SERVICES)
 def test_build_service_node_name_env(name):
     frag = _fragment(name)
     env = frag.get("environment", {})
@@ -163,8 +166,8 @@ def test_build_service_node_name_env(name):
     assert env["NODE_NAME"] == "test-decky"
 
 
-# SSH uses COWRIE_OUTPUT_TCP_* instead of LOG_TARGET — exclude from generic tests
-_LOG_TARGET_SERVICES = [n for n in BUILD_SERVICES if n != "ssh"]
+# ssh, real_ssh, and telnet do not use LOG_TARGET (rsyslog handles log forwarding inside the container)
+_LOG_TARGET_SERVICES = [n for n in BUILD_SERVICES if n not in _RSYSLOG_SERVICES]
 
 
 @pytest.mark.parametrize("name", _LOG_TARGET_SERVICES)
@@ -181,13 +184,11 @@ def test_build_service_no_log_target_by_default(name):
     assert "LOG_TARGET" not in env
 
 
-def test_ssh_log_target_uses_cowrie_tcp_output():
-    """SSH forwards logs via Cowrie TCP output, not LOG_TARGET."""
+def test_ssh_no_log_target_env():
+    """SSH uses rsyslog internally — no LOG_TARGET or COWRIE_* vars."""
     env = _fragment("ssh", log_target="10.0.0.1:5140").get("environment", {})
-    assert env.get("COWRIE_OUTPUT_TCP_ENABLED") == "true"
-    assert env.get("COWRIE_OUTPUT_TCP_HOST") == "10.0.0.1"
-    assert env.get("COWRIE_OUTPUT_TCP_PORT") == "5140"
     assert "LOG_TARGET" not in env
+    assert not any(k.startswith("COWRIE_") for k in env)
 
 
 # ---------------------------------------------------------------------------
@@ -266,31 +267,26 @@ def test_http_empty_service_cfg_no_extra_env():
 
 # SSH ------------------------------------------------------------------------
 
-def test_ssh_default_no_persona_env():
+def test_ssh_default_env():
     env = _fragment("ssh").get("environment", {})
-    for key in ("COWRIE_HONEYPOT_KERNEL_VERSION", "COWRIE_HONEYPOT_HARDWARE_PLATFORM",
-                "COWRIE_SSH_VERSION", "COWRIE_USERDB_ENTRIES"):
-        assert key not in env, f"Expected {key} absent by default"
+    assert env.get("SSH_ROOT_PASSWORD") == "admin"
+    assert not any(k.startswith("COWRIE_") for k in env)
+    assert "NODE_NAME" not in env
 
 
-def test_ssh_kernel_version():
-    env = _fragment("ssh", service_cfg={"kernel_version": "5.15.0-76-generic"}).get("environment", {})
-    assert env.get("COWRIE_HONEYPOT_KERNEL_VERSION") == "5.15.0-76-generic"
+def test_ssh_custom_password():
+    env = _fragment("ssh", service_cfg={"password": "h4x!"}).get("environment", {})
+    assert env.get("SSH_ROOT_PASSWORD") == "h4x!"
 
 
-def test_ssh_hardware_platform():
-    env = _fragment("ssh", service_cfg={"hardware_platform": "aarch64"}).get("environment", {})
-    assert env.get("COWRIE_HONEYPOT_HARDWARE_PLATFORM") == "aarch64"
+def test_ssh_custom_hostname():
+    env = _fragment("ssh", service_cfg={"hostname": "prod-db"}).get("environment", {})
+    assert env.get("SSH_HOSTNAME") == "prod-db"
 
 
-def test_ssh_banner():
-    env = _fragment("ssh", service_cfg={"ssh_banner": "SSH-2.0-OpenSSH_8.9p1 Ubuntu-3ubuntu0.3"}).get("environment", {})
-    assert env.get("COWRIE_SSH_VERSION") == "SSH-2.0-OpenSSH_8.9p1 Ubuntu-3ubuntu0.3"
-
-
-def test_ssh_users():
-    env = _fragment("ssh", service_cfg={"users": "root:toor,admin:admin123"}).get("environment", {})
-    assert env.get("COWRIE_USERDB_ENTRIES") == "root:toor,admin:admin123"
+def test_ssh_no_hostname_by_default():
+    env = _fragment("ssh").get("environment", {})
+    assert "SSH_HOSTNAME" not in env
 
 
 # SMTP -----------------------------------------------------------------------
@@ -339,3 +335,28 @@ def test_redis_default_no_extra_env():
     env = _fragment("redis").get("environment", {})
     assert "REDIS_VERSION" not in env
     assert "REDIS_OS" not in env
+
+
+# Telnet ---------------------------------------------------------------------
+
+def test_telnet_uses_build_context():
+    """Telnet uses a build context (no Cowrie image)."""
+    frag = _fragment("telnet")
+    assert "build" in frag
+    assert "image" not in frag
+
+
+def test_telnet_default_password():
+    env = _fragment("telnet").get("environment", {})
+    assert env.get("TELNET_ROOT_PASSWORD") == "admin"
+
+
+def test_telnet_custom_password():
+    env = _fragment("telnet", service_cfg={"password": "s3cr3t"}).get("environment", {})
+    assert env.get("TELNET_ROOT_PASSWORD") == "s3cr3t"
+
+
+def test_telnet_no_cowrie_env_vars():
+    """Ensure no Cowrie env vars bleed into the real telnet service."""
+    env = _fragment("telnet").get("environment", {})
+    assert not any(k.startswith("COWRIE_") for k in env)

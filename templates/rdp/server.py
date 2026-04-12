@@ -6,11 +6,7 @@ in the initial RDP negotiation request. Forwards events as JSON to
 LOG_TARGET if set.
 """
 
-import json
 import os
-import socket
-import sys
-from datetime import datetime, timezone
 
 from twisted.internet import protocol, reactor
 from twisted.python import log as twisted_log
@@ -54,7 +50,7 @@ class RDPServerFactory(protocol.ServerFactory):
 
 
 if __name__ == "__main__":
-    twisted_log.startLogging(sys.stdout)
+    twisted_log.startLoggingWithObserver(lambda e: None, setStdout=False)
     _log("startup", msg=f"RDP server starting as {NODE_NAME} on port 3389")
     reactor.listenTCP(3389, RDPServerFactory())
     reactor.run()

@@ -7,29 +7,63 @@ Logs all requests as JSON.
 """
 
 import asyncio
-import json
 import os
-import socket
 import struct
-from datetime import datetime, timezone
 from decnet_logging import syslog_line, write_syslog_file, forward_syslog
 
 NODE_NAME = os.environ.get("NODE_NAME", "switch")
 SERVICE_NAME   = "snmp"
 LOG_TARGET = os.environ.get("LOG_TARGET", "")
+SNMP_ARCHETYPE = os.environ.get("SNMP_ARCHETYPE", "default")
+
+
+def _get_archetype_values() -> dict:
+    archetypes = {
+        "water_plant": {
+            "sysDescr": f"Linux {NODE_NAME} 4.19.0-18-amd64 #1 SMP Debian 4.19.208-1 (2021-09-29) x86_64",
+            "sysContact": "ICS Admin <ics-admin@plant.local>",
+            "sysName": NODE_NAME,
+            "sysLocation": "Water Treatment Facility — Pump Room B",
+        },
+        "factory": {
+            "sysDescr": "VxWorks 6.9 (Rockwell Automation Allen-Bradley ControlLogix 5580)",
+            "sysContact": "Factory Floor Support <support@factory.local>",
+            "sysName": NODE_NAME,
+            "sysLocation": "Factory Floor",
+        },
+        "substation": {
+            "sysDescr": "SEL Real-Time Automation Controller RTAC SEL-3555 firmware 1.9.7.0",
+            "sysContact": "Grid Ops <gridops@utility.local>",
+            "sysName": NODE_NAME,
+            "sysLocation": "Main Substation",
+        },
+        "hospital": {
+            "sysDescr": f"Linux {NODE_NAME} 5.10.0-21-amd64 #1 SMP Debian 5.10.162-1 x86_64",
+            "sysContact": "Medical IT <medit@hospital.local>",
+            "sysName": NODE_NAME,
+            "sysLocation": "ICU Ward 3",
+        },
+        "default": {
+            "sysDescr": f"Linux {NODE_NAME} 5.15.0-91-generic #101-Ubuntu SMP Tue Nov 14 13:30:08 UTC 2023 x86_64",
+            "sysContact": "admin@localhost",
+            "sysName": NODE_NAME,
+            "sysLocation": "Server Room",
+        }
+    }
+    return archetypes.get(SNMP_ARCHETYPE, archetypes["default"])
+
+_arch = _get_archetype_values()
 
 # OID value map — fake but plausible
 _OID_VALUES = {
-    "1.3.6.1.2.1.1.1.0": f"Linux {NODE_NAME} 5.15.0-76-generic #83-Ubuntu SMP x86_64",
+    "1.3.6.1.2.1.1.1.0": _arch["sysDescr"],
     "1.3.6.1.2.1.1.2.0": "1.3.6.1.4.1.8072.3.2.10",
     "1.3.6.1.2.1.1.3.0": "12345678",  # sysUpTime
-    "1.3.6.1.2.1.1.4.0": "admin@localhost",
-    "1.3.6.1.2.1.1.5.0": NODE_NAME,
-    "1.3.6.1.2.1.1.6.0": "Server Room",
+    "1.3.6.1.2.1.1.4.0": _arch["sysContact"],
+    "1.3.6.1.2.1.1.5.0": _arch["sysName"],
+    "1.3.6.1.2.1.1.6.0": _arch["sysLocation"],
     "1.3.6.1.2.1.1.7.0": "72",
 }
-
-
 
 
 def _log(event_type: str, severity: int = 6, **kwargs) -> None:
@@ -40,10 +74,14 @@ def _log(event_type: str, severity: int = 6, **kwargs) -> None:
 
 
 def _read_ber_length(data: bytes, pos: int):
+    if pos >= len(data):
+        raise ValueError("Unexpected end of data reading ASN.1 length")
     b = data[pos]
     if b < 0x80:
         return b, pos + 1
     n = b & 0x7f
+    if pos + 1 + n > len(data):
+        raise ValueError("BER length bytes truncated")
     length = int.from_bytes(data[pos + 1:pos + 1 + n], "big")
     return length, pos + 1 + n
 
@@ -94,35 +132,71 @@ def _ber_tlv(tag: int, value: bytes) -> bytes:
 def _parse_snmp(data: bytes):
     """Return (version, community, request_id, oids) or raise."""
     pos = 0
-    assert data[pos] == 0x30; pos += 1
+    if len(data) == 0 or data[pos] != 0x30:
+        raise ValueError("Not a valid ASN.1 sequence")
+    pos += 1
     _, pos = _read_ber_length(data, pos)
     # version
-    assert data[pos] == 0x02; pos += 1
+    if pos >= len(data) or data[pos] != 0x02:
+        raise ValueError("Expected SNMP version INTEGER")
+    pos += 1
     v_len, pos = _read_ber_length(data, pos)
-    version = int.from_bytes(data[pos:pos + v_len], "big"); pos += v_len
+    version = int.from_bytes(data[pos:pos + v_len], "big")
+    pos += v_len
     # community
-    assert data[pos] == 0x04; pos += 1
+    if pos >= len(data) or data[pos] != 0x04:
+        raise ValueError("Expected SNMP community OCTET STREAM")
+    pos += 1
     c_len, pos = _read_ber_length(data, pos)
-    community = data[pos:pos + c_len].decode(errors="replace"); pos += c_len
+    community = data[pos:pos + c_len].decode(errors="replace")
+    pos += c_len
     # PDU type (0xa0 = GetRequest, 0xa1 = GetNextRequest)
-    pdu_type = data[pos]; pos += 1
+    if pos >= len(data):
+        raise ValueError("Missing PDU type")
+    
+    pdu_type = data[pos]
+    if pdu_type not in (0xa0, 0xa1):
+        raise ValueError(f"Invalid PDU type {pdu_type}")
+        
+    pos += 1
     _, pos = _read_ber_length(data, pos)
     # request-id
-    assert data[pos] == 0x02; pos += 1
+    if pos >= len(data) or data[pos] != 0x02:
+        raise ValueError("Expected Request ID INTEGER")
+    pos += 1
     r_len, pos = _read_ber_length(data, pos)
-    request_id = int.from_bytes(data[pos:pos + r_len], "big"); pos += r_len
-    pos += 4  # skip error-status and error-index
+    request_id = int.from_bytes(data[pos:pos + r_len], "big")
+    pos += r_len
+    # skip error-status
+    if pos >= len(data) or data[pos] != 0x02:
+        raise ValueError("Expected error-status INTEGER")
+    pos += 1
+    e_len, pos = _read_ber_length(data, pos)
+    pos += e_len
+    # skip error-index
+    if pos >= len(data) or data[pos] != 0x02:
+        raise ValueError("Expected error-index INTEGER")
+    pos += 1
+    i_len, pos = _read_ber_length(data, pos)
+    pos += i_len
     # varbind list
-    assert data[pos] == 0x30; pos += 1
+    if pos >= len(data) or data[pos] != 0x30:
+        raise ValueError("Expected varbind list SEQUENCE")
+    pos += 1
     vbl_len, pos = _read_ber_length(data, pos)
     end = pos + vbl_len
     oids = []
     while pos < end:
-        assert data[pos] == 0x30; pos += 1
+        if data[pos] != 0x30:
+            raise ValueError("Expected varbind SEQUENCE")
+        pos += 1
         vb_len, pos = _read_ber_length(data, pos)
-        assert data[pos] == 0x06; pos += 1
+        if data[pos] != 0x06:
+            raise ValueError("Expected Object Identifier")
+        pos += 1
         oid_len, pos = _read_ber_length(data, pos)
-        oid = _decode_oid(data[pos:pos + oid_len]); pos += oid_len
+        oid = _decode_oid(data[pos:pos + oid_len])
+        pos += oid_len
         oids.append(oid)
         pos += vb_len - oid_len - 2  # skip value
     return version, community, request_id, oids
@@ -161,17 +235,17 @@ class SNMPProtocol(asyncio.DatagramProtocol):
             response = _build_response(version, community, request_id, oids)
             self._transport.sendto(response, addr)
         except Exception as e:
-            _log("parse_error", src=addr[0], error=str(e), data=data[:64].hex())
+            _log("parse_error", severity=4, src=addr[0], error=str(e), data=data[:64].hex())
 
     def error_received(self, exc):
         pass
 
 
 async def main():
-    _log("startup", msg=f"SNMP server starting as {NODE_NAME}")
+    _log("startup", msg=f"SNMP server starting as {NODE_NAME} with archetype {SNMP_ARCHETYPE}")
     loop = asyncio.get_running_loop()
     transport, _ = await loop.create_datagram_endpoint(
-        SNMPProtocol, local_addr=("0.0.0.0", 161)
+        SNMPProtocol, local_addr=("0.0.0.0", 161)  # nosec B104
     )
     try:
         await asyncio.sleep(float("inf"))

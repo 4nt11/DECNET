@@ -6,10 +6,7 @@ invalidCredentials error. Logs all interactions as JSON.
 """
 
 import asyncio
-import json
 import os
-import socket
-from datetime import datetime, timezone
 from decnet_logging import syslog_line, write_syslog_file, forward_syslog
 
 NODE_NAME = os.environ.get("NODE_NAME", "ldapserver")
@@ -48,20 +45,20 @@ def _parse_bind_request(msg: bytes):
     try:
         pos = 0
         # LDAPMessage SEQUENCE
-        assert msg[pos] == 0x30
+        assert msg[pos] == 0x30  # nosec B101
         pos += 1
         _, pos = _ber_length(msg, pos)
         # messageID INTEGER
-        assert msg[pos] == 0x02
+        assert msg[pos] == 0x02  # nosec B101
         pos += 1
         id_len, pos = _ber_length(msg, pos)
         pos += id_len
         # BindRequest [APPLICATION 0]
-        assert msg[pos] == 0x60
+        assert msg[pos] == 0x60  # nosec B101
         pos += 1
         _, pos = _ber_length(msg, pos)
         # version INTEGER
-        assert msg[pos] == 0x02
+        assert msg[pos] == 0x02  # nosec B101
         pos += 1
         v_len, pos = _ber_length(msg, pos)
         pos += v_len
@@ -73,7 +70,7 @@ def _parse_bind_request(msg: bytes):
             pw_len, pos = _ber_length(msg, pos)
             password = msg[pos:pos + pw_len].decode(errors="replace")
         else:
-            password = "<sasl_or_unknown>"
+            password = "<sasl_or_unknown>"  # nosec B105
         return dn, password
     except Exception:
         return "<parse_error>", "<parse_error>"
@@ -144,7 +141,7 @@ class LDAPProtocol(asyncio.Protocol):
 async def main():
     _log("startup", msg=f"LDAP server starting as {NODE_NAME}")
     loop = asyncio.get_running_loop()
-    server = await loop.create_server(LDAPProtocol, "0.0.0.0", 389)
+    server = await loop.create_server(LDAPProtocol, "0.0.0.0", 389)  # nosec B104
     async with server:
         await server.serve_forever()
 
