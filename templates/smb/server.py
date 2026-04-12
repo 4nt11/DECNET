@@ -25,12 +25,12 @@ def _log(event_type: str, severity: int = 6, **kwargs) -> None:
 
 if __name__ == "__main__":
     _log("startup", msg=f"SMB server starting as {NODE_NAME}")
-    os.makedirs("/tmp/smb_share", exist_ok=True)
+    os.makedirs("/tmp/smb_share", exist_ok=True)  # nosec B108
 
-    server = smbserver.SimpleSMBServer(listenAddress="0.0.0.0", listenPort=445)
+    server = smbserver.SimpleSMBServer(listenAddress="0.0.0.0", listenPort=445)  # nosec B104
     server.setSMB2Support(True)
     server.setSMBChallenge("")
-    server.addShare("SHARE", "/tmp/smb_share", "Shared Documents")
+    server.addShare("SHARE", "/tmp/smb_share", "Shared Documents")  # nosec B108
     try:
         server.start()
     except KeyboardInterrupt:

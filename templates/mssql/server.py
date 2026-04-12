@@ -14,27 +14,30 @@ NODE_NAME = os.environ.get("NODE_NAME", "dbserver")
 SERVICE_NAME   = "mssql"
 LOG_TARGET = os.environ.get("LOG_TARGET", "")
 
-# Minimal TDS pre-login response
 _PRELOGIN_RESP = bytes([
-    0x04, 0x01, 0x00, 0x2b, 0x00, 0x00, 0x01, 0x00,  # TDS header type=4, status=1, len=43
-    # VERSION option
+    0x04, 0x01, 0x00, 0x2f, 0x00, 0x00, 0x01, 0x00,  # TDS header type=4, status=1, len=47
+    # 0. VERSION option
     0x00, 0x00, 0x1a, 0x00, 0x06,
-    # ENCRYPTION option (not supported = 0x02)
+    # 1. ENCRYPTION option
     0x01, 0x00, 0x20, 0x00, 0x01,
-    # INSTOPT
+    # 2. INSTOPT
     0x02, 0x00, 0x21, 0x00, 0x01,
-    # THREADID
+    # 3. THREADID
     0x03, 0x00, 0x22, 0x00, 0x04,
+    # 4. MARS
+    0x04, 0x00, 0x26, 0x00, 0x01,
     # TERMINATOR
     0xff,
-    # version data: 16.00.1000
-    0x10, 0x00, 0x03, 0xe8, 0x00, 0x00,
+    # version data: 14.0.2000
+    0x0e, 0x00, 0x07, 0xd0, 0x00, 0x00,
     # encryption: NOT_SUP
     0x02,
-    # instance name NUL
+    # instopt
     0x00,
     # thread id
-    0x00, 0x00, 0x00, 0x01,
+    0x00, 0x00, 0x00, 0x00,
+    # mars
+    0x00,
 ])
 
 
@@ -85,11 +88,19 @@ class MSSQLProtocol(asyncio.Protocol):
         while len(self._buf) >= 8:
             pkt_type = self._buf[0]
             pkt_len = struct.unpack(">H", self._buf[2:4])[0]
+            if pkt_len < 8:
+                _log("unknown_packet", src=self._peer[0], pkt_type=hex(pkt_type))
+                self._transport.close()
+                self._buf = b""
+                return
             if len(self._buf) < pkt_len:
                 break
             payload = self._buf[8:pkt_len]
             self._buf = self._buf[pkt_len:]
             self._handle_packet(pkt_type, payload)
+            if self._transport.is_closing():
+                self._buf = b""
+                break
 
     def _handle_packet(self, pkt_type: int, payload: bytes):
         if pkt_type == 0x12:  # Pre-login
@@ -124,7 +135,7 @@ class MSSQLProtocol(asyncio.Protocol):
 async def main():
     _log("startup", msg=f"MSSQL server starting as {NODE_NAME}")
     loop = asyncio.get_running_loop()
-    server = await loop.create_server(MSSQLProtocol, "0.0.0.0", 1433)
+    server = await loop.create_server(MSSQLProtocol, "0.0.0.0", 1433)  # nosec B104
     async with server:
         await server.serve_forever()
 

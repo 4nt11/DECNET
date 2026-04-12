@@ -1,0 +1,117 @@
+# Nmap 7.92 scan initiated Thu Apr  9 02:09:54 2026 as: nmap -sS -sV -oN service-test.txt -p- 192.168.1.200
+Nmap scan report for 192.168.1.200
+Host is up (0.0000030s latency).
+Not shown: 65510 closed tcp ports (reset)
+PORT      STATE SERVICE       VERSION
+21/tcp    open  ftp           vsftpd (before 2.0.8) or WU-FTPD
+23/tcp    open  telnet?
+25/tcp    open  smtp          Postfix smtpd
+80/tcp    open  http          Apache httpd 2.4.54 ((Debian))
+110/tcp   open  pop3
+143/tcp   open  imap
+389/tcp   open  ldap          Cisco LDAP server
+445/tcp   open  microsoft-ds
+1433/tcp  open  ms-sql-s?
+1883/tcp  open  mqtt
+2121/tcp  open  ccproxy-ftp?
+2375/tcp  open  docker        Docker 24.0.5
+3306/tcp  open  mysql         MySQL 5.7.38-log
+3389/tcp  open  ms-wbt-server xrdp
+5020/tcp  open  zenginkyo-1?
+5060/tcp  open  sip           (SIP end point; Status: 401 Unauthorized)
+5432/tcp  open  postgresql?
+5900/tcp  open  vnc           VNC (protocol 3.8)
+6379/tcp  open  redis?
+6443/tcp  open  sun-sr-https?
+8800/tcp  open  sunwebadmin?
+9200/tcp  open  wap-wsp?
+10201/tcp open  rsms?
+27017/tcp open  mongod?
+44818/tcp open  EtherNetIP-2?
+9 services unrecognized despite returning data. If you know the service/version, please submit the following fingerprints at https://nmap.org/cgi-bin/submit.cgi?new-service :
+==============NEXT SERVICE FINGERPRINT (SUBMIT INDIVIDUALLY)==============
+SF-Port23-TCP:V=7.92%I=7%D=4/9%Time=69D742B9%P=x86_64-redhat-linux-gnu%r(N
+SF:ULL,7,"login:\x20")%r(GenericLines,2C,"login:\x20\xff\xfb\x01Password:\
+SF:x20\nLogin\x20incorrect\nlogin:\x20")%r(tn3270,16,"login:\x20\xff\xfe\x
+SF:18\xff\xfe\x19\xff\xfc\x19\xff\xfe\0\xff\xfc\0")%r(GetRequest,2C,"login
+SF::\x20\xff\xfb\x01Password:\x20\nLogin\x20incorrect\nlogin:\x20")%r(HTTP
+SF:Options,2C,"login:\x20\xff\xfb\x01Password:\x20\nLogin\x20incorrect\nlo
+SF:gin:\x20")%r(RTSPRequest,2C,"login:\x20\xff\xfb\x01Password:\x20\nLogin
+SF:\x20incorrect\nlogin:\x20")%r(RPCCheck,7,"login:\x20")%r(DNSVersionBind
+SF:ReqTCP,7,"login:\x20")%r(DNSStatusRequestTCP,7,"login:\x20")%r(Help,14,
+SF:"login:\x20\xff\xfb\x01Password:\x20")%r(SSLSessionReq,14,"login:\x20\x
+SF:ff\xfb\x01Password:\x20")%r(TerminalServerCookie,14,"login:\x20\xff\xfb
+SF:\x01Password:\x20")%r(Kerberos,14,"login:\x20\xff\xfb\x01Password:\x20"
+SF:)%r(X11Probe,7,"login:\x20")%r(FourOhFourRequest,2C,"login:\x20\xff\xfb
+SF:\x01Password:\x20\nLogin\x20incorrect\nlogin:\x20")%r(LPDString,14,"log
+SF:in:\x20\xff\xfb\x01Password:\x20")%r(LDAPSearchReq,2C,"login:\x20\xff\x
+SF:fb\x01Password:\x20\nLogin\x20incorrect\nlogin:\x20")%r(LDAPBindReq,7,"
+SF:login:\x20")%r(SIPOptions,BE,"login:\x20\xff\xfb\x01Password:\x20\nLogi
+SF:n\x20incorrect\nlogin:\x20Password:\x20\nLogin\x20incorrect\nlogin:\x20
+SF:Password:\x20\nLogin\x20incorrect\nlogin:\x20Password:\x20\nLogin\x20in
+SF:correct\nlogin:\x20Password:\x20\nLogin\x20incorrect\nlogin:\x20Passwor
+SF:d:\x20")%r(LANDesk-RC,7,"login:\x20")%r(TerminalServer,7,"login:\x20")%
+SF:r(NotesRPC,7,"login:\x20")%r(JavaRMI,7,"login:\x20")%r(WMSRequest,7,"lo
+SF:gin:\x20")%r(afp,7,"login:\x20")%r(giop,7,"login:\x20");
+==============NEXT SERVICE FINGERPRINT (SUBMIT INDIVIDUALLY)==============
+SF-Port110-TCP:V=7.92%I=7%D=4/9%Time=69D742B9%P=x86_64-redhat-linux-gnu%r(
+SF:NULL,23,"\+OK\x20omega-decky\x20POP3\x20server\x20ready\r\n")%r(Generic
+SF:Lines,4F,"\+OK\x20omega-decky\x20POP3\x20server\x20ready\r\n-ERR\x20Unk
+SF:nown\x20command\r\n-ERR\x20Unknown\x20command\r\n")%r(HTTPOptions,4F,"\
+SF:+OK\x20omega-decky\x20POP3\x20server\x20ready\r\n-ERR\x20Unknown\x20com
+SF:mand\r\n-ERR\x20Unknown\x20command\r\n");
+==============NEXT SERVICE FINGERPRINT (SUBMIT INDIVIDUALLY)==============
+SF-Port143-TCP:V=7.92%I=7%D=4/9%Time=69D742B9%P=x86_64-redhat-linux-gnu%r(
+SF:NULL,2C,"\*\x20OK\x20\[omega-decky\]\x20IMAP4rev1\x20Service\x20Ready\r
+SF:\n")%r(GetRequest,4C,"\*\x20OK\x20\[omega-decky\]\x20IMAP4rev1\x20Servi
+SF:ce\x20Ready\r\nGET\x20BAD\x20Command\x20not\x20recognized\r\n")%r(Gener
+SF:icLines,2C,"\*\x20OK\x20\[omega-decky\]\x20IMAP4rev1\x20Service\x20Read
+SF:y\r\n");
+==============NEXT SERVICE FINGERPRINT (SUBMIT INDIVIDUALLY)==============
+SF-Port445-TCP:V=7.92%I=7%D=4/9%Time=69D742BE%P=x86_64-redhat-linux-gnu%r(
+SF:SMBProgNeg,51,"\0\0\0M\xffSMBr\0\0\0\0\x80\0\xc0\0\0\0\0\0\0\0\0\0\0\0\
+SF:0\0\0@\x06\0\0\x01\0\x11\x07\0\x03\x01\0\x01\0\0\xfa\0\0\0\0\x01\0\0\0\
+SF:0\0p\0\0\0\0\0\0\0\0\0\0\0\0\0\x08\x08\0\x11\"3DUfw\x88");
+==============NEXT SERVICE FINGERPRINT (SUBMIT INDIVIDUALLY)==============
+SF-Port1433-TCP:V=7.92%I=7%D=4/9%Time=69D742BE%P=x86_64-redhat-linux-gnu%r
+SF:(ms-sql-s,29,"\x04\x01\0\+\0\0\x01\0\0\0\x1a\0\x06\x01\0\x20\0\x01\x02\
+SF:0!\0\x01\x03\0\"\0\x04\xff\x10\0\x03\xe8\0\0\x02\0\0\0\0\x01");
+==============NEXT SERVICE FINGERPRINT (SUBMIT INDIVIDUALLY)==============
+SF-Port2121-TCP:V=7.92%I=7%D=4/9%Time=69D742B9%P=x86_64-redhat-linux-gnu%r
+SF:(NULL,17,"200\x20FTP\x20server\x20ready\.\r\n")%r(GenericLines,3A,"200\
+SF:x20FTP\x20server\x20ready\.\r\n500\x20Command\x20'\\r\\n'\x20not\x20und
+SF:erstood\r\n");
+==============NEXT SERVICE FINGERPRINT (SUBMIT INDIVIDUALLY)==============
+SF-Port5060-TCP:V=7.92%I=7%D=4/9%Time=69D742C5%P=x86_64-redhat-linux-gnu%r
+SF:(SIPOptions,F1,"SIP/2\.0\x20401\x20Unauthorized\r\nVia:\x20SIP/2\.0/TCP
+SF:\x20nm;branch=foo\r\nFrom:\x20<sip:nm@nm>;tag=root\r\nTo:\x20<sip:nm2@n
+SF:m2>\r\nCall-ID:\x2050000\r\nCSeq:\x2042\x20OPTIONS\r\nWWW-Authenticate:
+SF:\x20Digest\x20realm=\"omega-decky\",\x20nonce=\"decnet0000\",\x20algori
+SF:thm=MD5\r\nContent-Length:\x200\r\n\r\n");
+==============NEXT SERVICE FINGERPRINT (SUBMIT INDIVIDUALLY)==============
+SF-Port5432-TCP:V=7.92%I=7%D=4/9%Time=69D742C8%P=x86_64-redhat-linux-gnu%r
+SF:(SMBProgNeg,D,"R\0\0\0\x0c\0\0\0\x05\xde\xad\xbe\xef")%r(Kerberos,D,"R\
+SF:0\0\0\x0c\0\0\0\x05\xde\xad\xbe\xef");
+==============NEXT SERVICE FINGERPRINT (SUBMIT INDIVIDUALLY)==============
+SF-Port6379-TCP:V=7.92%I=7%D=4/9%Time=69D742BE%P=x86_64-redhat-linux-gnu%r
+SF:(redis-server,9F,"\$151\r\n#\x20Server\nredis_version:7\.0\.12\nredis_m
+SF:ode:standalone\nos:Linux\x205\.15\.0\narch_bits:64\ntcp_port:6379\nupti
+SF:me_in_seconds:864000\nconnected_clients:1\n#\x20Keyspace\n\r\n")%r(GetR
+SF:equest,16,"-ERR\x20unknown\x20command\r\n")%r(HTTPOptions,16,"-ERR\x20u
+SF:nknown\x20command\r\n")%r(RTSPRequest,16,"-ERR\x20unknown\x20command\r\
+SF:n")%r(Help,16,"-ERR\x20unknown\x20command\r\n")%r(SSLSessionReq,16,"-ER
+SF:R\x20unknown\x20command\r\n")%r(TerminalServerCookie,16,"-ERR\x20unknow
+SF:n\x20command\r\n")%r(TLSSessionReq,16,"-ERR\x20unknown\x20command\r\n")
+SF:%r(Kerberos,16,"-ERR\x20unknown\x20command\r\n")%r(FourOhFourRequest,16
+SF:,"-ERR\x20unknown\x20command\r\n")%r(LPDString,16,"-ERR\x20unknown\x20c
+SF:ommand\r\n")%r(LDAPSearchReq,2C,"-ERR\x20unknown\x20command\r\n-ERR\x20
+SF:unknown\x20command\r\n")%r(SIPOptions,DC,"-ERR\x20unknown\x20command\r\
+SF:n-ERR\x20unknown\x20command\r\n-ERR\x20unknown\x20command\r\n-ERR\x20un
+SF:known\x20command\r\n-ERR\x20unknown\x20command\r\n-ERR\x20unknown\x20co
+SF:mmand\r\n-ERR\x20unknown\x20command\r\n-ERR\x20unknown\x20command\r\n-E
+SF:RR\x20unknown\x20command\r\n-ERR\x20unknown\x20command\r\n");
+MAC Address: 56:0E:4B:0C:6D:A0 (Unknown)
+Service Info: Hosts: Twisted,  omega-decky
+
+Service detection performed. Please report any incorrect results at https://nmap.org/submit/ .
+# Nmap done at Thu Apr  9 02:12:39 2026 -- 1 IP address (1 host up) scanned in 164.95 seconds

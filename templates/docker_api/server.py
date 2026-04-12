@@ -53,7 +53,7 @@ _CONTAINERS = [
         "Image": "nginx:latest",
         "State": "running",
         "Status": "Up 3 days",
-        "Ports": [{"IP": "0.0.0.0", "PrivatePort": 80, "PublicPort": 8080, "Type": "tcp"}],
+        "Ports": [{"IP": "0.0.0.0", "PrivatePort": 80, "PublicPort": 8080, "Type": "tcp"}],  # nosec B104
     }
 ]
 
@@ -114,4 +114,4 @@ def catch_all(path):
 
 if __name__ == "__main__":
     _log("startup", msg=f"Docker API server starting as {NODE_NAME}")
-    app.run(host="0.0.0.0", port=2375, debug=False)
+    app.run(host="0.0.0.0", port=2375, debug=False)  # nosec B104

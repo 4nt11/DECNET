@@ -7,11 +7,14 @@ import json
 from pathlib import Path
 from typing import Literal
 
-from pydantic import BaseModel, field_validator
+from pydantic import BaseModel, field_validator  # field_validator used by DeckyConfig
 
 from decnet.distros import random_hostname as _random_hostname
 
-STATE_FILE = Path("decnet-state.json")
+# Calculate absolute path to the project root (where the config file resides)
+_ROOT: Path = Path(__file__).parent.parent.absolute()
+STATE_FILE: Path = _ROOT / "decnet-state.json"
+DEFAULT_MUTATE_INTERVAL: int = 30  # default rotation interval in minutes
 
 
 def random_hostname(distro_slug: str = "debian") -> str:
@@ -29,6 +32,8 @@ class DeckyConfig(BaseModel):
     archetype: str | None = None  # archetype slug if spawned from an archetype profile
     service_config: dict[str, dict] = {}  # optional per-service persona config
     nmap_os: str = "linux"        # OS family for TCP/IP stack spoofing (see os_fingerprint.py)
+    mutate_interval: int | None = None  # automatic rotation interval in minutes
+    last_mutated: float = 0.0     # timestamp of last mutation
 
     @field_validator("services")
     @classmethod
@@ -44,19 +49,9 @@ class DecnetConfig(BaseModel):
     subnet: str
     gateway: str
     deckies: list[DeckyConfig]
-    log_target: str | None = None  # "ip:port" or None
-    log_file: str | None = None    # path for RFC 5424 syslog file output
+    log_file: str | None = None    # host path where the collector writes the log file
     ipvlan: bool = False           # use IPvlan L2 instead of MACVLAN (WiFi-friendly)
-
-    @field_validator("log_target")
-    @classmethod
-    def validate_log_target(cls, v: str | None) -> str | None:
-        if v is None:
-            return v
-        parts = v.rsplit(":", 1)
-        if len(parts) != 2 or not parts[1].isdigit():
-            raise ValueError("log_target must be in ip:port format, e.g. 192.168.1.5:5140")
-        return v
+    mutate_interval: int | None = DEFAULT_MUTATE_INTERVAL # global automatic rotation interval in minutes
 
 
 def save_state(config: DecnetConfig, compose_path: Path) -> None:
