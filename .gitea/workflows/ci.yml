@@ -56,18 +56,39 @@ jobs:
       - run: pip install -e .[dev]
       - run: pip-audit --skip-editable
 
+  merge-to-testing:
+    name: Merge dev → testing
+    runs-on: ubuntu-latest
+    needs: [lint, test, bandit, pip-audit]
+    if: github.ref == 'refs/heads/dev'
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          token: ${{ secrets.DECNET_PR_TOKEN }}
+      - name: Configure git
+        run: |
+          git config user.name "DECNET CI"
+          git config user.email "ci@decnet.local"
+      - name: Merge dev into testing
+        run: |
+          git fetch origin testing
+          git checkout testing
+          git merge origin/dev --no-ff -m "ci: auto-merge dev → testing"
+          git push origin testing
+
   open-pr:
     name: Open PR to main
     runs-on: ubuntu-latest
     needs: [lint, test, bandit, pip-audit]
-    if: github.ref == 'refs/heads/dev'
+    if: github.ref == 'refs/heads/testing'
     steps:
       - name: Open PR via Gitea API
         run: |
           echo "--- Checking for existing open PRs ---"
           LIST_RESPONSE=$(curl -s \
             -H "Authorization: token ${{ secrets.DECNET_PR_TOKEN }}" \
-            "https://git.resacachile.cl/api/v1/repos/anti/DECNET/pulls?state=open&head=anti:dev&base=main&limit=5")
+            "https://git.resacachile.cl/api/v1/repos/anti/DECNET/pulls?state=open&head=anti:testing&base=main&limit=5")
           echo "$LIST_RESPONSE"
           EXISTING=$(echo "$LIST_RESPONSE" | python3 -c "import sys, json; print(len(json.load(sys.stdin)))")
           echo "Open PRs found: $EXISTING"
@@ -80,10 +101,10 @@ jobs:
             -H "Authorization: token ${{ secrets.DECNET_PR_TOKEN }}" \
             -H "Content-Type: application/json" \
             -d '{
-              "title": "Auto PR: dev → main",
-              "head": "dev",
+              "title": "Auto PR: testing → main",
+              "head": "testing",
               "base": "main",
-              "body": "All CI and security checks passed. Review and merge when ready."
+              "body": "All CI and security checks passed on both dev and testing. Review and merge when ready."
             }' \
             "https://git.resacachile.cl/api/v1/repos/anti/DECNET/pulls")
           echo "$CREATE_RESPONSE"
