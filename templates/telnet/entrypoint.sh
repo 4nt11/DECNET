@@ -28,6 +28,7 @@ HIST
 fi
 
 # Logging pipeline: named pipe → rsyslogd (RFC 5424) → stdout
+rm -f /var/run/decnet-logs
 mkfifo /var/run/decnet-logs
 
 # Relay pipe to stdout so Docker captures all syslog events

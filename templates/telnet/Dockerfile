@@ -2,7 +2,7 @@ ARG BASE_IMAGE=debian:bookworm-slim
 FROM ${BASE_IMAGE}
 
 RUN apt-get update && apt-get install -y --no-install-recommends \
-    busybox \
+    busybox-static \
     rsyslog \
     procps \
     net-tools \
