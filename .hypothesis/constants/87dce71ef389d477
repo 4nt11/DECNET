@@ -1,4 +1,0 @@
-# file: /home/anti/Tools/DECNET/decnet/services/mqtt.py
-# hypothesis_version: 6.151.11
-
-[1883, 'LOG_TARGET', 'NODE_NAME', 'build', 'container_name', 'context', 'environment', 'mqtt', 'restart', 'templates', 'unless-stopped']

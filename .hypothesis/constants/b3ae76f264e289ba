@@ -1,4 +1,0 @@
-# file: /home/anti/Tools/DECNET/decnet/services/redis.py
-# hypothesis_version: 6.151.11
-
-[6379, 'LOG_TARGET', 'NODE_NAME', 'REDIS_OS', 'REDIS_VERSION', 'build', 'container_name', 'context', 'environment', 'os_string', 'redis', 'restart', 'templates', 'unless-stopped', 'version']

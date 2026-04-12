@@ -1,4 +1,0 @@
-# file: /home/anti/Tools/DECNET/decnet/services/postgres.py
-# hypothesis_version: 6.151.11
-
-[5432, 'LOG_TARGET', 'NODE_NAME', 'build', 'container_name', 'context', 'environment', 'postgres', 'restart', 'templates', 'unless-stopped']

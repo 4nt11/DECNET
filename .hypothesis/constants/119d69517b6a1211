@@ -1,4 +1,0 @@
-# file: /home/anti/Tools/DECNET/decnet/web/router/stream/api_stream_events.py
-# hypothesis_version: 6.151.12
-
-['/stream', 'Observability', 'data', 'histogram', 'id', 'lastEventId', 'logs', 'stats', 'text/event-stream', 'type']

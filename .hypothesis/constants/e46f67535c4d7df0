@@ -1,4 +1,0 @@
-# file: /home/anti/Tools/DECNET/decnet/web/router/fleet/api_mutate_decky.py
-# hypothesis_version: 6.151.12
-
-[404, 'Fleet Management', '^[a-z0-9\\-]{1,64}$', 'message']

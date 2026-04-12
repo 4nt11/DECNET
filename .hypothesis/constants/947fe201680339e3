@@ -1,4 +1,0 @@
-# file: /home/anti/Tools/DECNET/decnet/web/router/logs/api_get_logs.py
-# hypothesis_version: 6.151.12
-
-[1000, '/logs', 'Logs', 'data', 'limit', 'offset', 'total']

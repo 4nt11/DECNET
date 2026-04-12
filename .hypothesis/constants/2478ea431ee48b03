@@ -1,4 +1,0 @@
-# file: /home/anti/Tools/DECNET/decnet/web/router/logs/api_get_histogram.py
-# hypothesis_version: 6.151.12
-
-[401, 422, '/logs/histogram', 'Logs', 'Not authenticated', 'Validation error', 'description']

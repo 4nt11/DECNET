@@ -1,4 +1,0 @@
-# file: /home/anti/Tools/DECNET/decnet/env.py
-# hypothesis_version: 6.151.12
-
-[',', '.env', '.env.local', '0.0.0.0', '8000', '8080', 'DECNET_ADMIN_USER', 'DECNET_API_HOST', 'DECNET_API_PORT', 'DECNET_CORS_ORIGINS', 'DECNET_DEVELOPER', 'DECNET_JWT_SECRET', 'DECNET_WEB_HOST', 'DECNET_WEB_PORT', 'False', 'admin', 'true']

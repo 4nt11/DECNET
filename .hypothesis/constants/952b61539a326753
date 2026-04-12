@@ -1,4 +1,0 @@
-# file: /home/anti/Tools/DECNET/decnet/services/ssh.py
-# hypothesis_version: 6.151.11
-
-[2222, ':', 'COWRIE_HOSTNAME', 'COWRIE_SSH_VERSION', 'NET_BIND_SERVICE', 'NODE_NAME', 'build', 'cap_add', 'container_name', 'context', 'cowrie', 'environment', 'hardware_platform', 'kernel_build_string', 'kernel_version', 'restart', 'ssh', 'ssh_banner', 'templates', 'true', 'unless-stopped', 'users']

@@ -1,4 +1,0 @@
-# file: /home/anti/Tools/DECNET/decnet/web/router/auth/api_login.py
-# hypothesis_version: 6.151.12
-
-['/auth/login', 'Authentication', 'Bearer', 'WWW-Authenticate', 'access_token', 'bearer', 'must_change_password', 'password_hash', 'token_type', 'uuid']

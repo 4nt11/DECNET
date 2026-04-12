@@ -1,4 +1,0 @@
-# file: /home/anti/Tools/DECNET/decnet/web/router/fleet/api_deploy_deckies.py
-# hypothesis_version: 6.151.12
-
-[400, 500, '/deckies/deploy', 'Fleet Management', 'decnet.web.api', 'message', 'unihost']

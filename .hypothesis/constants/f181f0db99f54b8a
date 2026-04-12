@@ -1,4 +1,0 @@
-# file: /home/anti/Tools/DECNET/decnet/web/ingester.py
-# hypothesis_version: 6.151.12
-
-['.json', 'attacker_ip', 'bounty_type', 'credential', 'decky', 'decnet.web.ingester', 'fields', 'password', 'payload', 'r', 'replace', 'service', 'username', 'utf-8']
