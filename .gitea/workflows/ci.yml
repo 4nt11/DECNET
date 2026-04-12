@@ -148,7 +148,7 @@ jobs:
         run: |
           git fetch origin main
           git checkout main
-          git merge ${{ github.ref }} --no-ff -m "ci: auto-merge testing → main [skip ci]"
+          git merge ${{ github.ref }} --no-ff -m "ci: auto-merge testing → main"
           git push origin main
           echo "--- Cleaning up temp branch ---"
           git push origin --delete ${{ github.ref_name }}
