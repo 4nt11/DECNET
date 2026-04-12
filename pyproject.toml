@@ -37,6 +37,16 @@ dev = [
     "schemathesis>=4.0",
     "pytest-xdist>=3.8.0",
 ]
+live = [
+    "flask>=3.0",
+    "twisted>=24.0",
+    "requests>=2.32",
+    "redis>=5.0",
+    "pymysql>=1.1",
+    "psycopg2-binary>=2.9",
+    "paho-mqtt>=2.0",
+    "pymongo>=4.0",
+]
 
 [project.scripts]
 decnet = "decnet.cli:app"

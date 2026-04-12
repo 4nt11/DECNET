@@ -1,8 +1,0 @@
-requests
-redis
-pymysql
-psycopg2-binary
-paho-mqtt
-pymongo
-flask
-twisted
