@@ -1,0 +1,6 @@
+request-timeout = 5.0
+
+[[operations]]
+# Target your SSE endpoint specifically
+include-path = "/stream"
+request-timeout = 2.0

@@ -9,13 +9,15 @@ import pytest
 from datetime import datetime, timedelta
 from freezegun import freeze_time
 from hypothesis import given, settings, strategies as st
-from decnet.web.db.sqlite.repository import SQLiteRepository
+from decnet.web.db.factory import get_repository
 from ..conftest import _FUZZ_SETTINGS
 
 
 @pytest.fixture
-def repo(tmp_path):
-    return SQLiteRepository(db_path=str(tmp_path / "histogram_test.db"))
+async def repo(tmp_path):
+    r = get_repository(db_path=str(tmp_path / "histogram_test.db"))
+    await r.initialize()
+    return r
 
 
 def _log(decky="d", service="ssh", ip="1.2.3.4", timestamp=None):

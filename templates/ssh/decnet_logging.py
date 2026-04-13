@@ -155,13 +155,13 @@ def write_syslog_file(line: str) -> None:
     """Append a syslog line to the rotating log file."""
     try:
         _get_file_logger().info(line)
-        
+
         # Also parse and write JSON log
         import json
         import re
         from datetime import datetime
-        from typing import Optional, Any
-        
+        from typing import Optional
+
         _RFC5424_RE: re.Pattern = re.compile(
             r"^<\d+>1 "
             r"(\S+) "       # 1: TIMESTAMP
@@ -174,7 +174,7 @@ def write_syslog_file(line: str) -> None:
         _SD_BLOCK_RE: re.Pattern = re.compile(r'\[decnet@55555\s+(.*?)\]', re.DOTALL)
         _PARAM_RE: re.Pattern = re.compile(r'(\w+)="((?:[^"\\]|\\.)*)"')
         _IP_FIELDS: tuple[str, ...] = ("src_ip", "src", "client_ip", "remote_ip", "ip")
-        
+
         _m: Optional[re.Match] = _RFC5424_RE.match(line)
         if _m:
             _ts_raw: str
@@ -183,10 +183,10 @@ def write_syslog_file(line: str) -> None:
             _event_type: str
             _sd_rest: str
             _ts_raw, _decky, _service, _event_type, _sd_rest = _m.groups()
-            
+
             _fields: dict[str, str] = {}
             _msg: str = ""
-            
+
             if _sd_rest.startswith("-"):
                 _msg = _sd_rest[1:].lstrip()
             elif _sd_rest.startswith("["):
@@ -194,27 +194,27 @@ def write_syslog_file(line: str) -> None:
                 if _block:
                     for _k, _v in _PARAM_RE.findall(_block.group(1)):
                         _fields[_k] = _v.replace('\\"', '"').replace("\\\\", "\\").replace("\\]", "]")
-                    
+
                     # extract msg after the block
                     _msg_match: Optional[re.Match] = re.search(r'\]\s+(.+)$', _sd_rest)
                     if _msg_match:
                         _msg = _msg_match.group(1).strip()
             else:
                 _msg = _sd_rest
-                    
+
             _attacker_ip: str = "Unknown"
             for _fname in _IP_FIELDS:
                 if _fname in _fields:
                     _attacker_ip = _fields[_fname]
                     break
-                    
+
             # Parse timestamp to normalize it
             _ts_formatted: str
             try:
                 _ts_formatted = datetime.fromisoformat(_ts_raw).strftime("%Y-%m-%d %H:%M:%S")
             except ValueError:
                 _ts_formatted = _ts_raw
-                
+
             _payload: dict[str, Any] = {
                 "timestamp": _ts_formatted,
                 "decky": _decky,
@@ -226,7 +226,7 @@ def write_syslog_file(line: str) -> None:
                 "raw_line": line
             }
             _get_json_logger().info(json.dumps(_payload))
-            
+
     except Exception:
         pass
 

@@ -7,7 +7,7 @@ from types import SimpleNamespace
 from unittest.mock import patch, MagicMock
 from decnet.collector import parse_rfc5424, is_service_container, is_service_event
 from decnet.collector.worker import (
-    _stream_container, 
+    _stream_container,
     _load_service_container_names,
     log_collector_worker
 )
@@ -291,13 +291,13 @@ class TestLogCollectorWorker:
     @pytest.mark.asyncio
     async def test_worker_initial_discovery(self, tmp_path):
         log_file = str(tmp_path / "decnet.log")
-        
+
         mock_container = MagicMock()
         mock_container.id = "c1"
         mock_container.name = "/s-1"
         # Mock labels to satisfy is_service_container
         mock_container.labels = {"com.docker.compose.project": "decnet"}
-        
+
         mock_client = MagicMock()
         mock_client.containers.list.return_value = [mock_container]
         # Make events return an empty generator/iterator immediately
@@ -310,17 +310,17 @@ class TestLogCollectorWorker:
                 await asyncio.wait_for(log_collector_worker(log_file), timeout=0.1)
             except (asyncio.TimeoutError, StopIteration):
                 pass
-        
+
         # Should have tried to list and watch events
         mock_client.containers.list.assert_called_once()
 
     @pytest.mark.asyncio
     async def test_worker_handles_events(self, tmp_path):
         log_file = str(tmp_path / "decnet.log")
-        
+
         mock_client = MagicMock()
         mock_client.containers.list.return_value = []
-        
+
         event = {
             "id": "c2",
             "Actor": {"Attributes": {"name": "s-2", "com.docker.compose.project": "decnet"}}
@@ -333,7 +333,7 @@ class TestLogCollectorWorker:
                 await asyncio.wait_for(log_collector_worker(log_file), timeout=0.1)
             except (asyncio.TimeoutError, StopIteration):
                 pass
-        
+
         mock_client.events.assert_called_once()
 
     @pytest.mark.asyncio
@@ -341,7 +341,7 @@ class TestLogCollectorWorker:
         log_file = str(tmp_path / "decnet.log")
         mock_client = MagicMock()
         mock_client.containers.list.side_effect = Exception("Docker down")
-        
+
         with patch("docker.from_env", return_value=mock_client):
             # Should not raise
             await log_collector_worker(log_file)

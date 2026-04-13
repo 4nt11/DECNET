@@ -2,7 +2,7 @@ name: CI
 
 on:
   push:
-    branches: [dev, testing]
+    branches: [dev, testing, "temp/merge-*"]
     paths-ignore:
       - "**/*.md"
       - "docs/**"
@@ -18,20 +18,6 @@ jobs:
           python-version: "3.11"
       - run: pip install ruff
       - run: ruff check .
-
-  test:
-    name: Test (pytest)
-    runs-on: ubuntu-latest
-    strategy:
-      matrix:
-        python-version: ["3.11", "3.12"]
-    steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-python@v5
-        with:
-          python-version: ${{ matrix.python-version }}
-      - run: pip install -e .[dev]
-      - run: pytest tests/ -v --tb=short
 
   bandit:
     name: SAST (bandit)
@@ -56,10 +42,55 @@ jobs:
       - run: pip install -e .[dev]
       - run: pip-audit --skip-editable
 
+  test-standard:
+    name: Test (Standard)
+    runs-on: ubuntu-latest
+    needs: [lint, bandit, pip-audit]
+    strategy:
+      matrix:
+        python-version: ["3.11", "3.12"]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python-version }}
+      - run: pip install -e .[dev]
+      - run: pytest
+
+  test-live:
+    name: Test (Live)
+    runs-on: ubuntu-latest
+    needs: [test-standard]
+    strategy:
+      matrix:
+        python-version: ["3.11"]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python-version }}
+      - run: pip install -e .[dev]
+      - run: pytest -m live
+
+  test-fuzz:
+    name: Test (Fuzz)
+    runs-on: ubuntu-latest
+    needs: [test-live]
+    strategy:
+      matrix:
+        python-version: ["3.11"]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python-version }}
+      - run: pip install -e .[dev]
+      - run: pytest -m fuzz
+
   merge-to-testing:
     name: Merge dev → testing
     runs-on: ubuntu-latest
-    needs: [lint, test, bandit, pip-audit]
+    needs: [test-standard, test-live, test-fuzz]
     if: github.ref == 'refs/heads/dev'
     steps:
       - uses: actions/checkout@v4
@@ -74,37 +105,50 @@ jobs:
         run: |
           git fetch origin testing
           git checkout testing
-          git merge origin/dev --no-ff -m "ci: auto-merge dev → testing"
+          git merge origin/dev --no-ff -m "ci: auto-merge dev → testing [skip ci]"
           git push origin testing
 
-  open-pr:
-    name: Open PR to main
+  prepare-merge-to-main:
+    name: Prepare Merge to Main
     runs-on: ubuntu-latest
-    needs: [lint, test, bandit, pip-audit]
+    needs: [test-standard, test-live, test-fuzz]
     if: github.ref == 'refs/heads/testing'
     steps:
-      - name: Open PR via Gitea API
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          token: ${{ secrets.DECNET_PR_TOKEN }}
+      - name: Configure git
         run: |
-          echo "--- Checking for existing open PRs ---"
-          LIST_RESPONSE=$(curl -s \
-            -H "Authorization: token ${{ secrets.DECNET_PR_TOKEN }}" \
-            "https://git.resacachile.cl/api/v1/repos/anti/DECNET/pulls?state=open&head=anti:testing&base=main&limit=5")
-          echo "$LIST_RESPONSE"
-          EXISTING=$(echo "$LIST_RESPONSE" | python3 -c "import sys, json; print(len(json.load(sys.stdin)))")
-          echo "Open PRs found: $EXISTING"
-          if [ "$EXISTING" -gt "0" ]; then
-            echo "PR already open, skipping."
-            exit 0
-          fi
-          echo "--- Creating PR ---"
-          CREATE_RESPONSE=$(curl -s -X POST \
-            -H "Authorization: token ${{ secrets.DECNET_PR_TOKEN }}" \
-            -H "Content-Type: application/json" \
-            -d '{
-              "title": "Auto PR: testing → main",
-              "head": "testing",
-              "base": "main",
-              "body": "All CI and security checks passed on both dev and testing. Review and merge when ready."
-            }' \
-            "https://git.resacachile.cl/api/v1/repos/anti/DECNET/pulls")
-          echo "$CREATE_RESPONSE"
+          git config user.name "DECNET CI"
+          git config user.email "ci@decnet.local"
+      - name: Create temp branch and sync with main
+        run: |
+          git fetch origin main
+          git checkout -b temp/merge-testing-to-main
+          echo "--- Switched to temp branch, merging main into it ---"
+          git merge origin/main --no-edit || { echo "CONFLICT: Manual resolution required"; exit 1; }
+          git push origin temp/merge-testing-to-main --force
+
+  finalize-merge-to-main:
+    name: Finalize Merge to Main
+    runs-on: ubuntu-latest
+    needs: [test-standard, test-live, test-fuzz]
+    if: startsWith(github.ref, 'refs/heads/temp/merge-')
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          token: ${{ secrets.DECNET_PR_TOKEN }}
+      - name: Configure git
+        run: |
+          git config user.name "DECNET CI"
+          git config user.email "ci@decnet.local"
+      - name: Merge RC into main
+        run: |
+          git fetch origin main
+          git checkout main
+          git merge ${{ github.ref }} --no-ff -m "ci: auto-merge testing → main"
+          git push origin main
+          echo "--- Cleaning up temp branch ---"
+          git push origin --delete ${{ github.ref_name }}

@@ -150,11 +150,11 @@ class TestBuildDeckiesFromIni:
         deckies = build_deckies_from_ini(ini, self._SUBNET, self._GATEWAY, self._HOST_IP, True)
         assert len(deckies[0].services) >= 1
 
-    def test_no_services_no_arch_no_randomize_raises(self):
+    def test_no_services_no_arch_auto_randomizes(self):
         spec = DeckySpec(name="test-1")
         ini = self._make_ini([spec])
-        with pytest.raises(ValueError, match="has no services"):
-            build_deckies_from_ini(ini, self._SUBNET, self._GATEWAY, self._HOST_IP, False)
+        deckies = build_deckies_from_ini(ini, self._SUBNET, self._GATEWAY, self._HOST_IP, False)
+        assert len(deckies[0].services) >= 1
 
     def test_unknown_service_raises(self):
         spec = DeckySpec(name="test-1", services=["nonexistent_svc_xyz"])

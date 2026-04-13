@@ -21,7 +21,7 @@ class TestStreamEvents:
         # We force the generator to exit immediately by making the first awaitable raise
         with patch("decnet.web.router.stream.api_stream_events.repo") as mock_repo:
             mock_repo.get_max_log_id = AsyncMock(side_effect=StopAsyncIteration)
-            
+
             # This will hit the 'except Exception' or just exit the generator
             resp = await client.get(
                 "/api/v1/stream",

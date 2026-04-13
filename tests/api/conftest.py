@@ -66,7 +66,15 @@ async def client() -> AsyncGenerator[httpx.AsyncClient, None]:
 @pytest.fixture
 async def auth_token(client: httpx.AsyncClient) -> str:
     resp = await client.post("/api/v1/auth/login", json={"username": DECNET_ADMIN_USER, "password": DECNET_ADMIN_PASSWORD})
-    return resp.json()["access_token"]
+    token = resp.json()["access_token"]
+    # Clear must_change_password so this token passes server-side enforcement on all other endpoints.
+    await client.post(
+        "/api/v1/auth/change-password",
+        json={"old_password": DECNET_ADMIN_PASSWORD, "new_password": DECNET_ADMIN_PASSWORD},
+        headers={"Authorization": f"Bearer {token}"},
+    )
+    resp2 = await client.post("/api/v1/auth/login", json={"username": DECNET_ADMIN_USER, "password": DECNET_ADMIN_PASSWORD})
+    return resp2.json()["access_token"]
 
 @pytest.fixture(autouse=True)
 def patch_state_file(monkeypatch, tmp_path) -> Path:

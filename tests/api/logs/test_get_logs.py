@@ -33,11 +33,11 @@ async def test_fuzz_get_logs(client: httpx.AsyncClient, auth_token: str, limit: 
     _params: dict[str, Any] = {"limit": limit, "offset": offset}
     if search is not None:
         _params["search"] = search
-        
+
     _response: httpx.Response = await client.get(
         "/api/v1/logs",
         params=_params,
         headers={"Authorization": f"Bearer {auth_token}"}
     )
-    
+
     assert _response.status_code in (200, 422)

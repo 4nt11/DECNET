@@ -13,8 +13,6 @@ dependencies = [
     "docker>=7.0",
     "pyyaml>=6.0",
     "jinja2>=3.1",
-<<<<<<< HEAD
-=======
     "fastapi>=0.110.0",
     "uvicorn>=0.29.0",
     "aiosqlite>=0.20.0",
@@ -23,7 +21,6 @@ dependencies = [
     "psutil>=5.9.0",
     "python-dotenv>=1.0.0",
     "sqlmodel>=0.0.16",
->>>>>>> testing
 ]
 
 [project.optional-dependencies]
@@ -32,9 +29,6 @@ dev = [
     "ruff>=0.4",
     "bandit>=1.7",
     "pip-audit>=2.0",
-<<<<<<< HEAD
-    "hypothesis>=6.0",
-=======
     "httpx>=0.27.0",
     "hypothesis>=6.0",
     "pytest-cov>=7.0",
@@ -50,16 +44,14 @@ dev = [
     "psycopg2-binary>=2.9",
     "paho-mqtt>=2.0",
     "pymongo>=4.0",
->>>>>>> testing
 ]
 
 [project.scripts]
 decnet = "decnet.cli:app"
 
-<<<<<<< HEAD
-=======
 [tool.pytest.ini_options]
 asyncio_mode = "auto"
+asyncio_debug = "true"
 addopts = "-m 'not fuzz and not live' -v -q -x -n logical"
 markers = [
     "fuzz: hypothesis-based fuzz tests (slow, run with -m fuzz or -m '' for all)",
@@ -69,6 +61,7 @@ markers = [
 filterwarnings = [
     "ignore::pytest.PytestUnhandledThreadExceptionWarning",
     "ignore::DeprecationWarning",
+    "ignore::RuntimeWarning",
 ]
 
 [tool.coverage.run]
@@ -80,7 +73,6 @@ parallel = true
 show_missing = true
 skip_covered = false
 # Run with: pytest --cov --cov-report=term-missing
->>>>>>> testing
 
 [tool.setuptools.packages.find]
 where = ["."]
