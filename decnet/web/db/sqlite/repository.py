@@ -355,7 +355,7 @@ class SQLiteRepository(BaseRepository):
         async with self.session_factory() as session:
             statement = select(State).where(State.key == key)
             result = await session.execute(statement)
-            state = result.scalar_one_none()
+            state = result.scalar_one_or_none()
             if state:
                 return json.loads(state.value)
             return None
@@ -365,7 +365,7 @@ class SQLiteRepository(BaseRepository):
             # Check if exists
             statement = select(State).where(State.key == key)
             result = await session.execute(statement)
-            state = result.scalar_one_none()
+            state = result.scalar_one_or_none()
 
             value_json = json.dumps(value)
             if state:

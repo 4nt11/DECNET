@@ -61,6 +61,7 @@ markers = [
 filterwarnings = [
     "ignore::pytest.PytestUnhandledThreadExceptionWarning",
     "ignore::DeprecationWarning",
+    "ignore::RuntimeWarning",
 ]
 
 [tool.coverage.run]

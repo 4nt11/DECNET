@@ -12,14 +12,22 @@ router = APIRouter()
     responses={401: {"description": "Could not validate credentials"}, 422: {"description": "Validation error"}},)
 async def get_bounties(
     limit: int = Query(50, ge=1, le=1000),
-    offset: int = Query(0, ge=0),
+    offset: int = Query(0, ge=0, le=2147483647),
     bounty_type: Optional[str] = None,
     search: Optional[str] = None,
     current_user: str = Depends(get_current_user)
 ) -> dict[str, Any]:
     """Retrieve collected bounties (harvested credentials, payloads, etc.)."""
-    _data = await repo.get_bounties(limit=limit, offset=offset, bounty_type=bounty_type, search=search)
-    _total = await repo.get_total_bounties(bounty_type=bounty_type, search=search)
+    def _norm(v: Optional[str]) -> Optional[str]:
+        if v in (None, "null", "NULL", "undefined", ""):
+            return None
+        return v
+
+    bt = _norm(bounty_type)
+    s = _norm(search)
+
+    _data = await repo.get_bounties(limit=limit, offset=offset, bounty_type=bt, search=s)
+    _total = await repo.get_total_bounties(bounty_type=bt, search=s)
     return {
         "total": _total,
         "limit": limit,

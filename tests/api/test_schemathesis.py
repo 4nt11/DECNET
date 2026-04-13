@@ -21,10 +21,17 @@ import sys
 import atexit
 import os
 import time
+from datetime import datetime, timezone
 from pathlib import Path
 
+def _free_port() -> int:
+    """Bind to port 0, let the OS pick a free port, return it."""
+    with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
+        s.bind(("127.0.0.1", 0))
+        return s.getsockname()[1]
+
 # Configuration for the automated live server
-LIVE_PORT = 8008
+LIVE_PORT = _free_port()
 LIVE_SERVER_URL = f"http://127.0.0.1:{LIVE_PORT}"
 TEST_SECRET = "test-secret-for-automated-fuzzing"
 
@@ -40,6 +47,10 @@ def before_call(context, case, *args):
     # Logged-in admin for all requests
     case.headers = case.headers or {}
     case.headers["Authorization"] = f"Bearer {TEST_TOKEN}"
+    # Force SSE stream to close after the initial snapshot so the test doesn't hang
+    if case.path and case.path.endswith("/stream"):
+        case.query = case.query or {}
+        case.query["maxOutput"] = 0
 
 def wait_for_port(port, timeout=10):
     start_time = time.time()
@@ -61,15 +72,21 @@ def start_automated_server():
     env["DECNET_CONTRACT_TEST"] = "true"
     env["DECNET_JWT_SECRET"] = TEST_SECRET
 
+    log_dir = Path(__file__).parent.parent.parent / "logs"
+    log_dir.mkdir(exist_ok=True)
+    ts = datetime.now(timezone.utc).strftime("%Y%m%d_%H%M%S")
+    log_file = open(log_dir / f"fuzz_server_{LIVE_PORT}_{ts}.log", "w")
+
     proc = subprocess.Popen(
-        [uvicorn_path, "decnet.web.api:app", "--host", "127.0.0.1", "--port", str(LIVE_PORT), "--log-level", "error"],
+        [uvicorn_path, "decnet.web.api:app", "--host", "127.0.0.1", "--port", str(LIVE_PORT), "--log-level", "info"],
         env=env,
-        stdout=subprocess.DEVNULL,
-        stderr=subprocess.DEVNULL
+        stdout=log_file,
+        stderr=log_file,
     )
 
     # Register cleanup
     atexit.register(proc.terminate)
+    atexit.register(log_file.close)
 
     if not wait_for_port(LIVE_PORT):
         proc.terminate()
@@ -87,6 +104,4 @@ schema = st.openapi.from_url(f"{LIVE_SERVER_URL}/openapi.json")
 @st.pytest.parametrize(api=schema)
 @settings(max_examples=3000, deadline=None, verbosity=Verbosity.debug)
 def test_schema_compliance(case):
-    #print(f"\n[Fuzzing] {case.method} {case.path} with query={case.query}")
     case.call_and_validate()
-    #print(f"  └─ Success")

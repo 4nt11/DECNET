@@ -7,21 +7,28 @@ from decnet.web.db.models import LogsResponse
 
 router = APIRouter()
 
-_DATETIME_RE = r"^(\d{4}-\d{2}-\d{2}[ T]\d{2}:\d{2}:\d{2})?$"
-
 
 @router.get("/logs", response_model=LogsResponse, tags=["Logs"],
     responses={401: {"description": "Could not validate credentials"}, 422: {"description": "Validation error"}})
 async def get_logs(
     limit: int = Query(50, ge=1, le=1000),
-    offset: int = Query(0, ge=0),
+    offset: int = Query(0, ge=0, le=2147483647),
     search: Optional[str] = Query(None, max_length=512),
-    start_time: Optional[str] = Query(None, pattern=_DATETIME_RE),
-    end_time: Optional[str] = Query(None, pattern=_DATETIME_RE),
+    start_time: Optional[str] = Query(None),
+    end_time: Optional[str] = Query(None),
     current_user: str = Depends(get_current_user)
 ) -> dict[str, Any]:
-    _logs: list[dict[str, Any]] = await repo.get_logs(limit=limit, offset=offset, search=search, start_time=start_time, end_time=end_time)
-    _total: int = await repo.get_total_logs(search=search, start_time=start_time, end_time=end_time)
+    def _norm(v: Optional[str]) -> Optional[str]:
+        if v in (None, "null", "NULL", "undefined", ""):
+            return None
+        return v
+
+    s = _norm(search)
+    st = _norm(start_time)
+    et = _norm(end_time)
+
+    _logs: list[dict[str, Any]] = await repo.get_logs(limit=limit, offset=offset, search=s, start_time=st, end_time=et)
+    _total: int = await repo.get_total_logs(search=s, start_time=st, end_time=et)
     return {
         "total": _total,
         "limit": limit,

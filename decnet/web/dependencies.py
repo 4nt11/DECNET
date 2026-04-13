@@ -52,7 +52,8 @@ async def get_stream_user(request: Request, token: Optional[str] = None) -> str:
         raise _credentials_exception
 
 
-async def get_current_user(request: Request) -> str:
+async def _decode_token(request: Request) -> str:
+    """Decode and validate a Bearer JWT, returning the user UUID."""
     _credentials_exception = HTTPException(
         status_code=status.HTTP_401_UNAUTHORIZED,
         detail="Could not validate credentials",
@@ -76,3 +77,22 @@ async def get_current_user(request: Request) -> str:
         return _user_uuid
     except jwt.PyJWTError:
         raise _credentials_exception
+
+
+async def get_current_user(request: Request) -> str:
+    """Auth dependency — enforces must_change_password."""
+    _user_uuid = await _decode_token(request)
+    _user = await repo.get_user_by_uuid(_user_uuid)
+    if _user and _user.get("must_change_password"):
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Password change required before accessing this resource",
+        )
+    return _user_uuid
+
+
+async def get_current_user_unchecked(request: Request) -> str:
+    """Auth dependency — skips must_change_password enforcement.
+    Use only for endpoints that must remain reachable with the flag set (e.g. change-password).
+    """
+    return await _decode_token(request)

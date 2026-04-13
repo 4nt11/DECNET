@@ -3,7 +3,7 @@ from typing import Any, Optional
 from fastapi import APIRouter, Depends, HTTPException, status
 
 from decnet.web.auth import get_password_hash, verify_password
-from decnet.web.dependencies import get_current_user, repo
+from decnet.web.dependencies import get_current_user_unchecked, repo
 from decnet.web.db.models import ChangePasswordRequest
 
 router = APIRouter()
@@ -18,7 +18,7 @@ router = APIRouter()
         422: {"description": "Validation error"}
     },
 )
-async def change_password(request: ChangePasswordRequest, current_user: str = Depends(get_current_user)) -> dict[str, str]:
+async def change_password(request: ChangePasswordRequest, current_user: str = Depends(get_current_user_unchecked)) -> dict[str, str]:
     _user: Optional[dict[str, Any]] = await repo.get_user_by_uuid(current_user)
     if not _user or not verify_password(request.old_password, _user["password_hash"]):
         raise HTTPException(

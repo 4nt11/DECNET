@@ -41,38 +41,8 @@ Format:
 """
 
 import configparser
-from dataclasses import dataclass, field
 from pathlib import Path
-
-
-@dataclass
-class DeckySpec:
-    name: str
-    ip: str | None = None
-    services: list[str] | None = None
-    archetype: str | None = None
-    service_config: dict[str, dict] = field(default_factory=dict)
-    nmap_os: str | None = None     # explicit OS family override (linux/windows/bsd/embedded/cisco)
-    mutate_interval: int | None = None
-
-
-@dataclass
-class CustomServiceSpec:
-    """Spec for a user-defined (bring-your-own) service."""
-    name: str          # service slug, e.g. "myservice" (section is "custom-myservice")
-    image: str         # Docker image to use
-    exec_cmd: str      # command to run inside the container
-    ports: list[int] = field(default_factory=list)
-
-
-@dataclass
-class IniConfig:
-    subnet: str | None = None
-    gateway: str | None = None
-    interface: str | None = None
-    mutate_interval: int | None = None
-    deckies: list[DeckySpec] = field(default_factory=list)
-    custom_services: list[CustomServiceSpec] = field(default_factory=list)
+from decnet.models import IniConfig, DeckySpec, CustomServiceSpec, validate_ini_string  # noqa: F401
 
 
 def load_ini(path: str | Path) -> IniConfig:
@@ -86,25 +56,13 @@ def load_ini(path: str | Path) -> IniConfig:
 
 def load_ini_from_string(content: str) -> IniConfig:
     """Parse a DECNET INI string and return an IniConfig."""
+    # Normalize line endings (CRLF → LF, bare CR → LF) so the validator
+    # and configparser both see the same line boundaries.
+    content = content.replace('\r\n', '\n').replace('\r', '\n')
     validate_ini_string(content)
-    cp = configparser.ConfigParser()
+    cp = configparser.ConfigParser(strict=False)
     cp.read_string(content)
     return _parse_configparser(cp)
-
-
-def validate_ini_string(content: str) -> None:
-    """Perform safety and sanity checks on raw INI content string."""
-    # 1. Size limit (e.g. 512KB)
-    if len(content) > 512 * 1024:
-        raise ValueError("INI content too large (max 512KB).")
-
-    # 2. Ensure it's not empty
-    if not content.strip():
-        raise ValueError("INI content is empty.")
-
-    # 3. Basic structure check (must contain at least one section header)
-    if "[" not in content or "]" not in content:
-        raise ValueError("Invalid INI format: no sections found.")
 
 
 def _parse_configparser(cp: configparser.ConfigParser) -> IniConfig:

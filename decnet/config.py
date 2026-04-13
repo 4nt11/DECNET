@@ -4,12 +4,76 @@ State is persisted to decnet-state.json in the working directory.
 """
 
 import json
+import logging
+import os
+import socket as _socket
+from datetime import datetime, timezone
 from pathlib import Path
-from typing import Literal
 
-from pydantic import BaseModel, field_validator  # field_validator used by DeckyConfig
+from decnet.models import DeckyConfig, DecnetConfig  # noqa: F401
 
 from decnet.distros import random_hostname as _random_hostname
+
+# ---------------------------------------------------------------------------
+# RFC 5424 syslog formatter
+# ---------------------------------------------------------------------------
+# Severity mapping: Python level → syslog severity (RFC 5424 §6.2.1)
+_SYSLOG_SEVERITY: dict[int, int] = {
+    logging.CRITICAL: 2,  # Critical
+    logging.ERROR:    3,  # Error
+    logging.WARNING:  4,  # Warning
+    logging.INFO:     6,  # Informational
+    logging.DEBUG:    7,  # Debug
+}
+_FACILITY_LOCAL0 = 16  # local0 (RFC 5424 §6.2.1 / POSIX)
+
+
+class Rfc5424Formatter(logging.Formatter):
+    """Formats log records as RFC 5424 syslog messages.
+
+    Output:
+        <PRIVAL>1 TIMESTAMP HOSTNAME APP-NAME PROCID MSGID STRUCTURED-DATA MSG
+
+    Example:
+        <134>1 2026-04-12T21:48:03.123456+00:00 host decnet 1234 decnet.config - Dev mode active
+    """
+
+    _hostname: str = _socket.gethostname()
+    _app: str = "decnet"
+
+    def format(self, record: logging.LogRecord) -> str:
+        severity = _SYSLOG_SEVERITY.get(record.levelno, 6)
+        prival   = (_FACILITY_LOCAL0 * 8) + severity
+        ts       = datetime.fromtimestamp(record.created, tz=timezone.utc).isoformat(timespec="microseconds")
+        msg      = record.getMessage()
+        if record.exc_info:
+            msg += "\n" + self.formatException(record.exc_info)
+        return (
+            f"<{prival}>1 {ts} {self._hostname} {self._app}"
+            f" {os.getpid()} {record.name} - {msg}"
+        )
+
+
+def _configure_logging(dev: bool) -> None:
+    """Install the RFC 5424 handler on the root logger (idempotent)."""
+    root = logging.getLogger()
+    # Avoid adding duplicate handlers on re-import (e.g. during testing)
+    if any(isinstance(h, logging.StreamHandler) and isinstance(h.formatter, Rfc5424Formatter)
+           for h in root.handlers):
+        return
+    handler = logging.StreamHandler()
+    handler.setFormatter(Rfc5424Formatter())
+    root.setLevel(logging.DEBUG if dev else logging.INFO)
+    root.addHandler(handler)
+
+
+_dev = os.environ.get("DECNET_DEVELOPER", "").lower() == "true"
+_configure_logging(_dev)
+
+log = logging.getLogger(__name__)
+
+if _dev:
+    log.debug("Developer mode: debug logging active")
 
 # Calculate absolute path to the project root (where the config file resides)
 _ROOT: Path = Path(__file__).parent.parent.absolute()
@@ -19,39 +83,6 @@ DEFAULT_MUTATE_INTERVAL: int = 30  # default rotation interval in minutes
 
 def random_hostname(distro_slug: str = "debian") -> str:
     return _random_hostname(distro_slug)
-
-
-class DeckyConfig(BaseModel):
-    name: str
-    ip: str
-    services: list[str]
-    distro: str          # slug from distros.DISTROS, e.g. "debian", "ubuntu22"
-    base_image: str      # Docker image for the base/IP-holder container
-    build_base: str = "debian:bookworm-slim"  # apt-compatible image for service Dockerfiles
-    hostname: str
-    archetype: str | None = None  # archetype slug if spawned from an archetype profile
-    service_config: dict[str, dict] = {}  # optional per-service persona config
-    nmap_os: str = "linux"        # OS family for TCP/IP stack spoofing (see os_fingerprint.py)
-    mutate_interval: int | None = None  # automatic rotation interval in minutes
-    last_mutated: float = 0.0     # timestamp of last mutation
-
-    @field_validator("services")
-    @classmethod
-    def services_not_empty(cls, v: list[str]) -> list[str]:
-        if not v:
-            raise ValueError("A decky must have at least one service.")
-        return v
-
-
-class DecnetConfig(BaseModel):
-    mode: Literal["unihost", "swarm"]
-    interface: str
-    subnet: str
-    gateway: str
-    deckies: list[DeckyConfig]
-    log_file: str | None = None    # host path where the collector writes the log file
-    ipvlan: bool = False           # use IPvlan L2 instead of MACVLAN (WiFi-friendly)
-    mutate_interval: int | None = DEFAULT_MUTATE_INTERVAL # global automatic rotation interval in minutes
 
 
 def save_state(config: DecnetConfig, compose_path: Path) -> None:

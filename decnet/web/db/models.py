@@ -1,7 +1,16 @@
 from datetime import datetime, timezone
-from typing import Optional, Any, List
+from typing import Optional, Any, List, Annotated
 from sqlmodel import SQLModel, Field
-from pydantic import BaseModel, Field as PydanticField
+from pydantic import BaseModel, ConfigDict, Field as PydanticField, BeforeValidator
+from decnet.models import IniContent
+
+def _normalize_null(v: Any) -> Any:
+    if isinstance(v, str) and v.lower() in ("null", "undefined", ""):
+        return None
+    return v
+
+NullableDatetime = Annotated[Optional[datetime], BeforeValidator(_normalize_null)]
+NullableString = Annotated[Optional[str], BeforeValidator(_normalize_null)]
 
 # --- Database Tables (SQLModel) ---
 
@@ -75,7 +84,12 @@ class StatsResponse(BaseModel):
     deployed_deckies: int
 
 class MutateIntervalRequest(BaseModel):
-    mutate_interval: Optional[int] = None
+    # Human-readable duration: <number><unit> where unit is m(inutes), d(ays), M(onths), y/Y(ears).
+    # Minimum granularity is 1 minute. Seconds are not accepted.
+    mutate_interval: Optional[str] = PydanticField(None, pattern=r"^[1-9]\d*[mdMyY]$")
 
 class DeployIniRequest(BaseModel):
-    ini_content: str = PydanticField(..., min_length=5, max_length=512 * 1024)
+    model_config = ConfigDict(extra="forbid")
+    # This field now enforces strict INI structure during Pydantic initialization.
+    # The OpenAPI schema correctly shows it as a required string.
+    ini_content: IniContent = PydanticField(..., description="A valid INI formatted string")
