@@ -115,13 +115,13 @@ $CHANGELOG"
           cache-from: type=gha
           cache-to: type=gha,mode=max
 
+      - name: Install Trivy
+        run: |
+          curl -sfL https://raw.githubusercontent.com/aquasecurity/trivy/main/contrib/install.sh | sh -s -- -b /usr/local/bin
+
       - name: Scan with Trivy
-        uses: aquasecurity/trivy-action@master
-        with:
-          image-ref: decnet-${{ matrix.service }}:scan
-          exit-code: "1"
-          severity: CRITICAL
-          ignore-unfixed: true
+        run: |
+          trivy image --exit-code 1 --severity CRITICAL --ignore-unfixed decnet-${{ matrix.service }}:scan
 
       - name: Push image
         if: success()
