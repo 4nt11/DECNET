@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState, useRef } from 'react';
 import './Dashboard.css';
 import { Shield, Users, Activity, Clock } from 'lucide-react';
 
@@ -29,37 +29,52 @@ const Dashboard: React.FC<DashboardProps> = ({ searchQuery }) => {
   const [stats, setStats] = useState<Stats | null>(null);
   const [logs, setLogs] = useState<LogEntry[]>([]);
   const [loading, setLoading] = useState(true);
+  const eventSourceRef = useRef<EventSource | null>(null);
+  const reconnectTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   useEffect(() => {
-    const token = localStorage.getItem('token');
-    const baseUrl = import.meta.env.VITE_API_URL || 'http://localhost:8000/api/v1';
-    let url = `${baseUrl}/stream?token=${token}`;
-    if (searchQuery) {
-      url += `&search=${encodeURIComponent(searchQuery)}`;
-    }
-
-    const eventSource = new EventSource(url);
-
-    eventSource.onmessage = (event) => {
-      try {
-        const payload = JSON.parse(event.data);
-        if (payload.type === 'logs') {
-          setLogs(prev => [...payload.data, ...prev].slice(0, 100));
-        } else if (payload.type === 'stats') {
-          setStats(payload.data);
-          setLoading(false);
-        }
-      } catch (err) {
-        console.error('Failed to parse SSE payload', err);
+    const connect = () => {
+      if (eventSourceRef.current) {
+        eventSourceRef.current.close();
       }
+
+      const token = localStorage.getItem('token');
+      const baseUrl = import.meta.env.VITE_API_URL || 'http://localhost:8000/api/v1';
+      let url = `${baseUrl}/stream?token=${token}`;
+      if (searchQuery) {
+        url += `&search=${encodeURIComponent(searchQuery)}`;
+      }
+
+      const es = new EventSource(url);
+      eventSourceRef.current = es;
+
+      es.onmessage = (event) => {
+        try {
+          const payload = JSON.parse(event.data);
+          if (payload.type === 'logs') {
+            setLogs(prev => [...payload.data, ...prev].slice(0, 100));
+          } else if (payload.type === 'stats') {
+            setStats(payload.data);
+            setLoading(false);
+            window.dispatchEvent(new CustomEvent('decnet:stats', { detail: payload.data }));
+          }
+        } catch (err) {
+          console.error('Failed to parse SSE payload', err);
+        }
+      };
+
+      es.onerror = () => {
+        es.close();
+        eventSourceRef.current = null;
+        reconnectTimerRef.current = setTimeout(connect, 3000);
+      };
     };
 
-    eventSource.onerror = (err) => {
-      console.error('SSE connection error, attempting to reconnect...', err);
-    };
+    connect();
 
     return () => {
-      eventSource.close();
+      if (reconnectTimerRef.current) clearTimeout(reconnectTimerRef.current);
+      if (eventSourceRef.current) eventSourceRef.current.close();
     };
   }, [searchQuery]);
 

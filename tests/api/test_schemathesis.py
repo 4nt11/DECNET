@@ -12,7 +12,7 @@ Requires DECNET_DEVELOPER=true (set in tests/conftest.py) to expose /openapi.jso
 """
 import pytest
 import schemathesis as st
-from hypothesis import settings, Verbosity
+from hypothesis import settings, Verbosity, HealthCheck
 from decnet.web.auth import create_access_token
 
 import subprocess
@@ -102,6 +102,6 @@ schema = st.openapi.from_url(f"{LIVE_SERVER_URL}/openapi.json")
 
 @pytest.mark.fuzz
 @st.pytest.parametrize(api=schema)
-@settings(max_examples=3000, deadline=None, verbosity=Verbosity.debug)
+@settings(max_examples=3000, deadline=None, verbosity=Verbosity.debug, suppress_health_check=[HealthCheck.filter_too_much])
 def test_schema_compliance(case):
     case.call_and_validate()

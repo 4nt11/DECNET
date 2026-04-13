@@ -1,7 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { NavLink } from 'react-router-dom';
 import { Menu, X, Search, Activity, LayoutDashboard, Terminal, Settings, LogOut, Server, Archive } from 'lucide-react';
-import api from '../utils/api';
 import './Layout.css';
 
 interface LayoutProps {
@@ -21,17 +20,12 @@ const Layout: React.FC<LayoutProps> = ({ children, onLogout, onSearch }) => {
   };
 
   useEffect(() => {
-    const fetchStatus = async () => {
-      try {
-        const res = await api.get('/stats');
-        setSystemActive(res.data.deployed_deckies > 0);
-      } catch (err) {
-        console.error('Failed to fetch system status', err);
-      }
+    const onStats = (e: Event) => {
+      const stats = (e as CustomEvent).detail;
+      setSystemActive(stats.deployed_deckies > 0);
     };
-    fetchStatus();
-    const interval = setInterval(fetchStatus, 10000);
-    return () => clearInterval(interval);
+    window.addEventListener('decnet:stats', onStats);
+    return () => window.removeEventListener('decnet:stats', onStats);
   }, []);
 
   return (

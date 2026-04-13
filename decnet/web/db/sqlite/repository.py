@@ -226,11 +226,6 @@ class SQLiteRepository(BaseRepository):
                     select(func.count(func.distinct(Log.attacker_ip)))
                 )
             ).scalar() or 0
-            active_deckies = (
-                await session.execute(
-                    select(func.count(func.distinct(Log.decky)))
-                )
-            ).scalar() or 0
 
         _state = await asyncio.to_thread(load_state)
         deployed_deckies = len(_state[0].deckies) if _state else 0
@@ -238,7 +233,7 @@ class SQLiteRepository(BaseRepository):
         return {
             "total_logs": total_logs,
             "unique_attackers": unique_attackers,
-            "active_deckies": active_deckies,
+            "active_deckies": deployed_deckies,
             "deployed_deckies": deployed_deckies,
         }
 
