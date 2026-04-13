@@ -1,5 +1,5 @@
 from sqlalchemy.ext.asyncio import AsyncEngine, AsyncSession, async_sessionmaker, create_async_engine
-from sqlalchemy import create_engine, Engine
+from sqlalchemy import create_engine, Engine, event
 from sqlmodel import SQLModel
 from typing import AsyncGenerator
 
@@ -11,7 +11,21 @@ def get_async_engine(db_path: str) -> AsyncEngine:
     prefix = "sqlite+aiosqlite:///"
     if db_path.startswith(":memory:"):
         prefix = "sqlite+aiosqlite://"
-    return create_async_engine(f"{prefix}{db_path}", echo=False, connect_args={"uri": True})
+    engine = create_async_engine(
+        f"{prefix}{db_path}",
+        echo=False,
+        connect_args={"uri": True, "timeout": 30},
+    )
+
+    @event.listens_for(engine.sync_engine, "connect")
+    def _set_sqlite_pragmas(dbapi_conn, _conn_record):
+        cursor = dbapi_conn.cursor()
+        cursor.execute("PRAGMA journal_mode=WAL")
+        cursor.execute("PRAGMA synchronous=NORMAL")
+        cursor.execute("PRAGMA busy_timeout=30000")
+        cursor.close()
+
+    return engine
 
 def get_sync_engine(db_path: str) -> Engine:
     prefix = "sqlite:///"
