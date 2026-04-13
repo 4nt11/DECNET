@@ -1,4 +1,5 @@
 .venv/
+logs/
 .claude/
 __pycache__/
 *.pyc
