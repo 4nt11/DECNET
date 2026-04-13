@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "decnet"
-version = "0.1.0"
+version = "0.2.0"
 description = "Deception network: deploy honeypot deckies that appear as real LAN hosts"
 requires-python = ">=3.11"
 dependencies = [
@@ -25,25 +25,25 @@ dependencies = [
 
 [project.optional-dependencies]
 dev = [
-    "pytest>=8.0",
-    "ruff>=0.4",
-    "bandit>=1.7",
-    "pip-audit>=2.0",
-    "httpx>=0.27.0",
-    "hypothesis>=6.0",
-    "pytest-cov>=7.0",
-    "pytest-asyncio>=1.0",
-    "freezegun>=1.5",
-    "schemathesis>=4.0",
+    "pytest>=9.0.3",
+    "ruff>=0.15.10",
+    "bandit>=1.9.4",
+    "pip-audit>=2.10.0",
+    "httpx>=0.28.1",
+    "hypothesis>=6.151.14",
+    "pytest-cov>=7.1.0",
+    "pytest-asyncio>=1.3.0",
+    "freezegun>=1.5.5",
+    "schemathesis>=4.15.1",
     "pytest-xdist>=3.8.0",
-    "flask>=3.0",
-    "twisted>=24.0",
-    "requests>=2.32",
-    "redis>=5.0",
-    "pymysql>=1.1",
-    "psycopg2-binary>=2.9",
-    "paho-mqtt>=2.0",
-    "pymongo>=4.0",
+    "flask>=3.1.3",
+    "twisted>=25.5.0",
+    "requests>=2.33.1",
+    "redis>=7.4.0",
+    "pymysql>=1.1.2",
+    "psycopg2-binary>=2.9.11",
+    "paho-mqtt>=2.1.0",
+    "pymongo>=4.16.0",
 ]
 
 [project.scripts]
