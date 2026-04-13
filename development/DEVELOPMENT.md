@@ -45,7 +45,7 @@
 
 ## Core / Hardening
 
-- [ ] **Attacker fingerprinting** — Capture TLS JA3/JA4 hashes, TCP window sizes, User-Agent strings, and SSH client banners.
+- [x] **Attacker fingerprinting** — HTTP User-Agent and VNC client version stored as `fingerprint` bounties. TLS JA3/JA4 and TCP window sizes require pcap (out of scope). SSH client banner deferred pending asyncssh server.
 - [ ] **Canary tokens** — Embed fake AWS keys and honeydocs into decky filesystems.
 - [ ] **Tarpit mode** — Slow down attackers by drip-feeding bytes or delaying responses.
 - [x] **Dynamic decky mutation** — Rotate exposed services or OS fingerprints over time.
@@ -66,7 +66,7 @@
 - [x] **Web dashboard** — Real-time React SPA + FastAPI backend for logs and fleet status.
 - [x] **Decky Inventory** — Dedicated "Decoy Fleet" page showing all deployed assets.
 - [ ] **Pre-built Kibana/Grafana dashboards** — Ship JSON exports for ELK/Grafana.
-- [ ] **CLI live feed** — `decnet watch` command for a unified, colored terminal stream.
+- [~] **CLI live feed** — `decnet watch` — WON'T IMPLEMENT: redundant with `tail -f` on the existing log file; adds bloat without meaningful value.
 - [x] **Traversal graph export** — Export attacker movement as JSON (via CLI).
 
 ## Deployment & Infrastructure

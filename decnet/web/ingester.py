@@ -97,4 +97,36 @@ async def _extract_bounty(repo: BaseRepository, log_data: dict[str, Any]) -> Non
             }
         })
 
-    # 2. Add more extractors here later (e.g. file hashes, crypto keys)
+    # 2. HTTP User-Agent fingerprint
+    _headers = _fields.get("headers") if isinstance(_fields.get("headers"), dict) else {}
+    _ua = _headers.get("User-Agent") or _headers.get("user-agent")
+    if _ua:
+        await repo.add_bounty({
+            "decky": log_data.get("decky"),
+            "service": log_data.get("service"),
+            "attacker_ip": log_data.get("attacker_ip"),
+            "bounty_type": "fingerprint",
+            "payload": {
+                "fingerprint_type": "http_useragent",
+                "value": _ua,
+                "method": _fields.get("method"),
+                "path": _fields.get("path"),
+            }
+        })
+
+    # 3. VNC client version fingerprint
+    _vnc_ver = _fields.get("client_version")
+    if _vnc_ver and log_data.get("event_type") == "version":
+        await repo.add_bounty({
+            "decky": log_data.get("decky"),
+            "service": log_data.get("service"),
+            "attacker_ip": log_data.get("attacker_ip"),
+            "bounty_type": "fingerprint",
+            "payload": {
+                "fingerprint_type": "vnc_client_version",
+                "value": _vnc_ver,
+            }
+        })
+
+    # 4. SSH client banner fingerprint (deferred — requires asyncssh server)
+    # Fires on: service=ssh, event_type=client_banner, fields.client_banner
