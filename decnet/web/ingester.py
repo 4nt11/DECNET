@@ -1,13 +1,13 @@
 import asyncio
 import os
-import logging
 import json
 from typing import Any
 from pathlib import Path
 
+from decnet.logging import get_logger
 from decnet.web.db.repository import BaseRepository
 
-logger: logging.Logger = logging.getLogger("decnet.web.ingester")
+logger = get_logger("api")
 
 async def log_ingestion_worker(repo: BaseRepository) -> None:
     """
@@ -22,7 +22,7 @@ async def log_ingestion_worker(repo: BaseRepository) -> None:
     _json_log_path: Path = Path(_base_log_file).with_suffix(".json")
     _position: int = 0
 
-    logger.info(f"Starting JSON log ingestion from {_json_log_path}")
+    logger.info("ingest worker started path=%s", _json_log_path)
 
     while True:
         try:
@@ -53,10 +53,11 @@ async def log_ingestion_worker(repo: BaseRepository) -> None:
 
                     try:
                         _log_data: dict[str, Any] = json.loads(_line.strip())
+                        logger.debug("ingest: record decky=%s event_type=%s", _log_data.get("decky"), _log_data.get("event_type"))
                         await repo.add_log(_log_data)
                         await _extract_bounty(repo, _log_data)
                     except json.JSONDecodeError:
-                        logger.error(f"Failed to decode JSON log line: {_line}")
+                        logger.error("ingest: failed to decode JSON log line: %s", _line.strip())
                         continue
 
                     # Update position after successful line read
@@ -65,10 +66,10 @@ async def log_ingestion_worker(repo: BaseRepository) -> None:
         except Exception as _e:
             _err_str = str(_e).lower()
             if "no such table" in _err_str or "no active connection" in _err_str or "connection closed" in _err_str:
-                logger.error(f"Post-shutdown or fatal DB error in ingester: {_e}")
+                logger.error("ingest: post-shutdown or fatal DB error: %s", _e)
                 break  # Exit worker — DB is gone or uninitialized
 
-            logger.error(f"Error in log ingestion worker: {_e}")
+            logger.error("ingest: error in worker: %s", _e)
             await asyncio.sleep(5)
 
         await asyncio.sleep(1)

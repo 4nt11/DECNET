@@ -8,6 +8,7 @@ Usage:
   decnet services
 """
 
+import logging
 import signal
 from typing import Optional
 
@@ -15,6 +16,7 @@ import typer
 from rich.console import Console
 from rich.table import Table
 
+from decnet.logging import get_logger
 from decnet.env import (
     DECNET_API_HOST,
     DECNET_API_PORT,
@@ -31,6 +33,8 @@ from decnet.fleet import all_service_names, build_deckies, build_deckies_from_in
 from decnet.ini_loader import load_ini
 from decnet.network import detect_interface, detect_subnet, allocate_ips, get_host_ip
 from decnet.services.registry import all_services
+
+log = get_logger("cli")
 
 app = typer.Typer(
     name="decnet",
@@ -77,6 +81,7 @@ def api(
     import sys
     import os
 
+    log.info("API command invoked host=%s port=%d", host, port)
     console.print(f"[green]Starting DECNET API on {host}:{port}...[/]")
     _env: dict[str, str] = os.environ.copy()
     _env["DECNET_INGEST_LOG_FILE"] = str(log_file)
@@ -115,6 +120,7 @@ def deploy(
 ) -> None:
     """Deploy deckies to the LAN."""
     import os
+    log.info("deploy command invoked mode=%s deckies=%s dry_run=%s", mode, deckies, dry_run)
     if mode not in ("unihost", "swarm"):
         console.print("[red]--mode must be 'unihost' or 'swarm'[/]")
         raise typer.Exit(1)
@@ -234,8 +240,13 @@ def deploy(
         mutate_interval=mutate_interval,
     )
 
+    log.debug("deploy: config built deckies=%d interface=%s subnet=%s", len(config.deckies), config.interface, config.subnet)
     from decnet.engine import deploy as _deploy
     _deploy(config, dry_run=dry_run, no_cache=no_cache, parallel=parallel)
+    if dry_run:
+        log.info("deploy: dry-run complete, no containers started")
+    else:
+        log.info("deploy: deployment complete deckies=%d", len(config.deckies))
 
     if mutate_interval is not None and not dry_run:
         import subprocess  # nosec B404
@@ -290,6 +301,7 @@ def collect(
     """Stream Docker logs from all running decky service containers to a log file."""
     import asyncio
     from decnet.collector import log_collector_worker
+    log.info("collect command invoked log_file=%s", log_file)
     console.print(f"[bold cyan]Collector starting[/] → {log_file}")
     asyncio.run(log_collector_worker(log_file))
 
@@ -322,6 +334,7 @@ def mutate(
 @app.command()
 def status() -> None:
     """Show running deckies and their status."""
+    log.info("status command invoked")
     from decnet.engine import status as _status
     _status()
 
@@ -336,8 +349,10 @@ def teardown(
         console.print("[red]Specify --all or --id <name>.[/]")
         raise typer.Exit(1)
 
+    log.info("teardown command invoked all=%s id=%s", all_, id_)
     from decnet.engine import teardown as _teardown
     _teardown(decky_id=id_)
+    log.info("teardown complete all=%s id=%s", all_, id_)
 
     if all_:
         _kill_api()

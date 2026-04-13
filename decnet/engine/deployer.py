@@ -11,6 +11,7 @@ import docker
 from rich.console import Console
 from rich.table import Table
 
+from decnet.logging import get_logger
 from decnet.config import DecnetConfig, clear_state, load_state, save_state
 from decnet.composer import write_compose
 from decnet.network import (
@@ -26,6 +27,7 @@ from decnet.network import (
     teardown_host_macvlan,
 )
 
+log = get_logger("engine")
 console = Console()
 COMPOSE_FILE = Path("decnet-compose.yml")
 _CANONICAL_LOGGING = Path(__file__).parent.parent.parent / "templates" / "decnet_logging.py"
@@ -106,11 +108,14 @@ def _compose_with_retry(
 
 
 def deploy(config: DecnetConfig, dry_run: bool = False, no_cache: bool = False, parallel: bool = False) -> None:
+    log.info("deployment started n_deckies=%d interface=%s subnet=%s dry_run=%s", len(config.deckies), config.interface, config.subnet, dry_run)
+    log.debug("deploy: deckies=%s", [d.name for d in config.deckies])
     client = docker.from_env()
 
     ip_list = [d.ip for d in config.deckies]
     decky_range = ips_to_range(ip_list)
     host_ip = get_host_ip(config.interface)
+    log.debug("deploy: ip_range=%s host_ip=%s", decky_range, host_ip)
 
     net_driver = "IPvlan L2" if config.ipvlan else "MACVLAN"
     console.print(f"[bold cyan]Creating {net_driver} network[/] ({MACVLAN_NETWORK_NAME}) on {config.interface}")
@@ -140,6 +145,7 @@ def deploy(config: DecnetConfig, dry_run: bool = False, no_cache: bool = False, 
     console.print(f"[bold cyan]Compose file written[/] → {compose_path}")
 
     if dry_run:
+        log.info("deployment dry-run complete compose_path=%s", compose_path)
         console.print("[yellow]Dry run — no containers started.[/]")
         return
 
@@ -161,12 +167,15 @@ def deploy(config: DecnetConfig, dry_run: bool = False, no_cache: bool = False, 
             _compose_with_retry("build", "--no-cache", compose_file=compose_path)
         _compose_with_retry("up", "--build", "-d", compose_file=compose_path)
 
+    log.info("deployment complete n_deckies=%d", len(config.deckies))
     _print_status(config)
 
 
 def teardown(decky_id: str | None = None) -> None:
+    log.info("teardown requested decky_id=%s", decky_id or "all")
     state = load_state()
     if state is None:
+        log.warning("teardown: no active deployment found")
         console.print("[red]No active deployment found (no decnet-state.json).[/]")
         return
 
@@ -193,6 +202,7 @@ def teardown(decky_id: str | None = None) -> None:
         clear_state()
 
         net_driver = "IPvlan" if config.ipvlan else "MACVLAN"
+        log.info("teardown complete all deckies removed network_driver=%s", net_driver)
         console.print(f"[green]All deckies torn down. {net_driver} network removed.[/]")
 
 

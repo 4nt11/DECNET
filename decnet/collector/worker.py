@@ -8,13 +8,14 @@ The ingester tails the .json file; rsyslog can consume the .log file independent
 
 import asyncio
 import json
-import logging
 import re
 from datetime import datetime
 from pathlib import Path
 from typing import Any, Optional
 
-logger = logging.getLogger("decnet.collector")
+from decnet.logging import get_logger
+
+logger = get_logger("collector")
 
 # ─── RFC 5424 parser ──────────────────────────────────────────────────────────
 
@@ -139,10 +140,13 @@ def _stream_container(container_id: str, log_path: Path, json_path: Path) -> Non
                     lf.flush()
                     parsed = parse_rfc5424(line)
                     if parsed:
+                        logger.debug("collector: event written decky=%s type=%s", parsed.get("decky"), parsed.get("event_type"))
                         jf.write(json.dumps(parsed) + "\n")
                         jf.flush()
+                    else:
+                        logger.debug("collector: malformed RFC5424 line snippet=%r", line[:80])
     except Exception as exc:
-        logger.debug("Log stream ended for container %s: %s", container_id, exc)
+        logger.debug("collector: log stream ended container_id=%s reason=%s", container_id, exc)
 
 
 # ─── Async collector ──────────────────────────────────────────────────────────
@@ -170,9 +174,10 @@ async def log_collector_worker(log_file: str) -> None:
                 asyncio.to_thread(_stream_container, container_id, log_path, json_path),
                 loop=loop,
             )
-            logger.info("Collecting logs from container: %s", container_name)
+            logger.info("collector: streaming container=%s", container_name)
 
     try:
+        logger.info("collector started log_path=%s", log_path)
         client = docker.from_env()
 
         for container in client.containers.list():
@@ -193,8 +198,9 @@ async def log_collector_worker(log_file: str) -> None:
         await asyncio.to_thread(_watch_events)
 
     except asyncio.CancelledError:
+        logger.info("collector shutdown requested cancelling %d tasks", len(active))
         for task in active.values():
             task.cancel()
         raise
     except Exception as exc:
-        logger.error("Collector error: %s", exc)
+        logger.error("collector error: %s", exc)

@@ -48,8 +48,9 @@ class Rfc5424Formatter(logging.Formatter):
         msg      = record.getMessage()
         if record.exc_info:
             msg += "\n" + self.formatException(record.exc_info)
+        app = getattr(record, "decnet_component", self._app)
         return (
-            f"<{prival}>1 {ts} {self._hostname} {self._app}"
+            f"<{prival}>1 {ts} {self._hostname} {app}"
             f" {os.getpid()} {record.name} - {msg}"
         )
 

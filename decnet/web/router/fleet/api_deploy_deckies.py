@@ -1,9 +1,11 @@
-import logging
 import os
 
 from fastapi import APIRouter, Depends, HTTPException
 
-from decnet.config import DEFAULT_MUTATE_INTERVAL, DecnetConfig, _ROOT, log
+from decnet.logging import get_logger
+from decnet.config import DEFAULT_MUTATE_INTERVAL, DecnetConfig, _ROOT
+
+log = get_logger("api")
 from decnet.engine import deploy as _deploy
 from decnet.ini_loader import load_ini_from_string
 from decnet.network import detect_interface, detect_subnet, get_host_ip
@@ -100,7 +102,7 @@ async def api_deploy_deckies(req: DeployIniRequest, current_user: str = Depends(
         }
         await repo.set_state("deployment", new_state_payload)
     except Exception as e:
-        logging.getLogger("decnet.web.api").exception("Deployment failed: %s", e)
+        log.exception("Deployment failed: %s", e)
         raise HTTPException(status_code=500, detail="Deployment failed. Check server logs for details.")
 
     return {"message": "Deckies deployed successfully"}

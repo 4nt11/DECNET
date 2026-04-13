@@ -1,15 +1,15 @@
 import json
 import asyncio
-import logging
 from typing import AsyncGenerator, Optional
 
 from fastapi import APIRouter, Depends, Query, Request
 from fastapi.responses import StreamingResponse
 
 from decnet.env import DECNET_DEVELOPER
+from decnet.logging import get_logger
 from decnet.web.dependencies import get_stream_user, repo
 
-log = logging.getLogger(__name__)
+log = get_logger("api")
 
 router = APIRouter()
 
