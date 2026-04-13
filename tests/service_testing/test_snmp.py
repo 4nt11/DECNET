@@ -50,10 +50,10 @@ def _make_protocol(mod):
     proto = mod.SNMPProtocol()
     transport = MagicMock()
     sent: list[tuple] = []
-    
+
     def sendto(data, addr):
         sent.append((data, addr))
-        
+
     transport.sendto = sendto
     proto.connection_made(transport)
     sent.clear()
@@ -104,11 +104,11 @@ def test_sysdescr_default(snmp_default):
     proto, transport, sent = _make_protocol(snmp_default)
     packet = _get_request_packet("public", 1, SYS_DESCR_OID_ENC)
     _send(proto, packet)
-    
+
     assert len(sent) == 1
     resp, addr = sent[0]
     assert addr == ("127.0.0.1", 12345)
-    
+
     # default sysDescr has "Ubuntu SMP" in it
     assert b"Ubuntu SMP" in resp
 
@@ -116,10 +116,10 @@ def test_sysdescr_water_plant(snmp_water_plant):
     proto, transport, sent = _make_protocol(snmp_water_plant)
     packet = _get_request_packet("public", 2, SYS_DESCR_OID_ENC)
     _send(proto, packet)
-    
+
     assert len(sent) == 1
     resp, _ = sent[0]
-    
+
     assert b"Debian" in resp
 
 # ── Negative Tests ────────────────────────────────────────────────────────────

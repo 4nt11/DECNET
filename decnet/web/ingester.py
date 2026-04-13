@@ -21,7 +21,7 @@ async def log_ingestion_worker(repo: BaseRepository) -> None:
 
     _json_log_path: Path = Path(_base_log_file).with_suffix(".json")
     _position: int = 0
-    
+
     logger.info(f"Starting JSON log ingestion from {_json_log_path}")
 
     while True:
@@ -29,24 +29,24 @@ async def log_ingestion_worker(repo: BaseRepository) -> None:
             if not _json_log_path.exists():
                 await asyncio.sleep(2)
                 continue
-                
+
             _stat: os.stat_result = _json_log_path.stat()
             if _stat.st_size < _position:
                 # File rotated or truncated
                 _position = 0
-                
+
             if _stat.st_size == _position:
                 # No new data
                 await asyncio.sleep(1)
                 continue
-                
+
             with open(_json_log_path, "r", encoding="utf-8", errors="replace") as _f:
                 _f.seek(_position)
                 while True:
                     _line: str = _f.readline()
                     if not _line:
                         break # EOF reached
-                    
+
                     if not _line.endswith('\n'):
                         # Partial line read, don't process yet, don't advance position
                         break
@@ -58,14 +58,19 @@ async def log_ingestion_worker(repo: BaseRepository) -> None:
                     except json.JSONDecodeError:
                         logger.error(f"Failed to decode JSON log line: {_line}")
                         continue
-                    
+
                     # Update position after successful line read
                     _position = _f.tell()
-                
+
         except Exception as _e:
+            _err_str = str(_e).lower()
+            if "no such table" in _err_str or "no active connection" in _err_str or "connection closed" in _err_str:
+                logger.error(f"Post-shutdown or fatal DB error in ingester: {_e}")
+                break  # Exit worker — DB is gone or uninitialized
+
             logger.error(f"Error in log ingestion worker: {_e}")
             await asyncio.sleep(5)
-            
+
         await asyncio.sleep(1)
 
 
@@ -78,7 +83,7 @@ async def _extract_bounty(repo: BaseRepository, log_data: dict[str, Any]) -> Non
     # 1. Credentials (User/Pass)
     _user = _fields.get("username")
     _pass = _fields.get("password")
-    
+
     if _user and _pass:
         await repo.add_bounty({
             "decky": log_data.get("decky"),
@@ -90,5 +95,5 @@ async def _extract_bounty(repo: BaseRepository, log_data: dict[str, Any]) -> Non
                 "password": _pass
             }
         })
-    
+
     # 2. Add more extractors here later (e.g. file hashes, crypto keys)

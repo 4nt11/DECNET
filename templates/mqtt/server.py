@@ -97,7 +97,7 @@ def _publish(topic: str, value: str, retain: bool = True) -> bytes:
     payload     = str(value).encode()
     fixed = 0x31 if retain else 0x30
     remaining = len(topic_len) + len(topic_bytes) + len(payload)
-    
+
     # variable length encoding
     rem_bytes = []
     while remaining > 0:
@@ -108,7 +108,7 @@ def _publish(topic: str, value: str, retain: bool = True) -> bytes:
         rem_bytes.append(encoded)
     if not rem_bytes:
         rem_bytes = [0]
-    
+
     return bytes([fixed]) + bytes(rem_bytes) + topic_len + topic_bytes + payload
 
 
@@ -132,7 +132,7 @@ def _generate_topics() -> dict:
             return topics
         except Exception as e:
             _log("config_error", severity=4, error=str(e))
-    
+
     if MQTT_PERSONA == "water_plant":
         topics.update({
             "plant/water/tank1/level": f"{random.uniform(60.0, 80.0):.1f}",
@@ -186,7 +186,7 @@ class MQTTProtocol(asyncio.Protocol):
             pkt_type = (pkt_byte >> 4) & 0x0f
             flags = pkt_byte & 0x0f
             qos = (flags >> 1) & 0x03
-            
+
             # Decode remaining length (variable-length encoding)
             pos = 1
             remaining = 0
@@ -225,7 +225,7 @@ class MQTTProtocol(asyncio.Protocol):
                 packet_id, subs = _parse_subscribe(payload)
                 granted_qos = [1] * len(subs)  # grant QoS 1 for all
                 self._transport.write(_suback(packet_id, granted_qos))
-                
+
                 # Immediately send retained publishes matching topics
                 for sub_topic, _ in subs:
                     _log("subscribe", src=self._peer[0], topics=[sub_topic])
@@ -245,11 +245,11 @@ class MQTTProtocol(asyncio.Protocol):
                 topic, packet_id, data = _parse_publish(payload, qos)
                 # Attacker command received!
                 _log("publish", src=self._peer[0], topic=topic, payload=data.decode(errors="replace"))
-                
+
                 if qos == 1:
                     puback = bytes([0x40, 0x02]) + struct.pack(">H", packet_id)
                     self._transport.write(puback)
-                
+
             elif pkt_type == 12:  # PINGREQ
                 self._transport.write(b"\xd0\x00")  # PINGRESP
             elif pkt_type == 14:  # DISCONNECT

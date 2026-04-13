@@ -153,11 +153,11 @@ def _parse_snmp(data: bytes):
     # PDU type (0xa0 = GetRequest, 0xa1 = GetNextRequest)
     if pos >= len(data):
         raise ValueError("Missing PDU type")
-    
+
     pdu_type = data[pos]
     if pdu_type not in (0xa0, 0xa1):
         raise ValueError(f"Invalid PDU type {pdu_type}")
-        
+
     pos += 1
     _, pos = _read_ber_length(data, pos)
     # request-id

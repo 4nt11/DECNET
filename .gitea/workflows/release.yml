@@ -22,27 +22,38 @@ jobs:
       - uses: actions/checkout@v4
         with:
           fetch-depth: 0
+          token: ${{ secrets.DECNET_PR_TOKEN }}
 
-      - name: Extract version from pyproject.toml
+      - name: Configure git
+        run: |
+          git config user.name "DECNET CI"
+          git config user.email "ci@decnet.local"
+
+      - name: Bump version and Tag
         id: version
         run: |
-          VERSION=$(python3 -c "import tomllib; f=open('pyproject.toml','rb'); d=tomllib.load(f); print(d['project']['version'])")
-          echo "version=$VERSION" >> $GITHUB_OUTPUT
-
-      - name: Create tag if not exists
-        id: tag
-        run: |
-          VERSION=${{ steps.version.outputs.version }}
-          if git rev-parse "v$VERSION" >/dev/null 2>&1; then
-            echo "Tag v$VERSION already exists, skipping."
-            echo "created=false" >> $GITHUB_OUTPUT
-          else
-            git config user.name "gitea-actions"
-            git config user.email "actions@git.resacachile.cl"
-            git tag -a "v$VERSION" -m "Release v$VERSION"
-            git push origin "v$VERSION"
-            echo "created=true" >> $GITHUB_OUTPUT
-          fi
+          # Calculate next version (v0.x)
+          LATEST_TAG=$(git describe --tags --abbrev=0 2>/dev/null || echo "v0.0")
+          NEXT_VER=$(python3 -c "
+          tag = '$LATEST_TAG'.lstrip('v')
+          parts = tag.split('.')
+          major = int(parts[0]) if parts[0] else 0
+          minor = int(parts[1]) if len(parts) > 1 else 0
+          print(f'{major}.{minor + 1}')
+          ")
+          
+          echo "Next version: $NEXT_VER (calculated from $LATEST_TAG)"
+          
+          # Update pyproject.toml
+          sed -i "s/^version = \".*\"/version = \"$NEXT_VER\"/" pyproject.toml
+          
+          git add pyproject.toml
+          git commit -m "chore: auto-release v$NEXT_VER [skip ci]" || echo "No changes to commit"
+          git tag -a "v$NEXT_VER" -m "Auto-release v$NEXT_VER"
+          git push origin main --follow-tags
+          
+          echo "version=$NEXT_VER" >> $GITHUB_OUTPUT
+          echo "created=true" >> $GITHUB_OUTPUT
 
   docker:
     name: Build, scan & push ${{ matrix.service }}
@@ -52,7 +63,7 @@ jobs:
       fail-fast: false
       matrix:
         service:
-          - cowrie
+          - conpot
           - docker_api
           - elasticsearch
           - ftp
@@ -69,11 +80,12 @@ jobs:
           - postgres
           - rdp
           - redis
-          - real_ssh
           - sip
           - smb
           - smtp
           - snmp
+          - ssh
+          - telnet
           - tftp
           - vnc
     steps:

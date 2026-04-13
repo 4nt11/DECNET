@@ -5,9 +5,9 @@ from decnet.correlation.graph import AttackerTraversal, TraversalHop
 from decnet.correlation.parser import LogEvent, parse_line
 
 __all__ = [
-    "CorrelationEngine",
     "AttackerTraversal",
-    "TraversalHop",
+    "CorrelationEngine",
     "LogEvent",
+    "TraversalHop",
     "parse_line",
 ]

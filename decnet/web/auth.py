@@ -12,7 +12,7 @@ ACCESS_TOKEN_EXPIRE_MINUTES: int = 1440
 
 def verify_password(plain_password: str, hashed_password: str) -> bool:
     return bcrypt.checkpw(
-        plain_password.encode("utf-8")[:72], 
+        plain_password.encode("utf-8")[:72],
         hashed_password.encode("utf-8")
     )
 
@@ -31,7 +31,7 @@ def create_access_token(data: dict[str, Any], expires_delta: Optional[timedelta]
         _expire = datetime.now(timezone.utc) + expires_delta
     else:
         _expire = datetime.now(timezone.utc) + timedelta(minutes=15)
-        
+
     _to_encode.update({"exp": _expire})
     _to_encode.update({"iat": datetime.now(timezone.utc)})
     _encoded_jwt: str = jwt.encode(_to_encode, SECRET_KEY, algorithm=ALGORITHM)

@@ -91,7 +91,7 @@ def _publish_packet(topic: str, payload: str, qos: int = 1, pid: int = 1) -> byt
         packet_payload = len(topic_bytes).to_bytes(2, "big") + topic_bytes + pid.to_bytes(2, "big") + payload_bytes
     else:
         packet_payload = len(topic_bytes).to_bytes(2, "big") + topic_bytes + payload_bytes
-    
+
     return bytes([byte0, len(packet_payload)]) + packet_payload
 
 def _pingreq_packet() -> bytes:
@@ -128,10 +128,10 @@ def test_subscribe_wildcard_retained(mqtt_mod):
     written.clear()
 
     _send(proto, _subscribe_packet("plant/#"))
-    
+
     assert len(written) >= 2 # At least SUBACK + some publishes
     assert written[0].startswith(b"\x90") # SUBACK
-    
+
     combined = b"".join(written[1:])
     # Should contain some water plant topics
     assert b"plant/water/tank1/level" in combined

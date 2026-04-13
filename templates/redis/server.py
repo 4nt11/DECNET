@@ -156,7 +156,7 @@ class RedisProtocol(asyncio.Protocol):
             elif pattern != '*':
                 pat = pattern.encode()
                 keys = [k for k in keys if k == pat]
-            
+
             resp = f"*{len(keys)}\r\n".encode() + b"".join(_bulk(k.decode()) for k in keys)
             self._transport.write(resp)
         elif verb == "GET":

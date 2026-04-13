@@ -89,6 +89,7 @@ Host NIC (eth0)
   - **Extensive testing** for every function must be created.
   - **Always develop in the `dev` branch, never in `main`.**
   - **Test in the `testing` branch.**
+  - **IMPORTANT**: The system now strictly enforces dependency injection for storage. Do not import `SQLiteRepository` directly in new features; instead, use `get_repository()` from the factory or the FastAPI `get_repo` dependency.
 
 ## Directory Structure
 
