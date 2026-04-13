@@ -32,7 +32,7 @@ class TestDeckyConfig:
         assert d.name == "decky-01"
 
     def test_empty_services_raises(self):
-        with pytest.raises(Exception, match="at least one service"):
+        with pytest.raises(Exception, match="at least 1 item"):
             DeckyConfig(**self._base(services=[]))
 
     def test_multiple_services_ok(self):

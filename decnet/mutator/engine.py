@@ -12,25 +12,29 @@ from rich.console import Console
 from decnet.archetypes import get_archetype
 from decnet.fleet import all_service_names
 from decnet.composer import write_compose
-from decnet.config import DeckyConfig, load_state, save_state
+from decnet.config import DeckyConfig, DecnetConfig
 from decnet.engine import _compose_with_retry
 
-import subprocess  # nosec B404
+from pathlib import Path
+import anyio
+import asyncio
+from decnet.web.db.repository import BaseRepository
 
 console = Console()
 
 
-def mutate_decky(decky_name: str) -> bool:
+async def mutate_decky(decky_name: str, repo: BaseRepository) -> bool:
     """
     Perform an Intra-Archetype Shuffle for a specific decky.
     Returns True if mutation succeeded, False otherwise.
     """
-    state = load_state()
-    if state is None:
-        console.print("[red]No active deployment found (no decnet-state.json).[/]")
+    state_dict = await repo.get_state("deployment")
+    if state_dict is None:
+        console.print("[red]No active deployment found in database.[/]")
         return False
 
-    config, compose_path = state
+    config = DecnetConfig(**state_dict["config"])
+    compose_path = Path(state_dict["compose_path"])
     decky: Optional[DeckyConfig] = next((d for d in config.deckies if d.name == decky_name), None)
 
     if not decky:
@@ -63,31 +67,35 @@ def mutate_decky(decky_name: str) -> bool:
     decky.services = list(chosen)
     decky.last_mutated = time.time()
 
-    save_state(config, compose_path)
+    # Save to DB
+    await repo.set_state("deployment", {"config": config.model_dump(), "compose_path": str(compose_path)})
+
+    # Still writes files for Docker to use
     write_compose(config, compose_path)
 
     console.print(f"[cyan]Mutating '{decky_name}' to services: {', '.join(decky.services)}[/]")
 
     try:
-        _compose_with_retry("up", "-d", "--remove-orphans", compose_file=compose_path)
-    except subprocess.CalledProcessError as e:
-        console.print(f"[red]Failed to mutate '{decky_name}': {e.stderr}[/]")
+        # Wrap blocking call in thread
+        await anyio.to_thread.run_sync(_compose_with_retry, "up", "-d", "--remove-orphans", compose_path)
+    except Exception as e:
+        console.print(f"[red]Failed to mutate '{decky_name}': {e}[/]")
         return False
 
     return True
 
 
-def mutate_all(force: bool = False) -> None:
+async def mutate_all(repo: BaseRepository, force: bool = False) -> None:
     """
     Check all deckies and mutate those that are due.
     If force=True, mutates all deckies regardless of schedule.
     """
-    state = load_state()
-    if state is None:
+    state_dict = await repo.get_state("deployment")
+    if state_dict is None:
         console.print("[red]No active deployment found.[/]")
         return
 
-    config, _ = state
+    config = DecnetConfig(**state_dict["config"])
     now = time.time()
 
     mutated_count = 0
@@ -103,7 +111,7 @@ def mutate_all(force: bool = False) -> None:
             due = elapsed_secs >= (interval_mins * 60)
 
         if due:
-            success = mutate_decky(decky.name)
+            success = await mutate_decky(decky.name, repo=repo)
             if success:
                 mutated_count += 1
 
@@ -111,12 +119,12 @@ def mutate_all(force: bool = False) -> None:
         console.print("[dim]No deckies are due for mutation.[/]")
 
 
-def run_watch_loop(poll_interval_secs: int = 10) -> None:
+async def run_watch_loop(repo: BaseRepository, poll_interval_secs: int = 10) -> None:
     """Run an infinite loop checking for deckies that need mutation."""
     console.print(f"[green]DECNET Mutator Watcher started (polling every {poll_interval_secs}s).[/]")
     try:
         while True:
-            mutate_all(force=False)
-            time.sleep(poll_interval_secs)
+            await mutate_all(force=False, repo=repo)
+            await asyncio.sleep(poll_interval_secs)
     except KeyboardInterrupt:
         console.print("\n[dim]Mutator watcher stopped.[/]")

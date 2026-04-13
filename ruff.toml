@@ -1,0 +1,30 @@
+# In your ruff.toml or pyproject.toml
+target-version = "py314" # DECNET's target Python version
+
+exclude = [
+    "tests/**",
+    "templates/**",
+    "development/**",
+]
+
+[lint]
+# Select a wide range of rules
+select = [
+    "F",    # Pyflakes: Catches undefined names (F821) and unused variables (F841)
+    "ANN",  # Enforces type annotations on functions and methods
+    "RUF",  # Includes the RUF045 rule for dataclass attributes
+    "E",    # Pycodestyle errors
+    "W",    # Pycodestyle warnings
+]
+
+# Ignore specific rules that might be too strict for now
+ignore = [
+    "E501",   # Line too long
+]
+
+[lint.extend-per-file-ignores]
+# Apply strict rules only to the core codebase
+"decnet/**/*.py" = []
+# Everywhere else is more relaxed
+"**/*.py" = ["ANN", "RUF"]
+"tests/**/*.py" = ["ANN", "RUF", "E", "W"]

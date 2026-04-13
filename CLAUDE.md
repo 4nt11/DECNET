@@ -46,6 +46,7 @@ DECNET is a honeypot/deception network framework. It deploys fake machines (call
 - The logging/aggregation network must be isolated from the decoy network.
 - A publicly accessible real server acts as the bridge between the two networks.
 - Deckies should differ in exposed services and OS fingerprints to appear as a heterogeneous network.
+- **IMPORTANT**: The system now strictly enforces dependency injection for storage. Do not import `SQLiteRepository` directly in new features; instead, use `get_repository()` from the factory or the FastAPI `get_repo` dependency.
 
 ## Development and testing
 

@@ -29,12 +29,12 @@ def _log(event_type: str, severity: int = 6, **kwargs) -> None:
 def _setup_bait_fs() -> str:
     bait_dir = Path("/tmp/ftp_bait")
     bait_dir.mkdir(parents=True, exist_ok=True)
-    
+
     (bait_dir / "backup.tar.gz").write_bytes(b"\x1f\x8b\x08\x00\x00\x00\x00\x00\x00\x03\x03\x00\x00\x00\x00\x00\x00\x00\x00\x00")
     (bait_dir / "db_dump.sql").write_text("CREATE TABLE users (id INT, username VARCHAR(50), password VARCHAR(50));\nINSERT INTO users VALUES (1, 'admin', 'pbkdf2:sha256:5000$...');\n")
     (bait_dir / "config.ini").write_text("[database]\nuser = dbadmin\npassword = db_super_admin_pass_!\nhost = localhost\n")
     (bait_dir / "credentials.txt").write_text("admin:super_secret_admin_pw\nroot:toor\nalice:wonderland\n")
-    
+
     return str(bait_dir)
 
 class ServerFTP(FTP):

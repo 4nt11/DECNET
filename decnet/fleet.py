@@ -12,7 +12,7 @@ from typing import Optional
 from decnet.archetypes import Archetype, get_archetype
 from decnet.config import DeckyConfig, random_hostname
 from decnet.distros import all_distros, get_distro, random_distro
-from decnet.ini_loader import IniConfig
+from decnet.models import IniConfig
 from decnet.services.registry import all_services
 
 
@@ -146,15 +146,10 @@ def build_deckies_from_ini(
             svc_list = spec.services
         elif arch:
             svc_list = list(arch.services)
-        elif randomize:
+        elif randomize or (not spec.services and not arch):
             svc_pool = all_service_names()
             count = random.randint(1, min(3, len(svc_pool)))  # nosec B311
             svc_list = random.sample(svc_pool, count)  # nosec B311
-        else:
-            raise ValueError(
-                f"Decky '[{spec.name}]' has no services= in config. "
-                "Add services=, archetype=, or use --randomize-services."
-            )
 
         resolved_nmap_os = spec.nmap_os or (arch.nmap_os if arch else "linux")
 
