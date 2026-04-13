@@ -33,13 +33,13 @@ jobs:
         id: version
         run: |
           # Calculate next version (v0.x)
-          LATEST_TAG=$(git describe --tags --abbrev=0 2>/dev/null || echo "v0.0")
+          LATEST_TAG=$(git describe --tags --abbrev=0 2>/dev/null || echo "v0.0.0")
           NEXT_VER=$(python3 -c "
           tag = '$LATEST_TAG'.lstrip('v')
           parts = tag.split('.')
           major = int(parts[0]) if parts[0] else 0
           minor = int(parts[1]) if len(parts) > 1 else 0
-          print(f'{major}.{minor + 1}')
+          print(f'{major}.{minor + 1}.0')
           ")
           
           echo "Next version: $NEXT_VER (calculated from $LATEST_TAG)"
