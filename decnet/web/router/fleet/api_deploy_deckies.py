@@ -4,13 +4,13 @@ from fastapi import APIRouter, Depends, HTTPException
 
 from decnet.logging import get_logger
 from decnet.config import DEFAULT_MUTATE_INTERVAL, DecnetConfig, _ROOT
-
-log = get_logger("api")
 from decnet.engine import deploy as _deploy
 from decnet.ini_loader import load_ini_from_string
 from decnet.network import detect_interface, detect_subnet, get_host_ip
 from decnet.web.dependencies import get_current_user, repo
 from decnet.web.db.models import DeployIniRequest
+
+log = get_logger("api")
 
 router = APIRouter()
 

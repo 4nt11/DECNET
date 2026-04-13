@@ -8,7 +8,6 @@ Usage:
   decnet services
 """
 
-import logging
 import signal
 from typing import Optional
 
