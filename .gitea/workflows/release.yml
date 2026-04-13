@@ -49,7 +49,11 @@ jobs:
           
           git add pyproject.toml
           git commit -m "chore: auto-release v$NEXT_VER [skip ci]" || echo "No changes to commit"
-          git tag -a "v$NEXT_VER" -m "Auto-release v$NEXT_VER"
+          CHANGELOG=$(git log ${LATEST_TAG}..HEAD --oneline --no-decorate --no-merges)
+          git tag -a "v$NEXT_VER" -m "Auto-release v$NEXT_VER
+
+Changes since $LATEST_TAG:
+$CHANGELOG"
           git push origin main --follow-tags
           
           echo "version=$NEXT_VER" >> $GITHUB_OUTPUT
