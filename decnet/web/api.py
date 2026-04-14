@@ -21,11 +21,12 @@ log = get_logger("api")
 ingestion_task: Optional[asyncio.Task[Any]] = None
 collector_task: Optional[asyncio.Task[Any]] = None
 attacker_task: Optional[asyncio.Task[Any]] = None
+sniffer_task: Optional[asyncio.Task[Any]] = None
 
 
 @asynccontextmanager
 async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
-    global ingestion_task, collector_task, attacker_task
+    global ingestion_task, collector_task, attacker_task, sniffer_task
 
     log.info("API startup initialising database")
     for attempt in range(1, 6):
@@ -58,13 +59,22 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
         if attacker_task is None or attacker_task.done():
             attacker_task = asyncio.create_task(attacker_profile_worker(repo))
             log.debug("API startup attacker profile worker started")
+
+        # Start fleet-wide MACVLAN sniffer (fault-isolated — never crashes the API)
+        try:
+            from decnet.sniffer import sniffer_worker
+            if sniffer_task is None or sniffer_task.done():
+                sniffer_task = asyncio.create_task(sniffer_worker(_log_file))
+                log.debug("API startup sniffer worker started")
+        except Exception as exc:
+            log.warning("Sniffer worker failed to start — API continues without sniffing: %s", exc)
     else:
         log.info("Contract Test Mode: skipping background worker startup")
 
     yield
 
     log.info("API shutdown cancelling background tasks")
-    for task in (ingestion_task, collector_task, attacker_task):
+    for task in (ingestion_task, collector_task, attacker_task, sniffer_task):
         if task and not task.done():
             task.cancel()
             try:

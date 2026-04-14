@@ -16,6 +16,7 @@ class SnifferService(BaseService):
     name = "sniffer"
     ports: list[int] = []
     default_image = "build"
+    fleet_singleton = True
 
     def compose_fragment(
         self,

@@ -17,8 +17,11 @@ from decnet.services.registry import all_services
 
 
 def all_service_names() -> list[str]:
-    """Return all registered service names from the live plugin registry."""
-    return sorted(all_services().keys())
+    """Return all registered per-decky service names (excludes fleet singletons)."""
+    return sorted(
+        name for name, svc in all_services().items()
+        if not svc.fleet_singleton
+    )
 
 
 def resolve_distros(

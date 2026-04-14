@@ -10,11 +10,12 @@ from decnet.services.registry import all_services
 ORIGINAL_5 = {"ssh", "smb", "rdp", "http", "ftp"}
 
 
-def test_all_service_names_covers_full_registry():
-    """_all_service_names() must return every service in the registry."""
+def test_all_service_names_covers_per_decky_services():
+    """_all_service_names() must return every per-decky service (not fleet singletons)."""
     pool = set(_all_service_names())
-    registry = set(all_services().keys())
-    assert pool == registry
+    registry = all_services()
+    per_decky = {name for name, svc in registry.items() if not svc.fleet_singleton}
+    assert pool == per_decky
 
 
 def test_all_service_names_is_sorted():
