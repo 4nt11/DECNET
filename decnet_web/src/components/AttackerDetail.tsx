@@ -216,6 +216,7 @@ const AttackerDetail: React.FC = () => {
   const [attacker, setAttacker] = useState<AttackerData | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [serviceFilter, setServiceFilter] = useState<string | null>(null);
 
   useEffect(() => {
     const fetchAttacker = async () => {
@@ -330,17 +331,27 @@ const AttackerDetail: React.FC = () => {
           <h2>SERVICES TARGETED</h2>
         </div>
         <div style={{ padding: '16px', display: 'flex', flexWrap: 'wrap', gap: '8px' }}>
-          {attacker.services.length > 0 ? attacker.services.map((svc) => (
-            <span
-              key={svc}
-              className="service-badge"
-              style={{ fontSize: '0.85rem', padding: '4px 12px', cursor: 'pointer' }}
-              onClick={() => navigate(`/attackers?service=${encodeURIComponent(svc)}`)}
-              title={`Filter attackers by ${svc.toUpperCase()}`}
-            >
-              {svc.toUpperCase()}
-            </span>
-          )) : (
+          {attacker.services.length > 0 ? attacker.services.map((svc) => {
+            const isActive = serviceFilter === svc;
+            return (
+              <span
+                key={svc}
+                className="service-badge"
+                style={{
+                  fontSize: '0.85rem', padding: '4px 12px', cursor: 'pointer',
+                  ...(isActive ? {
+                    backgroundColor: 'var(--text-color)',
+                    color: 'var(--bg-color)',
+                    borderColor: 'var(--text-color)',
+                  } : {}),
+                }}
+                onClick={() => setServiceFilter(isActive ? null : svc)}
+                title={isActive ? 'Clear filter' : `Filter by ${svc.toUpperCase()}`}
+              >
+                {svc.toUpperCase()}
+              </span>
+            );
+          }) : (
             <span className="dim">No services recorded</span>
           )}
         </div>
@@ -371,59 +382,76 @@ const AttackerDetail: React.FC = () => {
       </div>
 
       {/* Commands */}
-      <div className="logs-section">
-        <div className="section-header">
-          <h2>COMMANDS ({attacker.commands.length})</h2>
-        </div>
-        {attacker.commands.length > 0 ? (
-          <div className="logs-table-container">
-            <table className="logs-table">
-              <thead>
-                <tr>
-                  <th>TIMESTAMP</th>
-                  <th>SERVICE</th>
-                  <th>DECKY</th>
-                  <th>COMMAND</th>
-                </tr>
-              </thead>
-              <tbody>
-                {attacker.commands.map((cmd, i) => (
-                  <tr key={i}>
-                    <td className="dim" style={{ fontSize: '0.75rem', whiteSpace: 'nowrap' }}>
-                      {cmd.timestamp ? new Date(cmd.timestamp).toLocaleString() : '-'}
-                    </td>
-                    <td>{cmd.service}</td>
-                    <td className="violet-accent">{cmd.decky}</td>
-                    <td className="matrix-text" style={{ fontFamily: 'monospace' }}>{cmd.command}</td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
+      {(() => {
+        const filteredCmds = serviceFilter
+          ? attacker.commands.filter((cmd) => cmd.service === serviceFilter)
+          : attacker.commands;
+        return (
+          <div className="logs-section">
+            <div className="section-header">
+              <h2>COMMANDS ({filteredCmds.length}{serviceFilter ? ` / ${attacker.commands.length}` : ''})</h2>
+            </div>
+            {filteredCmds.length > 0 ? (
+              <div className="logs-table-container">
+                <table className="logs-table">
+                  <thead>
+                    <tr>
+                      <th>TIMESTAMP</th>
+                      <th>SERVICE</th>
+                      <th>DECKY</th>
+                      <th>COMMAND</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {filteredCmds.map((cmd, i) => (
+                      <tr key={i}>
+                        <td className="dim" style={{ fontSize: '0.75rem', whiteSpace: 'nowrap' }}>
+                          {cmd.timestamp ? new Date(cmd.timestamp).toLocaleString() : '-'}
+                        </td>
+                        <td>{cmd.service}</td>
+                        <td className="violet-accent">{cmd.decky}</td>
+                        <td className="matrix-text" style={{ fontFamily: 'monospace' }}>{cmd.command}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            ) : (
+              <div style={{ padding: '24px', textAlign: 'center', opacity: 0.5 }}>
+                {serviceFilter ? `NO ${serviceFilter.toUpperCase()} COMMANDS CAPTURED` : 'NO COMMANDS CAPTURED'}
+              </div>
+            )}
           </div>
-        ) : (
-          <div style={{ padding: '24px', textAlign: 'center', opacity: 0.5 }}>
-            NO COMMANDS CAPTURED
-          </div>
-        )}
-      </div>
+        );
+      })()}
 
       {/* Fingerprints */}
-      <div className="logs-section">
-        <div className="section-header">
-          <h2>FINGERPRINTS ({attacker.fingerprints.length})</h2>
-        </div>
-        {attacker.fingerprints.length > 0 ? (
-          <div style={{ padding: '16px', display: 'flex', flexDirection: 'column', gap: '12px' }}>
-            {attacker.fingerprints.map((fp, i) => (
-              <FingerprintCard key={i} bounty={fp} />
-            ))}
+      {(() => {
+        const filteredFps = serviceFilter
+          ? attacker.fingerprints.filter((fp) => {
+              const p = getPayload(fp);
+              return p.service === serviceFilter;
+            })
+          : attacker.fingerprints;
+        return (
+          <div className="logs-section">
+            <div className="section-header">
+              <h2>FINGERPRINTS ({filteredFps.length}{serviceFilter ? ` / ${attacker.fingerprints.length}` : ''})</h2>
+            </div>
+            {filteredFps.length > 0 ? (
+              <div style={{ padding: '16px', display: 'flex', flexDirection: 'column', gap: '12px' }}>
+                {filteredFps.map((fp, i) => (
+                  <FingerprintCard key={i} bounty={fp} />
+                ))}
+              </div>
+            ) : (
+              <div style={{ padding: '24px', textAlign: 'center', opacity: 0.5 }}>
+                {serviceFilter ? `NO ${serviceFilter.toUpperCase()} FINGERPRINTS CAPTURED` : 'NO FINGERPRINTS CAPTURED'}
+              </div>
+            )}
           </div>
-        ) : (
-          <div style={{ padding: '24px', textAlign: 'center', opacity: 0.5 }}>
-            NO FINGERPRINTS CAPTURED
-          </div>
-        )}
-      </div>
+        );
+      })()}
 
       {/* UUID footer */}
       <div style={{ textAlign: 'right', fontSize: '0.65rem', opacity: 0.3, marginTop: '8px' }}>
