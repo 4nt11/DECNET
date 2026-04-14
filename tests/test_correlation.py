@@ -155,19 +155,6 @@ class TestParserAttackerIP:
         assert parse_line(line) is None
 
 
-class TestParserProcidFlexibility:
-    def test_non_nil_procid_accepted(self):
-        line = '<38>1 2026-04-14T05:48:12.611006+00:00 SRV-BRAVO-13 sshd 282 - -  Accepted password for root'
-        event = parse_line(line)
-        assert event is not None
-        assert event.service == "sshd"
-        assert event.decky == "SRV-BRAVO-13"
-
-    def test_nil_procid_still_works(self):
-        event = parse_line(_make_line())
-        assert event is not None
-
-
 # ---------------------------------------------------------------------------
 # graph.py — AttackerTraversal
 # ---------------------------------------------------------------------------

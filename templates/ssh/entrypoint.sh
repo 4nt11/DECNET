@@ -34,8 +34,8 @@ fi
 # Logging pipeline: named pipe → rsyslogd (RFC 5424) → stdout → Docker log capture
 mkfifo /var/run/decnet-logs
 
-# Relay pipe through Python log_relay — normalizes sshd/bash events to DECNET format
-python3 /opt/log_relay.py &
+# Relay pipe to stdout so Docker captures all syslog events
+cat /var/run/decnet-logs &
 
 # Start rsyslog (reads /etc/rsyslog.d/99-decnet.conf, writes to the pipe above)
 rsyslogd

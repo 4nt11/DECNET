@@ -26,7 +26,7 @@ _RFC5424_RE = re.compile(
     r"(\S+) "       # 1: TIMESTAMP
     r"(\S+) "       # 2: HOSTNAME (decky name)
     r"(\S+) "       # 3: APP-NAME (service)
-    r"\S+ "         # PROCID (NILVALUE or PID)
+    r"- "           # PROCID always NILVALUE
     r"(\S+) "       # 4: MSGID (event_type)
     r"(.+)$",       # 5: SD element + optional MSG
 )
@@ -39,7 +39,6 @@ _PARAM_RE = re.compile(r'(\w+)="((?:[^"\\]|\\.)*)"')
 
 # Field names to probe for attacker IP, in priority order
 _IP_FIELDS = ("src_ip", "src", "client_ip", "remote_ip", "ip")
-
 
 
 @dataclass
@@ -100,7 +99,6 @@ def parse_line(line: str) -> LogEvent | None:
         return None
 
     fields = _parse_sd_params(sd_rest)
-
     attacker_ip = _extract_attacker_ip(fields)
 
     return LogEvent(

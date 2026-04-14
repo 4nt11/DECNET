@@ -131,14 +131,6 @@ class TestParseRfc5424:
         assert result["msg"] == "login attempt"
 
 
-    def test_non_nil_procid_accepted(self):
-        line = '<38>1 2026-04-14T05:48:12.611006+00:00 SRV-BRAVO-13 sshd 282 - -  Accepted password for root from 192.168.1.5 port 50854 ssh2'
-        result = parse_rfc5424(line)
-        assert result is not None
-        assert result["service"] == "sshd"
-        assert result["decky"] == "SRV-BRAVO-13"
-
-
 class TestIsServiceContainer:
     def test_known_container_returns_true(self):
         with patch("decnet.collector.worker._load_service_container_names", return_value=_KNOWN_NAMES):
