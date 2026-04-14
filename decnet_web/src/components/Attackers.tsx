@@ -39,6 +39,7 @@ const Attackers: React.FC = () => {
   const [searchParams, setSearchParams] = useSearchParams();
   const query = searchParams.get('q') || '';
   const sortBy = searchParams.get('sort_by') || 'recent';
+  const serviceFilter = searchParams.get('service') || '';
   const page = parseInt(searchParams.get('page') || '1');
 
   const [attackers, setAttackers] = useState<AttackerEntry[]>([]);
@@ -54,6 +55,7 @@ const Attackers: React.FC = () => {
       const offset = (page - 1) * limit;
       let url = `/attackers?limit=${limit}&offset=${offset}&sort_by=${sortBy}`;
       if (query) url += `&search=${encodeURIComponent(query)}`;
+      if (serviceFilter) url += `&service=${encodeURIComponent(serviceFilter)}`;
 
       const res = await api.get(url);
       setAttackers(res.data.data);
@@ -67,19 +69,28 @@ const Attackers: React.FC = () => {
 
   useEffect(() => {
     fetchAttackers();
-  }, [query, sortBy, page]);
+  }, [query, sortBy, serviceFilter, page]);
+
+  const _params = (overrides: Record<string, string> = {}) => {
+    const base: Record<string, string> = { q: query, sort_by: sortBy, service: serviceFilter, page: '1' };
+    return Object.fromEntries(Object.entries({ ...base, ...overrides }).filter(([, v]) => v !== ''));
+  };
 
   const handleSearch = (e: React.FormEvent) => {
     e.preventDefault();
-    setSearchParams({ q: searchInput, sort_by: sortBy, page: '1' });
+    setSearchParams(_params({ q: searchInput }));
   };
 
   const setPage = (p: number) => {
-    setSearchParams({ q: query, sort_by: sortBy, page: p.toString() });
+    setSearchParams(_params({ page: p.toString() }));
   };
 
   const setSort = (s: string) => {
-    setSearchParams({ q: query, sort_by: s, page: '1' });
+    setSearchParams(_params({ sort_by: s }));
+  };
+
+  const clearService = () => {
+    setSearchParams(_params({ service: '' }));
   };
 
   const totalPages = Math.ceil(total / limit);
@@ -125,6 +136,19 @@ const Attackers: React.FC = () => {
         <div className="section-header" style={{ justifyContent: 'space-between' }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
             <span className="matrix-text" style={{ fontSize: '0.8rem' }}>{total} THREATS PROFILED</span>
+            {serviceFilter && (
+              <button
+                onClick={clearService}
+                style={{
+                  display: 'inline-flex', alignItems: 'center', gap: '6px',
+                  fontSize: '0.75rem', padding: '2px 10px', letterSpacing: '1px',
+                  border: '1px solid var(--accent-color)', color: 'var(--accent-color)',
+                  background: 'rgba(238, 130, 238, 0.1)', cursor: 'pointer',
+                }}
+              >
+                {serviceFilter.toUpperCase()} &times;
+              </button>
+            )}
           </div>
 
           <div style={{ display: 'flex', alignItems: 'center', gap: '16px' }}>
@@ -196,7 +220,14 @@ const Attackers: React.FC = () => {
                   {/* Services */}
                   <div style={{ display: 'flex', flexWrap: 'wrap', gap: '4px', marginBottom: '8px' }}>
                     {a.services.map((svc) => (
-                      <span key={svc} className="service-badge">{svc.toUpperCase()}</span>
+                      <span
+                        key={svc}
+                        className="service-badge"
+                        style={{ cursor: 'pointer' }}
+                        onClick={(e) => { e.stopPropagation(); setSearchParams(_params({ service: svc })); }}
+                      >
+                        {svc.toUpperCase()}
+                      </span>
                     ))}
                   </div>
 

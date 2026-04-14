@@ -22,6 +22,7 @@ async def get_attackers(
     offset: int = Query(0, ge=0, le=2147483647),
     search: Optional[str] = None,
     sort_by: str = Query("recent", pattern="^(recent|active|traversals)$"),
+    service: Optional[str] = None,
     current_user: str = Depends(get_current_user),
 ) -> dict[str, Any]:
     """Retrieve paginated attacker profiles."""
@@ -31,6 +32,7 @@ async def get_attackers(
         return v
 
     s = _norm(search)
-    _data = await repo.get_attackers(limit=limit, offset=offset, search=s, sort_by=sort_by)
-    _total = await repo.get_total_attackers(search=s)
+    svc = _norm(service)
+    _data = await repo.get_attackers(limit=limit, offset=offset, search=s, sort_by=sort_by, service=svc)
+    _total = await repo.get_total_attackers(search=s, service=svc)
     return {"total": _total, "limit": limit, "offset": offset, "data": _data}

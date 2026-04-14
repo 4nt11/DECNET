@@ -84,9 +84,9 @@ class TestGetAttackers:
             )
 
         mock_repo.get_attackers.assert_awaited_once_with(
-            limit=50, offset=0, search="192.168", sort_by="recent",
+            limit=50, offset=0, search="192.168", sort_by="recent", service=None,
         )
-        mock_repo.get_total_attackers.assert_awaited_once_with(search="192.168")
+        mock_repo.get_total_attackers.assert_awaited_once_with(search="192.168", service=None)
 
     @pytest.mark.asyncio
     async def test_null_search_normalized(self):
@@ -102,7 +102,7 @@ class TestGetAttackers:
             )
 
         mock_repo.get_attackers.assert_awaited_once_with(
-            limit=50, offset=0, search=None, sort_by="recent",
+            limit=50, offset=0, search=None, sort_by="recent", service=None,
         )
 
     @pytest.mark.asyncio
@@ -119,7 +119,7 @@ class TestGetAttackers:
             )
 
         mock_repo.get_attackers.assert_awaited_once_with(
-            limit=50, offset=0, search=None, sort_by="active",
+            limit=50, offset=0, search=None, sort_by="active", service=None,
         )
 
     @pytest.mark.asyncio
@@ -136,8 +136,26 @@ class TestGetAttackers:
             )
 
         mock_repo.get_attackers.assert_awaited_once_with(
-            limit=50, offset=0, search=None, sort_by="recent",
+            limit=50, offset=0, search=None, sort_by="recent", service=None,
         )
+
+    @pytest.mark.asyncio
+    async def test_service_filter_forwarded(self):
+        from decnet.web.router.attackers.api_get_attackers import get_attackers
+
+        with patch("decnet.web.router.attackers.api_get_attackers.repo") as mock_repo:
+            mock_repo.get_attackers = AsyncMock(return_value=[])
+            mock_repo.get_total_attackers = AsyncMock(return_value=0)
+
+            await get_attackers(
+                limit=50, offset=0, search=None, sort_by="recent",
+                service="https", current_user="test-user",
+            )
+
+        mock_repo.get_attackers.assert_awaited_once_with(
+            limit=50, offset=0, search=None, sort_by="recent", service="https",
+        )
+        mock_repo.get_total_attackers.assert_awaited_once_with(search=None, service="https")
 
 
 # ─── GET /attackers/{uuid} ───────────────────────────────────────────────────

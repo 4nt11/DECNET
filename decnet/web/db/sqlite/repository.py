@@ -484,6 +484,7 @@ class SQLiteRepository(BaseRepository):
         offset: int = 0,
         search: Optional[str] = None,
         sort_by: str = "recent",
+        service: Optional[str] = None,
     ) -> List[dict[str, Any]]:
         order = {
             "active": desc(Attacker.event_count),
@@ -493,6 +494,8 @@ class SQLiteRepository(BaseRepository):
         statement = select(Attacker).order_by(order).offset(offset).limit(limit)
         if search:
             statement = statement.where(Attacker.ip.like(f"%{search}%"))
+        if service:
+            statement = statement.where(Attacker.services.like(f'%"{service}"%'))
 
         async with self.session_factory() as session:
             result = await session.execute(statement)
@@ -501,10 +504,12 @@ class SQLiteRepository(BaseRepository):
                 for a in result.scalars().all()
             ]
 
-    async def get_total_attackers(self, search: Optional[str] = None) -> int:
+    async def get_total_attackers(self, search: Optional[str] = None, service: Optional[str] = None) -> int:
         statement = select(func.count()).select_from(Attacker)
         if search:
             statement = statement.where(Attacker.ip.like(f"%{search}%"))
+        if service:
+            statement = statement.where(Attacker.services.like(f'%"{service}"%'))
 
         async with self.session_factory() as session:
             result = await session.execute(statement)

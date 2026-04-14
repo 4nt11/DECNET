@@ -331,7 +331,13 @@ const AttackerDetail: React.FC = () => {
         </div>
         <div style={{ padding: '16px', display: 'flex', flexWrap: 'wrap', gap: '8px' }}>
           {attacker.services.length > 0 ? attacker.services.map((svc) => (
-            <span key={svc} className="service-badge" style={{ fontSize: '0.85rem', padding: '4px 12px' }}>
+            <span
+              key={svc}
+              className="service-badge"
+              style={{ fontSize: '0.85rem', padding: '4px 12px', cursor: 'pointer' }}
+              onClick={() => navigate(`/attackers?service=${encodeURIComponent(svc)}`)}
+              title={`Filter attackers by ${svc.toUpperCase()}`}
+            >
               {svc.toUpperCase()}
             </span>
           )) : (

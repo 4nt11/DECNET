@@ -133,11 +133,12 @@ class BaseRepository(ABC):
         offset: int = 0,
         search: Optional[str] = None,
         sort_by: str = "recent",
+        service: Optional[str] = None,
     ) -> list[dict[str, Any]]:
         """Retrieve paginated attacker profile records."""
         pass
 
     @abstractmethod
-    async def get_total_attackers(self, search: Optional[str] = None) -> int:
+    async def get_total_attackers(self, search: Optional[str] = None, service: Optional[str] = None) -> int:
         """Retrieve the total count of attacker profile records, optionally filtered."""
         pass
