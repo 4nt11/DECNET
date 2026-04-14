@@ -253,7 +253,10 @@ const AttackerDetail: React.FC = () => {
         const res = await api.get(url);
         setCommands(res.data.data);
         setCmdTotal(res.data.total);
-      } catch {
+      } catch (err: any) {
+        if (err.response?.status === 422) {
+          alert("Fuck off.");
+        }
         setCommands([]);
         setCmdTotal(0);
       }
