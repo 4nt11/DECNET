@@ -202,3 +202,19 @@ async def _extract_bounty(repo: BaseRepository, log_data: dict[str, Any]) -> Non
                 "sni": _fields.get("sni") or None,
             },
         })
+
+    # 9. JARM fingerprint from active prober
+    _jarm = _fields.get("jarm_hash")
+    if _jarm and log_data.get("service") == "prober":
+        await repo.add_bounty({
+            "decky": log_data.get("decky"),
+            "service": "prober",
+            "attacker_ip": _fields.get("target_ip", "Unknown"),
+            "bounty_type": "fingerprint",
+            "payload": {
+                "fingerprint_type": "jarm",
+                "hash": _jarm,
+                "target_ip": _fields.get("target_ip"),
+                "target_port": _fields.get("target_port"),
+            },
+        })
