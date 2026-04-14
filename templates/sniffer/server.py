@@ -42,6 +42,10 @@ SERVICE_NAME: str = "sniffer"
 # Session TTL in seconds — drop half-open sessions after this
 _SESSION_TTL: float = 60.0
 
+# Dedup TTL — suppress identical fingerprint events from the same source IP
+# within this window (seconds). Set to 0 to disable dedup.
+_DEDUP_TTL: float = float(os.environ.get("DEDUP_TTL", "300"))
+
 # GREASE values per RFC 8701 — 0x0A0A, 0x1A1A, 0x2A2A, ..., 0xFAFA
 _GREASE: frozenset[int] = frozenset(0x0A0A + i * 0x1010 for i in range(16))
 
@@ -823,9 +827,59 @@ def _cleanup_sessions() -> None:
         _tcp_rtt.pop(k, None)
 
 
+# ─── Dedup cache ─────────────────────────────────────────────────────────────
+
+# Key: (src_ip, event_type, fingerprint_key) → timestamp of last emit
+_dedup_cache: dict[tuple[str, str, str], float] = {}
+_DEDUP_CLEANUP_INTERVAL: float = 60.0
+_dedup_last_cleanup: float = 0.0
+
+
+def _dedup_key_for(event_type: str, fields: dict[str, Any]) -> str:
+    """Build a dedup fingerprint from the most significant fields."""
+    if event_type == "tls_client_hello":
+        return fields.get("ja3", "") + "|" + fields.get("ja4", "")
+    if event_type == "tls_session":
+        return (fields.get("ja3", "") + "|" + fields.get("ja3s", "") +
+                "|" + fields.get("ja4", "") + "|" + fields.get("ja4s", ""))
+    if event_type == "tls_certificate":
+        return fields.get("subject_cn", "") + "|" + fields.get("issuer", "")
+    # tls_resumption or unknown — dedup on mechanisms
+    return fields.get("mechanisms", fields.get("resumption", ""))
+
+
+def _is_duplicate(event_type: str, fields: dict[str, Any]) -> bool:
+    """Return True if this event was already emitted within the dedup window."""
+    if _DEDUP_TTL <= 0:
+        return False
+
+    global _dedup_last_cleanup
+    now = time.monotonic()
+
+    # Periodic cleanup
+    if now - _dedup_last_cleanup > _DEDUP_CLEANUP_INTERVAL:
+        stale = [k for k, ts in _dedup_cache.items() if now - ts > _DEDUP_TTL]
+        for k in stale:
+            del _dedup_cache[k]
+        _dedup_last_cleanup = now
+
+    src_ip = fields.get("src_ip", "")
+    fp = _dedup_key_for(event_type, fields)
+    cache_key = (src_ip, event_type, fp)
+
+    last_seen = _dedup_cache.get(cache_key)
+    if last_seen is not None and now - last_seen < _DEDUP_TTL:
+        return True
+
+    _dedup_cache[cache_key] = now
+    return False
+
+
 # ─── Logging helpers ─────────────────────────────────────────────────────────
 
 def _log(event_type: str, severity: int = SEVERITY_INFO, **fields: Any) -> None:
+    if _is_duplicate(event_type, fields):
+        return
     line = syslog_line(SERVICE_NAME, NODE_NAME, event_type, severity=severity, **fields)
     write_syslog_file(line)
 
