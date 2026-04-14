@@ -277,46 +277,37 @@ const FpGeneric: React.FC<{ p: any }> = ({ p }) => (
   </div>
 );
 
-const FingerprintCard: React.FC<{ bounty: any }> = ({ bounty }) => {
-  const p = getPayload(bounty);
-  const fpType: string = p.fingerprint_type || 'unknown';
+const FingerprintGroup: React.FC<{ fpType: string; items: any[] }> = ({ fpType, items }) => {
   const label = fpTypeLabel[fpType] || fpType.toUpperCase().replace(/_/g, ' ');
   const icon = fpTypeIcon[fpType] || <Fingerprint size={14} />;
 
-  let content: React.ReactNode;
-  switch (fpType) {
-    case 'ja3':
-      content = <FpTlsHashes p={p} />;
-      break;
-    case 'ja4l':
-      content = <FpLatency p={p} />;
-      break;
-    case 'tls_resumption':
-      content = <FpResumption p={p} />;
-      break;
-    case 'tls_certificate':
-      content = <FpCertificate p={p} />;
-      break;
-    case 'jarm':
-      content = <FpJarm p={p} />;
-      break;
-    case 'hassh_server':
-      content = <FpHassh p={p} />;
-      break;
-    case 'tcpfp':
-      content = <FpTcpStack p={p} />;
-      break;
-    default:
-      content = <FpGeneric p={p} />;
-  }
-
   return (
-    <div className="fp-card">
-      <div className="fp-card-header">
-        <span className="fp-card-icon">{icon}</span>
-        <span className="fp-card-label">{label}</span>
+    <div style={{
+      border: '1px solid var(--border-color)',
+      padding: '12px 16px',
+    }}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '10px' }}>
+        <span style={{ opacity: 0.6 }}>{icon}</span>
+        <span style={{ fontSize: '0.75rem', letterSpacing: '2px', fontWeight: 'bold' }}>{label}</span>
+        {items.length > 1 && (
+          <span className="dim" style={{ fontSize: '0.7rem' }}>({items.length})</span>
+        )}
       </div>
-      <div className="fp-card-body">{content}</div>
+      <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
+        {items.map((fp, i) => {
+          const p = getPayload(fp);
+          switch (fpType) {
+            case 'ja3': return <FpTlsHashes key={i} p={p} />;
+            case 'ja4l': return <FpLatency key={i} p={p} />;
+            case 'tls_resumption': return <FpResumption key={i} p={p} />;
+            case 'tls_certificate': return <FpCertificate key={i} p={p} />;
+            case 'jarm': return <FpJarm key={i} p={p} />;
+            case 'hassh_server': return <FpHassh key={i} p={p} />;
+            case 'tcpfp': return <FpTcpStack key={i} p={p} />;
+            default: return <FpGeneric key={i} p={p} />;
+          }
+        })}
+      </div>
     </div>
   );
 };
@@ -591,7 +582,7 @@ const AttackerDetail: React.FC = () => {
         );
       })()}
 
-      {/* Fingerprints */}
+      {/* Fingerprints — grouped by type */}
       {(() => {
         const filteredFps = serviceFilter
           ? attacker.fingerprints.filter((fp) => {
@@ -599,16 +590,62 @@ const AttackerDetail: React.FC = () => {
               return p.service === serviceFilter;
             })
           : attacker.fingerprints;
+
+        // Group fingerprints by type
+        const groups: Record<string, any[]> = {};
+        filteredFps.forEach((fp) => {
+          const p = getPayload(fp);
+          const fpType: string = p.fingerprint_type || 'unknown';
+          if (!groups[fpType]) groups[fpType] = [];
+          groups[fpType].push(fp);
+        });
+
+        // Active probes first, then passive, then unknown
+        const activeTypes = ['jarm', 'hassh_server', 'tcpfp'];
+        const passiveTypes = ['ja3', 'ja4l', 'tls_resumption', 'tls_certificate', 'http_useragent', 'vnc_client_version'];
+        const knownTypes = [...activeTypes, ...passiveTypes];
+        const unknownTypes = Object.keys(groups).filter((t) => !knownTypes.includes(t));
+        const orderedTypes = [...activeTypes, ...passiveTypes, ...unknownTypes].filter((t) => groups[t]);
+
+        const hasActive = activeTypes.some((t) => groups[t]);
+        const hasPassive = [...passiveTypes, ...unknownTypes].some((t) => groups[t]);
+
         return (
           <div className="logs-section">
             <div className="section-header">
               <h2>FINGERPRINTS ({filteredFps.length}{serviceFilter ? ` / ${attacker.fingerprints.length}` : ''})</h2>
             </div>
             {filteredFps.length > 0 ? (
-              <div style={{ padding: '16px', display: 'flex', flexDirection: 'column', gap: '12px' }}>
-                {filteredFps.map((fp, i) => (
-                  <FingerprintCard key={i} bounty={fp} />
-                ))}
+              <div style={{ padding: '16px', display: 'flex', flexDirection: 'column', gap: '20px' }}>
+                {/* Active probes section */}
+                {hasActive && (
+                  <div>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '12px' }}>
+                      <Crosshair size={14} className="violet-accent" />
+                      <span style={{ fontSize: '0.75rem', letterSpacing: '2px', opacity: 0.6 }}>ACTIVE PROBES</span>
+                    </div>
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
+                      {activeTypes.filter((t) => groups[t]).map((fpType) => (
+                        <FingerprintGroup key={fpType} fpType={fpType} items={groups[fpType]} />
+                      ))}
+                    </div>
+                  </div>
+                )}
+
+                {/* Passive fingerprints section */}
+                {hasPassive && (
+                  <div>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '12px' }}>
+                      <Fingerprint size={14} className="violet-accent" />
+                      <span style={{ fontSize: '0.75rem', letterSpacing: '2px', opacity: 0.6 }}>PASSIVE FINGERPRINTS</span>
+                    </div>
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
+                      {[...passiveTypes, ...unknownTypes].filter((t) => groups[t]).map((fpType) => (
+                        <FingerprintGroup key={fpType} fpType={fpType} items={groups[fpType]} />
+                      ))}
+                    </div>
+                  </div>
+                )}
               </div>
             ) : (
               <div style={{ padding: '24px', textAlign: 'center', opacity: 0.5 }}>
