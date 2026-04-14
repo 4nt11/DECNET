@@ -120,8 +120,6 @@ def deploy(
     config_file: Optional[str] = typer.Option(None, "--config", "-c", help="Path to INI config file"),
     api: bool = typer.Option(False, "--api", help="Start the FastAPI backend to ingest and serve logs"),
     api_port: int = typer.Option(8000, "--api-port", help="Port for the backend API"),
-    probe_targets: Optional[str] = typer.Option(None, "--probe-targets", help="Comma-separated ip:port pairs for JARM active probing (e.g. 10.0.0.1:443,10.0.0.2:8443)"),
-    probe_interval: int = typer.Option(300, "--probe-interval", help="Seconds between JARM probe cycles (default: 300)"),
 ) -> None:
     """Deploy deckies to the LAN."""
     import os
@@ -298,18 +296,16 @@ def deploy(
         except (FileNotFoundError, subprocess.SubprocessError):
             console.print("[red]Failed to start API. Ensure 'uvicorn' is installed in the current environment.[/]")
 
-    if probe_targets and not dry_run:
+    if effective_log_file and not dry_run:
         import subprocess  # nosec B404
         import sys
-        console.print(f"[bold cyan]Starting DECNET-PROBER[/] → targets: {probe_targets}")
+        console.print("[bold cyan]Starting DECNET-PROBER[/] (auto-discovers attackers from log stream)")
         try:
             _prober_args = [
                 sys.executable, "-m", "decnet.cli", "probe",
-                "--targets", probe_targets,
-                "--interval", str(probe_interval),
+                "--daemon",
+                "--log-file", str(effective_log_file),
             ]
-            if effective_log_file:
-                _prober_args.extend(["--log-file", str(effective_log_file)])
             subprocess.Popen(  # nosec B603
                 _prober_args,
                 stdin=subprocess.DEVNULL,
@@ -323,17 +319,28 @@ def deploy(
 
 @app.command()
 def probe(
-    targets: str = typer.Option(..., "--targets", "-t", help="Comma-separated ip:port pairs to JARM fingerprint"),
-    log_file: str = typer.Option(DECNET_INGEST_LOG_FILE, "--log-file", "-f", help="Path for RFC 5424 syslog + .json output"),
+    log_file: str = typer.Option(DECNET_INGEST_LOG_FILE, "--log-file", "-f", help="Path for RFC 5424 syslog + .json output (reads attackers from .json, writes results to both)"),
     interval: int = typer.Option(300, "--interval", "-i", help="Seconds between probe cycles (default: 300)"),
     timeout: float = typer.Option(5.0, "--timeout", help="Per-probe TCP timeout in seconds"),
+    daemon: bool = typer.Option(False, "--daemon", "-d", help="Detach to background (used by deploy, no console output)"),
 ) -> None:
-    """Run JARM active fingerprinting against target hosts."""
+    """JARM-fingerprint all attackers discovered in the log stream."""
     import asyncio
     from decnet.prober import prober_worker
-    log.info("probe command invoked targets=%s interval=%d", targets, interval)
-    console.print(f"[bold cyan]DECNET-PROBER starting[/] → {targets}")
-    asyncio.run(prober_worker(log_file, targets, interval=interval, timeout=timeout))
+
+    if daemon:
+        # Suppress console output when running as background daemon
+        import os
+        log.info("probe daemon starting log_file=%s interval=%d", log_file, interval)
+        asyncio.run(prober_worker(log_file, interval=interval, timeout=timeout))
+    else:
+        log.info("probe command invoked log_file=%s interval=%d", log_file, interval)
+        console.print(f"[bold cyan]DECNET-PROBER[/] watching {log_file} for attackers (interval: {interval}s)")
+        console.print("[dim]Press Ctrl+C to stop[/]")
+        try:
+            asyncio.run(prober_worker(log_file, interval=interval, timeout=timeout))
+        except KeyboardInterrupt:
+            console.print("\n[yellow]DECNET-PROBER stopped.[/]")
 
 
 @app.command()

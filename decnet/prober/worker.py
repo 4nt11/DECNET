@@ -1,10 +1,12 @@
 """
 DECNET-PROBER standalone worker.
 
-Runs as a detached host-level process. Probes targets on a configurable
-interval and writes results as RFC 5424 syslog + JSON to the same log
-files the collector uses. The ingester tails the JSON file and extracts
-JARM bounties automatically.
+Runs as a detached host-level process. Discovers attacker IPs by tailing the
+collector's JSON log file, then JARM-probes them on common C2/TLS ports.
+Results are written as RFC 5424 syslog + JSON to the same log files.
+
+Target discovery is fully automatic — every unique attacker IP seen in the
+log stream gets probed. No manual target list required.
 
 Tech debt: writing directly to the collector's log files couples the
 prober to the collector's file format. A future refactor should introduce
@@ -21,9 +23,16 @@ from pathlib import Path
 from typing import Any
 
 from decnet.logging import get_logger
-from decnet.prober.jarm import jarm_hash
+from decnet.prober.jarm import JARM_EMPTY_HASH, jarm_hash
 
 logger = get_logger("prober")
+
+# ─── Default ports to JARM-probe on each attacker IP ─────────────────────────
+# Common C2 callback / TLS server ports (Cobalt Strike, Sliver, Metasploit, etc.)
+
+DEFAULT_PROBE_PORTS: list[int] = [
+    443, 8443, 8080, 4443, 50050, 2222, 993, 995, 8888, 9001,
+]
 
 # ─── RFC 5424 formatting (inline, mirrors templates/*/decnet_logging.py) ─────
 
@@ -144,100 +153,181 @@ def _write_event(
             f.flush()
 
 
-# ─── Target parser ───────────────────────────────────────────────────────────
+# ─── Target discovery from log stream ────────────────────────────────────────
 
-def _parse_targets(raw: str) -> list[tuple[str, int]]:
-    """Parse 'ip:port,ip:port,...' into a list of (host, port) tuples."""
-    targets: list[tuple[str, int]] = []
-    for entry in raw.split(","):
-        entry = entry.strip()
-        if not entry:
-            continue
-        if ":" not in entry:
-            logger.warning("prober: skipping malformed target %r (missing port)", entry)
-            continue
-        host, _, port_str = entry.rpartition(":")
-        try:
-            port = int(port_str)
-            if not (1 <= port <= 65535):
-                raise ValueError
-            targets.append((host, port))
-        except ValueError:
-            logger.warning("prober: skipping malformed target %r (bad port)", entry)
-    return targets
+def _discover_attackers(json_path: Path, position: int) -> tuple[set[str], int]:
+    """
+    Read new JSON log lines from the given position and extract unique
+    attacker IPs. Returns (new_ips, new_position).
+
+    Only considers IPs that are not "Unknown" and come from events that
+    indicate real attacker interaction (not prober's own events).
+    """
+    new_ips: set[str] = set()
+
+    if not json_path.exists():
+        return new_ips, position
+
+    size = json_path.stat().st_size
+    if size < position:
+        position = 0  # file rotated
+
+    if size == position:
+        return new_ips, position
+
+    with open(json_path, "r", encoding="utf-8", errors="replace") as f:
+        f.seek(position)
+        while True:
+            line = f.readline()
+            if not line:
+                break
+            if not line.endswith("\n"):
+                break  # partial line
+
+            try:
+                record = json.loads(line.strip())
+            except json.JSONDecodeError:
+                position = f.tell()
+                continue
+
+            # Skip our own events
+            if record.get("service") == "prober":
+                position = f.tell()
+                continue
+
+            ip = record.get("attacker_ip", "Unknown")
+            if ip != "Unknown" and ip:
+                new_ips.add(ip)
+
+            position = f.tell()
+
+    return new_ips, position
 
 
 # ─── Probe cycle ─────────────────────────────────────────────────────────────
 
 def _probe_cycle(
-    targets: list[tuple[str, int]],
+    targets: set[str],
+    probed: dict[str, set[int]],
+    ports: list[int],
     log_path: Path,
     json_path: Path,
     timeout: float = 5.0,
 ) -> None:
-    for host, port in targets:
-        try:
-            h = jarm_hash(host, port, timeout=timeout)
-            _write_event(
-                log_path, json_path,
-                "jarm_fingerprint",
-                target_ip=host,
-                target_port=str(port),
-                jarm_hash=h,
-                msg=f"JARM {host}:{port} = {h}",
-            )
-            logger.info("prober: JARM %s:%d = %s", host, port, h)
-        except Exception as exc:
-            _write_event(
-                log_path, json_path,
-                "prober_error",
-                severity=_SEVERITY_WARNING,
-                target_ip=host,
-                target_port=str(port),
-                error=str(exc),
-                msg=f"JARM probe failed for {host}:{port}: {exc}",
-            )
-            logger.warning("prober: JARM probe failed %s:%d: %s", host, port, exc)
+    """
+    Probe all known attacker IPs on the configured ports.
+
+    Args:
+        targets: set of attacker IPs to probe
+        probed: dict mapping IP -> set of ports already successfully probed
+        ports: list of ports to probe on each IP
+        log_path: RFC 5424 log file
+        json_path: JSON log file
+        timeout: per-probe TCP timeout
+    """
+    for ip in sorted(targets):
+        already_done = probed.get(ip, set())
+        ports_to_probe = [p for p in ports if p not in already_done]
+
+        if not ports_to_probe:
+            continue
+
+        for port in ports_to_probe:
+            try:
+                h = jarm_hash(ip, port, timeout=timeout)
+                if h == JARM_EMPTY_HASH:
+                    # No TLS server on this port — don't log, don't reprobed
+                    probed.setdefault(ip, set()).add(port)
+                    continue
+
+                _write_event(
+                    log_path, json_path,
+                    "jarm_fingerprint",
+                    target_ip=ip,
+                    target_port=str(port),
+                    jarm_hash=h,
+                    msg=f"JARM {ip}:{port} = {h}",
+                )
+                logger.info("prober: JARM %s:%d = %s", ip, port, h)
+                probed.setdefault(ip, set()).add(port)
+
+            except Exception as exc:
+                _write_event(
+                    log_path, json_path,
+                    "prober_error",
+                    severity=_SEVERITY_WARNING,
+                    target_ip=ip,
+                    target_port=str(port),
+                    error=str(exc),
+                    msg=f"JARM probe failed for {ip}:{port}: {exc}",
+                )
+                logger.warning("prober: JARM probe failed %s:%d: %s", ip, port, exc)
+                # Mark as probed to avoid infinite retries
+                probed.setdefault(ip, set()).add(port)
 
 
 # ─── Main worker ─────────────────────────────────────────────────────────────
 
 async def prober_worker(
     log_file: str,
-    targets_raw: str,
     interval: int = 300,
     timeout: float = 5.0,
+    ports: list[int] | None = None,
 ) -> None:
     """
     Main entry point for the standalone prober process.
 
+    Discovers attacker IPs automatically by tailing the JSON log file,
+    then JARM-probes each IP on common C2 ports.
+
     Args:
         log_file: base path for log files (RFC 5424 to .log, JSON to .json)
-        targets_raw: comma-separated ip:port pairs
         interval: seconds between probe cycles
         timeout: per-probe TCP timeout
+        ports: list of ports to probe (defaults to DEFAULT_PROBE_PORTS)
     """
-    targets = _parse_targets(targets_raw)
-    if not targets:
-        logger.error("prober: no valid targets, exiting")
-        return
+    probe_ports = ports or DEFAULT_PROBE_PORTS
 
     log_path = Path(log_file)
     json_path = log_path.with_suffix(".json")
     log_path.parent.mkdir(parents=True, exist_ok=True)
 
-    logger.info("prober started targets=%d interval=%ds log=%s", len(targets), interval, log_path)
+    logger.info(
+        "prober started interval=%ds ports=%s log=%s",
+        interval, ",".join(str(p) for p in probe_ports), log_path,
+    )
 
     _write_event(
         log_path, json_path,
         "prober_startup",
-        target_count=str(len(targets)),
         interval=str(interval),
-        msg=f"DECNET-PROBER started with {len(targets)} targets, interval {interval}s",
+        probe_ports=",".join(str(p) for p in probe_ports),
+        msg=f"DECNET-PROBER started, interval {interval}s, "
+            f"ports {','.join(str(p) for p in probe_ports)}",
     )
 
+    known_attackers: set[str] = set()
+    probed: dict[str, set[int]] = {}  # IP -> set of ports already probed
+    log_position: int = 0
+
     while True:
-        await asyncio.to_thread(
-            _probe_cycle, targets, log_path, json_path, timeout,
+        # Discover new attacker IPs from the log stream
+        new_ips, log_position = await asyncio.to_thread(
+            _discover_attackers, json_path, log_position,
         )
+
+        if new_ips - known_attackers:
+            fresh = new_ips - known_attackers
+            known_attackers.update(fresh)
+            logger.info(
+                "prober: discovered %d new attacker(s), total=%d",
+                len(fresh), len(known_attackers),
+            )
+
+        if known_attackers:
+            await asyncio.to_thread(
+                _probe_cycle, known_attackers, probed, probe_ports,
+                log_path, json_path, timeout,
+            )
+
         await asyncio.sleep(interval)

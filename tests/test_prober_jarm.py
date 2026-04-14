@@ -60,15 +60,6 @@ class TestBuildClientHello:
             # supported_versions extension type = 0x002B
             assert b"\x00\x2b" in data, f"Probe {idx} missing supported_versions"
 
-    def test_non_tls13_probes_lack_supported_versions(self):
-        """Probes 0, 1, 2, 7, 8 should NOT include supported_versions."""
-        for idx in (0, 1, 2, 7, 8):
-            data = _build_client_hello(idx, host="example.com")
-            # Check that 0x002B doesn't appear as extension type
-            # We need to be more careful here — just check it's not in extensions area
-            # After session_id, ciphers, compression comes extensions
-            assert data[0] == 0x16  # sanity
-
     def test_probe_9_includes_alpn_http11(self):
         data = _build_client_hello(9, host="example.com")
         assert b"http/1.1" in data
@@ -129,7 +120,6 @@ class TestParseServerHello:
 
     def test_tls13_via_supported_versions(self):
         """When supported_versions extension says TLS 1.3, version should be tls13."""
-        # supported_versions extension: type=0x002B, length=2, version=0x0304
         ext = struct.pack("!HHH", 0x002B, 2, 0x0304)
         data = _make_server_hello(cipher=0x1301, version=0x0303, extensions=ext)
         result = _parse_server_hello(data)
@@ -153,7 +143,6 @@ class TestParseServerHello:
 
     def test_non_server_hello_returns_separator(self):
         """A Certificate message (type 0x0B) should not parse as ServerHello."""
-        # Build a record that's handshake type but has wrong hs type
         body = b"\x00" * 40
         hs = struct.pack("B", 0x0B) + struct.pack("!I", len(body))[1:] + body
         record = struct.pack("B", 0x16) + struct.pack("!H", 0x0303) + struct.pack("!H", len(hs)) + hs
