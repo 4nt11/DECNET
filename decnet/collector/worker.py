@@ -24,7 +24,7 @@ _RFC5424_RE = re.compile(
     r"(\S+) "       # 1: TIMESTAMP
     r"(\S+) "       # 2: HOSTNAME (decky name)
     r"(\S+) "       # 3: APP-NAME (service)
-    r"- "           # PROCID always NILVALUE
+    r"\S+ "         # PROCID (NILVALUE or PID)
     r"(\S+) "       # 4: MSGID (event_type)
     r"(.+)$",       # 5: SD element + optional MSG
 )
@@ -32,8 +32,6 @@ _SD_BLOCK_RE = re.compile(r'\[decnet@55555\s+(.*?)\]', re.DOTALL)
 _PARAM_RE = re.compile(r'(\w+)="((?:[^"\\]|\\.)*)"')
 _IP_FIELDS = ("src_ip", "src", "client_ip", "remote_ip", "ip")
 
-# bash PROMPT_COMMAND logger output: "CMD uid=0 pwd=/root cmd=ls -lah"
-_BASH_CMD_RE = re.compile(r"CMD\s+uid=(\S+)\s+pwd=(\S+)\s+cmd=(.*)")
 
 
 
@@ -73,16 +71,6 @@ def parse_rfc5424(line: str) -> Optional[dict[str, Any]]:
         ts_formatted = datetime.fromisoformat(ts_raw).strftime("%Y-%m-%d %H:%M:%S")
     except ValueError:
         ts_formatted = ts_raw
-
-    # Normalize bash CMD lines from SSH honeypot PROMPT_COMMAND logger
-    if service == "bash" and msg:
-        cmd_match = _BASH_CMD_RE.match(msg)
-        if cmd_match:
-            service = "ssh"
-            event_type = "command"
-            fields["uid"] = cmd_match.group(1)
-            fields["pwd"] = cmd_match.group(2)
-            fields["command"] = cmd_match.group(3)
 
     return {
         "timestamp": ts_formatted,

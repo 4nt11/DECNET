@@ -65,6 +65,8 @@ RUN mkdir -p /root/projects /root/backups /var/www/html && \
     printf 'DB_HOST=10.0.0.5\nDB_USER=admin\nDB_PASS=changeme123\nDB_NAME=prod_db\n' > /root/projects/.env && \
     printf '[Unit]\nDescription=App Server\n[Service]\nExecStart=/usr/bin/python3 /opt/app/server.py\n' > /root/projects/app.service
 
+COPY decnet_logging.py /opt/decnet_logging.py
+COPY log_relay.py /opt/log_relay.py
 COPY entrypoint.sh /entrypoint.sh
 RUN chmod +x /entrypoint.sh
 

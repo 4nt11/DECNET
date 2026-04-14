@@ -131,30 +131,12 @@ class TestParseRfc5424:
         assert result["msg"] == "login attempt"
 
 
-    def test_bash_cmd_normalized_to_ssh_command(self):
-        line = '<14>1 2026-04-14T05:48:12.628417+00:00 SRV-BRAVO-13 bash - - -  CMD uid=0 pwd=/root cmd=ls /var/www/html'
+    def test_non_nil_procid_accepted(self):
+        line = '<38>1 2026-04-14T05:48:12.611006+00:00 SRV-BRAVO-13 sshd 282 - -  Accepted password for root from 192.168.1.5 port 50854 ssh2'
         result = parse_rfc5424(line)
         assert result is not None
-        assert result["service"] == "ssh"
-        assert result["event_type"] == "command"
-        assert result["fields"]["command"] == "ls /var/www/html"
-        assert result["fields"]["uid"] == "0"
-        assert result["fields"]["pwd"] == "/root"
-
-    def test_bash_cmd_simple_command(self):
-        line = '<14>1 2026-04-14T05:48:13.332072+00:00 SRV-BRAVO-13 bash - - -  CMD uid=0 pwd=/root cmd=ls'
-        result = parse_rfc5424(line)
-        assert result is not None
-        assert result["service"] == "ssh"
-        assert result["event_type"] == "command"
-        assert result["fields"]["command"] == "ls"
-
-    def test_bash_non_cmd_not_normalized(self):
-        line = '<14>1 2026-04-14T05:48:12.628417+00:00 SRV-BRAVO-13 bash - - - some other bash message'
-        result = parse_rfc5424(line)
-        assert result is not None
-        assert result["service"] == "bash"
-        assert result["event_type"] == "-"
+        assert result["service"] == "sshd"
+        assert result["decky"] == "SRV-BRAVO-13"
 
 
 class TestIsServiceContainer:

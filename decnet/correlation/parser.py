@@ -26,7 +26,7 @@ _RFC5424_RE = re.compile(
     r"(\S+) "       # 1: TIMESTAMP
     r"(\S+) "       # 2: HOSTNAME (decky name)
     r"(\S+) "       # 3: APP-NAME (service)
-    r"- "           # PROCID always NILVALUE
+    r"\S+ "         # PROCID (NILVALUE or PID)
     r"(\S+) "       # 4: MSGID (event_type)
     r"(.+)$",       # 5: SD element + optional MSG
 )
@@ -40,8 +40,6 @@ _PARAM_RE = re.compile(r'(\w+)="((?:[^"\\]|\\.)*)"')
 # Field names to probe for attacker IP, in priority order
 _IP_FIELDS = ("src_ip", "src", "client_ip", "remote_ip", "ip")
 
-# bash PROMPT_COMMAND logger output: "CMD uid=0 pwd=/root cmd=ls -lah"
-_BASH_CMD_RE = re.compile(r"CMD\s+uid=(\S+)\s+pwd=(\S+)\s+cmd=(.*)")
 
 
 @dataclass
@@ -102,18 +100,6 @@ def parse_line(line: str) -> LogEvent | None:
         return None
 
     fields = _parse_sd_params(sd_rest)
-
-    # Normalize bash CMD lines from SSH honeypot PROMPT_COMMAND logger
-    if service == "bash":
-        # Free-text MSG follows the SD element (which is "-" for these lines)
-        msg = sd_rest.lstrip("- ").strip()
-        cmd_match = _BASH_CMD_RE.match(msg)
-        if cmd_match:
-            service = "ssh"
-            event_type = "command"
-            fields["uid"] = cmd_match.group(1)
-            fields["pwd"] = cmd_match.group(2)
-            fields["command"] = cmd_match.group(3)
 
     attacker_ip = _extract_attacker_ip(fields)
 
