@@ -114,6 +114,20 @@ def test_ehlo_returns_250_multiline(relay_mod):
     assert "PIPELINING" in combined
 
 
+def test_ehlo_empty_domain_rejected(relay_mod):
+    proto, _, written = _make_protocol(relay_mod)
+    _send(proto, "EHLO")
+    replies = _replies(written)
+    assert any(r.startswith("501") for r in replies)
+
+
+def test_helo_empty_domain_rejected(relay_mod):
+    proto, _, written = _make_protocol(relay_mod)
+    _send(proto, "HELO")
+    replies = _replies(written)
+    assert any(r.startswith("501") for r in replies)
+
+
 # ── OPEN RELAY MODE ───────────────────────────────────────────────────────────
 
 class TestOpenRelay:

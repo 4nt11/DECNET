@@ -142,6 +142,11 @@ class SMTPProtocol(asyncio.Protocol):
         args  = parts[1] if len(parts) > 1 else ""
 
         if cmd in ("EHLO", "HELO"):
+            if not args:
+                self._transport.write(
+                    f"501 5.5.4 Syntax: {cmd} hostname\r\n".encode()
+                )
+                return
             _log("ehlo", src=self._peer[0], domain=args)
             self._transport.write(
                 f"250-{_SMTP_MTA}\r\n"
