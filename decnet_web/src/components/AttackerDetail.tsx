@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
-import { ArrowLeft, ChevronLeft, ChevronRight, Crosshair, Fingerprint, Shield, Clock, Wifi, Lock, FileKey } from 'lucide-react';
+import { ArrowLeft, ChevronDown, ChevronLeft, ChevronRight, ChevronUp, Crosshair, Fingerprint, Shield, Clock, Wifi, Lock, FileKey } from 'lucide-react';
 import api from '../utils/api';
 import './Dashboard.css';
 
@@ -312,6 +312,31 @@ const FingerprintGroup: React.FC<{ fpType: string; items: any[] }> = ({ fpType, 
   );
 };
 
+// ─── Collapsible section ────────────────────────────────────────────────────
+
+const Section: React.FC<{
+  title: React.ReactNode;
+  right?: React.ReactNode;
+  open: boolean;
+  onToggle: () => void;
+  children: React.ReactNode;
+}> = ({ title, right, open, onToggle, children }) => (
+  <div className="logs-section">
+    <div
+      className="section-header"
+      style={{ justifyContent: 'space-between', cursor: 'pointer', userSelect: 'none' }}
+      onClick={onToggle}
+    >
+      <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+        {open ? <ChevronUp size={16} className="dim" /> : <ChevronDown size={16} className="dim" />}
+        <h2>{title}</h2>
+      </div>
+      {right && <div onClick={(e) => e.stopPropagation()}>{right}</div>}
+    </div>
+    {open && children}
+  </div>
+);
+
 // ─── Main component ─────────────────────────────────────────────────────────
 
 const AttackerDetail: React.FC = () => {
@@ -321,6 +346,16 @@ const AttackerDetail: React.FC = () => {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [serviceFilter, setServiceFilter] = useState<string | null>(null);
+
+  // Section collapse state
+  const [openSections, setOpenSections] = useState<Record<string, boolean>>({
+    timeline: true,
+    services: true,
+    deckies: true,
+    commands: true,
+    fingerprints: true,
+  });
+  const toggle = (key: string) => setOpenSections((prev) => ({ ...prev, [key]: !prev[key] }));
 
   // Commands pagination state
   const [commands, setCommands] = useState<AttackerData['commands']>([]);
@@ -441,10 +476,7 @@ const AttackerDetail: React.FC = () => {
       </div>
 
       {/* Timestamps */}
-      <div className="logs-section">
-        <div className="section-header">
-          <h2>TIMELINE</h2>
-        </div>
+      <Section title="TIMELINE" open={openSections.timeline} onToggle={() => toggle('timeline')}>
         <div style={{ padding: '16px', display: 'flex', gap: '32px', fontSize: '0.85rem' }}>
           <div>
             <span className="dim">FIRST SEEN: </span>
@@ -459,13 +491,10 @@ const AttackerDetail: React.FC = () => {
             <span className="dim">{new Date(attacker.updated_at).toLocaleString()}</span>
           </div>
         </div>
-      </div>
+      </Section>
 
       {/* Services */}
-      <div className="logs-section">
-        <div className="section-header">
-          <h2>SERVICES TARGETED</h2>
-        </div>
+      <Section title="SERVICES TARGETED" open={openSections.services} onToggle={() => toggle('services')}>
         <div style={{ padding: '16px', display: 'flex', flexWrap: 'wrap', gap: '8px' }}>
           {attacker.services.length > 0 ? attacker.services.map((svc) => {
             const isActive = serviceFilter === svc;
@@ -491,13 +520,10 @@ const AttackerDetail: React.FC = () => {
             <span className="dim">No services recorded</span>
           )}
         </div>
-      </div>
+      </Section>
 
       {/* Deckies & Traversal */}
-      <div className="logs-section">
-        <div className="section-header">
-          <h2>DECKY INTERACTIONS</h2>
-        </div>
+      <Section title="DECKY INTERACTIONS" open={openSections.deckies} onToggle={() => toggle('deckies')}>
         <div style={{ padding: '16px', fontSize: '0.85rem' }}>
           {attacker.traversal_path ? (
             <div>
@@ -515,39 +541,40 @@ const AttackerDetail: React.FC = () => {
             </div>
           )}
         </div>
-      </div>
+      </Section>
 
       {/* Commands */}
       {(() => {
         const cmdTotalPages = Math.ceil(cmdTotal / cmdLimit);
         return (
-          <div className="logs-section">
-            <div className="section-header" style={{ justifyContent: 'space-between' }}>
-              <h2>COMMANDS ({cmdTotal}{serviceFilter ? ` ${serviceFilter.toUpperCase()}` : ''})</h2>
-              {cmdTotalPages > 1 && (
-                <div style={{ display: 'flex', alignItems: 'center', gap: '16px' }}>
-                  <span className="dim" style={{ fontSize: '0.8rem' }}>
-                    Page {cmdPage} of {cmdTotalPages}
-                  </span>
-                  <div style={{ display: 'flex', gap: '8px' }}>
-                    <button
-                      disabled={cmdPage <= 1}
-                      onClick={() => setCmdPage(cmdPage - 1)}
-                      style={{ padding: '4px', border: '1px solid var(--border-color)', opacity: cmdPage <= 1 ? 0.3 : 1 }}
-                    >
-                      <ChevronLeft size={16} />
-                    </button>
-                    <button
-                      disabled={cmdPage >= cmdTotalPages}
-                      onClick={() => setCmdPage(cmdPage + 1)}
-                      style={{ padding: '4px', border: '1px solid var(--border-color)', opacity: cmdPage >= cmdTotalPages ? 0.3 : 1 }}
-                    >
-                      <ChevronRight size={16} />
-                    </button>
-                  </div>
+          <Section
+            title={<>COMMANDS ({cmdTotal}{serviceFilter ? ` ${serviceFilter.toUpperCase()}` : ''})</>}
+            open={openSections.commands}
+            onToggle={() => toggle('commands')}
+            right={openSections.commands && cmdTotalPages > 1 ? (
+              <div style={{ display: 'flex', alignItems: 'center', gap: '16px' }}>
+                <span className="dim" style={{ fontSize: '0.8rem' }}>
+                  Page {cmdPage} of {cmdTotalPages}
+                </span>
+                <div style={{ display: 'flex', gap: '8px' }}>
+                  <button
+                    disabled={cmdPage <= 1}
+                    onClick={() => setCmdPage(cmdPage - 1)}
+                    style={{ padding: '4px', border: '1px solid var(--border-color)', opacity: cmdPage <= 1 ? 0.3 : 1 }}
+                  >
+                    <ChevronLeft size={16} />
+                  </button>
+                  <button
+                    disabled={cmdPage >= cmdTotalPages}
+                    onClick={() => setCmdPage(cmdPage + 1)}
+                    style={{ padding: '4px', border: '1px solid var(--border-color)', opacity: cmdPage >= cmdTotalPages ? 0.3 : 1 }}
+                  >
+                    <ChevronRight size={16} />
+                  </button>
                 </div>
-              )}
-            </div>
+              </div>
+            ) : undefined}
+          >
             {commands.length > 0 ? (
               <div className="logs-table-container">
                 <table className="logs-table">
@@ -578,7 +605,7 @@ const AttackerDetail: React.FC = () => {
                 {serviceFilter ? `NO ${serviceFilter.toUpperCase()} COMMANDS CAPTURED` : 'NO COMMANDS CAPTURED'}
               </div>
             )}
-          </div>
+          </Section>
         );
       })()}
 
@@ -605,16 +632,16 @@ const AttackerDetail: React.FC = () => {
         const passiveTypes = ['ja3', 'ja4l', 'tls_resumption', 'tls_certificate', 'http_useragent', 'vnc_client_version'];
         const knownTypes = [...activeTypes, ...passiveTypes];
         const unknownTypes = Object.keys(groups).filter((t) => !knownTypes.includes(t));
-        const orderedTypes = [...activeTypes, ...passiveTypes, ...unknownTypes].filter((t) => groups[t]);
 
         const hasActive = activeTypes.some((t) => groups[t]);
         const hasPassive = [...passiveTypes, ...unknownTypes].some((t) => groups[t]);
 
         return (
-          <div className="logs-section">
-            <div className="section-header">
-              <h2>FINGERPRINTS ({filteredFps.length}{serviceFilter ? ` / ${attacker.fingerprints.length}` : ''})</h2>
-            </div>
+          <Section
+            title={<>FINGERPRINTS ({filteredFps.length}{serviceFilter ? ` / ${attacker.fingerprints.length}` : ''})</>}
+            open={openSections.fingerprints}
+            onToggle={() => toggle('fingerprints')}
+          >
             {filteredFps.length > 0 ? (
               <div style={{ padding: '16px', display: 'flex', flexDirection: 'column', gap: '20px' }}>
                 {/* Active probes section */}
@@ -652,7 +679,7 @@ const AttackerDetail: React.FC = () => {
                 {serviceFilter ? `NO ${serviceFilter.toUpperCase()} FINGERPRINTS CAPTURED` : 'NO FINGERPRINTS CAPTURED'}
               </div>
             )}
-          </div>
+          </Section>
         );
       })()}
 
