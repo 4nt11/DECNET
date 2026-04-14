@@ -208,7 +208,7 @@ def _compute_hassh(kex: str, enc: str, mac: str, comp: str) -> str:
     Returns 32-character lowercase hex digest.
     """
     raw = f"{kex};{enc};{mac};{comp}"
-    return hashlib.md5(raw.encode("utf-8")).hexdigest()
+    return hashlib.md5(raw.encode("utf-8")).hexdigest()  # nosec B324
 
 
 # ─── Public API ─────────────────────────────────────────────────────────────

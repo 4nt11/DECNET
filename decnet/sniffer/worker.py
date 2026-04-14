@@ -14,9 +14,7 @@ import asyncio
 import os
 import subprocess
 import threading
-import time
 from pathlib import Path
-from typing import Any
 
 from decnet.logging import get_logger
 from decnet.network import HOST_MACVLAN_IFACE

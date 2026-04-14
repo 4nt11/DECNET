@@ -297,7 +297,7 @@ def _parse_server_hello(data: bytes) -> str:
         if data[0] != _CONTENT_HANDSHAKE:
             return "|||"
 
-        record_version = struct.unpack_from("!H", data, 1)[0]
+        struct.unpack_from("!H", data, 1)[0]  # record_version (unused)
         record_len = struct.unpack_from("!H", data, 3)[0]
         hs = data[5: 5 + record_len]
 

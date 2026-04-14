@@ -12,7 +12,6 @@ from __future__ import annotations
 import hashlib
 import struct
 import time
-from pathlib import Path
 from typing import Any, Callable
 
 from decnet.sniffer.syslog import SEVERITY_INFO, SEVERITY_WARNING, syslog_line
@@ -519,7 +518,7 @@ def _ja3(ch: dict[str, Any]) -> tuple[str, str]:
         "-".join(str(p) for p in ch["ec_point_formats"]),
     ]
     ja3_str = ",".join(parts)
-    return ja3_str, hashlib.md5(ja3_str.encode()).hexdigest()
+    return ja3_str, hashlib.md5(ja3_str.encode()).hexdigest()  # nosec B324
 
 
 def _ja3s(sh: dict[str, Any]) -> tuple[str, str]:
@@ -529,7 +528,7 @@ def _ja3s(sh: dict[str, Any]) -> tuple[str, str]:
         "-".join(str(e) for e in sh["extensions"]),
     ]
     ja3s_str = ",".join(parts)
-    return ja3s_str, hashlib.md5(ja3s_str.encode()).hexdigest()
+    return ja3s_str, hashlib.md5(ja3s_str.encode()).hexdigest()  # nosec B324
 
 
 # ─── JA4 / JA4S ─────────────────────────────────────────────────────────────
