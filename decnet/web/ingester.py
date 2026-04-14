@@ -143,11 +143,62 @@ async def _extract_bounty(repo: BaseRepository, log_data: dict[str, Any]) -> Non
                 "fingerprint_type": "ja3",
                 "ja3": _ja3,
                 "ja3s": _fields.get("ja3s"),
+                "ja4": _fields.get("ja4"),
+                "ja4s": _fields.get("ja4s"),
                 "tls_version": _fields.get("tls_version"),
                 "sni": _fields.get("sni") or None,
                 "alpn": _fields.get("alpn") or None,
                 "dst_port": _fields.get("dst_port"),
                 "raw_ciphers": _fields.get("raw_ciphers"),
                 "raw_extensions": _fields.get("raw_extensions"),
+            },
+        })
+
+    # 6. JA4L latency fingerprint from sniffer
+    _ja4l_rtt = _fields.get("ja4l_rtt_ms")
+    if _ja4l_rtt and log_data.get("service") == "sniffer":
+        await repo.add_bounty({
+            "decky": log_data.get("decky"),
+            "service": "sniffer",
+            "attacker_ip": log_data.get("attacker_ip"),
+            "bounty_type": "fingerprint",
+            "payload": {
+                "fingerprint_type": "ja4l",
+                "rtt_ms": _ja4l_rtt,
+                "client_ttl": _fields.get("ja4l_client_ttl"),
+            },
+        })
+
+    # 7. TLS session resumption behavior
+    _resumption = _fields.get("resumption")
+    if _resumption and log_data.get("service") == "sniffer":
+        await repo.add_bounty({
+            "decky": log_data.get("decky"),
+            "service": "sniffer",
+            "attacker_ip": log_data.get("attacker_ip"),
+            "bounty_type": "fingerprint",
+            "payload": {
+                "fingerprint_type": "tls_resumption",
+                "mechanisms": _resumption,
+            },
+        })
+
+    # 8. TLS certificate details (TLS 1.2 only — passive extraction)
+    _subject_cn = _fields.get("subject_cn")
+    if _subject_cn and log_data.get("service") == "sniffer":
+        await repo.add_bounty({
+            "decky": log_data.get("decky"),
+            "service": "sniffer",
+            "attacker_ip": log_data.get("attacker_ip"),
+            "bounty_type": "fingerprint",
+            "payload": {
+                "fingerprint_type": "tls_certificate",
+                "subject_cn": _subject_cn,
+                "issuer": _fields.get("issuer"),
+                "self_signed": _fields.get("self_signed"),
+                "not_before": _fields.get("not_before"),
+                "not_after": _fields.get("not_after"),
+                "sans": _fields.get("sans"),
+                "sni": _fields.get("sni") or None,
             },
         })
