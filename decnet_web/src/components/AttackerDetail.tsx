@@ -32,6 +32,9 @@ const fpTypeLabel: Record<string, string> = {
   tls_certificate: 'CERTIFICATE',
   http_useragent: 'HTTP USER-AGENT',
   vnc_client_version: 'VNC CLIENT',
+  jarm: 'JARM',
+  hassh_server: 'HASSH SERVER',
+  tcpfp: 'TCP/IP STACK',
 };
 
 const fpTypeIcon: Record<string, React.ReactNode> = {
@@ -41,6 +44,9 @@ const fpTypeIcon: Record<string, React.ReactNode> = {
   tls_certificate: <FileKey size={14} />,
   http_useragent: <Shield size={14} />,
   vnc_client_version: <Lock size={14} />,
+  jarm: <Crosshair size={14} />,
+  hassh_server: <Lock size={14} />,
+  tcpfp: <Wifi size={14} />,
 };
 
 function getPayload(bounty: any): any {
@@ -159,6 +165,104 @@ const FpCertificate: React.FC<{ p: any }> = ({ p }) => (
   </div>
 );
 
+const FpJarm: React.FC<{ p: any }> = ({ p }) => (
+  <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
+    <HashRow label="HASH" value={p.hash} />
+    {(p.target_ip || p.target_port) && (
+      <div style={{ display: 'flex', gap: '8px', marginTop: '4px', flexWrap: 'wrap' }}>
+        {p.target_ip && <Tag color="var(--accent-color)">{p.target_ip}</Tag>}
+        {p.target_port && <Tag>:{p.target_port}</Tag>}
+      </div>
+    )}
+  </div>
+);
+
+const FpHassh: React.FC<{ p: any }> = ({ p }) => (
+  <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+    <HashRow label="HASH" value={p.hash} />
+    {p.ssh_banner && (
+      <div>
+        <span className="dim" style={{ fontSize: '0.7rem' }}>BANNER: </span>
+        <span className="matrix-text" style={{ fontFamily: 'monospace', fontSize: '0.8rem' }}>{p.ssh_banner}</span>
+      </div>
+    )}
+    {p.kex_algorithms && (
+      <details style={{ marginTop: '2px' }}>
+        <summary className="dim" style={{ fontSize: '0.7rem', cursor: 'pointer', letterSpacing: '1px' }}>
+          KEX ALGORITHMS
+        </summary>
+        <div style={{ display: 'flex', gap: '6px', flexWrap: 'wrap', marginTop: '4px' }}>
+          {p.kex_algorithms.split(',').map((algo: string) => (
+            <Tag key={algo}>{algo.trim()}</Tag>
+          ))}
+        </div>
+      </details>
+    )}
+    {p.encryption_s2c && (
+      <details>
+        <summary className="dim" style={{ fontSize: '0.7rem', cursor: 'pointer', letterSpacing: '1px' }}>
+          ENCRYPTION (S→C)
+        </summary>
+        <div style={{ display: 'flex', gap: '6px', flexWrap: 'wrap', marginTop: '4px' }}>
+          {p.encryption_s2c.split(',').map((algo: string) => (
+            <Tag key={algo}>{algo.trim()}</Tag>
+          ))}
+        </div>
+      </details>
+    )}
+    {(p.target_ip || p.target_port) && (
+      <div style={{ display: 'flex', gap: '8px', marginTop: '4px', flexWrap: 'wrap' }}>
+        {p.target_ip && <Tag color="var(--accent-color)">{p.target_ip}</Tag>}
+        {p.target_port && <Tag>:{p.target_port}</Tag>}
+      </div>
+    )}
+  </div>
+);
+
+const FpTcpStack: React.FC<{ p: any }> = ({ p }) => (
+  <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+    <HashRow label="HASH" value={p.hash} />
+    <div style={{ display: 'flex', gap: '24px', alignItems: 'center', flexWrap: 'wrap' }}>
+      {p.ttl && (
+        <div>
+          <span className="dim" style={{ fontSize: '0.7rem' }}>TTL </span>
+          <span className="matrix-text" style={{ fontSize: '1.2rem', fontWeight: 'bold' }}>{p.ttl}</span>
+        </div>
+      )}
+      {p.window_size && (
+        <div>
+          <span className="dim" style={{ fontSize: '0.7rem' }}>WIN </span>
+          <span className="matrix-text" style={{ fontSize: '1.2rem', fontWeight: 'bold' }}>{p.window_size}</span>
+        </div>
+      )}
+      {p.mss && (
+        <div>
+          <span className="dim" style={{ fontSize: '0.7rem' }}>MSS </span>
+          <span className="matrix-text" style={{ fontSize: '1rem' }}>{p.mss}</span>
+        </div>
+      )}
+    </div>
+    <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
+      {p.df_bit === '1' && <Tag color="#ff6b6b">DF</Tag>}
+      {p.sack_ok === '1' && <Tag>SACK</Tag>}
+      {p.timestamp === '1' && <Tag>TS</Tag>}
+      {p.window_scale && p.window_scale !== '-1' && <Tag>WSCALE:{p.window_scale}</Tag>}
+    </div>
+    {p.options_order && (
+      <div>
+        <span className="dim" style={{ fontSize: '0.7rem' }}>OPTS: </span>
+        <span className="matrix-text" style={{ fontFamily: 'monospace', fontSize: '0.8rem' }}>{p.options_order}</span>
+      </div>
+    )}
+    {(p.target_ip || p.target_port) && (
+      <div style={{ display: 'flex', gap: '8px', marginTop: '2px', flexWrap: 'wrap' }}>
+        {p.target_ip && <Tag color="var(--accent-color)">{p.target_ip}</Tag>}
+        {p.target_port && <Tag>:{p.target_port}</Tag>}
+      </div>
+    )}
+  </div>
+);
+
 const FpGeneric: React.FC<{ p: any }> = ({ p }) => (
   <div>
     {p.value ? (
@@ -192,6 +296,15 @@ const FingerprintCard: React.FC<{ bounty: any }> = ({ bounty }) => {
       break;
     case 'tls_certificate':
       content = <FpCertificate p={p} />;
+      break;
+    case 'jarm':
+      content = <FpJarm p={p} />;
+      break;
+    case 'hassh_server':
+      content = <FpHassh p={p} />;
+      break;
+    case 'tcpfp':
+      content = <FpTcpStack p={p} />;
       break;
     default:
       content = <FpGeneric p={p} />;
