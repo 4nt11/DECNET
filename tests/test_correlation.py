@@ -155,6 +155,39 @@ class TestParserAttackerIP:
         assert parse_line(line) is None
 
 
+class TestParserBashNormalization:
+    def test_bash_cmd_normalized_to_ssh_command(self):
+        line = '<14>1 2026-04-14T05:48:12.628417+00:00 SRV-BRAVO-13 bash - - -  CMD uid=0 pwd=/root cmd=ls /var/www/html'
+        event = parse_line(line)
+        assert event is not None
+        assert event.service == "ssh"
+        assert event.event_type == "command"
+        assert event.fields["command"] == "ls /var/www/html"
+        assert event.fields["uid"] == "0"
+        assert event.fields["pwd"] == "/root"
+
+    def test_bash_cmd_simple(self):
+        line = '<14>1 2026-04-14T05:48:13.332072+00:00 SRV-BRAVO-13 bash - - -  CMD uid=0 pwd=/root cmd=ls'
+        event = parse_line(line)
+        assert event is not None
+        assert event.service == "ssh"
+        assert event.fields["command"] == "ls"
+
+    def test_bash_non_cmd_stays_as_bash(self):
+        line = '<14>1 2026-04-14T05:48:12.628417+00:00 SRV-BRAVO-13 bash - - - some other bash message'
+        event = parse_line(line)
+        assert event is not None
+        assert event.service == "bash"
+        assert event.event_type == "-"
+
+    def test_bash_cmd_with_complex_command(self):
+        line = '<14>1 2026-04-14T05:48:32.006502+00:00 SRV-BRAVO-13 bash - - -  CMD uid=0 pwd=/root cmd=cat /etc/passwd | grep root'
+        event = parse_line(line)
+        assert event is not None
+        assert event.service == "ssh"
+        assert event.fields["command"] == "cat /etc/passwd | grep root"
+
+
 # ---------------------------------------------------------------------------
 # graph.py — AttackerTraversal
 # ---------------------------------------------------------------------------

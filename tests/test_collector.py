@@ -131,6 +131,32 @@ class TestParseRfc5424:
         assert result["msg"] == "login attempt"
 
 
+    def test_bash_cmd_normalized_to_ssh_command(self):
+        line = '<14>1 2026-04-14T05:48:12.628417+00:00 SRV-BRAVO-13 bash - - -  CMD uid=0 pwd=/root cmd=ls /var/www/html'
+        result = parse_rfc5424(line)
+        assert result is not None
+        assert result["service"] == "ssh"
+        assert result["event_type"] == "command"
+        assert result["fields"]["command"] == "ls /var/www/html"
+        assert result["fields"]["uid"] == "0"
+        assert result["fields"]["pwd"] == "/root"
+
+    def test_bash_cmd_simple_command(self):
+        line = '<14>1 2026-04-14T05:48:13.332072+00:00 SRV-BRAVO-13 bash - - -  CMD uid=0 pwd=/root cmd=ls'
+        result = parse_rfc5424(line)
+        assert result is not None
+        assert result["service"] == "ssh"
+        assert result["event_type"] == "command"
+        assert result["fields"]["command"] == "ls"
+
+    def test_bash_non_cmd_not_normalized(self):
+        line = '<14>1 2026-04-14T05:48:12.628417+00:00 SRV-BRAVO-13 bash - - - some other bash message'
+        result = parse_rfc5424(line)
+        assert result is not None
+        assert result["service"] == "bash"
+        assert result["event_type"] == "-"
+
+
 class TestIsServiceContainer:
     def test_known_container_returns_true(self):
         with patch("decnet.collector.worker._load_service_container_names", return_value=_KNOWN_NAMES):
