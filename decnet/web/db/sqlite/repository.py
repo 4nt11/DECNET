@@ -12,7 +12,7 @@ from decnet.config import load_state, _ROOT
 from decnet.env import DECNET_ADMIN_USER, DECNET_ADMIN_PASSWORD
 from decnet.web.auth import get_password_hash
 from decnet.web.db.repository import BaseRepository
-from decnet.web.db.models import User, Log, Bounty, State
+from decnet.web.db.models import User, Log, Bounty, State, Attacker
 from decnet.web.db.sqlite.database import get_async_engine
 
 
@@ -371,3 +371,92 @@ class SQLiteRepository(BaseRepository):
                 session.add(new_state)
 
             await session.commit()
+
+    # --------------------------------------------------------------- attackers
+
+    async def get_all_logs_raw(self) -> List[dict[str, Any]]:
+        async with self.session_factory() as session:
+            result = await session.execute(
+                select(
+                    Log.id,
+                    Log.raw_line,
+                    Log.attacker_ip,
+                    Log.service,
+                    Log.event_type,
+                    Log.decky,
+                    Log.timestamp,
+                    Log.fields,
+                )
+            )
+            return [
+                {
+                    "id": r.id,
+                    "raw_line": r.raw_line,
+                    "attacker_ip": r.attacker_ip,
+                    "service": r.service,
+                    "event_type": r.event_type,
+                    "decky": r.decky,
+                    "timestamp": r.timestamp,
+                    "fields": r.fields,
+                }
+                for r in result.all()
+            ]
+
+    async def get_all_bounties_by_ip(self) -> dict[str, List[dict[str, Any]]]:
+        from collections import defaultdict
+        async with self.session_factory() as session:
+            result = await session.execute(
+                select(Bounty).order_by(asc(Bounty.timestamp))
+            )
+            grouped: dict[str, List[dict[str, Any]]] = defaultdict(list)
+            for item in result.scalars().all():
+                d = item.model_dump(mode="json")
+                try:
+                    d["payload"] = json.loads(d["payload"])
+                except (json.JSONDecodeError, TypeError):
+                    pass
+                grouped[item.attacker_ip].append(d)
+            return dict(grouped)
+
+    async def upsert_attacker(self, data: dict[str, Any]) -> None:
+        async with self.session_factory() as session:
+            result = await session.execute(
+                select(Attacker).where(Attacker.ip == data["ip"])
+            )
+            existing = result.scalar_one_or_none()
+            if existing:
+                for k, v in data.items():
+                    setattr(existing, k, v)
+                session.add(existing)
+            else:
+                session.add(Attacker(**data))
+            await session.commit()
+
+    async def get_attackers(
+        self,
+        limit: int = 50,
+        offset: int = 0,
+        search: Optional[str] = None,
+        sort_by: str = "recent",
+    ) -> List[dict[str, Any]]:
+        order = {
+            "active": desc(Attacker.event_count),
+            "traversals": desc(Attacker.is_traversal),
+        }.get(sort_by, desc(Attacker.last_seen))
+
+        statement = select(Attacker).order_by(order).offset(offset).limit(limit)
+        if search:
+            statement = statement.where(Attacker.ip.like(f"%{search}%"))
+
+        async with self.session_factory() as session:
+            result = await session.execute(statement)
+            return [a.model_dump(mode="json") for a in result.scalars().all()]
+
+    async def get_total_attackers(self, search: Optional[str] = None) -> int:
+        statement = select(func.count()).select_from(Attacker)
+        if search:
+            statement = statement.where(Attacker.ip.like(f"%{search}%"))
+
+        async with self.session_factory() as session:
+            result = await session.execute(statement)
+            return result.scalar() or 0

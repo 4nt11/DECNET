@@ -50,6 +50,27 @@ class State(SQLModel, table=True):
     key: str = Field(primary_key=True)
     value: str  # Stores JSON serialized DecnetConfig or other state blobs
 
+
+class Attacker(SQLModel, table=True):
+    __tablename__ = "attackers"
+    ip: str = Field(primary_key=True)
+    first_seen: datetime = Field(index=True)
+    last_seen: datetime = Field(index=True)
+    event_count: int = Field(default=0)
+    service_count: int = Field(default=0)
+    decky_count: int = Field(default=0)
+    services: str = Field(default="[]")       # JSON list[str]
+    deckies: str = Field(default="[]")        # JSON list[str], first-contact ordered
+    traversal_path: Optional[str] = None      # "decky-01 → decky-03 → decky-05"
+    is_traversal: bool = Field(default=False)
+    bounty_count: int = Field(default=0)
+    credential_count: int = Field(default=0)
+    fingerprints: str = Field(default="[]")   # JSON list[dict] — bounty fingerprints
+    commands: str = Field(default="[]")       # JSON list[dict] — commands per service/decky
+    updated_at: datetime = Field(
+        default_factory=lambda: datetime.now(timezone.utc), index=True
+    )
+
 # --- API Request/Response Models (Pydantic) ---
 
 class Token(BaseModel):
@@ -72,6 +93,12 @@ class LogsResponse(BaseModel):
     data: List[dict[str, Any]]
 
 class BountyResponse(BaseModel):
+    total: int
+    limit: int
+    offset: int
+    data: List[dict[str, Any]]
+
+class AttackersResponse(BaseModel):
     total: int
     limit: int
     offset: int

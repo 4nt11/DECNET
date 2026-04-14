@@ -130,3 +130,24 @@ async def _extract_bounty(repo: BaseRepository, log_data: dict[str, Any]) -> Non
 
     # 4. SSH client banner fingerprint (deferred — requires asyncssh server)
     # Fires on: service=ssh, event_type=client_banner, fields.client_banner
+
+    # 5. JA3/JA3S TLS fingerprint from sniffer container
+    _ja3 = _fields.get("ja3")
+    if _ja3 and log_data.get("service") == "sniffer":
+        await repo.add_bounty({
+            "decky": log_data.get("decky"),
+            "service": "sniffer",
+            "attacker_ip": log_data.get("attacker_ip"),
+            "bounty_type": "fingerprint",
+            "payload": {
+                "fingerprint_type": "ja3",
+                "ja3": _ja3,
+                "ja3s": _fields.get("ja3s"),
+                "tls_version": _fields.get("tls_version"),
+                "sni": _fields.get("sni") or None,
+                "alpn": _fields.get("alpn") or None,
+                "dst_port": _fields.get("dst_port"),
+                "raw_ciphers": _fields.get("raw_ciphers"),
+                "raw_extensions": _fields.get("raw_extensions"),
+            },
+        })

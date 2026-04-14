@@ -21,6 +21,11 @@ class DummyRepo(BaseRepository):
     async def get_total_bounties(self, **kw): await super().get_total_bounties(**kw)
     async def get_state(self, k): await super().get_state(k)
     async def set_state(self, k, v): await super().set_state(k, v)
+    async def get_all_logs_raw(self): await super().get_all_logs_raw()
+    async def get_all_bounties_by_ip(self): await super().get_all_bounties_by_ip()
+    async def upsert_attacker(self, d): await super().upsert_attacker(d)
+    async def get_attackers(self, **kw): await super().get_attackers(**kw)
+    async def get_total_attackers(self, **kw): await super().get_total_attackers(**kw)
 
 @pytest.mark.asyncio
 async def test_base_repo_coverage():
@@ -41,3 +46,8 @@ async def test_base_repo_coverage():
     await dr.get_total_bounties()
     await dr.get_state("k")
     await dr.set_state("k", "v")
+    await dr.get_all_logs_raw()
+    await dr.get_all_bounties_by_ip()
+    await dr.upsert_attacker({})
+    await dr.get_attackers()
+    await dr.get_total_attackers()

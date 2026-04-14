@@ -45,7 +45,7 @@
 
 ## Core / Hardening
 
-- [x] **Attacker fingerprinting** — HTTP User-Agent and VNC client version stored as `fingerprint` bounties. TLS JA3/JA4 and TCP window sizes require pcap (out of scope). SSH client banner deferred pending asyncssh server.
+- [~] **Attacker fingerprinting** — HTTP User-Agent, VNC client version stored as `fingerprint` bounties. JA3/JA3S in progress (sniffer container). HASSH, JA4+, TCP stack, JARM planned (see Attacker Intelligence section).
 - [ ] **Canary tokens** — Embed fake AWS keys and honeydocs into decky filesystems.
 - [ ] **Tarpit mode** — Slow down attackers by drip-feeding bytes or delaying responses.
 - [x] **Dynamic decky mutation** — Rotate exposed services or OS fingerprints over time.
@@ -83,6 +83,55 @@
 - [ ] **Fake Active Directory** — Convincing AD/LDAP emulation.
 - [ ] **Realistic web apps** — Fake WordPress, Grafana, and phpMyAdmin templates.
 - [ ] **OT/ICS profiles** — Expanded Modbus, DNP3, and BACnet support.
+
+## Attacker Intelligence Collection
+*Goal: Build the richest possible attacker profile from passive observation across all 26 services.*
+
+### TLS/SSL Fingerprinting (via sniffer container)
+- [x] **JA3/JA3S** — TLS ClientHello/ServerHello fingerprint hashes
+- [ ] **JA4+ family** — JA4, JA4S, JA4H, JA4L (latency/geo estimation via RTT)
+- [ ] **JARM** — Active server fingerprint; identifies C2 framework from TLS server behavior
+- [ ] **CYU** — Citrix-specific TLS fingerprint
+- [ ] **TLS session resumption behavior** — Identifies tooling by how it handles session tickets
+- [ ] **Certificate details** — CN, SANs, issuer, validity period, self-signed flag (attacker-run servers)
+
+### Timing & Behavioral
+- [ ] **Inter-packet arrival times** — OS TCP stack fingerprint + beaconing interval detection
+- [ ] **TTL values** — Rough OS / hop-distance inference
+- [ ] **TCP window size & scaling** — p0f-style OS fingerprinting
+- [ ] **Retransmission patterns** — Identify lossy paths / throttled connections
+- [ ] **Beacon jitter variance** — Attribute tooling: Cobalt Strike vs. Sliver vs. Havoc have distinct profiles
+- [ ] **C2 check-in cadence** — Detect beaconing vs. interactive sessions
+- [ ] **Data exfil timing** — Behavioral sequencing relative to recon phase
+
+### Protocol Fingerprinting
+- [ ] **TCP/IP stack** — ISN patterns, DF bit, ToS/DSCP, IP ID sequence (random/incremental/zero)
+- [ ] **HASSH / HASSHServer** — SSH KEX algo, cipher, MAC order → tool fingerprint
+- [ ] **HTTP/2 fingerprint** — GREASE values, settings frame order, header pseudo-field ordering
+- [ ] **QUIC fingerprint** — Connection ID length, transport parameters order
+- [ ] **DNS behavior** — Query patterns, recursion flags, EDNS0 options, resolver fingerprint
+- [ ] **HTTP header ordering** — Tool-specific capitalization and ordering quirks
+
+### Network Topology Leakage
+- [ ] **X-Forwarded-For mismatches** — Detect VPN/proxy slip vs. actual source IP
+- [ ] **ICMP error messages** — Internal IP leakage from misconfigured attacker infra
+- [ ] **IPv6 link-local leakage** — IPv6 addrs leaked even over IPv4 VPN (common opsec fail)
+- [ ] **mDNS/LLMNR leakage** — Attacker hostname/device info from misconfigured systems
+
+### Geolocation & Infrastructure
+- [ ] **ASN lookup** — Source IP autonomous system number and org name
+- [ ] **BGP prefix / RPKI validity** — Route origin legitimacy
+- [ ] **PTR records** — rDNS for attacker IPs (catches infra with forgotten reverse DNS)
+- [ ] **Latency triangulation** — JA4L RTT estimates for rough geolocation
+
+### Service-Level Behavioral Profiling
+- [ ] **Commands executed** — Full command log per session (SSH, Telnet, FTP, Redis, DB services)
+- [ ] **Services actively interacted with** — Distinguish port scans from live exploitation attempts
+- [ ] **Tooling attribution** — Byte-sequence signatures from known C2 frameworks in handshakes
+- [ ] **Credential reuse patterns** — Same username/password tried across multiple deckies/services
+- [ ] **Payload signatures** — Hash and classify uploaded files, shellcode, exploit payloads
+
+---
 
 ## Developer Experience
 

@@ -90,3 +90,34 @@ class BaseRepository(ABC):
     async def set_state(self, key: str, value: Any) -> None:
         """Store a specific state entry by key."""
         pass
+
+    @abstractmethod
+    async def get_all_logs_raw(self) -> list[dict[str, Any]]:
+        """Retrieve all log rows with fields needed by the attacker profile worker."""
+        pass
+
+    @abstractmethod
+    async def get_all_bounties_by_ip(self) -> dict[str, list[dict[str, Any]]]:
+        """Retrieve all bounty rows grouped by attacker_ip."""
+        pass
+
+    @abstractmethod
+    async def upsert_attacker(self, data: dict[str, Any]) -> None:
+        """Insert or replace an attacker profile record."""
+        pass
+
+    @abstractmethod
+    async def get_attackers(
+        self,
+        limit: int = 50,
+        offset: int = 0,
+        search: Optional[str] = None,
+        sort_by: str = "recent",
+    ) -> list[dict[str, Any]]:
+        """Retrieve paginated attacker profile records."""
+        pass
+
+    @abstractmethod
+    async def get_total_attackers(self, search: Optional[str] = None) -> int:
+        """Retrieve the total count of attacker profile records, optionally filtered."""
+        pass

@@ -44,6 +44,7 @@ dev = [
     "psycopg2-binary>=2.9.11",
     "paho-mqtt>=2.1.0",
     "pymongo>=4.16.0",
+    "scapy>=2.6.1",
 ]
 
 [project.scripts]

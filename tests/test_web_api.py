@@ -128,8 +128,9 @@ class TestLifespan:
         with patch("decnet.web.api.repo", mock_repo):
             with patch("decnet.web.api.log_ingestion_worker", return_value=asyncio.sleep(0)):
                 with patch("decnet.web.api.log_collector_worker", return_value=asyncio.sleep(0)):
-                    async with lifespan(mock_app):
-                        mock_repo.initialize.assert_awaited_once()
+                    with patch("decnet.web.api.attacker_profile_worker", return_value=asyncio.sleep(0)):
+                        async with lifespan(mock_app):
+                            mock_repo.initialize.assert_awaited_once()
 
     @pytest.mark.asyncio
     async def test_lifespan_db_retry(self):
@@ -150,5 +151,6 @@ class TestLifespan:
             with patch("decnet.web.api.asyncio.sleep", new_callable=AsyncMock):
                 with patch("decnet.web.api.log_ingestion_worker", return_value=asyncio.sleep(0)):
                     with patch("decnet.web.api.log_collector_worker", return_value=asyncio.sleep(0)):
-                        async with lifespan(mock_app):
-                            assert _call_count == 3
+                        with patch("decnet.web.api.attacker_profile_worker", return_value=asyncio.sleep(0)):
+                            async with lifespan(mock_app):
+                                assert _call_count == 3

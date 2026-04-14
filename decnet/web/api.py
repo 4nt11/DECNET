@@ -14,16 +14,18 @@ from decnet.logging import get_logger
 from decnet.web.dependencies import repo
 from decnet.collector import log_collector_worker
 from decnet.web.ingester import log_ingestion_worker
+from decnet.web.attacker_worker import attacker_profile_worker
 from decnet.web.router import api_router
 
 log = get_logger("api")
 ingestion_task: Optional[asyncio.Task[Any]] = None
 collector_task: Optional[asyncio.Task[Any]] = None
+attacker_task: Optional[asyncio.Task[Any]] = None
 
 
 @asynccontextmanager
 async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
-    global ingestion_task, collector_task
+    global ingestion_task, collector_task, attacker_task
 
     log.info("API startup initialising database")
     for attempt in range(1, 6):
@@ -51,13 +53,18 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
             log.debug("API startup collector worker started log_file=%s", _log_file)
         elif not _log_file:
             log.warning("DECNET_INGEST_LOG_FILE not set — Docker log collection disabled.")
+
+        # Start attacker profile rebuild worker
+        if attacker_task is None or attacker_task.done():
+            attacker_task = asyncio.create_task(attacker_profile_worker(repo))
+            log.debug("API startup attacker profile worker started")
     else:
         log.info("Contract Test Mode: skipping background worker startup")
 
     yield
 
     log.info("API shutdown cancelling background tasks")
-    for task in (ingestion_task, collector_task):
+    for task in (ingestion_task, collector_task, attacker_task):
         if task and not task.done():
             task.cancel()
             try:
