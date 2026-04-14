@@ -1,5 +1,5 @@
 from datetime import datetime, timezone
-from typing import Optional, Any, List, Annotated
+from typing import Literal, Optional, Any, List, Annotated
 from sqlmodel import SQLModel, Field
 from pydantic import BaseModel, ConfigDict, Field as PydanticField, BeforeValidator
 from decnet.models import IniContent
@@ -121,3 +121,47 @@ class DeployIniRequest(BaseModel):
     # This field now enforces strict INI structure during Pydantic initialization.
     # The OpenAPI schema correctly shows it as a required string.
     ini_content: IniContent = PydanticField(..., description="A valid INI formatted string")
+
+
+# --- Configuration Models ---
+
+class CreateUserRequest(BaseModel):
+    username: str = PydanticField(..., min_length=1, max_length=64)
+    password: str = PydanticField(..., min_length=8, max_length=72)
+    role: Literal["admin", "viewer"] = "viewer"
+
+class UpdateUserRoleRequest(BaseModel):
+    role: Literal["admin", "viewer"]
+
+class ResetUserPasswordRequest(BaseModel):
+    new_password: str = PydanticField(..., min_length=8, max_length=72)
+
+class DeploymentLimitRequest(BaseModel):
+    deployment_limit: int = PydanticField(..., ge=1, le=500)
+
+class GlobalMutationIntervalRequest(BaseModel):
+    global_mutation_interval: str = PydanticField(..., pattern=r"^[1-9]\d*[mdMyY]$")
+
+class UserResponse(BaseModel):
+    uuid: str
+    username: str
+    role: str
+    must_change_password: bool
+
+class ConfigResponse(BaseModel):
+    role: str
+    deployment_limit: int
+    global_mutation_interval: str
+
+class AdminConfigResponse(ConfigResponse):
+    users: List[UserResponse]
+
+
+class ComponentHealth(BaseModel):
+    status: Literal["ok", "failing"]
+    detail: Optional[str] = None
+
+
+class HealthResponse(BaseModel):
+    status: Literal["healthy", "degraded", "unhealthy"]
+    components: dict[str, ComponentHealth]

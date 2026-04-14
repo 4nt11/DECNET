@@ -24,6 +24,16 @@ attacker_task: Optional[asyncio.Task[Any]] = None
 sniffer_task: Optional[asyncio.Task[Any]] = None
 
 
+def get_background_tasks() -> dict[str, Optional[asyncio.Task[Any]]]:
+    """Expose background task handles for the health endpoint."""
+    return {
+        "ingestion_worker": ingestion_task,
+        "collector_worker": collector_task,
+        "attacker_worker": attacker_task,
+        "sniffer_worker": sniffer_task,
+    }
+
+
 @asynccontextmanager
 async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
     global ingestion_task, collector_task, attacker_task, sniffer_task

@@ -14,6 +14,11 @@ from .stream.api_stream_events import router as stream_router
 from .attackers.api_get_attackers import router as attackers_router
 from .attackers.api_get_attacker_detail import router as attacker_detail_router
 from .attackers.api_get_attacker_commands import router as attacker_commands_router
+from .config.api_get_config import router as config_get_router
+from .config.api_update_config import router as config_update_router
+from .config.api_manage_users import router as config_users_router
+from .config.api_reinit import router as config_reinit_router
+from .health.api_get_health import router as health_router
 
 api_router = APIRouter()
 
@@ -42,3 +47,10 @@ api_router.include_router(attacker_commands_router)
 # Observability
 api_router.include_router(stats_router)
 api_router.include_router(stream_router)
+api_router.include_router(health_router)
+
+# Configuration
+api_router.include_router(config_get_router)
+api_router.include_router(config_update_router)
+api_router.include_router(config_users_router)
+api_router.include_router(config_reinit_router)
