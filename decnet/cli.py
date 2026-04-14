@@ -62,6 +62,10 @@ def _kill_api() -> None:
                 console.print(f"[yellow]Stopping DECNET Mutator Watcher (PID {_proc.info['pid']})...[/]")
                 os.kill(_proc.info['pid'], signal.SIGTERM)
                 _killed = True
+            elif "decnet.cli" in _cmd and "collect" in _cmd:
+                console.print(f"[yellow]Stopping DECNET Collector (PID {_proc.info['pid']})...[/]")
+                os.kill(_proc.info['pid'], signal.SIGTERM)
+                _killed = True
         except (psutil.NoSuchProcess, psutil.AccessDenied):
             continue
 

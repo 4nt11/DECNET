@@ -337,9 +337,14 @@ class TestKillApi:
             "pid": 222, "name": "python",
             "cmdline": ["python", "decnet.cli", "mutate", "--watch"],
         }
-        mock_iter.return_value = [mock_uvicorn, mock_mutate]
+        mock_collector = MagicMock()
+        mock_collector.info = {
+            "pid": 333, "name": "python",
+            "cmdline": ["python", "-m", "decnet.cli", "collect", "--log-file", "/tmp/decnet.log"],
+        }
+        mock_iter.return_value = [mock_uvicorn, mock_mutate, mock_collector]
         _kill_api()
-        assert mock_kill.call_count == 2
+        assert mock_kill.call_count == 3
 
     @patch("psutil.process_iter")
     def test_no_matching_processes(self, mock_iter):
