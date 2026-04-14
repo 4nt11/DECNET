@@ -14,7 +14,8 @@ class TestMutateDecky:
         assert resp.status_code == 401
 
     @pytest.mark.asyncio
-    async def test_successful_mutation(self, client: httpx.AsyncClient, auth_token: str):
+    async def test_successful_mutation(self, client: httpx.AsyncClient, auth_token: str, monkeypatch: pytest.MonkeyPatch):
+        monkeypatch.delenv("DECNET_CONTRACT_TEST", raising=False)
         with patch("decnet.web.router.fleet.api_mutate_decky.mutate_decky", return_value=True):
             resp = await client.post(
                 "/api/v1/deckies/decky-01/mutate",
@@ -24,7 +25,8 @@ class TestMutateDecky:
         assert "Successfully mutated" in resp.json()["message"]
 
     @pytest.mark.asyncio
-    async def test_failed_mutation_returns_404(self, client: httpx.AsyncClient, auth_token: str):
+    async def test_failed_mutation_returns_404(self, client: httpx.AsyncClient, auth_token: str, monkeypatch: pytest.MonkeyPatch):
+        monkeypatch.delenv("DECNET_CONTRACT_TEST", raising=False)
         with patch("decnet.web.router.fleet.api_mutate_decky.mutate_decky", return_value=False):
             resp = await client.post(
                 "/api/v1/deckies/decky-01/mutate",
