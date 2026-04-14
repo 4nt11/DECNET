@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
-import { ArrowLeft, Crosshair } from 'lucide-react';
+import { ArrowLeft, Crosshair, Fingerprint, Shield, Clock, Wifi, Lock, FileKey } from 'lucide-react';
 import api from '../utils/api';
 import './Dashboard.css';
 
@@ -22,6 +22,193 @@ interface AttackerData {
   commands: { service: string; decky: string; command: string; timestamp: string }[];
   updated_at: string;
 }
+
+// ─── Fingerprint rendering ───────────────────────────────────────────────────
+
+const fpTypeLabel: Record<string, string> = {
+  ja3: 'TLS FINGERPRINT',
+  ja4l: 'LATENCY (JA4L)',
+  tls_resumption: 'SESSION RESUMPTION',
+  tls_certificate: 'CERTIFICATE',
+  http_useragent: 'HTTP USER-AGENT',
+  vnc_client_version: 'VNC CLIENT',
+};
+
+const fpTypeIcon: Record<string, React.ReactNode> = {
+  ja3: <Fingerprint size={14} />,
+  ja4l: <Clock size={14} />,
+  tls_resumption: <Wifi size={14} />,
+  tls_certificate: <FileKey size={14} />,
+  http_useragent: <Shield size={14} />,
+  vnc_client_version: <Lock size={14} />,
+};
+
+function getPayload(bounty: any): any {
+  if (bounty?.payload && typeof bounty.payload === 'object') return bounty.payload;
+  if (bounty?.payload && typeof bounty.payload === 'string') {
+    try { return JSON.parse(bounty.payload); } catch { return bounty; }
+  }
+  return bounty;
+}
+
+const HashRow: React.FC<{ label: string; value?: string | null }> = ({ label, value }) => {
+  if (!value) return null;
+  return (
+    <div style={{ display: 'flex', gap: '8px', alignItems: 'baseline' }}>
+      <span className="dim" style={{ fontSize: '0.7rem', minWidth: '36px' }}>{label}</span>
+      <span className="matrix-text" style={{ fontFamily: 'monospace', fontSize: '0.8rem', wordBreak: 'break-all' }}>
+        {value}
+      </span>
+    </div>
+  );
+};
+
+const Tag: React.FC<{ children: React.ReactNode; color?: string }> = ({ children, color }) => (
+  <span style={{
+    fontSize: '0.7rem', padding: '2px 8px', letterSpacing: '1px',
+    border: `1px solid ${color || 'var(--text-color)'}`,
+    color: color || 'var(--text-color)',
+    background: `${color || 'var(--text-color)'}15`,
+  }}>
+    {children}
+  </span>
+);
+
+const FpTlsHashes: React.FC<{ p: any }> = ({ p }) => (
+  <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
+    <HashRow label="JA3" value={p.ja3} />
+    <HashRow label="JA3S" value={p.ja3s} />
+    <HashRow label="JA4" value={p.ja4} />
+    <HashRow label="JA4S" value={p.ja4s} />
+    {(p.tls_version || p.sni || p.alpn) && (
+      <div style={{ display: 'flex', gap: '8px', marginTop: '4px', flexWrap: 'wrap' }}>
+        {p.tls_version && <Tag>{p.tls_version}</Tag>}
+        {p.sni && <Tag color="var(--accent-color)">SNI: {p.sni}</Tag>}
+        {p.alpn && <Tag>ALPN: {p.alpn}</Tag>}
+        {p.dst_port && <Tag>:{p.dst_port}</Tag>}
+      </div>
+    )}
+  </div>
+);
+
+const FpLatency: React.FC<{ p: any }> = ({ p }) => (
+  <div style={{ display: 'flex', gap: '24px', alignItems: 'center' }}>
+    <div>
+      <span className="dim" style={{ fontSize: '0.7rem' }}>RTT </span>
+      <span className="matrix-text" style={{ fontSize: '1.2rem', fontWeight: 'bold' }}>
+        {p.rtt_ms}
+      </span>
+      <span className="dim" style={{ fontSize: '0.7rem' }}> ms</span>
+    </div>
+    {p.client_ttl && (
+      <div>
+        <span className="dim" style={{ fontSize: '0.7rem' }}>TTL </span>
+        <span className="matrix-text" style={{ fontSize: '1.2rem', fontWeight: 'bold' }}>
+          {p.client_ttl}
+        </span>
+      </div>
+    )}
+  </div>
+);
+
+const FpResumption: React.FC<{ p: any }> = ({ p }) => {
+  const mechanisms = typeof p.mechanisms === 'string'
+    ? p.mechanisms.split(',')
+    : Array.isArray(p.mechanisms) ? p.mechanisms : [];
+  return (
+    <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
+      {mechanisms.map((m: string) => (
+        <Tag key={m} color="var(--accent-color)">{m.trim().toUpperCase().replace(/_/g, ' ')}</Tag>
+      ))}
+    </div>
+  );
+};
+
+const FpCertificate: React.FC<{ p: any }> = ({ p }) => (
+  <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+    <div style={{ display: 'flex', gap: '8px', alignItems: 'center', flexWrap: 'wrap' }}>
+      <span className="matrix-text" style={{ fontFamily: 'monospace', fontSize: '0.85rem' }}>
+        {p.subject_cn}
+      </span>
+      {p.self_signed === 'true' && (
+        <Tag color="#ff6b6b">SELF-SIGNED</Tag>
+      )}
+    </div>
+    {p.issuer && (
+      <div>
+        <span className="dim" style={{ fontSize: '0.7rem' }}>ISSUER: </span>
+        <span style={{ fontSize: '0.8rem' }}>{p.issuer}</span>
+      </div>
+    )}
+    {(p.not_before || p.not_after) && (
+      <div>
+        <span className="dim" style={{ fontSize: '0.7rem' }}>VALIDITY: </span>
+        <span style={{ fontSize: '0.75rem', fontFamily: 'monospace' }}>
+          {p.not_before || '?'} — {p.not_after || '?'}
+        </span>
+      </div>
+    )}
+    {p.sans && (
+      <div style={{ display: 'flex', gap: '6px', flexWrap: 'wrap', marginTop: '2px' }}>
+        <span className="dim" style={{ fontSize: '0.7rem' }}>SANs: </span>
+        {(typeof p.sans === 'string' ? p.sans.split(',') : p.sans).map((san: string) => (
+          <Tag key={san}>{san.trim()}</Tag>
+        ))}
+      </div>
+    )}
+  </div>
+);
+
+const FpGeneric: React.FC<{ p: any }> = ({ p }) => (
+  <div>
+    {p.value ? (
+      <span className="matrix-text" style={{ fontFamily: 'monospace', fontSize: '0.85rem' }}>
+        {p.value}
+      </span>
+    ) : (
+      <span className="dim" style={{ fontSize: '0.8rem', wordBreak: 'break-all' }}>
+        {JSON.stringify(p)}
+      </span>
+    )}
+  </div>
+);
+
+const FingerprintCard: React.FC<{ bounty: any }> = ({ bounty }) => {
+  const p = getPayload(bounty);
+  const fpType: string = p.fingerprint_type || 'unknown';
+  const label = fpTypeLabel[fpType] || fpType.toUpperCase().replace(/_/g, ' ');
+  const icon = fpTypeIcon[fpType] || <Fingerprint size={14} />;
+
+  let content: React.ReactNode;
+  switch (fpType) {
+    case 'ja3':
+      content = <FpTlsHashes p={p} />;
+      break;
+    case 'ja4l':
+      content = <FpLatency p={p} />;
+      break;
+    case 'tls_resumption':
+      content = <FpResumption p={p} />;
+      break;
+    case 'tls_certificate':
+      content = <FpCertificate p={p} />;
+      break;
+    default:
+      content = <FpGeneric p={p} />;
+  }
+
+  return (
+    <div className="fp-card">
+      <div className="fp-card-header">
+        <span className="fp-card-icon">{icon}</span>
+        <span className="fp-card-label">{label}</span>
+      </div>
+      <div className="fp-card-body">{content}</div>
+    </div>
+  );
+};
+
+// ─── Main component ─────────────────────────────────────────────────────────
 
 const AttackerDetail: React.FC = () => {
   const { id } = useParams<{ id: string }>();
@@ -220,25 +407,10 @@ const AttackerDetail: React.FC = () => {
           <h2>FINGERPRINTS ({attacker.fingerprints.length})</h2>
         </div>
         {attacker.fingerprints.length > 0 ? (
-          <div className="logs-table-container">
-            <table className="logs-table">
-              <thead>
-                <tr>
-                  <th>TYPE</th>
-                  <th>VALUE</th>
-                </tr>
-              </thead>
-              <tbody>
-                {attacker.fingerprints.map((fp, i) => (
-                  <tr key={i}>
-                    <td className="violet-accent">{fp.type || fp.bounty_type || 'unknown'}</td>
-                    <td className="dim" style={{ fontSize: '0.8rem', wordBreak: 'break-all' }}>
-                      {typeof fp === 'object' ? JSON.stringify(fp) : String(fp)}
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
+          <div style={{ padding: '16px', display: 'flex', flexDirection: 'column', gap: '12px' }}>
+            {attacker.fingerprints.map((fp, i) => (
+              <FingerprintCard key={i} bounty={fp} />
+            ))}
           </div>
         ) : (
           <div style={{ padding: '24px', textAlign: 'center', opacity: 0.5 }}>

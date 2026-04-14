@@ -185,3 +185,38 @@
   border-color: var(--text-color);
   box-shadow: var(--matrix-green-glow);
 }
+
+/* Fingerprint cards */
+.fp-card {
+  border: 1px solid var(--border-color);
+  background: rgba(0, 0, 0, 0.2);
+  transition: border-color 0.15s ease;
+}
+
+.fp-card:hover {
+  border-color: var(--accent-color);
+}
+
+.fp-card-header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 16px;
+  border-bottom: 1px solid var(--border-color);
+}
+
+.fp-card-icon {
+  color: var(--accent-color);
+  display: flex;
+  align-items: center;
+}
+
+.fp-card-label {
+  font-size: 0.7rem;
+  letter-spacing: 2px;
+  opacity: 0.7;
+}
+
+.fp-card-body {
+  padding: 12px 16px;
+}
