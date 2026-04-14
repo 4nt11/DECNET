@@ -2,7 +2,11 @@
 DECNET-PROBER standalone worker.
 
 Runs as a detached host-level process. Discovers attacker IPs by tailing the
-collector's JSON log file, then JARM-probes them on common C2/TLS ports.
+collector's JSON log file, then fingerprints them via multiple active probes:
+- JARM (TLS server fingerprinting)
+- HASSHServer (SSH server fingerprinting)
+- TCP/IP stack fingerprinting (OS/tool identification)
+
 Results are written as RFC 5424 syslog + JSON to the same log files.
 
 Target discovery is fully automatic — every unique attacker IP seen in the
@@ -23,16 +27,24 @@ from pathlib import Path
 from typing import Any
 
 from decnet.logging import get_logger
+from decnet.prober.hassh import hassh_server
 from decnet.prober.jarm import JARM_EMPTY_HASH, jarm_hash
+from decnet.prober.tcpfp import tcp_fingerprint
 
 logger = get_logger("prober")
 
-# ─── Default ports to JARM-probe on each attacker IP ─────────────────────────
-# Common C2 callback / TLS server ports (Cobalt Strike, Sliver, Metasploit, etc.)
+# ─── Default ports per probe type ───────────────────────────────────────────
 
+# JARM: common C2 callback / TLS server ports
 DEFAULT_PROBE_PORTS: list[int] = [
     443, 8443, 8080, 4443, 50050, 2222, 993, 995, 8888, 9001,
 ]
+
+# HASSHServer: common SSH server ports
+DEFAULT_SSH_PORTS: list[int] = [22, 2222, 22222, 2022]
+
+# TCP/IP stack: probe on common service ports
+DEFAULT_TCPFP_PORTS: list[int] = [80, 443]
 
 # ─── RFC 5424 formatting (inline, mirrors templates/*/decnet_logging.py) ─────
 
@@ -208,62 +220,175 @@ def _discover_attackers(json_path: Path, position: int) -> tuple[set[str], int]:
 
 def _probe_cycle(
     targets: set[str],
-    probed: dict[str, set[int]],
-    ports: list[int],
+    probed: dict[str, dict[str, set[int]]],
+    jarm_ports: list[int],
+    ssh_ports: list[int],
+    tcpfp_ports: list[int],
     log_path: Path,
     json_path: Path,
     timeout: float = 5.0,
 ) -> None:
     """
-    Probe all known attacker IPs on the configured ports.
+    Probe all known attacker IPs with JARM, HASSH, and TCP/IP fingerprinting.
 
     Args:
         targets: set of attacker IPs to probe
-        probed: dict mapping IP -> set of ports already successfully probed
-        ports: list of ports to probe on each IP
+        probed: dict mapping IP -> {probe_type -> set of ports already probed}
+        jarm_ports: TLS ports for JARM fingerprinting
+        ssh_ports: SSH ports for HASSHServer fingerprinting
+        tcpfp_ports: ports for TCP/IP stack fingerprinting
         log_path: RFC 5424 log file
         json_path: JSON log file
         timeout: per-probe TCP timeout
     """
     for ip in sorted(targets):
-        already_done = probed.get(ip, set())
-        ports_to_probe = [p for p in ports if p not in already_done]
+        ip_probed = probed.setdefault(ip, {})
 
-        if not ports_to_probe:
+        # Phase 1: JARM (TLS fingerprinting)
+        _jarm_phase(ip, ip_probed, jarm_ports, log_path, json_path, timeout)
+
+        # Phase 2: HASSHServer (SSH fingerprinting)
+        _hassh_phase(ip, ip_probed, ssh_ports, log_path, json_path, timeout)
+
+        # Phase 3: TCP/IP stack fingerprinting
+        _tcpfp_phase(ip, ip_probed, tcpfp_ports, log_path, json_path, timeout)
+
+
+def _jarm_phase(
+    ip: str,
+    ip_probed: dict[str, set[int]],
+    ports: list[int],
+    log_path: Path,
+    json_path: Path,
+    timeout: float,
+) -> None:
+    """JARM-fingerprint an IP on the given TLS ports."""
+    done = ip_probed.setdefault("jarm", set())
+    for port in ports:
+        if port in done:
             continue
+        try:
+            h = jarm_hash(ip, port, timeout=timeout)
+            done.add(port)
+            if h == JARM_EMPTY_HASH:
+                continue
+            _write_event(
+                log_path, json_path,
+                "jarm_fingerprint",
+                target_ip=ip,
+                target_port=str(port),
+                jarm_hash=h,
+                msg=f"JARM {ip}:{port} = {h}",
+            )
+            logger.info("prober: JARM %s:%d = %s", ip, port, h)
+        except Exception as exc:
+            done.add(port)
+            _write_event(
+                log_path, json_path,
+                "prober_error",
+                severity=_SEVERITY_WARNING,
+                target_ip=ip,
+                target_port=str(port),
+                error=str(exc),
+                msg=f"JARM probe failed for {ip}:{port}: {exc}",
+            )
+            logger.warning("prober: JARM probe failed %s:%d: %s", ip, port, exc)
 
-        for port in ports_to_probe:
-            try:
-                h = jarm_hash(ip, port, timeout=timeout)
-                if h == JARM_EMPTY_HASH:
-                    # No TLS server on this port — don't log, don't reprobed
-                    probed.setdefault(ip, set()).add(port)
-                    continue
 
-                _write_event(
-                    log_path, json_path,
-                    "jarm_fingerprint",
-                    target_ip=ip,
-                    target_port=str(port),
-                    jarm_hash=h,
-                    msg=f"JARM {ip}:{port} = {h}",
-                )
-                logger.info("prober: JARM %s:%d = %s", ip, port, h)
-                probed.setdefault(ip, set()).add(port)
+def _hassh_phase(
+    ip: str,
+    ip_probed: dict[str, set[int]],
+    ports: list[int],
+    log_path: Path,
+    json_path: Path,
+    timeout: float,
+) -> None:
+    """HASSHServer-fingerprint an IP on the given SSH ports."""
+    done = ip_probed.setdefault("hassh", set())
+    for port in ports:
+        if port in done:
+            continue
+        try:
+            result = hassh_server(ip, port, timeout=timeout)
+            done.add(port)
+            if result is None:
+                continue
+            _write_event(
+                log_path, json_path,
+                "hassh_fingerprint",
+                target_ip=ip,
+                target_port=str(port),
+                hassh_server_hash=result["hassh_server"],
+                ssh_banner=result["banner"],
+                kex_algorithms=result["kex_algorithms"],
+                encryption_s2c=result["encryption_s2c"],
+                mac_s2c=result["mac_s2c"],
+                compression_s2c=result["compression_s2c"],
+                msg=f"HASSH {ip}:{port} = {result['hassh_server']}",
+            )
+            logger.info("prober: HASSH %s:%d = %s", ip, port, result["hassh_server"])
+        except Exception as exc:
+            done.add(port)
+            _write_event(
+                log_path, json_path,
+                "prober_error",
+                severity=_SEVERITY_WARNING,
+                target_ip=ip,
+                target_port=str(port),
+                error=str(exc),
+                msg=f"HASSH probe failed for {ip}:{port}: {exc}",
+            )
+            logger.warning("prober: HASSH probe failed %s:%d: %s", ip, port, exc)
 
-            except Exception as exc:
-                _write_event(
-                    log_path, json_path,
-                    "prober_error",
-                    severity=_SEVERITY_WARNING,
-                    target_ip=ip,
-                    target_port=str(port),
-                    error=str(exc),
-                    msg=f"JARM probe failed for {ip}:{port}: {exc}",
-                )
-                logger.warning("prober: JARM probe failed %s:%d: %s", ip, port, exc)
-                # Mark as probed to avoid infinite retries
-                probed.setdefault(ip, set()).add(port)
+
+def _tcpfp_phase(
+    ip: str,
+    ip_probed: dict[str, set[int]],
+    ports: list[int],
+    log_path: Path,
+    json_path: Path,
+    timeout: float,
+) -> None:
+    """TCP/IP stack fingerprint an IP on the given ports."""
+    done = ip_probed.setdefault("tcpfp", set())
+    for port in ports:
+        if port in done:
+            continue
+        try:
+            result = tcp_fingerprint(ip, port, timeout=timeout)
+            done.add(port)
+            if result is None:
+                continue
+            _write_event(
+                log_path, json_path,
+                "tcpfp_fingerprint",
+                target_ip=ip,
+                target_port=str(port),
+                tcpfp_hash=result["tcpfp_hash"],
+                tcpfp_raw=result["tcpfp_raw"],
+                ttl=str(result["ttl"]),
+                window_size=str(result["window_size"]),
+                df_bit=str(result["df_bit"]),
+                mss=str(result["mss"]),
+                window_scale=str(result["window_scale"]),
+                sack_ok=str(result["sack_ok"]),
+                timestamp=str(result["timestamp"]),
+                options_order=result["options_order"],
+                msg=f"TCPFP {ip}:{port} = {result['tcpfp_hash']}",
+            )
+            logger.info("prober: TCPFP %s:%d = %s", ip, port, result["tcpfp_hash"])
+        except Exception as exc:
+            done.add(port)
+            _write_event(
+                log_path, json_path,
+                "prober_error",
+                severity=_SEVERITY_WARNING,
+                target_ip=ip,
+                target_port=str(port),
+                error=str(exc),
+                msg=f"TCPFP probe failed for {ip}:{port}: {exc}",
+            )
+            logger.warning("prober: TCPFP probe failed %s:%d: %s", ip, port, exc)
 
 
 # ─── Main worker ─────────────────────────────────────────────────────────────
@@ -273,41 +398,52 @@ async def prober_worker(
     interval: int = 300,
     timeout: float = 5.0,
     ports: list[int] | None = None,
+    ssh_ports: list[int] | None = None,
+    tcpfp_ports: list[int] | None = None,
 ) -> None:
     """
     Main entry point for the standalone prober process.
 
     Discovers attacker IPs automatically by tailing the JSON log file,
-    then JARM-probes each IP on common C2 ports.
+    then fingerprints each IP via JARM, HASSH, and TCP/IP stack probes.
 
     Args:
         log_file: base path for log files (RFC 5424 to .log, JSON to .json)
         interval: seconds between probe cycles
         timeout: per-probe TCP timeout
-        ports: list of ports to probe (defaults to DEFAULT_PROBE_PORTS)
+        ports: JARM TLS ports (defaults to DEFAULT_PROBE_PORTS)
+        ssh_ports: HASSH SSH ports (defaults to DEFAULT_SSH_PORTS)
+        tcpfp_ports: TCP fingerprint ports (defaults to DEFAULT_TCPFP_PORTS)
     """
-    probe_ports = ports or DEFAULT_PROBE_PORTS
+    jarm_ports = ports or DEFAULT_PROBE_PORTS
+    hassh_ports = ssh_ports or DEFAULT_SSH_PORTS
+    tcp_ports = tcpfp_ports or DEFAULT_TCPFP_PORTS
+
+    all_ports_str = (
+        f"jarm={','.join(str(p) for p in jarm_ports)} "
+        f"ssh={','.join(str(p) for p in hassh_ports)} "
+        f"tcpfp={','.join(str(p) for p in tcp_ports)}"
+    )
 
     log_path = Path(log_file)
     json_path = log_path.with_suffix(".json")
     log_path.parent.mkdir(parents=True, exist_ok=True)
 
     logger.info(
-        "prober started interval=%ds ports=%s log=%s",
-        interval, ",".join(str(p) for p in probe_ports), log_path,
+        "prober started interval=%ds %s log=%s",
+        interval, all_ports_str, log_path,
     )
 
     _write_event(
         log_path, json_path,
         "prober_startup",
         interval=str(interval),
-        probe_ports=",".join(str(p) for p in probe_ports),
-        msg=f"DECNET-PROBER started, interval {interval}s, "
-            f"ports {','.join(str(p) for p in probe_ports)}",
+        probe_ports=all_ports_str,
+        msg=f"DECNET-PROBER started, interval {interval}s, {all_ports_str}",
     )
 
     known_attackers: set[str] = set()
-    probed: dict[str, set[int]] = {}  # IP -> set of ports already probed
+    probed: dict[str, dict[str, set[int]]] = {}  # IP -> {type -> ports}
     log_position: int = 0
 
     while True:
@@ -326,7 +462,8 @@ async def prober_worker(
 
         if known_attackers:
             await asyncio.to_thread(
-                _probe_cycle, known_attackers, probed, probe_ports,
+                _probe_cycle, known_attackers, probed,
+                jarm_ports, hassh_ports, tcp_ports,
                 log_path, json_path, timeout,
             )
 

@@ -1,6 +1,6 @@
 """
 Tests for the prober worker — target discovery from the log stream and
-probe cycle behavior.
+probe cycle behavior (JARM, HASSH, TCP/IP fingerprinting).
 """
 
 from __future__ import annotations
@@ -14,6 +14,8 @@ import pytest
 from decnet.prober.jarm import JARM_EMPTY_HASH
 from decnet.prober.worker import (
     DEFAULT_PROBE_PORTS,
+    DEFAULT_SSH_PORTS,
+    DEFAULT_TCPFP_PORTS,
     _discover_attackers,
     _probe_cycle,
     _write_event,
@@ -103,84 +105,355 @@ class TestDiscoverAttackers:
         assert "10.0.0.1" in ips
 
 
-# ─── _probe_cycle ────────────────────────────────────────────────────────────
+# ─── _probe_cycle: JARM phase ──────────────────────────────────────────────
 
-class TestProbeCycle:
+class TestProbeCycleJARM:
 
+    @patch("decnet.prober.worker.tcp_fingerprint")
+    @patch("decnet.prober.worker.hassh_server")
     @patch("decnet.prober.worker.jarm_hash")
-    def test_probes_new_ips(self, mock_jarm: MagicMock, tmp_path: Path):
+    def test_probes_new_ips(self, mock_jarm: MagicMock, mock_hassh: MagicMock,
+                            mock_tcpfp: MagicMock, tmp_path: Path):
         mock_jarm.return_value = "c0c" * 10 + "a" * 32  # fake 62-char hash
+        mock_hassh.return_value = None
+        mock_tcpfp.return_value = None
         log_path = tmp_path / "decnet.log"
         json_path = tmp_path / "decnet.json"
 
         targets = {"10.0.0.1"}
-        probed: dict[str, set[int]] = {}
+        probed: dict[str, dict[str, set[int]]] = {}
 
-        _probe_cycle(targets, probed, [443, 8443], log_path, json_path, timeout=1.0)
+        _probe_cycle(targets, probed, [443, 8443], [], [], log_path, json_path, timeout=1.0)
 
         assert mock_jarm.call_count == 2  # two ports
-        assert 443 in probed["10.0.0.1"]
-        assert 8443 in probed["10.0.0.1"]
+        assert 443 in probed["10.0.0.1"]["jarm"]
+        assert 8443 in probed["10.0.0.1"]["jarm"]
 
+    @patch("decnet.prober.worker.tcp_fingerprint")
+    @patch("decnet.prober.worker.hassh_server")
     @patch("decnet.prober.worker.jarm_hash")
-    def test_skips_already_probed_ports(self, mock_jarm: MagicMock, tmp_path: Path):
+    def test_skips_already_probed_ports(self, mock_jarm: MagicMock, mock_hassh: MagicMock,
+                                        mock_tcpfp: MagicMock, tmp_path: Path):
         mock_jarm.return_value = "c0c" * 10 + "a" * 32
+        mock_hassh.return_value = None
+        mock_tcpfp.return_value = None
         log_path = tmp_path / "decnet.log"
         json_path = tmp_path / "decnet.json"
 
         targets = {"10.0.0.1"}
-        probed: dict[str, set[int]] = {"10.0.0.1": {443}}
+        probed: dict[str, dict[str, set[int]]] = {"10.0.0.1": {"jarm": {443}}}
 
-        _probe_cycle(targets, probed, [443, 8443], log_path, json_path, timeout=1.0)
+        _probe_cycle(targets, probed, [443, 8443], [], [], log_path, json_path, timeout=1.0)
 
         # Should only probe 8443 (443 already done)
         assert mock_jarm.call_count == 1
         mock_jarm.assert_called_once_with("10.0.0.1", 8443, timeout=1.0)
 
+    @patch("decnet.prober.worker.tcp_fingerprint")
+    @patch("decnet.prober.worker.hassh_server")
     @patch("decnet.prober.worker.jarm_hash")
-    def test_empty_hash_not_logged(self, mock_jarm: MagicMock, tmp_path: Path):
-        """All-zeros JARM hash (no TLS server) should not be written as a jarm_fingerprint event."""
+    def test_empty_hash_not_logged(self, mock_jarm: MagicMock, mock_hassh: MagicMock,
+                                    mock_tcpfp: MagicMock, tmp_path: Path):
         mock_jarm.return_value = JARM_EMPTY_HASH
+        mock_hassh.return_value = None
+        mock_tcpfp.return_value = None
         log_path = tmp_path / "decnet.log"
         json_path = tmp_path / "decnet.json"
 
         targets = {"10.0.0.1"}
-        probed: dict[str, set[int]] = {}
+        probed: dict[str, dict[str, set[int]]] = {}
 
-        _probe_cycle(targets, probed, [443], log_path, json_path, timeout=1.0)
+        _probe_cycle(targets, probed, [443], [], [], log_path, json_path, timeout=1.0)
 
-        # Port should be marked as probed
-        assert 443 in probed["10.0.0.1"]
-        # But no jarm_fingerprint event should be written
+        assert 443 in probed["10.0.0.1"]["jarm"]
         if json_path.exists():
             content = json_path.read_text()
             assert "jarm_fingerprint" not in content
 
+    @patch("decnet.prober.worker.tcp_fingerprint")
+    @patch("decnet.prober.worker.hassh_server")
     @patch("decnet.prober.worker.jarm_hash")
-    def test_exception_marks_port_probed(self, mock_jarm: MagicMock, tmp_path: Path):
+    def test_exception_marks_port_probed(self, mock_jarm: MagicMock, mock_hassh: MagicMock,
+                                          mock_tcpfp: MagicMock, tmp_path: Path):
         mock_jarm.side_effect = OSError("Connection refused")
+        mock_hassh.return_value = None
+        mock_tcpfp.return_value = None
         log_path = tmp_path / "decnet.log"
         json_path = tmp_path / "decnet.json"
 
         targets = {"10.0.0.1"}
-        probed: dict[str, set[int]] = {}
+        probed: dict[str, dict[str, set[int]]] = {}
 
-        _probe_cycle(targets, probed, [443], log_path, json_path, timeout=1.0)
+        _probe_cycle(targets, probed, [443], [], [], log_path, json_path, timeout=1.0)
 
-        # Port marked as probed to avoid infinite retries
-        assert 443 in probed["10.0.0.1"]
+        assert 443 in probed["10.0.0.1"]["jarm"]
 
+    @patch("decnet.prober.worker.tcp_fingerprint")
+    @patch("decnet.prober.worker.hassh_server")
     @patch("decnet.prober.worker.jarm_hash")
-    def test_skips_ip_with_all_ports_done(self, mock_jarm: MagicMock, tmp_path: Path):
+    def test_skips_ip_with_all_ports_done(self, mock_jarm: MagicMock, mock_hassh: MagicMock,
+                                           mock_tcpfp: MagicMock, tmp_path: Path):
         log_path = tmp_path / "decnet.log"
         json_path = tmp_path / "decnet.json"
 
         targets = {"10.0.0.1"}
-        probed: dict[str, set[int]] = {"10.0.0.1": {443, 8443}}
+        probed: dict[str, dict[str, set[int]]] = {
+            "10.0.0.1": {"jarm": {443, 8443}, "hassh": set(), "tcpfp": set()},
+        }
 
-        _probe_cycle(targets, probed, [443, 8443], log_path, json_path, timeout=1.0)
+        _probe_cycle(targets, probed, [443, 8443], [], [], log_path, json_path, timeout=1.0)
 
         assert mock_jarm.call_count == 0
+
+
+# ─── _probe_cycle: HASSH phase ─────────────────────────────────────────────
+
+class TestProbeCycleHASSH:
+
+    @patch("decnet.prober.worker.tcp_fingerprint")
+    @patch("decnet.prober.worker.hassh_server")
+    @patch("decnet.prober.worker.jarm_hash")
+    def test_probes_ssh_ports(self, mock_jarm: MagicMock, mock_hassh: MagicMock,
+                               mock_tcpfp: MagicMock, tmp_path: Path):
+        mock_jarm.return_value = JARM_EMPTY_HASH
+        mock_hassh.return_value = {
+            "hassh_server": "a" * 32,
+            "banner": "SSH-2.0-OpenSSH_8.9p1",
+            "kex_algorithms": "curve25519-sha256",
+            "encryption_s2c": "aes256-gcm@openssh.com",
+            "mac_s2c": "hmac-sha2-256-etm@openssh.com",
+            "compression_s2c": "none",
+        }
+        mock_tcpfp.return_value = None
+        log_path = tmp_path / "decnet.log"
+        json_path = tmp_path / "decnet.json"
+
+        targets = {"10.0.0.1"}
+        probed: dict[str, dict[str, set[int]]] = {}
+
+        _probe_cycle(targets, probed, [], [22, 2222], [], log_path, json_path, timeout=1.0)
+
+        assert mock_hassh.call_count == 2
+        assert 22 in probed["10.0.0.1"]["hassh"]
+        assert 2222 in probed["10.0.0.1"]["hassh"]
+
+    @patch("decnet.prober.worker.tcp_fingerprint")
+    @patch("decnet.prober.worker.hassh_server")
+    @patch("decnet.prober.worker.jarm_hash")
+    def test_hassh_writes_event(self, mock_jarm: MagicMock, mock_hassh: MagicMock,
+                                 mock_tcpfp: MagicMock, tmp_path: Path):
+        mock_jarm.return_value = JARM_EMPTY_HASH
+        mock_hassh.return_value = {
+            "hassh_server": "b" * 32,
+            "banner": "SSH-2.0-Paramiko_3.0",
+            "kex_algorithms": "diffie-hellman-group14-sha1",
+            "encryption_s2c": "aes128-cbc",
+            "mac_s2c": "hmac-sha1",
+            "compression_s2c": "none",
+        }
+        mock_tcpfp.return_value = None
+        log_path = tmp_path / "decnet.log"
+        json_path = tmp_path / "decnet.json"
+
+        targets = {"10.0.0.1"}
+        probed: dict[str, dict[str, set[int]]] = {}
+
+        _probe_cycle(targets, probed, [], [22], [], log_path, json_path, timeout=1.0)
+
+        assert json_path.exists()
+        content = json_path.read_text()
+        assert "hassh_fingerprint" in content
+        record = json.loads(content.strip())
+        assert record["fields"]["hassh_server_hash"] == "b" * 32
+        assert record["fields"]["ssh_banner"] == "SSH-2.0-Paramiko_3.0"
+
+    @patch("decnet.prober.worker.tcp_fingerprint")
+    @patch("decnet.prober.worker.hassh_server")
+    @patch("decnet.prober.worker.jarm_hash")
+    def test_hassh_none_not_logged(self, mock_jarm: MagicMock, mock_hassh: MagicMock,
+                                    mock_tcpfp: MagicMock, tmp_path: Path):
+        mock_jarm.return_value = JARM_EMPTY_HASH
+        mock_hassh.return_value = None  # No SSH server
+        mock_tcpfp.return_value = None
+        log_path = tmp_path / "decnet.log"
+        json_path = tmp_path / "decnet.json"
+
+        targets = {"10.0.0.1"}
+        probed: dict[str, dict[str, set[int]]] = {}
+
+        _probe_cycle(targets, probed, [], [22], [], log_path, json_path, timeout=1.0)
+
+        assert 22 in probed["10.0.0.1"]["hassh"]
+        if json_path.exists():
+            content = json_path.read_text()
+            assert "hassh_fingerprint" not in content
+
+    @patch("decnet.prober.worker.tcp_fingerprint")
+    @patch("decnet.prober.worker.hassh_server")
+    @patch("decnet.prober.worker.jarm_hash")
+    def test_hassh_skips_already_probed(self, mock_jarm: MagicMock, mock_hassh: MagicMock,
+                                         mock_tcpfp: MagicMock, tmp_path: Path):
+        mock_jarm.return_value = JARM_EMPTY_HASH
+        mock_tcpfp.return_value = None
+        log_path = tmp_path / "decnet.log"
+        json_path = tmp_path / "decnet.json"
+
+        targets = {"10.0.0.1"}
+        probed: dict[str, dict[str, set[int]]] = {"10.0.0.1": {"hassh": {22}}}
+
+        _probe_cycle(targets, probed, [], [22, 2222], [], log_path, json_path, timeout=1.0)
+
+        assert mock_hassh.call_count == 1  # only 2222
+        mock_hassh.assert_called_once_with("10.0.0.1", 2222, timeout=1.0)
+
+    @patch("decnet.prober.worker.tcp_fingerprint")
+    @patch("decnet.prober.worker.hassh_server")
+    @patch("decnet.prober.worker.jarm_hash")
+    def test_hassh_exception_marks_probed(self, mock_jarm: MagicMock, mock_hassh: MagicMock,
+                                           mock_tcpfp: MagicMock, tmp_path: Path):
+        mock_jarm.return_value = JARM_EMPTY_HASH
+        mock_hassh.side_effect = OSError("Connection refused")
+        mock_tcpfp.return_value = None
+        log_path = tmp_path / "decnet.log"
+        json_path = tmp_path / "decnet.json"
+
+        targets = {"10.0.0.1"}
+        probed: dict[str, dict[str, set[int]]] = {}
+
+        _probe_cycle(targets, probed, [], [22], [], log_path, json_path, timeout=1.0)
+
+        assert 22 in probed["10.0.0.1"]["hassh"]
+
+
+# ─── _probe_cycle: TCPFP phase ─────────────────────────────────────────────
+
+class TestProbeCycleTCPFP:
+
+    @patch("decnet.prober.worker.tcp_fingerprint")
+    @patch("decnet.prober.worker.hassh_server")
+    @patch("decnet.prober.worker.jarm_hash")
+    def test_probes_tcpfp_ports(self, mock_jarm: MagicMock, mock_hassh: MagicMock,
+                                 mock_tcpfp: MagicMock, tmp_path: Path):
+        mock_jarm.return_value = JARM_EMPTY_HASH
+        mock_hassh.return_value = None
+        mock_tcpfp.return_value = {
+            "tcpfp_hash": "d" * 32,
+            "tcpfp_raw": "64:65535:1:1460:7:1:1:M,N,W,N,N,T,S,E",
+            "ttl": 64, "window_size": 65535, "df_bit": 1,
+            "mss": 1460, "window_scale": 7, "sack_ok": 1,
+            "timestamp": 1, "options_order": "M,N,W,N,N,T,S,E",
+        }
+        log_path = tmp_path / "decnet.log"
+        json_path = tmp_path / "decnet.json"
+
+        targets = {"10.0.0.1"}
+        probed: dict[str, dict[str, set[int]]] = {}
+
+        _probe_cycle(targets, probed, [], [], [80, 443], log_path, json_path, timeout=1.0)
+
+        assert mock_tcpfp.call_count == 2
+        assert 80 in probed["10.0.0.1"]["tcpfp"]
+        assert 443 in probed["10.0.0.1"]["tcpfp"]
+
+    @patch("decnet.prober.worker.tcp_fingerprint")
+    @patch("decnet.prober.worker.hassh_server")
+    @patch("decnet.prober.worker.jarm_hash")
+    def test_tcpfp_writes_event_with_all_fields(self, mock_jarm: MagicMock, mock_hassh: MagicMock,
+                                                  mock_tcpfp: MagicMock, tmp_path: Path):
+        mock_jarm.return_value = JARM_EMPTY_HASH
+        mock_hassh.return_value = None
+        mock_tcpfp.return_value = {
+            "tcpfp_hash": "e" * 32,
+            "tcpfp_raw": "128:8192:1:1460:8:1:0:M,N,W,N,N,S",
+            "ttl": 128, "window_size": 8192, "df_bit": 1,
+            "mss": 1460, "window_scale": 8, "sack_ok": 1,
+            "timestamp": 0, "options_order": "M,N,W,N,N,S",
+        }
+        log_path = tmp_path / "decnet.log"
+        json_path = tmp_path / "decnet.json"
+
+        targets = {"10.0.0.1"}
+        probed: dict[str, dict[str, set[int]]] = {}
+
+        _probe_cycle(targets, probed, [], [], [443], log_path, json_path, timeout=1.0)
+
+        content = json_path.read_text()
+        assert "tcpfp_fingerprint" in content
+        record = json.loads(content.strip())
+        assert record["fields"]["tcpfp_hash"] == "e" * 32
+        assert record["fields"]["ttl"] == "128"
+        assert record["fields"]["window_size"] == "8192"
+        assert record["fields"]["options_order"] == "M,N,W,N,N,S"
+
+    @patch("decnet.prober.worker.tcp_fingerprint")
+    @patch("decnet.prober.worker.hassh_server")
+    @patch("decnet.prober.worker.jarm_hash")
+    def test_tcpfp_none_not_logged(self, mock_jarm: MagicMock, mock_hassh: MagicMock,
+                                    mock_tcpfp: MagicMock, tmp_path: Path):
+        mock_jarm.return_value = JARM_EMPTY_HASH
+        mock_hassh.return_value = None
+        mock_tcpfp.return_value = None
+        log_path = tmp_path / "decnet.log"
+        json_path = tmp_path / "decnet.json"
+
+        targets = {"10.0.0.1"}
+        probed: dict[str, dict[str, set[int]]] = {}
+
+        _probe_cycle(targets, probed, [], [], [443], log_path, json_path, timeout=1.0)
+
+        assert 443 in probed["10.0.0.1"]["tcpfp"]
+        if json_path.exists():
+            content = json_path.read_text()
+            assert "tcpfp_fingerprint" not in content
+
+
+# ─── Probe type isolation ───────────────────────────────────────────────────
+
+class TestProbeTypeIsolation:
+
+    @patch("decnet.prober.worker.tcp_fingerprint")
+    @patch("decnet.prober.worker.hassh_server")
+    @patch("decnet.prober.worker.jarm_hash")
+    def test_jarm_does_not_mark_hassh(self, mock_jarm: MagicMock, mock_hassh: MagicMock,
+                                       mock_tcpfp: MagicMock, tmp_path: Path):
+        """JARM probing port 2222 should not mark HASSH port 2222 as done."""
+        mock_jarm.return_value = JARM_EMPTY_HASH
+        mock_hassh.return_value = None
+        mock_tcpfp.return_value = None
+        log_path = tmp_path / "decnet.log"
+        json_path = tmp_path / "decnet.json"
+
+        targets = {"10.0.0.1"}
+        probed: dict[str, dict[str, set[int]]] = {}
+
+        # Probe with JARM on 2222 and HASSH on 2222
+        _probe_cycle(targets, probed, [2222], [2222], [], log_path, json_path, timeout=1.0)
+
+        # Both should be called
+        assert mock_jarm.call_count == 1
+        assert mock_hassh.call_count == 1
+        assert 2222 in probed["10.0.0.1"]["jarm"]
+        assert 2222 in probed["10.0.0.1"]["hassh"]
+
+    @patch("decnet.prober.worker.tcp_fingerprint")
+    @patch("decnet.prober.worker.hassh_server")
+    @patch("decnet.prober.worker.jarm_hash")
+    def test_all_three_probes_run(self, mock_jarm: MagicMock, mock_hassh: MagicMock,
+                                   mock_tcpfp: MagicMock, tmp_path: Path):
+        mock_jarm.return_value = JARM_EMPTY_HASH
+        mock_hassh.return_value = None
+        mock_tcpfp.return_value = None
+        log_path = tmp_path / "decnet.log"
+        json_path = tmp_path / "decnet.json"
+
+        targets = {"10.0.0.1"}
+        probed: dict[str, dict[str, set[int]]] = {}
+
+        _probe_cycle(targets, probed, [443], [22], [80], log_path, json_path, timeout=1.0)
+
+        assert mock_jarm.call_count == 1
+        assert mock_hassh.call_count == 1
+        assert mock_tcpfp.call_count == 1
 
 
 # ─── _write_event ────────────────────────────────────────────────────────────

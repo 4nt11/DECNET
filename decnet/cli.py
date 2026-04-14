@@ -324,7 +324,7 @@ def probe(
     timeout: float = typer.Option(5.0, "--timeout", help="Per-probe TCP timeout in seconds"),
     daemon: bool = typer.Option(False, "--daemon", "-d", help="Detach to background (used by deploy, no console output)"),
 ) -> None:
-    """JARM-fingerprint all attackers discovered in the log stream."""
+    """Fingerprint attackers (JARM + HASSH + TCP/IP stack) discovered in the log stream."""
     import asyncio
     from decnet.prober import prober_worker
 

@@ -218,3 +218,49 @@ async def _extract_bounty(repo: BaseRepository, log_data: dict[str, Any]) -> Non
                 "target_port": _fields.get("target_port"),
             },
         })
+
+    # 10. HASSHServer fingerprint from active prober
+    _hassh = _fields.get("hassh_server_hash")
+    if _hassh and log_data.get("service") == "prober":
+        await repo.add_bounty({
+            "decky": log_data.get("decky"),
+            "service": "prober",
+            "attacker_ip": _fields.get("target_ip", "Unknown"),
+            "bounty_type": "fingerprint",
+            "payload": {
+                "fingerprint_type": "hassh_server",
+                "hash": _hassh,
+                "target_ip": _fields.get("target_ip"),
+                "target_port": _fields.get("target_port"),
+                "ssh_banner": _fields.get("ssh_banner"),
+                "kex_algorithms": _fields.get("kex_algorithms"),
+                "encryption_s2c": _fields.get("encryption_s2c"),
+                "mac_s2c": _fields.get("mac_s2c"),
+                "compression_s2c": _fields.get("compression_s2c"),
+            },
+        })
+
+    # 11. TCP/IP stack fingerprint from active prober
+    _tcpfp = _fields.get("tcpfp_hash")
+    if _tcpfp and log_data.get("service") == "prober":
+        await repo.add_bounty({
+            "decky": log_data.get("decky"),
+            "service": "prober",
+            "attacker_ip": _fields.get("target_ip", "Unknown"),
+            "bounty_type": "fingerprint",
+            "payload": {
+                "fingerprint_type": "tcpfp",
+                "hash": _tcpfp,
+                "raw": _fields.get("tcpfp_raw"),
+                "target_ip": _fields.get("target_ip"),
+                "target_port": _fields.get("target_port"),
+                "ttl": _fields.get("ttl"),
+                "window_size": _fields.get("window_size"),
+                "df_bit": _fields.get("df_bit"),
+                "mss": _fields.get("mss"),
+                "window_scale": _fields.get("window_scale"),
+                "sack_ok": _fields.get("sack_ok"),
+                "timestamp": _fields.get("timestamp"),
+                "options_order": _fields.get("options_order"),
+            },
+        })
