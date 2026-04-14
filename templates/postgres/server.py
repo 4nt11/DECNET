@@ -24,7 +24,6 @@ def _error_response(message: str) -> bytes:
 
 def _log(event_type: str, severity: int = 6, **kwargs) -> None:
     line = syslog_line(SERVICE_NAME, NODE_NAME, event_type, severity, **kwargs)
-    print(line, flush=True)
     write_syslog_file(line)
     forward_syslog(line, LOG_TARGET)
 
