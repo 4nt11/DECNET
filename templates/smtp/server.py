@@ -87,9 +87,10 @@ class SMTPProtocol(asyncio.Protocol):
 
     def data_received(self, data):
         self._buf += data
-        while b"\r\n" in self._buf:
-            line, self._buf = self._buf.split(b"\r\n", 1)
-            self._handle_line(line.decode(errors="replace"))
+        while b"\n" in self._buf:
+            line, self._buf = self._buf.split(b"\n", 1)
+            # Strip trailing \r so both CRLF and bare LF work
+            self._handle_line(line.rstrip(b"\r").decode(errors="replace"))
 
     def connection_lost(self, exc):
         _log("disconnect", src=self._peer[0] if self._peer else "?")
@@ -118,7 +119,12 @@ class SMTPProtocol(asyncio.Protocol):
                 self._data_buf.append(line[1:] if line.startswith(".") else line)
             return
 
-        # ── AUTH multi-step (LOGIN mechanism) ─────────────────────────────────
+        # ── AUTH multi-step (LOGIN / PLAIN continuation) ─────────────────────
+        if self._auth_state == "await_plain":
+            user, password = _decode_auth_plain(line)
+            self._finish_auth(user, password)
+            self._auth_state = ""
+            return
         if self._auth_state == "await_user":
             self._auth_user  = base64.b64decode(line + "==").decode(errors="replace")
             self._auth_state = "await_pass"
