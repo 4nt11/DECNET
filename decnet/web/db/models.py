@@ -53,7 +53,8 @@ class State(SQLModel, table=True):
 
 class Attacker(SQLModel, table=True):
     __tablename__ = "attackers"
-    ip: str = Field(primary_key=True)
+    uuid: str = Field(primary_key=True)
+    ip: str = Field(index=True)
     first_seen: datetime = Field(index=True)
     last_seen: datetime = Field(index=True)
     event_count: int = Field(default=0)

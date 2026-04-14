@@ -11,6 +11,8 @@ from .fleet.api_mutate_decky import router as mutate_decky_router
 from .fleet.api_mutate_interval import router as mutate_interval_router
 from .fleet.api_deploy_deckies import router as deploy_deckies_router
 from .stream.api_stream_events import router as stream_router
+from .attackers.api_get_attackers import router as attackers_router
+from .attackers.api_get_attacker_detail import router as attacker_detail_router
 
 api_router = APIRouter()
 
@@ -30,6 +32,10 @@ api_router.include_router(get_deckies_router)
 api_router.include_router(mutate_decky_router)
 api_router.include_router(mutate_interval_router)
 api_router.include_router(deploy_deckies_router)
+
+# Attacker Profiles
+api_router.include_router(attackers_router)
+api_router.include_router(attacker_detail_router)
 
 # Observability
 api_router.include_router(stats_router)

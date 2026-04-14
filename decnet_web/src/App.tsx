@@ -6,6 +6,7 @@ import Dashboard from './components/Dashboard';
 import DeckyFleet from './components/DeckyFleet';
 import LiveLogs from './components/LiveLogs';
 import Attackers from './components/Attackers';
+import AttackerDetail from './components/AttackerDetail';
 import Config from './components/Config';
 import Bounty from './components/Bounty';
 
@@ -61,6 +62,7 @@ function App() {
           <Route path="/live-logs" element={<LiveLogs />} />
           <Route path="/bounty" element={<Bounty />} />
           <Route path="/attackers" element={<Attackers />} />
+          <Route path="/attackers/:id" element={<AttackerDetail />} />
           <Route path="/config" element={<Config />} />
           <Route path="*" element={<Navigate to="/" replace />} />
         </Routes>

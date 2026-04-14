@@ -97,13 +97,33 @@ class BaseRepository(ABC):
         pass
 
     @abstractmethod
+    async def get_max_log_id(self) -> int:
+        """Return the highest log ID, or 0 if the table is empty."""
+        pass
+
+    @abstractmethod
+    async def get_logs_after_id(self, last_id: int, limit: int = 500) -> list[dict[str, Any]]:
+        """Return logs with id > last_id, ordered by id ASC, up to limit."""
+        pass
+
+    @abstractmethod
     async def get_all_bounties_by_ip(self) -> dict[str, list[dict[str, Any]]]:
         """Retrieve all bounty rows grouped by attacker_ip."""
         pass
 
     @abstractmethod
+    async def get_bounties_for_ips(self, ips: set[str]) -> dict[str, list[dict[str, Any]]]:
+        """Retrieve bounty rows grouped by attacker_ip, filtered to only the given IPs."""
+        pass
+
+    @abstractmethod
     async def upsert_attacker(self, data: dict[str, Any]) -> None:
         """Insert or replace an attacker profile record."""
+        pass
+
+    @abstractmethod
+    async def get_attacker_by_uuid(self, uuid: str) -> Optional[dict[str, Any]]:
+        """Retrieve a single attacker profile by UUID."""
         pass
 
     @abstractmethod

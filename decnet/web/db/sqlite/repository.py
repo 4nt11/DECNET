@@ -29,6 +29,7 @@ class SQLiteRepository(BaseRepository):
     async def initialize(self) -> None:
         """Async warm-up / verification. Creates tables if they don't exist."""
         from sqlmodel import SQLModel
+        await self._migrate_attackers_table()
         async with self.engine.begin() as conn:
             await conn.run_sync(SQLModel.metadata.create_all)
 
@@ -46,6 +47,13 @@ class SQLiteRepository(BaseRepository):
                     must_change_password=True,
                 ))
                 await session.commit()
+
+    async def _migrate_attackers_table(self) -> None:
+        """Drop the old attackers table if it lacks the uuid column (pre-UUID schema)."""
+        async with self.engine.begin() as conn:
+            rows = (await conn.execute(text("PRAGMA table_info(attackers)"))).fetchall()
+            if rows and not any(r[1] == "uuid" for r in rows):
+                await conn.execute(text("DROP TABLE attackers"))
 
     async def reinitialize(self) -> None:
         """Initialize the database schema asynchronously (useful for tests)."""
@@ -418,6 +426,22 @@ class SQLiteRepository(BaseRepository):
                 grouped[item.attacker_ip].append(d)
             return dict(grouped)
 
+    async def get_bounties_for_ips(self, ips: set[str]) -> dict[str, List[dict[str, Any]]]:
+        from collections import defaultdict
+        async with self.session_factory() as session:
+            result = await session.execute(
+                select(Bounty).where(Bounty.attacker_ip.in_(ips)).order_by(asc(Bounty.timestamp))
+            )
+            grouped: dict[str, List[dict[str, Any]]] = defaultdict(list)
+            for item in result.scalars().all():
+                d = item.model_dump(mode="json")
+                try:
+                    d["payload"] = json.loads(d["payload"])
+                except (json.JSONDecodeError, TypeError):
+                    pass
+                grouped[item.attacker_ip].append(d)
+            return dict(grouped)
+
     async def upsert_attacker(self, data: dict[str, Any]) -> None:
         async with self.session_factory() as session:
             result = await session.execute(
@@ -429,8 +453,30 @@ class SQLiteRepository(BaseRepository):
                     setattr(existing, k, v)
                 session.add(existing)
             else:
+                data["uuid"] = str(uuid.uuid4())
                 session.add(Attacker(**data))
             await session.commit()
+
+    @staticmethod
+    def _deserialize_attacker(d: dict[str, Any]) -> dict[str, Any]:
+        """Parse JSON-encoded list fields in an attacker dict."""
+        for key in ("services", "deckies", "fingerprints", "commands"):
+            if isinstance(d.get(key), str):
+                try:
+                    d[key] = json.loads(d[key])
+                except (json.JSONDecodeError, TypeError):
+                    pass
+        return d
+
+    async def get_attacker_by_uuid(self, uuid: str) -> Optional[dict[str, Any]]:
+        async with self.session_factory() as session:
+            result = await session.execute(
+                select(Attacker).where(Attacker.uuid == uuid)
+            )
+            attacker = result.scalar_one_or_none()
+            if not attacker:
+                return None
+            return self._deserialize_attacker(attacker.model_dump(mode="json"))
 
     async def get_attackers(
         self,
@@ -450,7 +496,10 @@ class SQLiteRepository(BaseRepository):
 
         async with self.session_factory() as session:
             result = await session.execute(statement)
-            return [a.model_dump(mode="json") for a in result.scalars().all()]
+            return [
+                self._deserialize_attacker(a.model_dump(mode="json"))
+                for a in result.scalars().all()
+            ]
 
     async def get_total_attackers(self, search: Optional[str] = None) -> int:
         statement = select(func.count()).select_from(Attacker)
