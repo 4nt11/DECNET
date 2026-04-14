@@ -13,6 +13,7 @@ from .fleet.api_deploy_deckies import router as deploy_deckies_router
 from .stream.api_stream_events import router as stream_router
 from .attackers.api_get_attackers import router as attackers_router
 from .attackers.api_get_attacker_detail import router as attacker_detail_router
+from .attackers.api_get_attacker_commands import router as attacker_commands_router
 
 api_router = APIRouter()
 
@@ -36,6 +37,7 @@ api_router.include_router(deploy_deckies_router)
 # Attacker Profiles
 api_router.include_router(attackers_router)
 api_router.include_router(attacker_detail_router)
+api_router.include_router(attacker_commands_router)
 
 # Observability
 api_router.include_router(stats_router)

@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
-import { ArrowLeft, Crosshair, Fingerprint, Shield, Clock, Wifi, Lock, FileKey } from 'lucide-react';
+import { ArrowLeft, ChevronLeft, ChevronRight, Crosshair, Fingerprint, Shield, Clock, Wifi, Lock, FileKey } from 'lucide-react';
 import api from '../utils/api';
 import './Dashboard.css';
 
@@ -218,6 +218,12 @@ const AttackerDetail: React.FC = () => {
   const [error, setError] = useState<string | null>(null);
   const [serviceFilter, setServiceFilter] = useState<string | null>(null);
 
+  // Commands pagination state
+  const [commands, setCommands] = useState<AttackerData['commands']>([]);
+  const [cmdTotal, setCmdTotal] = useState(0);
+  const [cmdPage, setCmdPage] = useState(1);
+  const cmdLimit = 50;
+
   useEffect(() => {
     const fetchAttacker = async () => {
       setLoading(true);
@@ -236,6 +242,29 @@ const AttackerDetail: React.FC = () => {
     };
     fetchAttacker();
   }, [id]);
+
+  useEffect(() => {
+    if (!id) return;
+    const fetchCommands = async () => {
+      try {
+        const offset = (cmdPage - 1) * cmdLimit;
+        let url = `/attackers/${id}/commands?limit=${cmdLimit}&offset=${offset}`;
+        if (serviceFilter) url += `&service=${encodeURIComponent(serviceFilter)}`;
+        const res = await api.get(url);
+        setCommands(res.data.data);
+        setCmdTotal(res.data.total);
+      } catch {
+        setCommands([]);
+        setCmdTotal(0);
+      }
+    };
+    fetchCommands();
+  }, [id, cmdPage, serviceFilter]);
+
+  // Reset command page when service filter changes
+  useEffect(() => {
+    setCmdPage(1);
+  }, [serviceFilter]);
 
   if (loading) {
     return (
@@ -383,15 +412,36 @@ const AttackerDetail: React.FC = () => {
 
       {/* Commands */}
       {(() => {
-        const filteredCmds = serviceFilter
-          ? attacker.commands.filter((cmd) => cmd.service === serviceFilter)
-          : attacker.commands;
+        const cmdTotalPages = Math.ceil(cmdTotal / cmdLimit);
         return (
           <div className="logs-section">
-            <div className="section-header">
-              <h2>COMMANDS ({filteredCmds.length}{serviceFilter ? ` / ${attacker.commands.length}` : ''})</h2>
+            <div className="section-header" style={{ justifyContent: 'space-between' }}>
+              <h2>COMMANDS ({cmdTotal}{serviceFilter ? ` ${serviceFilter.toUpperCase()}` : ''})</h2>
+              {cmdTotalPages > 1 && (
+                <div style={{ display: 'flex', alignItems: 'center', gap: '16px' }}>
+                  <span className="dim" style={{ fontSize: '0.8rem' }}>
+                    Page {cmdPage} of {cmdTotalPages}
+                  </span>
+                  <div style={{ display: 'flex', gap: '8px' }}>
+                    <button
+                      disabled={cmdPage <= 1}
+                      onClick={() => setCmdPage(cmdPage - 1)}
+                      style={{ padding: '4px', border: '1px solid var(--border-color)', opacity: cmdPage <= 1 ? 0.3 : 1 }}
+                    >
+                      <ChevronLeft size={16} />
+                    </button>
+                    <button
+                      disabled={cmdPage >= cmdTotalPages}
+                      onClick={() => setCmdPage(cmdPage + 1)}
+                      style={{ padding: '4px', border: '1px solid var(--border-color)', opacity: cmdPage >= cmdTotalPages ? 0.3 : 1 }}
+                    >
+                      <ChevronRight size={16} />
+                    </button>
+                  </div>
+                </div>
+              )}
             </div>
-            {filteredCmds.length > 0 ? (
+            {commands.length > 0 ? (
               <div className="logs-table-container">
                 <table className="logs-table">
                   <thead>
@@ -403,7 +453,7 @@ const AttackerDetail: React.FC = () => {
                     </tr>
                   </thead>
                   <tbody>
-                    {filteredCmds.map((cmd, i) => (
+                    {commands.map((cmd, i) => (
                       <tr key={i}>
                         <td className="dim" style={{ fontSize: '0.75rem', whiteSpace: 'nowrap' }}>
                           {cmd.timestamp ? new Date(cmd.timestamp).toLocaleString() : '-'}

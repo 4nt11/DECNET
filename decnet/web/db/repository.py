@@ -142,3 +142,14 @@ class BaseRepository(ABC):
     async def get_total_attackers(self, search: Optional[str] = None, service: Optional[str] = None) -> int:
         """Retrieve the total count of attacker profile records, optionally filtered."""
         pass
+
+    @abstractmethod
+    async def get_attacker_commands(
+        self,
+        uuid: str,
+        limit: int = 50,
+        offset: int = 0,
+        service: Optional[str] = None,
+    ) -> dict[str, Any]:
+        """Retrieve paginated commands for an attacker, optionally filtered by service."""
+        pass

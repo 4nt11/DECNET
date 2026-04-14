@@ -30,6 +30,7 @@ class DummyRepo(BaseRepository):
     async def get_attacker_by_uuid(self, u): await super().get_attacker_by_uuid(u)
     async def get_attackers(self, **kw): await super().get_attackers(**kw)
     async def get_total_attackers(self, **kw): await super().get_total_attackers(**kw)
+    async def get_attacker_commands(self, **kw): await super().get_attacker_commands(**kw)
 
 @pytest.mark.asyncio
 async def test_base_repo_coverage():
@@ -59,3 +60,4 @@ async def test_base_repo_coverage():
     await dr.get_attacker_by_uuid("a")
     await dr.get_attackers()
     await dr.get_total_attackers()
+    await dr.get_attacker_commands(uuid="a")

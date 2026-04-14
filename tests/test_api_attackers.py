@@ -204,6 +204,66 @@ class TestGetAttackerDetail:
         assert isinstance(result["commands"], list)
 
 
+# ─── GET /attackers/{uuid}/commands ──────────────────────────────────────────
+
+class TestGetAttackerCommands:
+    @pytest.mark.asyncio
+    async def test_returns_paginated_commands(self):
+        from decnet.web.router.attackers.api_get_attacker_commands import get_attacker_commands
+
+        sample = _sample_attacker()
+        cmds = [
+            {"service": "ssh", "decky": "decky-01", "command": "id", "timestamp": "2026-04-01T10:00:00"},
+            {"service": "ssh", "decky": "decky-01", "command": "whoami", "timestamp": "2026-04-01T10:01:00"},
+        ]
+        with patch("decnet.web.router.attackers.api_get_attacker_commands.repo") as mock_repo:
+            mock_repo.get_attacker_by_uuid = AsyncMock(return_value=sample)
+            mock_repo.get_attacker_commands = AsyncMock(return_value={"total": 2, "data": cmds})
+
+            result = await get_attacker_commands(
+                uuid="att-uuid-1", limit=50, offset=0, service=None,
+                current_user="test-user",
+            )
+
+        assert result["total"] == 2
+        assert len(result["data"]) == 2
+        assert result["limit"] == 50
+        assert result["offset"] == 0
+
+    @pytest.mark.asyncio
+    async def test_service_filter_forwarded(self):
+        from decnet.web.router.attackers.api_get_attacker_commands import get_attacker_commands
+
+        sample = _sample_attacker()
+        with patch("decnet.web.router.attackers.api_get_attacker_commands.repo") as mock_repo:
+            mock_repo.get_attacker_by_uuid = AsyncMock(return_value=sample)
+            mock_repo.get_attacker_commands = AsyncMock(return_value={"total": 0, "data": []})
+
+            await get_attacker_commands(
+                uuid="att-uuid-1", limit=50, offset=0, service="ssh",
+                current_user="test-user",
+            )
+
+        mock_repo.get_attacker_commands.assert_awaited_once_with(
+            uuid="att-uuid-1", limit=50, offset=0, service="ssh",
+        )
+
+    @pytest.mark.asyncio
+    async def test_404_on_unknown_uuid(self):
+        from decnet.web.router.attackers.api_get_attacker_commands import get_attacker_commands
+
+        with patch("decnet.web.router.attackers.api_get_attacker_commands.repo") as mock_repo:
+            mock_repo.get_attacker_by_uuid = AsyncMock(return_value=None)
+
+            with pytest.raises(HTTPException) as exc_info:
+                await get_attacker_commands(
+                    uuid="nonexistent", limit=50, offset=0, service=None,
+                    current_user="test-user",
+                )
+
+        assert exc_info.value.status_code == 404
+
+
 # ─── Auth enforcement ────────────────────────────────────────────────────────
 
 class TestAttackersAuth:

@@ -514,3 +514,26 @@ class SQLiteRepository(BaseRepository):
         async with self.session_factory() as session:
             result = await session.execute(statement)
             return result.scalar() or 0
+
+    async def get_attacker_commands(
+        self,
+        uuid: str,
+        limit: int = 50,
+        offset: int = 0,
+        service: Optional[str] = None,
+    ) -> dict[str, Any]:
+        async with self.session_factory() as session:
+            result = await session.execute(
+                select(Attacker.commands).where(Attacker.uuid == uuid)
+            )
+            raw = result.scalar_one_or_none()
+            if raw is None:
+                return {"total": 0, "data": []}
+
+            commands: list = json.loads(raw) if isinstance(raw, str) else raw
+            if service:
+                commands = [c for c in commands if c.get("service") == service]
+
+            total = len(commands)
+            page = commands[offset: offset + limit]
+            return {"total": total, "data": page}
