@@ -46,6 +46,49 @@ class MySQLRepository(SQLModelRepository):
             if rows and not any(r[0] == "uuid" for r in rows):
                 await conn.execute(text("DROP TABLE attackers"))
 
+    async def _migrate_column_types(self) -> None:
+        """Upgrade TEXT → MEDIUMTEXT for columns that accumulate large JSON blobs.
+
+        ``create_all()`` never alters existing columns, so tables created before
+        ``_BIG_TEXT`` was introduced keep their 64 KiB ``TEXT`` cap.  This method
+        inspects ``information_schema`` and issues ``ALTER TABLE … MODIFY COLUMN``
+        for each offending column found.
+        """
+        targets: dict[str, dict[str, str]] = {
+            "attackers": {
+                "commands":     "MEDIUMTEXT NOT NULL DEFAULT '[]'",
+                "fingerprints": "MEDIUMTEXT NOT NULL DEFAULT '[]'",
+                "services":     "MEDIUMTEXT NOT NULL DEFAULT '[]'",
+                "deckies":      "MEDIUMTEXT NOT NULL DEFAULT '[]'",
+            },
+            "state": {
+                "value": "MEDIUMTEXT NOT NULL",
+            },
+        }
+        async with self.engine.begin() as conn:
+            rows = (await conn.execute(text(
+                "SELECT TABLE_NAME, COLUMN_NAME FROM information_schema.COLUMNS "
+                "WHERE TABLE_SCHEMA = DATABASE() "
+                "  AND TABLE_NAME  IN ('attackers', 'state') "
+                "  AND COLUMN_NAME IN ('commands','fingerprints','services','deckies','value') "
+                "  AND DATA_TYPE   = 'text'"
+            ))).fetchall()
+            for table_name, col_name in rows:
+                spec = targets.get(table_name, {}).get(col_name)
+                if spec:
+                    await conn.execute(text(
+                        f"ALTER TABLE `{table_name}` MODIFY COLUMN `{col_name}` {spec}"
+                    ))
+
+    async def initialize(self) -> None:
+        """Create tables and run all MySQL-specific migrations."""
+        from sqlmodel import SQLModel
+        await self._migrate_attackers_table()
+        await self._migrate_column_types()
+        async with self.engine.begin() as conn:
+            await conn.run_sync(SQLModel.metadata.create_all)
+        await self._ensure_admin_user()
+
     def _json_field_equals(self, key: str):
         # MySQL 5.7+ exposes JSON_EXTRACT; quoted string result returned for
         # TEXT-stored JSON, same behavior we rely on in SQLite.
