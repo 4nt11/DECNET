@@ -89,11 +89,11 @@
 
 ### TLS/SSL Fingerprinting (via sniffer container)
 - [x] **JA3/JA3S** — TLS ClientHello/ServerHello fingerprint hashes
-- [ ] **JA4+ family** — JA4, JA4S, JA4H, JA4L (latency/geo estimation via RTT)
-- [ ] **JARM** — Active server fingerprint; identifies C2 framework from TLS server behavior
-- [ ] **CYU** — Citrix-specific TLS fingerprint
-- [ ] **TLS session resumption behavior** — Identifies tooling by how it handles session tickets
-- [ ] **Certificate details** — CN, SANs, issuer, validity period, self-signed flag (attacker-run servers)
+- [x] **JA4+ family** — JA4, JA4S, JA4H, JA4L (latency/geo estimation via RTT)
+- [x] **JARM** — Active server fingerprint; identifies C2 framework from TLS server behavior
+- [~] **CYU** — Citrix-specific TLS fingerprint: WILL NOT implement pre-v1. Don't have that kind of data.
+- [x] **TLS session resumption behavior** — Identifies tooling by how it handles session tickets
+- [x] **Certificate details** — CN, SANs, issuer, validity period, self-signed flag (attacker-run servers)
 
 ### Timing & Behavioral
 - [ ] **Inter-packet arrival times** — OS TCP stack fingerprint + beaconing interval detection
