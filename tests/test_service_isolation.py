@@ -212,8 +212,7 @@ class TestAttackerWorkerIsolation:
         from decnet.profiler.worker import _WorkerState, _incremental_update
 
         mock_repo = MagicMock()
-        mock_repo.get_all_logs_raw = AsyncMock(return_value=[])
-        mock_repo.get_max_log_id = AsyncMock(return_value=0)
+        mock_repo.get_logs_after_id = AsyncMock(return_value=[])
         mock_repo.set_state = AsyncMock()
 
         state = _WorkerState()

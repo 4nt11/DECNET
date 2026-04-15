@@ -27,7 +27,6 @@ from decnet.profiler.worker import (
     _STATE_KEY,
     _WorkerState,
     _build_record,
-    _cold_start,
     _extract_commands_from_events,
     _first_contact_deckies,
     _incremental_update,
@@ -97,11 +96,12 @@ def _make_log_row(
 
 def _make_repo(logs=None, bounties=None, bounties_for_ips=None, max_log_id=0, saved_state=None):
     repo = MagicMock()
-    repo.get_all_logs_raw = AsyncMock(return_value=logs or [])
     repo.get_all_bounties_by_ip = AsyncMock(return_value=bounties or {})
     repo.get_bounties_for_ips = AsyncMock(return_value=bounties_for_ips or {})
     repo.get_max_log_id = AsyncMock(return_value=max_log_id)
-    repo.get_logs_after_id = AsyncMock(return_value=[])
+    # Return provided logs on first call (simulating a single page < BATCH_SIZE), then [] to end loop
+    _log_pages = [logs or [], []]
+    repo.get_logs_after_id = AsyncMock(side_effect=_log_pages)
     repo.get_state = AsyncMock(return_value=saved_state)
     repo.set_state = AsyncMock()
     repo.upsert_attacker = AsyncMock(return_value="mock-uuid")
@@ -283,7 +283,7 @@ class TestBuildRecord:
         assert record["updated_at"].tzinfo is not None
 
 
-# ─── _cold_start ─────────────────────────────────────────────────────────────
+# ─── cold start via _incremental_update (uninitialized state) ────────────────
 
 class TestColdStart:
     @pytest.mark.asyncio
@@ -299,7 +299,7 @@ class TestColdStart:
         repo = _make_repo(logs=rows, max_log_id=3)
         state = _WorkerState()
 
-        await _cold_start(repo, state)
+        await _incremental_update(repo, state)
 
         assert state.initialized is True
         assert state.last_log_id == 3
@@ -313,7 +313,7 @@ class TestColdStart:
         repo = _make_repo(logs=[], max_log_id=0)
         state = _WorkerState()
 
-        await _cold_start(repo, state)
+        await _incremental_update(repo, state)
 
         assert state.initialized is True
         assert state.last_log_id == 0
@@ -337,7 +337,7 @@ class TestColdStart:
         repo = _make_repo(logs=rows, max_log_id=2)
         state = _WorkerState()
 
-        await _cold_start(repo, state)
+        await _incremental_update(repo, state)
 
         record = repo.upsert_attacker.call_args[0][0]
         assert record["is_traversal"] is True
@@ -357,7 +357,7 @@ class TestColdStart:
         )
         state = _WorkerState()
 
-        await _cold_start(repo, state)
+        await _incremental_update(repo, state)
 
         record = repo.upsert_attacker.call_args[0][0]
         assert record["bounty_count"] == 2
@@ -376,7 +376,7 @@ class TestColdStart:
         repo = _make_repo(logs=[row], max_log_id=1)
         state = _WorkerState()
 
-        await _cold_start(repo, state)
+        await _incremental_update(repo, state)
 
         record = repo.upsert_attacker.call_args[0][0]
         commands = json.loads(record["commands"])
@@ -542,7 +542,7 @@ class TestIncrementalUpdate:
         assert called_ips == {"1.1.1.1", "2.2.2.2"}
 
     @pytest.mark.asyncio
-    async def test_uninitialized_state_triggers_cold_start(self):
+    async def test_uninitialized_state_runs_full_cursor_sweep(self):
         rows = [
             _make_log_row(
                 row_id=1,
@@ -556,7 +556,8 @@ class TestIncrementalUpdate:
         await _incremental_update(repo, state)
 
         assert state.initialized is True
-        repo.get_all_logs_raw.assert_awaited_once()
+        assert state.last_log_id == 1
+        repo.upsert_attacker.assert_awaited_once()
 
 
 # ─── attacker_profile_worker ────────────────────────────────────────────────

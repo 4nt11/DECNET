@@ -59,10 +59,7 @@ async def attacker_profile_worker(repo: BaseRepository, *, interval: int = 30) -
 
 
 async def _incremental_update(repo: BaseRepository, state: _WorkerState) -> None:
-    if not state.initialized:
-        await _cold_start(repo, state)
-        return
-
+    was_cold = not state.initialized
     affected_ips: set[str] = set()
 
     while True:
@@ -76,8 +73,12 @@ async def _incremental_update(repo: BaseRepository, state: _WorkerState) -> None
                 affected_ips.add(event.attacker_ip)
             state.last_log_id = row["id"]
 
+        await asyncio.sleep(0)  # yield to event loop after each batch
+
         if len(batch) < _BATCH_SIZE:
             break
+
+    state.initialized = True
 
     if not affected_ips:
         await repo.set_state(_STATE_KEY, {"last_log_id": state.last_log_id})
@@ -86,27 +87,10 @@ async def _incremental_update(repo: BaseRepository, state: _WorkerState) -> None
     await _update_profiles(repo, state, affected_ips)
     await repo.set_state(_STATE_KEY, {"last_log_id": state.last_log_id})
 
-    logger.info("attacker worker: updated %d profiles (incremental)", len(affected_ips))
-
-
-async def _cold_start(repo: BaseRepository, state: _WorkerState) -> None:
-    all_logs = await repo.get_all_logs_raw()
-    if not all_logs:
-        state.last_log_id = await repo.get_max_log_id()
-        state.initialized = True
-        await repo.set_state(_STATE_KEY, {"last_log_id": state.last_log_id})
-        return
-
-    for row in all_logs:
-        state.engine.ingest(row["raw_line"])
-        state.last_log_id = max(state.last_log_id, row["id"])
-
-    all_ips = set(state.engine._events.keys())
-    await _update_profiles(repo, state, all_ips)
-    await repo.set_state(_STATE_KEY, {"last_log_id": state.last_log_id})
-
-    state.initialized = True
-    logger.info("attacker worker: cold start rebuilt %d profiles", len(all_ips))
+    if was_cold:
+        logger.info("attacker worker: cold start rebuilt %d profiles", len(affected_ips))
+    else:
+        logger.info("attacker worker: updated %d profiles (incremental)", len(affected_ips))
 
 
 async def _update_profiles(

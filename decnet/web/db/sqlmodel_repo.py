@@ -413,34 +413,6 @@ class SQLModelRepository(BaseRepository):
 
     # ----------------------------------------------------------- attackers
 
-    async def get_all_logs_raw(self) -> List[dict[str, Any]]:
-        async with self.session_factory() as session:
-            result = await session.execute(
-                select(
-                    Log.id,
-                    Log.raw_line,
-                    Log.attacker_ip,
-                    Log.service,
-                    Log.event_type,
-                    Log.decky,
-                    Log.timestamp,
-                    Log.fields,
-                )
-            )
-            return [
-                {
-                    "id": r.id,
-                    "raw_line": r.raw_line,
-                    "attacker_ip": r.attacker_ip,
-                    "service": r.service,
-                    "event_type": r.event_type,
-                    "decky": r.decky,
-                    "timestamp": r.timestamp,
-                    "fields": r.fields,
-                }
-                for r in result.all()
-            ]
-
     async def get_all_bounties_by_ip(self) -> dict[str, List[dict[str, Any]]]:
         from collections import defaultdict
         async with self.session_factory() as session:

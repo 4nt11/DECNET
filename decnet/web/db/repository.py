@@ -112,11 +112,6 @@ class BaseRepository(ABC):
         pass
 
     @abstractmethod
-    async def get_all_logs_raw(self) -> list[dict[str, Any]]:
-        """Retrieve all log rows with fields needed by the attacker profile worker."""
-        pass
-
-    @abstractmethod
     async def get_max_log_id(self) -> int:
         """Return the highest log ID, or 0 if the table is empty."""
         pass

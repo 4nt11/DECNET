@@ -40,6 +40,8 @@ async def stream_events(
         loops_since_stats = 0
         emitted_chunks = 0
         try:
+            yield ": keepalive\n\n"  # flush headers immediately; helps diagnose pre-yield hangs
+
             if last_id == 0:
                 last_id = await repo.get_max_log_id()
 
@@ -90,4 +92,11 @@ async def stream_events(
             log.exception("SSE stream error for user %s", last_event_id)
             yield f"event: error\ndata: {json.dumps({'type': 'error', 'message': 'Stream interrupted'})}\n\n"
 
-    return StreamingResponse(event_generator(), media_type="text/event-stream")
+    return StreamingResponse(
+        event_generator(),
+        media_type="text/event-stream",
+        headers={
+            "Cache-Control": "no-cache",
+            "X-Accel-Buffering": "no",
+        },
+    )
