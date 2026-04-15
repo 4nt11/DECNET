@@ -435,27 +435,8 @@ const KeyValueRow: React.FC<{ label: string; value: React.ReactNode }> = ({ labe
   </div>
 );
 
-const ToolBadges: React.FC<{ tools: string[] }> = ({ tools }) => (
-  <div style={{ display: 'flex', flexWrap: 'wrap', gap: '4px' }}>
-    {tools.map(t => (
-      <span
-        key={t}
-        style={{
-          fontSize: '0.7rem',
-          fontFamily: 'monospace',
-          color: '#ff6b6b',
-          border: '1px solid #ff6b6b44',
-          borderRadius: '2px',
-          padding: '1px 5px',
-          letterSpacing: '0.5px',
-          whiteSpace: 'nowrap',
-        }}
-      >
-        {TOOL_LABELS[t] || t.toUpperCase()}
-      </span>
-    ))}
-  </div>
-);
+// Tools detected via beacon timing (C2 frameworks).
+const _C2_TOOLS = new Set(['cobalt_strike', 'sliver', 'havoc', 'mythic']);
 
 const BehaviorHeadline: React.FC<{ b: AttackerBehavior }> = ({ b }) => {
   const osLabel = b.os_guess ? (OS_LABELS[b.os_guess] || b.os_guess.toUpperCase()) : '—';
@@ -463,17 +444,56 @@ const BehaviorHeadline: React.FC<{ b: AttackerBehavior }> = ({ b }) => {
     ? (BEHAVIOR_LABELS[b.behavior_class] || b.behavior_class.toUpperCase())
     : 'UNKNOWN';
   const behaviorColor = b.behavior_class ? BEHAVIOR_COLORS[b.behavior_class] : undefined;
-  const tools = b.tool_guesses && b.tool_guesses.length > 0 ? b.tool_guesses : null;
   return (
-    <div className="stats-grid" style={{ gridTemplateColumns: 'repeat(4, 1fr)' }}>
+    <div className="stats-grid" style={{ gridTemplateColumns: 'repeat(3, 1fr)' }}>
       <StatBlock label="OS GUESS" value={osLabel} />
       <StatBlock label="HOP DISTANCE" value={fmtOpt(b.hop_distance)} />
       <StatBlock label="ATTACK PATTERN" value={behaviorLabel} color={behaviorColor} />
-      <StatBlock
-        label="TOOL ATTRIBUTION"
-        value={tools ? <ToolBadges tools={tools} /> : '—'}
-        color={tools ? '#ff6b6b' : undefined}
-      />
+    </div>
+  );
+};
+
+const DetectedToolsBlock: React.FC<{ b: AttackerBehavior }> = ({ b }) => {
+  const tools = b.tool_guesses && b.tool_guesses.length > 0 ? b.tool_guesses : null;
+  if (!tools) return null;
+  return (
+    <div style={{ border: '1px solid var(--border-color)', padding: '12px 16px' }}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '10px' }}>
+        <Crosshair size={14} style={{ opacity: 0.6 }} />
+        <span style={{ fontSize: '0.75rem', letterSpacing: '2px', fontWeight: 'bold' }}>
+          DETECTED TOOLS
+        </span>
+      </div>
+      <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+        {tools.map(t => (
+          <div key={t} style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+            <span
+              style={{
+                fontSize: '0.8rem',
+                fontFamily: 'monospace',
+                fontWeight: 'bold',
+                color: '#ff6b6b',
+                minWidth: '160px',
+              }}
+            >
+              {TOOL_LABELS[t] || t.toUpperCase()}
+            </span>
+            <span
+              style={{
+                fontSize: '0.65rem',
+                fontFamily: 'monospace',
+                letterSpacing: '1px',
+                color: 'var(--dim-color)',
+                border: '1px solid var(--border-color)',
+                borderRadius: '2px',
+                padding: '1px 6px',
+              }}
+            >
+              {_C2_TOOLS.has(t) ? 'BEACON TIMING' : 'HTTP HEADER'}
+            </span>
+          </div>
+        ))}
+      </div>
     </div>
   );
 };
@@ -885,6 +905,7 @@ const AttackerDetail: React.FC = () => {
             <BehaviorHeadline b={attacker.behavior} />
             <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
               <BeaconBlock b={attacker.behavior} />
+              <DetectedToolsBlock b={attacker.behavior} />
               <TcpStackBlock b={attacker.behavior} />
               <TimingStatsBlock b={attacker.behavior} />
               <PhaseSequenceBlock b={attacker.behavior} />
