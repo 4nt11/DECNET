@@ -34,25 +34,30 @@ async def stream_events(
     user: dict = Depends(require_stream_viewer)
 ) -> StreamingResponse:
 
+    # Prefetch the initial snapshot before entering the streaming generator.
+    # With aiomysql (pure async TCP I/O), the first DB await inside the generator
+    # fires immediately after the ASGI layer sends the keepalive chunk — the HTTP
+    # write and the MySQL read compete for asyncio I/O callbacks and the MySQL
+    # callback can stall.  Running these here (normal async context, no streaming)
+    # avoids that race entirely.  aiosqlite is immune because it runs SQLite in a
+    # thread, decoupled from the event loop's I/O scheduler.
+    _start_id = last_event_id if last_event_id != 0 else await repo.get_max_log_id()
+    _initial_stats = await repo.get_stats_summary()
+    _initial_histogram = await repo.get_log_histogram(
+        search=search, start_time=start_time, end_time=end_time, interval_minutes=15,
+    )
+
     async def event_generator() -> AsyncGenerator[str, None]:
-        last_id = last_event_id
+        last_id = _start_id
         stats_interval_sec = 10
         loops_since_stats = 0
         emitted_chunks = 0
         try:
-            yield ": keepalive\n\n"  # flush headers immediately; helps diagnose pre-yield hangs
+            yield ": keepalive\n\n"  # flush headers immediately
 
-            if last_id == 0:
-                last_id = await repo.get_max_log_id()
-
-            # Emit initial snapshot immediately so the client never needs to poll /stats
-            stats = await repo.get_stats_summary()
-            yield f"event: message\ndata: {json.dumps({'type': 'stats', 'data': stats})}\n\n"
-            histogram = await repo.get_log_histogram(
-                search=search, start_time=start_time,
-                end_time=end_time, interval_minutes=15,
-            )
-            yield f"event: message\ndata: {json.dumps({'type': 'histogram', 'data': histogram})}\n\n"
+            # Emit pre-fetched initial snapshot — no DB calls in generator until the loop
+            yield f"event: message\ndata: {json.dumps({'type': 'stats', 'data': _initial_stats})}\n\n"
+            yield f"event: message\ndata: {json.dumps({'type': 'histogram', 'data': _initial_histogram})}\n\n"
 
             while True:
                 if DECNET_DEVELOPER and max_output is not None:

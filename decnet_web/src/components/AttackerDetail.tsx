@@ -19,7 +19,7 @@ interface AttackerBehavior {
   behavior_class: string | null;
   beacon_interval_s: number | null;
   beacon_jitter_pct: number | null;
-  tool_guess: string | null;
+  tool_guesses: string[] | null;
   timing_stats: {
     event_count?: number;
     duration_s?: number;
@@ -374,6 +374,20 @@ const TOOL_LABELS: Record<string, string> = {
   sliver: 'SLIVER',
   havoc: 'HAVOC',
   mythic: 'MYTHIC',
+  nmap: 'NMAP',
+  gophish: 'GOPHISH',
+  nikto: 'NIKTO',
+  sqlmap: 'SQLMAP',
+  nuclei: 'NUCLEI',
+  masscan: 'MASSCAN',
+  zgrab: 'ZGRAB',
+  metasploit: 'METASPLOIT',
+  gobuster: 'GOBUSTER',
+  dirbuster: 'DIRBUSTER',
+  hydra: 'HYDRA',
+  wfuzz: 'WFUZZ',
+  curl: 'CURL',
+  python_requests: 'PYTHON-REQUESTS',
 };
 
 const fmtOpt = (v: number | null | undefined): string =>
@@ -413,7 +427,10 @@ const BehaviorHeadline: React.FC<{ b: AttackerBehavior }> = ({ b }) => {
   const osLabel = b.os_guess ? (OS_LABELS[b.os_guess] || b.os_guess.toUpperCase()) : '—';
   const behaviorLabel = b.behavior_class ? b.behavior_class.toUpperCase() : 'UNKNOWN';
   const behaviorColor = b.behavior_class ? BEHAVIOR_COLORS[b.behavior_class] : undefined;
-  const toolLabel = b.tool_guess ? (TOOL_LABELS[b.tool_guess] || b.tool_guess.toUpperCase()) : '—';
+  const tools = b.tool_guesses && b.tool_guesses.length > 0 ? b.tool_guesses : null;
+  const toolLabel = tools
+    ? tools.map(t => TOOL_LABELS[t] || t.toUpperCase()).join(', ')
+    : '—';
   return (
     <div className="stats-grid" style={{ gridTemplateColumns: 'repeat(4, 1fr)' }}>
       <StatBlock label="OS GUESS" value={osLabel} />
@@ -422,7 +439,7 @@ const BehaviorHeadline: React.FC<{ b: AttackerBehavior }> = ({ b }) => {
       <StatBlock
         label="TOOL ATTRIBUTION"
         value={toolLabel}
-        color={b.tool_guess ? '#ff6b6b' : undefined}
+        color={tools ? '#ff6b6b' : undefined}
       />
     </div>
   );

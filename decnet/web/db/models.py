@@ -117,10 +117,10 @@ class AttackerBehavior(SQLModel, table=True):
     )  # JSON: window, wscale, mss, options_sig
     retransmit_count: int = Field(default=0)
     # Behavioral (derived by the profiler from log-event timing)
-    behavior_class: Optional[str] = None          # beaconing | interactive | scanning | mixed | unknown
+    behavior_class: Optional[str] = None          # beaconing | interactive | scanning | brute_force | slow_scan | mixed | unknown
     beacon_interval_s: Optional[float] = None
     beacon_jitter_pct: Optional[float] = None
-    tool_guess: Optional[str] = None              # cobalt_strike | sliver | havoc | mythic
+    tool_guesses: Optional[str] = None            # JSON list[str] — all matched tools
     timing_stats: str = Field(
         default="{}",
         sa_column=Column("timing_stats", Text, nullable=False, default="{}"),

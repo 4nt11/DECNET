@@ -524,6 +524,16 @@ class SQLModelRepository(BaseRepository):
                     d[key] = json.loads(d[key])
                 except (json.JSONDecodeError, TypeError):
                     pass
+        # Deserialize tool_guesses JSON array; normalise None → [].
+        raw = d.get("tool_guesses")
+        if isinstance(raw, str):
+            try:
+                parsed = json.loads(raw)
+                d["tool_guesses"] = parsed if isinstance(parsed, list) else [parsed]
+            except (json.JSONDecodeError, TypeError):
+                d["tool_guesses"] = []
+        elif raw is None:
+            d["tool_guesses"] = []
         return d
 
     @staticmethod

@@ -6,12 +6,17 @@ Consumes the chronological `LogEvent` stream already built by
 
   - Inter-event timing statistics (mean / median / stdev / min / max)
   - Coefficient-of-variation (jitter metric)
-  - Beaconing vs. interactive vs. scanning classification
+  - Beaconing vs. interactive vs. scanning vs. brute_force vs. slow_scan
+    classification
   - Tool attribution against known C2 frameworks (Cobalt Strike, Sliver,
-    Havoc, Mythic) using default beacon/jitter profiles
+    Havoc, Mythic) using default beacon/jitter profiles — returns a list,
+    since multiple tools can be in use simultaneously
+  - Header-based tool detection (Nmap NSE, Gophish, Nikto, sqlmap, etc.)
+    from HTTP request events
   - Recon → exfil phase sequencing (latency between the last recon event
     and the first exfil-like event)
-  - OS / TCP fingerprint + retransmit rollup from sniffer-emitted events
+  - OS / TCP fingerprint + retransmit rollup from sniffer-emitted events,
+    with TTL-based fallback when p0f returns no match
 
 Pure-Python; no external dependencies. All functions are safe to call from
 both sync and async contexts.
@@ -20,6 +25,7 @@ both sync and async contexts.
 from __future__ import annotations
 
 import json
+import re
 import statistics
 from collections import Counter
 from typing import Any
@@ -47,15 +53,14 @@ _EXFIL_EVENT_TYPES: frozenset[str] = frozenset({
 # Fields carrying payload byte counts (for "large payload" detection).
 _PAYLOAD_SIZE_FIELDS: tuple[str, ...] = ("bytes", "size", "content_length")
 
-# ─── C2 tool attribution signatures ─────────────────────────────────────────
+# ─── C2 tool attribution signatures (beacon timing) ─────────────────────────
 #
 # Each entry lists the default beacon cadence profile of a popular C2.
 # A profile *matches* an attacker when:
 #   - mean inter-event time is within ±`interval_tolerance` seconds, AND
 #   - jitter (cv = stdev / mean) is within ±`jitter_tolerance`
 #
-# These defaults are documented in each framework's public user guides;
-# real operators often tune them, so attribution is advisory, not definitive.
+# Multiple matches are all returned (attacker may run multiple implants).
 
 _TOOL_SIGNATURES: tuple[dict[str, Any], ...] = (
     {
@@ -87,6 +92,47 @@ _TOOL_SIGNATURES: tuple[dict[str, Any], ...] = (
         "jitter_tolerance": 0.03,
     },
 )
+
+# ─── Header-based tool signatures ───────────────────────────────────────────
+#
+# Scanned against HTTP `request` events.  `pattern` is a case-insensitive
+# substring (or a regex anchored with ^ if it starts with that character).
+# `header` is matched case-insensitively against the event's headers dict.
+
+_HEADER_TOOL_SIGNATURES: tuple[dict[str, str], ...] = (
+    {"name": "nmap",             "header": "user-agent", "pattern": "Nmap Scripting Engine"},
+    {"name": "gophish",          "header": "x-mailer",   "pattern": "gophish"},
+    {"name": "nikto",            "header": "user-agent", "pattern": "Nikto"},
+    {"name": "sqlmap",           "header": "user-agent", "pattern": "sqlmap"},
+    {"name": "nuclei",           "header": "user-agent", "pattern": "Nuclei"},
+    {"name": "masscan",          "header": "user-agent", "pattern": "masscan"},
+    {"name": "zgrab",            "header": "user-agent", "pattern": "zgrab"},
+    {"name": "metasploit",       "header": "user-agent", "pattern": "Metasploit"},
+    {"name": "curl",             "header": "user-agent", "pattern": "^curl/"},
+    {"name": "python_requests",  "header": "user-agent", "pattern": "python-requests"},
+    {"name": "gobuster",         "header": "user-agent", "pattern": "gobuster"},
+    {"name": "dirbuster",        "header": "user-agent", "pattern": "DirBuster"},
+    {"name": "hydra",            "header": "user-agent", "pattern": "hydra"},
+    {"name": "wfuzz",            "header": "user-agent", "pattern": "Wfuzz"},
+)
+
+# ─── TTL → coarse OS bucket (fallback when p0f returns nothing) ─────────────
+
+def _os_from_ttl(ttl_str: str | None) -> str | None:
+    """Derive a coarse OS guess from observed TTL when p0f has no match."""
+    if not ttl_str:
+        return None
+    try:
+        ttl = int(ttl_str)
+    except (TypeError, ValueError):
+        return None
+    if 55 <= ttl <= 70:
+        return "linux"
+    if 115 <= ttl <= 135:
+        return "windows"
+    if 235 <= ttl <= 255:
+        return "embedded"
+    return None
 
 
 # ─── Timing stats ───────────────────────────────────────────────────────────
@@ -167,13 +213,16 @@ def timing_stats(events: list[LogEvent]) -> dict[str, Any]:
 
 def classify_behavior(stats: dict[str, Any], services_count: int) -> str:
     """
-    Coarse behavior bucket: beaconing | interactive | scanning | mixed | unknown
+    Coarse behavior bucket:
+      beaconing | interactive | scanning | brute_force | slow_scan | mixed | unknown
 
-    Heuristics:
-      * `beaconing`   — low CV (< 0.35) + mean IAT ≥ 5 s + ≥ 5 events
-      * `scanning`    — ≥ 3 services touched in short bursts (mean IAT < 3 s)
-      * `interactive` — fast but irregular: mean IAT < 3 s AND CV ≥ 0.5, ≥ 10 events
-      * `mixed`       — moderate count + moderate CV, neither cleanly beaconing nor interactive
+    Heuristics (evaluated in priority order):
+      * `scanning`    — ≥ 3 services touched OR mean IAT < 2 s, ≥ 3 events
+      * `brute_force` — 1 service, n ≥ 8, mean IAT < 5 s, CV < 0.6
+      * `beaconing`   — CV < 0.35, mean IAT ≥ 5 s, ≥ 4 events
+      * `slow_scan`   — ≥ 2 services, mean IAT ≥ 10 s, ≥ 4 events
+      * `interactive` — mean IAT < 5 s AND CV ≥ 0.5, ≥ 6 events
+      * `mixed`       — catch-all for sessions with enough data
       * `unknown`     — too few data points
     """
     n = stats.get("event_count") or 0
@@ -183,32 +232,45 @@ def classify_behavior(stats: dict[str, Any], services_count: int) -> str:
     if n < 3 or mean is None:
         return "unknown"
 
-    # Scanning: many services, fast bursts, few events per service.
-    if services_count >= 3 and mean < 3.0 and n >= 5:
+    # Slow scan / low-and-slow: multiple services with long gaps.
+    # Must be checked before generic scanning so slow multi-service sessions
+    # don't get mis-bucketed as a fast sweep.
+    if services_count >= 2 and mean >= 10.0 and n >= 4:
+        return "slow_scan"
+
+    # Scanning: broad service sweep (multi-service) or very rapid single-service bursts.
+    if n >= 3 and (
+        (services_count >= 3 and mean < 10.0)
+        or (services_count >= 2 and mean < 2.0)
+    ):
         return "scanning"
 
-    # Beaconing: regular cadence over many events.
-    if cv is not None and cv < 0.35 and mean >= 5.0 and n >= 5:
+    # Brute force: hammering one service rapidly and repeatedly.
+    if services_count == 1 and n >= 8 and mean < 5.0 and cv is not None and cv < 0.6:
+        return "brute_force"
+
+    # Beaconing: regular cadence over multiple events.
+    if cv is not None and cv < 0.35 and mean >= 5.0 and n >= 4:
         return "beaconing"
 
-    # Interactive: short, irregular intervals.
-    if cv is not None and cv >= 0.5 and mean < 3.0 and n >= 10:
+    # Interactive: short but irregular bursts (human or tool with think time).
+    if cv is not None and cv >= 0.5 and mean < 5.0 and n >= 6:
         return "interactive"
 
     return "mixed"
 
 
-# ─── C2 tool attribution ────────────────────────────────────────────────────
+# ─── C2 tool attribution (beacon timing) ────────────────────────────────────
 
-def guess_tool(mean_iat_s: float | None, cv: float | None) -> str | None:
+def guess_tools(mean_iat_s: float | None, cv: float | None) -> list[str]:
     """
     Match (mean_iat, cv) against known C2 default beacon profiles.
 
-    Returns the tool name if a single signature matches; None otherwise.
-    Multiple matches also return None to avoid false attribution.
+    Returns a list of all matching tool names (may be empty).  Multiple
+    matches are all returned because an attacker can run several implants.
     """
     if mean_iat_s is None or cv is None:
-        return None
+        return []
 
     hits: list[str] = []
     for sig in _TOOL_SIGNATURES:
@@ -218,9 +280,72 @@ def guess_tool(mean_iat_s: float | None, cv: float | None) -> str | None:
             continue
         hits.append(sig["name"])
 
+    return hits
+
+
+# Keep the old name as an alias so callers that expected a single string still
+# compile, but mark it deprecated.  Returns the first hit or None.
+def guess_tool(mean_iat_s: float | None, cv: float | None) -> str | None:
+    """Deprecated: use guess_tools() instead."""
+    hits = guess_tools(mean_iat_s, cv)
     if len(hits) == 1:
         return hits[0]
     return None
+
+
+# ─── Header-based tool detection ────────────────────────────────────────────
+
+def detect_tools_from_headers(events: list[LogEvent]) -> list[str]:
+    """
+    Scan HTTP `request` events for tool-identifying headers.
+
+    Checks User-Agent, X-Mailer, and other headers case-insensitively
+    against `_HEADER_TOOL_SIGNATURES`.  Returns a deduplicated list of
+    matched tool names in detection order.
+    """
+    found: list[str] = []
+    seen: set[str] = set()
+
+    for e in events:
+        if e.event_type != "request":
+            continue
+
+        raw_headers = e.fields.get("headers")
+        if not raw_headers:
+            continue
+
+        # headers may arrive as a JSON string or a dict already
+        if isinstance(raw_headers, str):
+            try:
+                headers: dict[str, str] = json.loads(raw_headers)
+            except (json.JSONDecodeError, ValueError):
+                continue
+        elif isinstance(raw_headers, dict):
+            headers = raw_headers
+        else:
+            continue
+
+        # Normalise header keys to lowercase for matching.
+        lc_headers: dict[str, str] = {k.lower(): str(v) for k, v in headers.items()}
+
+        for sig in _HEADER_TOOL_SIGNATURES:
+            name = sig["name"]
+            if name in seen:
+                continue
+            value = lc_headers.get(sig["header"])
+            if value is None:
+                continue
+            pattern = sig["pattern"]
+            if pattern.startswith("^"):
+                if re.match(pattern, value, re.IGNORECASE):
+                    found.append(name)
+                    seen.add(name)
+            else:
+                if pattern.lower() in value.lower():
+                    found.append(name)
+                    seen.add(name)
+
+    return found
 
 
 # ─── Phase sequencing ───────────────────────────────────────────────────────
@@ -275,8 +400,14 @@ def sniffer_rollup(events: list[LogEvent]) -> dict[str, Any]:
     """
     Roll up sniffer-emitted `tcp_syn_fingerprint` and `tcp_flow_timing`
     events into a per-attacker summary.
+
+    OS guess priority:
+      1. Modal p0f label from os_guess field (if not "unknown"/empty).
+      2. TTL-based coarse bucket (linux / windows / embedded) as fallback.
+    Hop distance: median of non-zero reported values only.
     """
     os_guesses: list[str] = []
+    ttl_values: list[str] = []
     hops: list[int] = []
     tcp_fp: dict[str, Any] | None = None
     retransmits = 0
@@ -284,12 +415,24 @@ def sniffer_rollup(events: list[LogEvent]) -> dict[str, Any]:
     for e in events:
         if e.event_type == _SNIFFER_SYN_EVENT:
             og = e.fields.get("os_guess")
-            if og:
+            if og and og != "unknown":
                 os_guesses.append(og)
-            try:
-                hops.append(int(e.fields.get("hop_distance", "0")))
-            except (TypeError, ValueError):
-                pass
+
+            # Collect raw TTL for fallback OS derivation.
+            ttl_raw = e.fields.get("ttl") or e.fields.get("initial_ttl")
+            if ttl_raw:
+                ttl_values.append(ttl_raw)
+
+            # Only include hop distances that are valid and non-zero.
+            hop_raw = e.fields.get("hop_distance")
+            if hop_raw:
+                try:
+                    hop_val = int(hop_raw)
+                    if hop_val > 0:
+                        hops.append(hop_val)
+                except (TypeError, ValueError):
+                    pass
+
             # Keep the latest fingerprint snapshot.
             tcp_fp = {
                 "window": _int_or_none(e.fields.get("window")),
@@ -310,6 +453,11 @@ def sniffer_rollup(events: list[LogEvent]) -> dict[str, Any]:
     os_guess: str | None = None
     if os_guesses:
         os_guess = Counter(os_guesses).most_common(1)[0][0]
+    else:
+        # TTL-based fallback: use the most common observed TTL value.
+        if ttl_values:
+            modal_ttl = Counter(ttl_values).most_common(1)[0][0]
+            os_guess = _os_from_ttl(modal_ttl)
 
     # Median hop distance (robust to the occasional weird TTL).
     hop_distance: int | None = None
@@ -348,9 +496,13 @@ def build_behavior_record(events: list[LogEvent]) -> dict[str, Any]:
     stats = timing_stats(events)
     services = {e.service for e in events}
     behavior = classify_behavior(stats, len(services))
-    tool = guess_tool(stats.get("mean_iat_s"), stats.get("cv"))
-    phase = phase_sequence(events)
     rollup = sniffer_rollup(events)
+    phase = phase_sequence(events)
+
+    # Combine beacon-timing tool matches with header-based detections.
+    beacon_tools = guess_tools(stats.get("mean_iat_s"), stats.get("cv"))
+    header_tools = detect_tools_from_headers(events)
+    all_tools: list[str] = list(dict.fromkeys(beacon_tools + header_tools))  # dedup, preserve order
 
     # Beacon-specific projection: only surface interval/jitter when we've
     # classified the flow as beaconing (otherwise these numbers are noise).
@@ -369,7 +521,7 @@ def build_behavior_record(events: list[LogEvent]) -> dict[str, Any]:
         "behavior_class": behavior,
         "beacon_interval_s": beacon_interval_s,
         "beacon_jitter_pct": beacon_jitter_pct,
-        "tool_guess": tool,
+        "tool_guesses": json.dumps(all_tools),
         "timing_stats": json.dumps(stats),
         "phase_sequence": json.dumps(phase),
     }
