@@ -200,44 +200,70 @@ def is_service_event(attrs: dict) -> bool:
 
 # ─── Blocking stream worker (runs in a thread) ────────────────────────────────
 
+def _reopen_if_needed(path: Path, fh: Optional[Any]) -> Any:
+    """Return fh if it still points to the same inode as path; otherwise close
+    fh and open a fresh handle.  Handles the file being deleted (manual rm) or
+    rotated (logrotate rename + create)."""
+    try:
+        if fh is not None and os.fstat(fh.fileno()).st_ino == os.stat(path).st_ino:
+            return fh
+    except OSError:
+        pass
+    # File gone or inode changed — close stale handle and open a new one.
+    if fh is not None:
+        try:
+            fh.close()
+        except Exception:
+            pass
+    path.parent.mkdir(parents=True, exist_ok=True)
+    return open(path, "a", encoding="utf-8")
+
+
 def _stream_container(container_id: str, log_path: Path, json_path: Path) -> None:
     """Stream logs from one container and append to the host log files."""
     import docker  # type: ignore[import]
 
+    lf: Optional[Any] = None
+    jf: Optional[Any] = None
     try:
         client = docker.from_env()
         container = client.containers.get(container_id)
         log_stream = container.logs(stream=True, follow=True, stdout=True, stderr=False)
         buf = ""
-        with (
-            open(log_path, "a", encoding="utf-8") as lf,
-            open(json_path, "a", encoding="utf-8") as jf,
-        ):
-            for chunk in log_stream:
-                buf += chunk.decode("utf-8", errors="replace")
-                while "\n" in buf:
-                    line, buf = buf.split("\n", 1)
-                    line = line.rstrip()
-                    if not line:
-                        continue
-                    lf.write(line + "\n")
-                    lf.flush()
-                    parsed = parse_rfc5424(line)
-                    if parsed:
-                        if _should_ingest(parsed):
-                            logger.debug("collector: event written decky=%s type=%s", parsed.get("decky"), parsed.get("event_type"))
-                            jf.write(json.dumps(parsed) + "\n")
-                            jf.flush()
-                        else:
-                            logger.debug(
-                                "collector: rate-limited decky=%s service=%s type=%s attacker=%s",
-                                parsed.get("decky"), parsed.get("service"),
-                                parsed.get("event_type"), parsed.get("attacker_ip"),
-                            )
+        for chunk in log_stream:
+            buf += chunk.decode("utf-8", errors="replace")
+            while "\n" in buf:
+                line, buf = buf.split("\n", 1)
+                line = line.rstrip()
+                if not line:
+                    continue
+                lf = _reopen_if_needed(log_path, lf)
+                lf.write(line + "\n")
+                lf.flush()
+                parsed = parse_rfc5424(line)
+                if parsed:
+                    if _should_ingest(parsed):
+                        logger.debug("collector: event written decky=%s type=%s", parsed.get("decky"), parsed.get("event_type"))
+                        jf = _reopen_if_needed(json_path, jf)
+                        jf.write(json.dumps(parsed) + "\n")
+                        jf.flush()
                     else:
-                        logger.debug("collector: malformed RFC5424 line snippet=%r", line[:80])
+                        logger.debug(
+                            "collector: rate-limited decky=%s service=%s type=%s attacker=%s",
+                            parsed.get("decky"), parsed.get("service"),
+                            parsed.get("event_type"), parsed.get("attacker_ip"),
+                        )
+                else:
+                    logger.debug("collector: malformed RFC5424 line snippet=%r", line[:80])
     except Exception as exc:
         logger.debug("collector: log stream ended container_id=%s reason=%s", container_id, exc)
+    finally:
+        for fh in (lf, jf):
+            if fh is not None:
+                try:
+                    fh.close()
+                except Exception:
+                    pass
 
 
 # ─── Async collector ──────────────────────────────────────────────────────────

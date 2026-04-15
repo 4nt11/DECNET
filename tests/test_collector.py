@@ -259,7 +259,8 @@ class TestStreamContainer:
             _stream_container("test-id", log_path, json_path)
 
         assert log_path.exists()
-        assert json_path.read_text() == ""  # No JSON written for non-RFC lines
+        # JSON file is only created when RFC5424 lines are parsed — not for plain lines.
+        assert not json_path.exists() or json_path.read_text() == ""
 
     def test_handles_docker_error(self, tmp_path):
         log_path = tmp_path / "test.log"
@@ -286,7 +287,88 @@ class TestStreamContainer:
         with patch("docker.from_env", return_value=mock_client):
             _stream_container("test-id", log_path, json_path)
 
-        assert log_path.read_text() == ""
+        # All lines were empty — no file is created (lazy open).
+        assert not log_path.exists() or log_path.read_text() == ""
+
+    def test_log_file_recreated_after_deletion(self, tmp_path):
+        log_path = tmp_path / "test.log"
+        json_path = tmp_path / "test.json"
+
+        line1 = b"first line\n"
+        line2 = b"second line\n"
+
+        def _chunks():
+            yield line1
+            log_path.unlink()   # simulate deletion between writes
+            yield line2
+
+        mock_container = MagicMock()
+        mock_container.logs.return_value = _chunks()
+        mock_client = MagicMock()
+        mock_client.containers.get.return_value = mock_container
+
+        with patch("docker.from_env", return_value=mock_client):
+            _stream_container("test-id", log_path, json_path)
+
+        assert log_path.exists(), "log file must be recreated after deletion"
+        content = log_path.read_text()
+        assert "second line" in content
+
+    def test_json_file_recreated_after_deletion(self, tmp_path):
+        log_path = tmp_path / "test.log"
+        json_path = tmp_path / "test.json"
+
+        rfc_line = (
+            '<134>1 2024-01-15T12:00:00+00:00 decky-01 ssh - auth '
+            '[decnet@55555 src_ip="1.2.3.4"] login\n'
+        )
+        encoded = rfc_line.encode("utf-8")
+
+        def _chunks():
+            yield encoded
+            # Remove the json file between writes; the second RFC line should
+            # trigger a fresh file open.
+            if json_path.exists():
+                json_path.unlink()
+            yield encoded
+
+        mock_container = MagicMock()
+        mock_container.logs.return_value = _chunks()
+        mock_client = MagicMock()
+        mock_client.containers.get.return_value = mock_container
+
+        with patch("docker.from_env", return_value=mock_client):
+            _stream_container("test-id", log_path, json_path)
+
+        assert json_path.exists(), "json file must be recreated after deletion"
+        lines = [l for l in json_path.read_text().splitlines() if l.strip()]
+        assert len(lines) >= 1
+
+    def test_rotated_file_detected(self, tmp_path):
+        """Simulate logrotate: rename old file away, new write should go to a fresh file."""
+        log_path = tmp_path / "test.log"
+        json_path = tmp_path / "test.json"
+
+        line1 = b"before rotation\n"
+        line2 = b"after rotation\n"
+        rotated = tmp_path / "test.log.1"
+
+        def _chunks():
+            yield line1
+            log_path.rename(rotated)   # logrotate renames old file
+            yield line2
+
+        mock_container = MagicMock()
+        mock_container.logs.return_value = _chunks()
+        mock_client = MagicMock()
+        mock_client.containers.get.return_value = mock_container
+
+        with patch("docker.from_env", return_value=mock_client):
+            _stream_container("test-id", log_path, json_path)
+
+        assert log_path.exists(), "new log file must be created after rotation"
+        assert "after rotation" in log_path.read_text()
+        assert "before rotation" in rotated.read_text()
 
 
 class TestIngestRateLimiter:
