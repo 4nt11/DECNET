@@ -43,8 +43,9 @@ DEFAULT_PROBE_PORTS: list[int] = [
 # HASSHServer: common SSH server ports
 DEFAULT_SSH_PORTS: list[int] = [22, 2222, 22222, 2022]
 
-# TCP/IP stack: probe on common service ports
-DEFAULT_TCPFP_PORTS: list[int] = [80, 443]
+# TCP/IP stack: probe on ports commonly open on attacker machines.
+# Wide spread gives the best chance of a SYN-ACK for TTL/fingerprint extraction.
+DEFAULT_TCPFP_PORTS: list[int] = [22, 80, 443, 8080, 8443, 445, 3389]
 
 # ─── RFC 5424 formatting (inline, mirrors templates/*/decnet_logging.py) ─────
 

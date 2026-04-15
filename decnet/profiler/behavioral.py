@@ -35,8 +35,18 @@ from decnet.correlation.parser import LogEvent
 # ─── Event-type taxonomy ────────────────────────────────────────────────────
 
 # Sniffer-emitted packet events that feed into fingerprint rollup.
-_SNIFFER_SYN_EVENT: str = "tcp_syn_fingerprint"
+_SNIFFER_SYN_EVENT: str  = "tcp_syn_fingerprint"
 _SNIFFER_FLOW_EVENT: str = "tcp_flow_timing"
+# Prober-emitted active-probe result (SYN-ACK fingerprint of attacker machine).
+_PROBER_TCPFP_EVENT: str = "tcpfp_fingerprint"
+
+# Canonical initial TTL for each coarse OS bucket.  Used to derive hop
+# distance when only the observed TTL is available (prober path).
+_INITIAL_TTL: dict[str, int] = {
+    "linux":    64,
+    "windows":  128,
+    "embedded": 255,
+}
 
 # Events that signal "recon" phase (scans, probes, auth attempts).
 _RECON_EVENT_TYPES: frozenset[str] = frozenset({
@@ -460,6 +470,36 @@ def sniffer_rollup(events: list[LogEvent]) -> dict[str, Any]:
                 retransmits += int(e.fields.get("retransmits", "0"))
             except (TypeError, ValueError):
                 pass
+
+        elif e.event_type == _PROBER_TCPFP_EVENT:
+            # Active-probe result: prober sent SYN to attacker, got SYN-ACK back.
+            # Field names differ from the passive sniffer (different emitter).
+            ttl_raw = e.fields.get("ttl")
+            if ttl_raw:
+                ttl_values.append(ttl_raw)
+
+                # Derive hop distance from observed TTL vs canonical initial TTL.
+                os_hint = _os_from_ttl(ttl_raw)
+                if os_hint:
+                    initial = _INITIAL_TTL.get(os_hint)
+                    if initial:
+                        try:
+                            hop_val = initial - int(ttl_raw)
+                            if hop_val > 0:
+                                hops.append(hop_val)
+                        except (TypeError, ValueError):
+                            pass
+
+            # Prober uses window_size/window_scale/options_order instead of
+            # the sniffer's window/wscale/options_sig.
+            tcp_fp = {
+                "window":         _int_or_none(e.fields.get("window_size")),
+                "wscale":         _int_or_none(e.fields.get("window_scale")),
+                "mss":            _int_or_none(e.fields.get("mss")),
+                "options_sig":    e.fields.get("options_order", ""),
+                "has_sack":       e.fields.get("sack_ok") == "1",
+                "has_timestamps": e.fields.get("timestamp") == "1",
+            }
 
     # Mode for the OS bucket — most frequently observed label.
     os_guess: str | None = None

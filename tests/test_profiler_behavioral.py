@@ -423,6 +423,45 @@ class TestSnifferRollup:
         r = sniffer_rollup(events)
         assert r["os_guess"] == "macos_ios"
 
+    def test_prober_tcpfp_os_from_ttl(self):
+        # Active-probe event: TTL=121 → windows OS guess.
+        events = [
+            _mk(0, event_type="tcpfp_fingerprint",
+                fields={"ttl": "121", "window_size": "64240", "mss": "1460",
+                        "window_scale": "8", "sack_ok": "1", "timestamp": "0",
+                        "options_order": "M,N,W,N,N,S"}),
+        ]
+        r = sniffer_rollup(events)
+        assert r["os_guess"] == "windows"
+
+    def test_prober_tcpfp_hop_distance_derived(self):
+        # TTL=121 with windows initial TTL=128 → hop_distance=7.
+        events = [
+            _mk(0, event_type="tcpfp_fingerprint",
+                fields={"ttl": "121", "window_size": "64240", "mss": "1460",
+                        "window_scale": "8", "sack_ok": "1", "timestamp": "0",
+                        "options_order": "M,N,W,N,N,S"}),
+        ]
+        r = sniffer_rollup(events)
+        assert r["hop_distance"] == 7
+
+    def test_prober_tcpfp_tcp_fingerprint_fields(self):
+        # Prober field names (window_size, window_scale, etc.) are mapped correctly.
+        events = [
+            _mk(0, event_type="tcpfp_fingerprint",
+                fields={"ttl": "60", "window_size": "29200", "mss": "1460",
+                        "window_scale": "7", "sack_ok": "1", "timestamp": "1",
+                        "options_order": "M,N,W,N,N,T,S,E"}),
+        ]
+        r = sniffer_rollup(events)
+        fp = r["tcp_fingerprint"]
+        assert fp["window"] == 29200
+        assert fp["wscale"] == 7
+        assert fp["mss"] == 1460
+        assert fp["has_sack"] is True
+        assert fp["has_timestamps"] is True
+        assert fp["options_sig"] == "M,N,W,N,N,T,S,E"
+
 
 # ─── build_behavior_record (composite) ──────────────────────────────────────
 

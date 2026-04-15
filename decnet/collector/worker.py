@@ -114,7 +114,7 @@ _RFC5424_RE = re.compile(
 )
 _SD_BLOCK_RE = re.compile(r'\[decnet@55555\s+(.*?)\]', re.DOTALL)
 _PARAM_RE = re.compile(r'(\w+)="((?:[^"\\]|\\.)*)"')
-_IP_FIELDS = ("src_ip", "src", "client_ip", "remote_ip", "remote_addr", "ip")
+_IP_FIELDS = ("src_ip", "src", "client_ip", "remote_ip", "remote_addr", "target_ip", "ip")
 
 
 def parse_rfc5424(line: str) -> Optional[dict[str, Any]]:
