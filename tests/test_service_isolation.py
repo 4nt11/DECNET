@@ -93,6 +93,8 @@ class TestIngesterIsolation:
         from decnet.web.ingester import log_ingestion_worker
 
         mock_repo = MagicMock()
+        mock_repo.get_state = AsyncMock(return_value=None)
+        mock_repo.set_state = AsyncMock()
         iterations = 0
 
         async def _controlled_sleep(seconds):
@@ -133,6 +135,8 @@ class TestIngesterIsolation:
 
         mock_repo = MagicMock()
         mock_repo.add_log = AsyncMock()
+        mock_repo.get_state = AsyncMock(return_value=None)
+        mock_repo.set_state = AsyncMock()
         iterations = 0
 
         async def _controlled_sleep(seconds):
@@ -168,6 +172,8 @@ class TestIngesterIsolation:
 
         mock_repo = MagicMock()
         mock_repo.add_log = AsyncMock(side_effect=Exception("no such table: logs"))
+        mock_repo.get_state = AsyncMock(return_value=None)
+        mock_repo.set_state = AsyncMock()
 
         with patch.dict(os.environ, {"DECNET_INGEST_LOG_FILE": str(tmp_path / "test.log")}):
             # Worker should exit the loop on fatal DB error
@@ -189,6 +195,7 @@ class TestAttackerWorkerIsolation:
         mock_repo = MagicMock()
         mock_repo.get_all_logs_raw = AsyncMock(side_effect=Exception("DB is locked"))
         mock_repo.get_max_log_id = AsyncMock(return_value=0)
+        mock_repo.get_state = AsyncMock(return_value=None)
         mock_repo.set_state = AsyncMock()
 
         iterations = 0
@@ -412,6 +419,8 @@ class TestCascadeIsolation:
 
         mock_repo = MagicMock()
         mock_repo.add_log = AsyncMock()
+        mock_repo.get_state = AsyncMock(return_value=None)
+        mock_repo.set_state = AsyncMock()
         iterations = 0
 
         async def _controlled_sleep(seconds):
@@ -437,6 +446,7 @@ class TestCascadeIsolation:
         mock_repo = MagicMock()
         mock_repo.get_all_logs_raw = AsyncMock(return_value=[])
         mock_repo.get_max_log_id = AsyncMock(return_value=0)
+        mock_repo.get_state = AsyncMock(return_value=None)
         mock_repo.set_state = AsyncMock()
         mock_repo.get_logs_after_id = AsyncMock(return_value=[])
 

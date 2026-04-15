@@ -9,6 +9,9 @@ from decnet.web.db.repository import BaseRepository
 
 logger = get_logger("api")
 
+_INGEST_STATE_KEY = "ingest_worker_position"
+
+
 async def log_ingestion_worker(repo: BaseRepository) -> None:
     """
     Background task that tails the DECNET_INGEST_LOG_FILE.json and
@@ -20,9 +23,11 @@ async def log_ingestion_worker(repo: BaseRepository) -> None:
         return
 
     _json_log_path: Path = Path(_base_log_file).with_suffix(".json")
-    _position: int = 0
 
-    logger.info("ingest worker started path=%s", _json_log_path)
+    _saved = await repo.get_state(_INGEST_STATE_KEY)
+    _position: int = _saved.get("position", 0) if _saved else 0
+
+    logger.info("ingest worker started path=%s position=%d", _json_log_path, _position)
 
     while True:
         try:
@@ -34,6 +39,7 @@ async def log_ingestion_worker(repo: BaseRepository) -> None:
             if _stat.st_size < _position:
                 # File rotated or truncated
                 _position = 0
+                await repo.set_state(_INGEST_STATE_KEY, {"position": 0})
 
             if _stat.st_size == _position:
                 # No new data
@@ -62,6 +68,8 @@ async def log_ingestion_worker(repo: BaseRepository) -> None:
 
                     # Update position after successful line read
                     _position = _f.tell()
+
+            await repo.set_state(_INGEST_STATE_KEY, {"position": _position})
 
         except Exception as _e:
             _err_str = str(_e).lower()

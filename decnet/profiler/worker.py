@@ -50,6 +50,11 @@ async def attacker_profile_worker(repo: BaseRepository, *, interval: int = 30) -
     """Periodically updates the Attacker table incrementally. Designed to run as an asyncio Task."""
     logger.info("attacker profile worker started interval=%ds", interval)
     state = _WorkerState()
+    _saved_cursor = await repo.get_state(_STATE_KEY)
+    if _saved_cursor:
+        state.last_log_id = _saved_cursor.get("last_log_id", 0)
+        state.initialized = True
+        logger.info("attacker worker: resumed from cursor last_log_id=%d", state.last_log_id)
     while True:
         await asyncio.sleep(interval)
         try:

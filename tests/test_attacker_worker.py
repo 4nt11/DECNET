@@ -614,6 +614,60 @@ class TestAttackerProfileWorker:
 
         assert len(update_calls) >= 1
 
+    @pytest.mark.asyncio
+    async def test_cursor_restored_from_db_on_startup(self):
+        """Worker loads saved last_log_id from DB and passes it to _incremental_update."""
+        repo = _make_repo(saved_state={"last_log_id": 99})
+        _call_count = 0
+
+        async def fake_sleep(secs):
+            nonlocal _call_count
+            _call_count += 1
+            if _call_count >= 2:
+                raise asyncio.CancelledError()
+
+        captured_states = []
+
+        async def mock_update(_repo, state):
+            captured_states.append((state.last_log_id, state.initialized))
+
+        with patch("decnet.profiler.worker.asyncio.sleep", side_effect=fake_sleep):
+            with patch("decnet.profiler.worker._incremental_update", side_effect=mock_update):
+                with pytest.raises(asyncio.CancelledError):
+                    await attacker_profile_worker(repo)
+
+        assert captured_states, "_incremental_update never called"
+        restored_id, initialized = captured_states[0]
+        assert restored_id == 99
+        assert initialized is True
+
+    @pytest.mark.asyncio
+    async def test_no_saved_cursor_starts_from_zero(self):
+        """When get_state returns None, worker starts fresh from log ID 0."""
+        repo = _make_repo(saved_state=None)
+        _call_count = 0
+
+        async def fake_sleep(secs):
+            nonlocal _call_count
+            _call_count += 1
+            if _call_count >= 2:
+                raise asyncio.CancelledError()
+
+        captured_states = []
+
+        async def mock_update(_repo, state):
+            captured_states.append((state.last_log_id, state.initialized))
+
+        with patch("decnet.profiler.worker.asyncio.sleep", side_effect=fake_sleep):
+            with patch("decnet.profiler.worker._incremental_update", side_effect=mock_update):
+                with pytest.raises(asyncio.CancelledError):
+                    await attacker_profile_worker(repo)
+
+        assert captured_states, "_incremental_update never called"
+        restored_id, initialized = captured_states[0]
+        assert restored_id == 0
+        assert initialized is False
+
 
 # ─── JA3 bounty extraction from ingester ─────────────────────────────────────
 
