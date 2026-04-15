@@ -23,6 +23,9 @@ from decnet.web.auth import get_password_hash
 from decnet.env import DECNET_ADMIN_USER, DECNET_ADMIN_PASSWORD
 import decnet.config
 
+VIEWER_USERNAME = "testviewer"
+VIEWER_PASSWORD = "viewer-pass-123"
+
 
 @pytest.fixture(scope="function", autouse=True)
 async def setup_db(monkeypatch) -> AsyncGenerator[None, None]:
@@ -75,6 +78,30 @@ async def auth_token(client: httpx.AsyncClient) -> str:
     )
     resp2 = await client.post("/api/v1/auth/login", json={"username": DECNET_ADMIN_USER, "password": DECNET_ADMIN_PASSWORD})
     return resp2.json()["access_token"]
+
+@pytest.fixture
+async def viewer_token(client, setup_db):
+    """Seed a viewer user and return their auth token."""
+    async with repo.session_factory() as session:
+        result = await session.execute(
+            select(User).where(User.username == VIEWER_USERNAME)
+        )
+        if not result.scalar_one_or_none():
+            session.add(User(
+                uuid=str(_uuid.uuid4()),
+                username=VIEWER_USERNAME,
+                password_hash=get_password_hash(VIEWER_PASSWORD),
+                role="viewer",
+                must_change_password=False,
+            ))
+            await session.commit()
+
+    resp = await client.post("/api/v1/auth/login", json={
+        "username": VIEWER_USERNAME,
+        "password": VIEWER_PASSWORD,
+    })
+    return resp.json()["access_token"]
+
 
 @pytest.fixture(autouse=True)
 def patch_state_file(monkeypatch, tmp_path) -> Path:

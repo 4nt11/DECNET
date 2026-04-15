@@ -36,7 +36,7 @@ from decnet.collector.worker import (  # noqa: E402
     is_service_container,
 )
 from decnet.web.ingester import log_ingestion_worker  # noqa: E402
-from decnet.web.attacker_worker import (  # noqa: E402
+from decnet.profiler.worker import (  # noqa: E402
     attacker_profile_worker,
     _WorkerState,
     _incremental_update,

@@ -1,5 +1,5 @@
 """
-Tests for decnet/web/attacker_worker.py
+Tests for decnet/attacker/worker.py
 
 Covers:
 - _cold_start(): full build on first run, cursor persistence
@@ -22,7 +22,7 @@ import pytest
 
 from decnet.correlation.parser import LogEvent
 from decnet.logging.syslog_formatter import SEVERITY_INFO, format_rfc5424
-from decnet.web.attacker_worker import (
+from decnet.profiler.worker import (
     _BATCH_SIZE,
     _STATE_KEY,
     _WorkerState,
@@ -104,7 +104,8 @@ def _make_repo(logs=None, bounties=None, bounties_for_ips=None, max_log_id=0, sa
     repo.get_logs_after_id = AsyncMock(return_value=[])
     repo.get_state = AsyncMock(return_value=saved_state)
     repo.set_state = AsyncMock()
-    repo.upsert_attacker = AsyncMock()
+    repo.upsert_attacker = AsyncMock(return_value="mock-uuid")
+    repo.upsert_attacker_behavior = AsyncMock()
     return repo
 
 
@@ -584,8 +585,8 @@ class TestAttackerProfileWorker:
         async def bad_update(_repo, _state):
             raise RuntimeError("DB exploded")
 
-        with patch("decnet.web.attacker_worker.asyncio.sleep", side_effect=fake_sleep):
-            with patch("decnet.web.attacker_worker._incremental_update", side_effect=bad_update):
+        with patch("decnet.profiler.worker.asyncio.sleep", side_effect=fake_sleep):
+            with patch("decnet.profiler.worker._incremental_update", side_effect=bad_update):
                 with pytest.raises(asyncio.CancelledError):
                     await attacker_profile_worker(repo)
 
@@ -605,8 +606,8 @@ class TestAttackerProfileWorker:
         async def mock_update(_repo, _state):
             update_calls.append(True)
 
-        with patch("decnet.web.attacker_worker.asyncio.sleep", side_effect=fake_sleep):
-            with patch("decnet.web.attacker_worker._incremental_update", side_effect=mock_update):
+        with patch("decnet.profiler.worker.asyncio.sleep", side_effect=fake_sleep):
+            with patch("decnet.profiler.worker._incremental_update", side_effect=mock_update):
                 with pytest.raises(asyncio.CancelledError):
                     await attacker_profile_worker(repo)
 

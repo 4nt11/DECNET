@@ -58,10 +58,11 @@ class TestGetAttackers:
         with patch("decnet.web.router.attackers.api_get_attackers.repo") as mock_repo:
             mock_repo.get_attackers = AsyncMock(return_value=[sample])
             mock_repo.get_total_attackers = AsyncMock(return_value=1)
+            mock_repo.get_behaviors_for_ips = AsyncMock(return_value={})
 
             result = await get_attackers(
                 limit=50, offset=0, search=None, sort_by="recent",
-                current_user="test-user",
+                user={"uuid": "test-user", "role": "viewer"},
             )
 
         assert result["total"] == 1
@@ -77,10 +78,11 @@ class TestGetAttackers:
         with patch("decnet.web.router.attackers.api_get_attackers.repo") as mock_repo:
             mock_repo.get_attackers = AsyncMock(return_value=[])
             mock_repo.get_total_attackers = AsyncMock(return_value=0)
+            mock_repo.get_behaviors_for_ips = AsyncMock(return_value={})
 
             await get_attackers(
                 limit=50, offset=0, search="192.168", sort_by="recent",
-                current_user="test-user",
+                user={"uuid": "test-user", "role": "viewer"},
             )
 
         mock_repo.get_attackers.assert_awaited_once_with(
@@ -95,10 +97,11 @@ class TestGetAttackers:
         with patch("decnet.web.router.attackers.api_get_attackers.repo") as mock_repo:
             mock_repo.get_attackers = AsyncMock(return_value=[])
             mock_repo.get_total_attackers = AsyncMock(return_value=0)
+            mock_repo.get_behaviors_for_ips = AsyncMock(return_value={})
 
             await get_attackers(
                 limit=50, offset=0, search="null", sort_by="recent",
-                current_user="test-user",
+                user={"uuid": "test-user", "role": "viewer"},
             )
 
         mock_repo.get_attackers.assert_awaited_once_with(
@@ -112,10 +115,11 @@ class TestGetAttackers:
         with patch("decnet.web.router.attackers.api_get_attackers.repo") as mock_repo:
             mock_repo.get_attackers = AsyncMock(return_value=[])
             mock_repo.get_total_attackers = AsyncMock(return_value=0)
+            mock_repo.get_behaviors_for_ips = AsyncMock(return_value={})
 
             await get_attackers(
                 limit=50, offset=0, search=None, sort_by="active",
-                current_user="test-user",
+                user={"uuid": "test-user", "role": "viewer"},
             )
 
         mock_repo.get_attackers.assert_awaited_once_with(
@@ -129,10 +133,11 @@ class TestGetAttackers:
         with patch("decnet.web.router.attackers.api_get_attackers.repo") as mock_repo:
             mock_repo.get_attackers = AsyncMock(return_value=[])
             mock_repo.get_total_attackers = AsyncMock(return_value=0)
+            mock_repo.get_behaviors_for_ips = AsyncMock(return_value={})
 
             await get_attackers(
                 limit=50, offset=0, search="", sort_by="recent",
-                current_user="test-user",
+                user={"uuid": "test-user", "role": "viewer"},
             )
 
         mock_repo.get_attackers.assert_awaited_once_with(
@@ -146,10 +151,11 @@ class TestGetAttackers:
         with patch("decnet.web.router.attackers.api_get_attackers.repo") as mock_repo:
             mock_repo.get_attackers = AsyncMock(return_value=[])
             mock_repo.get_total_attackers = AsyncMock(return_value=0)
+            mock_repo.get_behaviors_for_ips = AsyncMock(return_value={})
 
             await get_attackers(
                 limit=50, offset=0, search=None, sort_by="recent",
-                service="https", current_user="test-user",
+                service="https", user={"uuid": "test-user", "role": "viewer"},
             )
 
         mock_repo.get_attackers.assert_awaited_once_with(
@@ -168,8 +174,9 @@ class TestGetAttackerDetail:
         sample = _sample_attacker()
         with patch("decnet.web.router.attackers.api_get_attacker_detail.repo") as mock_repo:
             mock_repo.get_attacker_by_uuid = AsyncMock(return_value=sample)
+            mock_repo.get_attacker_behavior = AsyncMock(return_value=None)
 
-            result = await get_attacker_detail(uuid="att-uuid-1", current_user="test-user")
+            result = await get_attacker_detail(uuid="att-uuid-1", user={"uuid": "test-user", "role": "viewer"})
 
         assert result["uuid"] == "att-uuid-1"
         assert result["ip"] == "1.2.3.4"
@@ -184,7 +191,7 @@ class TestGetAttackerDetail:
             mock_repo.get_attacker_by_uuid = AsyncMock(return_value=None)
 
             with pytest.raises(HTTPException) as exc_info:
-                await get_attacker_detail(uuid="nonexistent", current_user="test-user")
+                await get_attacker_detail(uuid="nonexistent", user={"uuid": "test-user", "role": "viewer"})
 
         assert exc_info.value.status_code == 404
 
@@ -195,8 +202,9 @@ class TestGetAttackerDetail:
         sample = _sample_attacker()
         with patch("decnet.web.router.attackers.api_get_attacker_detail.repo") as mock_repo:
             mock_repo.get_attacker_by_uuid = AsyncMock(return_value=sample)
+            mock_repo.get_attacker_behavior = AsyncMock(return_value=None)
 
-            result = await get_attacker_detail(uuid="att-uuid-1", current_user="test-user")
+            result = await get_attacker_detail(uuid="att-uuid-1", user={"uuid": "test-user", "role": "viewer"})
 
         assert isinstance(result["services"], list)
         assert isinstance(result["deckies"], list)
@@ -222,7 +230,7 @@ class TestGetAttackerCommands:
 
             result = await get_attacker_commands(
                 uuid="att-uuid-1", limit=50, offset=0, service=None,
-                current_user="test-user",
+                user={"uuid": "test-user", "role": "viewer"},
             )
 
         assert result["total"] == 2
@@ -241,7 +249,7 @@ class TestGetAttackerCommands:
 
             await get_attacker_commands(
                 uuid="att-uuid-1", limit=50, offset=0, service="ssh",
-                current_user="test-user",
+                user={"uuid": "test-user", "role": "viewer"},
             )
 
         mock_repo.get_attacker_commands.assert_awaited_once_with(
@@ -258,7 +266,7 @@ class TestGetAttackerCommands:
             with pytest.raises(HTTPException) as exc_info:
                 await get_attacker_commands(
                     uuid="nonexistent", limit=50, offset=0, service=None,
-                    current_user="test-user",
+                    user={"uuid": "test-user", "role": "viewer"},
                 )
 
         assert exc_info.value.status_code == 404

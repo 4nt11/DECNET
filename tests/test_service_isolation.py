@@ -184,7 +184,7 @@ class TestAttackerWorkerIsolation:
     @pytest.mark.asyncio
     async def test_attacker_worker_survives_db_error(self):
         """Attacker worker must catch DB errors and continue looping."""
-        from decnet.web.attacker_worker import attacker_profile_worker
+        from decnet.profiler import attacker_profile_worker
 
         mock_repo = MagicMock()
         mock_repo.get_all_logs_raw = AsyncMock(side_effect=Exception("DB is locked"))
@@ -199,7 +199,7 @@ class TestAttackerWorkerIsolation:
             if iterations >= 3:
                 raise asyncio.CancelledError()
 
-        with patch("decnet.web.attacker_worker.asyncio.sleep", side_effect=_controlled_sleep):
+        with patch("decnet.profiler.worker.asyncio.sleep", side_effect=_controlled_sleep):
             task = asyncio.create_task(attacker_profile_worker(mock_repo))
             with pytest.raises(asyncio.CancelledError):
                 await task
@@ -209,7 +209,7 @@ class TestAttackerWorkerIsolation:
     @pytest.mark.asyncio
     async def test_attacker_worker_survives_empty_db(self):
         """Attacker worker must handle an empty database gracefully."""
-        from decnet.web.attacker_worker import _WorkerState, _incremental_update
+        from decnet.profiler.worker import _WorkerState, _incremental_update
 
         mock_repo = MagicMock()
         mock_repo.get_all_logs_raw = AsyncMock(return_value=[])
@@ -433,7 +433,7 @@ class TestCascadeIsolation:
     @pytest.mark.asyncio
     async def test_ingester_failure_does_not_kill_attacker(self):
         """When ingester dies, attacker worker must keep running independently."""
-        from decnet.web.attacker_worker import attacker_profile_worker
+        from decnet.profiler import attacker_profile_worker
 
         mock_repo = MagicMock()
         mock_repo.get_all_logs_raw = AsyncMock(return_value=[])
@@ -449,7 +449,7 @@ class TestCascadeIsolation:
             if iterations >= 3:
                 raise asyncio.CancelledError()
 
-        with patch("decnet.web.attacker_worker.asyncio.sleep", side_effect=_controlled_sleep):
+        with patch("decnet.profiler.worker.asyncio.sleep", side_effect=_controlled_sleep):
             task = asyncio.create_task(attacker_profile_worker(mock_repo))
             with pytest.raises(asyncio.CancelledError):
                 await task

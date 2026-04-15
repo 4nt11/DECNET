@@ -181,7 +181,7 @@ class TestTeardownCommand:
         result = runner.invoke(app, ["teardown"])
         assert result.exit_code == 1
 
-    @patch("decnet.cli._kill_api")
+    @patch("decnet.cli._kill_all_services")
     @patch("decnet.engine.teardown")
     def test_teardown_all(self, mock_teardown, mock_kill):
         result = runner.invoke(app, ["teardown", "--all"])
@@ -275,13 +275,29 @@ class TestWebCommand:
         assert result.exit_code == 1
         assert "Frontend build not found" in result.stdout
 
-    @patch("socketserver.TCPServer")
-    @patch("os.chdir")
-    @patch("pathlib.Path.exists", return_value=True)
-    def test_web_success(self, mock_exists, mock_chdir, mock_server):
-        # We need to simulate a KeyboardInterrupt to stop serve_forever
-        mock_server.return_value.__enter__.return_value.serve_forever.side_effect = KeyboardInterrupt
-        result = runner.invoke(app, ["web"])
+    def test_web_success(self):
+        with (
+            patch("pathlib.Path.exists", return_value=True),
+            patch("os.chdir"),
+            patch(
+                "socketserver.TCPServer.__init__",
+                lambda self, *a, **kw: None,
+            ),
+            patch(
+                "socketserver.TCPServer.__enter__",
+                lambda self: self,
+            ),
+            patch(
+                "socketserver.TCPServer.__exit__",
+                lambda self, *a: None,
+            ),
+            patch(
+                "socketserver.TCPServer.serve_forever",
+                side_effect=KeyboardInterrupt,
+            ),
+        ):
+            result = runner.invoke(app, ["web"])
+
         assert result.exit_code == 0
         assert "Serving DECNET Web Dashboard" in result.stdout
 
@@ -320,13 +336,13 @@ class TestApiCommand:
         assert result.exit_code == 0
 
 
-# ── _kill_api ─────────────────────────────────────────────────────────────────
+# ── _kill_all_services ────────────────────────────────────────────────────────
 
-class TestKillApi:
+class TestKillAllServices:
     @patch("os.kill")
     @patch("psutil.process_iter")
     def test_kills_matching_processes(self, mock_iter, mock_kill):
-        from decnet.cli import _kill_api
+        from decnet.cli import _kill_all_services
         mock_uvicorn = MagicMock()
         mock_uvicorn.info = {
             "pid": 111, "name": "python",
@@ -343,21 +359,21 @@ class TestKillApi:
             "cmdline": ["python", "-m", "decnet.cli", "collect", "--log-file", "/tmp/decnet.log"],
         }
         mock_iter.return_value = [mock_uvicorn, mock_mutate, mock_collector]
-        _kill_api()
+        _kill_all_services()
         assert mock_kill.call_count == 3
 
     @patch("psutil.process_iter")
     def test_no_matching_processes(self, mock_iter):
-        from decnet.cli import _kill_api
+        from decnet.cli import _kill_all_services
         mock_proc = MagicMock()
         mock_proc.info = {"pid": 1, "name": "bash", "cmdline": ["bash"]}
         mock_iter.return_value = [mock_proc]
-        _kill_api()
+        _kill_all_services()
 
     @patch("psutil.process_iter")
     def test_handles_empty_cmdline(self, mock_iter):
-        from decnet.cli import _kill_api
+        from decnet.cli import _kill_all_services
         mock_proc = MagicMock()
         mock_proc.info = {"pid": 1, "name": "bash", "cmdline": None}
         mock_iter.return_value = [mock_proc]
-        _kill_api()
+        _kill_all_services()
