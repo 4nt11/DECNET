@@ -106,7 +106,17 @@ async def _extract_bounty(repo: BaseRepository, log_data: dict[str, Any]) -> Non
         })
 
     # 2. HTTP User-Agent fingerprint
-    _headers = _fields.get("headers") if isinstance(_fields.get("headers"), dict) else {}
+    _h_raw = _fields.get("headers")
+    if isinstance(_h_raw, dict):
+        _headers = _h_raw
+    elif isinstance(_h_raw, str):
+        try:
+            _parsed = json.loads(_h_raw)
+            _headers = _parsed if isinstance(_parsed, dict) else {}
+        except (json.JSONDecodeError, ValueError):
+            _headers = {}
+    else:
+        _headers = {}
     _ua = _headers.get("User-Agent") or _headers.get("user-agent")
     if _ua:
         await repo.add_bounty({

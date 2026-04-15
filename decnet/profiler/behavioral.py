@@ -314,12 +314,24 @@ def detect_tools_from_headers(events: list[LogEvent]) -> list[str]:
         if not raw_headers:
             continue
 
-        # headers may arrive as a JSON string or a dict already
+        # headers may arrive as a JSON string, a Python-repr string (legacy),
+        # or a dict already (in-memory / test paths).
         if isinstance(raw_headers, str):
             try:
                 headers: dict[str, str] = json.loads(raw_headers)
             except (json.JSONDecodeError, ValueError):
-                continue
+                # Backward-compat: events written before the JSON-encode fix
+                # were serialized as Python repr via str(dict).  ast.literal_eval
+                # handles that safely (no arbitrary code execution).
+                try:
+                    import ast as _ast
+                    _parsed = _ast.literal_eval(raw_headers)
+                    if isinstance(_parsed, dict):
+                        headers = _parsed
+                    else:
+                        continue
+                except Exception:
+                    continue
         elif isinstance(raw_headers, dict):
             headers = raw_headers
         else:

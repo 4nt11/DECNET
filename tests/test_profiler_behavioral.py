@@ -287,6 +287,18 @@ class TestDetectToolsFromHeaders:
         result = detect_tools_from_headers(events)
         assert result.count("sqlmap") == 1
 
+    def test_json_string_headers(self):
+        # Post-fix format: headers stored as a JSON string (not a dict).
+        e = _mk(0, event_type="request", service="http",
+                fields={"headers": '{"User-Agent": "Nmap Scripting Engine"}'})
+        assert "nmap" in detect_tools_from_headers([e])
+
+    def test_python_repr_headers_fallback(self):
+        # Legacy format: headers stored as Python repr string (str(dict)).
+        e = _mk(0, event_type="request", service="http",
+                fields={"headers": "{'User-Agent': 'Nmap Scripting Engine'}"})
+        assert "nmap" in detect_tools_from_headers([e])
+
 
 # ─── phase_sequence ────────────────────────────────────────────────────────
 

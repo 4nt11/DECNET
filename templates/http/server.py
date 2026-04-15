@@ -79,7 +79,7 @@ def log_request():
         method=request.method,
         path=request.path,
         remote_addr=request.remote_addr,
-        headers=dict(request.headers),
+        headers=json.dumps(dict(request.headers)),
         body=request.get_data(as_text=True)[:512],
     )
 
