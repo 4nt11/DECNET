@@ -9,7 +9,7 @@ from fastapi.responses import JSONResponse
 from pydantic import ValidationError
 from fastapi.middleware.cors import CORSMiddleware
 
-from decnet.env import DECNET_CORS_ORIGINS, DECNET_DEVELOPER, DECNET_INGEST_LOG_FILE
+from decnet.env import DECNET_CORS_ORIGINS, DECNET_DEVELOPER, DECNET_EMBED_PROFILER, DECNET_INGEST_LOG_FILE
 from decnet.logging import get_logger
 from decnet.web.dependencies import repo
 from decnet.collector import log_collector_worker
@@ -65,10 +65,16 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
         elif not _log_file:
             log.warning("DECNET_INGEST_LOG_FILE not set — Docker log collection disabled.")
 
-        # Start attacker profile rebuild worker
-        if attacker_task is None or attacker_task.done():
-            attacker_task = asyncio.create_task(attacker_profile_worker(repo))
-            log.debug("API startup attacker profile worker started")
+        # Start attacker profile rebuild worker only when explicitly requested.
+        # Default is OFF because `decnet deploy` always starts a standalone
+        # `decnet profiler --daemon` process.  Running both against the same
+        # DB cursor causes events to be skipped or double-processed.
+        if DECNET_EMBED_PROFILER:
+            if attacker_task is None or attacker_task.done():
+                attacker_task = asyncio.create_task(attacker_profile_worker(repo))
+                log.info("API startup: embedded profiler started (DECNET_EMBED_PROFILER=true)")
+        else:
+            log.debug("API startup: profiler not embedded — expecting standalone daemon")
 
         # Start fleet-wide MACVLAN sniffer (fault-isolated — never crashes the API)
         try:

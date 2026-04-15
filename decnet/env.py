@@ -53,6 +53,12 @@ def _require_env(name: str) -> str:
 # System logging — all microservice daemons append here.
 DECNET_SYSTEM_LOGS: str = os.environ.get("DECNET_SYSTEM_LOGS", "decnet.system.log")
 
+# Set to "true" to embed the profiler inside the API process.
+# Leave unset (default) when the standalone `decnet profiler --daemon` is
+# running — embedding both produces two workers sharing the same DB cursor,
+# which causes events to be skipped or processed twice.
+DECNET_EMBED_PROFILER: bool = os.environ.get("DECNET_EMBED_PROFILER", "").lower() == "true"
+
 # API Options
 DECNET_API_HOST: str = os.environ.get("DECNET_API_HOST", "0.0.0.0")  # nosec B104
 DECNET_API_PORT: int = _port("DECNET_API_PORT", 8000)
