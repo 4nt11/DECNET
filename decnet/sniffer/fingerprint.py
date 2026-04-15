@@ -14,6 +14,8 @@ import struct
 import time
 from typing import Any, Callable
 
+from decnet.prober.tcpfp import _extract_options_order
+from decnet.sniffer.p0f import guess_os, hop_distance, initial_ttl
 from decnet.sniffer.syslog import SEVERITY_INFO, SEVERITY_WARNING, syslog_line
 
 # ─── Constants ───────────────────────────────────────────────────────────────
@@ -22,6 +24,10 @@ SERVICE_NAME: str = "sniffer"
 
 _SESSION_TTL: float = 60.0
 _DEDUP_TTL: float = 300.0
+
+# Inactivity after which a TCP flow is considered closed and its timing
+# summary is flushed as an event.
+_FLOW_IDLE_TIMEOUT: float = 120.0
 
 _GREASE: frozenset[int] = frozenset(0x0A0A + i * 0x1010 for i in range(16))
 
@@ -42,6 +48,38 @@ _EXT_EARLY_DATA: int = 0x002A
 
 _TCP_SYN: int = 0x02
 _TCP_ACK: int = 0x10
+_TCP_FIN: int = 0x01
+_TCP_RST: int = 0x04
+
+
+# ─── TCP option extraction for passive fingerprinting ───────────────────────
+
+def _extract_tcp_fingerprint(tcp_options: list) -> dict[str, Any]:
+    """
+    Extract MSS, window-scale, SACK, timestamp flags, and the options order
+    signature from a scapy TCP options list.
+    """
+    mss = 0
+    wscale: int | None = None
+    sack_ok = False
+    has_ts = False
+    for opt_name, opt_value in tcp_options or []:
+        if opt_name == "MSS":
+            mss = opt_value
+        elif opt_name == "WScale":
+            wscale = opt_value
+        elif opt_name in ("SAckOK", "SAck"):
+            sack_ok = True
+        elif opt_name == "Timestamp":
+            has_ts = True
+    options_sig = _extract_options_order(tcp_options or [])
+    return {
+        "mss": mss,
+        "wscale": wscale,
+        "sack_ok": sack_ok,
+        "has_timestamps": has_ts,
+        "options_sig": options_sig,
+    }
 
 
 # ─── GREASE helpers ──────────────────────────────────────────────────────────
@@ -655,6 +693,13 @@ class SnifferEngine:
         self._tcp_syn: dict[tuple[str, int, str, int], dict[str, Any]] = {}
         self._tcp_rtt: dict[tuple[str, int, str, int], dict[str, Any]] = {}
 
+        # Per-flow timing aggregator. Key: (src_ip, src_port, dst_ip, dst_port).
+        # Flow direction is client→decky; reverse packets are associated back
+        # to the forward flow so we can track retransmits and inter-arrival.
+        self._flows: dict[tuple[str, int, str, int], dict[str, Any]] = {}
+        self._flow_last_cleanup: float = 0.0
+        self._FLOW_CLEANUP_INTERVAL: float = 30.0
+
         self._dedup_cache: dict[tuple[str, str, str], float] = {}
         self._dedup_last_cleanup: float = 0.0
         self._DEDUP_CLEANUP_INTERVAL: float = 60.0
@@ -693,6 +738,16 @@ class SnifferEngine:
                     "|" + fields.get("ja4", "") + "|" + fields.get("ja4s", ""))
         if event_type == "tls_certificate":
             return fields.get("subject_cn", "") + "|" + fields.get("issuer", "")
+        if event_type == "tcp_syn_fingerprint":
+            # Dedupe per (OS signature, options layout). One event per unique
+            # stack profile from this attacker IP per dedup window.
+            return fields.get("os_guess", "") + "|" + fields.get("options_sig", "")
+        if event_type == "tcp_flow_timing":
+            # Dedup per (attacker_ip, decky_port) — src_port is deliberately
+            # excluded so a port scanner rotating source ports only produces
+            # one timing event per dedup window. Behavior cadence doesn't
+            # need per-ephemeral-port fidelity.
+            return fields.get("dst_ip", "") + "|" + fields.get("dst_port", "")
         return fields.get("mechanisms", fields.get("resumption", ""))
 
     def _is_duplicate(self, event_type: str, fields: dict[str, Any]) -> bool:
@@ -719,6 +774,149 @@ class SnifferEngine:
         line = syslog_line(SERVICE_NAME, node_name, event_type, severity=severity, **fields)
         self._write_fn(line)
 
+    # ── Flow tracking (per-TCP-4-tuple timing + retransmits) ────────────────
+
+    def _flow_key(
+        self,
+        src_ip: str,
+        src_port: int,
+        dst_ip: str,
+        dst_port: int,
+    ) -> tuple[str, int, str, int]:
+        """
+        Canonicalize a packet to the *client→decky* direction so forward and
+        reverse packets share one flow record.
+        """
+        if dst_ip in self._ip_to_decky:
+            return (src_ip, src_port, dst_ip, dst_port)
+        # Otherwise src is the decky, flip.
+        return (dst_ip, dst_port, src_ip, src_port)
+
+    def _update_flow(
+        self,
+        flow_key: tuple[str, int, str, int],
+        now: float,
+        seq: int,
+        payload_len: int,
+        direction_forward: bool,
+    ) -> None:
+        """Record one packet into the flow aggregator."""
+        flow = self._flows.get(flow_key)
+        if flow is None:
+            flow = {
+                "start": now,
+                "last": now,
+                "packets": 0,
+                "bytes": 0,
+                "iat_sum": 0.0,
+                "iat_min": float("inf"),
+                "iat_max": 0.0,
+                "iat_count": 0,
+                "forward_seqs": set(),
+                "retransmits": 0,
+                "emitted": False,
+            }
+            self._flows[flow_key] = flow
+
+        if flow["packets"] > 0:
+            iat = now - flow["last"]
+            if iat >= 0:
+                flow["iat_sum"] += iat
+                flow["iat_count"] += 1
+                if iat < flow["iat_min"]:
+                    flow["iat_min"] = iat
+                if iat > flow["iat_max"]:
+                    flow["iat_max"] = iat
+
+        flow["last"] = now
+        flow["packets"] += 1
+        flow["bytes"] += payload_len
+
+        # Retransmit detection: a forward-direction packet with payload whose
+        # sequence number we've already seen is a retransmit. Empty SYN/ACKs
+        # are excluded because they share seq legitimately.
+        if direction_forward and payload_len > 0:
+            if seq in flow["forward_seqs"]:
+                flow["retransmits"] += 1
+            else:
+                flow["forward_seqs"].add(seq)
+
+    def _flush_flow(
+        self,
+        flow_key: tuple[str, int, str, int],
+        node_name: str,
+    ) -> None:
+        """Emit one `tcp_flow_timing` event for *flow_key* and drop its state.
+
+        Trivial flows (scan probes: 1–2 packets, sub-second duration) are
+        dropped silently — they add noise to the log pipeline without carrying
+        usable behavioral signal (beacon cadence, exfil timing, retransmits
+        are all meaningful only on longer-lived flows).
+        """
+        flow = self._flows.pop(flow_key, None)
+        if flow is None or flow.get("emitted"):
+            return
+        flow["emitted"] = True
+
+        # Skip uninteresting flows — keep the log pipeline from being flooded
+        # by short-lived scan probes.
+        duration = flow["last"] - flow["start"]
+        if flow["packets"] < 4 and flow["retransmits"] == 0 and duration < 1.0:
+            return
+
+        src_ip, src_port, dst_ip, dst_port = flow_key
+        iat_count = flow["iat_count"]
+        mean_iat_ms = round((flow["iat_sum"] / iat_count) * 1000, 2) if iat_count else 0.0
+        min_iat_ms = round(flow["iat_min"] * 1000, 2) if iat_count else 0.0
+        max_iat_ms = round(flow["iat_max"] * 1000, 2) if iat_count else 0.0
+        duration_s = round(duration, 3)
+
+        self._log(
+            node_name,
+            "tcp_flow_timing",
+            src_ip=src_ip,
+            src_port=str(src_port),
+            dst_ip=dst_ip,
+            dst_port=str(dst_port),
+            packets=str(flow["packets"]),
+            bytes=str(flow["bytes"]),
+            duration_s=str(duration_s),
+            mean_iat_ms=str(mean_iat_ms),
+            min_iat_ms=str(min_iat_ms),
+            max_iat_ms=str(max_iat_ms),
+            retransmits=str(flow["retransmits"]),
+        )
+
+    def flush_all_flows(self) -> None:
+        """
+        Flush every tracked flow (emit `tcp_flow_timing` events) and drop
+        state. Safe to call from outside the sniff thread; used during
+        shutdown and in tests.
+        """
+        for key in list(self._flows.keys()):
+            decky = self._ip_to_decky.get(key[2])
+            if decky:
+                self._flush_flow(key, decky)
+            else:
+                self._flows.pop(key, None)
+
+    def _flush_idle_flows(self) -> None:
+        """Flush any flow whose last packet was more than _FLOW_IDLE_TIMEOUT ago."""
+        now = time.monotonic()
+        if now - self._flow_last_cleanup < self._FLOW_CLEANUP_INTERVAL:
+            return
+        self._flow_last_cleanup = now
+        stale: list[tuple[str, int, str, int]] = [
+            k for k, f in self._flows.items()
+            if now - f["last"] > _FLOW_IDLE_TIMEOUT
+        ]
+        for key in stale:
+            decky = self._ip_to_decky.get(key[2])
+            if decky:
+                self._flush_flow(key, decky)
+            else:
+                self._flows.pop(key, None)
+
     def on_packet(self, pkt: Any) -> None:
         """Process a single scapy packet. Called from the sniff thread."""
         try:
@@ -743,20 +941,73 @@ class SnifferEngine:
         if node_name is None:
             return
 
-        # TCP SYN tracking for JA4L
+        now = time.monotonic()
+
+        # Per-flow timing aggregation (covers all TCP traffic, not just TLS)
+        flow_key = self._flow_key(src_ip, src_port, dst_ip, dst_port)
+        direction_forward = (flow_key[0] == src_ip and flow_key[1] == src_port)
+        tcp_payload_len = len(bytes(tcp.payload))
+        self._update_flow(
+            flow_key,
+            now=now,
+            seq=int(tcp.seq),
+            payload_len=tcp_payload_len,
+            direction_forward=direction_forward,
+        )
+        self._flush_idle_flows()
+
+        # TCP SYN tracking for JA4L + passive SYN fingerprint
         if flags & _TCP_SYN and not (flags & _TCP_ACK):
             key = (src_ip, src_port, dst_ip, dst_port)
-            self._tcp_syn[key] = {"time": time.monotonic(), "ttl": ip.ttl}
+            self._tcp_syn[key] = {"time": now, "ttl": ip.ttl}
+
+            # Emit passive OS fingerprint on the *client* SYN. Only do this
+            # when the destination is a known decky, i.e. we're seeing an
+            # attacker's initial packet.
+            if dst_ip in self._ip_to_decky:
+                tcp_fp = _extract_tcp_fingerprint(list(tcp.options or []))
+                os_label = guess_os(
+                    ttl=ip.ttl,
+                    window=int(tcp.window),
+                    mss=tcp_fp["mss"],
+                    wscale=tcp_fp["wscale"],
+                    options_sig=tcp_fp["options_sig"],
+                )
+                target_node = self._ip_to_decky[dst_ip]
+                self._log(
+                    target_node,
+                    "tcp_syn_fingerprint",
+                    src_ip=src_ip,
+                    src_port=str(src_port),
+                    dst_ip=dst_ip,
+                    dst_port=str(dst_port),
+                    ttl=str(ip.ttl),
+                    initial_ttl=str(initial_ttl(ip.ttl)),
+                    hop_distance=str(hop_distance(ip.ttl)),
+                    window=str(int(tcp.window)),
+                    mss=str(tcp_fp["mss"]),
+                    wscale=("" if tcp_fp["wscale"] is None else str(tcp_fp["wscale"])),
+                    options_sig=tcp_fp["options_sig"],
+                    has_sack=str(tcp_fp["sack_ok"]).lower(),
+                    has_timestamps=str(tcp_fp["has_timestamps"]).lower(),
+                    os_guess=os_label,
+                )
 
         elif flags & _TCP_SYN and flags & _TCP_ACK:
             rev_key = (dst_ip, dst_port, src_ip, src_port)
             syn_data = self._tcp_syn.pop(rev_key, None)
             if syn_data:
-                rtt_ms = round((time.monotonic() - syn_data["time"]) * 1000, 2)
+                rtt_ms = round((now - syn_data["time"]) * 1000, 2)
                 self._tcp_rtt[rev_key] = {
                     "rtt_ms": rtt_ms,
                     "client_ttl": syn_data["ttl"],
                 }
+
+        # Flush flow on FIN/RST (terminal packets).
+        if flags & (_TCP_FIN | _TCP_RST):
+            decky = self._ip_to_decky.get(flow_key[2])
+            if decky:
+                self._flush_flow(flow_key, decky)
 
         payload = bytes(tcp.payload)
         if not payload:
