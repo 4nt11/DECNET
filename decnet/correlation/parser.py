@@ -38,7 +38,7 @@ _SD_BLOCK_RE = re.compile(r'\[decnet@55555\s+(.*?)\]', re.DOTALL)
 _PARAM_RE = re.compile(r'(\w+)="((?:[^"\\]|\\.)*)"')
 
 # Field names to probe for attacker IP, in priority order
-_IP_FIELDS = ("src_ip", "src", "client_ip", "remote_ip", "ip")
+_IP_FIELDS = ("src_ip", "src", "client_ip", "remote_ip", "remote_addr", "ip")
 
 
 @dataclass
