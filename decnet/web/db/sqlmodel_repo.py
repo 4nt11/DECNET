@@ -327,6 +327,15 @@ class SQLModelRepository(BaseRepository):
             data["payload"] = json.dumps(data["payload"])
 
         async with self.session_factory() as session:
+            dup = await session.execute(
+                select(Bounty.id).where(
+                    Bounty.bounty_type == data.get("bounty_type"),
+                    Bounty.attacker_ip == data.get("attacker_ip"),
+                    Bounty.payload == data.get("payload"),
+                ).limit(1)
+            )
+            if dup.first() is not None:
+                return
             session.add(Bounty(**data))
             await session.commit()
 
