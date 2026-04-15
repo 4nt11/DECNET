@@ -504,6 +504,13 @@ def build_behavior_record(events: list[LogEvent]) -> dict[str, Any]:
     header_tools = detect_tools_from_headers(events)
     all_tools: list[str] = list(dict.fromkeys(beacon_tools + header_tools))  # dedup, preserve order
 
+    # Promote TCP-level scanner identification to tool_guesses.
+    # p0f fingerprints nmap from the TCP handshake alone — this fires even
+    # when no HTTP service is present, making it far more reliable than the
+    # header-based path for raw port scans.
+    if rollup["os_guess"] == "nmap" and "nmap" not in all_tools:
+        all_tools.insert(0, "nmap")
+
     # Beacon-specific projection: only surface interval/jitter when we've
     # classified the flow as beaconing (otherwise these numbers are noise).
     beacon_interval_s: float | None = None

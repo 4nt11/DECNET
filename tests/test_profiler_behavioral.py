@@ -475,3 +475,15 @@ class TestBuildBehaviorRecord:
         events = [_mk(i * 300.0) for i in range(5)]  # 5-min intervals, no signature match
         r = build_behavior_record(events)
         assert json.loads(r["tool_guesses"]) == []
+
+    def test_nmap_promoted_from_tcp_fingerprint(self):
+        # p0f identifies nmap from TCP handshake → must appear in tool_guesses
+        # even when no HTTP request events are present.
+        events = [
+            _mk(0, event_type="tcp_syn_fingerprint", service="ssh",
+                fields={"os_guess": "nmap", "window": "31337", "ttl": "58"}),
+            _mk(1, event_type="tcp_syn_fingerprint", service="smb",
+                fields={"os_guess": "nmap", "window": "31337", "ttl": "58"}),
+        ]
+        r = build_behavior_record(events)
+        assert "nmap" in json.loads(r["tool_guesses"])
