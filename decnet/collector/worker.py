@@ -8,7 +8,10 @@ The ingester tails the .json file; rsyslog can consume the .log file independent
 
 import asyncio
 import json
+import os
 import re
+import threading
+import time
 from datetime import datetime
 from pathlib import Path
 from typing import Any, Optional
@@ -16,6 +19,87 @@ from typing import Any, Optional
 from decnet.logging import get_logger
 
 logger = get_logger("collector")
+
+# ─── Ingestion rate limiter ───────────────────────────────────────────────────
+#
+# Rationale: connection-lifecycle events (connect/disconnect/accept/close) are
+# emitted once per TCP connection. During a portscan or credential-stuffing
+# run, a single attacker can generate hundreds of these per second from the
+# honeypot services themselves — each becoming a tiny WAL-write transaction
+# through the ingester, starving reads until the queue drains.
+#
+# The collector still writes every line to the raw .log file (forensic record
+# for rsyslog/SIEM). Only the .json path — which feeds SQLite — is deduped.
+#
+# Dedup key: (attacker_ip, decky, service, event_type)
+# Window:    DECNET_COLLECTOR_RL_WINDOW_SEC seconds (default 1.0)
+# Scope:     DECNET_COLLECTOR_RL_EVENT_TYPES comma list
+#            (default: connect,disconnect,connection,accept,close)
+# Events outside that set bypass the limiter untouched.
+
+def _parse_float_env(name: str, default: float) -> float:
+    raw = os.environ.get(name)
+    if raw is None:
+        return default
+    try:
+        value = float(raw)
+    except ValueError:
+        logger.warning("collector: invalid %s=%r, using default %s", name, raw, default)
+        return default
+    return max(0.0, value)
+
+
+_RL_WINDOW_SEC: float = _parse_float_env("DECNET_COLLECTOR_RL_WINDOW_SEC", 1.0)
+_RL_EVENT_TYPES: frozenset[str] = frozenset(
+    t.strip()
+    for t in os.environ.get(
+        "DECNET_COLLECTOR_RL_EVENT_TYPES",
+        "connect,disconnect,connection,accept,close",
+    ).split(",")
+    if t.strip()
+)
+_RL_MAX_ENTRIES: int = 10_000
+
+_rl_lock: threading.Lock = threading.Lock()
+_rl_last: dict[tuple[str, str, str, str], float] = {}
+
+
+def _should_ingest(parsed: dict[str, Any]) -> bool:
+    """
+    Return True if this parsed event should be written to the JSON ingestion
+    stream. Rate-limited connection-lifecycle events return False when another
+    event with the same (attacker_ip, decky, service, event_type) was emitted
+    inside the dedup window.
+    """
+    event_type = parsed.get("event_type", "")
+    if _RL_WINDOW_SEC <= 0.0 or event_type not in _RL_EVENT_TYPES:
+        return True
+    key = (
+        parsed.get("attacker_ip", "Unknown"),
+        parsed.get("decky", ""),
+        parsed.get("service", ""),
+        event_type,
+    )
+    now = time.monotonic()
+    with _rl_lock:
+        last = _rl_last.get(key, 0.0)
+        if now - last < _RL_WINDOW_SEC:
+            return False
+        _rl_last[key] = now
+        # Opportunistic GC: when the map grows past the cap, drop entries older
+        # than 60 windows (well outside any realistic in-flight dedup range).
+        if len(_rl_last) > _RL_MAX_ENTRIES:
+            cutoff = now - (_RL_WINDOW_SEC * 60.0)
+            stale = [k for k, t in _rl_last.items() if t < cutoff]
+            for k in stale:
+                del _rl_last[k]
+    return True
+
+
+def _reset_rate_limiter() -> None:
+    """Test-only helper — clear dedup state between test cases."""
+    with _rl_lock:
+        _rl_last.clear()
 
 # ─── RFC 5424 parser ──────────────────────────────────────────────────────────
 
@@ -140,9 +224,16 @@ def _stream_container(container_id: str, log_path: Path, json_path: Path) -> Non
                     lf.flush()
                     parsed = parse_rfc5424(line)
                     if parsed:
-                        logger.debug("collector: event written decky=%s type=%s", parsed.get("decky"), parsed.get("event_type"))
-                        jf.write(json.dumps(parsed) + "\n")
-                        jf.flush()
+                        if _should_ingest(parsed):
+                            logger.debug("collector: event written decky=%s type=%s", parsed.get("decky"), parsed.get("event_type"))
+                            jf.write(json.dumps(parsed) + "\n")
+                            jf.flush()
+                        else:
+                            logger.debug(
+                                "collector: rate-limited decky=%s service=%s type=%s attacker=%s",
+                                parsed.get("decky"), parsed.get("service"),
+                                parsed.get("event_type"), parsed.get("attacker_ip"),
+                            )
                     else:
                         logger.debug("collector: malformed RFC5424 line snippet=%r", line[:80])
     except Exception as exc:

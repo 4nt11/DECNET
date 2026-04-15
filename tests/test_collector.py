@@ -9,7 +9,9 @@ from decnet.collector import parse_rfc5424, is_service_container, is_service_eve
 from decnet.collector.worker import (
     _stream_container,
     _load_service_container_names,
-    log_collector_worker
+    _should_ingest,
+    _reset_rate_limiter,
+    log_collector_worker,
 )
 
 _KNOWN_NAMES = {"omega-decky-http", "omega-decky-smtp", "relay-decky-ftp"}
@@ -285,6 +287,106 @@ class TestStreamContainer:
             _stream_container("test-id", log_path, json_path)
 
         assert log_path.read_text() == ""
+
+
+class TestIngestRateLimiter:
+    def setup_method(self):
+        _reset_rate_limiter()
+
+    def _event(self, event_type="connect", attacker_ip="1.2.3.4",
+               decky="decky-01", service="ssh"):
+        return {
+            "event_type": event_type,
+            "attacker_ip": attacker_ip,
+            "decky": decky,
+            "service": service,
+        }
+
+    def test_non_limited_event_types_always_pass(self):
+        # login_attempt / request / etc. carry distinguishing payload — never deduped.
+        for _ in range(5):
+            assert _should_ingest(self._event(event_type="login_attempt")) is True
+            assert _should_ingest(self._event(event_type="request")) is True
+
+    def test_first_connect_passes(self):
+        assert _should_ingest(self._event()) is True
+
+    def test_duplicate_connect_within_window_is_dropped(self):
+        assert _should_ingest(self._event()) is True
+        assert _should_ingest(self._event()) is False
+        assert _should_ingest(self._event()) is False
+
+    def test_different_attackers_tracked_independently(self):
+        assert _should_ingest(self._event(attacker_ip="1.1.1.1")) is True
+        assert _should_ingest(self._event(attacker_ip="2.2.2.2")) is True
+
+    def test_different_deckies_tracked_independently(self):
+        assert _should_ingest(self._event(decky="a")) is True
+        assert _should_ingest(self._event(decky="b")) is True
+
+    def test_different_services_tracked_independently(self):
+        assert _should_ingest(self._event(service="ssh")) is True
+        assert _should_ingest(self._event(service="http")) is True
+
+    def test_disconnect_and_connect_tracked_independently(self):
+        assert _should_ingest(self._event(event_type="connect")) is True
+        assert _should_ingest(self._event(event_type="disconnect")) is True
+
+    def test_window_expiry_allows_next_event(self, monkeypatch):
+        import decnet.collector.worker as worker
+        t = [1000.0]
+        monkeypatch.setattr(worker.time, "monotonic", lambda: t[0])
+        assert _should_ingest(self._event()) is True
+        assert _should_ingest(self._event()) is False
+        # Advance past 1-second window.
+        t[0] += 1.5
+        assert _should_ingest(self._event()) is True
+
+    def test_window_zero_disables_limiter(self, monkeypatch):
+        import decnet.collector.worker as worker
+        monkeypatch.setattr(worker, "_RL_WINDOW_SEC", 0.0)
+        for _ in range(10):
+            assert _should_ingest(self._event()) is True
+
+    def test_raw_log_gets_all_lines_json_dedupes(self, tmp_path):
+        """End-to-end: duplicates hit the .log file but NOT the .json stream."""
+        log_path = tmp_path / "test.log"
+        json_path = tmp_path / "test.json"
+        line = (
+            '<134>1 2024-01-15T12:00:00+00:00 decky-01 ssh - connect '
+            '[decnet@55555 src_ip="1.2.3.4"]\n'
+        )
+        payload = (line * 5).encode("utf-8")
+
+        mock_container = MagicMock()
+        mock_container.logs.return_value = [payload]
+        mock_client = MagicMock()
+        mock_client.containers.get.return_value = mock_container
+
+        with patch("docker.from_env", return_value=mock_client):
+            _stream_container("test-id", log_path, json_path)
+
+        # Raw log: all 5 lines preserved (forensic fidelity).
+        assert log_path.read_text().count("\n") == 5
+        # JSON ingest: only the first one written (4 dropped by the limiter).
+        json_lines = [l for l in json_path.read_text().splitlines() if l.strip()]
+        assert len(json_lines) == 1
+
+    def test_gc_trims_oversized_map(self, monkeypatch):
+        import decnet.collector.worker as worker
+        # Seed the map with stale entries, then push past the cap.
+        monkeypatch.setattr(worker, "_RL_MAX_ENTRIES", 10)
+        t = [1000.0]
+        monkeypatch.setattr(worker.time, "monotonic", lambda: t[0])
+        for i in range(9):
+            assert _should_ingest(self._event(attacker_ip=f"10.0.0.{i}")) is True
+        # Jump well past 60 windows to make prior entries stale.
+        t[0] += 1000.0
+        # This insertion pushes len to 10; GC triggers on >10 so stays.
+        assert _should_ingest(self._event(attacker_ip="10.0.0.99")) is True
+        assert _should_ingest(self._event(attacker_ip="10.0.0.100")) is True
+        # After the map exceeds the cap, stale entries must be purged.
+        assert len(worker._rl_last) < 10
 
 
 class TestLogCollectorWorker:
