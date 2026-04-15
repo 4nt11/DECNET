@@ -2,7 +2,7 @@ from typing import Any, Optional
 
 from fastapi import APIRouter, Depends, Query
 
-from decnet.web.dependencies import get_current_user, repo
+from decnet.web.dependencies import require_viewer, repo
 from decnet.web.db.models import AttackersResponse
 
 router = APIRouter()
@@ -23,7 +23,7 @@ async def get_attackers(
     search: Optional[str] = None,
     sort_by: str = Query("recent", pattern="^(recent|active|traversals)$"),
     service: Optional[str] = None,
-    current_user: str = Depends(get_current_user),
+    user: dict = Depends(require_viewer),
 ) -> dict[str, Any]:
     """Retrieve paginated attacker profiles."""
     def _norm(v: Optional[str]) -> Optional[str]:
@@ -35,4 +35,11 @@ async def get_attackers(
     svc = _norm(service)
     _data = await repo.get_attackers(limit=limit, offset=offset, search=s, sort_by=sort_by, service=svc)
     _total = await repo.get_total_attackers(search=s, service=svc)
+
+    # Bulk-join behavior rows for the IPs in this page to avoid N+1 queries.
+    _ips = {row["ip"] for row in _data if row.get("ip")}
+    _behaviors = await repo.get_behaviors_for_ips(_ips) if _ips else {}
+    for row in _data:
+        row["behavior"] = _behaviors.get(row.get("ip"))
+
     return {"total": _total, "limit": limit, "offset": offset, "data": _data}

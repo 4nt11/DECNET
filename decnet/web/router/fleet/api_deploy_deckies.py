@@ -7,7 +7,7 @@ from decnet.config import DEFAULT_MUTATE_INTERVAL, DecnetConfig, _ROOT
 from decnet.engine import deploy as _deploy
 from decnet.ini_loader import load_ini_from_string
 from decnet.network import detect_interface, detect_subnet, get_host_ip
-from decnet.web.dependencies import get_current_user, repo
+from decnet.web.dependencies import require_admin, repo
 from decnet.web.db.models import DeployIniRequest
 
 log = get_logger("api")
@@ -21,12 +21,13 @@ router = APIRouter()
     responses={
         400: {"description": "Bad Request (e.g. malformed JSON)"},
         401: {"description": "Could not validate credentials"},
+        403: {"description": "Insufficient permissions"},
         409: {"description": "Configuration conflict (e.g. invalid IP allocation or network mismatch)"},
         422: {"description": "Invalid INI config or schema validation error"},
         500: {"description": "Deployment failed"}
     }
 )
-async def api_deploy_deckies(req: DeployIniRequest, current_user: str = Depends(get_current_user)) -> dict[str, str]:
+async def api_deploy_deckies(req: DeployIniRequest, admin: dict = Depends(require_admin)) -> dict[str, str]:
     from decnet.fleet import build_deckies_from_ini
 
     try:
@@ -87,6 +88,16 @@ async def api_deploy_deckies(req: DeployIniRequest, current_user: str = Depends(
     existing_deckies_map = {d.name: d for d in config.deckies}
     for new_decky in new_decky_configs:
         existing_deckies_map[new_decky.name] = new_decky
+
+    # Enforce deployment limit
+    limits_state = await repo.get_state("config_limits")
+    deployment_limit = limits_state.get("deployment_limit", 10) if limits_state else 10
+    if len(existing_deckies_map) > deployment_limit:
+        raise HTTPException(
+            status_code=409,
+            detail=f"Deployment would result in {len(existing_deckies_map)} deckies, "
+                   f"exceeding the configured limit of {deployment_limit}",
+        )
 
     config.deckies = list(existing_deckies_map.values())
 

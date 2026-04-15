@@ -2,7 +2,7 @@ from typing import Any, Optional
 
 from fastapi import APIRouter, Depends, Query
 
-from decnet.web.dependencies import get_current_user, repo
+from decnet.web.dependencies import require_viewer, repo
 from decnet.web.db.models import BountyResponse
 
 router = APIRouter()
@@ -15,7 +15,7 @@ async def get_bounties(
     offset: int = Query(0, ge=0, le=2147483647),
     bounty_type: Optional[str] = None,
     search: Optional[str] = None,
-    current_user: str = Depends(get_current_user)
+    user: dict = Depends(require_viewer)
 ) -> dict[str, Any]:
     """Retrieve collected bounties (harvested credentials, payloads, etc.)."""
     def _norm(v: Optional[str]) -> Optional[str]:

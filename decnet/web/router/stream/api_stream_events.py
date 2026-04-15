@@ -7,7 +7,7 @@ from fastapi.responses import StreamingResponse
 
 from decnet.env import DECNET_DEVELOPER
 from decnet.logging import get_logger
-from decnet.web.dependencies import get_stream_user, repo
+from decnet.web.dependencies import require_stream_viewer, repo
 
 log = get_logger("api")
 
@@ -31,7 +31,7 @@ async def stream_events(
     start_time: Optional[str] = None,
     end_time: Optional[str] = None,
     max_output: Optional[int] = Query(None, alias="maxOutput"),
-    current_user: str = Depends(get_stream_user)
+    user: dict = Depends(require_stream_viewer)
 ) -> StreamingResponse:
 
     async def event_generator() -> AsyncGenerator[str, None]:

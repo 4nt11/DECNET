@@ -2,7 +2,7 @@ from typing import Any, Optional
 
 from fastapi import APIRouter, Depends, Query
 
-from decnet.web.dependencies import get_current_user, repo
+from decnet.web.dependencies import require_viewer, repo
 from decnet.web.db.models import LogsResponse
 
 router = APIRouter()
@@ -16,7 +16,7 @@ async def get_logs(
     search: Optional[str] = Query(None, max_length=512),
     start_time: Optional[str] = Query(None),
     end_time: Optional[str] = Query(None),
-    current_user: str = Depends(get_current_user)
+    user: dict = Depends(require_viewer)
 ) -> dict[str, Any]:
     def _norm(v: Optional[str]) -> Optional[str]:
         if v in (None, "null", "NULL", "undefined", ""):
