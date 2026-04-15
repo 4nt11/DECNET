@@ -56,16 +56,41 @@ class Rfc5424Formatter(logging.Formatter):
 
 
 def _configure_logging(dev: bool) -> None:
-    """Install the RFC 5424 handler on the root logger (idempotent)."""
+    """Install RFC 5424 handlers on the root logger (idempotent).
+
+    Always adds a StreamHandler (stderr).  Also adds a RotatingFileHandler
+    writing to DECNET_SYSTEM_LOGS (default: decnet.system.log in $PWD) so
+    all microservice daemons — which redirect stderr to /dev/null — still
+    produce readable logs.  File handler is skipped under pytest.
+    """
+    import logging.handlers as _lh
+
     root = logging.getLogger()
-    # Avoid adding duplicate handlers on re-import (e.g. during testing)
+    # Guard: if our StreamHandler is already installed, all handlers are set.
     if any(isinstance(h, logging.StreamHandler) and isinstance(h.formatter, Rfc5424Formatter)
            for h in root.handlers):
         return
-    handler = logging.StreamHandler()
-    handler.setFormatter(Rfc5424Formatter())
+
+    fmt = Rfc5424Formatter()
     root.setLevel(logging.DEBUG if dev else logging.INFO)
-    root.addHandler(handler)
+
+    stream_handler = logging.StreamHandler()
+    stream_handler.setFormatter(fmt)
+    root.addHandler(stream_handler)
+
+    # Skip the file handler during pytest runs to avoid polluting the test cwd.
+    _in_pytest = any(k.startswith("PYTEST") for k in os.environ)
+    if not _in_pytest:
+        _log_path = os.environ.get("DECNET_SYSTEM_LOGS", "decnet.system.log")
+        file_handler = _lh.RotatingFileHandler(
+            _log_path,
+            mode="a",
+            maxBytes=10 * 1024 * 1024,  # 10 MB
+            backupCount=5,
+            encoding="utf-8",
+        )
+        file_handler.setFormatter(fmt)
+        root.addHandler(file_handler)
 
 
 _dev = os.environ.get("DECNET_DEVELOPER", "").lower() == "true"

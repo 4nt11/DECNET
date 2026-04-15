@@ -40,8 +40,18 @@ def _require_env(name: str) -> str:
             f"Environment variable '{name}' is set to an insecure default ('{value}'). "
             f"Choose a strong, unique value before starting DECNET."
         )
+    if name == "DECNET_JWT_SECRET" and len(value) < 32:
+        _developer = os.environ.get("DECNET_DEVELOPER", "False").lower() == "true"
+        if not _developer:
+            raise ValueError(
+                f"DECNET_JWT_SECRET is too short ({len(value)} bytes). "
+                f"Use at least 32 characters to satisfy HS256 requirements (RFC 7518 §3.2)."
+            )
     return value
 
+
+# System logging — all microservice daemons append here.
+DECNET_SYSTEM_LOGS: str = os.environ.get("DECNET_SYSTEM_LOGS", "decnet.system.log")
 
 # API Options
 DECNET_API_HOST: str = os.environ.get("DECNET_API_HOST", "0.0.0.0")  # nosec B104
