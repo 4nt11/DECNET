@@ -361,12 +361,24 @@ const OS_LABELS: Record<string, string> = {
   unknown: 'UNKNOWN',
 };
 
+const BEHAVIOR_LABELS: Record<string, string> = {
+  beaconing:   'BEACONING',
+  interactive: 'INTERACTIVE',
+  scanning:    'SCANNING',
+  brute_force: 'BRUTE FORCE',
+  slow_scan:   'SLOW SCAN',
+  mixed:       'MIXED',
+  unknown:     'UNKNOWN',
+};
+
 const BEHAVIOR_COLORS: Record<string, string> = {
-  beaconing: '#ff6b6b',
+  beaconing:   '#ff6b6b',
   interactive: 'var(--accent-color)',
-  scanning: '#e5c07b',
-  mixed: 'var(--text-color)',
-  unknown: 'var(--text-color)',
+  scanning:    '#e5c07b',
+  brute_force: '#ff9f43',
+  slow_scan:   '#c8a96e',
+  mixed:       'var(--text-color)',
+  unknown:     'var(--text-color)',
 };
 
 const TOOL_LABELS: Record<string, string> = {
@@ -423,14 +435,35 @@ const KeyValueRow: React.FC<{ label: string; value: React.ReactNode }> = ({ labe
   </div>
 );
 
+const ToolBadges: React.FC<{ tools: string[] }> = ({ tools }) => (
+  <div style={{ display: 'flex', flexWrap: 'wrap', gap: '4px' }}>
+    {tools.map(t => (
+      <span
+        key={t}
+        style={{
+          fontSize: '0.7rem',
+          fontFamily: 'monospace',
+          color: '#ff6b6b',
+          border: '1px solid #ff6b6b44',
+          borderRadius: '2px',
+          padding: '1px 5px',
+          letterSpacing: '0.5px',
+          whiteSpace: 'nowrap',
+        }}
+      >
+        {TOOL_LABELS[t] || t.toUpperCase()}
+      </span>
+    ))}
+  </div>
+);
+
 const BehaviorHeadline: React.FC<{ b: AttackerBehavior }> = ({ b }) => {
   const osLabel = b.os_guess ? (OS_LABELS[b.os_guess] || b.os_guess.toUpperCase()) : '—';
-  const behaviorLabel = b.behavior_class ? b.behavior_class.toUpperCase() : 'UNKNOWN';
+  const behaviorLabel = b.behavior_class
+    ? (BEHAVIOR_LABELS[b.behavior_class] || b.behavior_class.toUpperCase())
+    : 'UNKNOWN';
   const behaviorColor = b.behavior_class ? BEHAVIOR_COLORS[b.behavior_class] : undefined;
   const tools = b.tool_guesses && b.tool_guesses.length > 0 ? b.tool_guesses : null;
-  const toolLabel = tools
-    ? tools.map(t => TOOL_LABELS[t] || t.toUpperCase()).join(', ')
-    : '—';
   return (
     <div className="stats-grid" style={{ gridTemplateColumns: 'repeat(4, 1fr)' }}>
       <StatBlock label="OS GUESS" value={osLabel} />
@@ -438,7 +471,7 @@ const BehaviorHeadline: React.FC<{ b: AttackerBehavior }> = ({ b }) => {
       <StatBlock label="BEHAVIOR" value={behaviorLabel} color={behaviorColor} />
       <StatBlock
         label="TOOL ATTRIBUTION"
-        value={toolLabel}
+        value={tools ? <ToolBadges tools={tools} /> : '—'}
         color={tools ? '#ff6b6b' : undefined}
       />
     </div>
