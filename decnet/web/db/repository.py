@@ -61,6 +61,26 @@ class BaseRepository(ABC):
         pass
 
     @abstractmethod
+    async def list_users(self) -> list[dict[str, Any]]:
+        """Retrieve all users (caller must strip password_hash before returning to clients)."""
+        pass
+
+    @abstractmethod
+    async def delete_user(self, uuid: str) -> bool:
+        """Delete a user by UUID. Returns True if user was found and deleted."""
+        pass
+
+    @abstractmethod
+    async def update_user_role(self, uuid: str, role: str) -> None:
+        """Update a user's role."""
+        pass
+
+    @abstractmethod
+    async def purge_logs_and_bounties(self) -> dict[str, int]:
+        """Delete all logs, bounties, and attacker profiles. Returns counts of deleted rows."""
+        pass
+
+    @abstractmethod
     async def add_bounty(self, bounty_data: dict[str, Any]) -> None:
         """Add a new harvested artifact (bounty) to the database."""
         pass
@@ -117,8 +137,23 @@ class BaseRepository(ABC):
         pass
 
     @abstractmethod
-    async def upsert_attacker(self, data: dict[str, Any]) -> None:
-        """Insert or replace an attacker profile record."""
+    async def upsert_attacker(self, data: dict[str, Any]) -> str:
+        """Insert or replace an attacker profile record. Returns the row's UUID."""
+        pass
+
+    @abstractmethod
+    async def upsert_attacker_behavior(self, attacker_uuid: str, data: dict[str, Any]) -> None:
+        """Insert or replace the behavioral/fingerprint row for an attacker."""
+        pass
+
+    @abstractmethod
+    async def get_attacker_behavior(self, attacker_uuid: str) -> Optional[dict[str, Any]]:
+        """Retrieve the behavioral/fingerprint row for an attacker UUID."""
+        pass
+
+    @abstractmethod
+    async def get_behaviors_for_ips(self, ips: set[str]) -> dict[str, dict[str, Any]]:
+        """Bulk-fetch behavior rows keyed by attacker IP (JOIN to attackers)."""
         pass
 
     @abstractmethod

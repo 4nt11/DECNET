@@ -14,7 +14,7 @@ from decnet.logging import get_logger
 from decnet.web.dependencies import repo
 from decnet.collector import log_collector_worker
 from decnet.web.ingester import log_ingestion_worker
-from decnet.web.attacker_worker import attacker_profile_worker
+from decnet.profiler import attacker_profile_worker
 from decnet.web.router import api_router
 
 log = get_logger("api")

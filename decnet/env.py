@@ -59,6 +59,12 @@ DECNET_DEVELOPER: bool = os.environ.get("DECNET_DEVELOPER", "False").lower() == 
 # Database Options
 DECNET_DB_TYPE: str = os.environ.get("DECNET_DB_TYPE", "sqlite").lower()
 DECNET_DB_URL: Optional[str] = os.environ.get("DECNET_DB_URL")
+# MySQL component vars (used only when DECNET_DB_URL is not set)
+DECNET_DB_HOST: str = os.environ.get("DECNET_DB_HOST", "localhost")
+DECNET_DB_PORT: int = _port("DECNET_DB_PORT", 3306) if os.environ.get("DECNET_DB_PORT") else 3306
+DECNET_DB_NAME: str = os.environ.get("DECNET_DB_NAME", "decnet")
+DECNET_DB_USER: str = os.environ.get("DECNET_DB_USER", "decnet")
+DECNET_DB_PASSWORD: Optional[str] = os.environ.get("DECNET_DB_PASSWORD")
 
 # CORS — comma-separated list of allowed origins for the web dashboard API.
 # Defaults to the configured web host/port. Override with DECNET_CORS_ORIGINS if needed.

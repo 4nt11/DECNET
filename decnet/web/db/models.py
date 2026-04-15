@@ -1,6 +1,14 @@
 from datetime import datetime, timezone
 from typing import Literal, Optional, Any, List, Annotated
+from sqlalchemy import Column, Text
+from sqlalchemy.dialects.mysql import MEDIUMTEXT
 from sqlmodel import SQLModel, Field
+
+# Use on columns that accumulate over an attacker's lifetime (commands,
+# fingerprints, state blobs).  TEXT on MySQL caps at 64 KiB; MEDIUMTEXT
+# stretches to 16 MiB.  SQLite has no fixed-width text types so Text()
+# stays unchanged there.
+_BIG_TEXT = Text().with_variant(MEDIUMTEXT(), "mysql")
 from pydantic import BaseModel, ConfigDict, Field as PydanticField, BeforeValidator
 from decnet.models import IniContent
 
@@ -30,9 +38,11 @@ class Log(SQLModel, table=True):
     service: str = Field(index=True)
     event_type: str = Field(index=True)
     attacker_ip: str = Field(index=True)
-    raw_line: str
-    fields: str
-    msg: Optional[str] = None
+    # Long-text columns — use TEXT so MySQL DDL doesn't truncate to VARCHAR(255).
+    # TEXT is equivalent to plain text in SQLite.
+    raw_line: str = Field(sa_column=Column("raw_line", Text, nullable=False))
+    fields: str = Field(sa_column=Column("fields", Text, nullable=False))
+    msg: Optional[str] = Field(default=None, sa_column=Column("msg", Text, nullable=True))
 
 class Bounty(SQLModel, table=True):
     __tablename__ = "bounty"
@@ -42,13 +52,15 @@ class Bounty(SQLModel, table=True):
     service: str = Field(index=True)
     attacker_ip: str = Field(index=True)
     bounty_type: str = Field(index=True)
-    payload: str
+    payload: str = Field(sa_column=Column("payload", Text, nullable=False))
 
 
 class State(SQLModel, table=True):
     __tablename__ = "state"
     key: str = Field(primary_key=True)
-    value: str  # Stores JSON serialized DecnetConfig or other state blobs
+    # JSON-serialized DecnetConfig or other state blobs — can be large as
+    # deckies/services accumulate.  MEDIUMTEXT on MySQL (16 MiB ceiling).
+    value: str = Field(sa_column=Column("value", _BIG_TEXT, nullable=False))
 
 
 class Attacker(SQLModel, table=True):
@@ -60,14 +72,63 @@ class Attacker(SQLModel, table=True):
     event_count: int = Field(default=0)
     service_count: int = Field(default=0)
     decky_count: int = Field(default=0)
-    services: str = Field(default="[]")       # JSON list[str]
-    deckies: str = Field(default="[]")        # JSON list[str], first-contact ordered
-    traversal_path: Optional[str] = None      # "decky-01 → decky-03 → decky-05"
+    # JSON blobs — these grow over the attacker's lifetime.  Use MEDIUMTEXT on
+    # MySQL (16 MiB) for the fields that accumulate (fingerprints, commands,
+    # and the deckies/services lists that are unbounded in principle).
+    services: str = Field(
+        default="[]", sa_column=Column("services", _BIG_TEXT, nullable=False, default="[]")
+    )  # JSON list[str]
+    deckies: str = Field(
+        default="[]", sa_column=Column("deckies", _BIG_TEXT, nullable=False, default="[]")
+    )  # JSON list[str], first-contact ordered
+    traversal_path: Optional[str] = Field(
+        default=None, sa_column=Column("traversal_path", Text, nullable=True)
+    )  # "decky-01 → decky-03 → decky-05"
     is_traversal: bool = Field(default=False)
     bounty_count: int = Field(default=0)
     credential_count: int = Field(default=0)
-    fingerprints: str = Field(default="[]")   # JSON list[dict] — bounty fingerprints
-    commands: str = Field(default="[]")       # JSON list[dict] — commands per service/decky
+    fingerprints: str = Field(
+        default="[]", sa_column=Column("fingerprints", _BIG_TEXT, nullable=False, default="[]")
+    )  # JSON list[dict] — bounty fingerprints
+    commands: str = Field(
+        default="[]", sa_column=Column("commands", _BIG_TEXT, nullable=False, default="[]")
+    )  # JSON list[dict] — commands per service/decky
+    updated_at: datetime = Field(
+        default_factory=lambda: datetime.now(timezone.utc), index=True
+    )
+
+
+class AttackerBehavior(SQLModel, table=True):
+    """
+    Timing & behavioral profile for an attacker, joined to Attacker by uuid.
+
+    Kept in a separate table so the core Attacker row stays narrow and
+    behavior data can be updated independently (e.g. as the sniffer observes
+    more packets) without touching the event-count aggregates.
+    """
+    __tablename__ = "attacker_behavior"
+    attacker_uuid: str = Field(primary_key=True, foreign_key="attackers.uuid")
+    # OS / TCP stack fingerprint (rolled up from sniffer events)
+    os_guess: Optional[str] = None
+    hop_distance: Optional[int] = None
+    tcp_fingerprint: str = Field(
+        default="{}",
+        sa_column=Column("tcp_fingerprint", Text, nullable=False, default="{}"),
+    )  # JSON: window, wscale, mss, options_sig
+    retransmit_count: int = Field(default=0)
+    # Behavioral (derived by the profiler from log-event timing)
+    behavior_class: Optional[str] = None          # beaconing | interactive | scanning | mixed | unknown
+    beacon_interval_s: Optional[float] = None
+    beacon_jitter_pct: Optional[float] = None
+    tool_guess: Optional[str] = None              # cobalt_strike | sliver | havoc | mythic
+    timing_stats: str = Field(
+        default="{}",
+        sa_column=Column("timing_stats", Text, nullable=False, default="{}"),
+    )  # JSON: mean/median/stdev/min/max IAT
+    phase_sequence: str = Field(
+        default="{}",
+        sa_column=Column("phase_sequence", Text, nullable=False, default="{}"),
+    )  # JSON: recon_end/exfil_start/latency
     updated_at: datetime = Field(
         default_factory=lambda: datetime.now(timezone.utc), index=True
     )

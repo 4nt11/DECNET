@@ -1,7 +1,7 @@
 from typing import Any, Optional
 
 import jwt
-from fastapi import HTTPException, status, Request
+from fastapi import Depends, HTTPException, status, Request
 from fastapi.security import OAuth2PasswordBearer
 
 from decnet.web.auth import ALGORITHM, SECRET_KEY
@@ -96,3 +96,44 @@ async def get_current_user_unchecked(request: Request) -> str:
     Use only for endpoints that must remain reachable with the flag set (e.g. change-password).
     """
     return await _decode_token(request)
+
+
+# ---------------------------------------------------------------------------
+# Role-based access control
+# ---------------------------------------------------------------------------
+
+def require_role(*allowed_roles: str):
+    """Factory that returns a FastAPI dependency enforcing role membership.
+
+    The returned dependency chains from ``get_current_user`` (JWT + must_change_password)
+    then verifies the user's role is in *allowed_roles*.  Returns the full user dict so
+    endpoints can inspect ``user["uuid"]``, ``user["role"]``, etc. without a second lookup.
+    """
+    async def _check(current_user: str = Depends(get_current_user)) -> dict:
+        user = await repo.get_user_by_uuid(current_user)
+        if not user or user["role"] not in allowed_roles:
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="Insufficient permissions",
+            )
+        return user
+    return _check
+
+
+def require_stream_role(*allowed_roles: str):
+    """Like ``require_role`` but for SSE endpoints that accept a query-param token."""
+    async def _check(request: Request, token: Optional[str] = None) -> dict:
+        user_uuid = await get_stream_user(request, token)
+        user = await repo.get_user_by_uuid(user_uuid)
+        if not user or user["role"] not in allowed_roles:
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="Insufficient permissions",
+            )
+        return user
+    return _check
+
+
+require_admin = require_role("admin")
+require_viewer = require_role("viewer", "admin")
+require_stream_viewer = require_stream_role("viewer", "admin")
