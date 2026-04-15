@@ -22,6 +22,7 @@ const DeckyFleet: React.FC = () => {
   const [showDeploy, setShowDeploy] = useState(false);
   const [iniContent, setIniContent] = useState('');
   const [deploying, setDeploying] = useState(false);
+  const [isAdmin, setIsAdmin] = useState(false);
 
   const fetchDeckies = async () => {
     try {
@@ -31,6 +32,15 @@ const DeckyFleet: React.FC = () => {
       console.error('Failed to fetch decky fleet', err);
     } finally {
       setLoading(false);
+    }
+  };
+
+  const fetchRole = async () => {
+    try {
+      const res = await api.get('/config');
+      setIsAdmin(res.data.role === 'admin');
+    } catch {
+      setIsAdmin(false);
     }
   };
 
@@ -94,6 +104,7 @@ const DeckyFleet: React.FC = () => {
 
   useEffect(() => {
     fetchDeckies();
+    fetchRole();
     const _interval = setInterval(fetchDeckies, 10000); // Fleet state updates less frequently than logs
     return () => clearInterval(_interval);
   }, []);
@@ -107,12 +118,14 @@ const DeckyFleet: React.FC = () => {
           <Server size={20} />
           <h2 style={{ margin: 0 }}>DECOY FLEET ASSET INVENTORY</h2>
         </div>
-        <button 
-          onClick={() => setShowDeploy(!showDeploy)}
-          style={{ display: 'flex', alignItems: 'center', gap: '8px', border: '1px solid var(--accent-color)', color: 'var(--accent-color)' }}
-        >
-          + DEPLOY DECKIES
-        </button>
+        {isAdmin && (
+          <button
+            onClick={() => setShowDeploy(!showDeploy)}
+            style={{ display: 'flex', alignItems: 'center', gap: '8px', border: '1px solid var(--accent-color)', color: 'var(--accent-color)' }}
+          >
+            + DEPLOY DECKIES
+          </button>
+        )}
       </div>
 
       {showDeploy && (
@@ -186,24 +199,32 @@ const DeckyFleet: React.FC = () => {
               <div style={{ display: 'flex', alignItems: 'center', gap: '8px', fontSize: '0.85rem', marginTop: '8px' }}>
                 <Clock size={14} className="dim" />
                 <span className="dim">MUTATION:</span>
-                <span 
-                  style={{ color: 'var(--accent-color)', cursor: 'pointer', textDecoration: 'underline' }}
-                  onClick={() => handleIntervalChange(decky.name, decky.mutate_interval)}
-                >
-                  {decky.mutate_interval ? `EVERY ${decky.mutate_interval}m` : 'DISABLED'}
-                </span>
-                <button 
-                  onClick={() => handleMutate(decky.name)}
-                  disabled={!!mutating}
-                  style={{
-                    background: 'transparent', border: '1px solid var(--accent-color)', 
-                    color: 'var(--accent-color)', padding: '2px 8px', fontSize: '0.7rem', 
-                    cursor: mutating ? 'not-allowed' : 'pointer', display: 'flex', alignItems: 'center', gap: '4px', marginLeft: 'auto',
-                    opacity: mutating ? 0.5 : 1
-                  }}
-                >
-                  <RefreshCw size={10} className={mutating === decky.name ? "spin" : ""} /> {mutating === decky.name ? 'MUTATING...' : 'FORCE'}
-                </button>
+                {isAdmin ? (
+                  <span
+                    style={{ color: 'var(--accent-color)', cursor: 'pointer', textDecoration: 'underline' }}
+                    onClick={() => handleIntervalChange(decky.name, decky.mutate_interval)}
+                  >
+                    {decky.mutate_interval ? `EVERY ${decky.mutate_interval}m` : 'DISABLED'}
+                  </span>
+                ) : (
+                  <span style={{ color: 'var(--accent-color)' }}>
+                    {decky.mutate_interval ? `EVERY ${decky.mutate_interval}m` : 'DISABLED'}
+                  </span>
+                )}
+                {isAdmin && (
+                  <button
+                    onClick={() => handleMutate(decky.name)}
+                    disabled={!!mutating}
+                    style={{
+                      background: 'transparent', border: '1px solid var(--accent-color)',
+                      color: 'var(--accent-color)', padding: '2px 8px', fontSize: '0.7rem',
+                      cursor: mutating ? 'not-allowed' : 'pointer', display: 'flex', alignItems: 'center', gap: '4px', marginLeft: 'auto',
+                      opacity: mutating ? 0.5 : 1
+                    }}
+                  >
+                    <RefreshCw size={10} className={mutating === decky.name ? "spin" : ""} /> {mutating === decky.name ? 'MUTATING...' : 'FORCE'}
+                  </button>
+                )}
               </div>
               {decky.last_mutated > 0 && (
                 <div style={{ fontSize: '0.7rem', color: 'var(--dim-color)', fontStyle: 'italic', marginTop: '4px' }}>

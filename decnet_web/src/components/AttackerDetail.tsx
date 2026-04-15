@@ -1,8 +1,43 @@
 import React, { useEffect, useState } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
-import { ArrowLeft, ChevronDown, ChevronLeft, ChevronRight, ChevronUp, Crosshair, Fingerprint, Shield, Clock, Wifi, Lock, FileKey } from 'lucide-react';
+import { Activity, ArrowLeft, ChevronDown, ChevronLeft, ChevronRight, ChevronUp, Crosshair, Fingerprint, Shield, Clock, Wifi, Lock, FileKey, Radio, Timer } from 'lucide-react';
 import api from '../utils/api';
 import './Dashboard.css';
+
+interface AttackerBehavior {
+  os_guess: string | null;
+  hop_distance: number | null;
+  tcp_fingerprint: {
+    window?: number | null;
+    wscale?: number | null;
+    mss?: number | null;
+    options_sig?: string;
+    has_sack?: boolean;
+    has_timestamps?: boolean;
+  } | null;
+  retransmit_count: number;
+  behavior_class: string | null;
+  beacon_interval_s: number | null;
+  beacon_jitter_pct: number | null;
+  tool_guess: string | null;
+  timing_stats: {
+    event_count?: number;
+    duration_s?: number;
+    mean_iat_s?: number | null;
+    median_iat_s?: number | null;
+    stdev_iat_s?: number | null;
+    min_iat_s?: number | null;
+    max_iat_s?: number | null;
+    cv?: number | null;
+  } | null;
+  phase_sequence: {
+    recon_end_ts?: string | null;
+    exfil_start_ts?: string | null;
+    exfil_latency_s?: number | null;
+    large_payload_count?: number;
+  } | null;
+  updated_at?: string;
+}
 
 interface AttackerData {
   uuid: string;
@@ -21,6 +56,7 @@ interface AttackerData {
   fingerprints: any[];
   commands: { service: string; decky: string; command: string; timestamp: string }[];
   updated_at: string;
+  behavior: AttackerBehavior | null;
 }
 
 // ─── Fingerprint rendering ───────────────────────────────────────────────────
@@ -312,6 +348,250 @@ const FingerprintGroup: React.FC<{ fpType: string; items: any[] }> = ({ fpType, 
   );
 };
 
+// ─── Behavioral profile blocks ──────────────────────────────────────────────
+
+const OS_LABELS: Record<string, string> = {
+  linux: 'LINUX',
+  windows: 'WINDOWS',
+  macos_ios: 'macOS / iOS',
+  freebsd: 'FREEBSD',
+  openbsd: 'OPENBSD',
+  embedded: 'EMBEDDED',
+  nmap: 'NMAP (SCANNER)',
+  unknown: 'UNKNOWN',
+};
+
+const BEHAVIOR_COLORS: Record<string, string> = {
+  beaconing: '#ff6b6b',
+  interactive: 'var(--accent-color)',
+  scanning: '#e5c07b',
+  mixed: 'var(--text-color)',
+  unknown: 'var(--text-color)',
+};
+
+const TOOL_LABELS: Record<string, string> = {
+  cobalt_strike: 'COBALT STRIKE',
+  sliver: 'SLIVER',
+  havoc: 'HAVOC',
+  mythic: 'MYTHIC',
+};
+
+const fmtOpt = (v: number | null | undefined): string =>
+  v === null || v === undefined ? '—' : String(v);
+
+const fmtSecs = (v: number | null | undefined): string => {
+  if (v === null || v === undefined) return '—';
+  if (v < 1) return `${(v * 1000).toFixed(0)} ms`;
+  if (v < 60) return `${v.toFixed(2)} s`;
+  if (v < 3600) return `${(v / 60).toFixed(2)} m`;
+  return `${(v / 3600).toFixed(2)} h`;
+};
+
+const StatBlock: React.FC<{ label: string; value: React.ReactNode; color?: string }> = ({
+  label, value, color,
+}) => (
+  <div className="stat-card">
+    <div className="stat-value" style={{ color: color || 'var(--text-color)' }}>
+      {value}
+    </div>
+    <div className="stat-label">{label}</div>
+  </div>
+);
+
+const KeyValueRow: React.FC<{ label: string; value: React.ReactNode }> = ({ label, value }) => (
+  <div style={{ display: 'flex', gap: '12px', alignItems: 'baseline' }}>
+    <span className="dim" style={{ fontSize: '0.7rem', letterSpacing: '1px', minWidth: '120px' }}>
+      {label}
+    </span>
+    <span className="matrix-text" style={{ fontFamily: 'monospace', fontSize: '0.85rem' }}>
+      {value}
+    </span>
+  </div>
+);
+
+const BehaviorHeadline: React.FC<{ b: AttackerBehavior }> = ({ b }) => {
+  const osLabel = b.os_guess ? (OS_LABELS[b.os_guess] || b.os_guess.toUpperCase()) : '—';
+  const behaviorLabel = b.behavior_class ? b.behavior_class.toUpperCase() : 'UNKNOWN';
+  const behaviorColor = b.behavior_class ? BEHAVIOR_COLORS[b.behavior_class] : undefined;
+  const toolLabel = b.tool_guess ? (TOOL_LABELS[b.tool_guess] || b.tool_guess.toUpperCase()) : '—';
+  return (
+    <div className="stats-grid" style={{ gridTemplateColumns: 'repeat(4, 1fr)' }}>
+      <StatBlock label="OS GUESS" value={osLabel} />
+      <StatBlock label="HOP DISTANCE" value={fmtOpt(b.hop_distance)} />
+      <StatBlock label="BEHAVIOR" value={behaviorLabel} color={behaviorColor} />
+      <StatBlock
+        label="TOOL ATTRIBUTION"
+        value={toolLabel}
+        color={b.tool_guess ? '#ff6b6b' : undefined}
+      />
+    </div>
+  );
+};
+
+const BeaconBlock: React.FC<{ b: AttackerBehavior }> = ({ b }) => {
+  if (b.behavior_class !== 'beaconing' || b.beacon_interval_s === null) return null;
+  return (
+    <div style={{
+      border: '1px solid var(--border-color)', padding: '12px 16px',
+    }}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '10px' }}>
+        <Radio size={14} style={{ opacity: 0.6 }} />
+        <span style={{ fontSize: '0.75rem', letterSpacing: '2px', fontWeight: 'bold' }}>
+          BEACON CADENCE
+        </span>
+      </div>
+      <div style={{ display: 'flex', gap: '32px', alignItems: 'baseline' }}>
+        <div>
+          <span className="dim" style={{ fontSize: '0.7rem' }}>INTERVAL </span>
+          <span className="matrix-text" style={{ fontSize: '1.3rem', fontWeight: 'bold' }}>
+            {fmtSecs(b.beacon_interval_s)}
+          </span>
+        </div>
+        {b.beacon_jitter_pct !== null && (
+          <div>
+            <span className="dim" style={{ fontSize: '0.7rem' }}>JITTER </span>
+            <span className="matrix-text" style={{ fontSize: '1.3rem', fontWeight: 'bold' }}>
+              {b.beacon_jitter_pct.toFixed(1)}%
+            </span>
+          </div>
+        )}
+      </div>
+    </div>
+  );
+};
+
+const TcpStackBlock: React.FC<{ b: AttackerBehavior }> = ({ b }) => {
+  const fp = b.tcp_fingerprint;
+  if (!fp || (!fp.window && !fp.mss && !fp.options_sig)) return null;
+  return (
+    <div style={{
+      border: '1px solid var(--border-color)', padding: '12px 16px',
+    }}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '10px' }}>
+        <Wifi size={14} style={{ opacity: 0.6 }} />
+        <span style={{ fontSize: '0.75rem', letterSpacing: '2px', fontWeight: 'bold' }}>
+          TCP STACK (PASSIVE)
+        </span>
+      </div>
+      <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+        <div style={{ display: 'flex', gap: '24px', flexWrap: 'wrap' }}>
+          {fp.window !== null && fp.window !== undefined && (
+            <div>
+              <span className="dim" style={{ fontSize: '0.7rem' }}>WIN </span>
+              <span className="matrix-text" style={{ fontSize: '1.1rem', fontWeight: 'bold' }}>
+                {fp.window}
+              </span>
+            </div>
+          )}
+          {fp.wscale !== null && fp.wscale !== undefined && (
+            <div>
+              <span className="dim" style={{ fontSize: '0.7rem' }}>WSCALE </span>
+              <span className="matrix-text" style={{ fontSize: '1.1rem', fontWeight: 'bold' }}>
+                {fp.wscale}
+              </span>
+            </div>
+          )}
+          {fp.mss !== null && fp.mss !== undefined && (
+            <div>
+              <span className="dim" style={{ fontSize: '0.7rem' }}>MSS </span>
+              <span className="matrix-text" style={{ fontSize: '1.1rem' }}>{fp.mss}</span>
+            </div>
+          )}
+          <div>
+            <span className="dim" style={{ fontSize: '0.7rem' }}>RETRANSMITS </span>
+            <span
+              className="matrix-text"
+              style={{
+                fontSize: '1.1rem',
+                fontWeight: 'bold',
+                color: b.retransmit_count > 0 ? '#e5c07b' : undefined,
+              }}
+            >
+              {b.retransmit_count}
+            </span>
+          </div>
+        </div>
+        <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
+          {fp.has_sack && <Tag>SACK</Tag>}
+          {fp.has_timestamps && <Tag>TS</Tag>}
+        </div>
+        {fp.options_sig && (
+          <div>
+            <span className="dim" style={{ fontSize: '0.7rem' }}>OPTS: </span>
+            <span className="matrix-text" style={{ fontFamily: 'monospace', fontSize: '0.8rem' }}>
+              {fp.options_sig}
+            </span>
+          </div>
+        )}
+      </div>
+    </div>
+  );
+};
+
+const TimingStatsBlock: React.FC<{ b: AttackerBehavior }> = ({ b }) => {
+  const s = b.timing_stats;
+  if (!s || !s.event_count || s.event_count < 2) return null;
+  return (
+    <div style={{
+      border: '1px solid var(--border-color)', padding: '12px 16px',
+    }}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '10px' }}>
+        <Timer size={14} style={{ opacity: 0.6 }} />
+        <span style={{ fontSize: '0.75rem', letterSpacing: '2px', fontWeight: 'bold' }}>
+          INTER-EVENT TIMING
+        </span>
+      </div>
+      <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
+        <KeyValueRow label="EVENT COUNT" value={s.event_count ?? '—'} />
+        <KeyValueRow label="DURATION" value={fmtSecs(s.duration_s)} />
+        <KeyValueRow label="MEAN IAT" value={fmtSecs(s.mean_iat_s)} />
+        <KeyValueRow label="MEDIAN IAT" value={fmtSecs(s.median_iat_s)} />
+        <KeyValueRow label="STDEV IAT" value={fmtSecs(s.stdev_iat_s)} />
+        <KeyValueRow
+          label="MIN / MAX IAT"
+          value={`${fmtSecs(s.min_iat_s)} / ${fmtSecs(s.max_iat_s)}`}
+        />
+        <KeyValueRow
+          label="CV (JITTER)"
+          value={s.cv !== null && s.cv !== undefined ? s.cv.toFixed(3) : '—'}
+        />
+      </div>
+    </div>
+  );
+};
+
+const PhaseSequenceBlock: React.FC<{ b: AttackerBehavior }> = ({ b }) => {
+  const p = b.phase_sequence;
+  if (!p || (!p.recon_end_ts && !p.exfil_start_ts && !p.large_payload_count)) return null;
+  return (
+    <div style={{
+      border: '1px solid var(--border-color)', padding: '12px 16px',
+    }}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '10px' }}>
+        <Activity size={14} style={{ opacity: 0.6 }} />
+        <span style={{ fontSize: '0.75rem', letterSpacing: '2px', fontWeight: 'bold' }}>
+          PHASE SEQUENCE
+        </span>
+      </div>
+      <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
+        <KeyValueRow
+          label="RECON END"
+          value={p.recon_end_ts ? new Date(p.recon_end_ts).toLocaleString() : '—'}
+        />
+        <KeyValueRow
+          label="EXFIL START"
+          value={p.exfil_start_ts ? new Date(p.exfil_start_ts).toLocaleString() : '—'}
+        />
+        <KeyValueRow label="RECON→EXFIL LATENCY" value={fmtSecs(p.exfil_latency_s)} />
+        <KeyValueRow
+          label="LARGE PAYLOADS"
+          value={p.large_payload_count ?? 0}
+        />
+      </div>
+    </div>
+  );
+};
+
 // ─── Collapsible section ────────────────────────────────────────────────────
 
 const Section: React.FC<{
@@ -352,6 +632,7 @@ const AttackerDetail: React.FC = () => {
     timeline: true,
     services: true,
     deckies: true,
+    behavior: true,
     commands: true,
     fingerprints: true,
   });
@@ -541,6 +822,29 @@ const AttackerDetail: React.FC = () => {
             </div>
           )}
         </div>
+      </Section>
+
+      {/* Behavioral Profile */}
+      <Section
+        title="BEHAVIORAL PROFILE"
+        open={openSections.behavior}
+        onToggle={() => toggle('behavior')}
+      >
+        {attacker.behavior ? (
+          <div style={{ padding: '16px', display: 'flex', flexDirection: 'column', gap: '16px' }}>
+            <BehaviorHeadline b={attacker.behavior} />
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
+              <BeaconBlock b={attacker.behavior} />
+              <TcpStackBlock b={attacker.behavior} />
+              <TimingStatsBlock b={attacker.behavior} />
+              <PhaseSequenceBlock b={attacker.behavior} />
+            </div>
+          </div>
+        ) : (
+          <div style={{ padding: '24px', textAlign: 'center', opacity: 0.5 }}>
+            NO BEHAVIORAL DATA YET — PROFILER HAS NOT RUN FOR THIS ATTACKER
+          </div>
+        )}
       </Section>
 
       {/* Commands */}
