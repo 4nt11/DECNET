@@ -468,7 +468,7 @@ const BehaviorHeadline: React.FC<{ b: AttackerBehavior }> = ({ b }) => {
     <div className="stats-grid" style={{ gridTemplateColumns: 'repeat(4, 1fr)' }}>
       <StatBlock label="OS GUESS" value={osLabel} />
       <StatBlock label="HOP DISTANCE" value={fmtOpt(b.hop_distance)} />
-      <StatBlock label="BEHAVIOR" value={behaviorLabel} color={behaviorColor} />
+      <StatBlock label="ATTACK PATTERN" value={behaviorLabel} color={behaviorColor} />
       <StatBlock
         label="TOOL ATTRIBUTION"
         value={tools ? <ToolBadges tools={tools} /> : '—'}
