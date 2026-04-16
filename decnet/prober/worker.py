@@ -169,6 +169,7 @@ def _write_event(
 
 # ─── Target discovery from log stream ────────────────────────────────────────
 
+@_traced("prober.discover_attackers")
 def _discover_attackers(json_path: Path, position: int) -> tuple[set[str], int]:
     """
     Read new JSON log lines from the given position and extract unique
@@ -399,6 +400,7 @@ def _tcpfp_phase(
 
 # ─── Main worker ─────────────────────────────────────────────────────────────
 
+@_traced("prober.worker")
 async def prober_worker(
     log_file: str,
     interval: int = 300,

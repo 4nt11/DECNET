@@ -3,6 +3,7 @@ from typing import Any, Optional
 
 from fastapi import APIRouter, HTTPException, status
 
+from decnet.telemetry import traced as _traced
 from decnet.web.auth import (
     ACCESS_TOKEN_EXPIRE_MINUTES,
     create_access_token,
@@ -24,6 +25,7 @@ router = APIRouter()
         422: {"description": "Validation error"}
     },
 )
+@_traced("api.login")
 async def login(request: LoginRequest) -> dict[str, Any]:
     _user: Optional[dict[str, Any]] = await repo.get_user_by_username(request.username)
     if not _user or not verify_password(request.password, _user["password_hash"]):

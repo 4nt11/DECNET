@@ -8,7 +8,7 @@ fingerprint that identifies the TLS server implementation.
 
 Reference: https://github.com/salesforce/jarm
 
-No DECNET imports — this module is self-contained and testable in isolation.
+Only DECNET import is decnet.telemetry for tracing (zero-cost when disabled).
 """
 
 from __future__ import annotations
@@ -18,6 +18,8 @@ import socket
 import struct
 import time
 from typing import Any
+
+from decnet.telemetry import traced as _traced
 
 # ─── Constants ────────────────────────────────────────────────────────────────
 
@@ -379,6 +381,7 @@ def _version_to_str(version: int) -> str:
 
 # ─── Probe sender ────────────────────────────────────────────────────────────
 
+@_traced("prober.jarm_send_probe")
 def _send_probe(host: str, port: int, hello: bytes, timeout: float = 5.0) -> bytes | None:
     """
     Open a TCP connection, send the ClientHello, and read the ServerHello.
@@ -471,6 +474,7 @@ def _compute_jarm(responses: list[str]) -> str:
 
 # ─── Public API ──────────────────────────────────────────────────────────────
 
+@_traced("prober.jarm_hash")
 def jarm_hash(host: str, port: int, timeout: float = 5.0) -> str:
     """
     Compute the JARM fingerprint for a TLS server.

@@ -3,6 +3,7 @@ import os
 from fastapi import APIRouter, Depends, HTTPException
 
 from decnet.logging import get_logger
+from decnet.telemetry import traced as _traced
 from decnet.config import DEFAULT_MUTATE_INTERVAL, DecnetConfig, _ROOT
 from decnet.engine import deploy as _deploy
 from decnet.ini_loader import load_ini_from_string
@@ -27,6 +28,7 @@ router = APIRouter()
         500: {"description": "Deployment failed"}
     }
 )
+@_traced("api.deploy_deckies")
 async def api_deploy_deckies(req: DeployIniRequest, admin: dict = Depends(require_admin)) -> dict[str, str]:
     from decnet.fleet import build_deckies_from_ini
 

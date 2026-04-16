@@ -7,6 +7,11 @@ Usage:
 
 The returned logger propagates to the root logger (configured in config.py with
 Rfc5424Formatter), so level control via DECNET_DEVELOPER still applies globally.
+
+When ``DECNET_DEVELOPER_TRACING`` is active, every LogRecord is enriched with
+``otel_trace_id`` and ``otel_span_id`` from the current OTEL span context.
+This lets you correlate log lines with Jaeger traces — click a log entry and
+jump straight to the span that produced it.
 """
 
 from __future__ import annotations
@@ -25,6 +30,51 @@ class _ComponentFilter(logging.Filter):
     def filter(self, record: logging.LogRecord) -> bool:
         record.decnet_component = self.component  # type: ignore[attr-defined]
         return True
+
+
+class _TraceContextFilter(logging.Filter):
+    """Injects ``otel_trace_id`` and ``otel_span_id`` onto every LogRecord
+    from the active OTEL span context.
+
+    Installed once by ``enable_trace_context()`` on the root ``decnet`` logger
+    so all child loggers inherit the enrichment via propagation.
+
+    When no span is active, both fields are set to ``"0"`` (cheap string
+    comparison downstream, no None-checks needed).
+    """
+
+    def filter(self, record: logging.LogRecord) -> bool:
+        try:
+            from opentelemetry import trace
+            span = trace.get_current_span()
+            ctx = span.get_span_context()
+            if ctx and ctx.trace_id:
+                record.otel_trace_id = format(ctx.trace_id, "032x")  # type: ignore[attr-defined]
+                record.otel_span_id = format(ctx.span_id, "016x")  # type: ignore[attr-defined]
+            else:
+                record.otel_trace_id = "0"  # type: ignore[attr-defined]
+                record.otel_span_id = "0"  # type: ignore[attr-defined]
+        except Exception:
+            record.otel_trace_id = "0"  # type: ignore[attr-defined]
+            record.otel_span_id = "0"  # type: ignore[attr-defined]
+        return True
+
+
+_trace_filter_installed: bool = False
+
+
+def enable_trace_context() -> None:
+    """Install the OTEL trace-context filter on the root ``decnet`` logger.
+
+    Called once from ``decnet.telemetry.setup_tracing()`` after the
+    TracerProvider is initialised.  Safe to call multiple times (idempotent).
+    """
+    global _trace_filter_installed
+    if _trace_filter_installed:
+        return
+    root = logging.getLogger("decnet")
+    root.addFilter(_TraceContextFilter())
+    _trace_filter_installed = True
 
 
 def get_logger(component: str) -> logging.Logger:

@@ -3,6 +3,7 @@ from typing import Any
 from fastapi import APIRouter, Depends
 from fastapi.responses import JSONResponse
 
+from decnet.telemetry import traced as _traced
 from decnet.web.dependencies import require_viewer, repo
 from decnet.web.db.models import HealthResponse, ComponentHealth
 
@@ -20,6 +21,7 @@ _OPTIONAL_SERVICES = {"sniffer_worker"}
         503: {"model": HealthResponse, "description": "System unhealthy"},
     },
 )
+@_traced("api.get_health")
 async def get_health(user: dict = Depends(require_viewer)) -> Any:
     components: dict[str, ComponentHealth] = {}
 

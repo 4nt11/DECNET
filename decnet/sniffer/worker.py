@@ -110,6 +110,7 @@ def _sniff_loop(
         logger.info("sniffer: sniff loop ended")
 
 
+@_traced("sniffer.worker")
 async def sniffer_worker(log_file: str) -> None:
     """
     Async entry point — started as asyncio.create_task in the API lifespan.

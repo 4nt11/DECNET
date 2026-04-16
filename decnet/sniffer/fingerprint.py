@@ -17,6 +17,7 @@ from typing import Any, Callable
 from decnet.prober.tcpfp import _extract_options_order
 from decnet.sniffer.p0f import guess_os, hop_distance, initial_ttl
 from decnet.sniffer.syslog import SEVERITY_INFO, SEVERITY_WARNING, syslog_line
+from decnet.telemetry import traced as _traced, get_tracer as _get_tracer
 
 # ─── Constants ───────────────────────────────────────────────────────────────
 
@@ -94,6 +95,7 @@ def _filter_grease(values: list[int]) -> list[int]:
 
 # ─── TLS parsers ─────────────────────────────────────────────────────────────
 
+@_traced("sniffer.parse_client_hello")
 def _parse_client_hello(data: bytes) -> dict[str, Any] | None:
     try:
         if len(data) < 6:
@@ -228,6 +230,7 @@ def _parse_client_hello(data: bytes) -> dict[str, Any] | None:
         return None
 
 
+@_traced("sniffer.parse_server_hello")
 def _parse_server_hello(data: bytes) -> dict[str, Any] | None:
     try:
         if len(data) < 6 or data[0] != _TLS_RECORD_HANDSHAKE:
@@ -294,6 +297,7 @@ def _parse_server_hello(data: bytes) -> dict[str, Any] | None:
         return None
 
 
+@_traced("sniffer.parse_certificate")
 def _parse_certificate(data: bytes) -> dict[str, Any] | None:
     try:
         if len(data) < 6 or data[0] != _TLS_RECORD_HANDSHAKE:
@@ -547,6 +551,7 @@ def _tls_version_str(version: int) -> str:
     }.get(version, f"0x{version:04x}")
 
 
+@_traced("sniffer.ja3")
 def _ja3(ch: dict[str, Any]) -> tuple[str, str]:
     parts = [
         str(ch["tls_version"]),
@@ -559,6 +564,7 @@ def _ja3(ch: dict[str, Any]) -> tuple[str, str]:
     return ja3_str, hashlib.md5(ja3_str.encode()).hexdigest()  # nosec B324
 
 
+@_traced("sniffer.ja3s")
 def _ja3s(sh: dict[str, Any]) -> tuple[str, str]:
     parts = [
         str(sh["tls_version"]),
@@ -605,6 +611,7 @@ def _sha256_12(text: str) -> str:
     return hashlib.sha256(text.encode()).hexdigest()[:12]
 
 
+@_traced("sniffer.ja4")
 def _ja4(ch: dict[str, Any]) -> str:
     proto = "t"
     ver = _ja4_version(ch)
@@ -624,6 +631,7 @@ def _ja4(ch: dict[str, Any]) -> str:
     return f"{section_a}_{section_b}_{section_c}"
 
 
+@_traced("sniffer.ja4s")
 def _ja4s(sh: dict[str, Any]) -> str:
     proto = "t"
     selected = sh.get("selected_version")
@@ -653,6 +661,7 @@ def _ja4l(
 
 # ─── Session resumption ─────────────────────────────────────────────────────
 
+@_traced("sniffer.session_resumption_info")
 def _session_resumption_info(ch: dict[str, Any]) -> dict[str, Any]:
     mechanisms: list[str] = []
     if ch.get("has_session_ticket_data"):
@@ -965,33 +974,38 @@ class SnifferEngine:
             # when the destination is a known decky, i.e. we're seeing an
             # attacker's initial packet.
             if dst_ip in self._ip_to_decky:
-                tcp_fp = _extract_tcp_fingerprint(list(tcp.options or []))
-                os_label = guess_os(
-                    ttl=ip.ttl,
-                    window=int(tcp.window),
-                    mss=tcp_fp["mss"],
-                    wscale=tcp_fp["wscale"],
-                    options_sig=tcp_fp["options_sig"],
-                )
-                target_node = self._ip_to_decky[dst_ip]
-                self._log(
-                    target_node,
-                    "tcp_syn_fingerprint",
-                    src_ip=src_ip,
-                    src_port=str(src_port),
-                    dst_ip=dst_ip,
-                    dst_port=str(dst_port),
-                    ttl=str(ip.ttl),
-                    initial_ttl=str(initial_ttl(ip.ttl)),
-                    hop_distance=str(hop_distance(ip.ttl)),
-                    window=str(int(tcp.window)),
-                    mss=str(tcp_fp["mss"]),
-                    wscale=("" if tcp_fp["wscale"] is None else str(tcp_fp["wscale"])),
-                    options_sig=tcp_fp["options_sig"],
-                    has_sack=str(tcp_fp["sack_ok"]).lower(),
-                    has_timestamps=str(tcp_fp["has_timestamps"]).lower(),
-                    os_guess=os_label,
-                )
+                _tracer = _get_tracer("sniffer")
+                with _tracer.start_as_current_span("sniffer.tcp_syn_fingerprint") as _span:
+                    _span.set_attribute("attacker_ip", src_ip)
+                    _span.set_attribute("dst_port", dst_port)
+                    tcp_fp = _extract_tcp_fingerprint(list(tcp.options or []))
+                    os_label = guess_os(
+                        ttl=ip.ttl,
+                        window=int(tcp.window),
+                        mss=tcp_fp["mss"],
+                        wscale=tcp_fp["wscale"],
+                        options_sig=tcp_fp["options_sig"],
+                    )
+                    _span.set_attribute("os_guess", os_label)
+                    target_node = self._ip_to_decky[dst_ip]
+                    self._log(
+                        target_node,
+                        "tcp_syn_fingerprint",
+                        src_ip=src_ip,
+                        src_port=str(src_port),
+                        dst_ip=dst_ip,
+                        dst_port=str(dst_port),
+                        ttl=str(ip.ttl),
+                        initial_ttl=str(initial_ttl(ip.ttl)),
+                        hop_distance=str(hop_distance(ip.ttl)),
+                        window=str(int(tcp.window)),
+                        mss=str(tcp_fp["mss"]),
+                        wscale=("" if tcp_fp["wscale"] is None else str(tcp_fp["wscale"])),
+                        options_sig=tcp_fp["options_sig"],
+                        has_sack=str(tcp_fp["sack_ok"]).lower(),
+                        has_timestamps=str(tcp_fp["has_timestamps"]).lower(),
+                        os_guess=os_label,
+                    )
 
         elif flags & _TCP_SYN and flags & _TCP_ACK:
             rev_key = (dst_ip, dst_port, src_ip, src_port)
@@ -1019,116 +1033,134 @@ class SnifferEngine:
         # ClientHello
         ch = _parse_client_hello(payload)
         if ch is not None:
-            self._cleanup_sessions()
+            _tracer = _get_tracer("sniffer")
+            with _tracer.start_as_current_span("sniffer.tls_client_hello") as _span:
+                _span.set_attribute("attacker_ip", src_ip)
+                _span.set_attribute("dst_port", dst_port)
+                self._cleanup_sessions()
 
-            key = (src_ip, src_port, dst_ip, dst_port)
-            ja3_str, ja3_hash = _ja3(ch)
-            ja4_hash = _ja4(ch)
-            resumption = _session_resumption_info(ch)
-            rtt_data = _ja4l(key, self._tcp_rtt)
+                key = (src_ip, src_port, dst_ip, dst_port)
+                ja3_str, ja3_hash = _ja3(ch)
+                ja4_hash = _ja4(ch)
+                resumption = _session_resumption_info(ch)
+                rtt_data = _ja4l(key, self._tcp_rtt)
 
-            self._sessions[key] = {
-                "ja3": ja3_hash,
-                "ja3_str": ja3_str,
-                "ja4": ja4_hash,
-                "tls_version": ch["tls_version"],
-                "cipher_suites": ch["cipher_suites"],
-                "extensions": ch["extensions"],
-                "signature_algorithms": ch.get("signature_algorithms", []),
-                "supported_versions": ch.get("supported_versions", []),
-                "sni": ch["sni"],
-                "alpn": ch["alpn"],
-                "resumption": resumption,
-            }
-            self._session_ts[key] = time.monotonic()
+                _span.set_attribute("ja3", ja3_hash)
+                _span.set_attribute("ja4", ja4_hash)
+                _span.set_attribute("sni", ch["sni"] or "")
 
-            log_fields: dict[str, Any] = {
-                "src_ip": src_ip,
-                "src_port": str(src_port),
-                "dst_ip": dst_ip,
-                "dst_port": str(dst_port),
-                "ja3": ja3_hash,
-                "ja4": ja4_hash,
-                "tls_version": _tls_version_str(ch["tls_version"]),
-                "sni": ch["sni"] or "",
-                "alpn": ",".join(ch["alpn"]),
-                "raw_ciphers": "-".join(str(c) for c in ch["cipher_suites"]),
-                "raw_extensions": "-".join(str(e) for e in ch["extensions"]),
-            }
+                self._sessions[key] = {
+                    "ja3": ja3_hash,
+                    "ja3_str": ja3_str,
+                    "ja4": ja4_hash,
+                    "tls_version": ch["tls_version"],
+                    "cipher_suites": ch["cipher_suites"],
+                    "extensions": ch["extensions"],
+                    "signature_algorithms": ch.get("signature_algorithms", []),
+                    "supported_versions": ch.get("supported_versions", []),
+                    "sni": ch["sni"],
+                    "alpn": ch["alpn"],
+                    "resumption": resumption,
+                }
+                self._session_ts[key] = time.monotonic()
 
-            if resumption["resumption_attempted"]:
-                log_fields["resumption"] = ",".join(resumption["mechanisms"])
+                log_fields: dict[str, Any] = {
+                    "src_ip": src_ip,
+                    "src_port": str(src_port),
+                    "dst_ip": dst_ip,
+                    "dst_port": str(dst_port),
+                    "ja3": ja3_hash,
+                    "ja4": ja4_hash,
+                    "tls_version": _tls_version_str(ch["tls_version"]),
+                    "sni": ch["sni"] or "",
+                    "alpn": ",".join(ch["alpn"]),
+                    "raw_ciphers": "-".join(str(c) for c in ch["cipher_suites"]),
+                    "raw_extensions": "-".join(str(e) for e in ch["extensions"]),
+                }
 
-            if rtt_data:
-                log_fields["ja4l_rtt_ms"] = str(rtt_data["rtt_ms"])
-                log_fields["ja4l_client_ttl"] = str(rtt_data["client_ttl"])
+                if resumption["resumption_attempted"]:
+                    log_fields["resumption"] = ",".join(resumption["mechanisms"])
 
-            # Resolve node for the *destination* (the decky being attacked)
-            target_node = self._ip_to_decky.get(dst_ip, node_name)
-            self._log(target_node, "tls_client_hello", **log_fields)
+                if rtt_data:
+                    log_fields["ja4l_rtt_ms"] = str(rtt_data["rtt_ms"])
+                    log_fields["ja4l_client_ttl"] = str(rtt_data["client_ttl"])
+
+                # Resolve node for the *destination* (the decky being attacked)
+                target_node = self._ip_to_decky.get(dst_ip, node_name)
+                self._log(target_node, "tls_client_hello", **log_fields)
             return
 
         # ServerHello
         sh = _parse_server_hello(payload)
         if sh is not None:
-            rev_key = (dst_ip, dst_port, src_ip, src_port)
-            ch_data = self._sessions.pop(rev_key, None)
-            self._session_ts.pop(rev_key, None)
+            _tracer = _get_tracer("sniffer")
+            with _tracer.start_as_current_span("sniffer.tls_server_hello") as _span:
+                _span.set_attribute("attacker_ip", dst_ip)
+                rev_key = (dst_ip, dst_port, src_ip, src_port)
+                ch_data = self._sessions.pop(rev_key, None)
+                self._session_ts.pop(rev_key, None)
 
-            ja3s_str, ja3s_hash = _ja3s(sh)
-            ja4s_hash = _ja4s(sh)
+                ja3s_str, ja3s_hash = _ja3s(sh)
+                ja4s_hash = _ja4s(sh)
 
-            fields: dict[str, Any] = {
-                "src_ip": dst_ip,
-                "src_port": str(dst_port),
-                "dst_ip": src_ip,
-                "dst_port": str(src_port),
-                "ja3s": ja3s_hash,
-                "ja4s": ja4s_hash,
-                "tls_version": _tls_version_str(sh["tls_version"]),
-            }
+                _span.set_attribute("ja3s", ja3s_hash)
+                _span.set_attribute("ja4s", ja4s_hash)
 
-            if ch_data:
-                fields["ja3"] = ch_data["ja3"]
-                fields["ja4"] = ch_data.get("ja4", "")
-                fields["sni"] = ch_data["sni"] or ""
-                fields["alpn"] = ",".join(ch_data["alpn"])
-                fields["raw_ciphers"] = "-".join(str(c) for c in ch_data["cipher_suites"])
-                fields["raw_extensions"] = "-".join(str(e) for e in ch_data["extensions"])
-                if ch_data.get("resumption", {}).get("resumption_attempted"):
-                    fields["resumption"] = ",".join(ch_data["resumption"]["mechanisms"])
+                fields: dict[str, Any] = {
+                    "src_ip": dst_ip,
+                    "src_port": str(dst_port),
+                    "dst_ip": src_ip,
+                    "dst_port": str(src_port),
+                    "ja3s": ja3s_hash,
+                    "ja4s": ja4s_hash,
+                    "tls_version": _tls_version_str(sh["tls_version"]),
+                }
 
-            rtt_data = self._tcp_rtt.pop(rev_key, None)
-            if rtt_data:
-                fields["ja4l_rtt_ms"] = str(rtt_data["rtt_ms"])
-                fields["ja4l_client_ttl"] = str(rtt_data["client_ttl"])
+                if ch_data:
+                    fields["ja3"] = ch_data["ja3"]
+                    fields["ja4"] = ch_data.get("ja4", "")
+                    fields["sni"] = ch_data["sni"] or ""
+                    fields["alpn"] = ",".join(ch_data["alpn"])
+                    fields["raw_ciphers"] = "-".join(str(c) for c in ch_data["cipher_suites"])
+                    fields["raw_extensions"] = "-".join(str(e) for e in ch_data["extensions"])
+                    if ch_data.get("resumption", {}).get("resumption_attempted"):
+                        fields["resumption"] = ",".join(ch_data["resumption"]["mechanisms"])
 
-            # Server response — resolve by src_ip (the decky responding)
-            target_node = self._ip_to_decky.get(src_ip, node_name)
-            self._log(target_node, "tls_session", severity=SEVERITY_WARNING, **fields)
+                rtt_data = self._tcp_rtt.pop(rev_key, None)
+                if rtt_data:
+                    fields["ja4l_rtt_ms"] = str(rtt_data["rtt_ms"])
+                    fields["ja4l_client_ttl"] = str(rtt_data["client_ttl"])
+
+                # Server response — resolve by src_ip (the decky responding)
+                target_node = self._ip_to_decky.get(src_ip, node_name)
+                self._log(target_node, "tls_session", severity=SEVERITY_WARNING, **fields)
             return
 
         # Certificate (TLS 1.2 only)
         cert = _parse_certificate(payload)
         if cert is not None:
-            rev_key = (dst_ip, dst_port, src_ip, src_port)
-            ch_data = self._sessions.get(rev_key)
+            _tracer = _get_tracer("sniffer")
+            with _tracer.start_as_current_span("sniffer.tls_certificate") as _span:
+                _span.set_attribute("subject_cn", cert["subject_cn"])
+                _span.set_attribute("self_signed", cert["self_signed"])
+                rev_key = (dst_ip, dst_port, src_ip, src_port)
+                ch_data = self._sessions.get(rev_key)
 
-            cert_fields: dict[str, Any] = {
-                "src_ip": dst_ip,
-                "src_port": str(dst_port),
-                "dst_ip": src_ip,
-                "dst_port": str(src_port),
-                "subject_cn": cert["subject_cn"],
-                "issuer": cert["issuer"],
-                "self_signed": str(cert["self_signed"]).lower(),
-                "not_before": cert["not_before"],
-                "not_after": cert["not_after"],
-            }
-            if cert["sans"]:
-                cert_fields["sans"] = ",".join(cert["sans"])
-            if ch_data:
-                cert_fields["sni"] = ch_data.get("sni", "")
+                cert_fields: dict[str, Any] = {
+                    "src_ip": dst_ip,
+                    "src_port": str(dst_port),
+                    "dst_ip": src_ip,
+                    "dst_port": str(src_port),
+                    "subject_cn": cert["subject_cn"],
+                    "issuer": cert["issuer"],
+                    "self_signed": str(cert["self_signed"]).lower(),
+                    "not_before": cert["not_before"],
+                    "not_after": cert["not_after"],
+                }
+                if cert["sans"]:
+                    cert_fields["sans"] = ",".join(cert["sans"])
+                if ch_data:
+                    cert_fields["sni"] = ch_data.get("sni", "")
 
-            target_node = self._ip_to_decky.get(src_ip, node_name)
-            self._log(target_node, "tls_certificate", **cert_fields)
+                target_node = self._ip_to_decky.get(src_ip, node_name)
+                self._log(target_node, "tls_certificate", **cert_fields)

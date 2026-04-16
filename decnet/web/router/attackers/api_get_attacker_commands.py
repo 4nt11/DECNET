@@ -2,6 +2,7 @@ from typing import Any, Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Query
 
+from decnet.telemetry import traced as _traced
 from decnet.web.dependencies import require_viewer, repo
 
 router = APIRouter()
@@ -15,6 +16,7 @@ router = APIRouter()
         404: {"description": "Attacker not found"},
     },
 )
+@_traced("api.get_attacker_commands")
 async def get_attacker_commands(
     uuid: str,
     limit: int = Query(50, ge=1, le=200),

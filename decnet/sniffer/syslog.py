@@ -11,6 +11,7 @@ from pathlib import Path
 from typing import Any
 
 from decnet.collector.worker import parse_rfc5424
+from decnet.telemetry import traced as _traced
 
 # ─── Constants (must match templates/sniffer/decnet_logging.py) ──────────────
 
@@ -57,6 +58,7 @@ def syslog_line(
     return f"{pri}1 {ts} {host} {appname} {_NILVALUE} {msgid} {sd}{message}"
 
 
+@_traced("sniffer.write_event")
 def write_event(line: str, log_path: Path, json_path: Path) -> None:
     """Append a syslog line to the raw log and its parsed JSON to the json log."""
     with open(log_path, "a", encoding="utf-8") as lf:

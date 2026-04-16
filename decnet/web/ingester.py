@@ -75,6 +75,14 @@ async def log_ingestion_worker(repo: BaseRepository) -> None:
                             _span.set_attribute("service", _log_data.get("service", ""))
                             _span.set_attribute("event_type", _log_data.get("event_type", ""))
                             _span.set_attribute("attacker_ip", _log_data.get("attacker_ip", ""))
+                            # Persist trace context in the DB row so the SSE
+                            # read path can link back to this ingestion trace.
+                            _sctx = getattr(_span, "get_span_context", None)
+                            if _sctx:
+                                _ctx = _sctx()
+                                if _ctx and getattr(_ctx, "trace_id", 0):
+                                    _log_data["trace_id"] = format(_ctx.trace_id, "032x")
+                                    _log_data["span_id"] = format(_ctx.span_id, "016x")
                             logger.debug("ingest: record decky=%s event_type=%s", _log_data.get("decky"), _log_data.get("event_type"))
                             await repo.add_log(_log_data)
                             await _extract_bounty(repo, _log_data)

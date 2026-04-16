@@ -1,6 +1,7 @@
 import os
 from fastapi import APIRouter, Depends, HTTPException, Path
 
+from decnet.telemetry import traced as _traced
 from decnet.mutator import mutate_decky
 from decnet.web.dependencies import require_admin, repo
 
@@ -12,6 +13,7 @@ router = APIRouter()
     tags=["Fleet Management"],
     responses={401: {"description": "Could not validate credentials"}, 403: {"description": "Insufficient permissions"}, 404: {"description": "Decky not found"}}
 )
+@_traced("api.mutate_decky")
 async def api_mutate_decky(
     decky_name: str = Path(..., pattern=r"^[a-z0-9\-]{1,64}$"),
     admin: dict = Depends(require_admin),

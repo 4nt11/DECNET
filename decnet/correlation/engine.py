@@ -33,6 +33,7 @@ from decnet.logging.syslog_formatter import (
     SEVERITY_WARNING,
     format_rfc5424,
 )
+from decnet.telemetry import traced as _traced, get_tracer as _get_tracer
 
 
 class CorrelationEngine:
@@ -64,6 +65,7 @@ class CorrelationEngine:
             self.events_indexed += 1
         return event
 
+    @_traced("correlation.ingest_file")
     def ingest_file(self, path: Path) -> int:
         """
         Parse every line of *path* and index it.
@@ -73,12 +75,18 @@ class CorrelationEngine:
         with open(path) as fh:
             for line in fh:
                 self.ingest(line)
+        _tracer = _get_tracer("correlation")
+        with _tracer.start_as_current_span("correlation.ingest_file.summary") as _span:
+            _span.set_attribute("lines_parsed", self.lines_parsed)
+            _span.set_attribute("events_indexed", self.events_indexed)
+            _span.set_attribute("unique_ips", len(self._events))
         return self.events_indexed
 
     # ------------------------------------------------------------------ #
     # Query                                                                #
     # ------------------------------------------------------------------ #
 
+    @_traced("correlation.traversals")
     def traversals(self, min_deckies: int = 2) -> list[AttackerTraversal]:
         """
         Return all attackers that touched at least *min_deckies* distinct
@@ -135,6 +143,7 @@ class CorrelationEngine:
             )
         return table
 
+    @_traced("correlation.report_json")
     def report_json(self, min_deckies: int = 2) -> dict:
         """Serialisable dict representation of all traversals."""
         return {
@@ -147,6 +156,7 @@ class CorrelationEngine:
             "traversals": [t.to_dict() for t in self.traversals(min_deckies)],
         }
 
+    @_traced("correlation.traversal_syslog_lines")
     def traversal_syslog_lines(self, min_deckies: int = 2) -> list[str]:
         """
         Emit one RFC 5424 syslog line per detected traversal.

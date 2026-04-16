@@ -2,6 +2,7 @@ from typing import Any
 
 from fastapi import APIRouter, Depends, HTTPException
 
+from decnet.telemetry import traced as _traced
 from decnet.web.dependencies import require_viewer, repo
 
 router = APIRouter()
@@ -15,6 +16,7 @@ router = APIRouter()
         404: {"description": "Attacker not found"},
     },
 )
+@_traced("api.get_attacker_detail")
 async def get_attacker_detail(
     uuid: str,
     user: dict = Depends(require_viewer),

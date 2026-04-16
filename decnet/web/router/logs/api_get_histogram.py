@@ -2,6 +2,7 @@ from typing import Any, Optional
 
 from fastapi import APIRouter, Depends, Query
 
+from decnet.telemetry import traced as _traced
 from decnet.web.dependencies import require_viewer, repo
 
 router = APIRouter()
@@ -9,6 +10,7 @@ router = APIRouter()
 
 @router.get("/logs/histogram", tags=["Logs"],
     responses={401: {"description": "Could not validate credentials"}, 422: {"description": "Validation error"}},)
+@_traced("api.get_logs_histogram")
 async def get_logs_histogram(
     search: Optional[str] = None,
     start_time: Optional[str] = Query(None),

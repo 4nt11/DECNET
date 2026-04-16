@@ -7,11 +7,40 @@ from fastapi.responses import StreamingResponse
 
 from decnet.env import DECNET_DEVELOPER
 from decnet.logging import get_logger
+from decnet.telemetry import traced as _traced, get_tracer as _get_tracer
 from decnet.web.dependencies import require_stream_viewer, repo
 
 log = get_logger("api")
 
 router = APIRouter()
+
+
+def _build_trace_links(logs: list[dict]) -> list:
+    """Build OTEL span links from persisted trace_id/span_id in log rows.
+
+    Returns an empty list when tracing is disabled (no OTEL imports).
+    """
+    try:
+        from opentelemetry.trace import Link, SpanContext, TraceFlags
+    except ImportError:
+        return []
+    links: list[Link] = []
+    for entry in logs:
+        tid = entry.get("trace_id")
+        sid = entry.get("span_id")
+        if not tid or not sid or tid == "0":
+            continue
+        try:
+            ctx = SpanContext(
+                trace_id=int(tid, 16),
+                span_id=int(sid, 16),
+                is_remote=True,
+                trace_flags=TraceFlags(TraceFlags.SAMPLED),
+            )
+            links.append(Link(ctx))
+        except (ValueError, TypeError):
+            continue
+    return links
 
 
 @router.get("/stream", tags=["Observability"],
@@ -24,6 +53,7 @@ router = APIRouter()
         422: {"description": "Validation error"}
     },
 )
+@_traced("api.stream_events")
 async def stream_events(
     request: Request,
     last_event_id: int = Query(0, alias="lastEventId"),
@@ -75,7 +105,15 @@ async def stream_events(
                 )
                 if new_logs:
                     last_id = max(entry["id"] for entry in new_logs)
-                    yield f"event: message\ndata: {json.dumps({'type': 'logs', 'data': new_logs})}\n\n"
+                    # Create a span linking back to the ingestion traces
+                    # stored in each log row, closing the pipeline gap.
+                    _links = _build_trace_links(new_logs)
+                    _tracer = _get_tracer("sse")
+                    with _tracer.start_as_current_span(
+                        "sse.emit_logs", links=_links,
+                        attributes={"log_count": len(new_logs)},
+                    ):
+                        yield f"event: message\ndata: {json.dumps({'type': 'logs', 'data': new_logs})}\n\n"
                     loops_since_stats = stats_interval_sec
 
                 if loops_since_stats >= stats_interval_sec:

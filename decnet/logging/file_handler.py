@@ -13,6 +13,8 @@ import logging.handlers
 import os
 from pathlib import Path
 
+from decnet.telemetry import traced as _traced
+
 _LOG_FILE_ENV = "DECNET_LOG_FILE"
 _DEFAULT_LOG_FILE = "/var/log/decnet/decnet.log"
 _MAX_BYTES = 10 * 1024 * 1024  # 10 MB
@@ -22,10 +24,10 @@ _handler: logging.handlers.RotatingFileHandler | None = None
 _logger: logging.Logger | None = None
 
 
-def _get_logger() -> logging.Logger:
+@_traced("logging.init_file_handler")
+def _init_file_handler() -> logging.Logger:
+    """One-time initialisation of the rotating file handler."""
     global _handler, _logger
-    if _logger is not None:
-        return _logger
 
     log_path = Path(os.environ.get(_LOG_FILE_ENV, _DEFAULT_LOG_FILE))
     log_path.parent.mkdir(parents=True, exist_ok=True)
@@ -44,6 +46,12 @@ def _get_logger() -> logging.Logger:
     _logger.addHandler(_handler)
 
     return _logger
+
+
+def _get_logger() -> logging.Logger:
+    if _logger is not None:
+        return _logger
+    return _init_file_handler()
 
 
 def write_syslog(line: str) -> None:

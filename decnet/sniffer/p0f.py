@@ -22,6 +22,8 @@ No external dependencies.
 
 from __future__ import annotations
 
+from decnet.telemetry import traced as _traced
+
 # ─── TTL → initial TTL bucket ───────────────────────────────────────────────
 
 # Common "hop 0" TTLs. Packets decrement TTL once per hop, so we round up
@@ -216,6 +218,7 @@ def _match_signature(
     return True
 
 
+@_traced("sniffer.p0f_guess_os")
 def guess_os(
     ttl: int,
     window: int,

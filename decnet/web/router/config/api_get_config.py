@@ -1,6 +1,7 @@
 from fastapi import APIRouter, Depends
 
 from decnet.env import DECNET_DEVELOPER
+from decnet.telemetry import traced as _traced
 from decnet.web.dependencies import require_viewer, repo
 from decnet.web.db.models import UserResponse
 
@@ -17,6 +18,7 @@ _DEFAULT_MUTATION_INTERVAL = "30m"
         401: {"description": "Could not validate credentials"},
     },
 )
+@_traced("api.get_config")
 async def api_get_config(user: dict = Depends(require_viewer)) -> dict:
     limits_state = await repo.get_state("config_limits")
     globals_state = await repo.get_state("config_globals")

@@ -133,6 +133,7 @@ async def mutate_all(repo: BaseRepository, force: bool = False) -> None:
         log.info("mutate_all: complete mutated_count=%d", mutated_count)
 
 
+@_traced("mutator.watch_loop")
 async def run_watch_loop(repo: BaseRepository, poll_interval_secs: int = 10) -> None:
     """Run an infinite loop checking for deckies that need mutation."""
     log.info("mutator watch loop started poll_interval_secs=%d", poll_interval_secs)

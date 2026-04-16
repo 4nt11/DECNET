@@ -15,6 +15,8 @@ import hashlib
 import random
 from typing import Any
 
+from decnet.telemetry import traced as _traced
+
 # Lazy-import scapy to avoid breaking non-root usage of HASSH/JARM.
 # The actual import happens inside functions that need it.
 
@@ -36,6 +38,7 @@ _OPT_CODES: dict[str, str] = {
 
 # ─── Packet construction ───────────────────────────────────────────────────
 
+@_traced("prober.tcpfp_send_syn")
 def _send_syn(
     host: str,
     port: int,
@@ -196,6 +199,7 @@ def _compute_fingerprint(fields: dict[str, Any]) -> tuple[str, str]:
 
 # ─── Public API ─────────────────────────────────────────────────────────────
 
+@_traced("prober.tcp_fingerprint")
 def tcp_fingerprint(
     host: str,
     port: int,

@@ -2,6 +2,7 @@ import uuid as _uuid
 
 from fastapi import APIRouter, Depends, HTTPException
 
+from decnet.telemetry import traced as _traced
 from decnet.web.auth import get_password_hash
 from decnet.web.dependencies import require_admin, repo
 from decnet.web.db.models import (
@@ -24,6 +25,7 @@ router = APIRouter()
         422: {"description": "Validation error"},
     },
 )
+@_traced("api.create_user")
 async def api_create_user(
     req: CreateUserRequest,
     admin: dict = Depends(require_admin),
@@ -57,6 +59,7 @@ async def api_create_user(
         404: {"description": "User not found"},
     },
 )
+@_traced("api.delete_user")
 async def api_delete_user(
     user_uuid: str,
     admin: dict = Depends(require_admin),
@@ -80,6 +83,7 @@ async def api_delete_user(
         422: {"description": "Validation error"},
     },
 )
+@_traced("api.update_user_role")
 async def api_update_user_role(
     user_uuid: str,
     req: UpdateUserRoleRequest,
@@ -106,6 +110,7 @@ async def api_update_user_role(
         422: {"description": "Validation error"},
     },
 )
+@_traced("api.reset_user_password")
 async def api_reset_user_password(
     user_uuid: str,
     req: ResetUserPasswordRequest,

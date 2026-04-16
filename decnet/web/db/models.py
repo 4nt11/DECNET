@@ -43,6 +43,11 @@ class Log(SQLModel, table=True):
     raw_line: str = Field(sa_column=Column("raw_line", Text, nullable=False))
     fields: str = Field(sa_column=Column("fields", Text, nullable=False))
     msg: Optional[str] = Field(default=None, sa_column=Column("msg", Text, nullable=True))
+    # OTEL trace context — bridges the collector→ingester trace to the SSE
+    # read path.  Nullable so pre-existing rows and non-traced deployments
+    # are unaffected.
+    trace_id: Optional[str] = Field(default=None)
+    span_id: Optional[str] = Field(default=None)
 
 class Bounty(SQLModel, table=True):
     __tablename__ = "bounty"

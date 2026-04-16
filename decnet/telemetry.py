@@ -64,7 +64,9 @@ def setup_tracing(app: Any) -> None:
         _init_provider()
         from opentelemetry.instrumentation.fastapi import FastAPIInstrumentor
         FastAPIInstrumentor.instrument_app(app)
-        log.info("FastAPI auto-instrumentation active")
+        from decnet.logging import enable_trace_context
+        enable_trace_context()
+        log.info("FastAPI auto-instrumentation active, log-trace correlation enabled")
     except Exception as exc:
         log.warning("OTEL setup failed — continuing without tracing: %s", exc)
 

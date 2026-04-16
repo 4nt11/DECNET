@@ -9,7 +9,7 @@ This is the *server* variant of HASSH (HASSHServer). It fingerprints what
 the server *offers*, which identifies the SSH implementation (OpenSSH,
 Paramiko, libssh, Cobalt Strike SSH, etc.).
 
-Stdlib only (socket, struct, hashlib). No DECNET imports.
+Stdlib only (socket, struct, hashlib) plus decnet.telemetry for tracing (zero-cost when disabled).
 """
 
 from __future__ import annotations
@@ -18,6 +18,8 @@ import hashlib
 import socket
 import struct
 from typing import Any
+
+from decnet.telemetry import traced as _traced
 
 # SSH protocol constants
 _SSH_MSG_KEXINIT = 20
@@ -36,6 +38,7 @@ _MAX_PACKET_LEN = 35000
 
 # ─── SSH connection + KEX_INIT capture ──────────────────────────────────────
 
+@_traced("prober.hassh_ssh_connect")
 def _ssh_connect(
     host: str,
     port: int,
@@ -213,6 +216,7 @@ def _compute_hassh(kex: str, enc: str, mac: str, comp: str) -> str:
 
 # ─── Public API ─────────────────────────────────────────────────────────────
 
+@_traced("prober.hassh_server")
 def hassh_server(
     host: str,
     port: int,

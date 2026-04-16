@@ -1,5 +1,6 @@
 from fastapi import APIRouter, Depends, HTTPException
 
+from decnet.telemetry import traced as _traced
 from decnet.config import DecnetConfig
 from decnet.web.dependencies import require_admin, repo
 from decnet.web.db.models import MutateIntervalRequest
@@ -24,6 +25,7 @@ def _parse_duration(s: str) -> int:
         422: {"description": "Validation error"}
     },
 )
+@_traced("api.update_mutate_interval")
 async def api_update_mutate_interval(decky_name: str, req: MutateIntervalRequest, admin: dict = Depends(require_admin)) -> dict[str, str]:
     state_dict = await repo.get_state("deployment")
     if not state_dict:

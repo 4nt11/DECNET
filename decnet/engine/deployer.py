@@ -68,6 +68,7 @@ _PERMANENT_ERRORS = (
 )
 
 
+@_traced("engine.compose_with_retry")
 def _compose_with_retry(
     *args: str,
     compose_file: Path = COMPOSE_FILE,

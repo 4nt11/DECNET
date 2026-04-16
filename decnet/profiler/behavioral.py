@@ -31,6 +31,7 @@ from collections import Counter
 from typing import Any
 
 from decnet.correlation.parser import LogEvent
+from decnet.telemetry import traced as _traced, get_tracer as _get_tracer
 
 # ─── Event-type taxonomy ────────────────────────────────────────────────────
 
@@ -147,6 +148,7 @@ def _os_from_ttl(ttl_str: str | None) -> str | None:
 
 # ─── Timing stats ───────────────────────────────────────────────────────────
 
+@_traced("profiler.timing_stats")
 def timing_stats(events: list[LogEvent]) -> dict[str, Any]:
     """
     Compute inter-arrival-time statistics across *events* (sorted by ts).
@@ -221,6 +223,7 @@ def timing_stats(events: list[LogEvent]) -> dict[str, Any]:
 
 # ─── Behavior classification ────────────────────────────────────────────────
 
+@_traced("profiler.classify_behavior")
 def classify_behavior(stats: dict[str, Any], services_count: int) -> str:
     """
     Coarse behavior bucket:
@@ -305,6 +308,7 @@ def guess_tool(mean_iat_s: float | None, cv: float | None) -> str | None:
 
 # ─── Header-based tool detection ────────────────────────────────────────────
 
+@_traced("profiler.detect_tools_from_headers")
 def detect_tools_from_headers(events: list[LogEvent]) -> list[str]:
     """
     Scan HTTP `request` events for tool-identifying headers.
@@ -372,6 +376,7 @@ def detect_tools_from_headers(events: list[LogEvent]) -> list[str]:
 
 # ─── Phase sequencing ───────────────────────────────────────────────────────
 
+@_traced("profiler.phase_sequence")
 def phase_sequence(events: list[LogEvent]) -> dict[str, Any]:
     """
     Derive recon→exfil phase transition info.
@@ -418,6 +423,7 @@ def phase_sequence(events: list[LogEvent]) -> dict[str, Any]:
 
 # ─── Sniffer rollup (OS fingerprint + retransmits) ──────────────────────────
 
+@_traced("profiler.sniffer_rollup")
 def sniffer_rollup(events: list[LogEvent]) -> dict[str, Any]:
     """
     Roll up sniffer-emitted `tcp_syn_fingerprint` and `tcp_flow_timing`
@@ -535,6 +541,7 @@ def _int_or_none(v: Any) -> int | None:
 
 # ─── Composite: build the full AttackerBehavior record ──────────────────────
 
+@_traced("profiler.build_behavior_record")
 def build_behavior_record(events: list[LogEvent]) -> dict[str, Any]:
     """
     Build the dict to persist in the `attacker_behavior` table.
@@ -571,6 +578,15 @@ def build_behavior_record(events: list[LogEvent]) -> dict[str, Any]:
         beacon_interval_s = stats.get("mean_iat_s")
         cv = stats.get("cv")
         beacon_jitter_pct = round(cv * 100, 2) if cv is not None else None
+
+    _tracer = _get_tracer("profiler")
+    with _tracer.start_as_current_span("profiler.behavior_summary") as _span:
+        _span.set_attribute("behavior_class", behavior)
+        _span.set_attribute("os_guess", rollup["os_guess"] or "unknown")
+        _span.set_attribute("tool_count", len(all_tools))
+        _span.set_attribute("event_count", stats.get("event_count", 0))
+        if all_tools:
+            _span.set_attribute("tools", ",".join(all_tools))
 
     return {
         "os_guess": rollup["os_guess"],
