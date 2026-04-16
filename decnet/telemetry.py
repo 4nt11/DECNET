@@ -12,7 +12,7 @@ from __future__ import annotations
 import asyncio
 import functools
 import inspect
-from typing import Any, Callable, Optional, TypeVar, overload
+from typing import Any, Callable, TypeVar, overload
 
 from decnet.env import DECNET_DEVELOPER_TRACING, DECNET_OTEL_ENDPOINT
 from decnet.logging import get_logger
@@ -76,7 +76,7 @@ def shutdown_tracing() -> None:
     if _tracer_provider is not None:
         try:
             _tracer_provider.shutdown()
-        except Exception:
+        except Exception:  # nosec B110 — best-effort tracer shutdown
             pass
 
 
@@ -272,7 +272,7 @@ def inject_context(record: dict[str, Any]) -> None:
         inject(carrier)
         if carrier:
             record["_trace"] = carrier
-    except Exception:
+    except Exception:  # nosec B110 — trace injection is optional
         pass
 
 

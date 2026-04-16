@@ -12,7 +12,7 @@ The API never depends on this worker being alive.
 
 import asyncio
 import os
-import subprocess
+import subprocess  # nosec B404 — needed for interface checks
 import threading
 from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
@@ -44,7 +44,7 @@ def _load_ip_to_decky() -> dict[str, str]:
 def _interface_exists(iface: str) -> bool:
     """Check if a network interface exists on this host."""
     try:
-        result = subprocess.run(
+        result = subprocess.run(  # nosec B603 B607 — hardcoded args
             ["ip", "link", "show", iface],
             capture_output=True, text=True, check=False,
         )

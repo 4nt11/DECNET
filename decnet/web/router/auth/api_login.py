@@ -42,6 +42,6 @@ async def login(request: LoginRequest) -> dict[str, Any]:
     )
     return {
         "access_token": _access_token,
-        "token_type": "bearer",  # nosec B105
+        "token_type": "bearer",  # nosec B105 — OAuth2 token type, not a password
         "must_change_password": bool(_user.get("must_change_password", False))
     }

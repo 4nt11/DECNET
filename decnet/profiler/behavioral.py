@@ -344,7 +344,7 @@ def detect_tools_from_headers(events: list[LogEvent]) -> list[str]:
                         headers = _parsed
                     else:
                         continue
-                except Exception:
+                except Exception:  # nosec B112 — skip unparseable header values
                     continue
         elif isinstance(raw_headers, dict):
             headers = raw_headers

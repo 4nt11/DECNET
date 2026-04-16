@@ -60,13 +60,13 @@ DECNET_SYSTEM_LOGS: str = os.environ.get("DECNET_SYSTEM_LOGS", "decnet.system.lo
 DECNET_EMBED_PROFILER: bool = os.environ.get("DECNET_EMBED_PROFILER", "").lower() == "true"
 
 # API Options
-DECNET_API_HOST: str = os.environ.get("DECNET_API_HOST", "0.0.0.0")  # nosec B104
+DECNET_API_HOST: str = os.environ.get("DECNET_API_HOST", "127.0.0.1")
 DECNET_API_PORT: int = _port("DECNET_API_PORT", 8000)
 DECNET_JWT_SECRET: str = _require_env("DECNET_JWT_SECRET")
 DECNET_INGEST_LOG_FILE: str | None = os.environ.get("DECNET_INGEST_LOG_FILE", "/var/log/decnet/decnet.log")
 
 # Web Dashboard Options
-DECNET_WEB_HOST: str = os.environ.get("DECNET_WEB_HOST", "0.0.0.0")  # nosec B104
+DECNET_WEB_HOST: str = os.environ.get("DECNET_WEB_HOST", "127.0.0.1")
 DECNET_WEB_PORT: int = _port("DECNET_WEB_PORT", 8080)
 DECNET_ADMIN_USER: str = os.environ.get("DECNET_ADMIN_USER", "admin")
 DECNET_ADMIN_PASSWORD: str = os.environ.get("DECNET_ADMIN_PASSWORD", "admin")
@@ -90,7 +90,8 @@ DECNET_DB_PASSWORD: Optional[str] = os.environ.get("DECNET_DB_PASSWORD")
 # CORS — comma-separated list of allowed origins for the web dashboard API.
 # Defaults to the configured web host/port. Override with DECNET_CORS_ORIGINS if needed.
 # Example: DECNET_CORS_ORIGINS=http://192.168.1.50:9090,https://dashboard.example.com
-_web_hostname: str = "localhost" if DECNET_WEB_HOST in ("0.0.0.0", "127.0.0.1", "::") else DECNET_WEB_HOST  # nosec B104
+_WILDCARD_ADDRS = {"0.0.0.0", "127.0.0.1", "::"}  # nosec B104 — comparison only, not a bind
+_web_hostname: str = "localhost" if DECNET_WEB_HOST in _WILDCARD_ADDRS else DECNET_WEB_HOST
 _cors_default: str = f"http://{_web_hostname}:{DECNET_WEB_PORT}"
 _cors_raw: str = os.environ.get("DECNET_CORS_ORIGINS", _cors_default)
 DECNET_CORS_ORIGINS: list[str] = [o.strip() for o in _cors_raw.split(",") if o.strip()]

@@ -40,7 +40,7 @@ async def api_create_user(
         "username": req.username,
         "password_hash": get_password_hash(req.password),
         "role": req.role,
-        "must_change_password": True,
+        "must_change_password": True,  # nosec B105 — not a password
     })
     return UserResponse(
         uuid=user_uuid,

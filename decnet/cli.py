@@ -290,7 +290,7 @@ def deploy(
         subprocess.Popen(  # nosec B603
             [sys.executable, "-m", "decnet.cli", "collect", "--log-file", str(effective_log_file)],
             stdin=subprocess.DEVNULL,
-            stdout=open(_collector_err, "a"),  # nosec B603
+            stdout=open(_collector_err, "a"),
             stderr=subprocess.STDOUT,
             start_new_session=True,
         )
@@ -781,7 +781,7 @@ def serve_web(
             finally:
                 try:
                     conn.close()
-                except Exception:
+                except Exception:  # nosec B110 — best-effort conn cleanup
                     pass
 
         def log_message(self, fmt: str, *args: object) -> None:
@@ -874,7 +874,7 @@ async def _db_reset_mysql_async(dsn: str, mode: str, confirm: bool) -> None:
         async with engine.connect() as conn:
             for tbl in _DB_RESET_TABLES:
                 try:
-                    result = await conn.execute(text(f"SELECT COUNT(*) FROM `{tbl}`"))
+                    result = await conn.execute(text(f"SELECT COUNT(*) FROM `{tbl}`"))  # nosec B608
                     rows[tbl] = result.scalar() or 0
                 except Exception:  # noqa: BLE001 — ProgrammingError for missing table varies by driver
                     rows[tbl] = -1

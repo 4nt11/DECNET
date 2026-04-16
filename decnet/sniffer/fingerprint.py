@@ -513,7 +513,7 @@ def _extract_sans(cert_der: bytes, pos: int, end: int) -> list[str]:
             else:
                 _, skip_start, skip_len = _der_read_tag_len(cert_der, pos)
                 pos = skip_start + skip_len
-    except Exception:
+    except Exception:  # nosec B110 — DER parse errors return partial results
         pass
     return sans
 
@@ -533,7 +533,7 @@ def _parse_san_sequence(data: bytes, start: int, length: int) -> list[str]:
             elif context_tag == 7 and val_len == 4:
                 names.append(".".join(str(b) for b in data[val_start: val_start + val_len]))
             pos = val_start + val_len
-    except Exception:
+    except Exception:  # nosec B110 — SAN parse errors return partial results
         pass
     return names
 
@@ -561,7 +561,7 @@ def _ja3(ch: dict[str, Any]) -> tuple[str, str]:
         "-".join(str(p) for p in ch["ec_point_formats"]),
     ]
     ja3_str = ",".join(parts)
-    return ja3_str, hashlib.md5(ja3_str.encode()).hexdigest()  # nosec B324
+    return ja3_str, hashlib.md5(ja3_str.encode(), usedforsecurity=False).hexdigest()
 
 
 @_traced("sniffer.ja3s")
@@ -572,7 +572,7 @@ def _ja3s(sh: dict[str, Any]) -> tuple[str, str]:
         "-".join(str(e) for e in sh["extensions"]),
     ]
     ja3s_str = ",".join(parts)
-    return ja3s_str, hashlib.md5(ja3s_str.encode()).hexdigest()  # nosec B324
+    return ja3s_str, hashlib.md5(ja3s_str.encode(), usedforsecurity=False).hexdigest()
 
 
 # ─── JA4 / JA4S ─────────────────────────────────────────────────────────────

@@ -53,7 +53,7 @@ def _send_syn(
     # Suppress scapy's noisy output
     conf.verb = 0
 
-    src_port = random.randint(49152, 65535)
+    src_port = random.randint(49152, 65535)  # nosec B311 — ephemeral port, not crypto
 
     pkt = (
         IP(dst=host)
@@ -114,8 +114,8 @@ def _send_rst(
             )
         )
         send(rst, verbose=0)
-    except Exception:
-        pass  # Best-effort cleanup
+    except Exception:  # nosec B110 — best-effort RST cleanup
+        pass
 
 
 # ─── Response parsing ───────────────────────────────────────────────────────

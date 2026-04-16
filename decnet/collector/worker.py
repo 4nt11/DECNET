@@ -215,7 +215,7 @@ def _reopen_if_needed(path: Path, fh: Optional[Any]) -> Any:
     if fh is not None:
         try:
             fh.close()
-        except Exception:
+        except Exception:  # nosec B110 — best-effort file handle cleanup
             pass
     path.parent.mkdir(parents=True, exist_ok=True)
     return open(path, "a", encoding="utf-8")
@@ -272,7 +272,7 @@ def _stream_container(container_id: str, log_path: Path, json_path: Path) -> Non
             if fh is not None:
                 try:
                     fh.close()
-                except Exception:
+                except Exception:  # nosec B110 — best-effort file handle cleanup
                     pass
 
 
