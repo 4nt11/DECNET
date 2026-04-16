@@ -14,6 +14,7 @@ import asyncio
 import os
 import subprocess
 import threading
+from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 
 from decnet.logging import get_logger
@@ -130,12 +131,25 @@ async def sniffer_worker(log_file: str) -> None:
 
         stop_event = threading.Event()
 
+        # Dedicated thread pool so the long-running sniff loop doesn't
+        # occupy a slot in the default asyncio executor.
+        sniffer_pool = ThreadPoolExecutor(
+            max_workers=2, thread_name_prefix="decnet-sniffer",
+        )
+
         try:
-            await asyncio.to_thread(_sniff_loop, interface, log_path, json_path, stop_event)
+            loop = asyncio.get_running_loop()
+            await loop.run_in_executor(
+                sniffer_pool, _sniff_loop,
+                interface, log_path, json_path, stop_event,
+            )
         except asyncio.CancelledError:
             logger.info("sniffer: shutdown requested")
             stop_event.set()
+            sniffer_pool.shutdown(wait=False)
             raise
+        finally:
+            sniffer_pool.shutdown(wait=False)
 
     except asyncio.CancelledError:
         raise

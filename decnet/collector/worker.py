@@ -12,6 +12,7 @@ import os
 import re
 import threading
 import time
+from concurrent.futures import ThreadPoolExecutor
 from datetime import datetime
 from pathlib import Path
 from typing import Any, Optional
@@ -285,10 +286,20 @@ async def log_collector_worker(log_file: str) -> None:
     active: dict[str, asyncio.Task[None]] = {}
     loop = asyncio.get_running_loop()
 
+    # Dedicated thread pool so long-running container log streams don't
+    # saturate the default asyncio executor and starve short-lived
+    # to_thread() calls elsewhere (e.g. load_state in the web API).
+    collector_pool = ThreadPoolExecutor(
+        max_workers=64, thread_name_prefix="decnet-collector",
+    )
+
     def _spawn(container_id: str, container_name: str) -> None:
         if container_id not in active or active[container_id].done():
             active[container_id] = asyncio.ensure_future(
-                asyncio.to_thread(_stream_container, container_id, log_path, json_path),
+                loop.run_in_executor(
+                    collector_pool, _stream_container,
+                    container_id, log_path, json_path,
+                ),
                 loop=loop,
             )
             logger.info("collector: streaming container=%s", container_name)
@@ -312,12 +323,15 @@ async def log_collector_worker(log_file: str) -> None:
                 if cid and is_service_event(attrs):
                     loop.call_soon_threadsafe(_spawn, cid, name)
 
-        await asyncio.to_thread(_watch_events)
+        await loop.run_in_executor(collector_pool, _watch_events)
 
     except asyncio.CancelledError:
         logger.info("collector shutdown requested cancelling %d tasks", len(active))
         for task in active.values():
             task.cancel()
+        collector_pool.shutdown(wait=False)
         raise
     except Exception as exc:
         logger.error("collector error: %s", exc)
+    finally:
+        collector_pool.shutdown(wait=False)
