@@ -18,7 +18,7 @@ from pathlib import Path
 from typing import Any, Optional
 
 from decnet.logging import get_logger
-from decnet.telemetry import traced as _traced
+from decnet.telemetry import traced as _traced, get_tracer as _get_tracer, inject_context as _inject_ctx
 
 logger = get_logger("collector")
 
@@ -246,10 +246,17 @@ def _stream_container(container_id: str, log_path: Path, json_path: Path) -> Non
                 parsed = parse_rfc5424(line)
                 if parsed:
                     if _should_ingest(parsed):
-                        logger.debug("collector: event written decky=%s type=%s", parsed.get("decky"), parsed.get("event_type"))
-                        jf = _reopen_if_needed(json_path, jf)
-                        jf.write(json.dumps(parsed) + "\n")
-                        jf.flush()
+                        _tracer = _get_tracer("collector")
+                        with _tracer.start_as_current_span("collector.event") as _span:
+                            _span.set_attribute("decky", parsed.get("decky", ""))
+                            _span.set_attribute("service", parsed.get("service", ""))
+                            _span.set_attribute("event_type", parsed.get("event_type", ""))
+                            _span.set_attribute("attacker_ip", parsed.get("attacker_ip", ""))
+                            _inject_ctx(parsed)
+                            logger.debug("collector: event written decky=%s type=%s", parsed.get("decky"), parsed.get("event_type"))
+                            jf = _reopen_if_needed(json_path, jf)
+                            jf.write(json.dumps(parsed) + "\n")
+                            jf.flush()
                     else:
                         logger.debug(
                             "collector: rate-limited decky=%s service=%s type=%s attacker=%s",

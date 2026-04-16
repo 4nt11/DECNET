@@ -5,7 +5,12 @@ from typing import Any
 from pathlib import Path
 
 from decnet.logging import get_logger
-from decnet.telemetry import traced as _traced
+from decnet.telemetry import (
+    traced as _traced,
+    get_tracer as _get_tracer,
+    extract_context as _extract_ctx,
+    start_span_with_context as _start_span,
+)
 from decnet.web.db.repository import BaseRepository
 
 logger = get_logger("api")
@@ -60,9 +65,19 @@ async def log_ingestion_worker(repo: BaseRepository) -> None:
 
                     try:
                         _log_data: dict[str, Any] = json.loads(_line.strip())
-                        logger.debug("ingest: record decky=%s event_type=%s", _log_data.get("decky"), _log_data.get("event_type"))
-                        await repo.add_log(_log_data)
-                        await _extract_bounty(repo, _log_data)
+                        # Extract trace context injected by the collector.
+                        # This makes the ingester span a child of the collector span,
+                        # showing the full event journey in Jaeger.
+                        _parent_ctx = _extract_ctx(_log_data)
+                        _tracer = _get_tracer("ingester")
+                        with _start_span(_tracer, "ingester.process_record", context=_parent_ctx) as _span:
+                            _span.set_attribute("decky", _log_data.get("decky", ""))
+                            _span.set_attribute("service", _log_data.get("service", ""))
+                            _span.set_attribute("event_type", _log_data.get("event_type", ""))
+                            _span.set_attribute("attacker_ip", _log_data.get("attacker_ip", ""))
+                            logger.debug("ingest: record decky=%s event_type=%s", _log_data.get("decky"), _log_data.get("event_type"))
+                            await repo.add_log(_log_data)
+                            await _extract_bounty(repo, _log_data)
                     except json.JSONDecodeError:
                         logger.error("ingest: failed to decode JSON log line: %s", _line.strip())
                         continue

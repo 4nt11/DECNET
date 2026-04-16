@@ -22,7 +22,7 @@ from decnet.correlation.engine import CorrelationEngine
 from decnet.correlation.parser import LogEvent
 from decnet.logging import get_logger
 from decnet.profiler.behavioral import build_behavior_record
-from decnet.telemetry import traced as _traced
+from decnet.telemetry import traced as _traced, get_tracer as _get_tracer
 from decnet.web.db.repository import BaseRepository
 
 logger = get_logger("attacker_worker")
@@ -109,25 +109,35 @@ async def _update_profiles(
     traversal_map = {t.attacker_ip: t for t in state.engine.traversals(min_deckies=2)}
     bounties_map = await repo.get_bounties_for_ips(ips)
 
+    _tracer = _get_tracer("profiler")
     for ip in ips:
         events = state.engine._events.get(ip, [])
         if not events:
             continue
 
-        traversal = traversal_map.get(ip)
-        bounties = bounties_map.get(ip, [])
-        commands = _extract_commands_from_events(events)
+        with _tracer.start_as_current_span("profiler.process_ip") as _span:
+            _span.set_attribute("attacker_ip", ip)
+            _span.set_attribute("event_count", len(events))
 
-        record = _build_record(ip, events, traversal, bounties, commands)
-        attacker_uuid = await repo.upsert_attacker(record)
+            traversal = traversal_map.get(ip)
+            bounties = bounties_map.get(ip, [])
+            commands = _extract_commands_from_events(events)
 
-        # Behavioral / fingerprint rollup lives in a sibling table so failures
-        # here never block the core attacker profile upsert.
-        try:
-            behavior = build_behavior_record(events)
-            await repo.upsert_attacker_behavior(attacker_uuid, behavior)
-        except Exception as exc:
-            logger.error("attacker worker: behavior upsert failed for %s: %s", ip, exc)
+            record = _build_record(ip, events, traversal, bounties, commands)
+            attacker_uuid = await repo.upsert_attacker(record)
+
+            _span.set_attribute("is_traversal", traversal is not None)
+            _span.set_attribute("bounty_count", len(bounties))
+            _span.set_attribute("command_count", len(commands))
+
+            # Behavioral / fingerprint rollup lives in a sibling table so failures
+            # here never block the core attacker profile upsert.
+            try:
+                behavior = build_behavior_record(events)
+                await repo.upsert_attacker_behavior(attacker_uuid, behavior)
+            except Exception as exc:
+                _span.record_exception(exc)
+                logger.error("attacker worker: behavior upsert failed for %s: %s", ip, exc)
 
 
 def _build_record(

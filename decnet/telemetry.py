@@ -244,3 +244,63 @@ def wrap_repository(repo: Any) -> Any:
             return attr
 
     return TracedRepository(repo)
+
+
+# ---------------------------------------------------------------------------
+# Cross-stage trace context propagation
+# ---------------------------------------------------------------------------
+# The DECNET pipeline is decoupled via JSON files:
+#   collector -> .json file -> ingester -> DB -> profiler
+#
+# To show the full journey of an event in Jaeger, we embed W3C trace context
+# into the JSON records.  The collector injects it; the ingester extracts it
+# and continues the trace as a child span.
+
+def inject_context(record: dict[str, Any]) -> None:
+    """Inject current OTEL trace context into *record* under ``_trace``.
+
+    No-op when tracing is disabled.  The ``_trace`` key is stripped by the
+    ingester after extraction — it never reaches the DB.
+    """
+    if not _ENABLED:
+        return
+    try:
+        from opentelemetry.propagate import inject
+        carrier: dict[str, str] = {}
+        inject(carrier)
+        if carrier:
+            record["_trace"] = carrier
+    except Exception:
+        pass
+
+
+def extract_context(record: dict[str, Any]) -> Any:
+    """Extract OTEL trace context from *record* and return it.
+
+    Returns ``None`` when tracing is disabled or no context is present.
+    Removes the ``_trace`` key from the record so it doesn't leak into the DB.
+    """
+    if not _ENABLED:
+        record.pop("_trace", None)
+        return None
+    try:
+        carrier = record.pop("_trace", None)
+        if not carrier:
+            return None
+        from opentelemetry.propagate import extract
+        return extract(carrier)
+    except Exception:
+        return None
+
+
+def start_span_with_context(tracer: Any, name: str, context: Any = None) -> Any:
+    """Start a span, optionally as a child of an extracted context.
+
+    Returns a context manager span.  When *context* is ``None``, creates a
+    root span (normal behavior).
+    """
+    if not _ENABLED:
+        return _NoOpSpan()
+    if context is not None:
+        return tracer.start_as_current_span(name, context=context)
+    return tracer.start_as_current_span(name)
