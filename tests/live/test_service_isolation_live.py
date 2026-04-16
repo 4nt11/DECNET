@@ -128,7 +128,6 @@ async def token(live_client):
 
 
 @pytest.mark.live
-@pytest.mark.xdist_group("service_isolation_live")
 class TestCollectorLiveIsolation:
     """Real collector behaviour against the actual Docker daemon."""
 
@@ -204,7 +203,6 @@ class TestCollectorLiveIsolation:
 
 
 @pytest.mark.live
-@pytest.mark.xdist_group("service_isolation_live")
 class TestIngesterLiveIsolation:
     """Real ingester against real DB and real filesystem."""
 
@@ -314,7 +312,6 @@ class TestIngesterLiveIsolation:
 
 
 @pytest.mark.live
-@pytest.mark.xdist_group("service_isolation_live")
 class TestAttackerWorkerLiveIsolation:
     """Real attacker worker against real DB."""
 
@@ -363,7 +360,6 @@ class TestAttackerWorkerLiveIsolation:
 
 
 @pytest.mark.live
-@pytest.mark.xdist_group("service_isolation_live")
 class TestSnifferLiveIsolation:
     """Real sniffer against the actual host network stack."""
 
@@ -400,7 +396,6 @@ class TestSnifferLiveIsolation:
 
 
 @pytest.mark.live
-@pytest.mark.xdist_group("service_isolation_live")
 class TestApiLifespanLiveIsolation:
     """Real API lifespan against real DB and real host state."""
 
@@ -447,7 +442,6 @@ class TestApiLifespanLiveIsolation:
 
 
 @pytest.mark.live
-@pytest.mark.xdist_group("service_isolation_live")
 class TestCascadeLiveIsolation:
     """Verify that real component failures do not cascade."""
 

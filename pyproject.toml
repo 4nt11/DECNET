@@ -22,6 +22,7 @@ dependencies = [
     "psutil>=5.9.0",
     "python-dotenv>=1.0.0",
     "sqlmodel>=0.0.16",
+    "scapy>=2.6.1",
 ]
 
 [project.optional-dependencies]
@@ -53,7 +54,6 @@ dev = [
     "psycopg2-binary>=2.9.11",
     "paho-mqtt>=2.1.0",
     "pymongo>=4.16.0",
-    "scapy>=2.6.1",
 ]
 
 [project.scripts]
@@ -62,7 +62,7 @@ decnet = "decnet.cli:app"
 [tool.pytest.ini_options]
 asyncio_mode = "auto"
 asyncio_debug = "true"
-addopts = "-m 'not fuzz and not live' -v -q -x -n logical"
+addopts = "-m 'not fuzz and not live' -v -q -x -n logical --dist loadscope"
 markers = [
     "fuzz: hypothesis-based fuzz tests (slow, run with -m fuzz or -m '' for all)",
     "live: live subprocess service tests (run with -m live)",

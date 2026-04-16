@@ -12,6 +12,18 @@ from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_asyn
 from sqlalchemy.pool import StaticPool
 import os as _os
 
+
+def pytest_ignore_collect(collection_path, config):
+    """Skip test_schemathesis.py unless fuzz marker is selected.
+
+    Its module-level code starts a subprocess server and mutates
+    decnet.web.auth.SECRET_KEY, which poisons other test suites.
+    """
+    if collection_path.name == "test_schemathesis.py":
+        markexpr = config.getoption("markexpr", default="")
+        if "fuzz" not in markexpr:
+            return True
+
 # Must be set before any decnet import touches decnet.env
 os.environ["DECNET_JWT_SECRET"] = "test-secret-key-at-least-32-chars-long!!"
 os.environ["DECNET_ADMIN_PASSWORD"] = "test-password-123"

@@ -97,7 +97,6 @@ async def token(live_client):
 
 
 @pytest.mark.live
-@pytest.mark.xdist_group("health_live")
 class TestHealthLive:
     """Live integration tests — real DB, real Docker check, real task state."""
 
