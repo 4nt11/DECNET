@@ -9,7 +9,7 @@ router = APIRouter()
 
 
 @router.get("/deckies", tags=["Fleet Management"],
-    responses={401: {"description": "Could not validate credentials"}, 422: {"description": "Validation error"}},)
+    responses={401: {"description": "Could not validate credentials"}, 403: {"description": "Insufficient permissions"}, 422: {"description": "Validation error"}},)
 @_traced("api.get_deckies")
 async def get_deckies(user: dict = Depends(require_viewer)) -> list[dict[str, Any]]:
     return await repo.get_deckies()

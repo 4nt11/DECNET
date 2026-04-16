@@ -1,3 +1,6 @@
+[[project]]
+title = "DECNET API"
+continue-on-failure = true
 request-timeout = 5.0
 
 [[operations]]

@@ -11,6 +11,7 @@ router = APIRouter()
     "/config/deployment-limit",
     tags=["Configuration"],
     responses={
+        400: {"description": "Bad Request (e.g. malformed JSON)"},
         401: {"description": "Could not validate credentials"},
         403: {"description": "Admin access required"},
         422: {"description": "Validation error"},
@@ -29,6 +30,7 @@ async def api_update_deployment_limit(
     "/config/global-mutation-interval",
     tags=["Configuration"],
     responses={
+        400: {"description": "Bad Request (e.g. malformed JSON)"},
         401: {"description": "Could not validate credentials"},
         403: {"description": "Admin access required"},
         422: {"description": "Validation error"},

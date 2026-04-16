@@ -18,6 +18,7 @@ _OPTIONAL_SERVICES = {"sniffer_worker"}
     tags=["Observability"],
     responses={
         401: {"description": "Could not validate credentials"},
+        403: {"description": "Insufficient permissions"},
         503: {"model": HealthResponse, "description": "System unhealthy"},
     },
 )

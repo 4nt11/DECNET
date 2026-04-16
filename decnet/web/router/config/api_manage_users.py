@@ -19,6 +19,7 @@ router = APIRouter()
     "/config/users",
     tags=["Configuration"],
     responses={
+        400: {"description": "Bad Request (e.g. malformed JSON)"},
         401: {"description": "Could not validate credentials"},
         403: {"description": "Admin access required"},
         409: {"description": "Username already exists"},
@@ -77,6 +78,7 @@ async def api_delete_user(
     "/config/users/{user_uuid}/role",
     tags=["Configuration"],
     responses={
+        400: {"description": "Bad Request (e.g. malformed JSON)"},
         401: {"description": "Could not validate credentials"},
         403: {"description": "Admin access required / cannot change own role"},
         404: {"description": "User not found"},
@@ -104,6 +106,7 @@ async def api_update_user_role(
     "/config/users/{user_uuid}/reset-password",
     tags=["Configuration"],
     responses={
+        400: {"description": "Bad Request (e.g. malformed JSON)"},
         401: {"description": "Could not validate credentials"},
         403: {"description": "Admin access required"},
         404: {"description": "User not found"},

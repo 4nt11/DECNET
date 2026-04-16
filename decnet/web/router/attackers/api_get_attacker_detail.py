@@ -13,6 +13,7 @@ router = APIRouter()
     tags=["Attacker Profiles"],
     responses={
         401: {"description": "Could not validate credentials"},
+        403: {"description": "Insufficient permissions"},
         404: {"description": "Attacker not found"},
     },
 )

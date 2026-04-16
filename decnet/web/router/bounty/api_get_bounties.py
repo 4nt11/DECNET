@@ -10,7 +10,7 @@ router = APIRouter()
 
 
 @router.get("/bounty", response_model=BountyResponse, tags=["Bounty Vault"],
-    responses={401: {"description": "Could not validate credentials"}, 422: {"description": "Validation error"}},)
+    responses={401: {"description": "Could not validate credentials"}, 403: {"description": "Insufficient permissions"}, 422: {"description": "Validation error"}},)
 @_traced("api.get_bounties")
 async def get_bounties(
     limit: int = Query(50, ge=1, le=1000),

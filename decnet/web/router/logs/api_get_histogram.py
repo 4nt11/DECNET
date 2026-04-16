@@ -9,7 +9,7 @@ router = APIRouter()
 
 
 @router.get("/logs/histogram", tags=["Logs"],
-    responses={401: {"description": "Could not validate credentials"}, 422: {"description": "Validation error"}},)
+    responses={401: {"description": "Could not validate credentials"}, 403: {"description": "Insufficient permissions"}, 422: {"description": "Validation error"}},)
 @_traced("api.get_logs_histogram")
 async def get_logs_histogram(
     search: Optional[str] = None,

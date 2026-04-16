@@ -10,7 +10,7 @@ router = APIRouter()
 
 
 @router.get("/logs", response_model=LogsResponse, tags=["Logs"],
-    responses={401: {"description": "Could not validate credentials"}, 422: {"description": "Validation error"}})
+    responses={401: {"description": "Could not validate credentials"}, 403: {"description": "Insufficient permissions"}, 422: {"description": "Validation error"}})
 @_traced("api.get_logs")
 async def get_logs(
     limit: int = Query(50, ge=1, le=1000),

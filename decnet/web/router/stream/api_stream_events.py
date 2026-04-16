@@ -50,6 +50,7 @@ def _build_trace_links(logs: list[dict]) -> list:
             "description": "Real-time Server-Sent Events (SSE) stream"
         },
         401: {"description": "Could not validate credentials"},
+        403: {"description": "Insufficient permissions"},
         422: {"description": "Validation error"}
     },
 )

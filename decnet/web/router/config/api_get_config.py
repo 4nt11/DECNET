@@ -16,6 +16,7 @@ _DEFAULT_MUTATION_INTERVAL = "30m"
     tags=["Configuration"],
     responses={
         401: {"description": "Could not validate credentials"},
+        403: {"description": "Insufficient permissions"},
     },
 )
 @_traced("api.get_config")
