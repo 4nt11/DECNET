@@ -4,33 +4,33 @@
 *Goal: Ensure every service is interactive enough to feel real during manual exploration.*
 
 ### Remote Access & Shells
-- [ ] **SSH (Cowrie)** — Custom filesystem, realistic user database, and command execution.
-- [ ] **Telnet (Cowrie)** — Realistic banner and command emulation.
-- [ ] **RDP** — Realistic NLA authentication and screen capture (where possible).
+- [~] **SSH (Cowrie)** — Custom filesystem, realistic user database, and command execution: DELETED! Will use real OpenSSH for the highest interaction possible.
+- [~] **Telnet (Cowrie)** — Realistic banner and command emulation: DELETED! Will use Busybox Telnetd for the same reasons as above.
+- [x] **RDP** — Realistic NLA authentication and screen capture (where possible).
 - [ ] **VNC** — Realistic RFB protocol handshake and authentication.
 - [x] **Real SSH** — High-interaction sshd with shell logging.
 
 ### Databases
-- [ ] **MySQL** — Support for common SQL queries and realistic schema.
+- [x] **MySQL** — Support for common SQL queries and realistic schema.
 - [ ] **Postgres** — Realistic version strings and basic query support.
-- [ ] **MSSQL** — Realistic TDS protocol handshake.
-- [ ] **MongoDB** — Support for common Mongo wire protocol commands.
+- [x] **MSSQL** — Realistic TDS protocol handshake.
+- [x] **MongoDB** — Support for common Mongo wire protocol commands.
 - [x] **Redis** — Support for basic GET/SET/INFO commands.
-- [ ] **Elasticsearch** — Realistic REST API responses for `/_cluster/health` etc.
+- [x] **Elasticsearch** — Realistic REST API responses for `/_cluster/health` etc.
 
 ### Web & APIs
 - [x] **HTTP** — Flexible templates (WordPress, phpMyAdmin, etc.) with logging.
-- [ ] **Docker API** — Realistic responses for `docker version` and `docker ps`.
-- [ ] **Kubernetes (K8s)** — Mocked kubectl responses and basic API exploration.
+- [x] **Docker API** — Realistic responses for `docker version` and `docker ps`.
+- [x] **Kubernetes (K8s)** — Mocked kubectl responses and basic API exploration.
 - [x] **LLMNR** — Realistic local name resolution responses via responder-style emulation.
 
 ### File Transfer & Storage
-- [ ] **SMB** — Realistic share discovery and basic file browsing.
+- [x] **SMB** — Realistic share discovery and basic file browsing.
 - [x] **FTP** — Support for common FTP commands and directory listing.
-- [ ] **TFTP** — Basic block-based file transfer emulation.
+- [x] **TFTP** — Basic block-based file transfer emulation.
 
 ### Directory & Mail
-- [ ] **LDAP** — Basic directory search and authentication responses.
+- [x] **LDAP** — Basic directory search and authentication responses.
 - [x] **SMTP** — Mail server banners and basic EHLO/MAIL FROM support.
 - [x] **IMAP** — Realistic mail folder structure and auth.
 - [x] **POP3** — Basic mail retrieval protocol emulation.
@@ -38,7 +38,7 @@
 ### Industrial & IoT (ICS)
 - [x] **MQTT** — Basic topic subscription and publishing support.
 - [x] **SNMP** — Realistic MIB responses for common OIDs.
-- [ ] **SIP** — Basic VoIP protocol handshake and registration.
+- [x] **SIP** — Basic VoIP protocol handshake and registration.
 - [x] **Conpot** — SCADA/ICS protocol emulation (Modbus, etc.).
 
 ---
@@ -96,12 +96,12 @@
 - [x] **Certificate details** — CN, SANs, issuer, validity period, self-signed flag (attacker-run servers)
 
 ### Timing & Behavioral
-- [ ] **Inter-packet arrival times** — OS TCP stack fingerprint + beaconing interval detection
+- [x] **Inter-packet arrival times** — OS TCP stack fingerprint + beaconing interval detection
 - [ ] **TTL values** — Rough OS / hop-distance inference
 - [ ] **TCP window size & scaling** — p0f-style OS fingerprinting
 - [ ] **Retransmission patterns** — Identify lossy paths / throttled connections
 - [ ] **Beacon jitter variance** — Attribute tooling: Cobalt Strike vs. Sliver vs. Havoc have distinct profiles
-- [ ] **C2 check-in cadence** — Detect beaconing vs. interactive sessions
+- [x] **C2 check-in cadence** — Detect beaconing vs. interactive sessions
 - [ ] **Data exfil timing** — Behavioral sequencing relative to recon phase
 
 ### Protocol Fingerprinting
