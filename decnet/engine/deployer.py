@@ -12,6 +12,7 @@ from rich.console import Console
 from rich.table import Table
 
 from decnet.logging import get_logger
+from decnet.telemetry import traced as _traced
 from decnet.config import DecnetConfig, clear_state, load_state, save_state
 from decnet.composer import write_compose
 from decnet.network import (
@@ -107,6 +108,7 @@ def _compose_with_retry(
     raise last_exc
 
 
+@_traced("engine.deploy")
 def deploy(config: DecnetConfig, dry_run: bool = False, no_cache: bool = False, parallel: bool = False) -> None:
     log.info("deployment started n_deckies=%d interface=%s subnet=%s dry_run=%s", len(config.deckies), config.interface, config.subnet, dry_run)
     log.debug("deploy: deckies=%s", [d.name for d in config.deckies])
@@ -171,6 +173,7 @@ def deploy(config: DecnetConfig, dry_run: bool = False, no_cache: bool = False, 
     _print_status(config)
 
 
+@_traced("engine.teardown")
 def teardown(decky_id: str | None = None) -> None:
     log.info("teardown requested decky_id=%s", decky_id or "all")
     state = load_state()

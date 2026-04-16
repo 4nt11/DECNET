@@ -30,6 +30,7 @@ from decnet.logging import get_logger
 from decnet.prober.hassh import hassh_server
 from decnet.prober.jarm import JARM_EMPTY_HASH, jarm_hash
 from decnet.prober.tcpfp import tcp_fingerprint
+from decnet.telemetry import traced as _traced
 
 logger = get_logger("prober")
 
@@ -219,6 +220,7 @@ def _discover_attackers(json_path: Path, position: int) -> tuple[set[str], int]:
 
 # ─── Probe cycle ─────────────────────────────────────────────────────────────
 
+@_traced("prober.probe_cycle")
 def _probe_cycle(
     targets: set[str],
     probed: dict[str, dict[str, set[int]]],
@@ -255,6 +257,7 @@ def _probe_cycle(
         _tcpfp_phase(ip, ip_probed, tcpfp_ports, log_path, json_path, timeout)
 
 
+@_traced("prober.jarm_phase")
 def _jarm_phase(
     ip: str,
     ip_probed: dict[str, set[int]],
@@ -296,6 +299,7 @@ def _jarm_phase(
             logger.warning("prober: JARM probe failed %s:%d: %s", ip, port, exc)
 
 
+@_traced("prober.hassh_phase")
 def _hassh_phase(
     ip: str,
     ip_probed: dict[str, set[int]],
@@ -342,6 +346,7 @@ def _hassh_phase(
             logger.warning("prober: HASSH probe failed %s:%d: %s", ip, port, exc)
 
 
+@_traced("prober.tcpfp_phase")
 def _tcpfp_phase(
     ip: str,
     ip_probed: dict[str, set[int]],

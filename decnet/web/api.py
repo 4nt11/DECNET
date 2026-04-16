@@ -50,6 +50,10 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
                 log.error("DB failed to initialize after 5 attempts — startup may be degraded")
             await asyncio.sleep(0.5)
 
+    # Conditionally enable OpenTelemetry tracing
+    from decnet.telemetry import setup_tracing
+    setup_tracing(app)
+
     # Start background tasks only if not in contract test mode
     if os.environ.get("DECNET_CONTRACT_TEST") != "true":
         # Start background ingestion task
@@ -99,6 +103,8 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
                 pass
             except Exception as exc:
                 log.warning("Task shutdown error: %s", exc)
+    from decnet.telemetry import shutdown_tracing
+    shutdown_tracing()
     log.info("API shutdown complete")
 
 

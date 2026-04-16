@@ -72,6 +72,11 @@ DECNET_ADMIN_USER: str = os.environ.get("DECNET_ADMIN_USER", "admin")
 DECNET_ADMIN_PASSWORD: str = os.environ.get("DECNET_ADMIN_PASSWORD", "admin")
 DECNET_DEVELOPER: bool = os.environ.get("DECNET_DEVELOPER", "False").lower() == "true"
 
+# Tracing — set to "true" to enable OpenTelemetry distributed tracing.
+# Separate from DECNET_DEVELOPER so tracing can be toggled independently.
+DECNET_DEVELOPER_TRACING: bool = os.environ.get("DECNET_DEVELOPER_TRACING", "").lower() == "true"
+DECNET_OTEL_ENDPOINT: str = os.environ.get("DECNET_OTEL_ENDPOINT", "http://localhost:4317")
+
 # Database Options
 DECNET_DB_TYPE: str = os.environ.get("DECNET_DB_TYPE", "sqlite").lower()
 DECNET_DB_URL: Optional[str] = os.environ.get("DECNET_DB_URL")

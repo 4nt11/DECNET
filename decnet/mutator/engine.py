@@ -15,6 +15,7 @@ from decnet.composer import write_compose
 from decnet.config import DeckyConfig, DecnetConfig
 from decnet.engine import _compose_with_retry
 from decnet.logging import get_logger
+from decnet.telemetry import traced as _traced
 
 from pathlib import Path
 import anyio
@@ -25,6 +26,7 @@ log = get_logger("mutator")
 console = Console()
 
 
+@_traced("mutator.mutate_decky")
 async def mutate_decky(decky_name: str, repo: BaseRepository) -> bool:
     """
     Perform an Intra-Archetype Shuffle for a specific decky.
@@ -91,6 +93,7 @@ async def mutate_decky(decky_name: str, repo: BaseRepository) -> bool:
     return True
 
 
+@_traced("mutator.mutate_all")
 async def mutate_all(repo: BaseRepository, force: bool = False) -> None:
     """
     Check all deckies and mutate those that are due.

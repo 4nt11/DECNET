@@ -22,6 +22,7 @@ from decnet.correlation.engine import CorrelationEngine
 from decnet.correlation.parser import LogEvent
 from decnet.logging import get_logger
 from decnet.profiler.behavioral import build_behavior_record
+from decnet.telemetry import traced as _traced
 from decnet.web.db.repository import BaseRepository
 
 logger = get_logger("attacker_worker")
@@ -63,6 +64,7 @@ async def attacker_profile_worker(repo: BaseRepository, *, interval: int = 30) -
             logger.error("attacker worker: update failed: %s", exc)
 
 
+@_traced("profiler.incremental_update")
 async def _incremental_update(repo: BaseRepository, state: _WorkerState) -> None:
     was_cold = not state.initialized
     affected_ips: set[str] = set()
@@ -98,6 +100,7 @@ async def _incremental_update(repo: BaseRepository, state: _WorkerState) -> None
         logger.info("attacker worker: updated %d profiles (incremental)", len(affected_ips))
 
 
+@_traced("profiler.update_profiles")
 async def _update_profiles(
     repo: BaseRepository,
     state: _WorkerState,

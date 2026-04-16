@@ -18,6 +18,7 @@ from pathlib import Path
 from typing import Any, Optional
 
 from decnet.logging import get_logger
+from decnet.telemetry import traced as _traced
 
 logger = get_logger("collector")
 
@@ -220,6 +221,7 @@ def _reopen_if_needed(path: Path, fh: Optional[Any]) -> Any:
     return open(path, "a", encoding="utf-8")
 
 
+@_traced("collector.stream_container")
 def _stream_container(container_id: str, log_path: Path, json_path: Path) -> None:
     """Stream logs from one container and append to the host log files."""
     import docker  # type: ignore[import]

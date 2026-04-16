@@ -25,7 +25,14 @@ dependencies = [
 ]
 
 [project.optional-dependencies]
+tracing = [
+    "opentelemetry-api>=1.20.0",
+    "opentelemetry-sdk>=1.20.0",
+    "opentelemetry-exporter-otlp>=1.20.0",
+    "opentelemetry-instrumentation-fastapi>=0.41b0",
+]
 dev = [
+    "decnet[tracing]",
     "pytest>=9.0.3",
     "ruff>=0.15.10",
     "bandit>=1.9.4",

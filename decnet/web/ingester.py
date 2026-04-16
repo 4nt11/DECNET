@@ -5,6 +5,7 @@ from typing import Any
 from pathlib import Path
 
 from decnet.logging import get_logger
+from decnet.telemetry import traced as _traced
 from decnet.web.db.repository import BaseRepository
 
 logger = get_logger("api")
@@ -83,6 +84,7 @@ async def log_ingestion_worker(repo: BaseRepository) -> None:
         await asyncio.sleep(1)
 
 
+@_traced("ingester.extract_bounty")
 async def _extract_bounty(repo: BaseRepository, log_data: dict[str, Any]) -> None:
     """Detect and extract valuable artifacts (bounties) from log entries."""
     _fields = log_data.get("fields")

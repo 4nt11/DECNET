@@ -22,8 +22,12 @@ def get_repository(**kwargs: Any) -> BaseRepository:
 
     if db_type == "sqlite":
         from decnet.web.db.sqlite.repository import SQLiteRepository
-        return SQLiteRepository(**kwargs)
-    if db_type == "mysql":
+        repo = SQLiteRepository(**kwargs)
+    elif db_type == "mysql":
         from decnet.web.db.mysql.repository import MySQLRepository
-        return MySQLRepository(**kwargs)
-    raise ValueError(f"Unsupported database type: {db_type}")
+        repo = MySQLRepository(**kwargs)
+    else:
+        raise ValueError(f"Unsupported database type: {db_type}")
+
+    from decnet.telemetry import wrap_repository
+    return wrap_repository(repo)

@@ -21,6 +21,7 @@ from decnet.logging import get_logger
 from decnet.network import HOST_MACVLAN_IFACE
 from decnet.sniffer.fingerprint import SnifferEngine
 from decnet.sniffer.syslog import write_event
+from decnet.telemetry import traced as _traced
 
 logger = get_logger("sniffer")
 
@@ -52,6 +53,7 @@ def _interface_exists(iface: str) -> bool:
         return False
 
 
+@_traced("sniffer.sniff_loop")
 def _sniff_loop(
     interface: str,
     log_path: Path,
