@@ -13,6 +13,7 @@ import logging.handlers
 import os
 from pathlib import Path
 
+from decnet.privdrop import chown_to_invoking_user, chown_tree_to_invoking_user
 from decnet.telemetry import traced as _traced
 
 _LOG_FILE_ENV = "DECNET_LOG_FILE"
@@ -31,6 +32,9 @@ def _init_file_handler() -> logging.Logger:
 
     log_path = Path(os.environ.get(_LOG_FILE_ENV, _DEFAULT_LOG_FILE))
     log_path.parent.mkdir(parents=True, exist_ok=True)
+    # When running under sudo, hand the parent dir back to the invoking user
+    # so a subsequent non-root `decnet api` can also write to it.
+    chown_tree_to_invoking_user(log_path.parent)
 
     _handler = logging.handlers.RotatingFileHandler(
         log_path,
@@ -38,6 +42,7 @@ def _init_file_handler() -> logging.Logger:
         backupCount=_BACKUP_COUNT,
         encoding="utf-8",
     )
+    chown_to_invoking_user(log_path)
     _handler.setFormatter(logging.Formatter("%(message)s"))
 
     _logger = logging.getLogger("decnet.syslog")

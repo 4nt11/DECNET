@@ -91,6 +91,10 @@ def _configure_logging(dev: bool) -> None:
         )
         file_handler.setFormatter(fmt)
         root.addHandler(file_handler)
+        # Drop root ownership when invoked via sudo so non-root follow-up
+        # commands (e.g. `decnet api` after `sudo decnet deploy`) can append.
+        from decnet.privdrop import chown_to_invoking_user
+        chown_to_invoking_user(_log_path)
 
 
 _dev = os.environ.get("DECNET_DEVELOPER", "").lower() == "true"
