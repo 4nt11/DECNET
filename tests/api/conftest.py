@@ -62,8 +62,10 @@ async def setup_db(monkeypatch) -> AsyncGenerator[None, None]:
     from decnet.web.router.bounty import api_get_bounties as _b
     from decnet.web.router.logs import api_get_histogram as _lh
     from decnet.web.router.fleet import api_get_deckies as _d
+    from decnet.web import dependencies as _deps
     _h._reset_db_cache()
     _c._reset_state_cache()
+    _deps._reset_user_cache()
     _s._reset_stats_cache()
     _l._reset_total_cache()
     _a._reset_total_cache()

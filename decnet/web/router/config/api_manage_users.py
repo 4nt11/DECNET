@@ -4,7 +4,8 @@ from fastapi import APIRouter, Depends, HTTPException
 
 from decnet.telemetry import traced as _traced
 from decnet.web.auth import ahash_password
-from decnet.web.dependencies import require_admin, repo
+from decnet.web.dependencies import require_admin, invalidate_user_cache, repo
+from decnet.web.router.config.api_get_config import invalidate_list_users_cache
 from decnet.web.db.models import (
     CreateUserRequest,
     UpdateUserRoleRequest,
@@ -43,6 +44,7 @@ async def api_create_user(
         "role": req.role,
         "must_change_password": True,  # nosec B105 — not a password
     })
+    invalidate_list_users_cache()
     return UserResponse(
         uuid=user_uuid,
         username=req.username,
@@ -71,6 +73,8 @@ async def api_delete_user(
     deleted = await repo.delete_user(user_uuid)
     if not deleted:
         raise HTTPException(status_code=404, detail="User not found")
+    invalidate_user_cache(user_uuid)
+    invalidate_list_users_cache()
     return {"message": "User deleted"}
 
 
@@ -99,6 +103,8 @@ async def api_update_user_role(
         raise HTTPException(status_code=404, detail="User not found")
 
     await repo.update_user_role(user_uuid, req.role)
+    invalidate_user_cache(user_uuid)
+    invalidate_list_users_cache()
     return {"message": "User role updated"}
 
 
@@ -128,4 +134,6 @@ async def api_reset_user_password(
         await ahash_password(req.new_password),
         must_change_password=True,
     )
+    invalidate_user_cache(user_uuid)
+    invalidate_list_users_cache()
     return {"message": "Password reset successfully"}

@@ -4,7 +4,7 @@ from fastapi import APIRouter, Depends, HTTPException, status
 
 from decnet.telemetry import traced as _traced
 from decnet.web.auth import ahash_password, averify_password
-from decnet.web.dependencies import get_current_user_unchecked, repo
+from decnet.web.dependencies import get_current_user_unchecked, invalidate_user_cache, repo
 from decnet.web.db.models import ChangePasswordRequest
 
 router = APIRouter()
@@ -30,4 +30,5 @@ async def change_password(request: ChangePasswordRequest, current_user: str = De
 
     _new_hash: str = await ahash_password(request.new_password)
     await repo.update_user_password(current_user, _new_hash, must_change_password=False)
+    invalidate_user_cache(current_user)
     return {"message": "Password updated successfully"}

@@ -1,3 +1,5 @@
+import asyncio
+import time
 from typing import Any, Optional
 
 import jwt
@@ -21,6 +23,49 @@ def get_repo() -> BaseRepository:
 repo = get_repo()
 
 oauth2_scheme = OAuth2PasswordBearer(tokenUrl="/api/v1/auth/login")
+
+
+# Per-request user lookup was the hidden tax behind every authed endpoint —
+# SELECT users WHERE uuid=? ran once per call, serializing through aiosqlite.
+# 10s TTL is well below JWT expiry and we invalidate on all user writes.
+_USER_TTL = 10.0
+_user_cache: dict[str, tuple[Optional[dict[str, Any]], float]] = {}
+_user_cache_lock: Optional[asyncio.Lock] = None
+
+
+def _reset_user_cache() -> None:
+    global _user_cache, _user_cache_lock
+    _user_cache = {}
+    _user_cache_lock = None
+
+
+def invalidate_user_cache(user_uuid: Optional[str] = None) -> None:
+    """Drop a single user (or all users) from the auth cache.
+
+    Callers: password change, role change, user create/delete.
+    """
+    if user_uuid is None:
+        _user_cache.clear()
+    else:
+        _user_cache.pop(user_uuid, None)
+
+
+async def _get_user_cached(user_uuid: str) -> Optional[dict[str, Any]]:
+    global _user_cache_lock
+    entry = _user_cache.get(user_uuid)
+    now = time.monotonic()
+    if entry is not None and now - entry[1] < _USER_TTL:
+        return entry[0]
+    if _user_cache_lock is None:
+        _user_cache_lock = asyncio.Lock()
+    async with _user_cache_lock:
+        entry = _user_cache.get(user_uuid)
+        now = time.monotonic()
+        if entry is not None and now - entry[1] < _USER_TTL:
+            return entry[0]
+        user = await repo.get_user_by_uuid(user_uuid)
+        _user_cache[user_uuid] = (user, time.monotonic())
+        return user
 
 
 async def get_stream_user(request: Request, token: Optional[str] = None) -> str:
@@ -82,7 +127,7 @@ async def _decode_token(request: Request) -> str:
 async def get_current_user(request: Request) -> str:
     """Auth dependency — enforces must_change_password."""
     _user_uuid = await _decode_token(request)
-    _user = await repo.get_user_by_uuid(_user_uuid)
+    _user = await _get_user_cached(_user_uuid)
     if _user and _user.get("must_change_password"):
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
@@ -112,7 +157,7 @@ def require_role(*allowed_roles: str):
     """
     async def _check(request: Request) -> dict:
         user_uuid = await _decode_token(request)
-        user = await repo.get_user_by_uuid(user_uuid)
+        user = await _get_user_cached(user_uuid)
         if not user:
             raise HTTPException(
                 status_code=status.HTTP_401_UNAUTHORIZED,
@@ -137,7 +182,7 @@ def require_stream_role(*allowed_roles: str):
     """Like ``require_role`` but for SSE endpoints that accept a query-param token."""
     async def _check(request: Request, token: Optional[str] = None) -> dict:
         user_uuid = await get_stream_user(request, token)
-        user = await repo.get_user_by_uuid(user_uuid)
+        user = await _get_user_cached(user_uuid)
         if not user or user["role"] not in allowed_roles:
             raise HTTPException(
                 status_code=status.HTTP_403_FORBIDDEN,

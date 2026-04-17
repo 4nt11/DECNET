@@ -20,13 +20,45 @@ _STATE_TTL = 5.0
 _state_cache: dict[str, tuple[Optional[dict[str, Any]], float]] = {}
 _state_locks: dict[str, asyncio.Lock] = {}
 
+# Admin branch fetched repo.list_users() on every /config call — cache 5s,
+# invalidate on user create/update/delete so the admin UI stays consistent.
+_USERS_TTL = 5.0
+_users_cache: tuple[Optional[list[dict[str, Any]]], float] = (None, 0.0)
+_users_lock: Optional[asyncio.Lock] = None
+
 
 def _reset_state_cache() -> None:
     """Reset cached config state — used by tests."""
+    global _users_cache, _users_lock
     _state_cache.clear()
     # Drop any locks bound to the previous event loop — reusing one from
     # a dead loop deadlocks the next test.
     _state_locks.clear()
+    _users_cache = (None, 0.0)
+    _users_lock = None
+
+
+def invalidate_list_users_cache() -> None:
+    global _users_cache
+    _users_cache = (None, 0.0)
+
+
+async def _get_list_users_cached() -> list[dict[str, Any]]:
+    global _users_cache, _users_lock
+    value, ts = _users_cache
+    now = time.monotonic()
+    if value is not None and now - ts < _USERS_TTL:
+        return value
+    if _users_lock is None:
+        _users_lock = asyncio.Lock()
+    async with _users_lock:
+        value, ts = _users_cache
+        now = time.monotonic()
+        if value is not None and now - ts < _USERS_TTL:
+            return value
+        value = await repo.list_users()
+        _users_cache = (value, time.monotonic())
+        return value
 
 
 async def _get_state_cached(name: str) -> Optional[dict[str, Any]]:
@@ -76,7 +108,7 @@ async def api_get_config(user: dict = Depends(require_viewer)) -> dict:
     }
 
     if user["role"] == "admin":
-        all_users = await repo.list_users()
+        all_users = await _get_list_users_cached()
         base["users"] = [
             UserResponse(
                 uuid=u["uuid"],
