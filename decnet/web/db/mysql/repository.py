@@ -24,7 +24,7 @@ from decnet.web.db.sqlmodel_repo import SQLModelRepository
 
 
 class MySQLRepository(SQLModelRepository):
-    """MySQL backend — uses ``aiomysql``."""
+    """MySQL backend — uses ``asyncmy``."""
 
     def __init__(self, url: Optional[str] = None, **engine_kwargs) -> None:
         self.engine = get_async_engine(url=url, **engine_kwargs)
@@ -81,13 +81,24 @@ class MySQLRepository(SQLModelRepository):
                     ))
 
     async def initialize(self) -> None:
-        """Create tables and run all MySQL-specific migrations."""
+        """Create tables and run all MySQL-specific migrations.
+
+        Uses a MySQL advisory lock to serialize DDL across concurrent
+        uvicorn workers — prevents the 'Table was skipped since its
+        definition is being modified by concurrent DDL' race.
+        """
         from sqlmodel import SQLModel
-        await self._migrate_attackers_table()
-        await self._migrate_column_types()
-        async with self.engine.begin() as conn:
-            await conn.run_sync(SQLModel.metadata.create_all)
-        await self._ensure_admin_user()
+        async with self.engine.connect() as lock_conn:
+            await lock_conn.execute(text("SELECT GET_LOCK('decnet_schema_init', 30)"))
+            try:
+                await self._migrate_attackers_table()
+                await self._migrate_column_types()
+                async with self.engine.begin() as conn:
+                    await conn.run_sync(SQLModel.metadata.create_all)
+                await self._ensure_admin_user()
+            finally:
+                await lock_conn.execute(text("SELECT RELEASE_LOCK('decnet_schema_init')"))
+                await lock_conn.close()
 
     def _json_field_equals(self, key: str):
         # MySQL 5.7+ exposes JSON_EXTRACT; quoted string result returned for
@@ -115,7 +126,7 @@ class MySQLRepository(SQLModelRepository):
             literal_column("bucket_time")
         )
 
-        async with self.session_factory() as session:
+        async with self._session() as session:
             results = await session.execute(statement)
             # Normalize to ISO string for API parity with the SQLite backend
             # (SQLite's datetime() returns a string already; FROM_UNIXTIME

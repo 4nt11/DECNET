@@ -66,7 +66,7 @@ async def stream_events(
 ) -> StreamingResponse:
 
     # Prefetch the initial snapshot before entering the streaming generator.
-    # With aiomysql (pure async TCP I/O), the first DB await inside the generator
+    # With asyncmy (pure async TCP I/O), the first DB await inside the generator
     # fires immediately after the ASGI layer sends the keepalive chunk — the HTTP
     # write and the MySQL read compete for asyncio I/O callbacks and the MySQL
     # callback can stall.  Running these here (normal async context, no streaming)

@@ -1,3 +1,5 @@
+import os
+
 from sqlalchemy.ext.asyncio import AsyncEngine, AsyncSession, async_sessionmaker, create_async_engine
 from sqlalchemy import create_engine, Engine, event
 from sqlmodel import SQLModel
@@ -11,9 +13,20 @@ def get_async_engine(db_path: str) -> AsyncEngine:
     prefix = "sqlite+aiosqlite:///"
     if db_path.startswith(":memory:"):
         prefix = "sqlite+aiosqlite://"
+
+    pool_size = int(os.environ.get("DECNET_DB_POOL_SIZE", "20"))
+    max_overflow = int(os.environ.get("DECNET_DB_MAX_OVERFLOW", "40"))
+
+    pool_recycle = int(os.environ.get("DECNET_DB_POOL_RECYCLE", "3600"))
+    pool_pre_ping = os.environ.get("DECNET_DB_POOL_PRE_PING", "true").lower() == "true"
+
     engine = create_async_engine(
         f"{prefix}{db_path}",
         echo=False,
+        pool_size=pool_size,
+        max_overflow=max_overflow,
+        pool_recycle=pool_recycle,
+        pool_pre_ping=pool_pre_ping,
         connect_args={"uri": True, "timeout": 30},
     )
 

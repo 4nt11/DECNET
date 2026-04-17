@@ -54,6 +54,6 @@ class SQLiteRepository(SQLModelRepository):
             literal_column("bucket_time")
         )
 
-        async with self.session_factory() as session:
+        async with self._session() as session:
             results = await session.execute(statement)
             return [{"time": r[0], "count": r[1]} for r in results.all()]

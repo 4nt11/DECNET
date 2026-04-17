@@ -1,7 +1,7 @@
 """
 MySQL async engine factory.
 
-Builds a SQLAlchemy AsyncEngine against MySQL using the ``aiomysql`` driver.
+Builds a SQLAlchemy AsyncEngine against MySQL using the ``asyncmy`` driver.
 
 Connection info is resolved (in order of precedence):
 
@@ -23,10 +23,10 @@ from urllib.parse import quote_plus
 from sqlalchemy.ext.asyncio import AsyncEngine, create_async_engine
 
 
-DEFAULT_POOL_SIZE = 10
-DEFAULT_MAX_OVERFLOW = 20
-DEFAULT_POOL_RECYCLE = 3600  # seconds — avoid MySQL ``wait_timeout`` disconnects
-DEFAULT_POOL_PRE_PING = True
+DEFAULT_POOL_SIZE = int(os.environ.get("DECNET_DB_POOL_SIZE", "20"))
+DEFAULT_MAX_OVERFLOW = int(os.environ.get("DECNET_DB_MAX_OVERFLOW", "40"))
+DEFAULT_POOL_RECYCLE = int(os.environ.get("DECNET_DB_POOL_RECYCLE", "3600"))
+DEFAULT_POOL_PRE_PING = os.environ.get("DECNET_DB_POOL_PRE_PING", "true").lower() == "true"
 
 
 def build_mysql_url(
@@ -36,7 +36,7 @@ def build_mysql_url(
     user: Optional[str] = None,
     password: Optional[str] = None,
 ) -> str:
-    """Compose an async SQLAlchemy URL for MySQL using the aiomysql driver.
+    """Compose an async SQLAlchemy URL for MySQL using the asyncmy driver.
 
     Component args override env vars. Password is percent-encoded so special
     characters (``@``, ``:``, ``/``…) don't break URL parsing.
@@ -59,7 +59,7 @@ def build_mysql_url(
 
     pw_enc = quote_plus(password)
     user_enc = quote_plus(user)
-    return f"mysql+aiomysql://{user_enc}:{pw_enc}@{host}:{port}/{database}"
+    return f"mysql+asyncmy://{user_enc}:{pw_enc}@{host}:{port}/{database}"
 
 
 def resolve_url(url: Optional[str] = None) -> str:
