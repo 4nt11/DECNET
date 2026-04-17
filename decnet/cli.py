@@ -84,6 +84,7 @@ def api(
     host: str = typer.Option(DECNET_API_HOST, "--host", help="Host IP for the backend API"),
     log_file: str = typer.Option(DECNET_INGEST_LOG_FILE, "--log-file", help="Path to the DECNET log file to monitor"),
     daemon: bool = typer.Option(False, "--daemon", "-d", help="Detach to background as a daemon process"),
+    workers: int = typer.Option(1, "--workers", "-w", min=1, help="Number of uvicorn worker processes"),
 ) -> None:
     """Run the DECNET API and Web Dashboard in standalone mode."""
     import subprocess  # nosec B404
@@ -91,18 +92,17 @@ def api(
     import os
 
     if daemon:
-        log.info("API daemonizing host=%s port=%d", host, port)
+        log.info("API daemonizing host=%s port=%d workers=%d", host, port, workers)
         _daemonize()
 
-    log.info("API command invoked host=%s port=%d", host, port)
-    console.print(f"[green]Starting DECNET API on {host}:{port}...[/]")
+    log.info("API command invoked host=%s port=%d workers=%d", host, port, workers)
+    console.print(f"[green]Starting DECNET API on {host}:{port} (workers={workers})...[/]")
     _env: dict[str, str] = os.environ.copy()
     _env["DECNET_INGEST_LOG_FILE"] = str(log_file)
+    _cmd = [sys.executable, "-m", "uvicorn", "decnet.web.api:app",
+            "--host", host, "--port", str(port), "--workers", str(workers)]
     try:
-        subprocess.run(  # nosec B603 B404
-            [sys.executable, "-m", "uvicorn", "decnet.web.api:app", "--host", host, "--port", str(port)],
-            env=_env
-        )
+        subprocess.run(_cmd, env=_env)  # nosec B603 B404
     except KeyboardInterrupt:
         pass
     except (FileNotFoundError, subprocess.SubprocessError):
