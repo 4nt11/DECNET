@@ -1,9 +1,11 @@
 import asyncio
 import os
 import json
+import time
 from typing import Any
 from pathlib import Path
 
+from decnet.env import DECNET_BATCH_SIZE, DECNET_BATCH_MAX_WAIT_MS
 from decnet.logging import get_logger
 from decnet.telemetry import (
     traced as _traced,
@@ -52,22 +54,26 @@ async def log_ingestion_worker(repo: BaseRepository) -> None:
                 await asyncio.sleep(1)
                 continue
 
+            # Accumulate parsed rows and the file offset they end at.  We
+            # only advance _position after the batch is successfully
+            # committed — if we get cancelled mid-flush, the next run
+            # re-reads the un-committed lines rather than losing them.
+            _batch: list[tuple[dict[str, Any], int]] = []
+            _batch_started: float = time.monotonic()
+            _max_wait_s: float = DECNET_BATCH_MAX_WAIT_MS / 1000.0
+
             with open(_json_log_path, "r", encoding="utf-8", errors="replace") as _f:
                 _f.seek(_position)
                 while True:
                     _line: str = _f.readline()
-                    if not _line:
-                        break # EOF reached
-
-                    if not _line.endswith('\n'):
-                        # Partial line read, don't process yet, don't advance position
+                    if not _line or not _line.endswith('\n'):
+                        # EOF or partial line — flush what we have and stop
                         break
 
                     try:
                         _log_data: dict[str, Any] = json.loads(_line.strip())
-                        # Extract trace context injected by the collector.
-                        # This makes the ingester span a child of the collector span,
-                        # showing the full event journey in Jaeger.
+                        # Collector injects trace context so the ingester span
+                        # chains off the collector's — full event journey in Jaeger.
                         _parent_ctx = _extract_ctx(_log_data)
                         _tracer = _get_tracer("ingester")
                         with _start_span(_tracer, "ingester.process_record", context=_parent_ctx) as _span:
@@ -75,25 +81,29 @@ async def log_ingestion_worker(repo: BaseRepository) -> None:
                             _span.set_attribute("service", _log_data.get("service", ""))
                             _span.set_attribute("event_type", _log_data.get("event_type", ""))
                             _span.set_attribute("attacker_ip", _log_data.get("attacker_ip", ""))
-                            # Persist trace context in the DB row so the SSE
-                            # read path can link back to this ingestion trace.
                             _sctx = getattr(_span, "get_span_context", None)
                             if _sctx:
                                 _ctx = _sctx()
                                 if _ctx and getattr(_ctx, "trace_id", 0):
                                     _log_data["trace_id"] = format(_ctx.trace_id, "032x")
                                     _log_data["span_id"] = format(_ctx.span_id, "016x")
-                            logger.debug("ingest: record decky=%s event_type=%s", _log_data.get("decky"), _log_data.get("event_type"))
-                            await repo.add_log(_log_data)
-                            await _extract_bounty(repo, _log_data)
+                        _batch.append((_log_data, _f.tell()))
                     except json.JSONDecodeError:
                         logger.error("ingest: failed to decode JSON log line: %s", _line.strip())
+                        # Skip past bad line so we don't loop forever on it.
+                        _position = _f.tell()
                         continue
 
-                    # Update position after successful line read
-                    _position = _f.tell()
+                    if len(_batch) >= DECNET_BATCH_SIZE or (
+                        time.monotonic() - _batch_started >= _max_wait_s
+                    ):
+                        _position = await _flush_batch(repo, _batch, _position)
+                        _batch.clear()
+                        _batch_started = time.monotonic()
 
-            await repo.set_state(_INGEST_STATE_KEY, {"position": _position})
+            # Flush any remainder collected before EOF / partial-line break.
+            if _batch:
+                _position = await _flush_batch(repo, _batch, _position)
 
         except Exception as _e:
             _err_str = str(_e).lower()
@@ -105,6 +115,32 @@ async def log_ingestion_worker(repo: BaseRepository) -> None:
             await asyncio.sleep(5)
 
         await asyncio.sleep(1)
+
+
+async def _flush_batch(
+    repo: BaseRepository,
+    batch: list[tuple[dict[str, Any], int]],
+    current_position: int,
+) -> int:
+    """Commit a batch of log rows and return the new file position.
+
+    If the enclosing task is being cancelled, bail out without touching
+    the DB — the session factory may already be disposed during lifespan
+    teardown, and awaiting it would stall the worker.  The un-flushed
+    lines stay uncommitted; the next startup re-reads them from
+    ``current_position``.
+    """
+    _task = asyncio.current_task()
+    if _task is not None and _task.cancelling():
+        raise asyncio.CancelledError()
+
+    _entries = [_entry for _entry, _ in batch]
+    _new_position = batch[-1][1]
+    await repo.add_logs(_entries)
+    for _entry in _entries:
+        await _extract_bounty(repo, _entry)
+    await repo.set_state(_INGEST_STATE_KEY, {"position": _new_position})
+    return _new_position
 
 
 @_traced("ingester.extract_bounty")

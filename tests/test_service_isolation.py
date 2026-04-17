@@ -93,6 +93,7 @@ class TestIngesterIsolation:
         from decnet.web.ingester import log_ingestion_worker
 
         mock_repo = MagicMock()
+        mock_repo.add_logs = AsyncMock()
         mock_repo.get_state = AsyncMock(return_value=None)
         mock_repo.set_state = AsyncMock()
         iterations = 0
@@ -110,7 +111,7 @@ class TestIngesterIsolation:
                     await task
         # Should have waited at least 2 iterations without crashing
         assert iterations >= 2
-        mock_repo.add_log.assert_not_called()
+        mock_repo.add_logs.assert_not_called()
 
     @pytest.mark.asyncio
     async def test_ingester_survives_no_log_file_env(self):
@@ -135,6 +136,7 @@ class TestIngesterIsolation:
 
         mock_repo = MagicMock()
         mock_repo.add_log = AsyncMock()
+        mock_repo.add_logs = AsyncMock()
         mock_repo.get_state = AsyncMock(return_value=None)
         mock_repo.set_state = AsyncMock()
         iterations = 0
@@ -150,7 +152,7 @@ class TestIngesterIsolation:
                 task = asyncio.create_task(log_ingestion_worker(mock_repo))
                 with pytest.raises(asyncio.CancelledError):
                     await task
-        mock_repo.add_log.assert_not_called()
+        mock_repo.add_logs.assert_not_called()
 
     @pytest.mark.asyncio
     async def test_ingester_exits_on_db_fatal_error(self, tmp_path):
@@ -171,15 +173,16 @@ class TestIngesterIsolation:
         json_file.write_text(json.dumps(valid_record) + "\n")
 
         mock_repo = MagicMock()
-        mock_repo.add_log = AsyncMock(side_effect=Exception("no such table: logs"))
+        mock_repo.add_log = AsyncMock()
+        mock_repo.add_logs = AsyncMock(side_effect=Exception("no such table: logs"))
         mock_repo.get_state = AsyncMock(return_value=None)
         mock_repo.set_state = AsyncMock()
 
         with patch.dict(os.environ, {"DECNET_INGEST_LOG_FILE": str(tmp_path / "test.log")}):
             # Worker should exit the loop on fatal DB error
             await log_ingestion_worker(mock_repo)
-        # Should have attempted to add the log before dying
-        mock_repo.add_log.assert_awaited_once()
+        # Should have attempted to bulk-add before dying
+        mock_repo.add_logs.assert_awaited_once()
 
 
 # ─── Attacker worker isolation ───────────────────────────────────────────────

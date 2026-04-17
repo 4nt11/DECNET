@@ -85,6 +85,7 @@ class TestLogIngestionWorker:
         from decnet.web.ingester import log_ingestion_worker
         mock_repo = MagicMock()
         mock_repo.add_log = AsyncMock()
+        mock_repo.add_logs = AsyncMock()
         mock_repo.get_state = AsyncMock(return_value=None)
         mock_repo.set_state = AsyncMock()
         log_file = str(tmp_path / "nonexistent.log")
@@ -100,13 +101,14 @@ class TestLogIngestionWorker:
             with patch("decnet.web.ingester.asyncio.sleep", side_effect=fake_sleep):
                 with pytest.raises(asyncio.CancelledError):
                     await log_ingestion_worker(mock_repo)
-        mock_repo.add_log.assert_not_awaited()
+        mock_repo.add_logs.assert_not_awaited()
 
     @pytest.mark.asyncio
     async def test_ingests_json_lines(self, tmp_path):
         from decnet.web.ingester import log_ingestion_worker
         mock_repo = MagicMock()
         mock_repo.add_log = AsyncMock()
+        mock_repo.add_logs = AsyncMock()
         mock_repo.add_bounty = AsyncMock()
         mock_repo.get_state = AsyncMock(return_value=None)
         mock_repo.set_state = AsyncMock()
@@ -131,13 +133,17 @@ class TestLogIngestionWorker:
                 with pytest.raises(asyncio.CancelledError):
                     await log_ingestion_worker(mock_repo)
 
-        mock_repo.add_log.assert_awaited_once()
+        mock_repo.add_logs.assert_awaited_once()
+        _batch = mock_repo.add_logs.call_args[0][0]
+        assert len(_batch) == 1
+        assert _batch[0]["attacker_ip"] == "1.2.3.4"
 
     @pytest.mark.asyncio
     async def test_handles_json_decode_error(self, tmp_path):
         from decnet.web.ingester import log_ingestion_worker
         mock_repo = MagicMock()
         mock_repo.add_log = AsyncMock()
+        mock_repo.add_logs = AsyncMock()
         mock_repo.add_bounty = AsyncMock()
         mock_repo.get_state = AsyncMock(return_value=None)
         mock_repo.set_state = AsyncMock()
@@ -159,13 +165,14 @@ class TestLogIngestionWorker:
                 with pytest.raises(asyncio.CancelledError):
                     await log_ingestion_worker(mock_repo)
 
-        mock_repo.add_log.assert_not_awaited()
+        mock_repo.add_logs.assert_not_awaited()
 
     @pytest.mark.asyncio
     async def test_file_truncation_resets_position(self, tmp_path):
         from decnet.web.ingester import log_ingestion_worker
         mock_repo = MagicMock()
         mock_repo.add_log = AsyncMock()
+        mock_repo.add_logs = AsyncMock()
         mock_repo.add_bounty = AsyncMock()
         mock_repo.get_state = AsyncMock(return_value=None)
         mock_repo.set_state = AsyncMock()
@@ -195,13 +202,15 @@ class TestLogIngestionWorker:
                     await log_ingestion_worker(mock_repo)
 
         # Should have ingested lines from original + after truncation
-        assert mock_repo.add_log.await_count >= 2
+        _total = sum(len(call.args[0]) for call in mock_repo.add_logs.call_args_list)
+        assert _total >= 2
 
     @pytest.mark.asyncio
     async def test_partial_line_not_processed(self, tmp_path):
         from decnet.web.ingester import log_ingestion_worker
         mock_repo = MagicMock()
         mock_repo.add_log = AsyncMock()
+        mock_repo.add_logs = AsyncMock()
         mock_repo.add_bounty = AsyncMock()
         mock_repo.get_state = AsyncMock(return_value=None)
         mock_repo.set_state = AsyncMock()
@@ -224,7 +233,7 @@ class TestLogIngestionWorker:
                 with pytest.raises(asyncio.CancelledError):
                     await log_ingestion_worker(mock_repo)
 
-        mock_repo.add_log.assert_not_awaited()
+        mock_repo.add_logs.assert_not_awaited()
 
     @pytest.mark.asyncio
     async def test_position_restored_skips_already_seen_lines(self, tmp_path):
@@ -232,6 +241,7 @@ class TestLogIngestionWorker:
         from decnet.web.ingester import log_ingestion_worker
         mock_repo = MagicMock()
         mock_repo.add_log = AsyncMock()
+        mock_repo.add_logs = AsyncMock()
         mock_repo.add_bounty = AsyncMock()
         mock_repo.set_state = AsyncMock()
 
@@ -262,9 +272,9 @@ class TestLogIngestionWorker:
                 with pytest.raises(asyncio.CancelledError):
                     await log_ingestion_worker(mock_repo)
 
-        assert mock_repo.add_log.await_count == 1
-        ingested = mock_repo.add_log.call_args[0][0]
-        assert ingested["attacker_ip"] == "2.2.2.2"
+        _rows = [r for call in mock_repo.add_logs.call_args_list for r in call.args[0]]
+        assert len(_rows) == 1
+        assert _rows[0]["attacker_ip"] == "2.2.2.2"
 
     @pytest.mark.asyncio
     async def test_set_state_called_with_position_after_batch(self, tmp_path):
@@ -272,6 +282,7 @@ class TestLogIngestionWorker:
         from decnet.web.ingester import log_ingestion_worker, _INGEST_STATE_KEY
         mock_repo = MagicMock()
         mock_repo.add_log = AsyncMock()
+        mock_repo.add_logs = AsyncMock()
         mock_repo.add_bounty = AsyncMock()
         mock_repo.get_state = AsyncMock(return_value=None)
         mock_repo.set_state = AsyncMock()
@@ -302,11 +313,53 @@ class TestLogIngestionWorker:
         assert saved_pos == len(line.encode("utf-8"))
 
     @pytest.mark.asyncio
+    async def test_batches_many_lines_into_few_commits(self, tmp_path):
+        """250 lines with BATCH_SIZE=100 should flush in a handful of calls."""
+        from decnet.web.ingester import log_ingestion_worker
+        mock_repo = MagicMock()
+        mock_repo.add_log = AsyncMock()
+        mock_repo.add_logs = AsyncMock()
+        mock_repo.add_bounty = AsyncMock()
+        mock_repo.get_state = AsyncMock(return_value=None)
+        mock_repo.set_state = AsyncMock()
+
+        log_file = str(tmp_path / "test.log")
+        json_file = tmp_path / "test.json"
+        _lines = "".join(
+            json.dumps({
+                "decky": f"d{i}", "service": "ssh", "event_type": "auth",
+                "attacker_ip": f"10.0.0.{i % 256}", "fields": {}, "raw_line": "x", "msg": ""
+            }) + "\n"
+            for i in range(250)
+        )
+        json_file.write_text(_lines)
+
+        _call_count: int = 0
+
+        async def fake_sleep(secs):
+            nonlocal _call_count
+            _call_count += 1
+            if _call_count >= 2:
+                raise asyncio.CancelledError()
+
+        with patch.dict(os.environ, {"DECNET_INGEST_LOG_FILE": log_file}):
+            with patch("decnet.web.ingester.asyncio.sleep", side_effect=fake_sleep):
+                with pytest.raises(asyncio.CancelledError):
+                    await log_ingestion_worker(mock_repo)
+
+        # 250 lines, batch=100 → 2 size-triggered flushes + 1 remainder flush.
+        # Asserting <= 5 leaves headroom for time-triggered flushes on slow CI.
+        assert mock_repo.add_logs.await_count <= 5
+        _rows = [r for call in mock_repo.add_logs.call_args_list for r in call.args[0]]
+        assert len(_rows) == 250
+
+    @pytest.mark.asyncio
     async def test_truncation_resets_and_saves_zero_position(self, tmp_path):
         """On file truncation, set_state is called with position=0."""
         from decnet.web.ingester import log_ingestion_worker, _INGEST_STATE_KEY
         mock_repo = MagicMock()
         mock_repo.add_log = AsyncMock()
+        mock_repo.add_logs = AsyncMock()
         mock_repo.add_bounty = AsyncMock()
         mock_repo.set_state = AsyncMock()
 
