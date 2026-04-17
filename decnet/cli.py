@@ -106,19 +106,20 @@ def api(
     # can signal the whole tree on Ctrl+C. Without this, only the supervisor
     # receives SIGINT from the terminal and worker children may survive and
     # be respawned — the "forkbomb" ANTI hit during testing.
-    proc = subprocess.Popen(_cmd, env=_env, start_new_session=True)  # nosec B603 B404
     try:
-        proc.wait()
-    except KeyboardInterrupt:
+        proc = subprocess.Popen(_cmd, env=_env, start_new_session=True)  # nosec B603 B404
         try:
-            os.killpg(proc.pid, signal.SIGTERM)
+            proc.wait()
+        except KeyboardInterrupt:
             try:
-                proc.wait(timeout=10)
-            except subprocess.TimeoutExpired:
-                os.killpg(proc.pid, signal.SIGKILL)
-                proc.wait()
-        except ProcessLookupError:
-            pass
+                os.killpg(proc.pid, signal.SIGTERM)
+                try:
+                    proc.wait(timeout=10)
+                except subprocess.TimeoutExpired:
+                    os.killpg(proc.pid, signal.SIGKILL)
+                    proc.wait()
+            except ProcessLookupError:
+                pass
     except (FileNotFoundError, subprocess.SubprocessError):
         console.print("[red]Failed to start API. Ensure 'uvicorn' is installed in the current environment.[/]")
 

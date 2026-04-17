@@ -325,13 +325,19 @@ class TestCorrelateCommand:
 # ── api command ───────────────────────────────────────────────────────────────
 
 class TestApiCommand:
-    @patch("subprocess.run", side_effect=KeyboardInterrupt)
-    def test_api_keyboard_interrupt(self, mock_run):
+    @patch("os.killpg")
+    @patch("subprocess.Popen")
+    def test_api_keyboard_interrupt(self, mock_popen, mock_killpg):
+        proc = MagicMock()
+        proc.wait.side_effect = [KeyboardInterrupt, 0]
+        proc.pid = 4321
+        mock_popen.return_value = proc
         result = runner.invoke(app, ["api"])
         assert result.exit_code == 0
+        mock_killpg.assert_called()
 
-    @patch("subprocess.run", side_effect=FileNotFoundError)
-    def test_api_not_found(self, mock_run):
+    @patch("subprocess.Popen", side_effect=FileNotFoundError)
+    def test_api_not_found(self, mock_popen):
         result = runner.invoke(app, ["api"])
         assert result.exit_code == 0
 
