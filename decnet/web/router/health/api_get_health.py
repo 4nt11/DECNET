@@ -1,4 +1,5 @@
-from typing import Any
+import time
+from typing import Any, Optional
 
 from fastapi import APIRouter, Depends
 from fastapi.responses import JSONResponse
@@ -10,6 +11,22 @@ from decnet.web.db.models import HealthResponse, ComponentHealth
 router = APIRouter()
 
 _OPTIONAL_SERVICES = {"sniffer_worker"}
+
+# Cache Docker client and health result to avoid hammering the Docker socket
+_docker_client: Optional[Any] = None
+_docker_healthy: bool = False
+_docker_detail: str = ""
+_docker_last_check: float = 0.0
+_DOCKER_CHECK_INTERVAL = 5.0  # seconds between actual Docker pings
+
+
+def _reset_docker_cache() -> None:
+    """Reset cached Docker state — used by tests."""
+    global _docker_client, _docker_healthy, _docker_detail, _docker_last_check
+    _docker_client = None
+    _docker_healthy = False
+    _docker_detail = ""
+    _docker_last_check = 0.0
 
 
 @router.get(
@@ -48,16 +65,28 @@ async def get_health(user: dict = Depends(require_viewer)) -> Any:
         else:
             components[name] = ComponentHealth(status="ok")
 
-    # 3. Docker daemon
-    try:
-        import docker
+    # 3. Docker daemon (cached — avoids creating a new client per request)
+    global _docker_client, _docker_healthy, _docker_detail, _docker_last_check
+    now = time.monotonic()
+    if now - _docker_last_check > _DOCKER_CHECK_INTERVAL:
+        try:
+            import docker
 
-        client = docker.from_env()
-        client.ping()
-        client.close()
+            if _docker_client is None:
+                _docker_client = docker.from_env()
+            _docker_client.ping()
+            _docker_healthy = True
+            _docker_detail = ""
+        except Exception as exc:
+            _docker_client = None
+            _docker_healthy = False
+            _docker_detail = str(exc)
+        _docker_last_check = now
+
+    if _docker_healthy:
         components["docker"] = ComponentHealth(status="ok")
-    except Exception as exc:
-        components["docker"] = ComponentHealth(status="failing", detail=str(exc))
+    else:
+        components["docker"] = ComponentHealth(status="failing", detail=_docker_detail)
 
     # Compute overall status
     required_failing = any(
