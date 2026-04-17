@@ -59,6 +59,12 @@ DECNET_SYSTEM_LOGS: str = os.environ.get("DECNET_SYSTEM_LOGS", "decnet.system.lo
 # which causes events to be skipped or processed twice.
 DECNET_EMBED_PROFILER: bool = os.environ.get("DECNET_EMBED_PROFILER", "").lower() == "true"
 
+# Set to "true" to embed the MACVLAN sniffer inside the API process.
+# Leave unset (default) when the standalone `decnet sniffer --daemon` is
+# running (which `decnet deploy` always does). Embedding both produces two
+# workers sniffing the same interface — duplicated events and wasted CPU.
+DECNET_EMBED_SNIFFER: bool = os.environ.get("DECNET_EMBED_SNIFFER", "").lower() == "true"
+
 # Set to "true" to mount the Pyinstrument ASGI middleware on the FastAPI app.
 # Produces per-request HTML flamegraphs under ./profiles/. Off by default so
 # production and normal dev runs pay zero profiling overhead.

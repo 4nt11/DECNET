@@ -13,6 +13,7 @@ from decnet.env import (
     DECNET_CORS_ORIGINS,
     DECNET_DEVELOPER,
     DECNET_EMBED_PROFILER,
+    DECNET_EMBED_SNIFFER,
     DECNET_INGEST_LOG_FILE,
     DECNET_PROFILE_DIR,
     DECNET_PROFILE_REQUESTS,
@@ -97,14 +98,20 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
         else:
             log.debug("API startup: profiler not embedded — expecting standalone daemon")
 
-        # Start fleet-wide MACVLAN sniffer (fault-isolated — never crashes the API)
-        try:
-            from decnet.sniffer import sniffer_worker
-            if sniffer_task is None or sniffer_task.done():
-                sniffer_task = asyncio.create_task(sniffer_worker(_log_file))
-                log.debug("API startup sniffer worker started")
-        except Exception as exc:
-            log.warning("Sniffer worker failed to start — API continues without sniffing: %s", exc)
+        # Start fleet-wide MACVLAN sniffer only when explicitly requested.
+        # Default is OFF because `decnet deploy` always starts a standalone
+        # `decnet sniffer --daemon` process. Running both against the same
+        # interface produces duplicated events and wastes CPU.
+        if DECNET_EMBED_SNIFFER:
+            try:
+                from decnet.sniffer import sniffer_worker
+                if sniffer_task is None or sniffer_task.done():
+                    sniffer_task = asyncio.create_task(sniffer_worker(_log_file))
+                    log.info("API startup: embedded sniffer started (DECNET_EMBED_SNIFFER=true)")
+            except Exception as exc:
+                log.warning("Sniffer worker failed to start — API continues without sniffing: %s", exc)
+        else:
+            log.debug("API startup: sniffer not embedded — expecting standalone daemon")
     else:
         log.info("Contract Test Mode: skipping background worker startup")
 
