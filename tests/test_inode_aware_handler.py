@@ -78,6 +78,26 @@ def test_no_reopen_when_file_is_stable(tmp_path, monkeypatch):
     assert path.read_text().splitlines() == ["one", "two"]
 
 
+def test_emit_does_not_raise_when_reopen_fails(tmp_path, monkeypatch):
+    """A failed reopen must not propagate — it would crash the caller
+    (observed in the collector worker when decnet.system.log was root-owned
+    and the collector ran non-root)."""
+    path = tmp_path / "app.log"
+    h = _make_handler(path)
+    h.emit(_record("first"))
+    os.remove(path)  # force reopen on next emit
+
+    def boom(*_a, **_kw):
+        raise PermissionError(13, "Permission denied")
+    monkeypatch.setattr(h, "_open", boom)
+
+    # Swallow the stderr traceback stdlib prints via handleError.
+    monkeypatch.setattr(h, "handleError", lambda _r: None)
+
+    # Must not raise.
+    h.emit(_record("second"))
+
+
 def test_rotation_by_size_still_works(tmp_path):
     """maxBytes-triggered rotation must still function on top of the inode check."""
     path = tmp_path / "app.log"

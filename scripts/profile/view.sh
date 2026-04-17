@@ -34,7 +34,9 @@ case "${1:-}" in
     cprofile)     TARGET="$(pick_newest '*.prof')" ;;
     memray)       TARGET="$(pick_newest 'memray-*.bin')" ;;
     pyspy)        TARGET="$(pick_newest 'pyspy-*.svg')" ;;
-    pyinstrument) TARGET="$(pick_newest '*.html')" ;;
+    pyinstrument) TARGET="$(find "${DIR}" -maxdepth 1 -type f -name '*.html' \
+                       ! -name 'memray-*' -printf '%T@ %p\n' 2>/dev/null \
+                       | sort -n | tail -n 1 | cut -d' ' -f2-)" ;;
     *)            TARGET="$1" ;;
 esac
 

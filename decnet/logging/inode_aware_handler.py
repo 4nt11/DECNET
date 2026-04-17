@@ -48,5 +48,13 @@ class InodeAwareRotatingFileHandler(logging.handlers.RotatingFileHandler):
                     self.close()
             except Exception:  # nosec B110
                 pass
-            self.stream = self._open()
+            try:
+                self.stream = self._open()
+            except OSError:
+                # A logging handler MUST NOT crash its caller. If we can't
+                # reopen (e.g. file is root-owned after `sudo decnet deploy`
+                # and the current process is non-root), defer to the stdlib
+                # error path, which just prints a traceback to stderr.
+                self.handleError(record)
+                return
         super().emit(record)
