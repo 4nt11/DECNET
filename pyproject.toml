@@ -16,7 +16,7 @@ dependencies = [
     "fastapi>=0.110.0",
     "uvicorn>=0.29.0",
     "aiosqlite>=0.20.0",
-    "aiomysql>=0.2.0",
+    "asyncmy>=0.2.9",
     "PyJWT>=2.8.0",
     "bcrypt>=4.1.0",
     "psutil>=5.9.0",
@@ -32,8 +32,15 @@ tracing = [
     "opentelemetry-exporter-otlp>=1.20.0",
     "opentelemetry-instrumentation-fastapi>=0.41b0",
 ]
+profile = [
+    "py-spy>=0.4.1",
+    "pyinstrument>=4.7",
+    "pytest-benchmark>=4.0",
+    "memray>=1.14 ; sys_platform == 'linux'",
+    "snakeviz>=2.2",
+]
 dev = [
-    "decnet[tracing]",
+    "decnet[tracing,profile]",
     "pytest>=9.0.3",
     "ruff>=0.15.10",
     "bandit>=1.9.4",
@@ -54,6 +61,8 @@ dev = [
     "psycopg2-binary>=2.9.11",
     "paho-mqtt>=2.1.0",
     "pymongo>=4.16.0",
+    "locust>=2.29",
+    "gevent>=24.0",
 ]
 
 [project.scripts]
@@ -62,11 +71,13 @@ decnet = "decnet.cli:app"
 [tool.pytest.ini_options]
 asyncio_mode = "auto"
 asyncio_debug = "true"
-addopts = "-m 'not fuzz and not live' -v -q -x -n logical --dist loadscope"
+addopts = "-m 'not fuzz and not live and not stress and not bench' -v -q -x -n logical --dist loadscope"
 markers = [
     "fuzz: hypothesis-based fuzz tests (slow, run with -m fuzz or -m '' for all)",
     "live: live subprocess service tests (run with -m live)",
     "live_docker: live Docker container tests (requires DECNET_LIVE_DOCKER=1)",
+    "stress: locust-based stress tests (run with -m stress)",
+    "bench: pytest-benchmark micro-benchmarks (run with -m bench)",
 ]
 filterwarnings = [
     "ignore::pytest.PytestUnhandledThreadExceptionWarning",

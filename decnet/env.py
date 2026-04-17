@@ -59,6 +59,12 @@ DECNET_SYSTEM_LOGS: str = os.environ.get("DECNET_SYSTEM_LOGS", "decnet.system.lo
 # which causes events to be skipped or processed twice.
 DECNET_EMBED_PROFILER: bool = os.environ.get("DECNET_EMBED_PROFILER", "").lower() == "true"
 
+# Set to "true" to mount the Pyinstrument ASGI middleware on the FastAPI app.
+# Produces per-request HTML flamegraphs under ./profiles/. Off by default so
+# production and normal dev runs pay zero profiling overhead.
+DECNET_PROFILE_REQUESTS: bool = os.environ.get("DECNET_PROFILE_REQUESTS", "").lower() == "true"
+DECNET_PROFILE_DIR: str = os.environ.get("DECNET_PROFILE_DIR", "profiles")
+
 # API Options
 DECNET_API_HOST: str = os.environ.get("DECNET_API_HOST", "127.0.0.1")
 DECNET_API_PORT: int = _port("DECNET_API_PORT", 8000)

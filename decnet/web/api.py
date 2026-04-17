@@ -9,7 +9,14 @@ from fastapi.responses import JSONResponse
 from pydantic import ValidationError
 from fastapi.middleware.cors import CORSMiddleware
 
-from decnet.env import DECNET_CORS_ORIGINS, DECNET_DEVELOPER, DECNET_EMBED_PROFILER, DECNET_INGEST_LOG_FILE
+from decnet.env import (
+    DECNET_CORS_ORIGINS,
+    DECNET_DEVELOPER,
+    DECNET_EMBED_PROFILER,
+    DECNET_INGEST_LOG_FILE,
+    DECNET_PROFILE_DIR,
+    DECNET_PROFILE_REQUESTS,
+)
 from decnet.logging import get_logger
 from decnet.web.dependencies import repo
 from decnet.collector import log_collector_worker
@@ -37,6 +44,16 @@ def get_background_tasks() -> dict[str, Optional[asyncio.Task[Any]]]:
 @asynccontextmanager
 async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
     global ingestion_task, collector_task, attacker_task, sniffer_task
+
+    import resource
+    soft, hard = resource.getrlimit(resource.RLIMIT_NOFILE)
+    if soft < 4096:
+        log.warning(
+            "Low open-file limit detected (ulimit -n = %d). "
+            "High-traffic deployments may hit 'Too many open files' errors. "
+            "Raise it with: ulimit -n 65536 (session) or LimitNOFILE=65536 (systemd)",
+            soft,
+        )
 
     log.info("API startup initialising database")
     for attempt in range(1, 6):
@@ -124,6 +141,31 @@ app.add_middleware(
     allow_methods=["GET", "POST", "PUT", "DELETE", "OPTIONS"],
     allow_headers=["Authorization", "Content-Type", "Last-Event-ID"],
 )
+
+if DECNET_PROFILE_REQUESTS:
+    import time
+    from pathlib import Path
+    from pyinstrument import Profiler
+    from starlette.middleware.base import BaseHTTPMiddleware
+
+    _profile_dir = Path(DECNET_PROFILE_DIR)
+    _profile_dir.mkdir(parents=True, exist_ok=True)
+
+    class PyinstrumentMiddleware(BaseHTTPMiddleware):
+        async def dispatch(self, request: Request, call_next):
+            profiler = Profiler(async_mode="enabled")
+            profiler.start()
+            try:
+                response = await call_next(request)
+            finally:
+                profiler.stop()
+            slug = request.url.path.strip("/").replace("/", "_") or "root"
+            out = _profile_dir / f"{int(time.time() * 1000)}-{request.method}-{slug}.html"
+            out.write_text(profiler.output_html())
+            return response
+
+    app.add_middleware(PyinstrumentMiddleware)
+    log.info("Pyinstrument middleware mounted — flamegraphs -> %s", _profile_dir)
 
 # Include the modular API router
 app.include_router(api_router, prefix="/api/v1")
