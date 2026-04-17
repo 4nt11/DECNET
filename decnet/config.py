@@ -64,6 +64,7 @@ def _configure_logging(dev: bool) -> None:
     produce readable logs.  File handler is skipped under pytest.
     """
     import logging.handlers as _lh
+    from decnet.logging.inode_aware_handler import InodeAwareRotatingFileHandler
 
     root = logging.getLogger()
     # Guard: if our StreamHandler is already installed, all handlers are set.
@@ -82,7 +83,7 @@ def _configure_logging(dev: bool) -> None:
     _in_pytest = any(k.startswith("PYTEST") for k in os.environ)
     if not _in_pytest:
         _log_path = os.environ.get("DECNET_SYSTEM_LOGS", "decnet.system.log")
-        file_handler = _lh.RotatingFileHandler(
+        file_handler = InodeAwareRotatingFileHandler(
             _log_path,
             mode="a",
             maxBytes=10 * 1024 * 1024,  # 10 MB

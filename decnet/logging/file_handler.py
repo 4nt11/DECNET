@@ -13,6 +13,7 @@ import logging.handlers
 import os
 from pathlib import Path
 
+from decnet.logging.inode_aware_handler import InodeAwareRotatingFileHandler
 from decnet.privdrop import chown_to_invoking_user, chown_tree_to_invoking_user
 from decnet.telemetry import traced as _traced
 
@@ -21,7 +22,7 @@ _DEFAULT_LOG_FILE = "/var/log/decnet/decnet.log"
 _MAX_BYTES = 10 * 1024 * 1024  # 10 MB
 _BACKUP_COUNT = 5
 
-_handler: logging.handlers.RotatingFileHandler | None = None
+_handler: InodeAwareRotatingFileHandler | None = None
 _logger: logging.Logger | None = None
 
 
@@ -36,7 +37,7 @@ def _init_file_handler() -> logging.Logger:
     # so a subsequent non-root `decnet api` can also write to it.
     chown_tree_to_invoking_user(log_path.parent)
 
-    _handler = logging.handlers.RotatingFileHandler(
+    _handler = InodeAwareRotatingFileHandler(
         log_path,
         maxBytes=_MAX_BYTES,
         backupCount=_BACKUP_COUNT,
