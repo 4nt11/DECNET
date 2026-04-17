@@ -15,6 +15,15 @@ class BaseRepository(ABC):
         """Add a new log entry to the database."""
         pass
 
+    async def add_logs(self, log_entries: list[dict[str, Any]]) -> None:
+        """Bulk-insert log entries in a single transaction.
+
+        Default implementation falls back to per-row add_log; concrete
+        repositories should override for a real single-commit insert.
+        """
+        for _entry in log_entries:
+            await self.add_log(_entry)
+
     @abstractmethod
     async def get_logs(
         self,

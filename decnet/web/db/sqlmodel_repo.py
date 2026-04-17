@@ -145,7 +145,8 @@ class SQLModelRepository(BaseRepository):
 
     # ---------------------------------------------------------------- logs
 
-    async def add_log(self, log_data: dict[str, Any]) -> None:
+    @staticmethod
+    def _normalize_log_row(log_data: dict[str, Any]) -> dict[str, Any]:
         data = log_data.copy()
         if "fields" in data and isinstance(data["fields"], dict):
             data["fields"] = orjson.dumps(data["fields"]).decode()
@@ -156,9 +157,21 @@ class SQLModelRepository(BaseRepository):
                 )
             except ValueError:
                 pass
+        return data
 
+    async def add_log(self, log_data: dict[str, Any]) -> None:
+        data = self._normalize_log_row(log_data)
         async with self._session() as session:
             session.add(Log(**data))
+            await session.commit()
+
+    async def add_logs(self, log_entries: list[dict[str, Any]]) -> None:
+        """Bulk insert — one session, one commit for the whole batch."""
+        if not log_entries:
+            return
+        _rows = [Log(**self._normalize_log_row(e)) for e in log_entries]
+        async with self._session() as session:
+            session.add_all(_rows)
             await session.commit()
 
     def _apply_filters(

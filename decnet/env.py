@@ -77,6 +77,13 @@ DECNET_API_PORT: int = _port("DECNET_API_PORT", 8000)
 DECNET_JWT_SECRET: str = _require_env("DECNET_JWT_SECRET")
 DECNET_INGEST_LOG_FILE: str | None = os.environ.get("DECNET_INGEST_LOG_FILE", "/var/log/decnet/decnet.log")
 
+# Ingester batching: how many log rows to accumulate per commit, and the
+# max wait (ms) before flushing a partial batch. Larger batches reduce
+# SQLite write-lock contention; the timeout keeps latency bounded during
+# low-traffic periods.
+DECNET_BATCH_SIZE: int = int(os.environ.get("DECNET_BATCH_SIZE", "100"))
+DECNET_BATCH_MAX_WAIT_MS: int = int(os.environ.get("DECNET_BATCH_MAX_WAIT_MS", "250"))
+
 # Web Dashboard Options
 DECNET_WEB_HOST: str = os.environ.get("DECNET_WEB_HOST", "127.0.0.1")
 DECNET_WEB_PORT: int = _port("DECNET_WEB_PORT", 8080)
