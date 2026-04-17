@@ -9,7 +9,8 @@ OUT="${OUT:-profiles/memray-$(date +%s).bin}"
 mkdir -p "$(dirname "$OUT")"
 
 echo "Starting uvicorn under memray -> ${OUT}"
-python -m memray run -o "${OUT}" -m uvicorn decnet.web.api:app \
+python -m memray run --trace-python-allocators --follow-fork \
+    -o "${OUT}" -m uvicorn decnet.web.api:app \
     --host "${HOST}" --port "${PORT}" --log-level warning
 
 echo "Render with: memray flamegraph ${OUT}"
