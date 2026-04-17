@@ -18,7 +18,9 @@ def get_async_engine(db_path: str) -> AsyncEngine:
     max_overflow = int(os.environ.get("DECNET_DB_MAX_OVERFLOW", "40"))
 
     pool_recycle = int(os.environ.get("DECNET_DB_POOL_RECYCLE", "3600"))
-    pool_pre_ping = os.environ.get("DECNET_DB_POOL_PRE_PING", "true").lower() == "true"
+    # SQLite is a local file — dead-connection probes are pure overhead.
+    # Env var stays for network-mounted setups that still want it.
+    pool_pre_ping = os.environ.get("DECNET_DB_POOL_PRE_PING", "false").lower() == "true"
 
     engine = create_async_engine(
         f"{prefix}{db_path}",
