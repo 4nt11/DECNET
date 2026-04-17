@@ -56,8 +56,14 @@ async def setup_db(monkeypatch) -> AsyncGenerator[None, None]:
     # Reset per-request TTL caches so they don't leak across tests
     from decnet.web.router.health import api_get_health as _h
     from decnet.web.router.config import api_get_config as _c
+    from decnet.web.router.stats import api_get_stats as _s
+    from decnet.web.router.logs import api_get_logs as _l
+    from decnet.web.router.attackers import api_get_attackers as _a
     _h._reset_db_cache()
     _c._reset_state_cache()
+    _s._reset_stats_cache()
+    _l._reset_total_cache()
+    _a._reset_total_cache()
 
     # Create schema
     async with engine.begin() as conn:

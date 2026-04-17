@@ -1,3 +1,5 @@
+import asyncio
+import time
 from typing import Any, Optional
 
 from fastapi import APIRouter, Depends, Query
@@ -7,6 +9,36 @@ from decnet.web.dependencies import require_viewer, repo
 from decnet.web.db.models import AttackersResponse
 
 router = APIRouter()
+
+# Same pattern as /logs — cache the unfiltered total count; filtered
+# counts go straight to the DB.
+_TOTAL_TTL = 2.0
+_total_cache: tuple[Optional[int], float] = (None, 0.0)
+_total_lock: Optional[asyncio.Lock] = None
+
+
+def _reset_total_cache() -> None:
+    global _total_cache, _total_lock
+    _total_cache = (None, 0.0)
+    _total_lock = None
+
+
+async def _get_total_attackers_cached() -> int:
+    global _total_cache, _total_lock
+    value, ts = _total_cache
+    now = time.monotonic()
+    if value is not None and now - ts < _TOTAL_TTL:
+        return value
+    if _total_lock is None:
+        _total_lock = asyncio.Lock()
+    async with _total_lock:
+        value, ts = _total_cache
+        now = time.monotonic()
+        if value is not None and now - ts < _TOTAL_TTL:
+            return value
+        value = await repo.get_total_attackers()
+        _total_cache = (value, time.monotonic())
+        return value
 
 
 @router.get(
@@ -37,7 +69,10 @@ async def get_attackers(
     s = _norm(search)
     svc = _norm(service)
     _data = await repo.get_attackers(limit=limit, offset=offset, search=s, sort_by=sort_by, service=svc)
-    _total = await repo.get_total_attackers(search=s, service=svc)
+    if s is None and svc is None:
+        _total = await _get_total_attackers_cached()
+    else:
+        _total = await repo.get_total_attackers(search=s, service=svc)
 
     # Bulk-join behavior rows for the IPs in this page to avoid N+1 queries.
     _ips = {row["ip"] for row in _data if row.get("ip")}

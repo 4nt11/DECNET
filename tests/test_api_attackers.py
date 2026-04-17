@@ -15,6 +15,14 @@ import pytest
 from fastapi import HTTPException
 
 from decnet.web.auth import create_access_token
+from decnet.web.router.attackers.api_get_attackers import _reset_total_cache
+
+
+@pytest.fixture(autouse=True)
+def _reset_attackers_cache():
+    _reset_total_cache()
+    yield
+    _reset_total_cache()
 
 
 # ─── Helpers ──────────────────────────────────────────────────────────────────
