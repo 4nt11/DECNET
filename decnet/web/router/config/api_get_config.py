@@ -24,6 +24,9 @@ _state_locks: dict[str, asyncio.Lock] = {}
 def _reset_state_cache() -> None:
     """Reset cached config state — used by tests."""
     _state_cache.clear()
+    # Drop any locks bound to the previous event loop — reusing one from
+    # a dead loop deadlocks the next test.
+    _state_locks.clear()
 
 
 async def _get_state_cached(name: str) -> Optional[dict[str, Any]]:

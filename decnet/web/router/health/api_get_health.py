@@ -24,7 +24,9 @@ _DOCKER_CHECK_INTERVAL = 5.0  # seconds between actual Docker pings
 # repo.get_total_logs() and filling the aiosqlite queue.
 _db_component: Optional[ComponentHealth] = None
 _db_last_check: float = 0.0
-_db_lock = asyncio.Lock()
+# Lazy-init — an asyncio.Lock bound to a dead event loop deadlocks any
+# later test running under a fresh loop.  Create on first use.
+_db_lock: Optional[asyncio.Lock] = None
 _DB_CHECK_INTERVAL = 1.0  # seconds
 
 
@@ -39,16 +41,19 @@ def _reset_docker_cache() -> None:
 
 def _reset_db_cache() -> None:
     """Reset cached DB liveness — used by tests."""
-    global _db_component, _db_last_check
+    global _db_component, _db_last_check, _db_lock
     _db_component = None
     _db_last_check = 0.0
+    _db_lock = None
 
 
 async def _check_database_cached() -> ComponentHealth:
-    global _db_component, _db_last_check
+    global _db_component, _db_last_check, _db_lock
     now = time.monotonic()
     if _db_component is not None and now - _db_last_check < _DB_CHECK_INTERVAL:
         return _db_component
+    if _db_lock is None:
+        _db_lock = asyncio.Lock()
     async with _db_lock:
         now = time.monotonic()
         if _db_component is not None and now - _db_last_check < _DB_CHECK_INTERVAL:
