@@ -90,6 +90,7 @@ def api(
     import subprocess  # nosec B404
     import sys
     import os
+    import signal
 
     if daemon:
         log.info("API daemonizing host=%s port=%d workers=%d", host, port, workers)
@@ -101,10 +102,23 @@ def api(
     _env["DECNET_INGEST_LOG_FILE"] = str(log_file)
     _cmd = [sys.executable, "-m", "uvicorn", "decnet.web.api:app",
             "--host", host, "--port", str(port), "--workers", str(workers)]
+    # Put uvicorn (and its worker children) in their own process group so we
+    # can signal the whole tree on Ctrl+C. Without this, only the supervisor
+    # receives SIGINT from the terminal and worker children may survive and
+    # be respawned — the "forkbomb" ANTI hit during testing.
+    proc = subprocess.Popen(_cmd, env=_env, start_new_session=True)  # nosec B603 B404
     try:
-        subprocess.run(_cmd, env=_env)  # nosec B603 B404
+        proc.wait()
     except KeyboardInterrupt:
-        pass
+        try:
+            os.killpg(proc.pid, signal.SIGTERM)
+            try:
+                proc.wait(timeout=10)
+            except subprocess.TimeoutExpired:
+                os.killpg(proc.pid, signal.SIGKILL)
+                proc.wait()
+        except ProcessLookupError:
+            pass
     except (FileNotFoundError, subprocess.SubprocessError):
         console.print("[red]Failed to start API. Ensure 'uvicorn' is installed in the current environment.[/]")
 
