@@ -92,7 +92,7 @@ async def test_health_unhealthy_returns_503(client: httpx.AsyncClient, auth_toke
     with patch("decnet.web.api.get_background_tasks") as mock_tasks, \
          patch("docker.from_env") as mock_docker:
         tasks = _make_running_tasks()
-        tasks["ingestion_worker"] = None  # required worker down
+        tasks["ingestion_worker"] = None  # critical worker down
         mock_tasks.return_value = tasks
         mock_docker.return_value = MagicMock()
 
@@ -100,6 +100,37 @@ async def test_health_unhealthy_returns_503(client: httpx.AsyncClient, auth_toke
 
     assert resp.status_code == 503
     assert resp.json()["status"] == "unhealthy"
+
+
+@pytest.mark.anyio
+async def test_health_degraded_when_attacker_down(client: httpx.AsyncClient, auth_token: str) -> None:
+    with patch("decnet.web.api.get_background_tasks") as mock_tasks, \
+         patch("docker.from_env") as mock_docker:
+        tasks = _make_running_tasks()
+        tasks["attacker_worker"] = None  # non-critical
+        mock_tasks.return_value = tasks
+        mock_docker.return_value = MagicMock()
+
+        resp = await client.get("/api/v1/health", headers={"Authorization": f"Bearer {auth_token}"})
+
+    assert resp.status_code == 200
+    assert resp.json()["status"] == "degraded"
+    assert resp.json()["components"]["attacker_worker"]["status"] == "failing"
+
+
+@pytest.mark.anyio
+async def test_health_degraded_when_collector_down(client: httpx.AsyncClient, auth_token: str) -> None:
+    with patch("decnet.web.api.get_background_tasks") as mock_tasks, \
+         patch("docker.from_env") as mock_docker:
+        tasks = _make_running_tasks()
+        tasks["collector_worker"] = None  # non-critical
+        mock_tasks.return_value = tasks
+        mock_docker.return_value = MagicMock()
+
+        resp = await client.get("/api/v1/health", headers={"Authorization": f"Bearer {auth_token}"})
+
+    assert resp.status_code == 200
+    assert resp.json()["status"] == "degraded"
 
 
 @pytest.mark.anyio

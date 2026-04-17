@@ -11,7 +11,7 @@ from decnet.web.db.models import HealthResponse, ComponentHealth
 
 router = APIRouter()
 
-_OPTIONAL_SERVICES = {"sniffer_worker"}
+_CRITICAL_SERVICES = {"database", "docker", "ingestion_worker"}
 
 # Cache Docker client and health result to avoid hammering the Docker socket
 _docker_client: Optional[Any] = None
@@ -122,21 +122,26 @@ async def get_health(user: dict = Depends(require_viewer)) -> Any:
     else:
         components["docker"] = ComponentHealth(status="failing", detail=_docker_detail)
 
-    # Compute overall status
-    required_failing = any(
+    # Overall status tiers:
+    #   healthy    — every component ok
+    #   degraded   — only non-critical components failing (service usable,
+    #                falls back to cache or skips non-essential work)
+    #   unhealthy  — a critical component (db, docker, ingestion) failing;
+    #                survival depends on caches
+    critical_failing = any(
         c.status == "failing"
         for name, c in components.items()
-        if name not in _OPTIONAL_SERVICES
+        if name in _CRITICAL_SERVICES
     )
-    optional_failing = any(
+    noncritical_failing = any(
         c.status == "failing"
         for name, c in components.items()
-        if name in _OPTIONAL_SERVICES
+        if name not in _CRITICAL_SERVICES
     )
 
-    if required_failing:
+    if critical_failing:
         overall = "unhealthy"
-    elif optional_failing:
+    elif noncritical_failing:
         overall = "degraded"
     else:
         overall = "healthy"
