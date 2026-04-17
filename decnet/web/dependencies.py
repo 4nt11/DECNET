@@ -105,13 +105,26 @@ async def get_current_user_unchecked(request: Request) -> str:
 def require_role(*allowed_roles: str):
     """Factory that returns a FastAPI dependency enforcing role membership.
 
-    The returned dependency chains from ``get_current_user`` (JWT + must_change_password)
-    then verifies the user's role is in *allowed_roles*.  Returns the full user dict so
-    endpoints can inspect ``user["uuid"]``, ``user["role"]``, etc. without a second lookup.
+    Inlines JWT decode + user lookup + must_change_password + role check so the
+    user is only loaded from the DB once per request (not once in
+    ``get_current_user`` and again here).  Returns the full user dict so
+    endpoints can inspect ``user["uuid"]``, ``user["role"]``, etc.
     """
-    async def _check(current_user: str = Depends(get_current_user)) -> dict:
-        user = await repo.get_user_by_uuid(current_user)
-        if not user or user["role"] not in allowed_roles:
+    async def _check(request: Request) -> dict:
+        user_uuid = await _decode_token(request)
+        user = await repo.get_user_by_uuid(user_uuid)
+        if not user:
+            raise HTTPException(
+                status_code=status.HTTP_401_UNAUTHORIZED,
+                detail="Could not validate credentials",
+                headers={"WWW-Authenticate": "Bearer"},
+            )
+        if user.get("must_change_password"):
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="Password change required before accessing this resource",
+            )
+        if user["role"] not in allowed_roles:
             raise HTTPException(
                 status_code=status.HTTP_403_FORBIDDEN,
                 detail="Insufficient permissions",
