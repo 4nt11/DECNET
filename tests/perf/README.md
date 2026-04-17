@@ -67,6 +67,27 @@ Hunt leaks and allocation hot spots in the API / workers.
 memray flamegraph profiles/memray.bin
 ```
 
+## Viewing artifacts
+
+All profiling outputs land under `./profiles/`. Use the viewer wrapper to
+auto-pick the newest file and launch the right tool:
+
+```bash
+./scripts/profile/view.sh                   # newest artifact of any kind
+./scripts/profile/view.sh cprofile          # newest .prof -> snakeviz
+./scripts/profile/view.sh memray            # newest memray .bin -> flamegraph
+./scripts/profile/view.sh pyinstrument      # newest .html -> browser
+./scripts/profile/view.sh path/to/file      # explicit file
+
+# Memray view modes:
+VIEW=flamegraph ./scripts/profile/view.sh memray   # default
+VIEW=table      ./scripts/profile/view.sh memray
+VIEW=tree       ./scripts/profile/view.sh memray   # terminal
+VIEW=stats      ./scripts/profile/view.sh memray   # terminal summary
+VIEW=summary    ./scripts/profile/view.sh memray   # top allocators
+VIEW=leaks      ./scripts/profile/view.sh memray   # leak-filtered flamegraph
+```
+
 ## Load generation
 
 Pair any of the in-process lenses (2, 5) with Locust for realistic traffic:
