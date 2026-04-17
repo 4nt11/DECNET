@@ -59,11 +59,17 @@ async def setup_db(monkeypatch) -> AsyncGenerator[None, None]:
     from decnet.web.router.stats import api_get_stats as _s
     from decnet.web.router.logs import api_get_logs as _l
     from decnet.web.router.attackers import api_get_attackers as _a
+    from decnet.web.router.bounty import api_get_bounties as _b
+    from decnet.web.router.logs import api_get_histogram as _lh
+    from decnet.web.router.fleet import api_get_deckies as _d
     _h._reset_db_cache()
     _c._reset_state_cache()
     _s._reset_stats_cache()
     _l._reset_total_cache()
     _a._reset_total_cache()
+    _b._reset_bounty_cache()
+    _lh._reset_histogram_cache()
+    _d._reset_deckies_cache()
 
     # Create schema
     async with engine.begin() as conn:

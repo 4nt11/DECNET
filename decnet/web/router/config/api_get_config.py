@@ -16,7 +16,7 @@ _DEFAULT_MUTATION_INTERVAL = "30m"
 
 # Cache config_limits / config_globals reads — these change on rare admin
 # writes but get polled constantly by the UI and locust.
-_STATE_TTL = 1.0
+_STATE_TTL = 5.0
 _state_cache: dict[str, tuple[Optional[dict[str, Any]], float]] = {}
 _state_locks: dict[str, asyncio.Lock] = {}
 
