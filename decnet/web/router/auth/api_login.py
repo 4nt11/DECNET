@@ -6,8 +6,8 @@ from fastapi import APIRouter, HTTPException, status
 from decnet.telemetry import traced as _traced
 from decnet.web.auth import (
     ACCESS_TOKEN_EXPIRE_MINUTES,
+    averify_password,
     create_access_token,
-    verify_password,
 )
 from decnet.web.dependencies import repo
 from decnet.web.db.models import LoginRequest, Token
@@ -28,7 +28,7 @@ router = APIRouter()
 @_traced("api.login")
 async def login(request: LoginRequest) -> dict[str, Any]:
     _user: Optional[dict[str, Any]] = await repo.get_user_by_username(request.username)
-    if not _user or not verify_password(request.password, _user["password_hash"]):
+    if not _user or not await averify_password(request.password, _user["password_hash"]):
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Incorrect username or password",

@@ -4,6 +4,15 @@ from unittest.mock import AsyncMock, MagicMock, patch
 import httpx
 import pytest
 
+from decnet.web.router.health.api_get_health import _reset_docker_cache
+
+
+@pytest.fixture(autouse=True)
+def _clear_docker_cache():
+    _reset_docker_cache()
+    yield
+    _reset_docker_cache()
+
 
 @pytest.mark.anyio
 async def test_health_requires_auth(client: httpx.AsyncClient) -> None:

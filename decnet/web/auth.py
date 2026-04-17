@@ -1,3 +1,4 @@
+import asyncio
 from datetime import datetime, timedelta, timezone
 from typing import Optional, Any
 import jwt
@@ -22,6 +23,15 @@ def get_password_hash(password: str) -> str:
     _salt: bytes = bcrypt.gensalt(rounds=12)
     _hashed: bytes = bcrypt.hashpw(password.encode("utf-8")[:72], _salt)
     return _hashed.decode("utf-8")
+
+
+async def averify_password(plain_password: str, hashed_password: str) -> bool:
+    # bcrypt is CPU-bound and ~250ms/call; keep it off the event loop.
+    return await asyncio.to_thread(verify_password, plain_password, hashed_password)
+
+
+async def ahash_password(password: str) -> str:
+    return await asyncio.to_thread(get_password_hash, password)
 
 
 def create_access_token(data: dict[str, Any], expires_delta: Optional[timedelta] = None) -> str:

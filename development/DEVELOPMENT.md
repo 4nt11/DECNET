@@ -79,7 +79,7 @@
 
 ## Services & Realism
 
-- [ ] **HTTPS/TLS support** — Honeypots with SSL certificates.
+- [x] **HTTPS/TLS support** — Honeypots with SSL certificates.
 - [ ] **Fake Active Directory** — Convincing AD/LDAP emulation.
 - [ ] **Realistic web apps** — Fake WordPress, Grafana, and phpMyAdmin templates.
 - [ ] **OT/ICS profiles** — Expanded Modbus, DNP3, and BACnet support.
@@ -140,3 +140,9 @@
 - [x] **Strict Typing** — Project-wide enforcement of PEP 484 type hints.
 - [ ] **Plugin SDK docs** — Documentation for adding custom services.
 - [ ] **Config generator wizard** — `decnet wizard` for interactive setup.
+
+## API Improvements
+
+- [ ] Enable up to 250 concurrent users with close to zero performance degradation.
+- [ ] Enable up to 100 requests per second with close to zero performance degradation.
+

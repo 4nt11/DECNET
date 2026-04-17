@@ -3,7 +3,7 @@ import uuid as _uuid
 from fastapi import APIRouter, Depends, HTTPException
 
 from decnet.telemetry import traced as _traced
-from decnet.web.auth import get_password_hash
+from decnet.web.auth import ahash_password
 from decnet.web.dependencies import require_admin, repo
 from decnet.web.db.models import (
     CreateUserRequest,
@@ -39,7 +39,7 @@ async def api_create_user(
     await repo.create_user({
         "uuid": user_uuid,
         "username": req.username,
-        "password_hash": get_password_hash(req.password),
+        "password_hash": await ahash_password(req.password),
         "role": req.role,
         "must_change_password": True,  # nosec B105 — not a password
     })
@@ -125,7 +125,7 @@ async def api_reset_user_password(
 
     await repo.update_user_password(
         user_uuid,
-        get_password_hash(req.new_password),
+        await ahash_password(req.new_password),
         must_change_password=True,
     )
     return {"message": "Password reset successfully"}

@@ -508,6 +508,10 @@ DECNET_WEB_HOST=0.0.0.0
 DECNET_WEB_PORT=8080
 DECNET_ADMIN_USER=admin
 DECNET_ADMIN_PASSWORD=admin
+
+# Database pool tuning (applies to both SQLite and MySQL)
+DECNET_DB_POOL_SIZE=20       # base pool connections (default: 20)
+DECNET_DB_MAX_OVERFLOW=40    # extra connections under burst (default: 40)
 ```
 
 Copy `.env.example` to `.env.local` and modify it to suit your environment.
@@ -675,6 +679,57 @@ The test suite covers:
 | `test_cli_service_pool.py` | CLI service resolution |
 
 Every new feature requires passing tests before merging.
+
+### Stress Testing
+
+A [Locust](https://locust.io)-based stress test suite lives in `tests/stress/`. It hammers every API endpoint with realistic traffic patterns to find throughput ceilings and latency degradation.
+
+```bash
+# Run via pytest (starts its own server)
+pytest -m stress tests/stress/ -v -x -n0 -s
+
+# Crank it up
+STRESS_USERS=2000 STRESS_SPAWN_RATE=200 STRESS_DURATION=120 pytest -m stress tests/stress/ -v -x -n0 -s
+
+# Standalone Locust web UI against a running server
+locust -f tests/stress/locustfile.py --host http://localhost:8000
+```
+
+| Env var | Default | Description |
+|---|---|---|
+| `STRESS_USERS` | `500` | Total simulated users |
+| `STRESS_SPAWN_RATE` | `50` | Users spawned per second |
+| `STRESS_DURATION` | `60` | Test duration in seconds |
+| `STRESS_WORKERS` | CPU count (max 4) | Uvicorn workers for the test server |
+| `STRESS_MIN_RPS` | `500` | Minimum RPS to pass baseline test |
+| `STRESS_MAX_P99_MS` | `200` | Maximum p99 latency (ms) to pass |
+| `STRESS_SPIKE_USERS` | `1000` | Users for thundering herd test |
+| `STRESS_SUSTAINED_USERS` | `200` | Users for sustained load test |
+
+#### System tuning: open file limit
+
+Under heavy load (500+ concurrent users), the server will exhaust the default Linux open file limit (`ulimit -n`), causing `OSError: [Errno 24] Too many open files`. Most distros default to **1024**, which is far too low for stress testing or production use.
+
+**Before running stress tests:**
+
+```bash
+# Check current limit
+ulimit -n
+
+# Bump for this shell session
+ulimit -n 65536
+```
+
+**Permanent fix** — add to `/etc/security/limits.conf`:
+
+```
+*  soft  nofile  65536
+*  hard  nofile  65536
+```
+
+Or for systemd-managed services, add `LimitNOFILE=65536` to the unit file.
+
+> This applies to production deployments too — any server handling hundreds of concurrent connections needs a raised file descriptor limit.
 
 # AI Disclosure
 
