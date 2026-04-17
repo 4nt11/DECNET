@@ -102,8 +102,8 @@ async def get_health(user: dict = Depends(require_viewer)) -> Any:
             import docker
 
             if _docker_client is None:
-                _docker_client = docker.from_env()
-            _docker_client.ping()
+                _docker_client = await asyncio.to_thread(docker.from_env)
+            await asyncio.to_thread(_docker_client.ping)
             _docker_healthy = True
             _docker_detail = ""
         except Exception as exc:
