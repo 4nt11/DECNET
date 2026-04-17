@@ -1,5 +1,6 @@
-import json
 import asyncio
+
+import orjson
 from typing import AsyncGenerator, Optional
 
 from fastapi import APIRouter, Depends, Query, Request
@@ -87,8 +88,8 @@ async def stream_events(
             yield ": keepalive\n\n"  # flush headers immediately
 
             # Emit pre-fetched initial snapshot — no DB calls in generator until the loop
-            yield f"event: message\ndata: {json.dumps({'type': 'stats', 'data': _initial_stats})}\n\n"
-            yield f"event: message\ndata: {json.dumps({'type': 'histogram', 'data': _initial_histogram})}\n\n"
+            yield f"event: message\ndata: {orjson.dumps({'type': 'stats', 'data': _initial_stats}).decode()}\n\n"
+            yield f"event: message\ndata: {orjson.dumps({'type': 'histogram', 'data': _initial_histogram}).decode()}\n\n"
 
             while True:
                 if DECNET_DEVELOPER and max_output is not None:
@@ -114,17 +115,17 @@ async def stream_events(
                         "sse.emit_logs", links=_links,
                         attributes={"log_count": len(new_logs)},
                     ):
-                        yield f"event: message\ndata: {json.dumps({'type': 'logs', 'data': new_logs})}\n\n"
+                        yield f"event: message\ndata: {orjson.dumps({'type': 'logs', 'data': new_logs}).decode()}\n\n"
                     loops_since_stats = stats_interval_sec
 
                 if loops_since_stats >= stats_interval_sec:
                     stats = await repo.get_stats_summary()
-                    yield f"event: message\ndata: {json.dumps({'type': 'stats', 'data': stats})}\n\n"
+                    yield f"event: message\ndata: {orjson.dumps({'type': 'stats', 'data': stats}).decode()}\n\n"
                     histogram = await repo.get_log_histogram(
                         search=search, start_time=start_time,
                         end_time=end_time, interval_minutes=15,
                     )
-                    yield f"event: message\ndata: {json.dumps({'type': 'histogram', 'data': histogram})}\n\n"
+                    yield f"event: message\ndata: {orjson.dumps({'type': 'histogram', 'data': histogram}).decode()}\n\n"
                     loops_since_stats = 0
 
                 loops_since_stats += 1
@@ -134,7 +135,7 @@ async def stream_events(
             pass
         except Exception:
             log.exception("SSE stream error for user %s", last_event_id)
-            yield f"event: error\ndata: {json.dumps({'type': 'error', 'message': 'Stream interrupted'})}\n\n"
+            yield f"event: error\ndata: {orjson.dumps({'type': 'error', 'message': 'Stream interrupted'}).decode()}\n\n"
 
     return StreamingResponse(
         event_generator(),

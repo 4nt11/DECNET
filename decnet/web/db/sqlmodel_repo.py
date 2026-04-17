@@ -13,6 +13,8 @@ from __future__ import annotations
 
 import asyncio
 import json
+
+import orjson
 import uuid
 from datetime import datetime, timezone
 from typing import Any, Optional, List
@@ -146,7 +148,7 @@ class SQLModelRepository(BaseRepository):
     async def add_log(self, log_data: dict[str, Any]) -> None:
         data = log_data.copy()
         if "fields" in data and isinstance(data["fields"], dict):
-            data["fields"] = json.dumps(data["fields"])
+            data["fields"] = orjson.dumps(data["fields"]).decode()
         if "timestamp" in data and isinstance(data["timestamp"], str):
             try:
                 data["timestamp"] = datetime.fromisoformat(
@@ -391,7 +393,7 @@ class SQLModelRepository(BaseRepository):
     async def add_bounty(self, bounty_data: dict[str, Any]) -> None:
         data = bounty_data.copy()
         if "payload" in data and isinstance(data["payload"], dict):
-            data["payload"] = json.dumps(data["payload"])
+            data["payload"] = orjson.dumps(data["payload"]).decode()
 
         async with self._session() as session:
             dup = await session.execute(
@@ -478,7 +480,7 @@ class SQLModelRepository(BaseRepository):
             result = await session.execute(statement)
             state = result.scalar_one_or_none()
 
-            value_json = json.dumps(value)
+            value_json = orjson.dumps(value).decode()
             if state:
                 state.value = value_json
                 session.add(state)

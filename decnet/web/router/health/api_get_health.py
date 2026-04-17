@@ -3,7 +3,7 @@ import time
 from typing import Any, Optional
 
 from fastapi import APIRouter, Depends
-from fastapi.responses import JSONResponse
+from fastapi.responses import ORJSONResponse
 
 from decnet.telemetry import traced as _traced
 from decnet.web.dependencies import require_viewer, repo
@@ -138,4 +138,4 @@ async def get_health(user: dict = Depends(require_viewer)) -> Any:
 
     result = HealthResponse(status=overall, components=components)
     status_code = 503 if overall == "unhealthy" else 200
-    return JSONResponse(content=result.model_dump(), status_code=status_code)
+    return ORJSONResponse(content=result.model_dump(), status_code=status_code)
