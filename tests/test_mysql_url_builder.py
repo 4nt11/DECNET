@@ -14,7 +14,7 @@ def test_build_url_defaults(monkeypatch):
         monkeypatch.delenv(v, raising=False)
     # PYTEST_* is set by pytest itself, so empty password is allowed here.
     url = build_mysql_url()
-    assert url == "mysql+aiomysql://decnet:@localhost:3306/decnet"
+    assert url == "mysql+asyncmy://decnet:@localhost:3306/decnet"
 
 
 def test_build_url_from_env(monkeypatch):
@@ -24,7 +24,7 @@ def test_build_url_from_env(monkeypatch):
     monkeypatch.setenv("DECNET_DB_USER", "svc_decnet")
     monkeypatch.setenv("DECNET_DB_PASSWORD", "hunter2")
     url = build_mysql_url()
-    assert url == "mysql+aiomysql://svc_decnet:hunter2@db.internal:3307/decnet_prod"
+    assert url == "mysql+asyncmy://svc_decnet:hunter2@db.internal:3307/decnet_prod"
 
 
 def test_build_url_percent_encodes_password(monkeypatch):
@@ -33,7 +33,7 @@ def test_build_url_percent_encodes_password(monkeypatch):
     url = build_mysql_url(user="u", host="h", port=3306, database="d")
     # @ → %40, : → %3A, / → %2F, # → %23, ! → %21
     assert "p%40ss%3Aword%2F%21%23" in url
-    assert url.startswith("mysql+aiomysql://u:")
+    assert url.startswith("mysql+asyncmy://u:")
     assert url.endswith("@h:3306/d")
 
 
@@ -42,18 +42,18 @@ def test_build_url_component_args_override_env(monkeypatch):
     monkeypatch.setenv("DECNET_DB_PASSWORD", "env-pw")
     url = build_mysql_url(host="arg.host", user="arg-user", password="arg-pw",
                           port=9999, database="arg-db")
-    assert url == "mysql+aiomysql://arg-user:arg-pw@arg.host:9999/arg-db"
+    assert url == "mysql+asyncmy://arg-user:arg-pw@arg.host:9999/arg-db"
 
 
 def test_resolve_url_prefers_explicit_arg(monkeypatch):
-    monkeypatch.setenv("DECNET_DB_URL", "mysql+aiomysql://env-url/x")
-    assert resolve_url("mysql+aiomysql://explicit/y") == "mysql+aiomysql://explicit/y"
+    monkeypatch.setenv("DECNET_DB_URL", "mysql+asyncmy://env-url/x")
+    assert resolve_url("mysql+asyncmy://explicit/y") == "mysql+asyncmy://explicit/y"
 
 
 def test_resolve_url_uses_env_url_before_components(monkeypatch):
-    monkeypatch.setenv("DECNET_DB_URL", "mysql+aiomysql://env-user:env-pw@env-host/env-db")
+    monkeypatch.setenv("DECNET_DB_URL", "mysql+asyncmy://env-user:env-pw@env-host/env-db")
     monkeypatch.setenv("DECNET_DB_HOST", "ignored.host")
-    assert resolve_url() == "mysql+aiomysql://env-user:env-pw@env-host/env-db"
+    assert resolve_url() == "mysql+asyncmy://env-user:env-pw@env-host/env-db"
 
 
 def test_resolve_url_falls_back_to_components(monkeypatch):
@@ -62,7 +62,7 @@ def test_resolve_url_falls_back_to_components(monkeypatch):
     monkeypatch.setenv("DECNET_DB_PASSWORD", "pw")
     url = resolve_url()
     assert "fallback.host" in url
-    assert url.startswith("mysql+aiomysql://")
+    assert url.startswith("mysql+asyncmy://")
 
 
 def test_build_url_requires_password_outside_pytest(monkeypatch):
