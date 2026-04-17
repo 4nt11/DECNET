@@ -53,6 +53,12 @@ async def setup_db(monkeypatch) -> AsyncGenerator[None, None]:
     monkeypatch.setattr(repo, "engine", engine)
     monkeypatch.setattr(repo, "session_factory", session_factory)
 
+    # Reset per-request TTL caches so they don't leak across tests
+    from decnet.web.router.health import api_get_health as _h
+    from decnet.web.router.config import api_get_config as _c
+    _h._reset_db_cache()
+    _c._reset_state_cache()
+
     # Create schema
     async with engine.begin() as conn:
         await conn.run_sync(SQLModel.metadata.create_all)

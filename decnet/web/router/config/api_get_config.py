@@ -1,3 +1,7 @@
+import asyncio
+import time
+from typing import Any, Optional
+
 from fastapi import APIRouter, Depends
 
 from decnet.env import DECNET_DEVELOPER
@@ -10,6 +14,33 @@ router = APIRouter()
 _DEFAULT_DEPLOYMENT_LIMIT = 10
 _DEFAULT_MUTATION_INTERVAL = "30m"
 
+# Cache config_limits / config_globals reads — these change on rare admin
+# writes but get polled constantly by the UI and locust.
+_STATE_TTL = 1.0
+_state_cache: dict[str, tuple[Optional[dict[str, Any]], float]] = {}
+_state_locks: dict[str, asyncio.Lock] = {}
+
+
+def _reset_state_cache() -> None:
+    """Reset cached config state — used by tests."""
+    _state_cache.clear()
+
+
+async def _get_state_cached(name: str) -> Optional[dict[str, Any]]:
+    entry = _state_cache.get(name)
+    now = time.monotonic()
+    if entry is not None and now - entry[1] < _STATE_TTL:
+        return entry[0]
+    lock = _state_locks.setdefault(name, asyncio.Lock())
+    async with lock:
+        entry = _state_cache.get(name)
+        now = time.monotonic()
+        if entry is not None and now - entry[1] < _STATE_TTL:
+            return entry[0]
+        value = await repo.get_state(name)
+        _state_cache[name] = (value, time.monotonic())
+        return value
+
 
 @router.get(
     "/config",
@@ -21,8 +52,8 @@ _DEFAULT_MUTATION_INTERVAL = "30m"
 )
 @_traced("api.get_config")
 async def api_get_config(user: dict = Depends(require_viewer)) -> dict:
-    limits_state = await repo.get_state("config_limits")
-    globals_state = await repo.get_state("config_globals")
+    limits_state = await _get_state_cached("config_limits")
+    globals_state = await _get_state_cached("config_globals")
 
     deployment_limit = (
         limits_state.get("deployment_limit", _DEFAULT_DEPLOYMENT_LIMIT)

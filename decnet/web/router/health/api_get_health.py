@@ -1,3 +1,4 @@
+import asyncio
 import time
 from typing import Any, Optional
 
@@ -19,6 +20,13 @@ _docker_detail: str = ""
 _docker_last_check: float = 0.0
 _DOCKER_CHECK_INTERVAL = 5.0  # seconds between actual Docker pings
 
+# Cache DB liveness result — under load, every request was hitting
+# repo.get_total_logs() and filling the aiosqlite queue.
+_db_component: Optional[ComponentHealth] = None
+_db_last_check: float = 0.0
+_db_lock = asyncio.Lock()
+_DB_CHECK_INTERVAL = 1.0  # seconds
+
 
 def _reset_docker_cache() -> None:
     """Reset cached Docker state — used by tests."""
@@ -27,6 +35,31 @@ def _reset_docker_cache() -> None:
     _docker_healthy = False
     _docker_detail = ""
     _docker_last_check = 0.0
+
+
+def _reset_db_cache() -> None:
+    """Reset cached DB liveness — used by tests."""
+    global _db_component, _db_last_check
+    _db_component = None
+    _db_last_check = 0.0
+
+
+async def _check_database_cached() -> ComponentHealth:
+    global _db_component, _db_last_check
+    now = time.monotonic()
+    if _db_component is not None and now - _db_last_check < _DB_CHECK_INTERVAL:
+        return _db_component
+    async with _db_lock:
+        now = time.monotonic()
+        if _db_component is not None and now - _db_last_check < _DB_CHECK_INTERVAL:
+            return _db_component
+        try:
+            await repo.get_total_logs()
+            _db_component = ComponentHealth(status="ok")
+        except Exception as exc:
+            _db_component = ComponentHealth(status="failing", detail=str(exc))
+        _db_last_check = time.monotonic()
+        return _db_component
 
 
 @router.get(
@@ -43,12 +76,8 @@ def _reset_docker_cache() -> None:
 async def get_health(user: dict = Depends(require_viewer)) -> Any:
     components: dict[str, ComponentHealth] = {}
 
-    # 1. Database
-    try:
-        await repo.get_total_logs()
-        components["database"] = ComponentHealth(status="ok")
-    except Exception as exc:
-        components["database"] = ComponentHealth(status="failing", detail=str(exc))
+    # 1. Database (cached — avoids a DB round-trip per request)
+    components["database"] = await _check_database_cached()
 
     # 2. Background workers
     from decnet.web.api import get_background_tasks
