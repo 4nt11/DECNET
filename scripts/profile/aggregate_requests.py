@@ -57,7 +57,7 @@ def _is_synthetic(identifier: str) -> bool:
     return identifier in _SYNTHETIC or identifier.startswith(("[self]", "[await]"))
 
 
-def walk_self_time(frame: dict, acc: dict[str, float], parent_ident: str | None = None) -> None:
+def walk_self_time(frame: dict | None, acc: dict[str, float], parent_ident: str | None = None) -> None:
     """
     Accumulate self-time by frame identifier.
 
@@ -65,7 +65,11 @@ def walk_self_time(frame: dict, acc: dict[str, float], parent_ident: str | None 
     execution time. Rolling them into their parent ("self-time of X" vs. a
     global `[self]` bucket) is what gives us actionable per-function hotspots.
     """
-    ident = frame["identifier"]
+    if not frame:
+        return
+    ident = frame.get("identifier")
+    if not ident:
+        return
     total = frame.get("time", 0.0)
     children = frame.get("children") or []
     child_total = sum(c.get("time", 0.0) for c in children)
