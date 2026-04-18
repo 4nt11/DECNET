@@ -148,6 +148,26 @@ def test_entrypoint_creates_named_pipe():
     assert "mkfifo" in _entrypoint_text()
 
 
+def test_entrypoint_relay_pipe_path_is_disguised():
+    ep = _entrypoint_text()
+    # Pipe lives under /run/systemd/journal/, not the obvious /var/run/decnet-logs.
+    assert "/run/systemd/journal/syslog-relay" in ep
+    assert "decnet-logs" not in ep
+
+
+def test_entrypoint_cat_relay_is_cloaked():
+    ep = _entrypoint_text()
+    # `cat` is invoked via exec -a so ps shows systemd-journal-fwd.
+    assert "systemd-journal-fwd" in ep
+    assert "exec -a" in ep
+
+
+def test_dockerfile_rsyslog_uses_disguised_pipe():
+    df = _dockerfile_text()
+    assert "/run/systemd/journal/syslog-relay" in df
+    assert "decnet-logs" not in df
+
+
 def test_entrypoint_starts_rsyslogd():
     assert "rsyslogd" in _entrypoint_text()
 

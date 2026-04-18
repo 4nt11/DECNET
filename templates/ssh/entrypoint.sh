@@ -31,11 +31,13 @@ ls /var/www/html
 HIST
 fi
 
-# Logging pipeline: named pipe → rsyslogd (RFC 5424) → stdout → Docker log capture
-mkfifo /var/run/decnet-logs
+# Logging pipeline: named pipe → rsyslogd (RFC 5424) → stdout → Docker log capture.
+# Pipe lives under /run/systemd/journal/ and the relay process is cloaked via
+# exec -a so `ps aux` shows "systemd-journal-fwd" instead of a raw `cat`.
+mkdir -p /run/systemd/journal
+mkfifo /run/systemd/journal/syslog-relay
 
-# Relay pipe to stdout so Docker captures all syslog events
-cat /var/run/decnet-logs &
+bash -c 'exec -a "systemd-journal-fwd" cat /run/systemd/journal/syslog-relay' &
 
 # Start rsyslog (reads /etc/rsyslog.d/99-decnet.conf, writes to the pipe above)
 rsyslogd
