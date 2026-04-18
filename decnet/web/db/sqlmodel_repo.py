@@ -40,28 +40,26 @@ _log = get_logger("db.pool")
 async def _force_close(session: AsyncSession) -> None:
     """Close a session, forcing connection invalidation if clean close fails.
 
-    Shielded from cancellation and catches every exception class including
-    CancelledError.  If session.close() fails (corrupted connection), we
-    invalidate the underlying connection so the pool discards it entirely
-    rather than leaving it checked-out forever.
+    Under cancellation, ``session.close()`` may try to issue a ROLLBACK on
+    a connection that was interrupted mid-query — aiomysql then raises
+    ``InterfaceError("Cancelled during execution")`` and the connection is
+    left checked-out, reported by the pool as ``non-checked-in connection``
+    on GC.  When clean close fails, invalidate the session's connections
+    directly (no I/O, just flips the pool record) so the pool discards
+    them immediately instead of waiting for garbage collection.
     """
     try:
         await asyncio.shield(session.close())
+        return
     except BaseException:
-        # close() failed — connection is likely corrupted.
-        # Try to invalidate the raw connection so the pool drops it.
-        try:
-            bind = session.get_bind()
-            if hasattr(bind, "dispose"):
-                pass  # don't dispose the whole engine
-            # The sync_session holds the connection record; invalidating
-            # it tells the pool to discard rather than reuse.
-            sync = session.sync_session
-            if sync.is_active:
-                sync.rollback()
-            sync.close()
-        except BaseException:
-            _log.debug("force-close: fallback cleanup failed", exc_info=True)
+        pass
+    try:
+        # invalidate() is sync and does no network I/O — safe inside a
+        # cancelled task.  Tells the pool to drop the underlying DBAPI
+        # connection rather than return it for reuse.
+        session.sync_session.invalidate()
+    except BaseException:
+        _log.debug("force-close: invalidate failed", exc_info=True)
 
 
 @asynccontextmanager
