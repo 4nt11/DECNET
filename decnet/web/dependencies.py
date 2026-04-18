@@ -3,7 +3,7 @@ import time
 from typing import Any, Optional
 
 import jwt
-from fastapi import Depends, HTTPException, status, Request
+from fastapi import HTTPException, status, Request
 from fastapi.security import OAuth2PasswordBearer
 
 from decnet.web.auth import ALGORITHM, SECRET_KEY

@@ -63,7 +63,6 @@ def _configure_logging(dev: bool) -> None:
     all microservice daemons — which redirect stderr to /dev/null — still
     produce readable logs.  File handler is skipped under pytest.
     """
-    import logging.handlers as _lh
     from decnet.logging.inode_aware_handler import InodeAwareRotatingFileHandler
 
     root = logging.getLogger()
