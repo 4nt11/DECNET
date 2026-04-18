@@ -45,7 +45,8 @@ rsyslogd
 # File-catcher: mirror attacker drops into host-mounted quarantine with attribution.
 # Script lives at /usr/libexec/udev/journal-relay so `ps aux` shows a
 # plausible udev helper. See Dockerfile for the rename rationale.
-CAPTURE_DIR=/var/lib/systemd/coredump /usr/libexec/udev/journal-relay &
+CAPTURE_DIR=/var/lib/systemd/coredump \
+    bash -c 'exec -a "journal-relay" bash /usr/libexec/udev/journal-relay' &
 
 # sshd logs via syslog — no -e flag, so auth events flow through rsyslog → pipe → stdout
 exec /usr/sbin/sshd -D
