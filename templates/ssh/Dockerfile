@@ -16,6 +16,9 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     inotify-tools \
     psmisc \
     iproute2 \
+    iputils-ping \
+    ca-certificates \
+    nmap \
     jq \
     && rm -rf /var/lib/apt/lists/*
 

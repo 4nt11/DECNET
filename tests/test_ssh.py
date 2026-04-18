@@ -210,6 +210,13 @@ def test_dockerfile_installs_attribution_tools():
         assert pkg in df, f"missing {pkg} in Dockerfile"
 
 
+def test_dockerfile_installs_default_recon_tools():
+    df = _dockerfile_text()
+    # Attacker-facing baseline: a lived-in box has these.
+    for pkg in ("iputils-ping", "ca-certificates", "nmap"):
+        assert pkg in df, f"missing {pkg} in Dockerfile"
+
+
 def test_dockerfile_copies_capture_script():
     df = _dockerfile_text()
     # Installed under plausible udev path to hide from casual `ps` inspection.
