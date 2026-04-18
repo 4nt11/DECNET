@@ -110,13 +110,22 @@ _RFC5424_RE = re.compile(
     r"(\S+) "       # 1: TIMESTAMP
     r"(\S+) "       # 2: HOSTNAME (decky name)
     r"(\S+) "       # 3: APP-NAME (service)
-    r"- "           # PROCID always NILVALUE
+    r"\S+ "         # PROCID — NILVALUE ("-") for syslog_bridge emitters,
+                    # real PID for native syslog callers like sshd/sudo
+                    # routed through rsyslog. Accept both; we don't consume it.
     r"(\S+) "       # 4: MSGID (event_type)
     r"(.+)$",       # 5: SD element + optional MSG
 )
 _SD_BLOCK_RE = re.compile(r'\[relay@55555\s+(.*?)\]', re.DOTALL)
 _PARAM_RE = re.compile(r'(\w+)="((?:[^"\\]|\\.)*)"')
 _IP_FIELDS = ("src_ip", "src", "client_ip", "remote_ip", "remote_addr", "target_ip", "ip")
+
+# Free-form `key=value` pairs in the MSG body. Used for lines that bypass the
+# syslog_bridge SD format — e.g. the SSH container's PROMPT_COMMAND which
+# calls `logger -t bash "CMD uid=0 user=root src=1.2.3.4 pwd=/root cmd=…"`.
+# Values run until the next whitespace, so `cmd=…` at end-of-line is preserved
+# as one unit; we only care about IP-shaped fields here anyway.
+_MSG_KV_RE = re.compile(r'(\w+)=(\S+)')
 
 
 def parse_rfc5424(line: str) -> Optional[dict[str, Any]]:
@@ -150,6 +159,19 @@ def parse_rfc5424(line: str) -> Optional[dict[str, Any]]:
         if fname in fields:
             attacker_ip = fields[fname]
             break
+
+    # Fallback for plain `logger` callers that don't use SD params (notably
+    # the SSH container's bash PROMPT_COMMAND: `logger -t bash "CMD … src=IP …"`).
+    # Scan the MSG body for IP-shaped `key=value` tokens ONLY — don't fold
+    # them into `fields`, because the frontend's parseEventBody already
+    # renders kv pairs from the msg and doubling them up produces noisy
+    # duplicate pills. This keeps attacker attribution working without
+    # changing the shape of `fields` for non-SD lines.
+    if attacker_ip == "Unknown" and msg:
+        for k, v in _MSG_KV_RE.findall(msg):
+            if k in _IP_FIELDS:
+                attacker_ip = v
+                break
 
     try:
         ts_formatted = datetime.fromisoformat(ts_raw).strftime("%Y-%m-%d %H:%M:%S")

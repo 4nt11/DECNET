@@ -79,6 +79,48 @@ class TestParseRfc5424:
         result = parse_rfc5424(line)
         assert result["attacker_ip"] == "Unknown"
 
+    def test_parses_line_with_real_procid(self):
+        """sshd/sudo log via native syslog, so rsyslog fills PROCID with the
+        real PID instead of NILVALUE. The parser must accept either form."""
+        line = (
+            "<38>1 2026-04-18T08:27:21.862365+00:00 omega-decky sshd 940 - - "
+            "Accepted password for root from 192.168.1.5 port 43210 ssh2"
+        )
+        result = parse_rfc5424(line)
+        assert result is not None
+        assert result["decky"] == "omega-decky"
+        assert result["service"] == "sshd"
+        assert "Accepted password" in result["msg"]
+        assert result["attacker_ip"] == "Unknown"  # no key=value in this msg
+
+    def test_extracts_attacker_ip_from_msg_body_kv(self):
+        """SSH container's bash PROMPT_COMMAND uses `logger -t bash "CMD ... src=IP ..."`
+        which produces an RFC 5424 line with NILVALUE SD — the IP lives in the
+        free-form msg, not in SD params. The collector should still pick it up."""
+        line = (
+            "<134>1 2024-01-15T12:00:00+00:00 decky-01 bash - - - "
+            "CMD uid=0 user=root src=198.51.100.7 pwd=/root cmd=ls -la"
+        )
+        result = parse_rfc5424(line)
+        assert result is not None
+        assert result["attacker_ip"] == "198.51.100.7"
+        # `fields` stays empty — the frontend's parseEventBody renders kv
+        # pairs straight from msg; we don't want duplicate pills.
+        assert result["fields"] == {}
+        assert "CMD uid=0" in result["msg"]
+
+    def test_sd_ip_wins_over_msg_body(self):
+        """If SD params carry an IP, the msg-body fallback must not overwrite it."""
+        line = (
+            '<134>1 2024-01-15T12:00:00+00:00 decky-01 ssh - login '
+            '[relay@55555 src_ip="1.2.3.4"] rogue src=9.9.9.9 entry'
+        )
+        result = parse_rfc5424(line)
+        assert result["attacker_ip"] == "1.2.3.4"
+        # SD wins; `src=` from msg isn't folded into fields (msg retains it).
+        assert result["fields"]["src_ip"] == "1.2.3.4"
+        assert "src" not in result["fields"]
+
     def test_parses_msg(self):
         line = self._make_line(msg="hello world")
         result = parse_rfc5424(line)
