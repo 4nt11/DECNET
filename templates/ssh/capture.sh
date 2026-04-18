@@ -1,36 +1,28 @@
 #!/bin/bash
-# SSH honeypot file-catcher.
+# systemd-journal relay helper: mirrors newly-written files under a
+# monitored set of paths into the coredump staging directory and emits
+# a structured journal line per event.
 #
-# `lastpipe` runs the tail of `inotify | while` in the current shell, so
-# `ps aux` shows one bash instead of two. Job control must be off for
-# lastpipe to apply — non-interactive scripts already have it off.
+# `lastpipe` runs the tail of `inotify | while` in the current shell so
+# the process tree stays flat (one bash, not two). Job control must be
+# off for lastpipe to apply — non-interactive scripts already have it off.
 shopt -s lastpipe
 set +m
-#
-# Watches attacker-writable paths with inotifywait. On close_write/moved_to,
-# copies the file to the host-mounted quarantine dir, writes a .meta.json
-# with attacker attribution, and emits an RFC 5424 syslog line.
-#
-# Attribution chain (strongest → weakest):
-#   pid-chain : fuser/lsof finds writer PID → walk PPid to sshd session
-#               → cross-ref with `ss` to get src_ip/src_port
-#   utmp-only : writer PID gone (scp exited); fall back to `who --ips`
-#   unknown   : no live session at all (unlikely under real attack)
 
 set -u
 
 CAPTURE_DIR="${CAPTURE_DIR:-/var/lib/systemd/coredump}"
 CAPTURE_MAX_BYTES="${CAPTURE_MAX_BYTES:-52428800}"  # 50 MiB
 CAPTURE_WATCH_PATHS="${CAPTURE_WATCH_PATHS:-/root /tmp /var/tmp /home /var/www /opt /dev/shm}"
-# Invoke inotifywait through a plausible-looking symlink so ps output doesn't
-# out the honeypot. Falls back to the real binary if the symlink is missing.
+# Invoke inotifywait through the udev-sided symlink; fall back to the real
+# binary if the symlink is missing.
 INOTIFY_BIN="${INOTIFY_BIN:-/usr/libexec/udev/kmsg-watch}"
 [ -x "$INOTIFY_BIN" ] || INOTIFY_BIN="$(command -v inotifywait)"
 
 mkdir -p "$CAPTURE_DIR"
 chmod 700 "$CAPTURE_DIR"
 
-# Filenames we never capture (noise from container boot / attacker-irrelevant).
+# Filenames we never capture (boot noise, self-writes).
 _is_ignored_path() {
     local p="$1"
     case "$p" in
@@ -257,7 +249,7 @@ _capture_one() {
 # so /proc/PID/cmdline shows only "kmsg-watch" — the watch paths and flags
 # never make it to `ps aux`.
 # shellcheck disable=SC2086
-LD_PRELOAD=/usr/lib/argv_zap.so "$INOTIFY_BIN" -m -r -q \
+ARGV_ZAP_COMM=kmsg-watch LD_PRELOAD=/usr/lib/argv_zap.so "$INOTIFY_BIN" -m -r -q \
     --event close_write --event moved_to \
     --format '%w%f' \
     $CAPTURE_WATCH_PATHS 2>/dev/null \

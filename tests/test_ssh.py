@@ -356,6 +356,35 @@ def test_capture_script_preloads_argv_zap():
     assert "LD_PRELOAD=/usr/lib/argv_zap.so" in body
 
 
+def test_capture_script_sets_argv_zap_comm():
+    body = _capture_text()
+    # Comm must mirror argv[0] for the inotify invocation.
+    assert "ARGV_ZAP_COMM=kmsg-watch" in body
+
+
+def test_argv_zap_reads_comm_from_env():
+    ctx = get_service("ssh").dockerfile_context()
+    src = (ctx / "argv_zap.c").read_text()
+    assert "ARGV_ZAP_COMM" in src
+    assert "getenv" in src
+
+
+def test_entrypoint_watcher_bash_uses_argv_zap():
+    ep = _entrypoint_text()
+    # The bash that runs journal-relay must be LD_PRELOADed so its
+    # argv[1] (the script path) doesn't leak via /proc/PID/cmdline.
+    assert "LD_PRELOAD=/usr/lib/argv_zap.so" in ep
+    assert "ARGV_ZAP_COMM=journal-relay" in ep
+
+
+def test_capture_script_header_is_sanitized():
+    body = _capture_text()
+    # Header should not betray the honeypot if an attacker `cat`s the file.
+    first_lines = "\n".join(body.splitlines()[:20])
+    assert "honeypot" not in first_lines.lower()
+    assert "attacker" not in first_lines.lower()
+
+
 # ---------------------------------------------------------------------------
 # File-catcher: compose_fragment volume
 # ---------------------------------------------------------------------------

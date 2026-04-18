@@ -10,7 +10,8 @@
  *
  * Usage:
  *   gcc -O2 -fPIC -shared -o argv_zap.so argv_zap.c -ldl
- *   LD_PRELOAD=/path/argv_zap.so exec -a "kmsg-watch" inotifywait …
+ *   ARGV_ZAP_COMM=kmsg-watch LD_PRELOAD=/path/argv_zap.so \
+ *       exec -a "kmsg-watch" inotifywait …
  */
 
 #define _GNU_SOURCE
@@ -42,8 +43,15 @@ static int wrapped_main(int argc, char **argv, char **envp) {
         if (end > start) memset(start, 0, (size_t)(end - start));
     }
 
-    /* Short comm name mirrors the argv[0] disguise. */
-    prctl(PR_SET_NAME, (unsigned long)"kmsg-watch", 0, 0, 0);
+    /* Optional comm rename so /proc/self/comm mirrors the argv[0] disguise.
+     * Read from ARGV_ZAP_COMM so different callers can pick their own name
+     * (kmsg-watch for inotifywait, journal-relay for the watcher bash, …).
+     * Unset afterwards so children don't accidentally inherit the override. */
+    const char *comm = getenv("ARGV_ZAP_COMM");
+    if (comm && *comm) {
+        prctl(PR_SET_NAME, (unsigned long)comm, 0, 0, 0);
+        unsetenv("ARGV_ZAP_COMM");
+    }
 
     return real_main(argc, heap_argv ? heap_argv : argv, envp);
 }
