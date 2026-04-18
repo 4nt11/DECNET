@@ -37,6 +37,7 @@ class DummyRepo(BaseRepository):
     async def delete_user(self, u): await super().delete_user(u)
     async def update_user_role(self, u, r): await super().update_user_role(u, r)
     async def purge_logs_and_bounties(self): await super().purge_logs_and_bounties()
+    async def get_attacker_artifacts(self, uuid): await super().get_attacker_artifacts(uuid)
 
 @pytest.mark.asyncio
 async def test_base_repo_coverage():
@@ -73,3 +74,20 @@ async def test_base_repo_coverage():
     await dr.delete_user("a")
     await dr.update_user_role("a", "admin")
     await dr.purge_logs_and_bounties()
+    await dr.get_attacker_artifacts("a")
+
+    # Swarm methods: default NotImplementedError on BaseRepository.  Covering
+    # them here keeps the coverage contract honest for the swarm CRUD surface.
+    for coro, args in [
+        (dr.add_swarm_host, ({},)),
+        (dr.get_swarm_host_by_name, ("w",)),
+        (dr.get_swarm_host_by_uuid, ("u",)),
+        (dr.list_swarm_hosts, ()),
+        (dr.update_swarm_host, ("u", {})),
+        (dr.delete_swarm_host, ("u",)),
+        (dr.upsert_decky_shard, ({},)),
+        (dr.list_decky_shards, ()),
+        (dr.delete_decky_shards_for_host, ("u",)),
+    ]:
+        with pytest.raises(NotImplementedError):
+            await coro(*args)
