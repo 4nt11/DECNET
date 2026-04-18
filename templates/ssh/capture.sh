@@ -1,6 +1,12 @@
 #!/bin/bash
 # SSH honeypot file-catcher.
 #
+# `lastpipe` runs the tail of `inotify | while` in the current shell, so
+# `ps aux` shows one bash instead of two. Job control must be off for
+# lastpipe to apply — non-interactive scripts already have it off.
+shopt -s lastpipe
+set +m
+#
 # Watches attacker-writable paths with inotifywait. On close_write/moved_to,
 # copies the file to the host-mounted quarantine dir, writes a .meta.json
 # with attacker attribution, and emits an RFC 5424 syslog line.
