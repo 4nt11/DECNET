@@ -18,7 +18,7 @@ from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 
 from decnet.logging import get_logger
-from decnet.network import HOST_MACVLAN_IFACE
+from decnet.network import HOST_IPVLAN_IFACE, HOST_MACVLAN_IFACE
 from decnet.sniffer.fingerprint import SnifferEngine
 from decnet.sniffer.syslog import write_event
 from decnet.telemetry import traced as _traced
@@ -119,7 +119,23 @@ async def sniffer_worker(log_file: str) -> None:
     cleanly. The API continues running regardless of sniffer state.
     """
     try:
-        interface = os.environ.get("DECNET_SNIFFER_IFACE", HOST_MACVLAN_IFACE)
+        # Interface selection: explicit env override wins, otherwise probe
+        # both the MACVLAN and IPvlan host-side names since the driver
+        # choice is per-deploy (--ipvlan flag).
+        env_iface = os.environ.get("DECNET_SNIFFER_IFACE")
+        if env_iface:
+            interface = env_iface
+        elif _interface_exists(HOST_MACVLAN_IFACE):
+            interface = HOST_MACVLAN_IFACE
+        elif _interface_exists(HOST_IPVLAN_IFACE):
+            interface = HOST_IPVLAN_IFACE
+        else:
+            logger.warning(
+                "sniffer: neither %s nor %s found — sniffer disabled "
+                "(fleet may not be deployed yet)",
+                HOST_MACVLAN_IFACE, HOST_IPVLAN_IFACE,
+            )
+            return
 
         if not _interface_exists(interface):
             logger.warning(
