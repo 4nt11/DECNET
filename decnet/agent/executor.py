@@ -21,7 +21,10 @@ log = get_logger("agent.executor")
 async def deploy(config: DecnetConfig, dry_run: bool = False, no_cache: bool = False) -> None:
     """Run the blocking deployer off-loop. The deployer itself calls
     save_state() internally once the compose file is materialised."""
-    log.info("agent.deploy name=%s deckies=%d", config.name, len(config.deckies))
+    log.info(
+        "agent.deploy mode=%s deckies=%d interface=%s",
+        config.mode, len(config.deckies), config.interface,
+    )
     await asyncio.to_thread(_deployer.deploy, config, dry_run, no_cache, False)
 
 
@@ -39,7 +42,7 @@ async def status() -> dict[str, Any]:
     config, _compose_path = state
     return {
         "deployed": True,
-        "name": getattr(config, "name", None),
+        "mode": config.mode,
         "compose_path": str(_compose_path),
         "deckies": [d.model_dump() for d in config.deckies],
     }

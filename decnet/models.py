@@ -99,6 +99,9 @@ class DeckyConfig(BaseModel):
     mutate_interval: int | None = None  # automatic rotation interval in minutes
     last_mutated: float = 0.0     # timestamp of last mutation
     last_login_attempt: float = 0.0 # timestamp of most recent interaction
+    # SWARM: the SwarmHost.uuid that runs this decky. None in unihost mode
+    # so existing state files deserialize unchanged.
+    host_uuid: str | None = None
 
     @field_validator("services")
     @classmethod
