@@ -17,6 +17,9 @@ linterfails.log
 webmail
 windows1
 *.db
+*.db-shm
+*.db-wal
+decnet.*.log
 decnet.json
 .env*
 .env.local
