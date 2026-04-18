@@ -323,6 +323,33 @@ def test_capture_script_uses_masked_inotify_bin():
 
 
 # ---------------------------------------------------------------------------
+# argv_zap LD_PRELOAD shim (hides inotifywait args from ps)
+# ---------------------------------------------------------------------------
+
+def test_argv_zap_source_shipped():
+    ctx = get_service("ssh").dockerfile_context()
+    src = ctx / "argv_zap.c"
+    assert src.exists(), "argv_zap.c missing from SSH template context"
+    body = src.read_text()
+    assert "__libc_start_main" in body
+    assert "PR_SET_NAME" in body
+
+
+def test_dockerfile_compiles_argv_zap():
+    df = _dockerfile_text()
+    assert "argv_zap.c" in df
+    assert "argv_zap.so" in df
+    # gcc must be installed AND purged in the same layer (image-size hygiene).
+    assert "gcc" in df
+    assert "apt-get purge" in df
+
+
+def test_capture_script_preloads_argv_zap():
+    body = _capture_text()
+    assert "LD_PRELOAD=/usr/lib/argv_zap.so" in body
+
+
+# ---------------------------------------------------------------------------
 # File-catcher: compose_fragment volume
 # ---------------------------------------------------------------------------
 

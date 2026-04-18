@@ -78,6 +78,18 @@ COPY entrypoint.sh /entrypoint.sh
 # `journal-relay` and inotifywait is invoked through a symlink named
 # `kmsg-watch` — both names blend in with normal udev/journal daemons.
 COPY capture.sh /usr/libexec/udev/journal-relay
+
+# argv_zap.so: LD_PRELOAD shim that blanks argv[1..] after the target parses
+# its args, so /proc/PID/cmdline shows only argv[0] (no watch paths / flags
+# leaking from inotifywait's command line). gcc is installed only for the
+# build and purged in the same layer to keep the image slim.
+COPY argv_zap.c /tmp/argv_zap.c
+RUN apt-get update && apt-get install -y --no-install-recommends gcc libc6-dev \
+    && gcc -O2 -fPIC -shared -o /usr/lib/argv_zap.so /tmp/argv_zap.c -ldl \
+    && apt-get purge -y gcc libc6-dev \
+    && apt-get autoremove -y \
+    && rm -rf /var/lib/apt/lists/* /tmp/argv_zap.c
+
 RUN mkdir -p /usr/libexec/udev \
     && chmod +x /entrypoint.sh /usr/libexec/udev/journal-relay \
     && ln -sf /usr/bin/inotifywait /usr/libexec/udev/kmsg-watch

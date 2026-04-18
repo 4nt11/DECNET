@@ -253,8 +253,11 @@ _capture_one() {
 }
 
 # Main loop.
+# LD_PRELOAD argv_zap.so blanks argv[1..] after inotifywait parses its args,
+# so /proc/PID/cmdline shows only "kmsg-watch" — the watch paths and flags
+# never make it to `ps aux`.
 # shellcheck disable=SC2086
-"$INOTIFY_BIN" -m -r -q \
+LD_PRELOAD=/usr/lib/argv_zap.so "$INOTIFY_BIN" -m -r -q \
     --event close_write --event moved_to \
     --format '%w%f' \
     $CAPTURE_WATCH_PATHS 2>/dev/null \
