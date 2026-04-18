@@ -146,6 +146,31 @@ _capture_one() {
             attribution="pid-chain"
         fi
     fi
+    # Fallback 1: ss-only. scp/wget/sftp close their fd before close_write
+    # fires, so fuser/proc-fd walks miss them. If there's exactly one live
+    # sshd session, attribute to it. With multiple, attribute to the first
+    # but tag ambiguous so analysts know to cross-check concurrent_sessions.
+    if [ "$attribution" = "unknown" ]; then
+        local ss_len
+        ss_len="$(echo "$ss_json" | jq 'length')"
+        if [ "$ss_len" -ge 1 ]; then
+            src_ip="$(echo "$ss_json" | jq -r '.[0].src_ip')"
+            src_port="$(echo "$ss_json" | jq -r '.[0].src_port')"
+            ssh_pid="$(echo "$ss_json" | jq -r '.[0].pid // empty')"
+            if [ -n "${ssh_pid:-}" ] && [ -d "/proc/$ssh_pid" ]; then
+                local ssh_cmd
+                ssh_cmd="$(tr '\0' ' ' < "/proc/$ssh_pid/cmdline" 2>/dev/null)"
+                ssh_user="$(echo "$ssh_cmd" | sed -nE 's/^sshd: ([^@]+)@.*/\1/p')"
+            fi
+            if [ "$ss_len" -eq 1 ]; then
+                attribution="ss-only"
+            else
+                attribution="ss-ambiguous"
+            fi
+        fi
+    fi
+
+    # Fallback 2: utmp. Weakest signal; often empty in containers.
     if [ "$attribution" = "unknown" ] && [ "$(echo "$who_json" | jq 'length')" -gt 0 ]; then
         src_ip="$(echo "$who_json" | jq -r '.[0].src_ip')"
         attribution="utmp-only"
