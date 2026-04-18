@@ -73,13 +73,14 @@ decnet = "decnet.cli:app"
 [tool.pytest.ini_options]
 asyncio_mode = "auto"
 asyncio_debug = "true"
-addopts = "-m 'not fuzz and not live and not stress and not bench' -v -q -x -n logical --dist loadscope"
+addopts = "-m 'not fuzz and not live and not stress and not bench and not docker' -v -q -x -n logical --dist loadscope"
 markers = [
     "fuzz: hypothesis-based fuzz tests (slow, run with -m fuzz or -m '' for all)",
     "live: live subprocess service tests (run with -m live)",
     "live_docker: live Docker container tests (requires DECNET_LIVE_DOCKER=1)",
     "stress: locust-based stress tests (run with -m stress)",
     "bench: pytest-benchmark micro-benchmarks (run with -m bench)",
+    "docker: tests that build and run docker images (run with -m docker)",
 ]
 filterwarnings = [
     "ignore::pytest.PytestUnhandledThreadExceptionWarning",

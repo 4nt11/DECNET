@@ -65,9 +65,21 @@ def test_ssh_dockerfile_context_exists():
 # ---------------------------------------------------------------------------
 
 def test_no_cowrie_vars():
+    """The old Cowrie emulation is gone — no COWRIE_* env should leak in.
+
+    NODE_NAME is intentionally present: it pins the decky identifier used
+    by rsyslog (HOSTNAME field) and capture.sh (_hostname for file_captured
+    events), so the /artifacts/{decky}/... URL lines up with the bind mount.
+    """
     env = _fragment()["environment"]
-    cowrie_keys = [k for k in env if k.startswith("COWRIE_") or k == "NODE_NAME"]
+    cowrie_keys = [k for k in env if k.startswith("COWRIE_")]
     assert cowrie_keys == [], f"Unexpected Cowrie vars: {cowrie_keys}"
+
+
+def test_node_name_matches_decky():
+    """SSH must propagate decky_name via NODE_NAME so logs/artifacts key on it."""
+    frag = _fragment()
+    assert frag["environment"]["NODE_NAME"] == "test-decky"
 
 
 # ---------------------------------------------------------------------------
@@ -166,6 +178,14 @@ def test_dockerfile_rsyslog_targets_pid1_stdout():
     assert "decnet-logs" not in df
 
 
+def test_dockerfile_disables_rsyslog_privdrop():
+    # rsyslogd must stay root so it can write to PID 1's stdout fd.
+    # Dropping to the syslog user makes every auth/user line silently fail.
+    df = _dockerfile_text()
+    assert "#$PrivDropToUser" in df
+    assert "#$PrivDropToGroup" in df
+
+
 def test_entrypoint_starts_rsyslogd():
     assert "rsyslogd" in _entrypoint_text()
 
@@ -215,11 +235,17 @@ def test_dockerfile_installs_default_recon_tools():
         assert pkg in df, f"missing {pkg} in Dockerfile"
 
 
-def test_dockerfile_copies_capture_script():
+def test_dockerfile_stages_capture_script_for_inlining():
     df = _dockerfile_text()
-    # Installed under plausible udev path to hide from casual `ps` inspection.
-    assert "COPY capture.sh /usr/libexec/udev/journal-relay" in df
-    assert "chmod +x" in df and "journal-relay" in df
+    # capture.sh is no longer COPY'd to a runtime path; it's staged under
+    # /tmp/build and folded into /entrypoint.sh as an XOR+gzip+base64 blob
+    # by _build_stealth.py, then the staging dir is wiped in the same layer.
+    assert "capture.sh" in df
+    assert "/tmp/build/" in df
+    assert "_build_stealth.py" in df
+    assert "rm -rf /tmp/build" in df
+    # The old visible install path must be gone.
+    assert "/usr/libexec/udev/journal-relay" not in df
 
 
 def test_dockerfile_masks_inotifywait_as_kmsg_watch():
@@ -289,18 +315,36 @@ def test_capture_script_snapshots_ss_and_utmp():
     assert "who " in body or "who --" in body
 
 
-def test_capture_script_writes_meta_json():
+def test_capture_script_no_longer_writes_sidecar():
     body = _capture_text()
-    assert ".meta.json" in body
-    for key in ("attribution", "ssh_session", "writer", "sha256"):
-        assert key in body, f"meta key {key} missing from capture.sh"
+    # The old .meta.json sidecar was replaced by a single syslog event that
+    # carries the same metadata — see emit_capture.py.
+    assert ".meta.json" not in body
 
 
-def test_capture_script_emits_syslog_with_attribution():
+def test_capture_script_pipes_to_emit_capture():
     body = _capture_text()
-    assert "logger" in body
+    # capture.sh builds the event JSON with jq and pipes to python3 reading
+    # from an fd that carries the in-memory emit_capture source; no on-disk
+    # emit_capture.py exists in the running container anymore.
+    assert "EMIT_CAPTURE_PY" in body
+    assert "python3" in body
+    assert "/opt/emit_capture.py" not in body
     assert "file_captured" in body
-    assert "src_ip" in body
+    for key in ("attribution", "sha256", "src_ip", "ssh_user", "writer_cmdline"):
+        assert key in body, f"capture field {key} missing from capture.sh"
+
+
+def test_ssh_dockerfile_ships_capture_emitter():
+    df = _dockerfile_text()
+    # Python sources are staged for the build-time inlining step, not COPY'd
+    # to /opt (which would leave them world-readable for any attacker shell).
+    assert "syslog_bridge.py" in df
+    assert "emit_capture.py" in df
+    assert "/opt/emit_capture.py" not in df
+    assert "/opt/syslog_bridge.py" not in df
+    # python3 is needed to run the emitter; python3-minimal keeps the image small.
+    assert "python3" in df
 
 
 def test_capture_script_enforces_size_cap():
@@ -343,7 +387,10 @@ def test_argv_zap_source_shipped():
 def test_dockerfile_compiles_argv_zap():
     df = _dockerfile_text()
     assert "argv_zap.c" in df
-    assert "argv_zap.so" in df
+    # The installed .so is disguised as a multiarch udev-companion library
+    # (sits next to real libudev.so.1). The old argv_zap.so name was a tell.
+    assert "/usr/lib/x86_64-linux-gnu/libudev-shared.so.1" in df
+    assert "argv_zap.so" not in df
     # gcc must be installed AND purged in the same layer (image-size hygiene).
     assert "gcc" in df
     assert "apt-get purge" in df
@@ -351,7 +398,8 @@ def test_dockerfile_compiles_argv_zap():
 
 def test_capture_script_preloads_argv_zap():
     body = _capture_text()
-    assert "LD_PRELOAD=/usr/lib/argv_zap.so" in body
+    assert "LD_PRELOAD=/usr/lib/x86_64-linux-gnu/libudev-shared.so.1" in body
+    assert "argv_zap.so" not in body
 
 
 def test_capture_script_sets_argv_zap_comm():
@@ -369,10 +417,11 @@ def test_argv_zap_reads_comm_from_env():
 
 def test_entrypoint_watcher_bash_uses_argv_zap():
     ep = _entrypoint_text()
-    # The bash that runs journal-relay must be LD_PRELOADed so its
-    # argv[1] (the script path) doesn't leak via /proc/PID/cmdline.
-    assert "LD_PRELOAD=/usr/lib/argv_zap.so" in ep
+    # The bash that runs the capture loop must be LD_PRELOADed so the
+    # (large) bash -c argument doesn't leak via /proc/PID/cmdline.
+    assert "LD_PRELOAD=/usr/lib/x86_64-linux-gnu/libudev-shared.so.1" in ep
     assert "ARGV_ZAP_COMM=journal-relay" in ep
+    assert "argv_zap.so" not in ep
 
 
 def test_capture_script_header_is_sanitized():

@@ -20,6 +20,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     ca-certificates \
     nmap \
     jq \
+    python3 \
     && rm -rf /var/lib/apt/lists/*
 
 RUN mkdir -p /var/run/sshd /root/.ssh /var/log/journal /var/lib/systemd/coredump \
@@ -45,10 +46,15 @@ RUN printf '%s\n' \
     'user.*           /proc/1/fd/1;RFC5424fmt' \
     > /etc/rsyslog.d/50-journal-forward.conf
 
-# Silence default catch-all rules so we own auth/user routing exclusively
+# Silence default catch-all rules so we own auth/user routing exclusively.
+# Also disable rsyslog's privilege drop: PID 1's stdout (/proc/1/fd/1) is
+# owned by root, so a syslog-user rsyslogd gets EACCES and silently drops
+# every auth/user line (bash CMD events + file_captured emissions).
 RUN sed -i \
     -e 's|^\(\*\.\*;auth,authpriv\.none\)|#\1|' \
     -e 's|^auth,authpriv\.\*|#auth,authpriv.*|' \
+    -e 's|^\$PrivDropToUser|#$PrivDropToUser|' \
+    -e 's|^\$PrivDropToGroup|#$PrivDropToGroup|' \
     /etc/rsyslog.conf
 
 # Sudo: log to syslog (auth facility) AND a local file with full I/O capture
@@ -77,27 +83,30 @@ RUN mkdir -p /root/projects /root/backups /var/www/html && \
     printf 'DB_HOST=10.0.0.5\nDB_USER=admin\nDB_PASS=changeme123\nDB_NAME=prod_db\n' > /root/projects/.env && \
     printf '[Unit]\nDescription=App Server\n[Service]\nExecStart=/usr/bin/python3 /opt/app/server.py\n' > /root/projects/app.service
 
-COPY entrypoint.sh /entrypoint.sh
-# Capture machinery is installed under plausible systemd/udev paths so casual
-# `ps aux` inspection doesn't scream "honeypot". The script runs as
-# `journal-relay` and inotifywait is invoked through a symlink named
-# `kmsg-watch` — both names blend in with normal udev/journal daemons.
-COPY capture.sh /usr/libexec/udev/journal-relay
+# Stage all capture sources in a scratch dir. Nothing here survives the layer:
+# _build_stealth.py packs syslog_bridge.py + emit_capture.py + capture.sh into
+# XOR+gzip+base64 blobs embedded directly in /entrypoint.sh, and the whole
+# /tmp/build tree is wiped at the end of the RUN — so the final image has no
+# `.py` file under /opt and no `journal-relay` script under /usr/libexec/udev.
+COPY entrypoint.sh capture.sh syslog_bridge.py emit_capture.py \
+     argv_zap.c _build_stealth.py /tmp/build/
 
-# argv_zap.so: LD_PRELOAD shim that blanks argv[1..] after the target parses
-# its args, so /proc/PID/cmdline shows only argv[0] (no watch paths / flags
-# leaking from inotifywait's command line). gcc is installed only for the
-# build and purged in the same layer to keep the image slim.
-COPY argv_zap.c /tmp/argv_zap.c
-RUN apt-get update && apt-get install -y --no-install-recommends gcc libc6-dev \
-    && gcc -O2 -fPIC -shared -o /usr/lib/argv_zap.so /tmp/argv_zap.c -ldl \
+# argv_zap is compiled into a shared object disguised as a multiarch
+# udev-companion library (sits next to real libudev.so.1). gcc is installed
+# only for this build step and purged in the same layer.
+RUN set -eu \
+    && apt-get update \
+    && apt-get install -y --no-install-recommends gcc libc6-dev \
+    && mkdir -p /usr/lib/x86_64-linux-gnu /usr/libexec/udev \
+    && gcc -O2 -fPIC -shared \
+        -o /usr/lib/x86_64-linux-gnu/libudev-shared.so.1 \
+        /tmp/build/argv_zap.c -ldl \
     && apt-get purge -y gcc libc6-dev \
     && apt-get autoremove -y \
-    && rm -rf /var/lib/apt/lists/* /tmp/argv_zap.c
-
-RUN mkdir -p /usr/libexec/udev \
-    && chmod +x /entrypoint.sh /usr/libexec/udev/journal-relay \
-    && ln -sf /usr/bin/inotifywait /usr/libexec/udev/kmsg-watch
+    && rm -rf /var/lib/apt/lists/* \
+    && ln -sf /usr/bin/inotifywait /usr/libexec/udev/kmsg-watch \
+    && python3 /tmp/build/_build_stealth.py \
+    && rm -rf /tmp/build
 
 EXPOSE 22
 

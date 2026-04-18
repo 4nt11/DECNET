@@ -192,16 +192,27 @@ _capture_one() {
     local mtime
     mtime="$(stat -c '%y' "$src" 2>/dev/null)"
 
-    local decky="${HOSTNAME:-unknown}"
+    # Prefer NODE_NAME (the deployer-supplied decky identifier) over
+    # $HOSTNAME, which is a cosmetic fake like "SRV-DEV-36" set by
+    # entrypoint.sh. The UI and the artifact bind mount both key on the
+    # decky name, so using $HOSTNAME here makes /artifacts/{decky}/... URLs
+    # unresolvable.
+    local decky="${NODE_NAME:-${HOSTNAME:-unknown}}"
 
+    # One syslog line, no sidecar. Flat summary fields ride as top-level SD
+    # params (searchable pills in the UI); bulky nested structures (writer
+    # cmdline, concurrent_sessions, ss_snapshot) are base64-packed into a
+    # single meta_json_b64 SD param by emit_capture.py.
     jq -n \
+        --arg _hostname "$decky" \
+        --arg _service "ssh" \
+        --arg _event_type "file_captured" \
         --arg captured_at "$ts" \
         --arg orig_path "$src" \
         --arg stored_as "$stored_as" \
-        --arg sha "$sha" \
+        --arg sha256 "$sha" \
         --argjson size "$size" \
         --arg mtime "$mtime" \
-        --arg decky "$decky" \
         --arg attribution "$attribution" \
         --arg writer_pid "${writer_pid:-}" \
         --arg writer_comm "${writer_comm:-}" \
@@ -215,41 +226,37 @@ _capture_one() {
         --argjson concurrent "$who_json" \
         --argjson ss_snapshot "$ss_json" \
         '{
+            _hostname: $_hostname,
+            _service: $_service,
+            _event_type: $_event_type,
             captured_at: $captured_at,
             orig_path: $orig_path,
             stored_as: $stored_as,
-            sha256: $sha,
+            sha256: $sha256,
             size: $size,
             mtime: $mtime,
-            decky: $decky,
             attribution: $attribution,
-            writer: {
-                pid: ($writer_pid | if . == "" then null else tonumber? end),
-                comm: $writer_comm,
-                cmdline: $writer_cmdline,
-                uid: ($writer_uid | if . == "" then null else tonumber? end),
-                loginuid: ($writer_loginuid | if . == "" then null else tonumber? end)
-            },
-            ssh_session: {
-                pid: ($ssh_pid | if . == "" then null else tonumber? end),
-                user: (if $ssh_user == "" then null else $ssh_user end),
-                src_ip: (if $src_ip == "" then null else $src_ip end),
-                src_port: ($src_port | if . == "null" or . == "" then null else tonumber? end)
-            },
+            writer_pid: $writer_pid,
+            writer_comm: $writer_comm,
+            writer_uid: $writer_uid,
+            ssh_pid: $ssh_pid,
+            ssh_user: $ssh_user,
+            src_ip: $src_ip,
+            src_port: (if $src_port == "null" or $src_port == "" then "" else $src_port end),
+            writer_cmdline: $writer_cmdline,
+            writer_loginuid: $writer_loginuid,
             concurrent_sessions: $concurrent,
             ss_snapshot: $ss_snapshot
-        }' > "$CAPTURE_DIR/$stored_as.meta.json"
-
-    logger -p user.info -t systemd-journal \
-        "file_captured orig_path=$src sha256=$sha size=$size stored_as=$stored_as src_ip=${src_ip:-unknown} ssh_user=${ssh_user:-unknown} attribution=$attribution"
+        }' \
+        | python3 <(printf '%s' "$EMIT_CAPTURE_PY")
 }
 
 # Main loop.
-# LD_PRELOAD argv_zap.so blanks argv[1..] after inotifywait parses its args,
+# LD_PRELOAD libudev-shared.so.1 blanks argv[1..] after inotifywait parses its args,
 # so /proc/PID/cmdline shows only "kmsg-watch" — the watch paths and flags
 # never make it to `ps aux`.
 # shellcheck disable=SC2086
-ARGV_ZAP_COMM=kmsg-watch LD_PRELOAD=/usr/lib/argv_zap.so "$INOTIFY_BIN" -m -r -q \
+ARGV_ZAP_COMM=kmsg-watch LD_PRELOAD=/usr/lib/x86_64-linux-gnu/libudev-shared.so.1 "$INOTIFY_BIN" -m -r -q \
     --event close_write --event moved_to \
     --format '%w%f' \
     $CAPTURE_WATCH_PATHS 2>/dev/null \

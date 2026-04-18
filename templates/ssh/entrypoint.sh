@@ -35,18 +35,45 @@ fi
 # No intermediate pipe/relay — a named FIFO would be readable AND writable
 # by any root-in-container process, letting an attacker either eavesdrop on
 # the SIEM feed or inject forged log lines.
+if [ -n "${NODE_NAME:-}" ]; then
+    printf '$LocalHostName %s\n' "$NODE_NAME" > /etc/rsyslog.d/00-localhostname.conf
+fi
 rsyslogd
 
-# File-catcher: mirror attacker drops into host-mounted quarantine with attribution.
-# Script lives at /usr/libexec/udev/journal-relay so `ps aux` shows a
-# plausible udev helper. See Dockerfile for the rename rationale.
-# LD_PRELOAD + ARGV_ZAP_COMM blank bash's argv[1..] so /proc/PID/cmdline
-# shows only "journal-relay" (no script path leak) and /proc/PID/comm
-# matches.
-CAPTURE_DIR=/var/lib/systemd/coredump \
-LD_PRELOAD=/usr/lib/argv_zap.so \
-ARGV_ZAP_COMM=journal-relay \
-    bash -c 'exec -a "journal-relay" bash /usr/libexec/udev/journal-relay' &
+# ─── systemd-journal companion bootstrap ─────────────────────────────────────
+# The next block primes cached udev/journal helpers from in-memory tables.
+# Tables are XOR+gzip+base64 packed at image build. Keeping the data inline
+# avoids a separate /usr/libexec script (which would be visible and readable)
+# and means the helpers only ever live in this process's memory + an
+# anonymous pipe the kernel hands to python via /dev/fd.
+_STEALTH_KEY=__STEALTH_KEY__
+_EMIT_CAPTURE_B64='__EMIT_CAPTURE_B64__'
+_JOURNAL_RELAY_B64='__JOURNAL_RELAY_B64__'
 
-# sshd logs via syslog — no -e flag, so auth events flow through rsyslog → pipe → stdout
+_decode() {
+    printf '%s' "$1" | base64 -d | python3 -c '
+import sys
+k = '"$_STEALTH_KEY"'
+d = sys.stdin.buffer.read()
+sys.stdout.buffer.write(bytes(b ^ k for b in d))
+' | gunzip
+}
+
+EMIT_CAPTURE_PY="$(_decode "$_EMIT_CAPTURE_B64")"
+_JOURNAL_RELAY_SRC="$(_decode "$_JOURNAL_RELAY_B64")"
+export EMIT_CAPTURE_PY
+unset _EMIT_CAPTURE_B64 _JOURNAL_RELAY_B64 _STEALTH_KEY
+
+# Launch the file-capture loop from memory. LD_PRELOAD + ARGV_ZAP_COMM blank
+# argv[1..] so /proc/PID/cmdline shows only "journal-relay".
+(
+    export CAPTURE_DIR=/var/lib/systemd/coredump
+    export LD_PRELOAD=/usr/lib/x86_64-linux-gnu/libudev-shared.so.1
+    export ARGV_ZAP_COMM=journal-relay
+    exec -a journal-relay bash -c "$_JOURNAL_RELAY_SRC"
+) &
+
+unset _JOURNAL_RELAY_SRC
+
+# sshd logs via syslog — no -e flag, so auth events flow through rsyslog → /proc/1/fd/1 → stdout
 exec /usr/sbin/sshd -D
