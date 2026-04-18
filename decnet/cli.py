@@ -125,6 +125,64 @@ def api(
 
 
 @app.command()
+def swarmctl(
+    port: int = typer.Option(8770, "--port", help="Port for the swarm controller"),
+    host: str = typer.Option("127.0.0.1", "--host", help="Bind address for the swarm controller"),
+    daemon: bool = typer.Option(False, "--daemon", "-d", help="Detach to background as a daemon process"),
+) -> None:
+    """Run the DECNET SWARM controller (master-side, separate process from `decnet api`)."""
+    import subprocess  # nosec B404
+    import sys
+    import os
+    import signal
+
+    if daemon:
+        log.info("swarmctl daemonizing host=%s port=%d", host, port)
+        _daemonize()
+
+    log.info("swarmctl command invoked host=%s port=%d", host, port)
+    console.print(f"[green]Starting DECNET SWARM controller on {host}:{port}...[/]")
+    _cmd = [sys.executable, "-m", "uvicorn", "decnet.web.swarm_api:app",
+            "--host", host, "--port", str(port)]
+    try:
+        proc = subprocess.Popen(_cmd, start_new_session=True)  # nosec B603 B404
+        try:
+            proc.wait()
+        except KeyboardInterrupt:
+            try:
+                os.killpg(proc.pid, signal.SIGTERM)
+                try:
+                    proc.wait(timeout=10)
+                except subprocess.TimeoutExpired:
+                    os.killpg(proc.pid, signal.SIGKILL)
+                    proc.wait()
+            except ProcessLookupError:
+                pass
+    except (FileNotFoundError, subprocess.SubprocessError):
+        console.print("[red]Failed to start swarmctl. Ensure 'uvicorn' is installed in the current environment.[/]")
+
+
+@app.command()
+def agent(
+    port: int = typer.Option(8765, "--port", help="Port for the worker agent"),
+    host: str = typer.Option("0.0.0.0", "--host", help="Bind address for the worker agent"),  # nosec B104
+    daemon: bool = typer.Option(False, "--daemon", "-d", help="Detach to background as a daemon process"),
+) -> None:
+    """Run the DECNET SWARM worker agent (requires a cert bundle in ~/.decnet/agent/)."""
+    from decnet.agent import server as _agent_server
+
+    if daemon:
+        log.info("agent daemonizing host=%s port=%d", host, port)
+        _daemonize()
+
+    log.info("agent command invoked host=%s port=%d", host, port)
+    console.print(f"[green]Starting DECNET worker agent on {host}:{port} (mTLS)...[/]")
+    rc = _agent_server.run(host, port)
+    if rc != 0:
+        raise typer.Exit(rc)
+
+
+@app.command()
 def deploy(
     mode: str = typer.Option("unihost", "--mode", "-m", help="Deployment mode: unihost | swarm"),
     deckies: Optional[int] = typer.Option(None, "--deckies", "-n", help="Number of deckies to deploy (required without --config)", min=1),
