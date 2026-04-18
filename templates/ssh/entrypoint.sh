@@ -41,9 +41,9 @@ cat /var/run/decnet-logs &
 rsyslogd
 
 # File-catcher: mirror attacker drops into host-mounted quarantine with attribution.
-# exec -a masks the process name so casual `ps` inspection doesn't reveal the honeypot.
-CAPTURE_DIR=/var/decnet/captured \
-    bash -c 'exec -a "[kworker/u8:0]" /usr/local/sbin/decnet-capture' &
+# Script lives at /usr/libexec/udev/journal-relay so `ps aux` shows a
+# plausible udev helper. See Dockerfile for the rename rationale.
+CAPTURE_DIR=/var/decnet/captured /usr/libexec/udev/journal-relay &
 
 # sshd logs via syslog — no -e flag, so auth events flow through rsyslog → pipe → stdout
 exec /usr/sbin/sshd -D

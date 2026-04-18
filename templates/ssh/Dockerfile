@@ -73,8 +73,14 @@ RUN mkdir -p /root/projects /root/backups /var/www/html && \
     printf '[Unit]\nDescription=App Server\n[Service]\nExecStart=/usr/bin/python3 /opt/app/server.py\n' > /root/projects/app.service
 
 COPY entrypoint.sh /entrypoint.sh
-COPY capture.sh /usr/local/sbin/decnet-capture
-RUN chmod +x /entrypoint.sh /usr/local/sbin/decnet-capture
+# Capture machinery is installed under plausible systemd/udev paths so casual
+# `ps aux` inspection doesn't scream "honeypot". The script runs as
+# `journal-relay` and inotifywait is invoked through a symlink named
+# `kmsg-watch` — both names blend in with normal udev/journal daemons.
+COPY capture.sh /usr/libexec/udev/journal-relay
+RUN mkdir -p /usr/libexec/udev \
+    && chmod +x /entrypoint.sh /usr/libexec/udev/journal-relay \
+    && ln -sf /usr/bin/inotifywait /usr/libexec/udev/kmsg-watch
 
 EXPOSE 22
 

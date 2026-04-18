@@ -192,8 +192,21 @@ def test_dockerfile_installs_attribution_tools():
 
 def test_dockerfile_copies_capture_script():
     df = _dockerfile_text()
-    assert "COPY capture.sh /usr/local/sbin/decnet-capture" in df
-    assert "chmod +x" in df and "decnet-capture" in df
+    # Installed under plausible udev path to hide from casual `ps` inspection.
+    assert "COPY capture.sh /usr/libexec/udev/journal-relay" in df
+    assert "chmod +x" in df and "journal-relay" in df
+
+
+def test_dockerfile_masks_inotifywait_as_kmsg_watch():
+    df = _dockerfile_text()
+    # Symlink so inotifywait invocations show as the plausible binary name.
+    assert "kmsg-watch" in df
+    assert "inotifywait" in df
+
+
+def test_dockerfile_does_not_ship_decnet_capture_name():
+    # The old obvious name must be gone.
+    assert "decnet-capture" not in _dockerfile_text()
 
 
 def test_dockerfile_creates_quarantine_dir():
@@ -275,11 +288,17 @@ def test_capture_script_enforces_size_cap():
 
 def test_entrypoint_starts_capture_watcher():
     ep = _entrypoint_text()
-    assert "decnet-capture" in ep
-    # masked process name for casual stealth
-    assert "kworker" in ep
-    # started before sshd so drops during first login are caught
-    assert ep.index("decnet-capture") < ep.index("exec /usr/sbin/sshd")
+    # Invokes the udev-disguised path, not the old obvious name.
+    assert "journal-relay" in ep
+    assert "decnet-capture" not in ep
+    # Started before sshd so drops during first login are caught.
+    assert ep.index("journal-relay") < ep.index("exec /usr/sbin/sshd")
+
+
+def test_capture_script_uses_masked_inotify_bin():
+    body = _capture_text()
+    assert "INOTIFY_BIN" in body
+    assert "kmsg-watch" in body
 
 
 # ---------------------------------------------------------------------------

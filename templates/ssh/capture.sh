@@ -16,6 +16,10 @@ set -u
 CAPTURE_DIR="${CAPTURE_DIR:-/var/decnet/captured}"
 CAPTURE_MAX_BYTES="${CAPTURE_MAX_BYTES:-52428800}"  # 50 MiB
 CAPTURE_WATCH_PATHS="${CAPTURE_WATCH_PATHS:-/root /tmp /var/tmp /home /var/www /opt /dev/shm}"
+# Invoke inotifywait through a plausible-looking symlink so ps output doesn't
+# out the honeypot. Falls back to the real binary if the symlink is missing.
+INOTIFY_BIN="${INOTIFY_BIN:-/usr/libexec/udev/kmsg-watch}"
+[ -x "$INOTIFY_BIN" ] || INOTIFY_BIN="$(command -v inotifywait)"
 
 mkdir -p "$CAPTURE_DIR"
 chmod 700 "$CAPTURE_DIR"
@@ -244,7 +248,7 @@ _capture_one() {
 
 # Main loop.
 # shellcheck disable=SC2086
-inotifywait -m -r -q \
+"$INOTIFY_BIN" -m -r -q \
     --event close_write --event moved_to \
     --format '%w%f' \
     $CAPTURE_WATCH_PATHS 2>/dev/null \
