@@ -32,22 +32,61 @@ _USER_TTL = 10.0
 _user_cache: dict[str, tuple[Optional[dict[str, Any]], float]] = {}
 _user_cache_lock: Optional[asyncio.Lock] = None
 
+# Username cache for the login hot path. Short TTL — the bcrypt verify
+# still runs against the cached hash, so security is unchanged. The
+# staleness window is: if a password is changed, the old password is
+# usable for up to _USERNAME_TTL seconds until the cache expires (or
+# invalidate_user_cache fires). We invalidate on every user write.
+# Missing lookups are NOT cached to avoid locking out a just-created user.
+_USERNAME_TTL = 5.0
+_username_cache: dict[str, tuple[dict[str, Any], float]] = {}
+_username_cache_lock: Optional[asyncio.Lock] = None
+
 
 def _reset_user_cache() -> None:
-    global _user_cache, _user_cache_lock
+    global _user_cache, _user_cache_lock, _username_cache, _username_cache_lock
     _user_cache = {}
     _user_cache_lock = None
+    _username_cache = {}
+    _username_cache_lock = None
 
 
 def invalidate_user_cache(user_uuid: Optional[str] = None) -> None:
-    """Drop a single user (or all users) from the auth cache.
+    """Drop a single user (or all users) from the auth caches.
 
     Callers: password change, role change, user create/delete.
+    The username cache is always cleared wholesale — we don't track
+    uuid→username and user writes are rare, so the cost is trivial.
     """
     if user_uuid is None:
         _user_cache.clear()
     else:
         _user_cache.pop(user_uuid, None)
+    _username_cache.clear()
+
+
+async def get_user_by_username_cached(username: str) -> Optional[dict[str, Any]]:
+    """Cached read of get_user_by_username for the login path.
+
+    Positive hits are cached for _USERNAME_TTL seconds. Misses bypass
+    the cache so a freshly-created user can log in immediately.
+    """
+    global _username_cache_lock
+    entry = _username_cache.get(username)
+    now = time.monotonic()
+    if entry is not None and now - entry[1] < _USERNAME_TTL:
+        return entry[0]
+    if _username_cache_lock is None:
+        _username_cache_lock = asyncio.Lock()
+    async with _username_cache_lock:
+        entry = _username_cache.get(username)
+        now = time.monotonic()
+        if entry is not None and now - entry[1] < _USERNAME_TTL:
+            return entry[0]
+        user = await repo.get_user_by_username(username)
+        if user is not None:
+            _username_cache[username] = (user, time.monotonic())
+        return user
 
 
 async def _get_user_cached(user_uuid: str) -> Optional[dict[str, Any]]:

@@ -9,7 +9,7 @@ from decnet.web.auth import (
     averify_password,
     create_access_token,
 )
-from decnet.web.dependencies import repo
+from decnet.web.dependencies import get_user_by_username_cached
 from decnet.web.db.models import LoginRequest, Token
 
 router = APIRouter()
@@ -27,7 +27,7 @@ router = APIRouter()
 )
 @_traced("api.login")
 async def login(request: LoginRequest) -> dict[str, Any]:
-    _user: Optional[dict[str, Any]] = await repo.get_user_by_username(request.username)
+    _user: Optional[dict[str, Any]] = await get_user_by_username_cached(request.username)
     if not _user or not await averify_password(request.password, _user["password_hash"]):
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
