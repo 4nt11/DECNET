@@ -197,3 +197,34 @@ class BaseRepository(ABC):
     async def get_attacker_artifacts(self, uuid: str) -> list[dict[str, Any]]:
         """Return `file_captured` log rows for this attacker, newest first."""
         pass
+
+    # ------------------------------------------------------------- swarm
+    # Swarm methods have default no-op / empty implementations so existing
+    # subclasses and non-swarm deployments continue to work without change.
+
+    async def add_swarm_host(self, data: dict[str, Any]) -> None:
+        raise NotImplementedError
+
+    async def get_swarm_host_by_name(self, name: str) -> Optional[dict[str, Any]]:
+        raise NotImplementedError
+
+    async def get_swarm_host_by_uuid(self, uuid: str) -> Optional[dict[str, Any]]:
+        raise NotImplementedError
+
+    async def list_swarm_hosts(self, status: Optional[str] = None) -> list[dict[str, Any]]:
+        raise NotImplementedError
+
+    async def update_swarm_host(self, uuid: str, fields: dict[str, Any]) -> None:
+        raise NotImplementedError
+
+    async def delete_swarm_host(self, uuid: str) -> bool:
+        raise NotImplementedError
+
+    async def upsert_decky_shard(self, data: dict[str, Any]) -> None:
+        raise NotImplementedError
+
+    async def list_decky_shards(self, host_uuid: Optional[str] = None) -> list[dict[str, Any]]:
+        raise NotImplementedError
+
+    async def delete_decky_shards_for_host(self, host_uuid: str) -> int:
+        raise NotImplementedError

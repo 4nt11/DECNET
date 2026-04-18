@@ -103,6 +103,40 @@ class Attacker(SQLModel, table=True):
     )
 
 
+class SwarmHost(SQLModel, table=True):
+    """A worker host enrolled into a DECNET swarm.
+
+    Rows exist only on the master.  Populated by `decnet swarm enroll` and
+    read by the swarm controller when sharding deckies onto workers.
+    """
+    __tablename__ = "swarm_hosts"
+    uuid: str = Field(primary_key=True)
+    name: str = Field(index=True, unique=True)
+    address: str  # IP or hostname reachable by the master
+    agent_port: int = Field(default=8765)
+    status: str = Field(default="enrolled", index=True)
+    # ISO-8601 string of the last successful agent /health probe
+    last_heartbeat: Optional[datetime] = Field(default=None)
+    client_cert_fingerprint: str  # SHA-256 hex of worker's issued client cert
+    # Directory on the master where the per-worker cert bundle lives
+    cert_bundle_path: str
+    enrolled_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
+    notes: Optional[str] = Field(default=None, sa_column=Column("notes", Text, nullable=True))
+
+
+class DeckyShard(SQLModel, table=True):
+    """Mapping of a single decky to the worker host running it (swarm mode)."""
+    __tablename__ = "decky_shards"
+    decky_name: str = Field(primary_key=True)
+    host_uuid: str = Field(foreign_key="swarm_hosts.uuid", index=True)
+    # JSON list of service names running on this decky (snapshot of assignment).
+    services: str = Field(sa_column=Column("services", _BIG_TEXT, nullable=False, default="[]"))
+    state: str = Field(default="pending", index=True)  # pending|running|failed|torn_down
+    last_error: Optional[str] = Field(default=None, sa_column=Column("last_error", Text, nullable=True))
+    compose_hash: Optional[str] = Field(default=None)
+    updated_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
+
+
 class AttackerBehavior(SQLModel, table=True):
     """
     Timing & behavioral profile for an attacker, joined to Attacker by uuid.
