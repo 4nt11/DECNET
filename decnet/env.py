@@ -77,6 +77,11 @@ DECNET_API_PORT: int = _port("DECNET_API_PORT", 8000)
 DECNET_JWT_SECRET: str = _require_env("DECNET_JWT_SECRET")
 DECNET_INGEST_LOG_FILE: str | None = os.environ.get("DECNET_INGEST_LOG_FILE", "/var/log/decnet/decnet.log")
 
+# SWARM log pipeline — RFC 5425 syslog-over-TLS between worker forwarders
+# and the master listener.  Plaintext syslog across hosts is forbidden.
+DECNET_SWARM_SYSLOG_PORT: int = _port("DECNET_SWARM_SYSLOG_PORT", 6514)
+DECNET_SWARM_MASTER_HOST: str | None = os.environ.get("DECNET_SWARM_MASTER_HOST")
+
 # Ingester batching: how many log rows to accumulate per commit, and the
 # max wait (ms) before flushing a partial batch. Larger batches reduce
 # SQLite write-lock contention; the timeout keeps latency bounded during
