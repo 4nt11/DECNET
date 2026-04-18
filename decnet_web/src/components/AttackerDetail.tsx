@@ -1,7 +1,8 @@
 import React, { useEffect, useState } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
-import { Activity, ArrowLeft, ChevronDown, ChevronLeft, ChevronRight, ChevronUp, Crosshair, Fingerprint, Shield, Clock, Wifi, Lock, FileKey, Radio, Timer } from 'lucide-react';
+import { Activity, ArrowLeft, ChevronDown, ChevronLeft, ChevronRight, ChevronUp, Crosshair, Fingerprint, Shield, Clock, Wifi, Lock, FileKey, Radio, Timer, Paperclip } from 'lucide-react';
 import api from '../utils/api';
+import ArtifactDrawer from './ArtifactDrawer';
 import './Dashboard.css';
 
 interface AttackerBehavior {
@@ -705,7 +706,19 @@ const AttackerDetail: React.FC = () => {
     behavior: true,
     commands: true,
     fingerprints: true,
+    artifacts: true,
   });
+
+  // Captured file-drop artifacts (ssh inotify farm) for this attacker.
+  type ArtifactLog = {
+    id: number;
+    timestamp: string;
+    decky: string;
+    service: string;
+    fields: string; // JSON-encoded SD params (parsed lazily below)
+  };
+  const [artifacts, setArtifacts] = useState<ArtifactLog[]>([]);
+  const [artifact, setArtifact] = useState<{ decky: string; storedAs: string; fields: Record<string, any> } | null>(null);
   const toggle = (key: string) => setOpenSections((prev) => ({ ...prev, [key]: !prev[key] }));
 
   // Commands pagination state
@@ -758,6 +771,19 @@ const AttackerDetail: React.FC = () => {
   useEffect(() => {
     setCmdPage(1);
   }, [serviceFilter]);
+
+  useEffect(() => {
+    if (!id) return;
+    const fetchArtifacts = async () => {
+      try {
+        const res = await api.get(`/attackers/${id}/artifacts`);
+        setArtifacts(res.data.data ?? []);
+      } catch {
+        setArtifacts([]);
+      }
+    };
+    fetchArtifacts();
+  }, [id]);
 
   if (loading) {
     return (
@@ -1057,6 +1083,88 @@ const AttackerDetail: React.FC = () => {
           </Section>
         );
       })()}
+
+      {/* Captured Artifacts */}
+      <Section
+        title={<>CAPTURED ARTIFACTS ({artifacts.length})</>}
+        open={openSections.artifacts}
+        onToggle={() => toggle('artifacts')}
+      >
+        {artifacts.length > 0 ? (
+          <div className="logs-table-container">
+            <table className="logs-table">
+              <thead>
+                <tr>
+                  <th>TIMESTAMP</th>
+                  <th>DECKY</th>
+                  <th>FILENAME</th>
+                  <th>SIZE</th>
+                  <th>SHA-256</th>
+                  <th></th>
+                </tr>
+              </thead>
+              <tbody>
+                {artifacts.map((row) => {
+                  let fields: Record<string, any> = {};
+                  try { fields = JSON.parse(row.fields || '{}'); } catch {}
+                  const storedAs = fields.stored_as ? String(fields.stored_as) : null;
+                  const sha = fields.sha256 ? String(fields.sha256) : '';
+                  return (
+                    <tr key={row.id}>
+                      <td className="dim" style={{ fontSize: '0.75rem', whiteSpace: 'nowrap' }}>
+                        {new Date(row.timestamp).toLocaleString()}
+                      </td>
+                      <td className="violet-accent">{row.decky}</td>
+                      <td className="matrix-text" style={{ fontFamily: 'monospace', wordBreak: 'break-all' }}>
+                        {fields.orig_path ?? storedAs ?? '—'}
+                      </td>
+                      <td className="matrix-text" style={{ fontFamily: 'monospace' }}>
+                        {fields.size ? `${fields.size} B` : '—'}
+                      </td>
+                      <td className="dim" style={{ fontFamily: 'monospace', fontSize: '0.7rem' }}>
+                        {sha ? `${sha.slice(0, 12)}…` : '—'}
+                      </td>
+                      <td>
+                        {storedAs && (
+                          <button
+                            onClick={() => setArtifact({ decky: row.decky, storedAs, fields })}
+                            title="Inspect captured artifact"
+                            style={{
+                              display: 'flex', alignItems: 'center', gap: '6px',
+                              fontSize: '0.7rem',
+                              backgroundColor: 'rgba(255, 170, 0, 0.1)',
+                              padding: '2px 8px',
+                              borderRadius: '4px',
+                              border: '1px solid rgba(255, 170, 0, 0.5)',
+                              color: '#ffaa00',
+                              cursor: 'pointer',
+                            }}
+                          >
+                            <Paperclip size={11} /> OPEN
+                          </button>
+                        )}
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
+        ) : (
+          <div style={{ padding: '24px', textAlign: 'center', opacity: 0.5 }}>
+            NO ARTIFACTS CAPTURED FROM THIS ATTACKER
+          </div>
+        )}
+      </Section>
+
+      {artifact && (
+        <ArtifactDrawer
+          decky={artifact.decky}
+          storedAs={artifact.storedAs}
+          fields={artifact.fields}
+          onClose={() => setArtifact(null)}
+        />
+      )}
 
       {/* UUID footer */}
       <div style={{ textAlign: 'right', fontSize: '0.65rem', opacity: 0.3, marginTop: '8px' }}>

@@ -729,3 +729,27 @@ class SQLModelRepository(BaseRepository):
             total = len(commands)
             page = commands[offset: offset + limit]
             return {"total": total, "data": page}
+
+    async def get_attacker_artifacts(self, uuid: str) -> list[dict[str, Any]]:
+        """Return `file_captured` logs for the attacker identified by UUID.
+
+        Resolves the attacker's IP first, then queries the logs table on two
+        indexed columns (``attacker_ip`` and ``event_type``). No JSON extract
+        needed — the decky/stored_as are already decoded into ``fields`` by
+        the ingester and returned to the frontend for drawer rendering.
+        """
+        async with self._session() as session:
+            ip_res = await session.execute(
+                select(Attacker.ip).where(Attacker.uuid == uuid)
+            )
+            ip = ip_res.scalar_one_or_none()
+            if not ip:
+                return []
+            rows = await session.execute(
+                select(Log)
+                .where(Log.attacker_ip == ip)
+                .where(Log.event_type == "file_captured")
+                .order_by(desc(Log.timestamp))
+                .limit(200)
+            )
+            return [r.model_dump(mode="json") for r in rows.scalars().all()]

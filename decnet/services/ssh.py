@@ -32,6 +32,12 @@ class SSHService(BaseService):
         cfg = service_cfg or {}
         env: dict = {
             "SSH_ROOT_PASSWORD": cfg.get("password", "admin"),
+            # NODE_NAME is the authoritative decky identifier for log
+            # attribution — matches the host path used for the artifacts
+            # bind mount below. The container hostname (optionally overridden
+            # via SSH_HOSTNAME) is cosmetic and may differ to keep the
+            # decoy looking heterogeneous.
+            "NODE_NAME": decky_name,
         }
         if "hostname" in cfg:
             env["SSH_HOSTNAME"] = cfg["hostname"]

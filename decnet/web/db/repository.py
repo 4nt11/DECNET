@@ -192,3 +192,8 @@ class BaseRepository(ABC):
     ) -> dict[str, Any]:
         """Retrieve paginated commands for an attacker, optionally filtered by service."""
         pass
+
+    @abstractmethod
+    async def get_attacker_artifacts(self, uuid: str) -> list[dict[str, Any]]:
+        """Return `file_captured` log rows for this attacker, newest first."""
+        pass
