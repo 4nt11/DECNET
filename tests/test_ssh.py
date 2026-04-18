@@ -144,27 +144,25 @@ def test_dockerfile_prompt_command_logger():
     assert "logger" in df
 
 
-def test_entrypoint_creates_named_pipe():
-    assert "mkfifo" in _entrypoint_text()
-
-
-def test_entrypoint_relay_pipe_path_is_disguised():
+def test_entrypoint_has_no_named_pipe():
+    # Named pipes in the container are a liability — readable and writable
+    # by any root process. The log bridge must not rely on one.
     ep = _entrypoint_text()
-    # Pipe lives under /run/systemd/journal/, not the obvious /var/run/decnet-logs.
-    assert "/run/systemd/journal/syslog-relay" in ep
-    assert "decnet-logs" not in ep
+    assert "mkfifo" not in ep
+    assert "syslog-relay" not in ep
 
 
-def test_entrypoint_cat_relay_is_cloaked():
+def test_entrypoint_has_no_relay_cat():
+    # No intermediate cat relay either (removed together with the pipe).
     ep = _entrypoint_text()
-    # `cat` is invoked via exec -a so ps shows systemd-journal-fwd.
-    assert "systemd-journal-fwd" in ep
-    assert "exec -a" in ep
+    assert "systemd-journal-fwd" not in ep
 
 
-def test_dockerfile_rsyslog_uses_disguised_pipe():
+def test_dockerfile_rsyslog_targets_pid1_stdout():
     df = _dockerfile_text()
-    assert "/run/systemd/journal/syslog-relay" in df
+    # rsyslog writes straight to /proc/1/fd/1 — no pipe file on disk.
+    assert "/proc/1/fd/1" in df
+    assert "syslog-relay" not in df
     assert "decnet-logs" not in df
 
 

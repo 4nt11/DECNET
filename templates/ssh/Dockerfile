@@ -34,13 +34,15 @@ RUN sed -i \
     -e 's|^#\?LogLevel.*|LogLevel VERBOSE|' \
     /etc/ssh/sshd_config
 
-# rsyslog: forward auth.* and user.* to named pipe in RFC 5424 format.
-# The entrypoint relays the pipe to stdout for Docker log capture.
+# rsyslog: forward auth.* and user.* to PID 1's stdout in RFC 5424 format.
+# /proc/1/fd/1 is the container-stdout fd Docker attached — writing there
+# surfaces lines in `docker logs` without needing a named pipe + relay cat
+# (which would be readable AND writable by any root-in-container process).
 RUN printf '%s\n' \
-    '# syslog-relay log bridge — auth + user events → named pipe as RFC 5424' \
+    '# auth + user events → container stdout as RFC 5424' \
     '$template RFC5424fmt,"<%PRI%>1 %TIMESTAMP:::date-rfc3339% %HOSTNAME% %APP-NAME% %PROCID% %MSGID% %STRUCTURED-DATA% %msg%\n"' \
-    'auth,authpriv.*  |/run/systemd/journal/syslog-relay;RFC5424fmt' \
-    'user.*           |/run/systemd/journal/syslog-relay;RFC5424fmt' \
+    'auth,authpriv.*  /proc/1/fd/1;RFC5424fmt' \
+    'user.*           /proc/1/fd/1;RFC5424fmt' \
     > /etc/rsyslog.d/50-journal-forward.conf
 
 # Silence default catch-all rules so we own auth/user routing exclusively
