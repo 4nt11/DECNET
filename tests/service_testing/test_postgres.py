@@ -14,16 +14,16 @@ import pytest
 from hypothesis import given, settings
 from hypothesis import strategies as st
 
-from .conftest import _FUZZ_SETTINGS, make_fake_decnet_logging, run_with_timeout
+from .conftest import _FUZZ_SETTINGS, make_fake_syslog_bridge, run_with_timeout
 
 
 # ── Helpers ───────────────────────────────────────────────────────────────────
 
 def _load_postgres():
     for key in list(sys.modules):
-        if key in ("postgres_server", "decnet_logging"):
+        if key in ("postgres_server", "syslog_bridge"):
             del sys.modules[key]
-    sys.modules["decnet_logging"] = make_fake_decnet_logging()
+    sys.modules["syslog_bridge"] = make_fake_syslog_bridge()
     spec = importlib.util.spec_from_file_location("postgres_server", "templates/postgres/server.py")
     mod = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(mod)
@@ -80,7 +80,7 @@ def test_startup_sends_auth_challenge(postgres_mod):
 
 def test_startup_logs_username():
     mod = _load_postgres()
-    log_mock = sys.modules["decnet_logging"]
+    log_mock = sys.modules["syslog_bridge"]
     proto, _, _ = _make_protocol(mod)
     proto.data_received(_startup_msg(user="attacker"))
     log_mock.syslog_line.assert_called()

@@ -31,11 +31,11 @@ from decnet.network import (
 log = get_logger("engine")
 console = Console()
 COMPOSE_FILE = Path("decnet-compose.yml")
-_CANONICAL_LOGGING = Path(__file__).parent.parent.parent / "templates" / "decnet_logging.py"
+_CANONICAL_LOGGING = Path(__file__).parent.parent.parent / "templates" / "syslog_bridge.py"
 
 
 def _sync_logging_helper(config: DecnetConfig) -> None:
-    """Copy the canonical decnet_logging.py into every active template build context."""
+    """Copy the canonical syslog_bridge.py into every active template build context."""
     from decnet.services.registry import get_service
     seen: set[Path] = set()
     for decky in config.deckies:
@@ -47,7 +47,7 @@ def _sync_logging_helper(config: DecnetConfig) -> None:
             if ctx is None or ctx in seen:
                 continue
             seen.add(ctx)
-            dest = ctx / "decnet_logging.py"
+            dest = ctx / "syslog_bridge.py"
             if not dest.exists() or dest.read_bytes() != _CANONICAL_LOGGING.read_bytes():
                 shutil.copy2(_CANONICAL_LOGGING, dest)
 

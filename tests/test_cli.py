@@ -316,7 +316,7 @@ class TestCorrelateCommand:
         log_file = tmp_path / "test.log"
         log_file.write_text(
             "<134>1 2024-01-15T12:00:00+00:00 decky-01 ssh - auth "
-            '[decnet@55555 src_ip="10.0.0.5" username="admin"] login\n'
+            '[relay@55555 src_ip="10.0.0.5" username="admin"] login\n'
         )
         result = runner.invoke(app, ["correlate", "--log-file", str(log_file)])
         assert result.exit_code == 0

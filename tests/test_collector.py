@@ -23,7 +23,7 @@ def _make_container(name="omega-decky-http"):
 
 class TestParseRfc5424:
     def _make_line(self, fields_str="", msg=""):
-        sd = f"[decnet@55555 {fields_str}]" if fields_str else "-"
+        sd = f"[relay@55555 {fields_str}]" if fields_str else "-"
         suffix = f" {msg}" if msg else ""
         return f"<134>1 2024-01-15T12:00:00+00:00 decky-01 http - request {sd}{suffix}"
 
@@ -126,7 +126,7 @@ class TestParseRfc5424:
         assert result["msg"] == "hello world"
 
     def test_sd_with_msg_after_bracket(self):
-        line = '<134>1 2024-01-15T12:00:00+00:00 decky-01 http - request [decnet@55555 src_ip="1.2.3.4"] login attempt'
+        line = '<134>1 2024-01-15T12:00:00+00:00 decky-01 http - request [relay@55555 src_ip="1.2.3.4"] login attempt'
         result = parse_rfc5424(line)
         assert result is not None
         assert result["fields"]["src_ip"] == "1.2.3.4"
@@ -227,7 +227,7 @@ class TestStreamContainer:
         json_path = tmp_path / "test.json"
 
         mock_container = MagicMock()
-        rfc_line = '<134>1 2024-01-15T12:00:00+00:00 decky-01 ssh - auth [decnet@55555 src_ip="1.2.3.4"] login\n'
+        rfc_line = '<134>1 2024-01-15T12:00:00+00:00 decky-01 ssh - auth [relay@55555 src_ip="1.2.3.4"] login\n'
         mock_container.logs.return_value = [rfc_line.encode("utf-8")]
 
         mock_client = MagicMock()
@@ -320,7 +320,7 @@ class TestStreamContainer:
 
         rfc_line = (
             '<134>1 2024-01-15T12:00:00+00:00 decky-01 ssh - auth '
-            '[decnet@55555 src_ip="1.2.3.4"] login\n'
+            '[relay@55555 src_ip="1.2.3.4"] login\n'
         )
         encoded = rfc_line.encode("utf-8")
 
@@ -436,7 +436,7 @@ class TestIngestRateLimiter:
         json_path = tmp_path / "test.json"
         line = (
             '<134>1 2024-01-15T12:00:00+00:00 decky-01 ssh - connect '
-            '[decnet@55555 src_ip="1.2.3.4"]\n'
+            '[relay@55555 src_ip="1.2.3.4"]\n'
         )
         payload = (line * 5).encode("utf-8")
 

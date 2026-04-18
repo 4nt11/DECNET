@@ -16,7 +16,7 @@ from decnet.telemetry import traced as _traced
 # ─── Constants (must match templates/sniffer/decnet_logging.py) ──────────────
 
 _FACILITY_LOCAL0 = 16
-_SD_ID = "decnet@55555"
+_SD_ID = "relay@55555"
 _NILVALUE = "-"
 
 SEVERITY_INFO = 6

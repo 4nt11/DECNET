@@ -6,7 +6,7 @@ the fields needed for cross-decky correlation: attacker IP, decky name,
 service, event type, and timestamp.
 
 Log format (produced by decnet.logging.syslog_formatter):
-  <PRI>1 TIMESTAMP HOSTNAME APP-NAME - MSGID [decnet@55555 k1="v1" k2="v2"] [MSG]
+  <PRI>1 TIMESTAMP HOSTNAME APP-NAME - MSGID [relay@55555 k1="v1" k2="v2"] [MSG]
 
 The attacker IP may appear under several field names depending on service:
   src_ip  — ftp, smtp, http, most services
@@ -31,8 +31,8 @@ _RFC5424_RE = re.compile(
     r"(.+)$",       # 5: SD element + optional MSG
 )
 
-# Structured data block: [decnet@55555 k="v" ...]
-_SD_BLOCK_RE = re.compile(r'\[decnet@55555\s+(.*?)\]', re.DOTALL)
+# Structured data block: [relay@55555 k="v" ...]
+_SD_BLOCK_RE = re.compile(r'\[relay@55555\s+(.*?)\]', re.DOTALL)
 
 # Individual param: key="value" (with escaped chars inside value)
 _PARAM_RE = re.compile(r'(\w+)="((?:[^"\\]|\\.)*)"')

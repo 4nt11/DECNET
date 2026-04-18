@@ -10,7 +10,7 @@ import json
 import os
 
 from flask import Flask, request
-from decnet_logging import syslog_line, write_syslog_file, forward_syslog
+from syslog_bridge import syslog_line, write_syslog_file, forward_syslog
 
 NODE_NAME = os.environ.get("NODE_NAME", "k8s-master")
 SERVICE_NAME   = "k8s"

@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-DECNET passive TLS sniffer.
+syslog-relay passive TLS sniffer.
 
 Captures TLS handshakes on the MACVLAN interface (shared network namespace
 with the decky base container). Extracts fingerprints and connection
@@ -32,7 +32,7 @@ from typing import Any
 from scapy.layers.inet import IP, TCP
 from scapy.sendrecv import sniff
 
-from decnet_logging import SEVERITY_INFO, SEVERITY_WARNING, syslog_line, write_syslog_file
+from syslog_bridge import SEVERITY_INFO, SEVERITY_WARNING, syslog_line, write_syslog_file
 
 # ─── Configuration ────────────────────────────────────────────────────────────
 

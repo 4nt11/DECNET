@@ -1,15 +1,15 @@
 #!/usr/bin/env python3
 """
-Shared RFC 5424 syslog helper for DECNET service templates.
+Shared RFC 5424 syslog helper used by service containers.
 
 Services call syslog_line() to format an RFC 5424 message, then
-write_syslog_file() to emit it to stdout — Docker captures it, and the
-host-side collector streams it into the log file.
+write_syslog_file() to emit it to stdout — the container runtime
+captures it, and the host-side collector streams it into the log file.
 
 RFC 5424 structure:
   <PRI>1 TIMESTAMP HOSTNAME APP-NAME PROCID MSGID [SD-ELEMENT] MSG
 
-Facility: local0 (16), PEN for SD element ID: decnet@55555
+Facility: local0 (16). SD element ID uses PEN 55555.
 """
 
 from datetime import datetime, timezone
@@ -18,7 +18,7 @@ from typing import Any
 # ─── Constants ────────────────────────────────────────────────────────────────
 
 _FACILITY_LOCAL0 = 16
-_SD_ID = "decnet@55555"
+_SD_ID = "relay@55555"
 _NILVALUE = "-"
 
 SEVERITY_EMERG   = 0
@@ -62,7 +62,7 @@ def syslog_line(
 
     Args:
         service:    APP-NAME (e.g. "http", "mysql")
-        hostname:   HOSTNAME (decky node name)
+        hostname:   HOSTNAME (node name)
         event_type: MSGID    (e.g. "request", "login_attempt")
         severity:   Syslog severity integer (default: INFO=6)
         timestamp:  UTC datetime; defaults to now
@@ -80,10 +80,10 @@ def syslog_line(
 
 
 def write_syslog_file(line: str) -> None:
-    """Emit a syslog line to stdout for Docker log capture."""
+    """Emit a syslog line to stdout for container log capture."""
     print(line, flush=True)
 
 
 def forward_syslog(line: str, log_target: str) -> None:
-    """No-op stub. TCP forwarding is now handled by rsyslog, not by service containers."""
+    """No-op stub. TCP forwarding is handled by rsyslog, not by service containers."""
     pass

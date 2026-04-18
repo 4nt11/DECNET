@@ -23,7 +23,7 @@ import base64
 import os
 import random
 import string
-from decnet_logging import SEVERITY_WARNING, syslog_line, write_syslog_file, forward_syslog
+from syslog_bridge import SEVERITY_WARNING, syslog_line, write_syslog_file, forward_syslog
 
 NODE_NAME   = os.environ.get("NODE_NAME", "mailserver")
 SERVICE_NAME = "smtp"

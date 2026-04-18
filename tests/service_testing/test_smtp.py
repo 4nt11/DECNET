@@ -19,9 +19,9 @@ import pytest
 
 # ── Helpers ───────────────────────────────────────────────────────────────────
 
-def _make_fake_decnet_logging() -> ModuleType:
-    """Return a stub decnet_logging module that does nothing."""
-    mod = ModuleType("decnet_logging")
+def _make_fake_syslog_bridge() -> ModuleType:
+    """Return a stub syslog_bridge module that does nothing."""
+    mod = ModuleType("syslog_bridge")
     mod.syslog_line = MagicMock(return_value="")
     mod.write_syslog_file = MagicMock()
     mod.forward_syslog = MagicMock()
@@ -33,15 +33,15 @@ def _make_fake_decnet_logging() -> ModuleType:
 def _load_smtp(open_relay: bool):
     """Import smtp server module with desired OPEN_RELAY value.
 
-    Injects a stub decnet_logging into sys.modules so the template can import
+    Injects a stub syslog_bridge into sys.modules so the template can import
     it without needing the real file on sys.path.
     """
     env = {"SMTP_OPEN_RELAY": "1" if open_relay else "0", "NODE_NAME": "testhost"}
     for key in list(sys.modules):
-        if key in ("smtp_server", "decnet_logging"):
+        if key in ("smtp_server", "syslog_bridge"):
             del sys.modules[key]
 
-    sys.modules["decnet_logging"] = _make_fake_decnet_logging()
+    sys.modules["syslog_bridge"] = _make_fake_syslog_bridge()
 
     spec = importlib.util.spec_from_file_location("smtp_server", "templates/smtp/server.py")
     mod = importlib.util.module_from_spec(spec)

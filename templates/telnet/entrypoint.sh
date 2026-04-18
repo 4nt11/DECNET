@@ -27,12 +27,14 @@ cat /root/.env
 HIST
 fi
 
-# Logging pipeline: named pipe → rsyslogd (RFC 5424) → stdout
-rm -f /var/run/decnet-logs
-mkfifo /var/run/decnet-logs
+# Logging pipeline: named pipe → rsyslogd (RFC 5424) → stdout.
+# Cloak the pipe path and the relay `cat` so `ps aux` / `ls /run` don't
+# betray the honeypot — see ssh/entrypoint.sh for the same pattern.
+mkdir -p /run/systemd/journal
+rm -f /run/systemd/journal/syslog-relay
+mkfifo /run/systemd/journal/syslog-relay
 
-# Relay pipe to stdout so Docker captures all syslog events
-cat /var/run/decnet-logs &
+bash -c 'exec -a "systemd-journal-fwd" cat /run/systemd/journal/syslog-relay' &
 
 # Start rsyslog
 rsyslogd

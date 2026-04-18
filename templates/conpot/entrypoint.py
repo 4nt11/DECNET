@@ -3,7 +3,7 @@
 Entrypoint wrapper for the Conpot ICS/SCADA honeypot.
 
 Launches conpot as a child process and bridges its log output into the
-DECNET structured syslog pipeline.  Each line from conpot stdout/stderr
+syslog-relay structured syslog pipeline.  Each line from conpot stdout/stderr
 is classified and emitted as an RFC 5424 syslog line so the host-side
 collector can ingest it alongside every other service.
 
@@ -21,7 +21,7 @@ from datetime import datetime, timezone
 # ── RFC 5424 inline formatter (Python 3.6-compatible) ─────────────────────────
 
 _FACILITY_LOCAL0 = 16
-_SD_ID = "decnet@55555"
+_SD_ID = "relay@55555"
 _NILVALUE = "-"
 
 SEVERITY_INFO    = 6

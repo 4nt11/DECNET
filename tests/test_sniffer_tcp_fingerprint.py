@@ -72,7 +72,7 @@ def _windows_syn(src_port: int = 45001):
 def _fields_from_line(line: str) -> dict[str, str]:
     """Parse the SD-params section of an RFC 5424 syslog line into a dict."""
     import re
-    m = re.search(r"\[decnet@55555 (.*?)\]", line)
+    m = re.search(r"\[relay@55555 (.*?)\]", line)
     if not m:
         return {}
     body = m.group(1)

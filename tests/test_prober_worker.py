@@ -471,7 +471,7 @@ class TestWriteEvent:
 
         log_content = log_path.read_text()
         assert "test_event" in log_content
-        assert "decnet@55555" in log_content
+        assert "relay@55555" in log_content
 
         json_content = json_path.read_text()
         record = json.loads(json_content.strip())

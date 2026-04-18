@@ -7,7 +7,7 @@ Logs all connection attempts, optionally forwarding them as JSON to LOG_TARGET.
 import os
 
 from impacket import smbserver
-from decnet_logging import syslog_line, write_syslog_file, forward_syslog
+from syslog_bridge import syslog_line, write_syslog_file, forward_syslog
 
 NODE_NAME = os.environ.get("NODE_NAME", "WORKSTATION")
 SERVICE_NAME   = "smb"

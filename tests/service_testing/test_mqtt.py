@@ -16,8 +16,8 @@ import pytest
 
 # ── Helpers ───────────────────────────────────────────────────────────────────
 
-def _make_fake_decnet_logging() -> ModuleType:
-    mod = ModuleType("decnet_logging")
+def _make_fake_syslog_bridge() -> ModuleType:
+    mod = ModuleType("syslog_bridge")
     mod.syslog_line = MagicMock(return_value="")
     mod.write_syslog_file = MagicMock()
     mod.forward_syslog = MagicMock()
@@ -34,10 +34,10 @@ def _load_mqtt(accept_all: bool = True, custom_topics: str = "", persona: str = 
         "MQTT_CUSTOM_TOPICS": custom_topics,
     }
     for key in list(sys.modules):
-        if key in ("mqtt_server", "decnet_logging"):
+        if key in ("mqtt_server", "syslog_bridge"):
             del sys.modules[key]
 
-    sys.modules["decnet_logging"] = _make_fake_decnet_logging()
+    sys.modules["syslog_bridge"] = _make_fake_syslog_bridge()
 
     spec = importlib.util.spec_from_file_location("mqtt_server", "templates/mqtt/server.py")
     mod = importlib.util.module_from_spec(spec)

@@ -9,7 +9,7 @@ received messages as JSON.
 import asyncio
 import os
 import struct
-from decnet_logging import syslog_line, write_syslog_file, forward_syslog
+from syslog_bridge import syslog_line, write_syslog_file, forward_syslog
 
 NODE_NAME = os.environ.get("NODE_NAME", "mongodb")
 SERVICE_NAME   = "mongodb"

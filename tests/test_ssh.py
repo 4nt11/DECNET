@@ -127,7 +127,7 @@ def test_dockerfile_runs_as_root():
 
 def test_dockerfile_rsyslog_conf_created():
     df = _dockerfile_text()
-    assert "99-decnet.conf" in df
+    assert "50-journal-forward.conf" in df
     assert "RFC5424fmt" in df
 
 
@@ -231,7 +231,8 @@ def test_dockerfile_does_not_ship_decnet_capture_name():
 
 def test_dockerfile_creates_quarantine_dir():
     df = _dockerfile_text()
-    assert "/var/decnet/captured" in df
+    # In-container path masquerades as the real systemd-coredump dir.
+    assert "/var/lib/systemd/coredump" in df
     assert "chmod 700" in df
 
 
@@ -265,8 +266,8 @@ def test_capture_script_uses_close_write_and_moved_to():
 
 def test_capture_script_skips_quarantine_path():
     body = _capture_text()
-    # Must not loop on its own writes.
-    assert "/var/decnet/" in body
+    # Must not loop on its own writes — quarantine lives under /var/lib/systemd.
+    assert "/var/lib/systemd/" in body
 
 
 def test_capture_script_resolves_writer_pid():
@@ -329,7 +330,7 @@ def test_fragment_mounts_quarantine_volume():
     frag = _fragment()
     vols = frag.get("volumes", [])
     assert any(
-        v.endswith(":/var/decnet/captured:rw") for v in vols
+        v.endswith(":/var/lib/systemd/coredump:rw") for v in vols
     ), f"quarantine volume missing: {vols}"
 
 

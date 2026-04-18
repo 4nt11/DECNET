@@ -38,7 +38,8 @@ class SSHService(BaseService):
 
         # File-catcher quarantine: bind-mount a per-decky host dir so attacker
         # drops (scp/sftp/wget) are mirrored out-of-band for forensic analysis.
-        # The container path is internal-only; attackers never see this mount.
+        # The in-container path masquerades as systemd-coredump so `mount`/`df`
+        # from inside the container looks benign.
         quarantine_host = f"/var/lib/decnet/artifacts/{decky_name}/ssh"
         return {
             "build": {"context": str(TEMPLATES_DIR)},
@@ -46,7 +47,7 @@ class SSHService(BaseService):
             "restart": "unless-stopped",
             "cap_add": ["NET_BIND_SERVICE"],
             "environment": env,
-            "volumes": [f"{quarantine_host}:/var/decnet/captured:rw"],
+            "volumes": [f"{quarantine_host}:/var/lib/systemd/coredump:rw"],
         }
 
     def dockerfile_context(self) -> Path:

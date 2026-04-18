@@ -31,7 +31,7 @@ The main asynchronous entry point.
 
 DECNET services emit logs using a standardized RFC 5424 format with structured data. The `parse_rfc5424` function is the primary tool for extracting this information.
 
-- **Structured Data**: Extracts parameters from the `decnet@55555` SD-ELEMENT.
+- **Structured Data**: Extracts parameters from the `relay@55555` SD-ELEMENT.
 - **Field Mapping**: Identifies the `attacker_ip` by scanning common source IP fields (`src_ip`, `client_ip`, etc.).
 - **Consistency**: Formats timestamps into a human-readable `%Y-%m-%d %H:%M:%S` format for the analytical stream.
 

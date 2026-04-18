@@ -17,8 +17,8 @@ import pytest
 
 # ── Helpers ───────────────────────────────────────────────────────────────────
 
-def _make_fake_decnet_logging() -> ModuleType:
-    mod = ModuleType("decnet_logging")
+def _make_fake_syslog_bridge() -> ModuleType:
+    mod = ModuleType("syslog_bridge")
     mod.syslog_line = MagicMock(return_value="")
     mod.write_syslog_file = MagicMock()
     mod.forward_syslog = MagicMock()
@@ -28,17 +28,17 @@ def _make_fake_decnet_logging() -> ModuleType:
 
 
 def _load_imap():
-    """Import imap server module, injecting a stub decnet_logging."""
+    """Import imap server module, injecting a stub syslog_bridge."""
     env = {
         "NODE_NAME": "testhost",
         "IMAP_USERS": "admin:admin123,root:toor",
         "IMAP_BANNER": "* OK [testhost] Dovecot ready.",
     }
     for key in list(sys.modules):
-        if key in ("imap_server", "decnet_logging"):
+        if key in ("imap_server", "syslog_bridge"):
             del sys.modules[key]
 
-    sys.modules["decnet_logging"] = _make_fake_decnet_logging()
+    sys.modules["syslog_bridge"] = _make_fake_syslog_bridge()
 
     spec = importlib.util.spec_from_file_location(
         "imap_server", "templates/imap/server.py"

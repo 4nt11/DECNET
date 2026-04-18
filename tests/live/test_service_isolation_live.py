@@ -172,7 +172,7 @@ class TestCollectorLiveIsolation:
 
     def test_rfc5424_parser_handles_real_formats(self):
         """Parser works on real log lines, not just test fixtures."""
-        valid = '<134>1 2026-04-14T12:00:00Z decky-01 ssh - login_attempt [decnet@55555 src_ip="10.0.0.1" username="root" password="toor"] Failed login'
+        valid = '<134>1 2026-04-14T12:00:00Z decky-01 ssh - login_attempt [relay@55555 src_ip="10.0.0.1" username="root" password="toor"] Failed login'
         result = parse_rfc5424(valid)
         assert result is not None
         assert result["decky"] == "decky-01"
@@ -236,7 +236,7 @@ class TestIngesterLiveIsolation:
             "attacker_ip": "10.99.99.1",
             "fields": {"username": "root", "password": "toor"},
             "msg": "Failed login",
-            "raw_line": '<134>1 2026-04-14T12:00:00Z decky-live-01 ssh - login_attempt [decnet@55555 src_ip="10.99.99.1"] Failed login',
+            "raw_line": '<134>1 2026-04-14T12:00:00Z decky-live-01 ssh - login_attempt [relay@55555 src_ip="10.99.99.1"] Failed login',
         }
         json_file.write_text(json.dumps(record) + "\n")
 
@@ -333,7 +333,7 @@ class TestAttackerWorkerLiveIsolation:
                 "attacker_ip": "10.77.77.1",
                 "fields": {"username": "admin"},
                 "msg": "",
-                "raw_line": f'<134>1 2026-04-14T14:0{i}:00Z decky-live-03 {"ssh" if i < 2 else "http"} - login_attempt [decnet@55555 src_ip="10.77.77.1" username="admin"]',
+                "raw_line": f'<134>1 2026-04-14T14:0{i}:00Z decky-live-03 {"ssh" if i < 2 else "http"} - login_attempt [relay@55555 src_ip="10.77.77.1" username="admin"]',
             })
 
         state = _WorkerState()

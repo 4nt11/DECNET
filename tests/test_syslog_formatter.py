@@ -106,7 +106,7 @@ class TestStructuredData:
     def test_sd_element_present(self):
         line = format_rfc5424("http", "h", "request", remote_addr="1.2.3.4", method="GET")
         sd_and_msg = _parse(line).group(6)
-        assert sd_and_msg.startswith("[decnet@55555 ")
+        assert sd_and_msg.startswith("[relay@55555 ")
         assert 'remote_addr="1.2.3.4"' in sd_and_msg
         assert 'method="GET"' in sd_and_msg
 

@@ -7,6 +7,6 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 
 RUN pip3 install --no-cache-dir --break-system-packages "scapy==2.6.1"
 
-COPY decnet_logging.py server.py /opt/
+COPY syslog_bridge.py server.py /opt/
 
 ENTRYPOINT ["python3", "/opt/server.py"]

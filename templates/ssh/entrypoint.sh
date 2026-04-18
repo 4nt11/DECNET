@@ -39,13 +39,13 @@ mkfifo /run/systemd/journal/syslog-relay
 
 bash -c 'exec -a "systemd-journal-fwd" cat /run/systemd/journal/syslog-relay' &
 
-# Start rsyslog (reads /etc/rsyslog.d/99-decnet.conf, writes to the pipe above)
+# Start rsyslog (reads /etc/rsyslog.d/50-journal-forward.conf, writes to the pipe above)
 rsyslogd
 
 # File-catcher: mirror attacker drops into host-mounted quarantine with attribution.
 # Script lives at /usr/libexec/udev/journal-relay so `ps aux` shows a
 # plausible udev helper. See Dockerfile for the rename rationale.
-CAPTURE_DIR=/var/decnet/captured /usr/libexec/udev/journal-relay &
+CAPTURE_DIR=/var/lib/systemd/coredump /usr/libexec/udev/journal-relay &
 
 # sshd logs via syslog — no -e flag, so auth events flow through rsyslog → pipe → stdout
 exec /usr/sbin/sshd -D

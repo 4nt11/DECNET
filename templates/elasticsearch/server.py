@@ -8,7 +8,7 @@ as JSON. Designed to attract automated scanners and credential stuffers.
 import json
 import os
 from http.server import BaseHTTPRequestHandler, HTTPServer
-from decnet_logging import syslog_line, write_syslog_file, forward_syslog
+from syslog_bridge import syslog_line, write_syslog_file, forward_syslog
 
 NODE_NAME = os.environ.get("NODE_NAME", "esserver")
 SERVICE_NAME   = "elasticsearch"

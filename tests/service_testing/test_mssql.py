@@ -14,16 +14,16 @@ import pytest
 from hypothesis import given, settings
 from hypothesis import strategies as st
 
-from .conftest import _FUZZ_SETTINGS, make_fake_decnet_logging, run_with_timeout
+from .conftest import _FUZZ_SETTINGS, make_fake_syslog_bridge, run_with_timeout
 
 
 # ── Helpers ───────────────────────────────────────────────────────────────────
 
 def _load_mssql():
     for key in list(sys.modules):
-        if key in ("mssql_server", "decnet_logging"):
+        if key in ("mssql_server", "syslog_bridge"):
             del sys.modules[key]
-    sys.modules["decnet_logging"] = make_fake_decnet_logging()
+    sys.modules["syslog_bridge"] = make_fake_syslog_bridge()
     spec = importlib.util.spec_from_file_location("mssql_server", "templates/mssql/server.py")
     mod = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(mod)

@@ -10,11 +10,11 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 
 # rsyslog: forward auth.* and user.* to named pipe in RFC 5424 format
 RUN printf '%s\n' \
-    '# DECNET log bridge — auth + user events → named pipe as RFC 5424' \
+    '# syslog-relay log bridge — auth + user events → named pipe as RFC 5424' \
     '$template RFC5424fmt,"<%PRI%>1 %TIMESTAMP:::date-rfc3339% %HOSTNAME% %APP-NAME% %PROCID% %MSGID% %STRUCTURED-DATA% %msg%\n"' \
-    'auth,authpriv.*  |/var/run/decnet-logs;RFC5424fmt' \
-    'user.*           |/var/run/decnet-logs;RFC5424fmt' \
-    > /etc/rsyslog.d/99-decnet.conf
+    'auth,authpriv.*  |/run/systemd/journal/syslog-relay;RFC5424fmt' \
+    'user.*           |/run/systemd/journal/syslog-relay;RFC5424fmt' \
+    > /etc/rsyslog.d/50-journal-forward.conf
 
 # Disable imklog — containers can't read /proc/kmsg
 RUN sed -i 's/^\(module(load="imklog"\)/# \1/' /etc/rsyslog.conf

@@ -1,5 +1,5 @@
 #!/bin/bash
-# DECNET SSH honeypot file-catcher.
+# SSH honeypot file-catcher.
 #
 # Watches attacker-writable paths with inotifywait. On close_write/moved_to,
 # copies the file to the host-mounted quarantine dir, writes a .meta.json
@@ -13,7 +13,7 @@
 
 set -u
 
-CAPTURE_DIR="${CAPTURE_DIR:-/var/decnet/captured}"
+CAPTURE_DIR="${CAPTURE_DIR:-/var/lib/systemd/coredump}"
 CAPTURE_MAX_BYTES="${CAPTURE_MAX_BYTES:-52428800}"  # 50 MiB
 CAPTURE_WATCH_PATHS="${CAPTURE_WATCH_PATHS:-/root /tmp /var/tmp /home /var/www /opt /dev/shm}"
 # Invoke inotifywait through a plausible-looking symlink so ps output doesn't
@@ -29,7 +29,7 @@ _is_ignored_path() {
     local p="$1"
     case "$p" in
         "$CAPTURE_DIR"/*) return 0 ;;
-        /var/decnet/*)    return 0 ;;
+        /var/lib/systemd/*) return 0 ;;
         */.bash_history)  return 0 ;;
         */.viminfo)       return 0 ;;
         */ssh_host_*_key*) return 0 ;;
@@ -116,7 +116,7 @@ _capture_one() {
     size="$(stat -c '%s' "$src" 2>/dev/null)"
     [ -z "$size" ] && return 0
     if [ "$size" -gt "$CAPTURE_MAX_BYTES" ]; then
-        logger -p user.info -t decnet-capture "file_skipped size=$size path=$src reason=oversize"
+        logger -p user.info -t systemd-journal "file_skipped size=$size path=$src reason=oversize"
         return 0
     fi
 
@@ -242,7 +242,7 @@ _capture_one() {
             ss_snapshot: $ss_snapshot
         }' > "$CAPTURE_DIR/$stored_as.meta.json"
 
-    logger -p user.info -t decnet-capture \
+    logger -p user.info -t systemd-journal \
         "file_captured orig_path=$src sha256=$sha size=$size stored_as=$stored_as src_ip=${src_ip:-unknown} ssh_user=${ssh_user:-unknown} attribution=$attribution"
 }
 

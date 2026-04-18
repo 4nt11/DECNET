@@ -15,8 +15,8 @@ import pytest
 
 # ── Helpers ───────────────────────────────────────────────────────────────────
 
-def _make_fake_decnet_logging() -> ModuleType:
-    mod = ModuleType("decnet_logging")
+def _make_fake_syslog_bridge() -> ModuleType:
+    mod = ModuleType("syslog_bridge")
     def syslog_line(*args, **kwargs):
         print("LOG:", args, kwargs)
         return ""
@@ -34,10 +34,10 @@ def _load_snmp(archetype: str = "default"):
         "SNMP_ARCHETYPE": archetype,
     }
     for key in list(sys.modules):
-        if key in ("snmp_server", "decnet_logging"):
+        if key in ("snmp_server", "syslog_bridge"):
             del sys.modules[key]
 
-    sys.modules["decnet_logging"] = _make_fake_decnet_logging()
+    sys.modules["syslog_bridge"] = _make_fake_syslog_bridge()
 
     spec = importlib.util.spec_from_file_location("snmp_server", "templates/snmp/server.py")
     mod = importlib.util.module_from_spec(spec)

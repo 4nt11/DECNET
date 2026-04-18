@@ -12,7 +12,7 @@ from pathlib import Path
 
 from flask import Flask, request, send_from_directory
 from werkzeug.serving import make_server, WSGIRequestHandler
-from decnet_logging import syslog_line, write_syslog_file, forward_syslog
+from syslog_bridge import syslog_line, write_syslog_file, forward_syslog
 
 logging.getLogger("werkzeug").setLevel(logging.ERROR)
 

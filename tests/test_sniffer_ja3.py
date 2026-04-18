@@ -2,7 +2,7 @@
 Unit tests for the JA3/JA3S parsing logic in templates/sniffer/server.py.
 
 Imports the parser functions directly via sys.path manipulation, with
-decnet_logging mocked out (it's a container-side stub at template build time).
+syslog_bridge mocked out (it's a container-side stub at template build time).
 """
 
 from __future__ import annotations
@@ -16,19 +16,19 @@ from unittest.mock import MagicMock
 
 import pytest
 
-# ─── Import sniffer module with mocked decnet_logging ─────────────────────────
+# ─── Import sniffer module with mocked syslog_bridge ─────────────────────────
 
 _SNIFFER_DIR = str(Path(__file__).parent.parent / "templates" / "sniffer")
 
 def _load_sniffer():
-    """Load templates/sniffer/server.py with decnet_logging stubbed out."""
-    # Stub the decnet_logging module that server.py imports
-    _stub = types.ModuleType("decnet_logging")
+    """Load templates/sniffer/server.py with syslog_bridge stubbed out."""
+    # Stub the syslog_bridge module that server.py imports
+    _stub = types.ModuleType("syslog_bridge")
     _stub.SEVERITY_INFO = 6
     _stub.SEVERITY_WARNING = 4
     _stub.syslog_line = MagicMock(return_value="<134>1 fake")
     _stub.write_syslog_file = MagicMock()
-    sys.modules.setdefault("decnet_logging", _stub)
+    sys.modules.setdefault("syslog_bridge", _stub)
 
     if _SNIFFER_DIR not in sys.path:
         sys.path.insert(0, _SNIFFER_DIR)

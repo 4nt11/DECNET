@@ -12,7 +12,7 @@ from twisted.internet import defer, reactor
 from twisted.protocols.ftp import FTP, FTPFactory, FTPAnonymousShell
 from twisted.python.filepath import FilePath
 from twisted.python import log as twisted_log
-from decnet_logging import syslog_line, write_syslog_file, forward_syslog
+from syslog_bridge import syslog_line, write_syslog_file, forward_syslog
 
 NODE_NAME = os.environ.get("NODE_NAME", "ftpserver")
 SERVICE_NAME   = "ftp"

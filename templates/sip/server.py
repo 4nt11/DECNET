@@ -8,7 +8,7 @@ Authorization header and call metadata, then responds with 401 Unauthorized.
 import asyncio
 import os
 import re
-from decnet_logging import syslog_line, write_syslog_file, forward_syslog
+from syslog_bridge import syslog_line, write_syslog_file, forward_syslog
 
 NODE_NAME = os.environ.get("NODE_NAME", "pbx")
 SERVICE_NAME   = "sip"

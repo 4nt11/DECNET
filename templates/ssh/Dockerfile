@@ -19,8 +19,8 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     jq \
     && rm -rf /var/lib/apt/lists/*
 
-RUN mkdir -p /var/run/sshd /root/.ssh /var/log/decnet /var/decnet/captured \
-    && chmod 700 /var/decnet /var/decnet/captured
+RUN mkdir -p /var/run/sshd /root/.ssh /var/log/journal /var/lib/systemd/coredump \
+    && chmod 700 /var/lib/systemd/coredump
 
 # sshd_config: allow root + password auth; VERBOSE so session lines carry
 # client IP + session PID (needed for file-capture attribution).
@@ -34,11 +34,11 @@ RUN sed -i \
 # rsyslog: forward auth.* and user.* to named pipe in RFC 5424 format.
 # The entrypoint relays the pipe to stdout for Docker log capture.
 RUN printf '%s\n' \
-    '# DECNET log bridge — auth + user events → named pipe as RFC 5424' \
+    '# syslog-relay log bridge — auth + user events → named pipe as RFC 5424' \
     '$template RFC5424fmt,"<%PRI%>1 %TIMESTAMP:::date-rfc3339% %HOSTNAME% %APP-NAME% %PROCID% %MSGID% %STRUCTURED-DATA% %msg%\n"' \
     'auth,authpriv.*  |/run/systemd/journal/syslog-relay;RFC5424fmt' \
     'user.*           |/run/systemd/journal/syslog-relay;RFC5424fmt' \
-    > /etc/rsyslog.d/99-decnet.conf
+    > /etc/rsyslog.d/50-journal-forward.conf
 
 # Silence default catch-all rules so we own auth/user routing exclusively
 RUN sed -i \

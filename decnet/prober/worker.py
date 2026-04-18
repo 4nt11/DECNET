@@ -51,7 +51,7 @@ DEFAULT_TCPFP_PORTS: list[int] = [22, 80, 443, 8080, 8443, 445, 3389]
 # ─── RFC 5424 formatting (inline, mirrors templates/*/decnet_logging.py) ─────
 
 _FACILITY_LOCAL0 = 16
-_SD_ID = "decnet@55555"
+_SD_ID = "relay@55555"
 _SEVERITY_INFO = 6
 _SEVERITY_WARNING = 4
 
@@ -98,7 +98,7 @@ _RFC5424_RE = re.compile(
     r"(\S+) "       # 4: MSGID (event_type)
     r"(.+)$",       # 5: SD + MSG
 )
-_SD_BLOCK_RE = re.compile(r'\[decnet@55555\s+(.*?)\]', re.DOTALL)
+_SD_BLOCK_RE = re.compile(r'\[relay@55555\s+(.*?)\]', re.DOTALL)
 _PARAM_RE = re.compile(r'(\w+)="((?:[^"\\]|\\.)*)"')
 _IP_FIELDS = ("src_ip", "src", "client_ip", "remote_ip", "ip", "target_ip")
 
