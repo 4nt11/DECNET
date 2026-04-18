@@ -1,6 +1,8 @@
 import React, { useEffect, useState, useRef } from 'react';
 import './Dashboard.css';
-import { Shield, Users, Activity, Clock } from 'lucide-react';
+import { Shield, Users, Activity, Clock, Paperclip } from 'lucide-react';
+import { parseEventBody } from '../utils/parseEventBody';
+import ArtifactDrawer from './ArtifactDrawer';
 
 interface Stats {
   total_logs: number;
@@ -29,6 +31,7 @@ const Dashboard: React.FC<DashboardProps> = ({ searchQuery }) => {
   const [stats, setStats] = useState<Stats | null>(null);
   const [logs, setLogs] = useState<LogEntry[]>([]);
   const [loading, setLoading] = useState(true);
+  const [artifact, setArtifact] = useState<{ decky: string; storedAs: string; fields: Record<string, any> } | null>(null);
   const eventSourceRef = useRef<EventSource | null>(null);
   const reconnectTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
@@ -127,6 +130,17 @@ const Dashboard: React.FC<DashboardProps> = ({ searchQuery }) => {
                   }
                 }
 
+                let msgHead: string | null = null;
+                let msgTail: string | null = null;
+                if (Object.keys(parsedFields).length === 0) {
+                  const parsed = parseEventBody(log.msg);
+                  parsedFields = parsed.fields;
+                  msgHead = parsed.head;
+                  msgTail = parsed.tail;
+                } else if (log.msg && log.msg !== '-') {
+                  msgTail = log.msg;
+                }
+
                 return (
                   <tr key={log.id}>
                     <td className="dim">{new Date(log.timestamp).toLocaleString()}</td>
@@ -136,20 +150,53 @@ const Dashboard: React.FC<DashboardProps> = ({ searchQuery }) => {
                     <td>
                       <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
                         <div style={{ fontWeight: 'bold', color: 'var(--text-color)' }}>
-                          {log.event_type} {log.msg && log.msg !== '-' && <span style={{ fontWeight: 'normal', opacity: 0.8 }}>— {log.msg}</span>}
+                          {(() => {
+                            const et = log.event_type && log.event_type !== '-' ? log.event_type : null;
+                            const parts = [et, msgHead].filter(Boolean) as string[];
+                            return (
+                              <>
+                                {parts.join(' · ')}
+                                {msgTail && <span style={{ fontWeight: 'normal', opacity: 0.8 }}>{parts.length ? ' — ' : ''}{msgTail}</span>}
+                              </>
+                            );
+                          })()}
                         </div>
-                        {Object.keys(parsedFields).length > 0 && (
+                        {(Object.keys(parsedFields).length > 0 || parsedFields.stored_as) && (
                           <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
-                            {Object.entries(parsedFields).map(([k, v]) => (
-                              <span key={k} style={{ 
-                                fontSize: '0.7rem', 
-                                backgroundColor: 'rgba(0, 255, 65, 0.1)', 
-                                padding: '2px 8px', 
-                                borderRadius: '4px', 
+                            {parsedFields.stored_as && (
+                              <button
+                                onClick={() => setArtifact({
+                                  decky: log.decky,
+                                  storedAs: String(parsedFields.stored_as),
+                                  fields: parsedFields,
+                                })}
+                                title="Inspect captured artifact"
+                                style={{
+                                  display: 'flex', alignItems: 'center', gap: '6px',
+                                  fontSize: '0.7rem',
+                                  backgroundColor: 'rgba(255, 170, 0, 0.1)',
+                                  padding: '2px 8px',
+                                  borderRadius: '4px',
+                                  border: '1px solid rgba(255, 170, 0, 0.5)',
+                                  color: '#ffaa00',
+                                  cursor: 'pointer',
+                                }}
+                              >
+                                <Paperclip size={11} /> ARTIFACT
+                              </button>
+                            )}
+                            {Object.entries(parsedFields)
+                              .filter(([k]) => k !== 'meta_json_b64')
+                              .map(([k, v]) => (
+                              <span key={k} style={{
+                                fontSize: '0.7rem',
+                                backgroundColor: 'rgba(0, 255, 65, 0.1)',
+                                padding: '2px 8px',
+                                borderRadius: '4px',
                                 border: '1px solid rgba(0, 255, 65, 0.3)',
                                 wordBreak: 'break-all'
                               }}>
-                                <span style={{ opacity: 0.6 }}>{k}:</span> {v}
+                                <span style={{ opacity: 0.6 }}>{k}:</span> {typeof v === 'object' ? JSON.stringify(v) : v}
                               </span>
                             ))}
                           </div>
@@ -167,6 +214,14 @@ const Dashboard: React.FC<DashboardProps> = ({ searchQuery }) => {
           </table>
         </div>
       </div>
+      {artifact && (
+        <ArtifactDrawer
+          decky={artifact.decky}
+          storedAs={artifact.storedAs}
+          fields={artifact.fields}
+          onClose={() => setArtifact(null)}
+        />
+      )}
     </div>
   );
 };
