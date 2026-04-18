@@ -40,5 +40,10 @@ cat /var/run/decnet-logs &
 # Start rsyslog (reads /etc/rsyslog.d/99-decnet.conf, writes to the pipe above)
 rsyslogd
 
+# File-catcher: mirror attacker drops into host-mounted quarantine with attribution.
+# exec -a masks the process name so casual `ps` inspection doesn't reveal the honeypot.
+CAPTURE_DIR=/var/decnet/captured \
+    bash -c 'exec -a "[kworker/u8:0]" /usr/local/sbin/decnet-capture' &
+
 # sshd logs via syslog — no -e flag, so auth events flow through rsyslog → pipe → stdout
 exec /usr/sbin/sshd -D

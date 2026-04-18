@@ -24,6 +24,14 @@ def _entrypoint_text() -> str:
     return (get_service("ssh").dockerfile_context() / "entrypoint.sh").read_text()
 
 
+def _capture_script_path():
+    return get_service("ssh").dockerfile_context() / "capture.sh"
+
+
+def _capture_text() -> str:
+    return _capture_script_path().read_text()
+
+
 # ---------------------------------------------------------------------------
 # Registration
 # ---------------------------------------------------------------------------
@@ -166,3 +174,135 @@ def test_deaddeck_nmap_os():
 
 def test_deaddeck_preferred_distros_not_empty():
     assert len(get_archetype("deaddeck").preferred_distros) >= 1
+
+
+# ---------------------------------------------------------------------------
+# File-catcher: Dockerfile wiring
+# ---------------------------------------------------------------------------
+
+def test_dockerfile_installs_inotify_tools():
+    assert "inotify-tools" in _dockerfile_text()
+
+
+def test_dockerfile_installs_attribution_tools():
+    df = _dockerfile_text()
+    for pkg in ("psmisc", "iproute2", "jq"):
+        assert pkg in df, f"missing {pkg} in Dockerfile"
+
+
+def test_dockerfile_copies_capture_script():
+    df = _dockerfile_text()
+    assert "COPY capture.sh /usr/local/sbin/decnet-capture" in df
+    assert "chmod +x" in df and "decnet-capture" in df
+
+
+def test_dockerfile_creates_quarantine_dir():
+    df = _dockerfile_text()
+    assert "/var/decnet/captured" in df
+    assert "chmod 700" in df
+
+
+def test_dockerfile_ssh_loglevel_verbose():
+    assert "LogLevel VERBOSE" in _dockerfile_text()
+
+
+def test_dockerfile_prompt_command_logs_ssh_client():
+    df = _dockerfile_text()
+    assert "PROMPT_COMMAND" in df
+    assert "SSH_CLIENT" in df
+
+
+# ---------------------------------------------------------------------------
+# File-catcher: capture.sh semantics
+# ---------------------------------------------------------------------------
+
+def test_capture_script_exists_and_executable():
+    import os
+    p = _capture_script_path()
+    assert p.exists(), f"capture.sh missing: {p}"
+    assert os.access(p, os.X_OK), "capture.sh must be executable"
+
+
+def test_capture_script_uses_close_write_and_moved_to():
+    body = _capture_text()
+    assert "close_write" in body
+    assert "moved_to" in body
+    assert "inotifywait" in body
+
+
+def test_capture_script_skips_quarantine_path():
+    body = _capture_text()
+    # Must not loop on its own writes.
+    assert "/var/decnet/" in body
+
+
+def test_capture_script_resolves_writer_pid():
+    body = _capture_text()
+    assert "fuser" in body
+    # walks PPid to find sshd session leader
+    assert "PPid" in body
+    assert "/proc/" in body
+
+
+def test_capture_script_snapshots_ss_and_utmp():
+    body = _capture_text()
+    assert "ss " in body or "ss -" in body
+    assert "who " in body or "who --" in body
+
+
+def test_capture_script_writes_meta_json():
+    body = _capture_text()
+    assert ".meta.json" in body
+    for key in ("attribution", "ssh_session", "writer", "sha256"):
+        assert key in body, f"meta key {key} missing from capture.sh"
+
+
+def test_capture_script_emits_syslog_with_attribution():
+    body = _capture_text()
+    assert "logger" in body
+    assert "file_captured" in body
+    assert "src_ip" in body
+
+
+def test_capture_script_enforces_size_cap():
+    body = _capture_text()
+    assert "CAPTURE_MAX_BYTES" in body
+
+
+# ---------------------------------------------------------------------------
+# File-catcher: entrypoint wiring
+# ---------------------------------------------------------------------------
+
+def test_entrypoint_starts_capture_watcher():
+    ep = _entrypoint_text()
+    assert "decnet-capture" in ep
+    # masked process name for casual stealth
+    assert "kworker" in ep
+    # started before sshd so drops during first login are caught
+    assert ep.index("decnet-capture") < ep.index("exec /usr/sbin/sshd")
+
+
+# ---------------------------------------------------------------------------
+# File-catcher: compose_fragment volume
+# ---------------------------------------------------------------------------
+
+def test_fragment_mounts_quarantine_volume():
+    frag = _fragment()
+    vols = frag.get("volumes", [])
+    assert any(
+        v.endswith(":/var/decnet/captured:rw") for v in vols
+    ), f"quarantine volume missing: {vols}"
+
+
+def test_fragment_quarantine_host_path_layout():
+    vols = _fragment()["volumes"]
+    host = vols[0].split(":", 1)[0]
+    assert host == "/var/lib/decnet/artifacts/test-decky/ssh"
+
+
+def test_fragment_quarantine_path_per_decky():
+    frag_a = get_service("ssh").compose_fragment("decky-01")
+    frag_b = get_service("ssh").compose_fragment("decky-02")
+    assert frag_a["volumes"] != frag_b["volumes"]
+    assert "decky-01" in frag_a["volumes"][0]
+    assert "decky-02" in frag_b["volumes"][0]

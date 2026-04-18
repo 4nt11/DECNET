@@ -13,15 +13,22 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     procps \
     htop \
     git \
+    inotify-tools \
+    psmisc \
+    iproute2 \
+    jq \
     && rm -rf /var/lib/apt/lists/*
 
-RUN mkdir -p /var/run/sshd /root/.ssh /var/log/decnet
+RUN mkdir -p /var/run/sshd /root/.ssh /var/log/decnet /var/decnet/captured \
+    && chmod 700 /var/decnet /var/decnet/captured
 
-# sshd_config: allow root + password auth
+# sshd_config: allow root + password auth; VERBOSE so session lines carry
+# client IP + session PID (needed for file-capture attribution).
 RUN sed -i \
     -e 's|^#\?PermitRootLogin.*|PermitRootLogin yes|' \
     -e 's|^#\?PasswordAuthentication.*|PasswordAuthentication yes|' \
     -e 's|^#\?ChallengeResponseAuthentication.*|ChallengeResponseAuthentication no|' \
+    -e 's|^#\?LogLevel.*|LogLevel VERBOSE|' \
     /etc/ssh/sshd_config
 
 # rsyslog: forward auth.* and user.* to named pipe in RFC 5424 format.
@@ -57,7 +64,7 @@ RUN echo 'alias ll="ls -alF"' >> /root/.bashrc && \
     echo 'alias l="ls -CF"'   >> /root/.bashrc && \
     echo 'export HISTSIZE=1000' >> /root/.bashrc && \
     echo 'export HISTFILESIZE=2000' >> /root/.bashrc && \
-    echo 'PROMPT_COMMAND='"'"'logger -p user.info -t bash "CMD uid=$UID pwd=$PWD cmd=$(history 1 | sed "s/^ *[0-9]* *//")";'"'" >> /root/.bashrc
+    echo 'PROMPT_COMMAND='"'"'logger -p user.info -t bash "CMD uid=$UID user=$USER src=${SSH_CLIENT%% *} pwd=$PWD cmd=$(history 1 | sed "s/^ *[0-9]* *//")";'"'" >> /root/.bashrc
 
 # Fake project files to look lived-in
 RUN mkdir -p /root/projects /root/backups /var/www/html && \
@@ -66,7 +73,8 @@ RUN mkdir -p /root/projects /root/backups /var/www/html && \
     printf '[Unit]\nDescription=App Server\n[Service]\nExecStart=/usr/bin/python3 /opt/app/server.py\n' > /root/projects/app.service
 
 COPY entrypoint.sh /entrypoint.sh
-RUN chmod +x /entrypoint.sh
+COPY capture.sh /usr/local/sbin/decnet-capture
+RUN chmod +x /entrypoint.sh /usr/local/sbin/decnet-capture
 
 EXPOSE 22
 

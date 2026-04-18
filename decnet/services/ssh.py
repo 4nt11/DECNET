@@ -36,12 +36,17 @@ class SSHService(BaseService):
         if "hostname" in cfg:
             env["SSH_HOSTNAME"] = cfg["hostname"]
 
+        # File-catcher quarantine: bind-mount a per-decky host dir so attacker
+        # drops (scp/sftp/wget) are mirrored out-of-band for forensic analysis.
+        # The container path is internal-only; attackers never see this mount.
+        quarantine_host = f"/var/lib/decnet/artifacts/{decky_name}/ssh"
         return {
             "build": {"context": str(TEMPLATES_DIR)},
             "container_name": f"{decky_name}-ssh",
             "restart": "unless-stopped",
             "cap_add": ["NET_BIND_SERVICE"],
             "environment": env,
+            "volumes": [f"{quarantine_host}:/var/decnet/captured:rw"],
         }
 
     def dockerfile_context(self) -> Path:
