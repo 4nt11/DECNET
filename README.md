@@ -706,6 +706,61 @@ locust -f tests/stress/locustfile.py --host http://localhost:8000
 | `STRESS_SPIKE_USERS` | `1000` | Users for thundering herd test |
 | `STRESS_SUSTAINED_USERS` | `200` | Users for sustained load test |
 
+#### Measured baseline
+
+Reference numbers from recent Locust runs against a MySQL backend
+(asyncmy driver). All runs hold zero failures throughout.
+
+**Single worker** (unless noted):
+
+| Metric | 500u, tracing on | 1500u, tracing on | 1500u, tracing **off** | 1500u, tracing off, **pinned to 1 core** | 1500u, tracing off, **12 workers** |
+|---|---|---|---|---|---|
+| Requests served | 396,672 | 232,648 | 277,214 | 3,532 | 308,024 |
+| Failures | 0 | 0 | 0 | 0 | 0 |
+| Throughput (current RPS) | ~960 | ~880 | ~990 | ~46 | ~1,585 |
+| Average latency | 465 ms | 1,774 ms | 1,489 ms | 21.7 s | 930 ms |
+| Median (p50) | 100 ms | 690 ms | 340 ms | 270 ms | 700 ms |
+| p95 | 1.9 s | 6.5 s | 5.7 s | 115 s | 2.7 s |
+| p99 | 2.9 s | 9.5 s | 8.4 s | 122 s | 4.2 s |
+| Max observed | 8.3 s | 24.4 s | 20.9 s | 124.5 s | 16.5 s |
+
+Ramp is 15 users/s for the 500u column, 40 users/s otherwise.
+
+Takeaways:
+
+- **Tracing off**: at 1500 users, flipping `DECNET_TRACING=false`
+  halves p50 (690 → 340 ms) and pushes RPS from ~880 past the
+  500-user figure on a single worker.
+- **12 workers**: RPS scales ~1.6× over a single worker (~990 →
+  ~1585). Sublinear because the workload is DB-bound — MySQL and the
+  connection pool become the new ceiling, not Python. p99 drops from
+  8.4 s to 4.2 s.
+- **Connection math**: `DECNET_DB_POOL_SIZE=20` × `DECNET_DB_MAX_OVERFLOW=40`
+  × 12 workers = 720 connections at peak. MySQL's default
+  `max_connections=151` needs bumping (we used 2000) before running
+  multi-worker load.
+- **Single-core pinning**: ~46 RPS with p95 near two minutes. Interesting
+  as a "physics floor" datapoint — not a production config.
+
+Top endpoints by volume: `/api/v1/attackers`, `/api/v1/deckies`,
+`/api/v1/bounty`, `/api/v1/logs/histogram`, `/api/v1/config`,
+`/api/v1/health`, `/api/v1/auth/login`, `/api/v1/logs`.
+
+Notes on tuning:
+
+- **Python 3.14 is currently a no-go for the API server.** Under heavy
+  concurrent async load the reworked 3.14 GC segfaults inside
+  `mark_all_reachable` (observed in `_PyGC_Collect` during pending-GC
+  on 3.14.3). Stick to Python 3.11–3.13 until upstream stabilises.
+- Router-level TTL caches on hot count/stats endpoints (`/stats`,
+  `/logs` count, `/attackers` count, `/bounty`, `/logs/histogram`,
+  `/deckies`, `/config`) collapse concurrent duplicate work onto a
+  single DB hit per window — essential to reach this RPS on one worker.
+- Turning off request tracing (`DECNET_TRACING=false`) is the next
+  free headroom: tracing was still on during the run above.
+- On SQLite, `DECNET_DB_POOL_PRE_PING=false` skips the per-checkout
+  `SELECT 1`. On MySQL, keep it `true` — network disconnects are real.
+
 #### System tuning: open file limit
 
 Under heavy load (500+ concurrent users), the server will exhaust the default Linux open file limit (`ulimit -n`), causing `OSError: [Errno 24] Too many open files`. Most distros default to **1024**, which is far too low for stress testing or production use.
