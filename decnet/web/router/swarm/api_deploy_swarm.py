@@ -20,10 +20,10 @@ from decnet.logging import get_logger
 from decnet.swarm.client import AgentClient
 from decnet.web.db.repository import BaseRepository
 from decnet.web.dependencies import get_repo
-from decnet.web.router.swarm._schemas import (
-    DeployRequest,
-    DeployResponse,
-    HostResult,
+from decnet.web.db.models import (
+    SwarmDeployRequest,
+    SwarmDeployResponse,
+    SwarmHostResult,
 )
 
 log = get_logger("swarm.deploy")
@@ -47,11 +47,11 @@ def _worker_config(base: DecnetConfig, shard: list[DeckyConfig]) -> DecnetConfig
     return base.model_copy(update={"deckies": shard})
 
 
-@router.post("/deploy", response_model=DeployResponse, tags=["Swarm Deployments"])
+@router.post("/deploy", response_model=SwarmDeployResponse, tags=["Swarm Deployments"])
 async def api_deploy_swarm(
-    req: DeployRequest,
+    req: SwarmDeployRequest,
     repo: BaseRepository = Depends(get_repo),
-) -> DeployResponse:
+) -> SwarmDeployResponse:
     if req.config.mode != "swarm":
         raise HTTPException(status_code=400, detail="mode must be 'swarm'")
 
@@ -64,7 +64,7 @@ async def api_deploy_swarm(
             raise HTTPException(status_code=404, detail=f"unknown host_uuid: {host_uuid}")
         hosts[host_uuid] = row
 
-    async def _dispatch(host_uuid: str, shard: list[DeckyConfig]) -> HostResult:
+    async def _dispatch(host_uuid: str, shard: list[DeckyConfig]) -> SwarmHostResult:
         host = hosts[host_uuid]
         cfg = _worker_config(req.config, shard)
         try:
@@ -82,7 +82,7 @@ async def api_deploy_swarm(
                     }
                 )
             await repo.update_swarm_host(host_uuid, {"status": "active"})
-            return HostResult(host_uuid=host_uuid, host_name=host["name"], ok=True, detail=body)
+            return SwarmHostResult(host_uuid=host_uuid, host_name=host["name"], ok=True, detail=body)
         except Exception as exc:
             log.exception("swarm.deploy dispatch failed host=%s", host["name"])
             for d in shard:
@@ -96,9 +96,9 @@ async def api_deploy_swarm(
                         "updated_at": datetime.now(timezone.utc),
                     }
                 )
-            return HostResult(host_uuid=host_uuid, host_name=host["name"], ok=False, detail=str(exc))
+            return SwarmHostResult(host_uuid=host_uuid, host_name=host["name"], ok=False, detail=str(exc))
 
     results = await asyncio.gather(
         *(_dispatch(uuid_, shard) for uuid_, shard in buckets.items())
     )
-    return DeployResponse(results=list(results))
+    return SwarmDeployResponse(results=list(results))

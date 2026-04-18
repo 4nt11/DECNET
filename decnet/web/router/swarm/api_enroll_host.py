@@ -18,21 +18,21 @@ from fastapi import APIRouter, Depends, HTTPException, status
 from decnet.swarm import pki
 from decnet.web.db.repository import BaseRepository
 from decnet.web.dependencies import get_repo
-from decnet.web.router.swarm._schemas import EnrolledBundle, EnrollRequest
+from decnet.web.db.models import SwarmEnrolledBundle, SwarmEnrollRequest
 
 router = APIRouter()
 
 
 @router.post(
     "/enroll",
-    response_model=EnrolledBundle,
+    response_model=SwarmEnrolledBundle,
     status_code=status.HTTP_201_CREATED,
     tags=["Swarm Hosts"],
 )
 async def api_enroll_host(
-    req: EnrollRequest,
+    req: SwarmEnrollRequest,
     repo: BaseRepository = Depends(get_repo),
-) -> EnrolledBundle:
+) -> SwarmEnrolledBundle:
     existing = await repo.get_swarm_host_by_name(req.name)
     if existing is not None:
         raise HTTPException(status_code=409, detail=f"Worker '{req.name}' is already enrolled")
@@ -60,7 +60,7 @@ async def api_enroll_host(
             "notes": req.notes,
         }
     )
-    return EnrolledBundle(
+    return SwarmEnrolledBundle(
         host_uuid=host_uuid,
         name=req.name,
         address=req.address,

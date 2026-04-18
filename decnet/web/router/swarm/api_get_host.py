@@ -5,7 +5,7 @@ from fastapi import APIRouter, Depends, HTTPException
 
 from decnet.web.db.repository import BaseRepository
 from decnet.web.dependencies import get_repo
-from decnet.web.router.swarm._schemas import SwarmHostView
+from decnet.web.db.models import SwarmHostView
 
 router = APIRouter()
 

@@ -4,7 +4,7 @@ from sqlalchemy import Column, Text
 from sqlalchemy.dialects.mysql import MEDIUMTEXT
 from sqlmodel import SQLModel, Field
 from pydantic import BaseModel, ConfigDict, Field as PydanticField, BeforeValidator
-from decnet.models import IniContent
+from decnet.models import IniContent, DecnetConfig
 
 # Use on columns that accumulate over an attacker's lifetime (commands,
 # fingerprints, state blobs).  TEXT on MySQL caps at 64 KiB; MEDIUMTEXT
@@ -265,3 +265,80 @@ class ComponentHealth(BaseModel):
 class HealthResponse(BaseModel):
     status: Literal["healthy", "degraded", "unhealthy"]
     components: dict[str, ComponentHealth]
+
+
+# --- Swarm API DTOs ---
+# Request/response contracts for the master-side swarm controller
+# (decnet/web/swarm_api.py).  The underlying SQLModel tables — SwarmHost and
+# DeckyShard — live above; these are the HTTP-facing shapes.
+
+class SwarmEnrollRequest(BaseModel):
+    name: str = PydanticField(..., min_length=1, max_length=128)
+    address: str = PydanticField(..., description="IP or DNS the master uses to reach the worker")
+    agent_port: int = PydanticField(default=8765, ge=1, le=65535)
+    sans: list[str] = PydanticField(
+        default_factory=list,
+        description="Extra SANs (IPs / hostnames) to embed in the worker cert",
+    )
+    notes: Optional[str] = None
+
+
+class SwarmEnrolledBundle(BaseModel):
+    """Cert bundle returned to the operator — must be delivered to the worker."""
+    host_uuid: str
+    name: str
+    address: str
+    agent_port: int
+    fingerprint: str
+    ca_cert_pem: str
+    worker_cert_pem: str
+    worker_key_pem: str
+
+
+class SwarmHostView(BaseModel):
+    uuid: str
+    name: str
+    address: str
+    agent_port: int
+    status: str
+    last_heartbeat: Optional[datetime] = None
+    client_cert_fingerprint: str
+    enrolled_at: datetime
+    notes: Optional[str] = None
+
+
+class SwarmDeployRequest(BaseModel):
+    config: DecnetConfig
+    dry_run: bool = False
+    no_cache: bool = False
+
+
+class SwarmTeardownRequest(BaseModel):
+    host_uuid: Optional[str] = PydanticField(
+        default=None,
+        description="If set, tear down only this worker; otherwise tear down all hosts",
+    )
+    decky_id: Optional[str] = None
+
+
+class SwarmHostResult(BaseModel):
+    host_uuid: str
+    host_name: str
+    ok: bool
+    detail: Any | None = None
+
+
+class SwarmDeployResponse(BaseModel):
+    results: list[SwarmHostResult]
+
+
+class SwarmHostHealth(BaseModel):
+    host_uuid: str
+    name: str
+    address: str
+    reachable: bool
+    detail: Any | None = None
+
+
+class SwarmCheckResponse(BaseModel):
+    results: list[SwarmHostHealth]

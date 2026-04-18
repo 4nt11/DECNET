@@ -15,20 +15,20 @@ from decnet.logging import get_logger
 from decnet.swarm.client import AgentClient
 from decnet.web.db.repository import BaseRepository
 from decnet.web.dependencies import get_repo
-from decnet.web.router.swarm._schemas import CheckResponse, HostHealth
+from decnet.web.db.models import SwarmCheckResponse, SwarmHostHealth
 
 log = get_logger("swarm.check")
 
 router = APIRouter()
 
 
-@router.post("/check", response_model=CheckResponse, tags=["Swarm Health"])
+@router.post("/check", response_model=SwarmCheckResponse, tags=["Swarm Health"])
 async def api_check_hosts(
     repo: BaseRepository = Depends(get_repo),
-) -> CheckResponse:
+) -> SwarmCheckResponse:
     hosts = await repo.list_swarm_hosts()
 
-    async def _probe(host: dict[str, Any]) -> HostHealth:
+    async def _probe(host: dict[str, Any]) -> SwarmHostHealth:
         try:
             async with AgentClient(host=host) as agent:
                 body = await agent.health()
@@ -39,7 +39,7 @@ async def api_check_hosts(
                     "last_heartbeat": datetime.now(timezone.utc),
                 },
             )
-            return HostHealth(
+            return SwarmHostHealth(
                 host_uuid=host["uuid"],
                 name=host["name"],
                 address=host["address"],
@@ -49,7 +49,7 @@ async def api_check_hosts(
         except Exception as exc:
             log.warning("swarm.check unreachable host=%s err=%s", host["name"], exc)
             await repo.update_swarm_host(host["uuid"], {"status": "unreachable"})
-            return HostHealth(
+            return SwarmHostHealth(
                 host_uuid=host["uuid"],
                 name=host["name"],
                 address=host["address"],
@@ -58,4 +58,4 @@ async def api_check_hosts(
             )
 
     results = await asyncio.gather(*(_probe(h) for h in hosts))
-    return CheckResponse(results=list(results))
+    return SwarmCheckResponse(results=list(results))
