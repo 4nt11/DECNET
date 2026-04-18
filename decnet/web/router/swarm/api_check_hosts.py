@@ -1,8 +1,7 @@
-"""Health endpoints for the swarm controller.
+"""POST /swarm/check — active mTLS probe of every enrolled worker.
 
-* ``GET /swarm/health``  — liveness of the controller itself (no I/O).
-* ``POST /swarm/check``  — active probe of every enrolled worker over mTLS.
-  Updates ``SwarmHost.status`` and ``last_heartbeat``.
+Updates ``SwarmHost.status`` and ``last_heartbeat`` for each host based
+on the outcome of the probe.
 """
 from __future__ import annotations
 
@@ -11,37 +10,20 @@ from datetime import datetime, timezone
 from typing import Any
 
 from fastapi import APIRouter, Depends
-from pydantic import BaseModel
 
 from decnet.logging import get_logger
 from decnet.swarm.client import AgentClient
 from decnet.web.db.repository import BaseRepository
 from decnet.web.dependencies import get_repo
+from decnet.web.router.swarm._schemas import CheckResponse, HostHealth
 
-log = get_logger("swarm.health")
+log = get_logger("swarm.check")
 
-router = APIRouter(tags=["swarm-health"])
-
-
-class HostHealth(BaseModel):
-    host_uuid: str
-    name: str
-    address: str
-    reachable: bool
-    detail: Any | None = None
+router = APIRouter()
 
 
-class CheckResponse(BaseModel):
-    results: list[HostHealth]
-
-
-@router.get("/health")
-async def health() -> dict[str, str]:
-    return {"status": "ok", "role": "swarm-controller"}
-
-
-@router.post("/check", response_model=CheckResponse)
-async def check(
+@router.post("/check", response_model=CheckResponse, tags=["Swarm Health"])
+async def api_check_hosts(
     repo: BaseRepository = Depends(get_repo),
 ) -> CheckResponse:
     hosts = await repo.list_swarm_hosts()

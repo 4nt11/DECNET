@@ -26,10 +26,10 @@ def ca_dir(tmp_path: pathlib.Path, monkeypatch: pytest.MonkeyPatch) -> pathlib.P
     monkeypatch.setattr(pki, "DEFAULT_CA_DIR", ca)
     # Also patch the already-imported references inside client.py / routers.
     from decnet.swarm import client as swarm_client
-    from decnet.web.router.swarm import hosts as swarm_hosts
+    from decnet.web.router.swarm import api_enroll_host as enroll_mod
 
     monkeypatch.setattr(swarm_client, "pki", pki)
-    monkeypatch.setattr(swarm_hosts, "pki", pki)
+    monkeypatch.setattr(enroll_mod, "pki", pki)
     return ca
 
 
@@ -166,11 +166,13 @@ class _StubAgentClient:
 def stub_agent(monkeypatch: pytest.MonkeyPatch):
     _StubAgentClient.deployed.clear()
     _StubAgentClient.torn_down.clear()
-    from decnet.web.router.swarm import deployments as dep_mod
-    from decnet.web.router.swarm import health as hlt_mod
+    from decnet.web.router.swarm import api_deploy_swarm as deploy_mod
+    from decnet.web.router.swarm import api_teardown_swarm as teardown_mod
+    from decnet.web.router.swarm import api_check_hosts as check_mod
 
-    monkeypatch.setattr(dep_mod, "AgentClient", _StubAgentClient)
-    monkeypatch.setattr(hlt_mod, "AgentClient", _StubAgentClient)
+    monkeypatch.setattr(deploy_mod, "AgentClient", _StubAgentClient)
+    monkeypatch.setattr(teardown_mod, "AgentClient", _StubAgentClient)
+    monkeypatch.setattr(check_mod, "AgentClient", _StubAgentClient)
     return _StubAgentClient
 
 

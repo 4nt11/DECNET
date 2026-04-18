@@ -1,16 +1,33 @@
 """Swarm controller routers.
 
-Mounted onto the swarm-api FastAPI app under the ``/swarm`` prefix. The
-controller is a separate process from the main DECNET API so swarm
-failures cannot cascade into log ingestion / dashboard serving.
+One file per endpoint, aggregated under the ``/swarm`` prefix. Mounted
+onto the swarm-api FastAPI app (``decnet/web/swarm_api.py``), a separate
+process from the main DECNET API so swarm failures cannot cascade into
+log ingestion / dashboard serving.
 """
 from fastapi import APIRouter
 
-from .hosts import router as hosts_router
-from .deployments import router as deployments_router
-from .health import router as health_router
+from .api_enroll_host import router as enroll_host_router
+from .api_list_hosts import router as list_hosts_router
+from .api_get_host import router as get_host_router
+from .api_decommission_host import router as decommission_host_router
+from .api_deploy_swarm import router as deploy_swarm_router
+from .api_teardown_swarm import router as teardown_swarm_router
+from .api_get_swarm_health import router as get_swarm_health_router
+from .api_check_hosts import router as check_hosts_router
 
 swarm_router = APIRouter(prefix="/swarm")
-swarm_router.include_router(hosts_router)
-swarm_router.include_router(deployments_router)
-swarm_router.include_router(health_router)
+
+# Hosts
+swarm_router.include_router(enroll_host_router)
+swarm_router.include_router(list_hosts_router)
+swarm_router.include_router(get_host_router)
+swarm_router.include_router(decommission_host_router)
+
+# Deployments
+swarm_router.include_router(deploy_swarm_router)
+swarm_router.include_router(teardown_swarm_router)
+
+# Health
+swarm_router.include_router(get_swarm_health_router)
+swarm_router.include_router(check_hosts_router)
