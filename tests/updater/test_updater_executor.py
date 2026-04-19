@@ -454,3 +454,74 @@ def test_spawn_agent_via_systemd_tolerates_missing_forwarder_unit(
     monkeypatch.setattr(ex.subprocess, "run", fake_run)
     pid = ex._spawn_agent_via_systemd(install_dir)
     assert pid == 4711
+
+
+# ---------------------------------------------------------- _sync_systemd_units
+
+def _make_release_with_units(install_dir: pathlib.Path, units: dict[str, str]) -> None:
+    src = install_dir / "releases" / "active" / "etc" / "systemd" / "system"
+    src.mkdir(parents=True)
+    for name, body in units.items():
+        (src / name).write_text(body)
+
+
+def test_sync_systemd_units_copies_new_files_and_reloads(
+    monkeypatch: pytest.MonkeyPatch,
+    install_dir: pathlib.Path,
+    tmp_path: pathlib.Path,
+) -> None:
+    """Shipping a new unit or changing an existing one triggers a single
+    daemon-reload after the file writes."""
+    _make_release_with_units(install_dir, {
+        "decnet-collector.service": "unit-body-v1\n",
+        "decnet-agent.service": "unit-body-agent\n",
+    })
+    dst_root = tmp_path / "etc-systemd"
+    dst_root.mkdir()
+    (dst_root / "decnet-agent.service").write_text("unit-body-agent-OLD\n")
+
+    calls: list[list[str]] = []
+
+    def fake_run(cmd, **kwargs):  # type: ignore[no-untyped-def]
+        calls.append(cmd)
+        return subprocess.CompletedProcess(cmd, 0, "", "")
+
+    monkeypatch.setenv("INVOCATION_ID", "x")
+    monkeypatch.setattr(ex.subprocess, "run", fake_run)
+
+    changed = ex._sync_systemd_units(install_dir, dst_root=dst_root)
+    assert changed is True
+    assert (dst_root / "decnet-collector.service").read_text() == "unit-body-v1\n"
+    assert (dst_root / "decnet-agent.service").read_text() == "unit-body-agent\n"
+    assert calls == [["systemctl", "daemon-reload"]]
+
+
+def test_sync_systemd_units_noop_when_unchanged(
+    monkeypatch: pytest.MonkeyPatch,
+    install_dir: pathlib.Path,
+    tmp_path: pathlib.Path,
+) -> None:
+    _make_release_with_units(install_dir, {"decnet-agent.service": "same\n"})
+    dst_root = tmp_path / "etc-systemd"
+    dst_root.mkdir()
+    (dst_root / "decnet-agent.service").write_text("same\n")
+
+    calls: list[list[str]] = []
+    monkeypatch.setenv("INVOCATION_ID", "x")
+    monkeypatch.setattr(
+        ex.subprocess, "run",
+        lambda cmd, **_: calls.append(cmd) or subprocess.CompletedProcess(cmd, 0, "", ""),
+    )
+
+    changed = ex._sync_systemd_units(install_dir, dst_root=dst_root)
+    assert changed is False
+    assert calls == []  # no daemon-reload when nothing changed
+
+
+def test_sync_systemd_units_missing_src_is_noop(
+    install_dir: pathlib.Path,
+    tmp_path: pathlib.Path,
+) -> None:
+    """Legacy bundles without etc/systemd/system in the release: no-op."""
+    (install_dir / "releases" / "active").mkdir(parents=True)
+    assert ex._sync_systemd_units(install_dir, dst_root=tmp_path) is False

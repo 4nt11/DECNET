@@ -278,6 +278,54 @@ def _spawn_agent(install_dir: pathlib.Path) -> int:
     return _spawn_agent_via_popen(install_dir)
 
 
+SYSTEMD_UNIT_DIR = pathlib.Path("/etc/systemd/system")
+
+
+def _sync_systemd_units(
+    install_dir: pathlib.Path,
+    dst_root: pathlib.Path = SYSTEMD_UNIT_DIR,
+) -> bool:
+    """Copy any `etc/systemd/system/*.service` files from the active release
+    into ``dst_root`` (default ``/etc/systemd/system/``) and run
+    `daemon-reload` if anything changed.
+
+    Returns True if daemon-reload was invoked. The bootstrap installer writes
+    these files on first enrollment; the updater mirrors that on every code
+    push so unit edits (ExecStart flips, new units, cap changes) ship too.
+    Best-effort: a read-only /etc or a missing ``active/etc`` subtree is just
+    logged and skipped.
+    """
+    src_root = _active_dir(install_dir) / "etc" / "systemd" / "system"
+    if not src_root.is_dir():
+        return False
+    changed = False
+    for src in sorted(src_root.glob("*.service")):
+        dst = dst_root / src.name
+        try:
+            new = src.read_bytes()
+            old = dst.read_bytes() if dst.is_file() else None
+            if old == new:
+                continue
+            tmp = dst.with_suffix(".service.tmp")
+            tmp.write_bytes(new)
+            os.chmod(tmp, 0o644)
+            os.replace(tmp, dst)
+            log.info("installed/updated systemd unit %s", dst)
+            changed = True
+        except OSError as exc:
+            log.warning("could not install unit %s: %s", dst, exc)
+    if changed and _systemd_available():
+        try:
+            subprocess.run(  # nosec B603 B607
+                ["systemctl", "daemon-reload"],
+                check=True, capture_output=True, text=True,
+            )
+            log.info("systemctl daemon-reload succeeded")
+        except subprocess.CalledProcessError as exc:
+            log.warning("systemctl daemon-reload failed: %s", exc.stderr.strip())
+    return changed
+
+
 def _spawn_agent_via_systemd(install_dir: pathlib.Path) -> int:
     # Restart agent + forwarder together: both processes run out of the same
     # /opt/decnet tree, so a code push that replaces the tree must cycle both
@@ -509,6 +557,7 @@ def run_update(
     _rotate(install_dir)
     _point_current_at(install_dir, _active_dir(install_dir))
     _heal_path_symlink(install_dir)
+    _sync_systemd_units(install_dir)
 
     log.info("restarting agent (and forwarder if present)")
     _stop_agent(install_dir)
@@ -606,6 +655,7 @@ def run_update_self(
     _rotate(updater_install_dir)
     _point_current_at(updater_install_dir, _active_dir(updater_install_dir))
     _heal_path_symlink(updater_install_dir)
+    _sync_systemd_units(updater_install_dir)
 
     # Reconstruct the updater's original launch command from env vars set by
     # `decnet.updater.server.run`. We can't reuse sys.argv: inside the app
