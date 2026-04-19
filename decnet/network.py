@@ -126,22 +126,46 @@ def allocate_ips(
 # Docker MACVLAN network
 # ---------------------------------------------------------------------------
 
-def create_macvlan_network(
+def _ensure_network(
     client: docker.DockerClient,
+    *,
+    driver: str,
     interface: str,
     subnet: str,
     gateway: str,
     ip_range: str,
+    extra_options: dict | None = None,
 ) -> None:
-    """Create the MACVLAN Docker network. No-op if it already exists."""
-    existing = [n.name for n in client.networks.list()]
-    if MACVLAN_NETWORK_NAME in existing:
-        return
+    """Create the decnet docker network with ``driver``, replacing any
+    existing network of the same name that was built with a different driver.
+
+    Why the replace-on-driver-mismatch: macvlan and ipvlan slaves can't
+    coexist on the same parent interface. If an earlier run left behind a
+    macvlan-driver network and we're now asked for ipvlan (or vice versa),
+    short-circuiting on name alone leaves Docker attaching new containers
+    to the old driver and the host NIC ends up EBUSY on the next port
+    create. So: when driver disagrees, disconnect everything and DROP it.
+    """
+    options = {"parent": interface}
+    if extra_options:
+        options.update(extra_options)
+
+    for net in client.networks.list(names=[MACVLAN_NETWORK_NAME]):
+        if net.attrs.get("Driver") == driver:
+            return  # right driver, leave it alone
+        # Wrong driver — tear it down. Disconnect any live containers first
+        # so `remove()` doesn't refuse with ErrNetworkInUse.
+        for cid in (net.attrs.get("Containers") or {}):
+            try:
+                net.disconnect(cid, force=True)
+            except docker.errors.APIError:
+                pass
+        net.remove()
 
     client.networks.create(
         name=MACVLAN_NETWORK_NAME,
-        driver="macvlan",
-        options={"parent": interface},
+        driver=driver,
+        options=options,
         ipam=docker.types.IPAMConfig(
             driver="default",
             pool_configs=[
@@ -155,6 +179,21 @@ def create_macvlan_network(
     )
 
 
+def create_macvlan_network(
+    client: docker.DockerClient,
+    interface: str,
+    subnet: str,
+    gateway: str,
+    ip_range: str,
+) -> None:
+    """Create the MACVLAN Docker network, replacing an ipvlan-driver one of
+    the same name if necessary (parent-NIC can't host both drivers)."""
+    _ensure_network(
+        client, driver="macvlan", interface=interface,
+        subnet=subnet, gateway=gateway, ip_range=ip_range,
+    )
+
+
 def create_ipvlan_network(
     client: docker.DockerClient,
     interface: str,
@@ -162,25 +201,12 @@ def create_ipvlan_network(
     gateway: str,
     ip_range: str,
 ) -> None:
-    """Create an IPvlan L2 Docker network. No-op if it already exists."""
-    existing = [n.name for n in client.networks.list()]
-    if MACVLAN_NETWORK_NAME in existing:
-        return
-
-    client.networks.create(
-        name=MACVLAN_NETWORK_NAME,
-        driver="ipvlan",
-        options={"parent": interface, "ipvlan_mode": "l2"},
-        ipam=docker.types.IPAMConfig(
-            driver="default",
-            pool_configs=[
-                docker.types.IPAMPool(
-                    subnet=subnet,
-                    gateway=gateway,
-                    iprange=ip_range,
-                )
-            ],
-        ),
+    """Create an IPvlan L2 Docker network, replacing a macvlan-driver one of
+    the same name if necessary (parent-NIC can't host both drivers)."""
+    _ensure_network(
+        client, driver="ipvlan", interface=interface,
+        subnet=subnet, gateway=gateway, ip_range=ip_range,
+        extra_options={"ipvlan_mode": "l2"},
     )
 
 
@@ -204,9 +230,13 @@ def _require_root() -> None:
 def setup_host_macvlan(interface: str, host_macvlan_ip: str, decky_ip_range: str) -> None:
     """
     Create a macvlan interface on the host so the deployer can reach deckies.
-    Idempotent — skips steps that are already done.
+    Idempotent — skips steps that are already done. Drops a stale ipvlan
+    host-helper first: the two drivers can share a parent NIC on paper but
+    leaving the opposite helper in place is just cruft after a driver swap.
     """
     _require_root()
+
+    _run(["ip", "link", "del", HOST_IPVLAN_IFACE], check=False)
 
     # Check if interface already exists
     result = _run(["ip", "link", "show", HOST_MACVLAN_IFACE], check=False)
@@ -227,9 +257,13 @@ def teardown_host_macvlan(decky_ip_range: str) -> None:
 def setup_host_ipvlan(interface: str, host_ipvlan_ip: str, decky_ip_range: str) -> None:
     """
     Create an IPvlan interface on the host so the deployer can reach deckies.
-    Idempotent — skips steps that are already done.
+    Idempotent — skips steps that are already done. Drops a stale macvlan
+    host-helper first so a prior macvlan deploy doesn't leave its slave
+    dangling on the parent NIC after the driver swap.
     """
     _require_root()
+
+    _run(["ip", "link", "del", HOST_MACVLAN_IFACE], check=False)
 
     result = _run(["ip", "link", "show", HOST_IPVLAN_IFACE], check=False)
     if result.returncode != 0:

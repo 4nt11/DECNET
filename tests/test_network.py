@@ -76,11 +76,12 @@ class TestIpsToRange:
 # ---------------------------------------------------------------------------
 
 class TestCreateMacvlanNetwork:
-    def _make_client(self, existing=None):
+    def _make_client(self, existing=None, existing_driver="macvlan"):
         client = MagicMock()
         nets = [MagicMock(name=n) for n in (existing or [])]
         for net, n in zip(nets, (existing or [])):
             net.name = n
+            net.attrs = {"Driver": existing_driver, "Containers": {}}
         client.networks.list.return_value = nets
         return client
 
@@ -104,11 +105,12 @@ class TestCreateMacvlanNetwork:
 # ---------------------------------------------------------------------------
 
 class TestCreateIpvlanNetwork:
-    def _make_client(self, existing=None):
+    def _make_client(self, existing=None, existing_driver="ipvlan"):
         client = MagicMock()
         nets = [MagicMock(name=n) for n in (existing or [])]
         for net, n in zip(nets, (existing or [])):
             net.name = n
+            net.attrs = {"Driver": existing_driver, "Containers": {}}
         client.networks.list.return_value = nets
         return client
 
@@ -125,6 +127,18 @@ class TestCreateIpvlanNetwork:
         client = self._make_client([MACVLAN_NETWORK_NAME])
         create_ipvlan_network(client, "wlan0", "192.168.1.0/24", "192.168.1.1", "192.168.1.96/27")
         client.networks.create.assert_not_called()
+
+    def test_replaces_macvlan_network_with_ipvlan(self):
+        """If an old macvlan-driver net exists under the same name, remove+recreate.
+        Short-circuiting on name alone leaves Docker attaching containers to the
+        wrong driver — on the next port create the parent NIC goes EBUSY because
+        macvlan and ipvlan slaves can't share it."""
+        client = self._make_client([MACVLAN_NETWORK_NAME], existing_driver="macvlan")
+        old_net = client.networks.list.return_value[0]
+        create_ipvlan_network(client, "wlan0", "192.168.1.0/24", "192.168.1.1", "192.168.1.96/27")
+        old_net.remove.assert_called_once()
+        client.networks.create.assert_called_once()
+        assert client.networks.create.call_args[1]["driver"] == "ipvlan"
 
     def test_uses_same_network_name_as_macvlan(self):
         """Both drivers share the same logical network name so compose files are identical."""
@@ -154,8 +168,10 @@ class TestSetupHostMacvlan:
         mock_run.return_value = MagicMock(returncode=0)
         setup_host_macvlan("eth0", "192.168.1.5", "192.168.1.96/27")
         calls = [c[0][0] for c in mock_run.call_args_list]
-        # "ip link add <iface> link ..." should not be called when iface exists
-        assert not any("link" in cmd and "add" in cmd and HOST_MACVLAN_IFACE in cmd for cmd in calls)
+        # "ip link add <iface> link ..." should not be called when iface exists.
+        # (The opportunistic `ip link del decnet_ipvlan0` cleanup is allowed.)
+        add_cmds = [cmd for cmd in calls if cmd[:3] == ["ip", "link", "add"]]
+        assert not any(HOST_MACVLAN_IFACE in cmd for cmd in add_cmds)
 
     @patch("decnet.network.os.geteuid", return_value=1)
     def test_requires_root(self, _):
@@ -182,9 +198,13 @@ class TestSetupHostIpvlan:
     def test_uses_ipvlan_iface_name(self, mock_run, _):
         mock_run.side_effect = lambda cmd, **kw: MagicMock(returncode=1) if "show" in cmd else MagicMock(returncode=0)
         setup_host_ipvlan("wlan0", "192.168.1.5", "192.168.1.96/27")
-        calls = [str(c) for c in mock_run.call_args_list]
-        assert any(HOST_IPVLAN_IFACE in c for c in calls)
-        assert not any(HOST_MACVLAN_IFACE in c for c in calls)
+        calls = [c[0][0] for c in mock_run.call_args_list]
+        # Primary interface created is the ipvlan slave.
+        assert any("add" in cmd and HOST_IPVLAN_IFACE in cmd for cmd in calls)
+        # The only macvlan reference allowed is the opportunistic `del`
+        # that cleans up a stale helper from a prior macvlan deploy.
+        macvlan_refs = [cmd for cmd in calls if HOST_MACVLAN_IFACE in cmd]
+        assert all(cmd[:3] == ["ip", "link", "del"] for cmd in macvlan_refs)
 
     @patch("decnet.network.os.geteuid", return_value=1)
     def test_requires_root(self, _):
