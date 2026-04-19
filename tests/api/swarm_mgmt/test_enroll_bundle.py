@@ -79,6 +79,42 @@ async def test_bundle_urls_use_master_host_not_request_base(client, auth_token):
 
 
 @pytest.mark.anyio
+async def test_use_ipvlan_opt_in_persists_and_bakes_into_ini(client, auth_token):
+    """use_ipvlan=True must persist on the SwarmHost row AND bake `ipvlan = true`
+    into the agent's decnet.ini so locally-initiated deploys also use IPvlan."""
+    from decnet.web.dependencies import repo
+
+    resp = await _post(client, auth_token, agent_name="ipv-node", use_ipvlan=True)
+    assert resp.status_code == 201
+    host_uuid = resp.json()["host_uuid"]
+    token = resp.json()["token"]
+
+    row = await repo.get_swarm_host_by_uuid(host_uuid)
+    assert row["use_ipvlan"] is True
+
+    tgz = await client.get(f"/api/v1/swarm/enroll-bundle/{token}.tgz")
+    assert tgz.status_code == 200
+    with tarfile.open(fileobj=io.BytesIO(tgz.content), mode="r:gz") as tar:
+        ini = tar.extractfile("etc/decnet/decnet.ini").read().decode()
+    assert "ipvlan = true" in ini
+
+
+@pytest.mark.anyio
+async def test_use_ipvlan_default_false(client, auth_token):
+    from decnet.web.dependencies import repo
+
+    resp = await _post(client, auth_token, agent_name="macv-node")
+    assert resp.status_code == 201
+    row = await repo.get_swarm_host_by_uuid(resp.json()["host_uuid"])
+    assert row["use_ipvlan"] is False
+
+    tgz = await client.get(f"/api/v1/swarm/enroll-bundle/{resp.json()['token']}.tgz")
+    with tarfile.open(fileobj=io.BytesIO(tgz.content), mode="r:gz") as tar:
+        ini = tar.extractfile("etc/decnet/decnet.ini").read().decode()
+    assert "ipvlan = false" in ini
+
+
+@pytest.mark.anyio
 async def test_duplicate_agent_name_409(client, auth_token):
     r1 = await _post(client, auth_token, agent_name="dup-node")
     assert r1.status_code == 201

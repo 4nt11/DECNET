@@ -126,6 +126,11 @@ class SwarmHost(SQLModel, table=True):
     cert_bundle_path: str
     enrolled_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
     notes: Optional[str] = Field(default=None, sa_column=Column("notes", Text, nullable=True))
+    # Per-host driver preference. True => deckies on this host run over IPvlan
+    # (L2) instead of macvlan — required when the host is a VirtualBox guest
+    # bridged over Wi-Fi, because Wi-Fi APs only allow one MAC per station
+    # and macvlan's per-container MACs rotate the VM's DHCP lease.
+    use_ipvlan: bool = Field(default=False)
 
 
 class DeckyShard(SQLModel, table=True):
@@ -322,6 +327,7 @@ class SwarmHostView(BaseModel):
     updater_cert_fingerprint: Optional[str] = None
     enrolled_at: datetime
     notes: Optional[str] = None
+    use_ipvlan: bool = False
 
 
 class DeckyShardView(BaseModel):

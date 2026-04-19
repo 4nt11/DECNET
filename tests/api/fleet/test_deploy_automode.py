@@ -155,6 +155,28 @@ async def test_deploy_automode_resets_stale_host_uuid(client, auth_token, monkey
 
 
 @pytest.mark.anyio
+async def test_deploy_automode_flips_ipvlan_for_opted_in_host(client, auth_token, monkeypatch):
+    """A host enrolled with use_ipvlan=True must receive a DecnetConfig with
+    ipvlan=True in its shard — sharding is per-host, so _worker_config flips it."""
+    from decnet.web.router.swarm.api_deploy_swarm import _worker_config
+    from decnet.config import DecnetConfig, DeckyConfig
+
+    base = DecnetConfig(
+        mode="swarm", interface="eth0", subnet="192.168.1.0/24", gateway="192.168.1.1",
+        ipvlan=False,
+        deckies=[DeckyConfig(
+            name="decky-1", ip="192.168.1.10", services=["ssh"],
+            distro="debian", base_image="debian:bookworm-slim", hostname="decky-1",
+            host_uuid="h1",
+        )],
+    )
+    opted_in = {"uuid": "h1", "name": "w1", "use_ipvlan": True}
+    opted_out = {"uuid": "h1", "name": "w1", "use_ipvlan": False}
+    assert _worker_config(base, base.deckies, opted_in).ipvlan is True
+    assert _worker_config(base, base.deckies, opted_out).ipvlan is False
+
+
+@pytest.mark.anyio
 async def test_deployment_mode_endpoint(client, auth_token, monkeypatch):
     monkeypatch.setenv("DECNET_MODE", "master")
     for row in await repo.list_swarm_hosts():

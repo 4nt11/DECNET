@@ -43,8 +43,18 @@ def _shard_by_host(config: DecnetConfig) -> dict[str, list[DeckyConfig]]:
     return buckets
 
 
-def _worker_config(base: DecnetConfig, shard: list[DeckyConfig]) -> DecnetConfig:
-    return base.model_copy(update={"deckies": shard})
+def _worker_config(
+    base: DecnetConfig,
+    shard: list[DeckyConfig],
+    host: dict[str, Any],
+) -> DecnetConfig:
+    updates: dict[str, Any] = {"deckies": shard}
+    # Per-host driver opt-in (Wi-Fi-bridged VMs can't use macvlan — see
+    # SwarmHost.use_ipvlan). Never downgrade: if the operator picked ipvlan
+    # at the deploy level, keep it regardless of the per-host flag.
+    if host.get("use_ipvlan"):
+        updates["ipvlan"] = True
+    return base.model_copy(update=updates)
 
 
 async def dispatch_decnet_config(
@@ -69,7 +79,7 @@ async def dispatch_decnet_config(
 
     async def _dispatch(host_uuid: str, shard: list[DeckyConfig]) -> SwarmHostResult:
         host = hosts[host_uuid]
-        cfg = _worker_config(config, shard)
+        cfg = _worker_config(config, shard, host)
         try:
             async with AgentClient(host=host) as agent:
                 body = await agent.deploy(cfg, dry_run=dry_run, no_cache=no_cache)

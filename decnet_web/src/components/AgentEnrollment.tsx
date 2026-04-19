@@ -15,6 +15,7 @@ const AgentEnrollment: React.FC = () => {
   const [masterHost, setMasterHost] = useState(window.location.hostname);
   const [agentName, setAgentName] = useState('');
   const [withUpdater, setWithUpdater] = useState(true);
+  const [useIpvlan, setUseIpvlan] = useState(false);
   const [servicesIni, setServicesIni] = useState<string | null>(null);
   const [servicesIniName, setServicesIniName] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
@@ -49,6 +50,7 @@ const AgentEnrollment: React.FC = () => {
     setError(null);
     setAgentName('');
     setWithUpdater(true);
+    setUseIpvlan(false);
     setServicesIni(null);
     setServicesIniName(null);
     setCopied(false);
@@ -64,6 +66,7 @@ const AgentEnrollment: React.FC = () => {
         master_host: masterHost,
         agent_name: agentName,
         with_updater: withUpdater,
+        use_ipvlan: useIpvlan,
         services_ini: servicesIni,
       });
       setResult(res.data);
@@ -129,6 +132,16 @@ const AgentEnrollment: React.FC = () => {
                 onChange={(e) => setWithUpdater(e.target.checked)}
               />
               <span>Install updater daemon (lets the master push code updates to this agent)</span>
+            </label>
+            <label className="form-inline">
+              <input
+                type="checkbox"
+                checked={useIpvlan}
+                onChange={(e) => setUseIpvlan(e.target.checked)}
+              />
+              <span>
+                Use IPvlan instead of MACVLAN (required for VirtualBox/VMware guests bridged over Wi-Fi — Wi-Fi APs bind one MAC per station, so MACVLAN rotates the VM's lease)
+              </span>
             </label>
             <label>
               Services INI (optional)
