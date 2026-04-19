@@ -43,16 +43,20 @@ async def api_deploy_deckies(req: DeployIniRequest, admin: dict = Depends(requir
     state_dict = await repo.get_state("deployment")
     ingest_log_file = os.environ.get("DECNET_INGEST_LOG_FILE")
 
+    config: DecnetConfig | None = None
     if state_dict:
         config = DecnetConfig(**state_dict["config"])
         subnet_cidr = ini.subnet or config.subnet
         gateway = ini.gateway or config.gateway
-        host_ip = get_host_ip(config.interface)
+        iface = config.interface
+        host_ip = get_host_ip(iface)
         # Always sync config log_file with current API ingestion target
         if ingest_log_file:
             config.log_file = ingest_log_file
     else:
-        # If no state exists, we need to infer network details from the INI or the host.
+        # No state yet — infer network details from the INI or the host. We
+        # defer instantiating DecnetConfig until after build_deckies_from_ini
+        # because DecnetConfig.deckies has min_length=1.
         try:
             iface = ini.interface or detect_interface()
             subnet_cidr, gateway = ini.subnet, ini.gateway
@@ -67,16 +71,6 @@ async def api_deploy_deckies(req: DeployIniRequest, admin: dict = Depends(requir
                 detail=f"Network configuration conflict: {e}. "
                        "Add a [general] section with interface=, net=, and gw= to the INI."
             )
-        config = DecnetConfig(
-            mode="unihost",
-            interface=iface,
-            subnet=subnet_cidr,
-            gateway=gateway,
-            deckies=[],
-            log_file=ingest_log_file,
-            ipvlan=False,
-            mutate_interval=ini.mutate_interval or DEFAULT_MUTATE_INTERVAL
-        )
 
     try:
         new_decky_configs = build_deckies_from_ini(
@@ -85,6 +79,18 @@ async def api_deploy_deckies(req: DeployIniRequest, admin: dict = Depends(requir
     except ValueError as e:
         log.debug("deploy: build_deckies_from_ini rejected input: %s", e)
         raise HTTPException(status_code=409, detail=str(e))
+
+    if config is None:
+        config = DecnetConfig(
+            mode="unihost",
+            interface=iface,
+            subnet=subnet_cidr,
+            gateway=gateway,
+            deckies=new_decky_configs,
+            log_file=ingest_log_file,
+            ipvlan=False,
+            mutate_interval=ini.mutate_interval or DEFAULT_MUTATE_INTERVAL,
+        )
 
     # Merge deckies
     existing_deckies_map = {d.name: d for d in config.deckies}
