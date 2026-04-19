@@ -333,6 +333,7 @@ class SwarmHostView(BaseModel):
 class DeckyShardView(BaseModel):
     """One decky → host mapping, enriched with the host's identity for display."""
     decky_name: str
+    decky_ip: Optional[str] = None  # resolved from the stored DecnetConfig at read time
     host_uuid: str
     host_name: str
     host_address: str

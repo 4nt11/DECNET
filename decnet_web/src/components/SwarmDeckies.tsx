@@ -6,6 +6,7 @@ import { Boxes, PowerOff, RefreshCw } from 'lucide-react';
 
 interface DeckyShard {
   decky_name: string;
+  decky_ip: string | null;
   host_uuid: string;
   host_name: string;
   host_address: string;
@@ -87,9 +88,9 @@ const SwarmDeckies: React.FC = () => {
               <thead>
                 <tr>
                   <th>Decky</th>
+                  <th>IP</th>
                   <th>State</th>
                   <th>Services</th>
-                  <th>Compose</th>
                   <th>Updated</th>
                   <th></th>
                 </tr>
@@ -98,9 +99,9 @@ const SwarmDeckies: React.FC = () => {
                 {h.shards.map((s) => (
                   <tr key={`${uuid}-${s.decky_name}`}>
                     <td>{s.decky_name}</td>
+                    <td><code>{s.decky_ip || '—'}</code></td>
                     <td>{s.state}{s.last_error ? ` — ${s.last_error}` : ''}</td>
                     <td>{s.services.join(', ')}</td>
-                    <td><code>{s.compose_hash ? s.compose_hash.slice(0, 8) : '—'}</code></td>
                     <td>{new Date(s.updated_at).toLocaleString()}</td>
                     <td>
                       <button

@@ -22,6 +22,15 @@ async def list_deckies(
     shards = await repo.list_decky_shards(host_uuid)
     hosts = {h["uuid"]: h for h in await repo.list_swarm_hosts()}
 
+    # IPs live on the stored DecnetConfig, not on the shard row. Resolve by
+    # decky_name — if the master rebooted without a config, the column falls
+    # back to "—" rather than blocking the list.
+    deploy_state = await repo.get_state("deployment") or {}
+    cfg_deckies = (deploy_state.get("config") or {}).get("deckies") or []
+    ip_by_name: dict[str, str] = {
+        d.get("name"): d.get("ip") for d in cfg_deckies if d.get("name")
+    }
+
     out: list[DeckyShardView] = []
     for s in shards:
         if state and s.get("state") != state:
@@ -29,6 +38,7 @@ async def list_deckies(
         host = hosts.get(s["host_uuid"], {})
         out.append(DeckyShardView(
             decky_name=s["decky_name"],
+            decky_ip=ip_by_name.get(s["decky_name"]),
             host_uuid=s["host_uuid"],
             host_name=host.get("name") or "<unknown>",
             host_address=host.get("address") or "",
