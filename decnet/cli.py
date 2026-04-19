@@ -1761,11 +1761,12 @@ def db_reset(
 # Forgetting to register a new command is a role-boundary bug. Grep for
 # MASTER_ONLY when touching command registration.
 #
-# Worker-legitimate commands (NOT in these sets): agent, updater, forwarder.
+# Worker-legitimate commands (NOT in these sets): agent, updater, forwarder,
+# status (agents run deckies locally and should be able to inspect them).
 # ───────────────────────────────────────────────────────────────────────────
 MASTER_ONLY_COMMANDS: frozenset[str] = frozenset({
     "api", "swarmctl", "deploy", "redeploy", "teardown",
-    "probe", "collect", "mutate", "listener", "status",
+    "probe", "collect", "mutate", "listener",
     "services", "distros", "correlate", "archetypes", "web",
     "profiler", "sniffer", "db-reset",
 })

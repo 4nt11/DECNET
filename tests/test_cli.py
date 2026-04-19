@@ -217,6 +217,28 @@ class TestStatusCommand:
         result = runner.invoke(app, ["status"])
         assert result.exit_code == 0
 
+    def test_status_available_in_agent_mode(self, monkeypatch):
+        # Agents run deckies locally and must be able to inspect them;
+        # `status` is intentionally NOT in MASTER_ONLY_COMMANDS.
+        import importlib
+
+        import decnet.cli as cli_mod
+
+        monkeypatch.setenv("DECNET_MODE", "agent")
+        monkeypatch.setenv("DECNET_DISALLOW_MASTER", "true")
+        reloaded = importlib.reload(cli_mod)
+        try:
+            names = {
+                (c.name or c.callback.__name__)
+                for c in reloaded.app.registered_commands
+            }
+            assert "status" in names
+            assert "deploy" not in names  # sanity: master-only still gated
+        finally:
+            monkeypatch.delenv("DECNET_MODE", raising=False)
+            monkeypatch.delenv("DECNET_DISALLOW_MASTER", raising=False)
+            importlib.reload(cli_mod)
+
 
 # ── mutate command ────────────────────────────────────────────────────────────
 
