@@ -22,6 +22,7 @@ from .config.api_reinit import router as config_reinit_router
 from .health.api_get_health import router as health_router
 from .artifacts.api_get_artifact import router as artifacts_router
 from .swarm_updates import swarm_updates_router
+from .swarm_mgmt import swarm_mgmt_router
 
 api_router = APIRouter()
 
@@ -64,3 +65,6 @@ api_router.include_router(artifacts_router)
 
 # Remote Updates (dashboard → worker updater daemons)
 api_router.include_router(swarm_updates_router)
+
+# Swarm Management (dashboard: hosts, deckies, agent enrollment bundles)
+api_router.include_router(swarm_mgmt_router)
