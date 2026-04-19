@@ -419,11 +419,17 @@ def test_spawn_agent_via_systemd_records_main_pid(
     pid = ex._spawn_agent_via_systemd(install_dir)
     assert pid == 4711
     assert (install_dir / "agent.pid").read_text() == "4711"
-    # Agent restart, forwarder restart, then MainPID lookup on the agent.
+    # Agent restart, forwarder restart, each aux microservice, then the
+    # MainPID lookup on the agent.
     assert calls[0] == ["systemctl", "restart", ex.AGENT_SYSTEMD_UNIT]
     assert calls[1] == ["systemctl", "restart", ex.FORWARDER_SYSTEMD_UNIT]
-    assert calls[2][:2] == ["systemctl", "show"]
-    assert ex.AGENT_SYSTEMD_UNIT in calls[2]
+    aux_calls = calls[2 : 2 + len(ex.AUXILIARY_SYSTEMD_UNITS)]
+    assert aux_calls == [
+        ["systemctl", "restart", unit] for unit in ex.AUXILIARY_SYSTEMD_UNITS
+    ]
+    show_call = calls[2 + len(ex.AUXILIARY_SYSTEMD_UNITS)]
+    assert show_call[:2] == ["systemctl", "show"]
+    assert ex.AGENT_SYSTEMD_UNIT in show_call
 
 
 def test_spawn_agent_via_systemd_tolerates_missing_forwarder_unit(

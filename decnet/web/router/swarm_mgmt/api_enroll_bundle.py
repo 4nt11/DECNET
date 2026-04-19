@@ -63,10 +63,19 @@ _EXCLUDES: tuple[str, ...] = (
     "wiki-checkout", "wiki-checkout/*",
     # Frontend is master-only; agents never serve UI.
     "decnet_web", "decnet_web/*", "decnet_web/**",
-    # Master FastAPI app (API, routers, master-side DB) is not run on agents.
-    # The `agent` / `updater` / `forwarder` commands have their own apps under
-    # decnet/agent, decnet/updater — they don't import decnet.web.
-    "decnet/web", "decnet/web/*", "decnet/web/**",
+    # Master API surface. Agents ship with decnet.web.db + auth + dependencies
+    # (the profiler microservice needs the repo singleton), but the FastAPI
+    # app itself (api.py, swarm_api.py, the full router tree, the ingester,
+    # and the .j2 templates that the master renders into the tarball) has no
+    # business running on a worker.
+    "decnet/web/api.py",
+    "decnet/web/swarm_api.py",
+    "decnet/web/ingester.py",
+    "decnet/web/router", "decnet/web/router/*", "decnet/web/router/**",
+    "decnet/web/templates", "decnet/web/templates/*", "decnet/web/templates/**",
+    # Mutator is master-only (it schedules decky respawns across the swarm);
+    # agents never invoke it. Keep it off the worker.
+    "decnet/mutator", "decnet/mutator/*", "decnet/mutator/**",
     "decnet-state.json",
     "master.log", "master.json",
     "decnet.tar",
@@ -254,7 +263,11 @@ def _build_tarball(
     return buf.getvalue()
 
 
-_SYSTEMD_UNITS = ("decnet-agent", "decnet-forwarder", "decnet-engine", "decnet-updater")
+_SYSTEMD_UNITS = (
+    "decnet-agent", "decnet-forwarder", "decnet-engine", "decnet-updater",
+    # Per-host microservices — activated by enroll_bootstrap.sh.
+    "decnet-collector", "decnet-prober", "decnet-profiler", "decnet-sniffer",
+)
 
 
 def _render_systemd_unit(name: str, agent_name: str, master_host: str) -> bytes:

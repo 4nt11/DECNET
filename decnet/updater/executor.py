@@ -237,6 +237,14 @@ def _run_pip(
 AGENT_SYSTEMD_UNIT = "decnet-agent.service"
 FORWARDER_SYSTEMD_UNIT = "decnet-forwarder.service"
 UPDATER_SYSTEMD_UNIT = "decnet-updater.service"
+# Per-host microservices that run out of the same /opt/decnet tree. An
+# update replaces their code, so we must cycle them alongside the agent or
+# they keep serving the pre-update image. Best-effort: legacy enrollments
+# without these units installed shouldn't abort the update.
+AUXILIARY_SYSTEMD_UNITS = (
+    "decnet-collector.service", "decnet-prober.service",
+    "decnet-profiler.service", "decnet-sniffer.service",
+)
 
 
 def _systemd_available() -> bool:
@@ -286,6 +294,13 @@ def _spawn_agent_via_systemd(install_dir: pathlib.Path) -> int:
     )
     if fwd.returncode != 0:
         log.warning("forwarder restart failed (ignored): %s", fwd.stderr.strip())
+    for unit in AUXILIARY_SYSTEMD_UNITS:
+        aux = subprocess.run(  # nosec B603 B607
+            ["systemctl", "restart", unit],
+            check=False, capture_output=True, text=True,
+        )
+        if aux.returncode != 0:
+            log.warning("%s restart failed (ignored): %s", unit, aux.stderr.strip())
     pid_out = subprocess.run(  # nosec B603 B607
         ["systemctl", "show", "--property=MainPID", "--value", AGENT_SYSTEMD_UNIT],
         check=True, capture_output=True, text=True,

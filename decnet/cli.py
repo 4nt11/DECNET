@@ -1323,6 +1323,11 @@ def status() -> None:
     _status()
 
     registry = _service_registry(str(DECNET_INGEST_LOG_FILE))
+    # On agents, the Mutator runs master-side only (it schedules decky
+    # respawns across the swarm) and the API is never shipped. Hide those
+    # rows so operators aren't chasing permanent DOWN entries.
+    if _agent_mode_active():
+        registry = [r for r in registry if r[0] not in {"Mutator", "API"}]
     svc_table = Table(title="DECNET Services", show_lines=True)
     svc_table.add_column("Service", style="bold cyan")
     svc_table.add_column("Status")
@@ -1762,13 +1767,17 @@ def db_reset(
 # MASTER_ONLY when touching command registration.
 #
 # Worker-legitimate commands (NOT in these sets): agent, updater, forwarder,
-# status (agents run deckies locally and should be able to inspect them).
+# status, collect, probe, profiler, sniffer. Agents run deckies locally and
+# should be able to inspect them + run the per-host microservices (collector
+# streams container logs, prober/profiler characterize attackers hitting
+# this host, sniffer captures traffic). Mutator stays master-only because
+# it orchestrates respawns across the swarm.
 # ───────────────────────────────────────────────────────────────────────────
 MASTER_ONLY_COMMANDS: frozenset[str] = frozenset({
     "api", "swarmctl", "deploy", "redeploy", "teardown",
-    "probe", "collect", "mutate", "listener",
+    "mutate", "listener",
     "services", "distros", "correlate", "archetypes", "web",
-    "profiler", "sniffer", "db-reset",
+    "db-reset",
 })
 MASTER_ONLY_GROUPS: frozenset[str] = frozenset({"swarm"})
 

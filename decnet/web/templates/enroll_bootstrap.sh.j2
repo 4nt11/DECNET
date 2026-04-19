@@ -60,15 +60,24 @@ chmod 0755 "$VENV_DIR/bin/decnet"
 ln -sf "$VENV_DIR/bin/decnet" /usr/local/bin/decnet
 
 echo "[DECNET] installing systemd units..."
-install -Dm0644 etc/systemd/system/decnet-agent.service /etc/systemd/system/decnet-agent.service
-install -Dm0644 etc/systemd/system/decnet-forwarder.service /etc/systemd/system/decnet-forwarder.service
-install -Dm0644 etc/systemd/system/decnet-engine.service /etc/systemd/system/decnet-engine.service
+for unit in \
+  decnet-agent decnet-forwarder decnet-engine \
+  decnet-collector decnet-prober decnet-profiler decnet-sniffer; do
+  install -Dm0644 "etc/systemd/system/${unit}.service" "/etc/systemd/system/${unit}.service"
+done
 if [[ "$WITH_UPDATER" == "true" ]]; then
   install -Dm0644 etc/systemd/system/decnet-updater.service /etc/systemd/system/decnet-updater.service
 fi
 systemctl daemon-reload
 
-ACTIVE_UNITS=(decnet-agent.service decnet-forwarder.service)
+# Agent + forwarder are the control plane; collector/prober/profiler/sniffer
+# are the per-host microservices that used to require `decnet deploy` to
+# auto-spawn. With systemd units they come up at boot and auto-restart.
+ACTIVE_UNITS=(
+  decnet-agent.service decnet-forwarder.service
+  decnet-collector.service decnet-prober.service
+  decnet-profiler.service decnet-sniffer.service
+)
 if [[ "$WITH_UPDATER" == "true" ]]; then
   ACTIVE_UNITS+=(decnet-updater.service)
 fi

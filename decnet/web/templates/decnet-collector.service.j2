@@ -1,0 +1,20 @@
+[Unit]
+Description=DECNET container log collector — {{ agent_name }}
+Documentation=https://github.com/anti/DECNET
+After=network-online.target decnet-agent.service
+Wants=network-online.target
+PartOf=decnet-agent.service
+
+[Service]
+Type=simple
+WorkingDirectory=/opt/decnet
+Environment=DECNET_MODE=agent
+Environment=DECNET_SYSTEM_LOGS=/var/log/decnet/decnet.collector.log
+ExecStart=/usr/local/bin/decnet collect --log-file /var/log/decnet/decnet.log
+Restart=on-failure
+RestartSec=5
+StandardOutput=append:/var/log/decnet/decnet.collector.log
+StandardError=append:/var/log/decnet/decnet.collector.log
+
+[Install]
+WantedBy=multi-user.target
