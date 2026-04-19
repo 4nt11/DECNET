@@ -31,7 +31,7 @@ from decnet.network import (
 log = get_logger("engine")
 console = Console()
 COMPOSE_FILE = Path("decnet-compose.yml")
-_CANONICAL_LOGGING = Path(__file__).parent.parent.parent / "templates" / "syslog_bridge.py"
+_CANONICAL_LOGGING = Path(__file__).parent.parent / "templates" / "syslog_bridge.py"
 
 
 def _sync_logging_helper(config: DecnetConfig) -> None:

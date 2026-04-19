@@ -2,7 +2,7 @@ import json
 from pathlib import Path
 from decnet.services.base import BaseService
 
-TEMPLATES_DIR = Path(__file__).parent.parent.parent / "templates" / "http"
+TEMPLATES_DIR = Path(__file__).parent.parent / "templates" / "http"
 
 
 class HTTPService(BaseService):

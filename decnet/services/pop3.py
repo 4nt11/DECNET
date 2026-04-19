@@ -1,7 +1,7 @@
 from pathlib import Path
 from decnet.services.base import BaseService
 
-TEMPLATES_DIR = Path(__file__).parent.parent.parent / "templates" / "pop3"
+TEMPLATES_DIR = Path(__file__).parent.parent / "templates" / "pop3"
 
 
 class POP3Service(BaseService):

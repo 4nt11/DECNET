@@ -19,7 +19,7 @@ import pytest
 
 from decnet.collector.worker import parse_rfc5424
 
-_TEMPLATE_DIR = Path(__file__).resolve().parent.parent / "templates" / "ssh"
+_TEMPLATE_DIR = Path(__file__).resolve().parent.parent / "decnet" / "templates" / "ssh"
 _EMIT_SCRIPT = _TEMPLATE_DIR / "emit_capture.py"
 
 

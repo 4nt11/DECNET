@@ -93,7 +93,7 @@ filterwarnings = [
 
 [tool.coverage.run]
 source = ["decnet"]
-omit = ["*/tests/*", "templates/*"]
+omit = ["*/tests/*", "*/templates/*"]
 parallel = true
 
 [tool.coverage.report]
@@ -105,7 +105,12 @@ skip_covered = false
 where = ["."]
 include = ["decnet*"]
 
+[tool.setuptools.package-data]
+# Ship docker build contexts + syslog_bridge.py as package data so they land
+# in site-packages when agents install the bundle via `pip install`.
+decnet = ["templates/**/*"]
+
 [tool.bandit]
 exclude_dirs = [
-    "templates/syslog_bridge.py",
+    "decnet/templates/syslog_bridge.py",
 ]

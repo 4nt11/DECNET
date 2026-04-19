@@ -1,7 +1,7 @@
 from pathlib import Path
 from decnet.services.base import BaseService
 
-TEMPLATES_DIR = Path(__file__).parent.parent.parent / "templates" / "postgres"
+TEMPLATES_DIR = Path(__file__).parent.parent / "templates" / "postgres"
 
 
 class PostgresService(BaseService):
