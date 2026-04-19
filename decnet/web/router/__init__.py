@@ -21,6 +21,7 @@ from .config.api_manage_users import router as config_users_router
 from .config.api_reinit import router as config_reinit_router
 from .health.api_get_health import router as health_router
 from .artifacts.api_get_artifact import router as artifacts_router
+from .swarm_updates import swarm_updates_router
 
 api_router = APIRouter()
 
@@ -60,3 +61,6 @@ api_router.include_router(config_reinit_router)
 
 # Artifacts (captured attacker file drops)
 api_router.include_router(artifacts_router)
+
+# Remote Updates (dashboard → worker updater daemons)
+api_router.include_router(swarm_updates_router)
