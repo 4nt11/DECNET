@@ -27,7 +27,7 @@ def test_factory_mysql_branch(monkeypatch):
     first query — so the repository constructs cleanly here.
     """
     monkeypatch.setenv("DECNET_DB_TYPE", "mysql")
-    monkeypatch.setenv("DECNET_DB_URL", "mysql+aiomysql://u:p@127.0.0.1:3306/x")
+    monkeypatch.setenv("DECNET_DB_URL", "mysql+asyncmy://u:p@127.0.0.1:3306/x")
     repo = get_repository()
     assert isinstance(repo, MySQLRepository)
 

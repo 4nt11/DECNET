@@ -59,7 +59,7 @@ class MutateRequest(BaseModel):
 
 @app.get("/health")
 async def health() -> dict[str, str]:
-    return {"status": "ok", "marker": "push-test-2"}
+    return {"status": "ok"}
 
 
 @app.get("/status")
