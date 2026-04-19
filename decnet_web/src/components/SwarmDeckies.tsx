@@ -2,7 +2,7 @@ import React, { useEffect, useState } from 'react';
 import api from '../utils/api';
 import './Dashboard.css';
 import './Swarm.css';
-import { Boxes, RefreshCw } from 'lucide-react';
+import { Boxes, PowerOff, RefreshCw } from 'lucide-react';
 
 interface DeckyShard {
   decky_name: string;
@@ -20,6 +20,7 @@ interface DeckyShard {
 const SwarmDeckies: React.FC = () => {
   const [shards, setShards] = useState<DeckyShard[]>([]);
   const [loading, setLoading] = useState(true);
+  const [tearingDown, setTearingDown] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
 
   const fetch = async () => {
@@ -39,6 +40,19 @@ const SwarmDeckies: React.FC = () => {
     const t = setInterval(fetch, 10000);
     return () => clearInterval(t);
   }, []);
+
+  const handleTeardown = async (s: DeckyShard) => {
+    if (!window.confirm(`Tear down decky ${s.decky_name} on ${s.host_name}?`)) return;
+    setTearingDown(s.decky_name);
+    try {
+      await api.post(`/swarm/hosts/${s.host_uuid}/teardown`, { decky_id: s.decky_name });
+      await fetch();
+    } catch (err: any) {
+      alert(err?.response?.data?.detail || 'Teardown failed');
+    } finally {
+      setTearingDown(null);
+    }
+  };
 
   const byHost: Record<string, { name: string; address: string; status: string; shards: DeckyShard[] }> = {};
   for (const s of shards) {
@@ -77,6 +91,7 @@ const SwarmDeckies: React.FC = () => {
                   <th>Services</th>
                   <th>Compose</th>
                   <th>Updated</th>
+                  <th></th>
                 </tr>
               </thead>
               <tbody>
@@ -87,6 +102,16 @@ const SwarmDeckies: React.FC = () => {
                     <td>{s.services.join(', ')}</td>
                     <td><code>{s.compose_hash ? s.compose_hash.slice(0, 8) : '—'}</code></td>
                     <td>{new Date(s.updated_at).toLocaleString()}</td>
+                    <td>
+                      <button
+                        className="control-btn danger"
+                        disabled={tearingDown === s.decky_name}
+                        onClick={() => handleTeardown(s)}
+                        title="Stop this decky on its host"
+                      >
+                        <PowerOff size={14} /> {tearingDown === s.decky_name ? 'Tearing down…' : 'Teardown'}
+                      </button>
+                    </td>
                   </tr>
                 ))}
               </tbody>

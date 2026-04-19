@@ -55,6 +55,9 @@ _EXCLUDES: tuple[str, ...] = (
     ".pytest_cache", ".pytest_cache/*",
     ".mypy_cache", ".mypy_cache/*",
     "*.egg-info", "*.egg-info/*",
+    # setuptools build/ staging dir — created by `pip install` and leaks a
+    # nested decnet_web/node_modules/ copy into the bundle otherwise.
+    "build", "build/*", "build/**",
     "*.pyc", "*.pyo",
     "*.db", "*.db-wal", "*.db-shm", "decnet.db*",
     "*.log",

@@ -228,3 +228,6 @@ class BaseRepository(ABC):
 
     async def delete_decky_shards_for_host(self, host_uuid: str) -> int:
         raise NotImplementedError
+
+    async def delete_decky_shard(self, decky_name: str) -> bool:
+        raise NotImplementedError

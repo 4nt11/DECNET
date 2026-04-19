@@ -861,3 +861,12 @@ class SQLModelRepository(BaseRepository):
             )
             await session.commit()
             return result.rowcount or 0
+
+    async def delete_decky_shard(self, decky_name: str) -> bool:
+        async with self._session() as session:
+            result = await session.execute(
+                text("DELETE FROM decky_shards WHERE decky_name = :n"),
+                {"n": decky_name},
+            )
+            await session.commit()
+            return bool(result.rowcount)

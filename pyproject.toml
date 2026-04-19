@@ -111,6 +111,9 @@ include = ["decnet*"]
 decnet = ["templates/**/*"]
 
 [tool.bandit]
+# Docker build contexts — code runs inside decoy containers, not in the
+# master/agent process. Skipping keeps honeypot service scripts (hashlib.md5
+# for JA3, /tmp/build in Dockerfile helpers, etc.) out of the scan.
 exclude_dirs = [
-    "decnet/templates/syslog_bridge.py",
+    "decnet/templates",
 ]

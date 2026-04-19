@@ -2,7 +2,7 @@ import React, { useEffect, useState } from 'react';
 import api from '../utils/api';
 import './Dashboard.css';
 import './Swarm.css';
-import { HardDrive, RefreshCw, Trash2, Wifi, WifiOff } from 'lucide-react';
+import { HardDrive, PowerOff, RefreshCw, Trash2, Wifi, WifiOff } from 'lucide-react';
 
 interface SwarmHost {
   uuid: string;
@@ -23,6 +23,7 @@ const SwarmHosts: React.FC = () => {
   const [hosts, setHosts] = useState<SwarmHost[]>([]);
   const [loading, setLoading] = useState(true);
   const [decommissioning, setDecommissioning] = useState<string | null>(null);
+  const [tearingDown, setTearingDown] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
 
   const fetchHosts = async () => {
@@ -42,6 +43,19 @@ const SwarmHosts: React.FC = () => {
     const t = setInterval(fetchHosts, 10000);
     return () => clearInterval(t);
   }, []);
+
+  const handleTeardownAll = async (host: SwarmHost) => {
+    if (!window.confirm(`Tear down ALL deckies on ${host.name}? The host stays enrolled.`)) return;
+    setTearingDown(host.uuid);
+    try {
+      await api.post(`/swarm/hosts/${host.uuid}/teardown`, {});
+      await fetchHosts();
+    } catch (err: any) {
+      alert(err?.response?.data?.detail || 'Teardown failed');
+    } finally {
+      setTearingDown(null);
+    }
+  };
 
   const handleDecommission = async (host: SwarmHost) => {
     if (!window.confirm(`Decommission ${host.name} (${host.address})? This removes certs and decky mappings.`)) return;
@@ -97,6 +111,14 @@ const SwarmHosts: React.FC = () => {
                   <td title={h.client_cert_fingerprint}><code>{shortFp(h.client_cert_fingerprint)}</code></td>
                   <td>{new Date(h.enrolled_at).toLocaleString()}</td>
                   <td>
+                    <button
+                      className="control-btn"
+                      disabled={tearingDown === h.uuid || h.status !== 'active'}
+                      onClick={() => handleTeardownAll(h)}
+                      title="Stop all deckies on this host (keeps it enrolled)"
+                    >
+                      <PowerOff size={14} /> {tearingDown === h.uuid ? 'Tearing down…' : 'Teardown all'}
+                    </button>
                     <button
                       className="control-btn danger"
                       disabled={decommissioning === h.uuid}
