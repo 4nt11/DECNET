@@ -47,15 +47,18 @@ def _worker_config(base: DecnetConfig, shard: list[DeckyConfig]) -> DecnetConfig
     return base.model_copy(update={"deckies": shard})
 
 
-@router.post("/deploy", response_model=SwarmDeployResponse, tags=["Swarm Deployments"])
-async def api_deploy_swarm(
-    req: SwarmDeployRequest,
-    repo: BaseRepository = Depends(get_repo),
+async def dispatch_decnet_config(
+    config: DecnetConfig,
+    repo: BaseRepository,
+    dry_run: bool = False,
+    no_cache: bool = False,
 ) -> SwarmDeployResponse:
-    if req.config.mode != "swarm":
-        raise HTTPException(status_code=400, detail="mode must be 'swarm'")
+    """Shard ``config`` by ``host_uuid`` and dispatch to each worker in parallel.
 
-    buckets = _shard_by_host(req.config)
+    Shared between POST /swarm/deploy (explicit swarm call) and the auto-swarm
+    branch of POST /deckies/deploy.
+    """
+    buckets = _shard_by_host(config)
 
     hosts: dict[str, dict[str, Any]] = {}
     for host_uuid in buckets:
@@ -66,17 +69,17 @@ async def api_deploy_swarm(
 
     async def _dispatch(host_uuid: str, shard: list[DeckyConfig]) -> SwarmHostResult:
         host = hosts[host_uuid]
-        cfg = _worker_config(req.config, shard)
+        cfg = _worker_config(config, shard)
         try:
             async with AgentClient(host=host) as agent:
-                body = await agent.deploy(cfg, dry_run=req.dry_run, no_cache=req.no_cache)
+                body = await agent.deploy(cfg, dry_run=dry_run, no_cache=no_cache)
             for d in shard:
                 await repo.upsert_decky_shard(
                     {
                         "decky_name": d.name,
                         "host_uuid": host_uuid,
                         "services": json.dumps(d.services),
-                        "state": "running" if not req.dry_run else "pending",
+                        "state": "running" if not dry_run else "pending",
                         "last_error": None,
                         "updated_at": datetime.now(timezone.utc),
                     }
@@ -102,3 +105,15 @@ async def api_deploy_swarm(
         *(_dispatch(uuid_, shard) for uuid_, shard in buckets.items())
     )
     return SwarmDeployResponse(results=list(results))
+
+
+@router.post("/deploy", response_model=SwarmDeployResponse, tags=["Swarm Deployments"])
+async def api_deploy_swarm(
+    req: SwarmDeployRequest,
+    repo: BaseRepository = Depends(get_repo),
+) -> SwarmDeployResponse:
+    if req.config.mode != "swarm":
+        raise HTTPException(status_code=400, detail="mode must be 'swarm'")
+    return await dispatch_decnet_config(
+        req.config, repo, dry_run=req.dry_run, no_cache=req.no_cache
+    )

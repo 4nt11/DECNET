@@ -10,6 +10,7 @@ from decnet.ini_loader import load_ini_from_string
 from decnet.network import detect_interface, detect_subnet, get_host_ip
 from decnet.web.dependencies import require_admin, repo
 from decnet.web.db.models import DeployIniRequest
+from decnet.web.router.swarm.api_deploy_swarm import dispatch_decnet_config
 
 log = get_logger("api")
 
@@ -109,12 +110,51 @@ async def api_deploy_deckies(req: DeployIniRequest, admin: dict = Depends(requir
 
     config.deckies = list(existing_deckies_map.values())
 
-    # We call deploy(config) which regenerates docker-compose and runs `up -d --remove-orphans`.
+    # Auto-mode: if we're a master with at least one enrolled/active SWARM
+    # host, shard the deckies across those workers instead of spawning docker
+    # containers on the master itself. Round-robin assignment over deckies
+    # that don't already carry a host_uuid (state from a prior swarm deploy
+    # keeps its original assignment).
+    swarm_hosts: list[dict] = []
+    if os.environ.get("DECNET_MODE", "master").lower() == "master":
+        swarm_hosts = [
+            h for h in await repo.list_swarm_hosts()
+            if h.get("status") in ("active", "enrolled") and h.get("address")
+        ]
+
+    if swarm_hosts:
+        unassigned = [d for d in config.deckies if not d.host_uuid]
+        for i, d in enumerate(unassigned):
+            d.host_uuid = swarm_hosts[i % len(swarm_hosts)]["uuid"]
+        config = config.model_copy(update={"mode": "swarm"})
+
+        try:
+            result = await dispatch_decnet_config(config, repo, dry_run=False, no_cache=False)
+        except HTTPException:
+            raise
+        except Exception as e:
+            log.exception("swarm-auto deploy dispatch failed: %s", e)
+            raise HTTPException(status_code=500, detail="Swarm dispatch failed. Check server logs.")
+
+        await repo.set_state("deployment", {
+            "config": config.model_dump(),
+            "compose_path": state_dict["compose_path"] if state_dict else "",
+        })
+
+        failed = [r for r in result.results if not r.ok]
+        if failed:
+            detail = "; ".join(f"{r.host_name}: {r.detail}" for r in failed)
+            raise HTTPException(status_code=502, detail=f"Partial swarm deploy failure — {detail}")
+        return {
+            "message": f"Deckies deployed across {len(result.results)} swarm host(s)",
+            "mode": "swarm",
+        }
+
+    # Unihost path — docker-compose on the master itself.
     try:
         if os.environ.get("DECNET_CONTRACT_TEST") != "true":
             _deploy(config)
 
-        # Persist new state to DB
         new_state_payload = {
             "config": config.model_dump(),
             "compose_path": str(_ROOT / "docker-compose.yml") if not state_dict else state_dict["compose_path"]
@@ -124,4 +164,4 @@ async def api_deploy_deckies(req: DeployIniRequest, admin: dict = Depends(requir
         log.exception("Deployment failed: %s", e)
         raise HTTPException(status_code=500, detail="Deployment failed. Check server logs for details.")
 
-    return {"message": "Deckies deployed successfully"}
+    return {"message": "Deckies deployed successfully", "mode": "unihost"}

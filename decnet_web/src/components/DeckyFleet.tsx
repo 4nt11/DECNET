@@ -23,6 +23,7 @@ const DeckyFleet: React.FC = () => {
   const [iniContent, setIniContent] = useState('');
   const [deploying, setDeploying] = useState(false);
   const [isAdmin, setIsAdmin] = useState(false);
+  const [deployMode, setDeployMode] = useState<{ mode: string; swarm_host_count: number } | null>(null);
 
   const fetchDeckies = async () => {
     try {
@@ -102,9 +103,19 @@ const DeckyFleet: React.FC = () => {
     reader.readAsText(file);
   };
 
+  const fetchDeployMode = async () => {
+    try {
+      const res = await api.get('/system/deployment-mode');
+      setDeployMode({ mode: res.data.mode, swarm_host_count: res.data.swarm_host_count });
+    } catch {
+      setDeployMode(null);
+    }
+  };
+
   useEffect(() => {
     fetchDeckies();
     fetchRole();
+    fetchDeployMode();
     const _interval = setInterval(fetchDeckies, 10000); // Fleet state updates less frequently than logs
     return () => clearInterval(_interval);
   }, []);
@@ -131,7 +142,16 @@ const DeckyFleet: React.FC = () => {
       {showDeploy && (
         <div style={{ marginBottom: '24px', padding: '24px', backgroundColor: 'var(--secondary-color)', border: '1px solid var(--accent-color)', display: 'flex', flexDirection: 'column', gap: '16px' }}>
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-            <h3 style={{ fontSize: '1rem', color: 'var(--text-color)' }}>Deploy via INI Configuration</h3>
+            <h3 style={{ fontSize: '1rem', color: 'var(--text-color)' }}>
+              Deploy via INI Configuration
+              {deployMode && (
+                <span style={{ marginLeft: 12, fontSize: '0.75rem', color: 'var(--dim-color)', fontWeight: 'normal' }}>
+                  {deployMode.mode === 'swarm'
+                    ? `→ will shard across ${deployMode.swarm_host_count} SWARM host(s)`
+                    : '→ will deploy locally (UNIHOST)'}
+                </span>
+              )}
+            </h3>
             <div>
               <input 
                 type="file" 

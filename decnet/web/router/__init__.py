@@ -23,6 +23,7 @@ from .health.api_get_health import router as health_router
 from .artifacts.api_get_artifact import router as artifacts_router
 from .swarm_updates import swarm_updates_router
 from .swarm_mgmt import swarm_mgmt_router
+from .system import system_router
 
 api_router = APIRouter()
 
@@ -68,3 +69,6 @@ api_router.include_router(swarm_updates_router)
 
 # Swarm Management (dashboard: hosts, deckies, agent enrollment bundles)
 api_router.include_router(swarm_mgmt_router)
+
+# System info (deployment-mode auto-detection, etc.)
+api_router.include_router(system_router)
