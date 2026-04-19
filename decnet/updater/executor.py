@@ -111,6 +111,32 @@ def _venv_python(release: pathlib.Path) -> pathlib.Path:
     return release / ".venv" / "bin" / "python"
 
 
+def _heal_path_symlink(install_dir: pathlib.Path) -> None:
+    """Point /usr/local/bin/decnet at the shared venv we manage.
+
+    Pre-fix bootstraps installed into ``<install_dir>/.venv`` (editable) and
+    symlinked /usr/local/bin/decnet there, so systemd units kept executing
+    the pre-update code even after ``_run_pip`` wrote to the shared venv.
+    Fix it opportunistically on every update so already-enrolled hosts
+    recover on the next push instead of needing a manual re-enroll.
+    """
+    target = _shared_venv(install_dir) / "bin" / "decnet"
+    link = pathlib.Path("/usr/local/bin/decnet")
+    if not target.is_file():
+        return
+    try:
+        if link.is_symlink() and pathlib.Path(os.readlink(link)) == target:
+            return
+        tmp = link.with_suffix(".tmp")
+        if tmp.exists() or tmp.is_symlink():
+            tmp.unlink()
+        tmp.symlink_to(target)
+        os.replace(tmp, link)
+        log.info("repointed %s -> %s", link, target)
+    except OSError as exc:
+        log.warning("could not repoint %s: %s", link, exc)
+
+
 def _shared_venv(install_dir: pathlib.Path) -> pathlib.Path:
     """The one stable venv that agents/updaters run out of.
 
@@ -447,27 +473,35 @@ def run_update(
     agent_dir: pathlib.Path = pki.DEFAULT_AGENT_DIR,
 ) -> dict[str, Any]:
     """Apply an update atomically. Rolls back on probe failure."""
+    log.info("update received sha=%s bytes=%d install_dir=%s", sha, len(tarball_bytes), install_dir)
     clean_stale_staging(install_dir)
     staging = _staging_dir(install_dir)
 
+    log.info("extracting tarball -> %s", staging)
     extract_tarball(tarball_bytes, staging)
     _write_manifest(staging, sha)
 
+    log.info("pip install into shared venv (%s)", _shared_venv(install_dir))
     pip = _run_pip(staging)
     if pip.returncode != 0:
+        log.error("pip install failed rc=%d stderr=%s", pip.returncode, (pip.stderr or pip.stdout).strip()[:400])
         shutil.rmtree(staging, ignore_errors=True)
         raise UpdateError(
             "pip install failed on new release", stderr=pip.stderr or pip.stdout,
         )
 
+    log.info("rotating releases: active.new -> active, active -> prev")
     _rotate(install_dir)
     _point_current_at(install_dir, _active_dir(install_dir))
+    _heal_path_symlink(install_dir)
 
+    log.info("restarting agent (and forwarder if present)")
     _stop_agent(install_dir)
     _spawn_agent(install_dir)
 
     ok, detail = _probe_agent(agent_dir=agent_dir)
     if ok:
+        log.info("update complete sha=%s probe=ok", sha)
         return {
             "status": "updated",
             "release": read_release(_active_dir(install_dir)).to_dict(),
@@ -536,21 +570,27 @@ def run_update_self(
     No auto-rollback. Caller must treat "connection dropped + /health
     returns new SHA within 30s" as success.
     """
+    log.info("self-update received sha=%s bytes=%d install_dir=%s", sha, len(tarball_bytes), updater_install_dir)
     clean_stale_staging(updater_install_dir)
     staging = _staging_dir(updater_install_dir)
+    log.info("extracting tarball -> %s", staging)
     extract_tarball(tarball_bytes, staging)
     _write_manifest(staging, sha)
 
+    log.info("pip install updater release into shared venv (%s)", _shared_venv(updater_install_dir))
     pip = _run_pip(staging)
     if pip.returncode != 0:
+        log.error("self-update pip install failed rc=%d stderr=%s", pip.returncode, (pip.stderr or pip.stdout).strip()[:400])
         shutil.rmtree(staging, ignore_errors=True)
         raise UpdateError(
             "pip install failed on new updater release",
             stderr=pip.stderr or pip.stdout,
         )
 
+    log.info("rotating updater releases and flipping current symlink")
     _rotate(updater_install_dir)
     _point_current_at(updater_install_dir, _active_dir(updater_install_dir))
+    _heal_path_symlink(updater_install_dir)
 
     # Reconstruct the updater's original launch command from env vars set by
     # `decnet.updater.server.run`. We can't reuse sys.argv: inside the app
@@ -576,6 +616,7 @@ def run_update_self(
     # on our own unit would kill us mid-response and the caller would see a
     # connection drop with no indication of success.
     if _systemd_available():
+        log.info("self-update queued: systemctl restart %s (deferred 1s)", UPDATER_SYSTEMD_UNIT)
         subprocess.Popen(  # nosec B603 B607
             ["sh", "-c", f"sleep 1 && systemctl restart {UPDATER_SYSTEMD_UNIT}"],
             start_new_session=True,
