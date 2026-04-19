@@ -92,6 +92,7 @@ def api(
     import os
     import signal
 
+    _require_master_mode("api")
     if daemon:
         log.info("API daemonizing host=%s port=%d workers=%d", host, port, workers)
         _daemonize()
@@ -136,6 +137,7 @@ def swarmctl(
     import os
     import signal
 
+    _require_master_mode("swarmctl")
     if daemon:
         log.info("swarmctl daemonizing host=%s port=%d", host, port)
         _daemonize()
@@ -782,6 +784,7 @@ def deploy(
     """Deploy deckies to the LAN."""
     import os
 
+    _require_master_mode("deploy")
     if daemon:
         log.info("deploy daemonizing mode=%s deckies=%s", mode, deckies)
         _daemonize()
@@ -1223,6 +1226,7 @@ def teardown(
     id_: Optional[str] = typer.Option(None, "--id", help="Tear down a specific decky by name"),
 ) -> None:
     """Stop and remove deckies."""
+    _require_master_mode("teardown")
     if not all_ and not id_:
         console.print("[red]Specify --all or --id <name>.[/]")
         raise typer.Exit(1)
@@ -1622,6 +1626,69 @@ def db_reset(
     except Exception as e:  # noqa: BLE001
         console.print(f"[red]db-reset failed: {e}[/]")
         raise typer.Exit(1) from e
+
+
+# ───────────────────────────────────────────────────────────────────────────
+# Role-based CLI gating.
+#
+# MAINTAINERS: when you add a new Typer command (or add_typer group) that is
+# master-only, register its name in MASTER_ONLY_COMMANDS / MASTER_ONLY_GROUPS
+# below. The gate is the only thing that:
+#   (a) hides the command from `decnet --help` on worker hosts, and
+#   (b) prevents a misconfigured worker from invoking master-side logic.
+# Forgetting to register a new command is a role-boundary bug. Grep for
+# MASTER_ONLY when touching command registration.
+#
+# Worker-legitimate commands (NOT in these sets): agent, updater, forwarder.
+# ───────────────────────────────────────────────────────────────────────────
+MASTER_ONLY_COMMANDS: frozenset[str] = frozenset({
+    "api", "swarmctl", "deploy", "redeploy", "teardown",
+    "probe", "collect", "mutate", "listener", "status",
+    "services", "distros", "correlate", "archetypes", "web",
+    "profiler", "sniffer", "db-reset",
+})
+MASTER_ONLY_GROUPS: frozenset[str] = frozenset({"swarm"})
+
+
+def _agent_mode_active() -> bool:
+    """True when the host is configured as an agent AND master commands are
+    disallowed (the default for agents). Workers overriding this explicitly
+    set DECNET_DISALLOW_MASTER=false to opt into hybrid use."""
+    import os
+    mode = os.environ.get("DECNET_MODE", "master").lower()
+    disallow = os.environ.get("DECNET_DISALLOW_MASTER", "true").lower() == "true"
+    return mode == "agent" and disallow
+
+
+def _require_master_mode(command_name: str) -> None:
+    """Defence-in-depth: called at the top of every master-only command body.
+
+    The registration-time gate in _gate_commands_by_mode() already hides
+    these commands from Typer's dispatch table, but this check protects
+    against direct function imports (e.g. from tests or third-party tools)
+    that would bypass Typer entirely."""
+    if _agent_mode_active():
+        console.print(
+            f"[red]`decnet {command_name}` is a master-only command; this host "
+            f"is configured as an agent (DECNET_MODE=agent).[/]"
+        )
+        raise typer.Exit(1)
+
+
+def _gate_commands_by_mode(_app: typer.Typer) -> None:
+    if not _agent_mode_active():
+        return
+    _app.registered_commands = [
+        c for c in _app.registered_commands
+        if (c.name or c.callback.__name__) not in MASTER_ONLY_COMMANDS
+    ]
+    _app.registered_groups = [
+        g for g in _app.registered_groups
+        if g.name not in MASTER_ONLY_GROUPS
+    ]
+
+
+_gate_commands_by_mode(app)
 
 
 if __name__ == '__main__':  # pragma: no cover
