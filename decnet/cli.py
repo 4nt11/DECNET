@@ -1627,13 +1627,17 @@ def sniffer_cmd(
 
 
 _DB_RESET_TABLES: tuple[str, ...] = (
-    # Order matters for DROP TABLE: attacker_behavior FK-references attackers.
+    # Order matters for DROP TABLE: child FKs first.
+    # - attacker_behavior FK-references attackers.
+    # - decky_shards FK-references swarm_hosts.
     "attacker_behavior",
     "attackers",
     "logs",
     "bounty",
     "state",
     "users",
+    "decky_shards",
+    "swarm_hosts",
 )
 
 
