@@ -79,7 +79,9 @@ DECNET_PROFILE_DIR: str = os.environ.get("DECNET_PROFILE_DIR", "profiles")
 # API Options
 DECNET_API_HOST: str = os.environ.get("DECNET_API_HOST", "127.0.0.1")
 DECNET_API_PORT: int = _port("DECNET_API_PORT", 8000)
-DECNET_JWT_SECRET: str = _require_env("DECNET_JWT_SECRET")
+# DECNET_JWT_SECRET is resolved lazily via module __getattr__ so that agent /
+# updater / swarmctl subcommands (which never touch auth) can start without
+# the master's JWT secret being present in the environment.
 DECNET_INGEST_LOG_FILE: str | None = os.environ.get("DECNET_INGEST_LOG_FILE", "/var/log/decnet/decnet.log")
 
 # SWARM log pipeline — RFC 5425 syslog-over-TLS between worker forwarders
@@ -124,3 +126,10 @@ _web_hostname: str = "localhost" if DECNET_WEB_HOST in _WILDCARD_ADDRS else DECN
 _cors_default: str = f"http://{_web_hostname}:{DECNET_WEB_PORT}"
 _cors_raw: str = os.environ.get("DECNET_CORS_ORIGINS", _cors_default)
 DECNET_CORS_ORIGINS: list[str] = [o.strip() for o in _cors_raw.split(",") if o.strip()]
+
+
+def __getattr__(name: str) -> str:
+    """Lazy resolution for secrets only the master web/api process needs."""
+    if name == "DECNET_JWT_SECRET":
+        return _require_env("DECNET_JWT_SECRET")
+    raise AttributeError(f"module 'decnet.env' has no attribute {name!r}")
