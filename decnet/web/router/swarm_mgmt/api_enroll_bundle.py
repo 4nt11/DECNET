@@ -288,7 +288,13 @@ async def create_enroll_bundle(
     sh_path = BUNDLE_DIR / f"{token}.sh"
     tgz_path = BUNDLE_DIR / f"{token}.tgz"
 
-    base = str(request.base_url).rstrip("/")
+    # Build URLs against the operator-supplied master_host (reachable from the
+    # new agent) rather than request.base_url, which reflects how the dashboard
+    # user reached us — often 127.0.0.1 behind a proxy or loopback-bound API.
+    scheme = request.url.scheme
+    port = request.url.port
+    netloc = req.master_host if port is None else f"{req.master_host}:{port}"
+    base = f"{scheme}://{netloc}"
     tarball_url = f"{base}/api/v1/swarm/enroll-bundle/{token}.tgz"
     bootstrap_url = f"{base}/api/v1/swarm/enroll-bundle/{token}.sh"
     script = _render_bootstrap(req.agent_name, req.master_host, tarball_url, expires_at)

@@ -56,6 +56,25 @@ async def test_create_bundle_returns_one_liner(client, auth_token):
 
 
 @pytest.mark.anyio
+async def test_bundle_urls_use_master_host_not_request_base(client, auth_token):
+    """URLs baked into the bootstrap must target the operator-supplied
+    master_host, not the dashboard's request.base_url (which may be loopback
+    behind a proxy)."""
+    resp = await _post(client, auth_token, master_host="10.20.30.40", agent_name="urltest")
+    assert resp.status_code == 201
+    body = resp.json()
+    assert "10.20.30.40" in body["command"]
+    assert "127.0.0.1" not in body["command"]
+    assert "testserver" not in body["command"]
+
+    token = body["token"]
+    sh = (await client.get(f"/api/v1/swarm/enroll-bundle/{token}.sh")).text
+    assert "10.20.30.40" in sh
+    assert "127.0.0.1" not in sh
+    assert "testserver" not in sh
+
+
+@pytest.mark.anyio
 async def test_duplicate_agent_name_409(client, auth_token):
     r1 = await _post(client, auth_token, agent_name="dup-node")
     assert r1.status_code == 201
