@@ -306,6 +306,7 @@ def test_stop_agent_falls_back_to_proc_scan_when_no_pidfile(
         killed.append((pid, sig))
         raise ProcessLookupError  # pretend it already died after SIGTERM
 
+    monkeypatch.setattr(ex, "_systemd_available", lambda: False)
     monkeypatch.setattr(ex, "_discover_agent_pids", lambda: [4242, 4243])
     monkeypatch.setattr(ex.os, "kill", fake_kill)
 
@@ -315,3 +316,76 @@ def test_stop_agent_falls_back_to_proc_scan_when_no_pidfile(
     import signal as _signal
     assert (4242, _signal.SIGTERM) in killed
     assert (4243, _signal.SIGTERM) in killed
+
+
+def test_systemd_available_requires_invocation_id_and_systemctl(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Both INVOCATION_ID and a resolvable systemctl are needed."""
+    monkeypatch.delenv("INVOCATION_ID", raising=False)
+    assert ex._systemd_available() is False
+
+    monkeypatch.setenv("INVOCATION_ID", "abc")
+    monkeypatch.setattr("shutil.which", lambda _: None)
+    assert ex._systemd_available() is False
+
+    monkeypatch.setattr("shutil.which", lambda _: "/usr/bin/systemctl")
+    assert ex._systemd_available() is True
+
+
+def test_spawn_agent_dispatches_to_systemd_when_available(
+    monkeypatch: pytest.MonkeyPatch,
+    install_dir: pathlib.Path,
+) -> None:
+    monkeypatch.setattr(ex, "_systemd_available", lambda: True)
+    called: list[pathlib.Path] = []
+    monkeypatch.setattr(ex, "_spawn_agent_via_systemd", lambda d: called.append(d) or 999)
+    monkeypatch.setattr(ex, "_spawn_agent_via_popen", lambda d: pytest.fail("popen path taken"))
+    assert ex._spawn_agent(install_dir) == 999
+    assert called == [install_dir]
+
+
+def test_spawn_agent_dispatches_to_popen_when_not_systemd(
+    monkeypatch: pytest.MonkeyPatch,
+    install_dir: pathlib.Path,
+) -> None:
+    monkeypatch.setattr(ex, "_systemd_available", lambda: False)
+    monkeypatch.setattr(ex, "_spawn_agent_via_systemd", lambda d: pytest.fail("systemd path taken"))
+    monkeypatch.setattr(ex, "_spawn_agent_via_popen", lambda d: 777)
+    assert ex._spawn_agent(install_dir) == 777
+
+
+def test_stop_agent_is_noop_under_systemd(
+    monkeypatch: pytest.MonkeyPatch,
+    install_dir: pathlib.Path,
+) -> None:
+    """Under systemd, stop is skipped — systemctl restart handles it atomically."""
+    monkeypatch.setattr(ex, "_systemd_available", lambda: True)
+    monkeypatch.setattr(ex, "_discover_agent_pids", lambda: pytest.fail("scanned /proc"))
+    monkeypatch.setattr(ex.os, "kill", lambda *a, **k: pytest.fail("sent signal"))
+    (install_dir / "agent.pid").write_text("12345")
+    ex._stop_agent(install_dir, grace=0.0)  # must not raise
+
+
+def test_spawn_agent_via_systemd_records_main_pid(
+    monkeypatch: pytest.MonkeyPatch,
+    install_dir: pathlib.Path,
+) -> None:
+    calls: list[list[str]] = []
+
+    class _Out:
+        def __init__(self, stdout: str = "") -> None:
+            self.stdout = stdout
+
+    def fake_run(cmd, **kwargs):  # type: ignore[no-untyped-def]
+        calls.append(cmd)
+        if "show" in cmd:
+            return _Out("4711\n")
+        return _Out("")
+
+    monkeypatch.setattr(ex.subprocess, "run", fake_run)
+    pid = ex._spawn_agent_via_systemd(install_dir)
+    assert pid == 4711
+    assert (install_dir / "agent.pid").read_text() == "4711"
+    assert calls[0][:2] == ["systemctl", "restart"]
+    assert calls[1][:2] == ["systemctl", "show"]

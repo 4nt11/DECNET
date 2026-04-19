@@ -208,11 +208,56 @@ def _run_pip(
     )
 
 
-def _spawn_agent(install_dir: pathlib.Path) -> int:
-    """Launch ``decnet agent --daemon`` using the current-symlinked venv.
+AGENT_SYSTEMD_UNIT = "decnet-agent.service"
 
-    Returns the new PID. Monkeypatched in tests.
+
+def _systemd_available() -> bool:
+    """True when we're running under systemd and have systemctl on PATH.
+
+    Detection is conservative: we only return True if *both* the invocation
+    marker is set (``INVOCATION_ID`` is exported by systemd for every unit)
+    and ``systemctl`` is resolvable. The env var alone can be forged; the
+    binary alone can exist on hosts running other init systems.
     """
+    if not os.environ.get("INVOCATION_ID"):
+        return False
+    from shutil import which
+    return which("systemctl") is not None
+
+
+def _spawn_agent(install_dir: pathlib.Path) -> int:
+    """Launch the agent and return its PID.
+
+    Under systemd, restart ``decnet-agent.service`` via ``systemctl`` so the
+    new process inherits the unit's ambient capabilities (CAP_NET_ADMIN,
+    CAP_NET_RAW). Spawning with ``subprocess.Popen`` from inside the updater
+    unit would make the agent a child of the updater and therefore a member
+    of the updater's (empty) capability set — it would come up without the
+    caps needed to run MACVLAN/scapy.
+
+    Off systemd (dev boxes, manual starts), fall back to a direct Popen.
+    """
+    if _systemd_available():
+        return _spawn_agent_via_systemd(install_dir)
+    return _spawn_agent_via_popen(install_dir)
+
+
+def _spawn_agent_via_systemd(install_dir: pathlib.Path) -> int:
+    subprocess.run(  # nosec B603 B607
+        ["systemctl", "restart", AGENT_SYSTEMD_UNIT],
+        check=True, capture_output=True, text=True,
+    )
+    pid_out = subprocess.run(  # nosec B603 B607
+        ["systemctl", "show", "--property=MainPID", "--value", AGENT_SYSTEMD_UNIT],
+        check=True, capture_output=True, text=True,
+    )
+    pid = int(pid_out.stdout.strip() or "0")
+    if pid:
+        _pid_file(install_dir).write_text(str(pid))
+    return pid
+
+
+def _spawn_agent_via_popen(install_dir: pathlib.Path) -> int:
     decnet_bin = _shared_venv(install_dir) / "bin" / "decnet"
     log_path = install_dir / "agent.spawn.log"
     # cwd=install_dir so a persistent ``<install_dir>/.env.local`` gets
@@ -267,7 +312,13 @@ def _stop_agent(install_dir: pathlib.Path, grace: float = AGENT_RESTART_GRACE_S)
     Prefers the PID recorded in ``agent.pid`` (processes we spawned) but
     falls back to scanning /proc for any ``decnet agent`` so manually-started
     agents are also restarted cleanly during an update.
+
+    Under systemd, stop is a no-op — ``_spawn_agent`` issues a single
+    ``systemctl restart`` that handles stop and start atomically. Pre-stopping
+    would only race the restart's own stop phase.
     """
+    if _systemd_available():
+        return
     pids: list[int] = []
     pid_file = _pid_file(install_dir)
     if pid_file.is_file():

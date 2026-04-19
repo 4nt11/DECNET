@@ -1,6 +1,6 @@
 [Unit]
-Description=DECNET Web Dashboard Service
-Documentation=https://github.com/4nt11/DECNET/wiki/Web-Dashboard
+Description=DECNET Swarm Controller (master)
+Documentation=https://github.com/4nt11/DECNET/wiki/SWARM-Mode
 After=network-online.target decnet-api.service
 Wants=network-online.target
 
@@ -10,11 +10,12 @@ User=decnet
 Group=decnet
 WorkingDirectory=/opt/decnet
 EnvironmentFile=-/opt/decnet/.env.local
-ExecStart=/opt/decnet/venv/bin/decnet web
+# Default bind is loopback — the controller is a master-local orchestrator
+# reached by the CLI and the web dashboard, not by workers.
+ExecStart=/opt/decnet/venv/bin/decnet swarmctl --host 127.0.0.1 --port 8770
 
-# Uncomment if you bind the dashboard to a privileged port (80/443):
-# CapabilityBoundingSet=CAP_NET_BIND_SERVICE
-# AmbientCapabilities=CAP_NET_BIND_SERVICE
+# No special capabilities — the controller issues mTLS certs and talks to
+# workers over TCP on unprivileged ports.
 CapabilityBoundingSet=
 AmbientCapabilities=
 
@@ -28,6 +29,7 @@ ProtectKernelModules=yes
 ProtectControlGroups=yes
 RestrictSUIDSGID=yes
 LockPersonality=yes
+# Reads/writes the CA bundle and the master DB.
 ReadWritePaths=/opt/decnet /var/log/decnet
 ReadOnlyPaths=/etc/decnet
 
