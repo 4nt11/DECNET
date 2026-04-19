@@ -197,7 +197,9 @@ async def test_systemd_units_shipped_and_installed(client, auth_token):
                             master_host="10.9.8.7")).json()["token"]
     sh = (await client.get(f"/api/v1/swarm/enroll-bundle/{sh_token}.sh")).text
     assert "systemctl daemon-reload" in sh
-    assert "systemctl enable --now decnet-agent.service decnet-forwarder.service" in sh
+    # Agent + forwarder always enabled; updater conditional on WITH_UPDATER.
+    assert "decnet-agent.service decnet-forwarder.service" in sh
+    assert "decnet-updater.service" in sh
 
     ini = tf.extractfile("etc/decnet/decnet.ini").read().decode()
     assert "log-directory = /var/log/decnet" in ini
@@ -205,7 +207,7 @@ async def test_systemd_units_shipped_and_installed(client, auth_token):
 
 
 @pytest.mark.anyio
-async def test_updater_opt_in_ships_cert_and_starts_daemon(client, auth_token):
+async def test_updater_opt_in_ships_cert_and_enables_systemd_unit(client, auth_token):
     import io, tarfile
     token = (await _post(client, auth_token, agent_name="up", with_updater=True)).json()["token"]
     resp = await client.get(f"/api/v1/swarm/enroll-bundle/{token}.tgz")
@@ -213,12 +215,20 @@ async def test_updater_opt_in_ships_cert_and_starts_daemon(client, auth_token):
     names = set(tf.getnames())
     assert "home/.decnet/updater/updater.crt" in names
     assert "home/.decnet/updater/updater.key" in names
+    assert "etc/systemd/system/decnet-updater.service" in names
     key_info = tf.getmember("home/.decnet/updater/updater.key")
     assert (key_info.mode & 0o777) == 0o600
+
+    updater_unit = tf.extractfile("etc/systemd/system/decnet-updater.service").read().decode()
+    assert "DECNET_SYSTEM_LOGS=/var/log/decnet/decnet.updater.log" in updater_unit
+    assert "Restart=on-failure" in updater_unit
+
     sh_token = (await _post(client, auth_token, agent_name="up2", with_updater=True)).json()["token"]
     sh = (await client.get(f"/api/v1/swarm/enroll-bundle/{sh_token}.sh")).text
     assert 'WITH_UPDATER="true"' in sh
-    assert "decnet updater --daemon" in sh
+    assert "decnet-updater.service" in sh
+    # Old --daemon path is gone — updater is now a systemd service.
+    assert "decnet updater --daemon" not in sh
 
 
 @pytest.mark.anyio

@@ -250,7 +250,7 @@ def _build_tarball(
     return buf.getvalue()
 
 
-_SYSTEMD_UNITS = ("decnet-agent", "decnet-forwarder", "decnet-engine")
+_SYSTEMD_UNITS = ("decnet-agent", "decnet-forwarder", "decnet-engine", "decnet-updater")
 
 
 def _render_systemd_unit(name: str, agent_name: str, master_host: str) -> bytes:

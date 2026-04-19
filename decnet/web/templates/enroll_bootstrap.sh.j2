@@ -58,10 +58,15 @@ echo "[DECNET] installing systemd units..."
 install -Dm0644 etc/systemd/system/decnet-agent.service /etc/systemd/system/decnet-agent.service
 install -Dm0644 etc/systemd/system/decnet-forwarder.service /etc/systemd/system/decnet-forwarder.service
 install -Dm0644 etc/systemd/system/decnet-engine.service /etc/systemd/system/decnet-engine.service
-systemctl daemon-reload
-systemctl enable --now decnet-agent.service decnet-forwarder.service
-
 if [[ "$WITH_UPDATER" == "true" ]]; then
-  /usr/local/bin/decnet updater --daemon
+  install -Dm0644 etc/systemd/system/decnet-updater.service /etc/systemd/system/decnet-updater.service
 fi
-echo "[DECNET] agent {{ agent_name }} enrolled -> {{ master_host }}. Units: decnet-agent, decnet-forwarder active."
+systemctl daemon-reload
+
+ACTIVE_UNITS=(decnet-agent.service decnet-forwarder.service)
+if [[ "$WITH_UPDATER" == "true" ]]; then
+  ACTIVE_UNITS+=(decnet-updater.service)
+fi
+systemctl enable --now "${ACTIVE_UNITS[@]}"
+
+echo "[DECNET] agent {{ agent_name }} enrolled -> {{ master_host }}. Units: ${ACTIVE_UNITS[*]} active."
