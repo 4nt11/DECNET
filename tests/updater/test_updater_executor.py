@@ -279,6 +279,36 @@ def test_update_self_rotates_and_calls_exec_cb(
     assert "updater" in seen_argv[0]
 
 
+def test_update_self_under_systemd_defers_to_systemctl(
+    monkeypatch: pytest.MonkeyPatch,
+    install_dir: pathlib.Path,
+) -> None:
+    """Under systemd, update-self must NOT os.execv — it hands the restart
+    to systemd so the new process inherits the unit context. A detached
+    ``systemctl restart decnet-updater.service`` is scheduled after a short
+    sleep so the HTTP response can flush before the unit cycles."""
+    active = install_dir / "releases" / "active"
+    active.mkdir()
+    (active / "marker").write_text("old-updater")
+    monkeypatch.setattr(ex, "_run_pip", lambda release: _PipOK())
+    monkeypatch.setattr(ex, "_systemd_available", lambda: True)
+
+    popen_calls: list[list[str]] = []
+    class _FakePopen:
+        def __init__(self, cmd, **kwargs):
+            popen_calls.append(cmd)
+    monkeypatch.setattr(ex.subprocess, "Popen", _FakePopen)
+    monkeypatch.setattr(ex.os, "execv", lambda *a, **k: pytest.fail("execv taken under systemd"))
+
+    tb = _make_tarball({"marker": "new-updater"})
+    result = ex.run_update_self(tb, sha="USHA", updater_install_dir=install_dir)
+    assert result == {"status": "self_update_queued", "via": "systemd"}
+    assert len(popen_calls) == 1
+    sh_cmd = popen_calls[0]
+    assert sh_cmd[:2] == ["sh", "-c"]
+    assert "systemctl restart decnet-updater.service" in sh_cmd[2]
+
+
 def test_update_self_pip_failure_leaves_active_intact(
     monkeypatch: pytest.MonkeyPatch,
     install_dir: pathlib.Path,
@@ -374,8 +404,10 @@ def test_spawn_agent_via_systemd_records_main_pid(
     calls: list[list[str]] = []
 
     class _Out:
-        def __init__(self, stdout: str = "") -> None:
+        def __init__(self, stdout: str = "", returncode: int = 0, stderr: str = "") -> None:
             self.stdout = stdout
+            self.returncode = returncode
+            self.stderr = stderr
 
     def fake_run(cmd, **kwargs):  # type: ignore[no-untyped-def]
         calls.append(cmd)
@@ -387,5 +419,32 @@ def test_spawn_agent_via_systemd_records_main_pid(
     pid = ex._spawn_agent_via_systemd(install_dir)
     assert pid == 4711
     assert (install_dir / "agent.pid").read_text() == "4711"
-    assert calls[0][:2] == ["systemctl", "restart"]
-    assert calls[1][:2] == ["systemctl", "show"]
+    # Agent restart, forwarder restart, then MainPID lookup on the agent.
+    assert calls[0] == ["systemctl", "restart", ex.AGENT_SYSTEMD_UNIT]
+    assert calls[1] == ["systemctl", "restart", ex.FORWARDER_SYSTEMD_UNIT]
+    assert calls[2][:2] == ["systemctl", "show"]
+    assert ex.AGENT_SYSTEMD_UNIT in calls[2]
+
+
+def test_spawn_agent_via_systemd_tolerates_missing_forwarder_unit(
+    monkeypatch: pytest.MonkeyPatch,
+    install_dir: pathlib.Path,
+) -> None:
+    """Legacy enrollments lack decnet-forwarder.service — restart fails and
+    must not abort the update."""
+    class _Out:
+        def __init__(self, stdout: str = "", returncode: int = 0, stderr: str = "") -> None:
+            self.stdout = stdout
+            self.returncode = returncode
+            self.stderr = stderr
+
+    def fake_run(cmd, **kwargs):  # type: ignore[no-untyped-def]
+        if "restart" in cmd and ex.FORWARDER_SYSTEMD_UNIT in cmd:
+            return _Out(returncode=5, stderr="Unit not found.")
+        if "show" in cmd:
+            return _Out("4711\n")
+        return _Out("")
+
+    monkeypatch.setattr(ex.subprocess, "run", fake_run)
+    pid = ex._spawn_agent_via_systemd(install_dir)
+    assert pid == 4711

@@ -209,6 +209,8 @@ def _run_pip(
 
 
 AGENT_SYSTEMD_UNIT = "decnet-agent.service"
+FORWARDER_SYSTEMD_UNIT = "decnet-forwarder.service"
+UPDATER_SYSTEMD_UNIT = "decnet-updater.service"
 
 
 def _systemd_available() -> bool:
@@ -243,10 +245,21 @@ def _spawn_agent(install_dir: pathlib.Path) -> int:
 
 
 def _spawn_agent_via_systemd(install_dir: pathlib.Path) -> int:
+    # Restart agent + forwarder together: both processes run out of the same
+    # /opt/decnet tree, so a code push that replaces the tree must cycle both
+    # or the forwarder keeps the pre-update code in memory. Forwarder restart
+    # is best-effort — a worker without the forwarder unit installed (e.g. a
+    # legacy enrollment) shouldn't abort the update.
     subprocess.run(  # nosec B603 B607
         ["systemctl", "restart", AGENT_SYSTEMD_UNIT],
         check=True, capture_output=True, text=True,
     )
+    fwd = subprocess.run(  # nosec B603 B607
+        ["systemctl", "restart", FORWARDER_SYSTEMD_UNIT],
+        check=False, capture_output=True, text=True,
+    )
+    if fwd.returncode != 0:
+        log.warning("forwarder restart failed (ignored): %s", fwd.stderr.strip())
     pid_out = subprocess.run(  # nosec B603 B607
         ["systemctl", "show", "--property=MainPID", "--value", AGENT_SYSTEMD_UNIT],
         check=True, capture_output=True, text=True,
@@ -556,6 +569,19 @@ def run_update_self(
     if exec_cb is not None:
         exec_cb(argv)  # tests stub this — we don't actually re-exec
         return {"status": "self_update_queued", "argv": argv}
-    # Returns nothing on success (replaces the process image).
+    # Under systemd, hand the restart to the init system so the new process
+    # keeps its unit context (capabilities, cgroup, logging target) instead
+    # of inheriting whatever we had here. Spawn a detached sh that waits for
+    # this response to flush before issuing the restart — `systemctl restart`
+    # on our own unit would kill us mid-response and the caller would see a
+    # connection drop with no indication of success.
+    if _systemd_available():
+        subprocess.Popen(  # nosec B603 B607
+            ["sh", "-c", f"sleep 1 && systemctl restart {UPDATER_SYSTEMD_UNIT}"],
+            start_new_session=True,
+            stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
+        )
+        return {"status": "self_update_queued", "via": "systemd"}
+    # Off-systemd fallback: replace the process image directly.
     os.execv(argv[0], argv)  # nosec B606 - pragma: no cover
     return {"status": "self_update_queued"}  # pragma: no cover
