@@ -61,8 +61,12 @@ _EXCLUDES: tuple[str, ...] = (
     "tests", "tests/*",
     "development", "development/*",
     "wiki-checkout", "wiki-checkout/*",
-    "decnet_web/node_modules", "decnet_web/node_modules/*",
-    "decnet_web/src", "decnet_web/src/*",
+    # Frontend is master-only; agents never serve UI.
+    "decnet_web", "decnet_web/*", "decnet_web/**",
+    # Master FastAPI app (API, routers, master-side DB) is not run on agents.
+    # The `agent` / `updater` / `forwarder` commands have their own apps under
+    # decnet/agent, decnet/updater — they don't import decnet.web.
+    "decnet/web", "decnet/web/*", "decnet/web/**",
     "decnet-state.json",
     "master.log", "master.json",
     "decnet.tar",

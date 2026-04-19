@@ -297,6 +297,11 @@ async def test_get_tgz_contents(client, auth_token, tmp_path):
         assert not bad.endswith(".env"), f"leaked env file: {bad}"
         assert ".env.local" not in bad, f"leaked env file: {bad}"
         assert ".env.example" not in bad, f"leaked env file: {bad}"
+        # Master-only trees: agents don't run the FastAPI master app or the
+        # React frontend, so shipping them bloats the tarball and widens the
+        # worker's attack surface for no benefit.
+        assert not bad.startswith("decnet_web/"), f"leaked frontend: {bad}"
+        assert not bad.startswith("decnet/web/"), f"leaked master-api: {bad}"
 
     # INI content is correct
     ini = tf.extractfile("etc/decnet/decnet.ini").read().decode()
