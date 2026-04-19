@@ -15,6 +15,6 @@ echo "MySQL up."
 export DECNET_DB_TYPE=mysql
 export DECNET_DB_URL='mysql+aiomysql://decnet:decnet@127.0.0.1:3307/decnet'
 
-source ../.venv/bin/activate
+source .venv/bin/activate
 
-sudo ../.venv/bin/decnet api
+sudo .venv/bin/decnet api

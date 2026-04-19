@@ -86,6 +86,17 @@ def _spawn_detached(argv: list[str], pid_file: Path) -> int:
     import os
     import subprocess  # nosec B404
 
+    # If the pid_file points at a live process, don't spawn a duplicate —
+    # agent/swarmctl auto-spawn is called on every startup, and the first
+    # run's sibling is still alive across restarts.
+    if pid_file.exists():
+        try:
+            existing = int(pid_file.read_text().strip())
+            os.kill(existing, 0)
+            return existing
+        except (ValueError, ProcessLookupError, PermissionError, OSError):
+            pass  # stale pid_file — fall through and spawn
+
     with open(os.devnull, "rb") as dn_in, open(os.devnull, "ab") as dn_out:
         proc = subprocess.Popen(  # nosec B603
             argv,

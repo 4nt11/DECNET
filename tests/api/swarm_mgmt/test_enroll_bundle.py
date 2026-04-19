@@ -30,7 +30,12 @@ def isolate_bundle_state(tmp_path: pathlib.Path, monkeypatch):
 
 
 async def _post(client, auth_token, **overrides):
-    body = {"master_host": "10.0.0.50", "agent_name": "worker-a"}
+    body = {
+        "master_host": "10.0.0.50",
+        "agent_name": "worker-a",
+        "agent_host": "10.0.0.100",
+        "with_updater": True,
+    }
     body.update(overrides)
     return await client.post(
         "/api/v1/swarm/enroll-bundle",
@@ -92,9 +97,49 @@ async def test_non_admin_forbidden(client, viewer_token):
 async def test_no_auth_401(client):
     resp = await client.post(
         "/api/v1/swarm/enroll-bundle",
-        json={"master_host": "10.0.0.50", "agent_name": "worker-a"},
+        json={"master_host": "10.0.0.50", "agent_name": "worker-a", "agent_host": "10.0.0.100"},
     )
     assert resp.status_code == 401
+
+
+@pytest.mark.anyio
+async def test_host_row_uses_agent_host_not_master_host(client, auth_token):
+    """SwarmHosts table should show the worker's own address, not the master's."""
+    from decnet.web.dependencies import repo
+    resp = await _post(client, auth_token, agent_name="addr-test",
+                       master_host="192.168.1.5", agent_host="192.168.1.23")
+    row = await repo.get_swarm_host_by_uuid(resp.json()["host_uuid"])
+    assert row["address"] == "192.168.1.23"
+
+
+@pytest.mark.anyio
+async def test_updater_opt_out_excludes_updater_artifacts(client, auth_token):
+    import io, tarfile
+    token = (await _post(client, auth_token, agent_name="noup", with_updater=False)).json()["token"]
+    resp = await client.get(f"/api/v1/swarm/enroll-bundle/{token}.tgz")
+    tf = tarfile.open(fileobj=io.BytesIO(resp.content), mode="r:gz")
+    names = set(tf.getnames())
+    assert not any(n.startswith("home/.decnet/updater/") for n in names)
+    sh_token = (await _post(client, auth_token, agent_name="noup2", with_updater=False)).json()["token"]
+    sh = (await client.get(f"/api/v1/swarm/enroll-bundle/{sh_token}.sh")).text
+    assert 'WITH_UPDATER="false"' in sh
+
+
+@pytest.mark.anyio
+async def test_updater_opt_in_ships_cert_and_starts_daemon(client, auth_token):
+    import io, tarfile
+    token = (await _post(client, auth_token, agent_name="up", with_updater=True)).json()["token"]
+    resp = await client.get(f"/api/v1/swarm/enroll-bundle/{token}.tgz")
+    tf = tarfile.open(fileobj=io.BytesIO(resp.content), mode="r:gz")
+    names = set(tf.getnames())
+    assert "home/.decnet/updater/updater.crt" in names
+    assert "home/.decnet/updater/updater.key" in names
+    key_info = tf.getmember("home/.decnet/updater/updater.key")
+    assert (key_info.mode & 0o777) == 0o600
+    sh_token = (await _post(client, auth_token, agent_name="up2", with_updater=True)).json()["token"]
+    sh = (await client.get(f"/api/v1/swarm/enroll-bundle/{sh_token}.sh")).text
+    assert 'WITH_UPDATER="true"' in sh
+    assert "decnet updater --daemon" in sh
 
 
 @pytest.mark.anyio

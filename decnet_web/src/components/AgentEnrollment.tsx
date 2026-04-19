@@ -14,6 +14,8 @@ interface BundleResult {
 const AgentEnrollment: React.FC = () => {
   const [masterHost, setMasterHost] = useState(window.location.hostname);
   const [agentName, setAgentName] = useState('');
+  const [agentHost, setAgentHost] = useState('');
+  const [withUpdater, setWithUpdater] = useState(true);
   const [servicesIni, setServicesIni] = useState<string | null>(null);
   const [servicesIniName, setServicesIniName] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
@@ -47,6 +49,8 @@ const AgentEnrollment: React.FC = () => {
     setResult(null);
     setError(null);
     setAgentName('');
+    setAgentHost('');
+    setWithUpdater(true);
     setServicesIni(null);
     setServicesIniName(null);
     setCopied(false);
@@ -61,6 +65,8 @@ const AgentEnrollment: React.FC = () => {
       const res = await api.post('/swarm/enroll-bundle', {
         master_host: masterHost,
         agent_name: agentName,
+        agent_host: agentHost,
+        with_updater: withUpdater,
         services_ini: servicesIni,
       });
       setResult(res.data);
@@ -107,6 +113,16 @@ const AgentEnrollment: React.FC = () => {
               />
             </label>
             <label>
+              Agent host (IP or DNS of the new worker VM)
+              <input
+                type="text"
+                value={agentHost}
+                onChange={(e) => setAgentHost(e.target.value)}
+                placeholder="e.g. 192.168.1.23"
+                required
+              />
+            </label>
+            <label>
               Agent name (lowercase, digits, dashes)
               <input
                 type="text"
@@ -119,6 +135,14 @@ const AgentEnrollment: React.FC = () => {
                 <small className="field-warn"><AlertTriangle size={12} /> must match ^[a-z0-9][a-z0-9-]{`{0,62}`}$</small>
               )}
             </label>
+            <label className="form-inline">
+              <input
+                type="checkbox"
+                checked={withUpdater}
+                onChange={(e) => setWithUpdater(e.target.checked)}
+              />
+              <span>Install updater daemon (lets the master push code updates to this agent)</span>
+            </label>
             <label>
               Services INI (optional)
               <input ref={fileRef} type="file" accept=".ini,.conf,.txt" onChange={handleFile} />
@@ -128,7 +152,7 @@ const AgentEnrollment: React.FC = () => {
             <button
               type="submit"
               className="control-btn primary"
-              disabled={submitting || !nameOk || !masterHost}
+              disabled={submitting || !nameOk || !masterHost || !agentHost}
             >
               {submitting ? 'Generating…' : 'Generate enrollment bundle'}
             </button>

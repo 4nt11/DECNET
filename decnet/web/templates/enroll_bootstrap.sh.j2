@@ -38,9 +38,20 @@ for f in ca.crt worker.crt worker.key; do
     "home/.decnet/agent/$f" "$REAL_HOME/.decnet/agent/$f"
 done
 
+WITH_UPDATER="{{ with_updater }}"
+if [[ "$WITH_UPDATER" == "true" && -d home/.decnet/updater ]]; then
+  for f in ca.crt updater.crt updater.key; do
+    install -Dm0600 -o "$REAL_USER" -g "$REAL_USER" \
+      "home/.decnet/updater/$f" "$REAL_HOME/.decnet/updater/$f"
+  done
+fi
+
 # Guarantee the pip-installed entrypoint is executable (some setuptools+editable
 # combos drop it with mode 0644) and expose it on PATH.
 chmod 0755 "$INSTALL_DIR/.venv/bin/decnet"
 ln -sf "$INSTALL_DIR/.venv/bin/decnet" /usr/local/bin/decnet
 sudo -u "$REAL_USER" /usr/local/bin/decnet agent --daemon
+if [[ "$WITH_UPDATER" == "true" ]]; then
+  sudo -u "$REAL_USER" /usr/local/bin/decnet updater --daemon
+fi
 echo "[DECNET] agent {{ agent_name }} enrolled -> {{ master_host }}. Forwarder auto-spawned."

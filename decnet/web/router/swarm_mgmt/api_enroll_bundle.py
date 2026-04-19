@@ -83,6 +83,12 @@ class EnrollBundleRequest(BaseModel):
                              description="IP/host the agent will reach back to")
     agent_name: str = Field(..., pattern=r"^[a-z0-9][a-z0-9-]{0,62}$",
                             description="Worker name (DNS-label safe)")
+    agent_host: str = Field(..., min_length=1, max_length=253,
+                            description="IP/host of the new worker — shown in SwarmHosts and used as cert SAN")
+    with_updater: bool = Field(
+        default=True,
+        description="Include updater cert bundle and auto-start decnet updater on the agent",
+    )
     services_ini: Optional[str] = Field(
         default=None,
         description="Optional INI text shipped to the agent as /etc/decnet/services.ini",
@@ -190,11 +196,13 @@ def _build_tarball(
     master_host: str,
     issued: pki.IssuedCert,
     services_ini: Optional[str],
+    updater_issued: Optional[pki.IssuedCert] = None,
 ) -> bytes:
     """Gzipped tarball with:
       - full repo source (minus excludes)
       - etc/decnet/decnet.ini (pre-baked for mode=agent)
       - home/.decnet/agent/{ca.crt,worker.crt,worker.key}
+      - home/.decnet/updater/{ca.crt,updater.crt,updater.key}  (if updater_issued)
       - services.ini at root if provided
     """
     root = _repo_root()
@@ -213,6 +221,11 @@ def _build_tarball(
         _add_bytes(tar, "home/.decnet/agent/worker.crt", issued.cert_pem)
         _add_bytes(tar, "home/.decnet/agent/worker.key", issued.key_pem, mode=0o600)
 
+        if updater_issued is not None:
+            _add_bytes(tar, "home/.decnet/updater/ca.crt", updater_issued.ca_cert_pem)
+            _add_bytes(tar, "home/.decnet/updater/updater.crt", updater_issued.cert_pem)
+            _add_bytes(tar, "home/.decnet/updater/updater.key", updater_issued.key_pem, mode=0o600)
+
         if services_ini:
             _add_bytes(tar, "services.ini", services_ini.encode())
 
@@ -224,6 +237,7 @@ def _render_bootstrap(
     master_host: str,
     tarball_url: str,
     expires_at: datetime,
+    with_updater: bool,
 ) -> bytes:
     tpl_path = pathlib.Path(__file__).resolve().parents[1].parent / "templates" / "enroll_bootstrap.sh.j2"
     tpl = tpl_path.read_text()
@@ -234,6 +248,7 @@ def _render_bootstrap(
            .replace("{{ tarball_url }}", tarball_url)
            .replace("{{ generated_at }}", now)
            .replace("{{ expires_at }}", expires_at.replace(microsecond=0).isoformat())
+           .replace("{{ with_updater }}", "true" if with_updater else "false")
     )
     return rendered.encode()
 
@@ -262,10 +277,23 @@ async def create_enroll_bundle(
 
     # 1. Issue certs (reuses the same code as /swarm/enroll).
     ca = pki.ensure_ca()
-    sans = list({req.agent_name, req.master_host})
+    sans = list({req.agent_name, req.agent_host, req.master_host})
     issued = pki.issue_worker_cert(ca, req.agent_name, sans)
     bundle_dir = pki.DEFAULT_CA_DIR / "workers" / req.agent_name
     pki.write_worker_bundle(issued, bundle_dir)
+
+    updater_issued: Optional[pki.IssuedCert] = None
+    updater_fp: Optional[str] = None
+    if req.with_updater:
+        updater_cn = f"updater@{req.agent_name}"
+        updater_sans = list({*sans, updater_cn, "127.0.0.1"})
+        updater_issued = pki.issue_worker_cert(ca, updater_cn, updater_sans)
+        updater_dir = bundle_dir / "updater"
+        updater_dir.mkdir(parents=True, exist_ok=True)
+        (updater_dir / "updater.crt").write_bytes(updater_issued.cert_pem)
+        (updater_dir / "updater.key").write_bytes(updater_issued.key_pem)
+        os.chmod(updater_dir / "updater.key", 0o600)
+        updater_fp = updater_issued.fingerprint_sha256
 
     # 2. Register the host row so it shows up in SwarmHosts immediately.
     host_uuid = str(_uuid.uuid4())
@@ -273,11 +301,11 @@ async def create_enroll_bundle(
         {
             "uuid": host_uuid,
             "name": req.agent_name,
-            "address": req.master_host,  # placeholder; agent overwrites on first heartbeat
+            "address": req.agent_host,
             "agent_port": 8765,
             "status": "enrolled",
             "client_cert_fingerprint": issued.fingerprint_sha256,
-            "updater_cert_fingerprint": None,
+            "updater_cert_fingerprint": updater_fp,
             "cert_bundle_path": str(bundle_dir),
             "enrolled_at": datetime.now(timezone.utc),
             "notes": "enrolled via UI bundle",
@@ -285,7 +313,7 @@ async def create_enroll_bundle(
     )
 
     # 3. Render payload + bootstrap.
-    tarball = _build_tarball(req.master_host, issued, req.services_ini)
+    tarball = _build_tarball(req.master_host, issued, req.services_ini, updater_issued)
     token = secrets.token_urlsafe(24)
     expires_at = datetime.now(timezone.utc) + BUNDLE_TTL
 
@@ -302,7 +330,7 @@ async def create_enroll_bundle(
     base = f"{scheme}://{netloc}"
     tarball_url = f"{base}/api/v1/swarm/enroll-bundle/{token}.tgz"
     bootstrap_url = f"{base}/api/v1/swarm/enroll-bundle/{token}.sh"
-    script = _render_bootstrap(req.agent_name, req.master_host, tarball_url, expires_at)
+    script = _render_bootstrap(req.agent_name, req.master_host, tarball_url, expires_at, req.with_updater)
 
     tgz_path.write_bytes(tarball)
     sh_path.write_bytes(script)
