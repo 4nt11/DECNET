@@ -62,7 +62,7 @@ ln -sf "$VENV_DIR/bin/decnet" /usr/local/bin/decnet
 echo "[DECNET] installing systemd units..."
 for unit in \
   decnet-agent decnet-forwarder decnet-engine \
-  decnet-collector decnet-prober decnet-profiler decnet-sniffer; do
+  decnet-collector decnet-prober decnet-sniffer; do
   install -Dm0644 "etc/systemd/system/${unit}.service" "/etc/systemd/system/${unit}.service"
 done
 if [[ "$WITH_UPDATER" == "true" ]]; then
@@ -76,7 +76,7 @@ systemctl daemon-reload
 ACTIVE_UNITS=(
   decnet-agent.service decnet-forwarder.service
   decnet-collector.service decnet-prober.service
-  decnet-profiler.service decnet-sniffer.service
+  decnet-sniffer.service
 )
 if [[ "$WITH_UPDATER" == "true" ]]; then
   ACTIVE_UNITS+=(decnet-updater.service)

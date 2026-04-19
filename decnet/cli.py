@@ -1163,30 +1163,45 @@ def _service_registry(log_file: str) -> list[tuple[str, callable, list[str]]]:
     import sys
 
     _py = sys.executable
+
+    # On agents these run as systemd units invoking /usr/local/bin/decnet,
+    # which doesn't include "decnet.cli" in its cmdline. On master dev boxes
+    # they're launched via `python -m decnet.cli`. Match either form — cmd
+    # is a list of argv tokens, so substring-check each token.
+    def _matches(sub: str, extras: tuple[str, ...] = ()):
+        def _check(cmd) -> bool:
+            joined = " ".join(cmd) if not isinstance(cmd, str) else cmd
+            if "decnet" not in joined:
+                return False
+            if sub not in joined:
+                return False
+            return all(e in joined for e in extras)
+        return _check
+
     return [
         (
             "Collector",
-            lambda cmd: "decnet.cli" in cmd and "collect" in cmd,
+            _matches("collect"),
             [_py, "-m", "decnet.cli", "collect", "--daemon", "--log-file", log_file],
         ),
         (
             "Mutator",
-            lambda cmd: "decnet.cli" in cmd and "mutate" in cmd and "--watch" in cmd,
+            _matches("mutate", ("--watch",)),
             [_py, "-m", "decnet.cli", "mutate", "--daemon", "--watch"],
         ),
         (
             "Prober",
-            lambda cmd: "decnet.cli" in cmd and "probe" in cmd,
+            _matches("probe"),
             [_py, "-m", "decnet.cli", "probe", "--daemon", "--log-file", log_file],
         ),
         (
             "Profiler",
-            lambda cmd: "decnet.cli" in cmd and "profiler" in cmd,
+            _matches("profiler"),
             [_py, "-m", "decnet.cli", "profiler", "--daemon"],
         ),
         (
             "Sniffer",
-            lambda cmd: "decnet.cli" in cmd and "sniffer" in cmd,
+            _matches("sniffer"),
             [_py, "-m", "decnet.cli", "sniffer", "--daemon", "--log-file", log_file],
         ),
         (
@@ -1323,11 +1338,11 @@ def status() -> None:
     _status()
 
     registry = _service_registry(str(DECNET_INGEST_LOG_FILE))
-    # On agents, the Mutator runs master-side only (it schedules decky
-    # respawns across the swarm) and the API is never shipped. Hide those
-    # rows so operators aren't chasing permanent DOWN entries.
+    # On agents, Mutator + Profiler are master-only (they need the master
+    # DB and orchestrate across the swarm), and the API is never shipped.
+    # Hide those rows so operators aren't chasing permanent DOWN entries.
     if _agent_mode_active():
-        registry = [r for r in registry if r[0] not in {"Mutator", "API"}]
+        registry = [r for r in registry if r[0] not in {"Mutator", "Profiler", "API"}]
     svc_table = Table(title="DECNET Services", show_lines=True)
     svc_table.add_column("Service", style="bold cyan")
     svc_table.add_column("Status")
@@ -1767,15 +1782,16 @@ def db_reset(
 # MASTER_ONLY when touching command registration.
 #
 # Worker-legitimate commands (NOT in these sets): agent, updater, forwarder,
-# status, collect, probe, profiler, sniffer. Agents run deckies locally and
-# should be able to inspect them + run the per-host microservices (collector
-# streams container logs, prober/profiler characterize attackers hitting
-# this host, sniffer captures traffic). Mutator stays master-only because
-# it orchestrates respawns across the swarm.
+# status, collect, probe, sniffer. Agents run deckies locally and should be
+# able to inspect them + run the per-host microservices (collector streams
+# container logs, prober characterizes attackers hitting this host, sniffer
+# captures traffic). Mutator and Profiler stay master-only: the mutator
+# orchestrates respawns across the swarm; the profiler rebuilds attacker
+# profiles against the master DB (no per-host DB exists).
 # ───────────────────────────────────────────────────────────────────────────
 MASTER_ONLY_COMMANDS: frozenset[str] = frozenset({
     "api", "swarmctl", "deploy", "redeploy", "teardown",
-    "mutate", "listener",
+    "mutate", "listener", "profiler",
     "services", "distros", "correlate", "archetypes", "web",
     "db-reset",
 })

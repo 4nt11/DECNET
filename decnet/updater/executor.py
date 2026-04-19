@@ -243,7 +243,7 @@ UPDATER_SYSTEMD_UNIT = "decnet-updater.service"
 # without these units installed shouldn't abort the update.
 AUXILIARY_SYSTEMD_UNITS = (
     "decnet-collector.service", "decnet-prober.service",
-    "decnet-profiler.service", "decnet-sniffer.service",
+    "decnet-sniffer.service",
 )
 
 

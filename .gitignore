@@ -26,3 +26,4 @@ decnet.json
 .coverage
 .hypothesis/
 profiles/*
+tests/test_decnet.db*

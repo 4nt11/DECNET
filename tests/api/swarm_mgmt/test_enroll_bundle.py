@@ -185,9 +185,10 @@ async def test_systemd_units_shipped_and_installed(client, auth_token):
     assert "etc/systemd/system/decnet-forwarder.service" in names
     assert "etc/systemd/system/decnet-engine.service" in names
     # Per-host microservices get their own systemd units now.
-    for unit in ("decnet-collector", "decnet-prober",
-                 "decnet-profiler", "decnet-sniffer"):
+    # Profiler is master-only (uses the master DB) and must NOT ship.
+    for unit in ("decnet-collector", "decnet-prober", "decnet-sniffer"):
         assert f"etc/systemd/system/{unit}.service" in names, unit
+    assert "etc/systemd/system/decnet-profiler.service" not in names
 
     fwd = tf.extractfile("etc/systemd/system/decnet-forwarder.service").read().decode()
     assert "--master-host 10.9.8.7" in fwd
@@ -206,7 +207,7 @@ async def test_systemd_units_shipped_and_installed(client, auth_token):
     for unit in (
         "decnet-agent.service", "decnet-forwarder.service",
         "decnet-collector.service", "decnet-prober.service",
-        "decnet-profiler.service", "decnet-sniffer.service",
+        "decnet-sniffer.service",
     ):
         assert unit in sh, unit
     assert "decnet-updater.service" in sh
@@ -307,18 +308,13 @@ async def test_get_tgz_contents(client, auth_token, tmp_path):
         assert not bad.endswith(".env"), f"leaked env file: {bad}"
         assert ".env.local" not in bad, f"leaked env file: {bad}"
         assert ".env.example" not in bad, f"leaked env file: {bad}"
-        # Master-only trees: agents don't run the FastAPI master app or the
-        # React frontend, so shipping them bloats the tarball and widens the
-        # worker's attack surface for no benefit. decnet/web/db and
-        # decnet/web/dependencies.py DO ship — the profiler microservice on
-        # the agent needs the repo singleton.
+        # Master-only trees: agents don't run the FastAPI master app, the
+        # React frontend, the mutator (swarm-wide respawn scheduler), or
+        # the profiler (rebuilds profiles against the master DB).
         assert not bad.startswith("decnet_web/"), f"leaked frontend: {bad}"
-        assert bad != "decnet/web/api.py", f"leaked master API: {bad}"
-        assert bad != "decnet/web/swarm_api.py", f"leaked swarm API: {bad}"
-        assert bad != "decnet/web/ingester.py", f"leaked ingester: {bad}"
-        assert not bad.startswith("decnet/web/router/"), f"leaked router: {bad}"
-        assert not bad.startswith("decnet/web/templates/"), f"leaked tpl: {bad}"
+        assert not bad.startswith("decnet/web/"), f"leaked master-api: {bad}"
         assert not bad.startswith("decnet/mutator/"), f"leaked mutator: {bad}"
+        assert not bad.startswith("decnet/profiler/"), f"leaked profiler: {bad}"
 
     # INI content is correct
     ini = tf.extractfile("etc/decnet/decnet.ini").read().decode()
