@@ -47,6 +47,10 @@ def run(
     os.environ["DECNET_UPDATER_INSTALL_DIR"] = str(install_dir)
     os.environ["DECNET_UPDATER_UPDATER_DIR"] = str(install_dir / "updater")
     os.environ["DECNET_UPDATER_AGENT_DIR"] = str(agent_dir)
+    # Needed by run_update_self to rebuild the updater's launch argv.
+    os.environ["DECNET_UPDATER_BUNDLE_DIR"] = str(updater_dir)
+    os.environ["DECNET_UPDATER_HOST"] = str(host)
+    os.environ["DECNET_UPDATER_PORT"] = str(port)
 
     keyfile = updater_dir / "updater.key"
     certfile = updater_dir / "updater.crt"

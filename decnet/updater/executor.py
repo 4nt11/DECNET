@@ -191,16 +191,20 @@ def _run_pip(
     """
     idir = install_dir or release.parent.parent  # releases/<slot> -> install_dir
     venv_dir = _shared_venv(idir)
-    if not venv_dir.exists():
+    fresh = not venv_dir.exists()
+    if fresh:
         subprocess.run(  # nosec B603
             [sys.executable, "-m", "venv", str(venv_dir)],
             check=True, capture_output=True, text=True,
         )
     py = venv_dir / "bin" / "python"
+    # First install into a fresh venv: pull full dep tree. Subsequent updates
+    # use --no-deps so pip only replaces the decnet package.
+    args = [str(py), "-m", "pip", "install", "--force-reinstall", str(release)]
+    if not fresh:
+        args.insert(-1, "--no-deps")
     return subprocess.run(  # nosec B603
-        [str(py), "-m", "pip", "install", "--force-reinstall", "--no-deps",
-         str(release)],
-        check=False, capture_output=True, text=True,
+        args, check=False, capture_output=True, text=True,
     )
 
 
@@ -484,7 +488,20 @@ def run_update_self(
     _rotate(updater_install_dir)
     _point_current_at(updater_install_dir, _active_dir(updater_install_dir))
 
-    argv = [str(_shared_venv(updater_install_dir) / "bin" / "decnet"), "updater"] + sys.argv[1:]
+    # Reconstruct the updater's original launch command from env vars set by
+    # `decnet.updater.server.run`. We can't reuse sys.argv: inside the app
+    # process this is the uvicorn subprocess invocation (--ssl-keyfile, etc.),
+    # not the operator-visible `decnet updater ...` command.
+    decnet_bin = str(_shared_venv(updater_install_dir) / "bin" / "decnet")
+    argv = [decnet_bin, "updater",
+            "--host", os.environ.get("DECNET_UPDATER_HOST", "0.0.0.0"),  # nosec B104
+            "--port", os.environ.get("DECNET_UPDATER_PORT", "8766"),
+            "--updater-dir", os.environ.get("DECNET_UPDATER_BUNDLE_DIR",
+                                             str(pki.DEFAULT_AGENT_DIR.parent / "updater")),
+            "--install-dir", os.environ.get("DECNET_UPDATER_INSTALL_DIR",
+                                            str(updater_install_dir.parent)),
+            "--agent-dir", os.environ.get("DECNET_UPDATER_AGENT_DIR",
+                                          str(pki.DEFAULT_AGENT_DIR))]
     if exec_cb is not None:
         exec_cb(argv)  # tests stub this — we don't actually re-exec
         return {"status": "self_update_queued", "argv": argv}
