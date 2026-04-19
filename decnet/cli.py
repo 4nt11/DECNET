@@ -455,6 +455,45 @@ def swarm_list(
     console.print(table)
 
 
+@swarm_app.command("check")
+def swarm_check(
+    url: Optional[str] = typer.Option(None, "--url", help="Override swarm controller URL"),
+    json_out: bool = typer.Option(False, "--json", help="Emit JSON instead of a table"),
+) -> None:
+    """Actively probe every enrolled worker and refresh status + last_heartbeat."""
+    resp = _http_request("POST", _swarmctl_base_url(url) + "/swarm/check", timeout=60.0)
+    payload = resp.json()
+    results = payload.get("results", [])
+
+    if json_out:
+        console.print_json(data=payload)
+        return
+
+    if not results:
+        console.print("[dim]No workers enrolled.[/]")
+        return
+
+    table = Table(title="DECNET swarm check")
+    for col in ("name", "address", "reachable", "detail"):
+        table.add_column(col)
+    for r in results:
+        reachable = r.get("reachable")
+        mark = "[green]yes[/]" if reachable else "[red]no[/]"
+        detail = r.get("detail")
+        detail_str = "—"
+        if isinstance(detail, dict):
+            detail_str = detail.get("status") or ", ".join(f"{k}={v}" for k, v in detail.items())
+        elif detail is not None:
+            detail_str = str(detail)
+        table.add_row(
+            r.get("name") or "",
+            r.get("address") or "",
+            mark,
+            detail_str,
+        )
+    console.print(table)
+
+
 @swarm_app.command("decommission")
 def swarm_decommission(
     name: Optional[str] = typer.Option(None, "--name", help="Worker hostname"),

@@ -110,6 +110,48 @@ def test_swarm_enroll_writes_bundle(http_stub, tmp_path: pathlib.Path) -> None:
     assert body["sans"] == ["decky01.lan", "10.0.0.1"]
 
 
+# ------------------------------------------------------------- swarm check
+
+
+def test_swarm_check_prints_table(http_stub) -> None:
+    http_stub.script[("POST", "/swarm/check")] = _FakeResp({
+        "results": [
+            {"host_uuid": "u-a", "name": "decky01", "address": "10.0.0.1",
+             "reachable": True, "detail": {"status": "ok"}},
+            {"host_uuid": "u-b", "name": "decky02", "address": "10.0.0.2",
+             "reachable": False, "detail": "connection refused"},
+        ]
+    })
+    result = runner.invoke(app, ["swarm", "check"])
+    assert result.exit_code == 0, result.output
+    assert "decky01" in result.output
+    assert "decky02" in result.output
+    # Both reachable=true and reachable=false render.
+    assert "yes" in result.output.lower()
+    assert "no" in result.output.lower()
+
+
+def test_swarm_check_empty(http_stub) -> None:
+    http_stub.script[("POST", "/swarm/check")] = _FakeResp({"results": []})
+    result = runner.invoke(app, ["swarm", "check"])
+    assert result.exit_code == 0
+    assert "No workers" in result.output
+
+
+def test_swarm_check_json_output(http_stub) -> None:
+    http_stub.script[("POST", "/swarm/check")] = _FakeResp({
+        "results": [
+            {"host_uuid": "u-a", "name": "decky01", "address": "10.0.0.1",
+             "reachable": True, "detail": {"status": "ok"}},
+        ]
+    })
+    result = runner.invoke(app, ["swarm", "check", "--json"])
+    assert result.exit_code == 0
+    # JSON mode emits structured output, not the rich table.
+    assert '"reachable"' in result.output
+    assert '"decky01"' in result.output
+
+
 # ------------------------------------------------------------- swarm decommission
 
 
