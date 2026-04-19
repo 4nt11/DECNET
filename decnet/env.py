@@ -6,9 +6,14 @@ from dotenv import load_dotenv
 # Calculate absolute path to the project root
 _ROOT: Path = Path(__file__).parent.parent.absolute()
 
-# Load .env.local first, then fallback to .env
+# Load .env.local first, then fallback to .env.
+# Also check CWD so deployments that install into site-packages (e.g. the
+# self-updater's release slots) can ship a per-host .env.local at the
+# process's working directory without having to edit site-packages.
 load_dotenv(_ROOT / ".env.local")
 load_dotenv(_ROOT / ".env")
+load_dotenv(Path.cwd() / ".env.local")
+load_dotenv(Path.cwd() / ".env")
 
 
 def _port(name: str, default: int) -> int:

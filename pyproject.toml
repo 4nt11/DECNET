@@ -25,7 +25,9 @@ dependencies = [
     "scapy>=2.6.1",
     "orjson>=3.10",
     "cryptography>=46.0.7",
-    "python-multipart>=0.0.20"
+    "python-multipart>=0.0.20",
+    "httpx>=0.28.1",
+    "requests>=2.33.1"
 ]
 
 [project.optional-dependencies]

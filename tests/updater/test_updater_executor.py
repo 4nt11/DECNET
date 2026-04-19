@@ -293,3 +293,25 @@ def test_update_self_pip_failure_leaves_active_intact(
         ex.run_update_self(tb, sha="U", updater_install_dir=install_dir, exec_cb=lambda a: None)
     assert (install_dir / "releases" / "active" / "marker").read_text() == "old-updater"
     assert not (install_dir / "releases" / "active.new").exists()
+
+
+def test_stop_agent_falls_back_to_proc_scan_when_no_pidfile(
+    monkeypatch: pytest.MonkeyPatch,
+    install_dir: pathlib.Path,
+) -> None:
+    """No agent.pid → _stop_agent still terminates agents found via /proc."""
+    killed: list[tuple[int, int]] = []
+
+    def fake_kill(pid: int, sig: int) -> None:
+        killed.append((pid, sig))
+        raise ProcessLookupError  # pretend it already died after SIGTERM
+
+    monkeypatch.setattr(ex, "_discover_agent_pids", lambda: [4242, 4243])
+    monkeypatch.setattr(ex.os, "kill", fake_kill)
+
+    assert not (install_dir / "agent.pid").exists()
+    ex._stop_agent(install_dir, grace=0.0)
+
+    import signal as _signal
+    assert (4242, _signal.SIGTERM) in killed
+    assert (4243, _signal.SIGTERM) in killed
