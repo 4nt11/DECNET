@@ -178,8 +178,8 @@ def _render_decnet_ini(master_host: str) -> bytes:
         f"master-host = {master_host}\n"
         "swarm-syslog-port = 6514\n"
         "agent-port = 8765\n"
-        "agent-dir = /root/.decnet/agent\n"
-        "updater-dir = /root/.decnet/updater\n"
+        "agent-dir = /etc/decnet/agent\n"
+        "updater-dir = /etc/decnet/updater\n"
     ).encode()
 
 

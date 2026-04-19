@@ -31,27 +31,30 @@ install -Dm0644 etc/decnet/decnet.ini /etc/decnet/decnet.ini
 # Log directory the baked-in INI points at — must exist before `decnet` imports config.
 install -d -m0755 /var/log/decnet
 
-REAL_USER="${SUDO_USER:-root}"
-REAL_HOME="$(getent passwd "$REAL_USER" | cut -d: -f6)"
+# Certs live under /etc/decnet/ (root-owned, 0600 keys) — this is a root
+# daemon's data, not a user's. The baked INI's `agent-dir`/`updater-dir`
+# point at these paths.
 for f in ca.crt worker.crt worker.key; do
-  install -Dm0600 -o "$REAL_USER" -g "$REAL_USER" \
-    "home/.decnet/agent/$f" "$REAL_HOME/.decnet/agent/$f"
+  install -Dm0600 -o root -g root \
+    "home/.decnet/agent/$f" "/etc/decnet/agent/$f"
 done
+chmod 0755 /etc/decnet/agent
 
 WITH_UPDATER="{{ with_updater }}"
 if [[ "$WITH_UPDATER" == "true" && -d home/.decnet/updater ]]; then
   for f in ca.crt updater.crt updater.key; do
-    install -Dm0600 -o "$REAL_USER" -g "$REAL_USER" \
-      "home/.decnet/updater/$f" "$REAL_HOME/.decnet/updater/$f"
+    install -Dm0600 -o root -g root \
+      "home/.decnet/updater/$f" "/etc/decnet/updater/$f"
   done
+  chmod 0755 /etc/decnet/updater
 fi
 
 # Guarantee the pip-installed entrypoint is executable (some setuptools+editable
 # combos drop it with mode 0644) and expose it on PATH.
 chmod 0755 "$INSTALL_DIR/.venv/bin/decnet"
 ln -sf "$INSTALL_DIR/.venv/bin/decnet" /usr/local/bin/decnet
-sudo -u "$REAL_USER" /usr/local/bin/decnet agent --daemon
+/usr/local/bin/decnet agent --daemon
 if [[ "$WITH_UPDATER" == "true" ]]; then
-  sudo -u "$REAL_USER" /usr/local/bin/decnet updater --daemon
+  /usr/local/bin/decnet updater --daemon
 fi
 echo "[DECNET] agent {{ agent_name }} enrolled -> {{ master_host }}. Forwarder auto-spawned."
