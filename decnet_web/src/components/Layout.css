@@ -83,6 +83,44 @@
   white-space: nowrap;
 }
 
+.nav-group {
+  display: flex;
+  flex-direction: column;
+}
+
+.nav-group-toggle {
+  background: transparent;
+  border: none;
+  width: 100%;
+  text-align: left;
+  font-family: inherit;
+  font-size: inherit;
+  letter-spacing: 1px;
+  text-transform: uppercase;
+  opacity: 0.6;
+}
+
+.nav-group-toggle:hover {
+  box-shadow: none;
+  opacity: 1;
+}
+
+.nav-group-chevron {
+  margin-left: auto;
+  display: flex;
+  align-items: center;
+}
+
+.nav-group-children {
+  display: flex;
+  flex-direction: column;
+}
+
+.nav-subitem {
+  padding-left: 40px;
+  font-size: 0.85rem;
+}
+
 .sidebar-footer {
   padding: 20px;
   border-top: 1px solid var(--border-color);

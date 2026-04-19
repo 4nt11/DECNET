@@ -10,6 +10,9 @@ import AttackerDetail from './components/AttackerDetail';
 import Config from './components/Config';
 import Bounty from './components/Bounty';
 import RemoteUpdates from './components/RemoteUpdates';
+import SwarmHosts from './components/SwarmHosts';
+import SwarmDeckies from './components/SwarmDeckies';
+import AgentEnrollment from './components/AgentEnrollment';
 
 function isTokenValid(token: string): boolean {
   try {
@@ -66,6 +69,9 @@ function App() {
           <Route path="/attackers/:id" element={<AttackerDetail />} />
           <Route path="/config" element={<Config />} />
           <Route path="/swarm-updates" element={<RemoteUpdates />} />
+          <Route path="/swarm/hosts" element={<SwarmHosts />} />
+          <Route path="/swarm/deckies" element={<SwarmDeckies />} />
+          <Route path="/swarm/enroll" element={<AgentEnrollment />} />
           <Route path="*" element={<Navigate to="/" replace />} />
         </Routes>
       </Layout>

@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { NavLink } from 'react-router-dom';
-import { Menu, X, Search, Activity, LayoutDashboard, Terminal, Settings, LogOut, Server, Archive, Package } from 'lucide-react';
+import { Menu, X, Search, Activity, LayoutDashboard, Terminal, Settings, LogOut, Server, Archive, Package, Network, ChevronDown, ChevronRight, HardDrive, Boxes, UserPlus } from 'lucide-react';
 import './Layout.css';
 
 interface LayoutProps {
@@ -46,7 +46,12 @@ const Layout: React.FC<LayoutProps> = ({ children, onLogout, onSearch }) => {
           <NavItem to="/live-logs" icon={<Terminal size={20} />} label="Live Logs" open={sidebarOpen} />
           <NavItem to="/bounty" icon={<Archive size={20} />} label="Bounty" open={sidebarOpen} />
           <NavItem to="/attackers" icon={<Activity size={20} />} label="Attackers" open={sidebarOpen} />
-          <NavItem to="/swarm-updates" icon={<Package size={20} />} label="Remote Updates" open={sidebarOpen} />
+          <NavGroup label="SWARM" icon={<Network size={20} />} open={sidebarOpen}>
+            <NavItem to="/swarm/hosts" icon={<HardDrive size={18} />} label="SWARM Hosts" open={sidebarOpen} indent />
+            <NavItem to="/swarm/deckies" icon={<Boxes size={18} />} label="SWARM Deckies" open={sidebarOpen} indent />
+            <NavItem to="/swarm-updates" icon={<Package size={18} />} label="Remote Updates" open={sidebarOpen} indent />
+            <NavItem to="/swarm/enroll" icon={<UserPlus size={18} />} label="Agent Enrollment" open={sidebarOpen} indent />
+          </NavGroup>
           <NavItem to="/config" icon={<Settings size={20} />} label="Config" open={sidebarOpen} />
         </nav>
 
@@ -92,13 +97,49 @@ interface NavItemProps {
   icon: React.ReactNode;
   label: string;
   open: boolean;
+  indent?: boolean;
 }
 
-const NavItem: React.FC<NavItemProps> = ({ to, icon, label, open }) => (
-  <NavLink to={to} className={({ isActive }) => `nav-item ${isActive ? 'active' : ''}`} end={to === '/'}>
+const NavItem: React.FC<NavItemProps> = ({ to, icon, label, open, indent }) => (
+  <NavLink
+    to={to}
+    className={({ isActive }) => `nav-item ${isActive ? 'active' : ''} ${indent ? 'nav-subitem' : ''}`}
+    end={to === '/'}
+  >
     {icon}
     {open && <span className="nav-label">{label}</span>}
   </NavLink>
 );
+
+interface NavGroupProps {
+  label: string;
+  icon: React.ReactNode;
+  open: boolean;
+  children: React.ReactNode;
+}
+
+const NavGroup: React.FC<NavGroupProps> = ({ label, icon, open, children }) => {
+  const [expanded, setExpanded] = useState(true);
+  return (
+    <div className="nav-group">
+      <button
+        type="button"
+        className="nav-item nav-group-toggle"
+        onClick={() => setExpanded((v) => !v)}
+      >
+        {icon}
+        {open && (
+          <>
+            <span className="nav-label">{label}</span>
+            <span className="nav-group-chevron">
+              {expanded ? <ChevronDown size={16} /> : <ChevronRight size={16} />}
+            </span>
+          </>
+        )}
+      </button>
+      {expanded && <div className="nav-group-children">{children}</div>}
+    </div>
+  );
+};
 
 export default Layout;
