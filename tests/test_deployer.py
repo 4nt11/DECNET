@@ -40,6 +40,7 @@ class TestCompose:
     @patch("decnet.engine.deployer.subprocess.run")
     def test_compose_constructs_correct_command(self, mock_run):
         from decnet.engine.deployer import _compose
+        mock_run.return_value = MagicMock(returncode=0, stdout="", stderr="")
         _compose("up", "-d", compose_file=Path("test.yml"))
         mock_run.assert_called_once()
         cmd = mock_run.call_args[0][0]
@@ -50,6 +51,7 @@ class TestCompose:
     @patch("decnet.engine.deployer.subprocess.run")
     def test_compose_passes_env(self, mock_run):
         from decnet.engine.deployer import _compose
+        mock_run.return_value = MagicMock(returncode=0, stdout="", stderr="")
         _compose("build", env={"DOCKER_BUILDKIT": "1"})
         _, kwargs = mock_run.call_args
         assert "DOCKER_BUILDKIT" in kwargs["env"]

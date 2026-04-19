@@ -152,9 +152,20 @@ def _ensure_network(
 
     for net in client.networks.list(names=[MACVLAN_NETWORK_NAME]):
         if net.attrs.get("Driver") == driver:
-            return  # right driver, leave it alone
-        # Wrong driver — tear it down. Disconnect any live containers first
-        # so `remove()` doesn't refuse with ErrNetworkInUse.
+            # Same driver — but if the IPAM pool drifted (different subnet,
+            # gateway, or ip-range than this deploy asks for), reusing it
+            # hands out addresses from the old pool and we race the real LAN.
+            # Compare and rebuild on mismatch.
+            pools = (net.attrs.get("IPAM") or {}).get("Config") or []
+            cur = pools[0] if pools else {}
+            if (
+                cur.get("Subnet") == subnet
+                and cur.get("Gateway") == gateway
+                and cur.get("IPRange") == ip_range
+            ):
+                return  # right driver AND matching pool, leave it alone
+        # Driver mismatch OR IPAM drift — tear it down. Disconnect any live
+        # containers first so `remove()` doesn't refuse with ErrNetworkInUse.
         for cid in (net.attrs.get("Containers") or {}):
             try:
                 net.disconnect(cid, force=True)

@@ -76,12 +76,22 @@ class TestIpsToRange:
 # ---------------------------------------------------------------------------
 
 class TestCreateMacvlanNetwork:
-    def _make_client(self, existing=None, existing_driver="macvlan"):
+    def _make_client(self, existing=None, existing_driver="macvlan",
+                     ipam_subnet="192.168.1.0/24", ipam_gateway="192.168.1.1",
+                     ipam_range="192.168.1.96/27"):
         client = MagicMock()
         nets = [MagicMock(name=n) for n in (existing or [])]
         for net, n in zip(nets, (existing or [])):
             net.name = n
-            net.attrs = {"Driver": existing_driver, "Containers": {}}
+            net.attrs = {
+                "Driver": existing_driver,
+                "Containers": {},
+                "IPAM": {"Config": [{
+                    "Subnet": ipam_subnet,
+                    "Gateway": ipam_gateway,
+                    "IPRange": ipam_range,
+                }]},
+            }
         client.networks.list.return_value = nets
         return client
 
@@ -99,18 +109,38 @@ class TestCreateMacvlanNetwork:
         create_macvlan_network(client, "eth0", "192.168.1.0/24", "192.168.1.1", "192.168.1.96/27")
         client.networks.create.assert_not_called()
 
+    def test_rebuilds_when_ipam_subnet_drifted(self):
+        """Existing net matches driver+name, but IPAM pool is stale. Reusing it
+        hands out addresses from the old pool — surfaces as 'Address already in
+        use'. Must tear down + recreate."""
+        client = self._make_client([MACVLAN_NETWORK_NAME], ipam_subnet="10.0.0.0/24")
+        old_net = client.networks.list.return_value[0]
+        create_macvlan_network(client, "eth0", "192.168.1.0/24", "192.168.1.1", "192.168.1.96/27")
+        old_net.remove.assert_called_once()
+        client.networks.create.assert_called_once()
+
 
 # ---------------------------------------------------------------------------
 # create_ipvlan_network
 # ---------------------------------------------------------------------------
 
 class TestCreateIpvlanNetwork:
-    def _make_client(self, existing=None, existing_driver="ipvlan"):
+    def _make_client(self, existing=None, existing_driver="ipvlan",
+                     ipam_subnet="192.168.1.0/24", ipam_gateway="192.168.1.1",
+                     ipam_range="192.168.1.96/27"):
         client = MagicMock()
         nets = [MagicMock(name=n) for n in (existing or [])]
         for net, n in zip(nets, (existing or [])):
             net.name = n
-            net.attrs = {"Driver": existing_driver, "Containers": {}}
+            net.attrs = {
+                "Driver": existing_driver,
+                "Containers": {},
+                "IPAM": {"Config": [{
+                    "Subnet": ipam_subnet,
+                    "Gateway": ipam_gateway,
+                    "IPRange": ipam_range,
+                }]},
+            }
         client.networks.list.return_value = nets
         return client
 

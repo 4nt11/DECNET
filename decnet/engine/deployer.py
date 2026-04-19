@@ -60,7 +60,19 @@ def _compose(*args: str, compose_file: Path = COMPOSE_FILE, env: dict | None = N
     # "project name must not be empty".
     cmd = ["docker", "compose", "-p", "decnet", "-f", str(compose_file), *args]
     merged = {**os.environ, **(env or {})}
-    subprocess.run(cmd, check=True, env=merged)  # nosec B603
+    result = subprocess.run(cmd, capture_output=True, text=True, env=merged)  # nosec B603
+    if result.stdout:
+        print(result.stdout, end="")
+    if result.returncode != 0:
+        # Docker emits the useful detail ("Address already in use", which IP,
+        # which port) on stderr. Surface it to the structured log so the
+        # agent's journal carries it — without this the upstream traceback
+        # just shows the exit code.
+        if result.stderr:
+            log.error("docker compose %s failed: %s", " ".join(args), result.stderr.strip())
+        raise subprocess.CalledProcessError(
+            result.returncode, cmd, result.stdout, result.stderr
+        )
 
 
 _PERMANENT_ERRORS = (
@@ -114,6 +126,8 @@ def _compose_with_retry(
         else:
             if result.stderr:
                 console.print(f"[red]{result.stderr.strip()}[/]")
+                log.error("docker compose %s failed after %d attempts: %s",
+                          " ".join(args), retries, result.stderr.strip())
     raise last_exc
 
 
@@ -161,6 +175,15 @@ def deploy(config: DecnetConfig, dry_run: bool = False, no_cache: bool = False, 
         return
 
     save_state(config, compose_path)
+
+    # Pre-up cleanup: a prior half-failed `up` can leave containers still
+    # holding the IPs/ports this run wants, which surfaces as the recurring
+    # "Address already in use" from Docker's IPAM. Best-effort — ignore
+    # failure (e.g. nothing to tear down on a clean host).
+    try:
+        _compose("down", "--remove-orphans", compose_file=compose_path)
+    except subprocess.CalledProcessError:
+        log.debug("pre-up cleanup: compose down failed (likely nothing to remove)")
 
     build_env = {"DOCKER_BUILDKIT": "1"} if parallel else {}
 
