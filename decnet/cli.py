@@ -176,8 +176,17 @@ def swarmctl(
     port: int = typer.Option(8770, "--port", help="Port for the swarm controller"),
     host: str = typer.Option("127.0.0.1", "--host", help="Bind address for the swarm controller"),
     daemon: bool = typer.Option(False, "--daemon", "-d", help="Detach to background as a daemon process"),
+    no_listener: bool = typer.Option(False, "--no-listener", help="Do not auto-spawn the syslog-TLS listener alongside swarmctl"),
 ) -> None:
-    """Run the DECNET SWARM controller (master-side, separate process from `decnet api`)."""
+    """Run the DECNET SWARM controller (master-side, separate process from `decnet api`).
+
+    By default, `decnet swarmctl` auto-spawns `decnet listener` as a fully-
+    detached sibling process so the master starts accepting forwarder
+    connections on 6514 without a second manual invocation. The listener
+    survives swarmctl restarts and crashes — if it dies on its own,
+    restart it manually with `decnet listener --daemon …`. Pass
+    --no-listener to skip.
+    """
     import subprocess  # nosec B404
     import sys
     import os
@@ -187,6 +196,24 @@ def swarmctl(
     if daemon:
         log.info("swarmctl daemonizing host=%s port=%d", host, port)
         _daemonize()
+
+    if not no_listener:
+        listener_host = os.environ.get("DECNET_LISTENER_HOST", "0.0.0.0")  # nosec B104
+        listener_port = int(os.environ.get("DECNET_SWARM_SYSLOG_PORT", "6514"))
+        lst_argv = [
+            sys.executable, "-m", "decnet", "listener",
+            "--host", listener_host,
+            "--port", str(listener_port),
+            "--daemon",
+        ]
+        try:
+            pid = _spawn_detached(lst_argv, _pid_dir() / "listener.pid")
+            log.info("swarmctl auto-spawned listener pid=%d bind=%s:%d",
+                     pid, listener_host, listener_port)
+            console.print(f"[dim]Auto-spawned listener (pid {pid}) on {listener_host}:{listener_port}.[/]")
+        except Exception as e:  # noqa: BLE001
+            log.warning("swarmctl could not auto-spawn listener: %s", e)
+            console.print(f"[yellow]listener auto-spawn skipped: {e}[/]")
 
     log.info("swarmctl command invoked host=%s port=%d", host, port)
     console.print(f"[green]Starting DECNET SWARM controller on {host}:{port}...[/]")

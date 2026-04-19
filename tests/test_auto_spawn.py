@@ -133,3 +133,72 @@ def test_agent_skips_forwarder_when_master_unset(fake_popen, monkeypatch, tmp_pa
     result = runner.invoke(fake_popen.app, ["agent"])
     assert result.exit_code == 0
     assert _FakePopen.last_instance is None
+
+
+# ───────────────────────────────────────────────────────────────────────────
+# swarmctl → listener auto-spawn
+# ───────────────────────────────────────────────────────────────────────────
+
+class _FakeUvicornPopen:
+    """Stub for the uvicorn subprocess inside swarmctl — returns immediately
+    so the Typer command body doesn't block on proc.wait()."""
+    def __init__(self, *a, **kw) -> None:
+        self.pid = 999999
+    def wait(self, *a, **kw) -> int:
+        return 0
+
+
+@pytest.fixture
+def fake_swarmctl_popen(monkeypatch):
+    """For swarmctl: record the detached listener spawn via _FakePopen
+    AND stub uvicorn's Popen so swarmctl's body returns immediately."""
+    import decnet.cli as cli_mod
+    import subprocess as _subp
+
+    calls: list[_FakePopen] = []
+
+    def _router(argv, **kwargs):
+        # Only the listener auto-spawn uses start_new_session + DEVNULL stdio.
+        if kwargs.get("start_new_session") and "stdin" in kwargs:
+            inst = _FakePopen(argv, **kwargs)
+            calls.append(inst)
+            return inst
+        # Anything else (the uvicorn child swarmctl blocks on) → cheap stub.
+        return _FakeUvicornPopen()
+
+    monkeypatch.setattr(_subp, "Popen", _router)
+    _FakePopen.last_instance = None
+    return cli_mod, calls
+
+
+def test_swarmctl_autospawns_listener(fake_swarmctl_popen, monkeypatch, tmp_path):
+    cli_mod, calls = fake_swarmctl_popen
+    monkeypatch.setattr(cli_mod, "_pid_dir", lambda: tmp_path)
+    monkeypatch.setenv("DECNET_LISTENER_HOST", "0.0.0.0")
+    monkeypatch.setenv("DECNET_SWARM_SYSLOG_PORT", "6514")
+
+    from typer.testing import CliRunner
+    runner = CliRunner()
+    result = runner.invoke(cli_mod.app, ["swarmctl", "--port", "8770"])
+    assert result.exit_code == 0, result.stdout
+    assert len(calls) == 1, f"expected one detached spawn, got {len(calls)}"
+    argv = calls[0].argv
+    assert "listener" in argv
+    assert "--daemon" in argv
+    assert "--port" in argv and "6514" in argv
+    # PID file written.
+    pid_path = tmp_path / "listener.pid"
+    assert pid_path.exists()
+    assert int(pid_path.read_text().strip()) > 0
+
+
+def test_swarmctl_no_listener_flag_suppresses_spawn(fake_swarmctl_popen, monkeypatch, tmp_path):
+    cli_mod, calls = fake_swarmctl_popen
+    monkeypatch.setattr(cli_mod, "_pid_dir", lambda: tmp_path)
+
+    from typer.testing import CliRunner
+    runner = CliRunner()
+    result = runner.invoke(cli_mod.app, ["swarmctl", "--no-listener"])
+    assert result.exit_code == 0, result.stdout
+    assert calls == [], "listener should NOT have been spawned"
+    assert not (tmp_path / "listener.pid").exists()

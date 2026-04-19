@@ -1,0 +1,63 @@
+; /etc/decnet/decnet.ini — DECNET host configuration
+;
+; Copy to /etc/decnet/decnet.ini and edit. Values here seed os.environ at
+; CLI startup via setdefault() — real env vars still win, so you can
+; override any value on the shell without editing this file.
+;
+; A missing file is fine; every daemon has sensible defaults. The main
+; reason to use this file is to skip typing the same flags on every
+; `decnet` invocation and to pin a host's role via `mode`.
+
+[decnet]
+; mode = agent | master
+;   agent  — worker host (runs `decnet agent`, `decnet forwarder`, `decnet updater`).
+;            Master-only commands (api, swarmctl, swarm, deploy, teardown, ...)
+;            are hidden from `decnet --help` and refuse to run.
+;   master — central server (runs `decnet api`, `decnet web`, `decnet swarmctl`,
+;            `decnet listener`). All commands visible.
+mode = agent
+
+; disallow-master = true (default when mode=agent)
+; Set to false for hybrid dev hosts that legitimately run both roles.
+disallow-master = true
+
+; log-file-path — where the local RFC 5424 event sink writes. The forwarder
+; tails this file and ships it to the master.
+log-file-path = /var/log/decnet/decnet.log
+
+
+; ─── Agent-only settings (read when mode=agent) ───────────────────────────
+[agent]
+; Where the master's syslog-TLS listener lives. DECNET_SWARM_MASTER_HOST.
+master-host = 192.168.1.50
+; Master listener port (RFC 5425 default 6514). DECNET_SWARM_SYSLOG_PORT.
+swarm-syslog-port = 6514
+; Bind address/port for this worker's agent API (mTLS).
+agent-port = 8765
+; Cert bundle dir — must contain ca.crt, worker.crt, worker.key from enroll.
+; DECNET_AGENT_DIR — honored by the forwarder child as well.
+agent-dir = /home/anti/.decnet/agent
+; Updater cert bundle (required for `decnet updater`).
+updater-dir = /home/anti/.decnet/updater
+
+
+; ─── Master-only settings (read when mode=master) ─────────────────────────
+[master]
+; Main API (REST for the React dashboard). DECNET_API_HOST / _PORT.
+api-host = 0.0.0.0
+api-port = 8000
+; React dev-server dashboard (`decnet web`). DECNET_WEB_HOST / _PORT.
+web-host = 0.0.0.0
+web-port = 8080
+; Swarm controller (master-internal). DECNET_SWARMCTL_HOST isn't exposed
+; under that name today — this block is the forward-compatible spelling.
+; swarmctl-host = 127.0.0.1
+; swarmctl-port = 8770
+; Syslog-over-TLS listener bind address and port. DECNET_LISTENER_HOST and
+; DECNET_SWARM_SYSLOG_PORT. The listener is auto-spawned by `decnet swarmctl`.
+listener-host = 0.0.0.0
+swarm-syslog-port = 6514
+; Master CA dir (for enroll / swarm cert issuance).
+; ca-dir = /home/anti/.decnet/ca
+; JWT secret for the web API. MUST be set; 32+ bytes. Keep out of git.
+; jwt-secret = REPLACE_ME_WITH_A_32_BYTE_SECRET
