@@ -83,8 +83,6 @@ class EnrollBundleRequest(BaseModel):
                              description="IP/host the agent will reach back to")
     agent_name: str = Field(..., pattern=r"^[a-z0-9][a-z0-9-]{0,62}$",
                             description="Worker name (DNS-label safe)")
-    agent_host: str = Field(..., min_length=1, max_length=253,
-                            description="IP/host of the new worker — shown in SwarmHosts and used as cert SAN")
     with_updater: bool = Field(
         default=True,
         description="Include updater cert bundle and auto-start decnet updater on the agent",
@@ -111,6 +109,7 @@ class _Bundle:
     sh_path: pathlib.Path
     tgz_path: pathlib.Path
     expires_at: datetime
+    host_uuid: str
     served: bool = False
 
 
@@ -275,9 +274,11 @@ async def create_enroll_bundle(
     if existing is not None:
         raise HTTPException(status_code=409, detail=f"Worker '{req.agent_name}' is already enrolled")
 
-    # 1. Issue certs (reuses the same code as /swarm/enroll).
+    # 1. Issue certs (reuses the same code as /swarm/enroll). The worker's own
+    # address is not known yet — the master learns it when the agent fetches
+    # the tarball (see get_payload), which also backfills the SwarmHost row.
     ca = pki.ensure_ca()
-    sans = list({req.agent_name, req.agent_host, req.master_host})
+    sans = list({req.agent_name, req.master_host})
     issued = pki.issue_worker_cert(ca, req.agent_name, sans)
     bundle_dir = pki.DEFAULT_CA_DIR / "workers" / req.agent_name
     pki.write_worker_bundle(issued, bundle_dir)
@@ -301,7 +302,7 @@ async def create_enroll_bundle(
         {
             "uuid": host_uuid,
             "name": req.agent_name,
-            "address": req.agent_host,
+            "address": "",  # filled in when the agent fetches the .tgz (its source IP)
             "agent_port": 8765,
             "status": "enrolled",
             "client_cert_fingerprint": issued.fingerprint_sha256,
@@ -338,7 +339,9 @@ async def create_enroll_bundle(
     os.chmod(sh_path, 0o600)
 
     async with _LOCK:
-        _BUNDLES[token] = _Bundle(sh_path=sh_path, tgz_path=tgz_path, expires_at=expires_at)
+        _BUNDLES[token] = _Bundle(
+            sh_path=sh_path, tgz_path=tgz_path, expires_at=expires_at, host_uuid=host_uuid,
+        )
     _ensure_sweeper()
 
     log.info("enroll-bundle created agent=%s master=%s token=%s...", req.agent_name, req.master_host, token[:8])
@@ -380,14 +383,30 @@ async def get_bootstrap(token: str) -> Response:
     tags=["Swarm Management"],
     include_in_schema=False,
 )
-async def get_payload(token: str) -> Response:
+async def get_payload(
+    token: str,
+    request: Request,
+    repo: BaseRepository = Depends(get_repo),
+) -> Response:
     async with _LOCK:
         b = await _lookup_live(token)
         b.served = True
         data = b.tgz_path.read_bytes()
+        host_uuid = b.host_uuid
         for p in (b.sh_path, b.tgz_path):
             try:
                 p.unlink()
             except FileNotFoundError:
                 pass
+
+    # The agent's first connect-back — its source IP is the reachable address
+    # the master will later use to probe it. Backfill the SwarmHost row here
+    # so the operator sees the real address instead of an empty placeholder.
+    client_host = request.client.host if request.client else ""
+    if client_host:
+        try:
+            await repo.update_swarm_host(host_uuid, {"address": client_host})
+        except Exception as e:  # noqa: BLE001
+            log.warning("enroll-bundle could not backfill address host=%s err=%s", host_uuid, e)
+
     return Response(content=data, media_type="application/gzip")

@@ -33,7 +33,6 @@ async def _post(client, auth_token, **overrides):
     body = {
         "master_host": "10.0.0.50",
         "agent_name": "worker-a",
-        "agent_host": "10.0.0.100",
         "with_updater": True,
     }
     body.update(overrides)
@@ -97,19 +96,31 @@ async def test_non_admin_forbidden(client, viewer_token):
 async def test_no_auth_401(client):
     resp = await client.post(
         "/api/v1/swarm/enroll-bundle",
-        json={"master_host": "10.0.0.50", "agent_name": "worker-a", "agent_host": "10.0.0.100"},
+        json={"master_host": "10.0.0.50", "agent_name": "worker-a"},
     )
     assert resp.status_code == 401
 
 
 @pytest.mark.anyio
-async def test_host_row_uses_agent_host_not_master_host(client, auth_token):
-    """SwarmHosts table should show the worker's own address, not the master's."""
+async def test_host_row_address_backfilled_from_tgz_source_ip(client, auth_token):
+    """SwarmHosts.address starts blank at enroll time and is populated from
+    the agent's source IP when it curls the .tgz."""
     from decnet.web.dependencies import repo
     resp = await _post(client, auth_token, agent_name="addr-test",
-                       master_host="192.168.1.5", agent_host="192.168.1.23")
-    row = await repo.get_swarm_host_by_uuid(resp.json()["host_uuid"])
-    assert row["address"] == "192.168.1.23"
+                       master_host="192.168.1.5")
+    host_uuid = resp.json()["host_uuid"]
+    token = resp.json()["token"]
+
+    row = await repo.get_swarm_host_by_uuid(host_uuid)
+    assert row["address"] == ""  # placeholder until first tgz fetch
+
+    tgz = await client.get(f"/api/v1/swarm/enroll-bundle/{token}.tgz")
+    assert tgz.status_code == 200
+
+    row = await repo.get_swarm_host_by_uuid(host_uuid)
+    # The TestClient client.host depends on httpx's ASGITransport — any
+    # non-empty value proves the backfill path ran.
+    assert row["address"] != ""
 
 
 @pytest.mark.anyio

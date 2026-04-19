@@ -92,7 +92,7 @@ const SwarmHosts: React.FC = () => {
                     {h.status === 'active' ? <Wifi size={16} /> : <WifiOff size={16} />} {h.status}
                   </td>
                   <td>{h.name}</td>
-                  <td>{h.address}:{h.agent_port}</td>
+                  <td>{h.address ? `${h.address}:${h.agent_port}` : <em>pending first connect</em>}</td>
                   <td>{h.last_heartbeat ? new Date(h.last_heartbeat).toLocaleString() : '—'}</td>
                   <td title={h.client_cert_fingerprint}><code>{shortFp(h.client_cert_fingerprint)}</code></td>
                   <td>{new Date(h.enrolled_at).toLocaleString()}</td>
