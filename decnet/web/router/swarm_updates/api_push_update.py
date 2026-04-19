@@ -136,8 +136,12 @@ async def api_push_update(
 ) -> PushUpdateResponse:
     targets = await _resolve_targets(repo, req)
     tree_root = _master_tree_root()
-    sha = detect_git_sha(tree_root)
-    tarball = tar_working_tree(tree_root, extra_excludes=req.exclude)
+    # Both `detect_git_sha` (shells out) and `tar_working_tree` (walks the repo
+    # + gzips a few MB) are synchronous CPU+I/O. Running them directly on the
+    # event loop blocks every other request until the tarball is built — the
+    # dashboard freezes on /swarm-updates push. Offload to a worker thread.
+    sha = await asyncio.to_thread(detect_git_sha, tree_root)
+    tarball = await asyncio.to_thread(tar_working_tree, tree_root, extra_excludes=req.exclude)
     log.info(
         "swarm_updates.push sha=%s tarball=%d hosts=%d include_self=%s",
         sha or "(not a git repo)", len(tarball), len(targets), req.include_self,

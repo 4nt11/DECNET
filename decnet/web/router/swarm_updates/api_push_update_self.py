@@ -76,8 +76,10 @@ async def api_push_update_self(
 ) -> PushUpdateResponse:
     targets = await _resolve_targets(repo, req)
     tree_root = _master_tree_root()
-    sha = detect_git_sha(tree_root)
-    tarball = tar_working_tree(tree_root, extra_excludes=req.exclude)
+    # Offload sync I/O (git shell-out + tar+gzip of the repo) so the event
+    # loop stays responsive while the tarball is being built.
+    sha = await asyncio.to_thread(detect_git_sha, tree_root)
+    tarball = await asyncio.to_thread(tar_working_tree, tree_root, extra_excludes=req.exclude)
     log.info(
         "swarm_updates.push_self sha=%s tarball=%d hosts=%d",
         sha or "(not a git repo)", len(tarball), len(targets),
