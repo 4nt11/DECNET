@@ -9,6 +9,7 @@ import Attackers from './components/Attackers';
 import AttackerDetail from './components/AttackerDetail';
 import Config from './components/Config';
 import Bounty from './components/Bounty';
+import RemoteUpdates from './components/RemoteUpdates';
 
 function isTokenValid(token: string): boolean {
   try {
@@ -64,6 +65,7 @@ function App() {
           <Route path="/attackers" element={<Attackers />} />
           <Route path="/attackers/:id" element={<AttackerDetail />} />
           <Route path="/config" element={<Config />} />
+          <Route path="/swarm-updates" element={<RemoteUpdates />} />
           <Route path="*" element={<Navigate to="/" replace />} />
         </Routes>
       </Layout>

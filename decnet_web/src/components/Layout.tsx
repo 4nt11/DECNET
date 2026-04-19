@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { NavLink } from 'react-router-dom';
-import { Menu, X, Search, Activity, LayoutDashboard, Terminal, Settings, LogOut, Server, Archive } from 'lucide-react';
+import { Menu, X, Search, Activity, LayoutDashboard, Terminal, Settings, LogOut, Server, Archive, Package } from 'lucide-react';
 import './Layout.css';
 
 interface LayoutProps {
@@ -46,6 +46,7 @@ const Layout: React.FC<LayoutProps> = ({ children, onLogout, onSearch }) => {
           <NavItem to="/live-logs" icon={<Terminal size={20} />} label="Live Logs" open={sidebarOpen} />
           <NavItem to="/bounty" icon={<Archive size={20} />} label="Bounty" open={sidebarOpen} />
           <NavItem to="/attackers" icon={<Activity size={20} />} label="Attackers" open={sidebarOpen} />
+          <NavItem to="/swarm-updates" icon={<Package size={20} />} label="Remote Updates" open={sidebarOpen} />
           <NavItem to="/config" icon={<Settings size={20} />} label="Config" open={sidebarOpen} />
         </nav>
 
