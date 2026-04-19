@@ -123,6 +123,14 @@ async def api_deploy_deckies(req: DeployIniRequest, admin: dict = Depends(requir
         ]
 
     if swarm_hosts:
+        # Carry-over from a prior deployment may reference a host_uuid that's
+        # since been decommissioned / re-enrolled at a new uuid. Drop any
+        # assignment that isn't in the currently-reachable set, then round-
+        # robin-fill the blanks — otherwise dispatch 404s on a dead uuid.
+        live_uuids = {h["uuid"] for h in swarm_hosts}
+        for d in config.deckies:
+            if d.host_uuid and d.host_uuid not in live_uuids:
+                d.host_uuid = None
         unassigned = [d for d in config.deckies if not d.host_uuid]
         for i, d in enumerate(unassigned):
             d.host_uuid = swarm_hosts[i % len(swarm_hosts)]["uuid"]
