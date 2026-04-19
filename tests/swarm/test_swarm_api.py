@@ -78,6 +78,36 @@ def test_enroll_creates_host_and_returns_bundle(client: TestClient) -> None:
     assert len(body["fingerprint"]) == 64  # sha256 hex
 
 
+def test_enroll_with_updater_issues_second_cert(client: TestClient, ca_dir) -> None:
+    resp = client.post(
+        "/swarm/enroll",
+        json={"name": "worker-upd", "address": "10.0.0.99", "agent_port": 8765,
+              "issue_updater_bundle": True},
+    )
+    assert resp.status_code == 201, resp.text
+    body = resp.json()
+    assert body["updater"] is not None
+    assert body["updater"]["fingerprint"] != body["fingerprint"]
+    assert "-----BEGIN CERTIFICATE-----" in body["updater"]["updater_cert_pem"]
+    assert "-----BEGIN PRIVATE KEY-----" in body["updater"]["updater_key_pem"]
+    # Cert bundle persisted on master.
+    upd_bundle = ca_dir / "workers" / "worker-upd" / "updater"
+    assert (upd_bundle / "updater.crt").is_file()
+    assert (upd_bundle / "updater.key").is_file()
+    # DB row carries the updater fingerprint.
+    row = client.get(f"/swarm/hosts/{body['host_uuid']}").json()
+    assert row.get("updater_cert_fingerprint") == body["updater"]["fingerprint"]
+
+
+def test_enroll_without_updater_omits_bundle(client: TestClient) -> None:
+    resp = client.post(
+        "/swarm/enroll",
+        json={"name": "worker-no-upd", "address": "10.0.0.98", "agent_port": 8765},
+    )
+    assert resp.status_code == 201
+    assert resp.json()["updater"] is None
+
+
 def test_enroll_rejects_duplicate_name(client: TestClient) -> None:
     payload = {"name": "worker-dup", "address": "10.0.0.6", "agent_port": 8765}
     assert client.post("/swarm/enroll", json=payload).status_code == 201

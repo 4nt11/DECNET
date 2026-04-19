@@ -118,6 +118,10 @@ class SwarmHost(SQLModel, table=True):
     # ISO-8601 string of the last successful agent /health probe
     last_heartbeat: Optional[datetime] = Field(default=None)
     client_cert_fingerprint: str  # SHA-256 hex of worker's issued client cert
+    # SHA-256 hex of the updater-identity cert, if the host was enrolled
+    # with ``--updater`` / ``issue_updater_bundle``. ``None`` for hosts
+    # that only have an agent identity.
+    updater_cert_fingerprint: Optional[str] = Field(default=None)
     # Directory on the master where the per-worker cert bundle lives
     cert_bundle_path: str
     enrolled_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
@@ -281,6 +285,17 @@ class SwarmEnrollRequest(BaseModel):
         description="Extra SANs (IPs / hostnames) to embed in the worker cert",
     )
     notes: Optional[str] = None
+    issue_updater_bundle: bool = PydanticField(
+        default=False,
+        description="If true, also issue an updater cert (CN=updater@<name>) for the remote self-updater",
+    )
+
+
+class SwarmUpdaterBundle(BaseModel):
+    """Subset of SwarmEnrolledBundle for the updater identity."""
+    fingerprint: str
+    updater_cert_pem: str
+    updater_key_pem: str
 
 
 class SwarmEnrolledBundle(BaseModel):
@@ -293,6 +308,7 @@ class SwarmEnrolledBundle(BaseModel):
     ca_cert_pem: str
     worker_cert_pem: str
     worker_key_pem: str
+    updater: Optional[SwarmUpdaterBundle] = None
 
 
 class SwarmHostView(BaseModel):
@@ -303,6 +319,7 @@ class SwarmHostView(BaseModel):
     status: str
     last_heartbeat: Optional[datetime] = None
     client_cert_fingerprint: str
+    updater_cert_fingerprint: Optional[str] = None
     enrolled_at: datetime
     notes: Optional[str] = None
 

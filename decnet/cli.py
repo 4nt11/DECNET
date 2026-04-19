@@ -188,6 +188,43 @@ def agent(
 
 
 @app.command()
+def updater(
+    port: int = typer.Option(8766, "--port", help="Port for the self-updater daemon"),
+    host: str = typer.Option("0.0.0.0", "--host", help="Bind address for the updater"),  # nosec B104
+    updater_dir: Optional[str] = typer.Option(None, "--updater-dir", help="Updater cert bundle dir (default: ~/.decnet/updater)"),
+    install_dir: Optional[str] = typer.Option(None, "--install-dir", help="Release install root (default: /opt/decnet)"),
+    agent_dir: Optional[str] = typer.Option(None, "--agent-dir", help="Worker agent cert bundle (for local /health probes; default: ~/.decnet/agent)"),
+    daemon: bool = typer.Option(False, "--daemon", "-d", help="Detach to background as a daemon process"),
+) -> None:
+    """Run the DECNET self-updater (requires a bundle in ~/.decnet/updater/)."""
+    import pathlib as _pathlib
+    from decnet.swarm import pki as _pki
+    from decnet.updater import server as _upd_server
+
+    resolved_updater = _pathlib.Path(updater_dir) if updater_dir else _upd_server.DEFAULT_UPDATER_DIR
+    resolved_install = _pathlib.Path(install_dir) if install_dir else _pathlib.Path("/opt/decnet")
+    resolved_agent = _pathlib.Path(agent_dir) if agent_dir else _pki.DEFAULT_AGENT_DIR
+
+    if daemon:
+        log.info("updater daemonizing host=%s port=%d", host, port)
+        _daemonize()
+
+    log.info(
+        "updater command invoked host=%s port=%d updater_dir=%s install_dir=%s",
+        host, port, resolved_updater, resolved_install,
+    )
+    console.print(f"[green]Starting DECNET self-updater on {host}:{port} (mTLS)...[/]")
+    rc = _upd_server.run(
+        host, port,
+        updater_dir=resolved_updater,
+        install_dir=resolved_install,
+        agent_dir=resolved_agent,
+    )
+    if rc != 0:
+        raise typer.Exit(rc)
+
+
+@app.command()
 def listener(
     bind_host: str = typer.Option("0.0.0.0", "--host", help="Bind address for the master syslog-TLS listener"),  # nosec B104
     bind_port: int = typer.Option(6514, "--port", help="Listener TCP port (RFC 5425 default 6514)"),
@@ -393,6 +430,7 @@ def swarm_enroll(
     sans: Optional[str] = typer.Option(None, "--sans", help="Comma-separated extra SANs for the worker cert"),
     notes: Optional[str] = typer.Option(None, "--notes", help="Free-form operator notes"),
     out_dir: Optional[str] = typer.Option(None, "--out-dir", help="Write the bundle (ca.crt/worker.crt/worker.key) to this dir for scp"),
+    updater: bool = typer.Option(False, "--updater", help="Also issue an updater-identity cert (CN=updater@<name>) for the remote self-updater"),
     url: Optional[str] = typer.Option(None, "--url", help="Override swarm controller URL (default: 127.0.0.1:8770)"),
 ) -> None:
     """Issue a mTLS bundle for a new worker and register it in the swarm."""
@@ -403,6 +441,8 @@ def swarm_enroll(
         body["sans"] = [s.strip() for s in sans.split(",") if s.strip()]
     if notes:
         body["notes"] = notes
+    if updater:
+        body["issue_updater_bundle"] = True
 
     resp = _http_request("POST", _swarmctl_base_url(url) + "/swarm/enroll", json_body=body)
     data = resp.json()
@@ -410,6 +450,9 @@ def swarm_enroll(
     console.print(f"[green]Enrolled worker:[/] {data['name']}  "
                   f"[dim]uuid=[/]{data['host_uuid']}  "
                   f"[dim]fingerprint=[/]{data['fingerprint']}")
+    if data.get("updater"):
+        console.print(f"[green]  + updater identity[/] "
+                      f"[dim]fingerprint=[/]{data['updater']['fingerprint']}")
 
     if out_dir:
         target = _pathlib.Path(out_dir).expanduser()
@@ -422,8 +465,22 @@ def swarm_enroll(
                 (target / leaf).chmod(0o600)
             except OSError:
                 pass
-        console.print(f"[cyan]Bundle written to[/] {target}")
-        console.print("[dim]Ship this directory to the worker at ~/.decnet/agent/ (or wherever `decnet agent --agent-dir` points).[/]")
+        console.print(f"[cyan]Agent bundle written to[/] {target}")
+
+        if data.get("updater"):
+            upd_target = target.parent / f"{target.name}-updater"
+            upd_target.mkdir(parents=True, exist_ok=True)
+            (upd_target / "ca.crt").write_text(data["ca_cert_pem"])
+            (upd_target / "updater.crt").write_text(data["updater"]["updater_cert_pem"])
+            (upd_target / "updater.key").write_text(data["updater"]["updater_key_pem"])
+            try:
+                (upd_target / "updater.key").chmod(0o600)
+            except OSError:
+                pass
+            console.print(f"[cyan]Updater bundle written to[/] {upd_target}")
+            console.print("[dim]Ship the agent dir to ~/.decnet/agent/ and the updater dir to ~/.decnet/updater/ on the worker.[/]")
+        else:
+            console.print("[dim]Ship this directory to the worker at ~/.decnet/agent/ (or wherever `decnet agent --agent-dir` points).[/]")
     else:
         console.print("[yellow]No --out-dir given — bundle PEMs are in the JSON response; persist them before leaving this shell.[/]")
 
@@ -492,6 +549,116 @@ def swarm_check(
             detail_str,
         )
     console.print(table)
+
+
+@swarm_app.command("update")
+def swarm_update(
+    host: Optional[str] = typer.Option(None, "--host", help="Target worker (name or UUID). Omit with --all."),
+    all_hosts: bool = typer.Option(False, "--all", help="Push to every enrolled worker."),
+    include_self: bool = typer.Option(False, "--include-self", help="Also push to each updater's /update-self after a successful agent update."),
+    root: Optional[str] = typer.Option(None, "--root", help="Source tree to tar (default: CWD)."),
+    exclude: list[str] = typer.Option([], "--exclude", help="Additional exclude glob. Repeatable."),
+    updater_port: int = typer.Option(8766, "--updater-port", help="Port the workers' updater listens on."),
+    dry_run: bool = typer.Option(False, "--dry-run", help="Build the tarball and print stats; no network."),
+    url: Optional[str] = typer.Option(None, "--url", help="Override swarm controller URL."),
+) -> None:
+    """Push the current working tree to workers' self-updaters (with auto-rollback on failure)."""
+    import asyncio
+    import pathlib as _pathlib
+
+    from decnet.swarm.tar_tree import tar_working_tree, detect_git_sha
+    from decnet.swarm.updater_client import UpdaterClient
+
+    if not (host or all_hosts):
+        console.print("[red]Supply --host <name> or --all.[/]")
+        raise typer.Exit(2)
+    if host and all_hosts:
+        console.print("[red]--host and --all are mutually exclusive.[/]")
+        raise typer.Exit(2)
+
+    base = _swarmctl_base_url(url)
+    resp = _http_request("GET", base + "/swarm/hosts")
+    rows = resp.json()
+    if host:
+        targets = [r for r in rows if r.get("name") == host or r.get("uuid") == host]
+        if not targets:
+            console.print(f"[red]No enrolled worker matching '{host}'.[/]")
+            raise typer.Exit(1)
+    else:
+        targets = [r for r in rows if r.get("status") != "decommissioned"]
+    if not targets:
+        console.print("[dim]No targets.[/]")
+        return
+
+    tree_root = _pathlib.Path(root) if root else _pathlib.Path.cwd()
+    sha = detect_git_sha(tree_root)
+    console.print(f"[dim]Tarring[/] {tree_root} [dim]sha={sha or '(not a git repo)'}[/]")
+    tarball = tar_working_tree(tree_root, extra_excludes=exclude)
+    console.print(f"[dim]Tarball size:[/] {len(tarball):,} bytes")
+
+    if dry_run:
+        console.print("[yellow]--dry-run: not pushing.[/]")
+        for t in targets:
+            console.print(f"  would push to [cyan]{t.get('name')}[/] at {t.get('address')}:{updater_port}")
+        return
+
+    async def _push_one(h: dict) -> dict:
+        name = h.get("name") or h.get("uuid")
+        out: dict = {"name": name, "address": h.get("address"), "agent": None, "self": None}
+        try:
+            async with UpdaterClient(h, updater_port=updater_port) as u:
+                r = await u.update(tarball, sha=sha)
+                out["agent"] = {"status": r.status_code, "body": r.json() if r.content else {}}
+                if r.status_code == 200 and include_self:
+                    # Agent first, updater second — see plan.
+                    rs = await u.update_self(tarball, sha=sha)
+                    # Connection-drop is expected for update-self.
+                    out["self"] = {"status": rs.status_code, "body": rs.json() if rs.content else {}}
+        except Exception as exc:  # noqa: BLE001
+            out["error"] = f"{type(exc).__name__}: {exc}"
+        return out
+
+    async def _push_all() -> list[dict]:
+        return await asyncio.gather(*(_push_one(t) for t in targets))
+
+    results = asyncio.run(_push_all())
+
+    table = Table(title="DECNET swarm update")
+    for col in ("host", "address", "agent", "self", "detail"):
+        table.add_column(col)
+    any_failure = False
+    for r in results:
+        agent = r.get("agent") or {}
+        selff = r.get("self") or {}
+        err = r.get("error")
+        if err:
+            any_failure = True
+            table.add_row(r["name"], r.get("address") or "", "[red]error[/]", "—", err)
+            continue
+        a_status = agent.get("status")
+        if a_status == 200:
+            agent_cell = "[green]updated[/]"
+        elif a_status == 409:
+            agent_cell = "[yellow]rolled-back[/]"
+            any_failure = True
+        else:
+            agent_cell = f"[red]{a_status}[/]"
+            any_failure = True
+        if not include_self:
+            self_cell = "—"
+        elif selff.get("status") == 200 or selff.get("status") is None:
+            self_cell = "[green]ok[/]" if selff else "[dim]skipped[/]"
+        else:
+            self_cell = f"[red]{selff.get('status')}[/]"
+        detail = ""
+        body = agent.get("body") or {}
+        if isinstance(body, dict):
+            detail = body.get("release", {}).get("sha") or body.get("detail", {}).get("error") or ""
+        table.add_row(r["name"], r.get("address") or "", agent_cell, self_cell, str(detail)[:80])
+    console.print(table)
+
+    if any_failure:
+        raise typer.Exit(1)
 
 
 @swarm_app.command("deckies")
