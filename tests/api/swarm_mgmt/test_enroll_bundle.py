@@ -159,6 +159,10 @@ async def test_get_tgz_contents(client, auth_token, tmp_path):
         assert "__pycache__" not in bad
         assert not bad.endswith(".pyc")
         assert "node_modules" not in bad
+        # Dev-host env leaks would bake absolute master paths into the agent.
+        assert not bad.endswith(".env"), f"leaked env file: {bad}"
+        assert ".env.local" not in bad, f"leaked env file: {bad}"
+        assert ".env.example" not in bad, f"leaked env file: {bad}"
 
     # INI content is correct
     ini = tf.extractfile("etc/decnet/decnet.ini").read().decode()

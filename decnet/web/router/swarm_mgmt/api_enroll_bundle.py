@@ -66,6 +66,11 @@ _EXCLUDES: tuple[str, ...] = (
     "decnet-state.json",
     "master.log", "master.json",
     "decnet.tar",
+    # Dev-host env/config leaks — these bake the master's absolute paths into
+    # the agent and point log handlers at directories that don't exist on the
+    # worker VM.
+    ".env", ".env.*", "**/.env", "**/.env.*",
+    "decnet.ini", "**/decnet.ini",
 )
 
 

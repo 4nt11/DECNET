@@ -28,6 +28,9 @@ python3 -m venv .venv
 install -Dm0644 etc/decnet/decnet.ini /etc/decnet/decnet.ini
 [[ -f services.ini ]] && install -Dm0644 services.ini /etc/decnet/services.ini
 
+# Log directory the baked-in INI points at — must exist before `decnet` imports config.
+install -d -m0755 /var/log/decnet
+
 REAL_USER="${SUDO_USER:-root}"
 REAL_HOME="$(getent passwd "$REAL_USER" | cut -d: -f6)"
 for f in ca.crt worker.crt worker.key; do
@@ -35,6 +38,9 @@ for f in ca.crt worker.crt worker.key; do
     "home/.decnet/agent/$f" "$REAL_HOME/.decnet/agent/$f"
 done
 
+# Guarantee the pip-installed entrypoint is executable (some setuptools+editable
+# combos drop it with mode 0644) and expose it on PATH.
+chmod 0755 "$INSTALL_DIR/.venv/bin/decnet"
 ln -sf "$INSTALL_DIR/.venv/bin/decnet" /usr/local/bin/decnet
 sudo -u "$REAL_USER" /usr/local/bin/decnet agent --daemon
 echo "[DECNET] agent {{ agent_name }} enrolled -> {{ master_host }}. Forwarder auto-spawned."
