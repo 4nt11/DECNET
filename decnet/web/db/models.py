@@ -307,6 +307,20 @@ class SwarmHostView(BaseModel):
     notes: Optional[str] = None
 
 
+class DeckyShardView(BaseModel):
+    """One decky → host mapping, enriched with the host's identity for display."""
+    decky_name: str
+    host_uuid: str
+    host_name: str
+    host_address: str
+    host_status: str
+    services: list[str]
+    state: str
+    last_error: Optional[str] = None
+    compose_hash: Optional[str] = None
+    updated_at: datetime
+
+
 class SwarmDeployRequest(BaseModel):
     config: DecnetConfig
     dry_run: bool = False

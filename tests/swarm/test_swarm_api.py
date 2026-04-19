@@ -287,6 +287,57 @@ def test_check_marks_hosts_active(client: TestClient, stub_agent) -> None:
     assert one["last_heartbeat"] is not None
 
 
+# ---------------------------------------------------------------- /deckies
+
+
+def test_list_deckies_empty(client: TestClient) -> None:
+    resp = client.get("/swarm/deckies")
+    assert resp.status_code == 200
+    assert resp.json() == []
+
+
+def test_list_deckies_joins_host_identity(client: TestClient, repo) -> None:
+    import asyncio
+
+    h1 = client.post(
+        "/swarm/enroll",
+        json={"name": "deck-host-1", "address": "10.0.0.11", "agent_port": 8765},
+    ).json()
+    h2 = client.post(
+        "/swarm/enroll",
+        json={"name": "deck-host-2", "address": "10.0.0.12", "agent_port": 8765},
+    ).json()
+
+    async def _seed() -> None:
+        await repo.upsert_decky_shard({
+            "decky_name": "decky-01", "host_uuid": h1["host_uuid"],
+            "services": ["ssh"], "state": "running",
+        })
+        await repo.upsert_decky_shard({
+            "decky_name": "decky-02", "host_uuid": h2["host_uuid"],
+            "services": ["smb", "ssh"], "state": "failed", "last_error": "boom",
+        })
+
+    asyncio.get_event_loop().run_until_complete(_seed())
+
+    rows = client.get("/swarm/deckies").json()
+    assert len(rows) == 2
+    by_name = {r["decky_name"]: r for r in rows}
+    assert by_name["decky-01"]["host_name"] == "deck-host-1"
+    assert by_name["decky-01"]["host_address"] == "10.0.0.11"
+    assert by_name["decky-01"]["state"] == "running"
+    assert by_name["decky-02"]["services"] == ["smb", "ssh"]
+    assert by_name["decky-02"]["last_error"] == "boom"
+
+    # host_uuid filter
+    only = client.get(f"/swarm/deckies?host_uuid={h1['host_uuid']}").json()
+    assert [r["decky_name"] for r in only] == ["decky-01"]
+
+    # state filter
+    failed = client.get("/swarm/deckies?state=failed").json()
+    assert [r["decky_name"] for r in failed] == ["decky-02"]
+
+
 # ---------------------------------------------------------------- /health (root)
 
 

@@ -15,6 +15,7 @@ from .api_deploy_swarm import router as deploy_swarm_router
 from .api_teardown_swarm import router as teardown_swarm_router
 from .api_get_swarm_health import router as get_swarm_health_router
 from .api_check_hosts import router as check_hosts_router
+from .api_list_deckies import router as list_deckies_router
 
 swarm_router = APIRouter(prefix="/swarm")
 
@@ -27,6 +28,7 @@ swarm_router.include_router(decommission_host_router)
 # Deployments
 swarm_router.include_router(deploy_swarm_router)
 swarm_router.include_router(teardown_swarm_router)
+swarm_router.include_router(list_deckies_router)
 
 # Health
 swarm_router.include_router(get_swarm_health_router)

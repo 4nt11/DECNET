@@ -494,6 +494,66 @@ def swarm_check(
     console.print(table)
 
 
+@swarm_app.command("deckies")
+def swarm_deckies(
+    host: Optional[str] = typer.Option(None, "--host", help="Filter by worker name or UUID"),
+    state: Optional[str] = typer.Option(None, "--state", help="Filter by shard state (pending|running|failed|torn_down)"),
+    url: Optional[str] = typer.Option(None, "--url", help="Override swarm controller URL"),
+    json_out: bool = typer.Option(False, "--json", help="Emit JSON instead of a table"),
+) -> None:
+    """List deployed deckies across the swarm with their owning worker host."""
+    base = _swarmctl_base_url(url)
+
+    host_uuid: Optional[str] = None
+    if host:
+        resp = _http_request("GET", base + "/swarm/hosts")
+        rows = resp.json()
+        match = next((r for r in rows if r.get("uuid") == host or r.get("name") == host), None)
+        if match is None:
+            console.print(f"[red]No enrolled worker matching '{host}'.[/]")
+            raise typer.Exit(1)
+        host_uuid = match["uuid"]
+
+    query = []
+    if host_uuid:
+        query.append(f"host_uuid={host_uuid}")
+    if state:
+        query.append(f"state={state}")
+    path = "/swarm/deckies" + ("?" + "&".join(query) if query else "")
+
+    resp = _http_request("GET", base + path)
+    rows = resp.json()
+
+    if json_out:
+        console.print_json(data=rows)
+        return
+
+    if not rows:
+        console.print("[dim]No deckies deployed.[/]")
+        return
+
+    table = Table(title="DECNET swarm deckies")
+    for col in ("decky", "host", "address", "state", "services"):
+        table.add_column(col)
+    for r in rows:
+        services = ",".join(r.get("services") or []) or "—"
+        state_val = r.get("state") or "pending"
+        colored = {
+            "running": f"[green]{state_val}[/]",
+            "failed": f"[red]{state_val}[/]",
+            "pending": f"[yellow]{state_val}[/]",
+            "torn_down": f"[dim]{state_val}[/]",
+        }.get(state_val, state_val)
+        table.add_row(
+            r.get("decky_name") or "",
+            r.get("host_name") or "<unknown>",
+            r.get("host_address") or "",
+            colored,
+            services,
+        )
+    console.print(table)
+
+
 @swarm_app.command("decommission")
 def swarm_decommission(
     name: Optional[str] = typer.Option(None, "--name", help="Worker hostname"),

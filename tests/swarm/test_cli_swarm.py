@@ -152,6 +152,65 @@ def test_swarm_check_json_output(http_stub) -> None:
     assert '"decky01"' in result.output
 
 
+# ------------------------------------------------------------- swarm deckies
+
+
+def test_swarm_deckies_empty(http_stub) -> None:
+    http_stub.script[("GET", "/swarm/deckies")] = _FakeResp([])
+    result = runner.invoke(app, ["swarm", "deckies"])
+    assert result.exit_code == 0, result.output
+    assert "No deckies" in result.output
+
+
+def test_swarm_deckies_renders_table(http_stub) -> None:
+    http_stub.script[("GET", "/swarm/deckies")] = _FakeResp([
+        {"decky_name": "decky-01", "host_uuid": "u-1", "host_name": "w1",
+         "host_address": "10.0.0.1", "host_status": "active",
+         "services": ["ssh"], "state": "running", "last_error": None,
+         "compose_hash": None, "updated_at": "2026-04-18T00:00:00Z"},
+        {"decky_name": "decky-02", "host_uuid": "u-2", "host_name": "w2",
+         "host_address": "10.0.0.2", "host_status": "active",
+         "services": ["smb", "ssh"], "state": "failed", "last_error": "boom",
+         "compose_hash": None, "updated_at": "2026-04-18T00:00:00Z"},
+    ])
+    result = runner.invoke(app, ["swarm", "deckies"])
+    assert result.exit_code == 0, result.output
+    assert "decky-01" in result.output
+    assert "decky-02" in result.output
+    assert "w1" in result.output and "w2" in result.output
+    assert "smb,ssh" in result.output
+
+
+def test_swarm_deckies_json_output(http_stub) -> None:
+    http_stub.script[("GET", "/swarm/deckies")] = _FakeResp([
+        {"decky_name": "decky-01", "host_uuid": "u-1", "host_name": "w1",
+         "host_address": "10.0.0.1", "host_status": "active",
+         "services": ["ssh"], "state": "running", "last_error": None,
+         "compose_hash": None, "updated_at": "2026-04-18T00:00:00Z"},
+    ])
+    result = runner.invoke(app, ["swarm", "deckies", "--json"])
+    assert result.exit_code == 0
+    assert '"decky_name"' in result.output
+    assert '"decky-01"' in result.output
+
+
+def test_swarm_deckies_filter_by_host_name_looks_up_uuid(http_stub) -> None:
+    http_stub.script[("GET", "/swarm/hosts")] = _FakeResp([
+        {"uuid": "u-x", "name": "w1"},
+    ])
+    http_stub.script[("GET", "/swarm/deckies?host_uuid=u-x")] = _FakeResp([])
+    result = runner.invoke(app, ["swarm", "deckies", "--host", "w1"])
+    assert result.exit_code == 0
+    assert http_stub[-1][1].endswith("/swarm/deckies?host_uuid=u-x")
+
+
+def test_swarm_deckies_filter_by_state(http_stub) -> None:
+    http_stub.script[("GET", "/swarm/deckies?state=failed")] = _FakeResp([])
+    result = runner.invoke(app, ["swarm", "deckies", "--state", "failed"])
+    assert result.exit_code == 0
+    assert http_stub[-1][1].endswith("/swarm/deckies?state=failed")
+
+
 # ------------------------------------------------------------- swarm decommission
 
 
