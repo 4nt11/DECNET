@@ -43,7 +43,7 @@ class TestCompose:
         _compose("up", "-d", compose_file=Path("test.yml"))
         mock_run.assert_called_once()
         cmd = mock_run.call_args[0][0]
-        assert cmd[:4] == ["docker", "compose", "-f", "test.yml"]
+        assert cmd[:6] == ["docker", "compose", "-p", "decnet", "-f", "test.yml"]
         assert "up" in cmd
         assert "-d" in cmd
 

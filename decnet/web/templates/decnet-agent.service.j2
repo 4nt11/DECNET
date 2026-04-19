@@ -6,6 +6,7 @@ Wants=network-online.target
 
 [Service]
 Type=simple
+WorkingDirectory=/opt/decnet
 Environment=DECNET_SYSTEM_LOGS=/var/log/decnet/decnet.agent.log
 ExecStart=/usr/local/bin/decnet agent --no-forwarder
 Restart=on-failure

@@ -54,7 +54,11 @@ def _sync_logging_helper(config: DecnetConfig) -> None:
 
 def _compose(*args: str, compose_file: Path = COMPOSE_FILE, env: dict | None = None) -> None:
     import os
-    cmd = ["docker", "compose", "-f", str(compose_file), *args]
+    # -p decnet pins the compose project name. Without it, docker compose
+    # derives the project from basename($PWD); when a daemon (systemd) runs
+    # with WorkingDirectory=/ that basename is empty and compose aborts with
+    # "project name must not be empty".
+    cmd = ["docker", "compose", "-p", "decnet", "-f", str(compose_file), *args]
     merged = {**os.environ, **(env or {})}
     subprocess.run(cmd, check=True, env=merged)  # nosec B603
 
@@ -79,7 +83,11 @@ def _compose_with_retry(
     """Run a docker compose command, retrying on transient failures."""
     import os
     last_exc: subprocess.CalledProcessError | None = None
-    cmd = ["docker", "compose", "-f", str(compose_file), *args]
+    # -p decnet pins the compose project name. Without it, docker compose
+    # derives the project from basename($PWD); when a daemon (systemd) runs
+    # with WorkingDirectory=/ that basename is empty and compose aborts with
+    # "project name must not be empty".
+    cmd = ["docker", "compose", "-p", "decnet", "-f", str(compose_file), *args]
     merged = {**os.environ, **(env or {})}
     for attempt in range(1, retries + 1):
         result = subprocess.run(cmd, capture_output=True, text=True, env=merged)  # nosec B603

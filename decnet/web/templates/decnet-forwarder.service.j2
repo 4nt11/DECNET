@@ -7,6 +7,7 @@ PartOf=decnet-agent.service
 
 [Service]
 Type=simple
+WorkingDirectory=/opt/decnet
 Environment=DECNET_SYSTEM_LOGS=/var/log/decnet/decnet.forwarder.log
 ExecStart=/usr/local/bin/decnet forwarder --master-host {{ master_host }} --master-port 6514 --agent-dir /etc/decnet/agent --log-file /var/log/decnet/decnet.log
 Restart=on-failure
