@@ -103,6 +103,17 @@ DECNET_ADMIN_USER: str = os.environ.get("DECNET_ADMIN_USER", "admin")
 DECNET_ADMIN_PASSWORD: str = os.environ.get("DECNET_ADMIN_PASSWORD", "admin")
 DECNET_DEVELOPER: bool = os.environ.get("DECNET_DEVELOPER", "False").lower() == "true"
 
+# Host role — seeded by /etc/decnet/decnet.ini or exported directly.
+# "master" = the central server (api, web, swarmctl, listener).
+# "agent"  = a worker node (agent, forwarder, updater). Workers gate their
+#            Typer CLI to hide master-only commands (see decnet/cli.py).
+DECNET_MODE: str = os.environ.get("DECNET_MODE", "master").lower()
+# When mode=agent, hide master-only Typer commands. Set to "false" for dual-
+# role dev hosts where a single machine plays both sides.
+DECNET_DISALLOW_MASTER: bool = (
+    os.environ.get("DECNET_DISALLOW_MASTER", "true").lower() == "true"
+)
+
 # Tracing — set to "true" to enable OpenTelemetry distributed tracing.
 # Separate from DECNET_DEVELOPER so tracing can be toggled independently.
 DECNET_DEVELOPER_TRACING: bool = os.environ.get("DECNET_DEVELOPER_TRACING", "").lower() == "true"
