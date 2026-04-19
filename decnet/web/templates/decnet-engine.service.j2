@@ -1,0 +1,16 @@
+[Unit]
+Description=DECNET deckie orchestrator (decnet deploy) — {{ agent_name }}
+Documentation=https://github.com/anti/DECNET
+After=network-online.target decnet-agent.service
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+RemainAfterExit=yes
+Environment=DECNET_SYSTEM_LOGS=/var/log/decnet/decnet.log
+ExecStart=/usr/local/bin/decnet deploy
+StandardOutput=append:/var/log/decnet/decnet.log
+StandardError=append:/var/log/decnet/decnet.log
+
+[Install]
+WantedBy=multi-user.target

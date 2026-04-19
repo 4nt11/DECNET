@@ -21,9 +21,10 @@ mode = agent
 ; Set to false for hybrid dev hosts that legitimately run both roles.
 disallow-master = true
 
-; log-file-path — where the local RFC 5424 event sink writes. The forwarder
-; tails this file and ships it to the master.
-log-file-path = /var/log/decnet/decnet.log
+; log-directory — root for DECNET's per-component logs. Systemd units set
+; DECNET_SYSTEM_LOGS=<log-directory>/decnet.<component>.log so agent, forwarder,
+; and engine each get their own file. The forwarder tails decnet.log.
+log-directory = /var/log/decnet
 
 
 ; ─── Agent-only settings (read when mode=agent) ───────────────────────────

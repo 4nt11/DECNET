@@ -1,0 +1,18 @@
+[Unit]
+Description=DECNET log forwarder (syslog-over-TLS → master) — {{ agent_name }}
+Documentation=https://github.com/anti/DECNET
+After=network-online.target
+Wants=network-online.target
+PartOf=decnet-agent.service
+
+[Service]
+Type=simple
+Environment=DECNET_SYSTEM_LOGS=/var/log/decnet/decnet.forwarder.log
+ExecStart=/usr/local/bin/decnet forwarder --master-host {{ master_host }} --master-port 6514 --agent-dir /etc/decnet/agent --log-file /var/log/decnet/decnet.log
+Restart=on-failure
+RestartSec=5
+StandardOutput=append:/var/log/decnet/decnet.forwarder.log
+StandardError=append:/var/log/decnet/decnet.forwarder.log
+
+[Install]
+WantedBy=multi-user.target

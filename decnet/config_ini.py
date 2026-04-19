@@ -10,7 +10,7 @@ Shape::
 
     [decnet]
     mode = agent              # or "master"
-    log-file-path = /var/log/decnet/decnet.log
+    log-directory = /var/log/decnet
     disallow-master = true
 
     [agent]
@@ -42,7 +42,7 @@ from typing import Optional
 DEFAULT_CONFIG_PATH = Path("/etc/decnet/decnet.ini")
 
 # The [decnet] section keys are role-agnostic and always exported.
-_COMMON_KEYS = frozenset({"mode", "disallow-master", "log-file-path"})
+_COMMON_KEYS = frozenset({"mode", "disallow-master", "log-directory"})
 
 
 def _key_to_env(key: str) -> str:
@@ -69,7 +69,7 @@ def load_ini_config(path: Optional[Path] = None) -> Optional[Path]:
     parser = configparser.ConfigParser()
     parser.read(path)
 
-    # [decnet] first — mode/disallow-master/log-file-path. These seed the
+    # [decnet] first — mode/disallow-master/log-directory. These seed the
     # mode decision for the section selection below.
     if parser.has_section("decnet"):
         for key, value in parser.items("decnet"):

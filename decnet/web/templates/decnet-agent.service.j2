@@ -1,0 +1,17 @@
+[Unit]
+Description=DECNET worker agent (mTLS control plane) — {{ agent_name }}
+Documentation=https://github.com/anti/DECNET
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+Environment=DECNET_SYSTEM_LOGS=/var/log/decnet/decnet.agent.log
+ExecStart=/usr/local/bin/decnet agent --no-forwarder
+Restart=on-failure
+RestartSec=5
+StandardOutput=append:/var/log/decnet/decnet.agent.log
+StandardError=append:/var/log/decnet/decnet.agent.log
+
+[Install]
+WantedBy=multi-user.target

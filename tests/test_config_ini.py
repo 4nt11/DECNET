@@ -95,17 +95,17 @@ agent-port = 8765
 
 
 def test_common_keys_always_exported(monkeypatch, tmp_path):
-    _scrub(monkeypatch, "DECNET_MODE", "DECNET_DISALLOW_MASTER", "DECNET_LOG_FILE_PATH")
+    _scrub(monkeypatch, "DECNET_MODE", "DECNET_DISALLOW_MASTER", "DECNET_LOG_DIRECTORY")
     ini = _write_ini(tmp_path, """
 [decnet]
 mode = agent
 disallow-master = true
-log-file-path = /var/log/decnet/decnet.log
+log-directory = /var/log/decnet
 """)
     load_ini_config(ini)
     assert os.environ["DECNET_MODE"] == "agent"
     assert os.environ["DECNET_DISALLOW_MASTER"] == "true"
-    assert os.environ["DECNET_LOG_FILE_PATH"] == "/var/log/decnet/decnet.log"
+    assert os.environ["DECNET_LOG_DIRECTORY"] == "/var/log/decnet"
 
 
 def test_invalid_mode_raises(monkeypatch, tmp_path):

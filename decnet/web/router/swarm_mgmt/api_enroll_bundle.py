@@ -172,7 +172,7 @@ def _render_decnet_ini(master_host: str) -> bytes:
         "[decnet]\n"
         "mode = agent\n"
         "disallow-master = true\n"
-        "log-file-path = /var/log/decnet/decnet.log\n"
+        "log-directory = /var/log/decnet\n"
         "\n"
         "[agent]\n"
         f"master-host = {master_host}\n"
@@ -193,6 +193,7 @@ def _add_bytes(tar: tarfile.TarFile, name: str, data: bytes, mode: int = 0o644) 
 
 def _build_tarball(
     master_host: str,
+    agent_name: str,
     issued: pki.IssuedCert,
     services_ini: Optional[str],
     updater_issued: Optional[pki.IssuedCert] = None,
@@ -216,6 +217,12 @@ def _build_tarball(
             tar.add(path, arcname=rel, recursive=False)
 
         _add_bytes(tar, "etc/decnet/decnet.ini", _render_decnet_ini(master_host))
+        for unit in _SYSTEMD_UNITS:
+            _add_bytes(
+                tar,
+                f"etc/systemd/system/{unit}.service",
+                _render_systemd_unit(unit, agent_name, master_host),
+            )
         _add_bytes(tar, "home/.decnet/agent/ca.crt", issued.ca_cert_pem)
         _add_bytes(tar, "home/.decnet/agent/worker.crt", issued.cert_pem)
         _add_bytes(tar, "home/.decnet/agent/worker.key", issued.key_pem, mode=0o600)
@@ -229,6 +236,18 @@ def _build_tarball(
             _add_bytes(tar, "services.ini", services_ini.encode())
 
     return buf.getvalue()
+
+
+_SYSTEMD_UNITS = ("decnet-agent", "decnet-forwarder", "decnet-engine")
+
+
+def _render_systemd_unit(name: str, agent_name: str, master_host: str) -> bytes:
+    tpl_path = pathlib.Path(__file__).resolve().parents[1].parent / "templates" / f"{name}.service.j2"
+    tpl = tpl_path.read_text()
+    return (
+        tpl.replace("{{ agent_name }}", agent_name)
+           .replace("{{ master_host }}", master_host)
+    ).encode()
 
 
 def _render_bootstrap(
@@ -314,7 +333,7 @@ async def create_enroll_bundle(
     )
 
     # 3. Render payload + bootstrap.
-    tarball = _build_tarball(req.master_host, issued, req.services_ini, updater_issued)
+    tarball = _build_tarball(req.master_host, req.agent_name, issued, req.services_ini, updater_issued)
     token = secrets.token_urlsafe(24)
     expires_at = datetime.now(timezone.utc) + BUNDLE_TTL
 

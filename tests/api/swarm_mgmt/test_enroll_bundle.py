@@ -137,6 +137,38 @@ async def test_updater_opt_out_excludes_updater_artifacts(client, auth_token):
 
 
 @pytest.mark.anyio
+async def test_systemd_units_shipped_and_installed(client, auth_token):
+    import io, tarfile
+    post = await _post(client, auth_token, agent_name="svc-test", master_host="10.9.8.7")
+    token = post.json()["token"]
+    resp = await client.get(f"/api/v1/swarm/enroll-bundle/{token}.tgz")
+    assert resp.status_code == 200
+    tf = tarfile.open(fileobj=io.BytesIO(resp.content), mode="r:gz")
+    names = set(tf.getnames())
+    assert "etc/systemd/system/decnet-agent.service" in names
+    assert "etc/systemd/system/decnet-forwarder.service" in names
+    assert "etc/systemd/system/decnet-engine.service" in names
+
+    fwd = tf.extractfile("etc/systemd/system/decnet-forwarder.service").read().decode()
+    assert "--master-host 10.9.8.7" in fwd
+    assert "DECNET_SYSTEM_LOGS=/var/log/decnet/decnet.forwarder.log" in fwd
+
+    agent_unit = tf.extractfile("etc/systemd/system/decnet-agent.service").read().decode()
+    assert "--no-forwarder" in agent_unit
+    assert "DECNET_SYSTEM_LOGS=/var/log/decnet/decnet.agent.log" in agent_unit
+
+    sh_token = (await _post(client, auth_token, agent_name="svc-test2",
+                            master_host="10.9.8.7")).json()["token"]
+    sh = (await client.get(f"/api/v1/swarm/enroll-bundle/{sh_token}.sh")).text
+    assert "systemctl daemon-reload" in sh
+    assert "systemctl enable --now decnet-agent.service decnet-forwarder.service" in sh
+
+    ini = tf.extractfile("etc/decnet/decnet.ini").read().decode()
+    assert "log-directory = /var/log/decnet" in ini
+    assert "log-file-path" not in ini
+
+
+@pytest.mark.anyio
 async def test_updater_opt_in_ships_cert_and_starts_daemon(client, auth_token):
     import io, tarfile
     token = (await _post(client, auth_token, agent_name="up", with_updater=True)).json()["token"]

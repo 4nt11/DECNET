@@ -5,7 +5,7 @@
 set -euo pipefail
 
 [[ $EUID -eq 0 ]] || { echo "decnet-install: must run as root (use sudo)"; exit 1; }
-for bin in python3 curl tar; do
+for bin in python3 curl tar systemctl; do
   command -v "$bin" >/dev/null || { echo "decnet-install: $bin required"; exit 1; }
 done
 
@@ -53,8 +53,15 @@ fi
 # combos drop it with mode 0644) and expose it on PATH.
 chmod 0755 "$INSTALL_DIR/.venv/bin/decnet"
 ln -sf "$INSTALL_DIR/.venv/bin/decnet" /usr/local/bin/decnet
-/usr/local/bin/decnet agent --daemon
+
+echo "[DECNET] installing systemd units..."
+install -Dm0644 etc/systemd/system/decnet-agent.service /etc/systemd/system/decnet-agent.service
+install -Dm0644 etc/systemd/system/decnet-forwarder.service /etc/systemd/system/decnet-forwarder.service
+install -Dm0644 etc/systemd/system/decnet-engine.service /etc/systemd/system/decnet-engine.service
+systemctl daemon-reload
+systemctl enable --now decnet-agent.service decnet-forwarder.service
+
 if [[ "$WITH_UPDATER" == "true" ]]; then
   /usr/local/bin/decnet updater --daemon
 fi
-echo "[DECNET] agent {{ agent_name }} enrolled -> {{ master_host }}. Forwarder auto-spawned."
+echo "[DECNET] agent {{ agent_name }} enrolled -> {{ master_host }}. Units: decnet-agent, decnet-forwarder active."
