@@ -268,6 +268,43 @@ class TestTeardown:
         teardown()
         mock_td_ipvlan.assert_called_once()
 
+    @patch("decnet.engine.deployer._compose")
+    @patch("decnet.engine.deployer.docker.from_env")
+    @patch("decnet.engine.deployer.load_state")
+    def test_single_decky_emits_flat_service_names(
+        self, mock_load, mock_docker, mock_compose,
+    ):
+        """Regression: teardown(decky_id=...) must iterate the matched decky's
+        services, not stringify the services list itself. The old nested
+        comprehension produced `decky3-['sip']` and docker compose choked."""
+        config = _config(deckies=[
+            _decky(name="decky3", ip="192.168.1.13", services=["sip", "ssh"]),
+            _decky(name="decky4", ip="192.168.1.14", services=["http"]),
+        ])
+        mock_load.return_value = (config, Path("test.yml"))
+        from decnet.engine.deployer import teardown
+        teardown(decky_id="decky3")
+
+        # stop + rm, each called with the flat per-service names
+        assert mock_compose.call_count == 2
+        for call in mock_compose.call_args_list:
+            args = call.args
+            svc_names = [a for a in args if a.startswith("decky3-")]
+            assert svc_names == ["decky3-sip", "decky3-ssh"], svc_names
+            for name in svc_names:
+                assert "[" not in name and "'" not in name
+
+    @patch("decnet.engine.deployer._compose")
+    @patch("decnet.engine.deployer.docker.from_env")
+    @patch("decnet.engine.deployer.load_state")
+    def test_unknown_decky_id_is_noop(
+        self, mock_load, mock_docker, mock_compose,
+    ):
+        mock_load.return_value = (_config(), Path("test.yml"))
+        from decnet.engine.deployer import teardown
+        teardown(decky_id="does-not-exist")
+        mock_compose.assert_not_called()
+
 
 # ── status ────────────────────────────────────────────────────────────────────
 

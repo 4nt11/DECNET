@@ -195,9 +195,13 @@ def teardown(decky_id: str | None = None) -> None:
     client = docker.from_env()
 
     if decky_id:
-        svc_names = [f"{decky_id}-{svc}" for svc in [d.services for d in config.deckies if d.name == decky_id]]
-        if not svc_names:
+        decky = next((d for d in config.deckies if d.name == decky_id), None)
+        if decky is None:
             console.print(f"[red]Decky '{decky_id}' not found in current deployment.[/]")
+            return
+        svc_names = [f"{decky_id}-{svc}" for svc in decky.services]
+        if not svc_names:
+            log.warning("teardown: decky %s has no services to stop", decky_id)
             return
         _compose("stop", *svc_names, compose_file=compose_path)
         _compose("rm", "-f", *svc_names, compose_file=compose_path)
