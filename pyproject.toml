@@ -76,6 +76,7 @@ decnet = "decnet.cli:app"
 [tool.pytest.ini_options]
 asyncio_mode = "auto"
 asyncio_debug = "true"
+asyncio_default_fixture_loop_scope = "module"
 addopts = "-m 'not fuzz and not live and not stress and not bench and not docker' -v -q -x -n logical --dist loadscope"
 markers = [
     "fuzz: hypothesis-based fuzz tests (slow, run with -m fuzz or -m '' for all)",
