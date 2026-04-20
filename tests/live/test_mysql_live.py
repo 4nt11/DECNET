@@ -1,8 +1,12 @@
 import pytest
 import pymysql
 
-from tests.live.conftest import assert_rfc5424
+from tests.live.conftest import assert_rfc5424, _mysql_available
 
+pytestmark = pytest.mark.skipif(
+    not _mysql_available(),
+    reason="MySQL not available on 127.0.0.1:3307"
+)
 
 @pytest.mark.live
 class TestMySQLLive:

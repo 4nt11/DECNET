@@ -1,0 +1,20 @@
+# DECNET OpenTelemetry development stack.
+#
+# Start:  docker compose -f development/docker-compose.otel.yml up -d
+# UI:     http://localhost:16686  (Jaeger)
+# Stop:   docker compose -f development/docker-compose.otel.yml down
+#
+# Then run DECNET with tracing enabled:
+#   DECNET_DEVELOPER_TRACING=true decnet web
+
+services:
+  jaeger:
+    image: jaegertracing/all-in-one:latest
+    container_name: decnet-jaeger
+    restart: unless-stopped
+    ports:
+      - "4317:4317"    # OTLP gRPC receiver
+      - "4318:4318"    # OTLP HTTP receiver
+      - "16686:16686"  # Jaeger UI
+    environment:
+      COLLECTOR_OTLP_ENABLED: "true"

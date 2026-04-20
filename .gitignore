@@ -1,6 +1,7 @@
 .venv/
 logs/
-.claude/
+.claude/*
+CLAUDE.md
 __pycache__/
 *.pyc
 *.pyo
@@ -10,7 +11,6 @@ build/
 decnet-compose.yml
 decnet-state.json
 *.ini
-.env
 decnet.log*
 *.loggy
 *.nmap
@@ -18,8 +18,13 @@ linterfails.log
 webmail
 windows1
 *.db
+*.db-shm
+*.db-wal
+decnet.*.log
 decnet.json
-.env
+.env*
 .env.local
 .coverage
 .hypothesis/
+profiles/*
+tests/test_decnet.db*

@@ -18,8 +18,8 @@ _FUZZ_SETTINGS = dict(
 )
 
 
-def make_fake_decnet_logging() -> ModuleType:
-    mod = ModuleType("decnet_logging")
+def make_fake_syslog_bridge() -> ModuleType:
+    mod = ModuleType("syslog_bridge")
     mod.syslog_line = MagicMock(return_value="")
     mod.write_syslog_file = MagicMock()
     mod.forward_syslog = MagicMock()

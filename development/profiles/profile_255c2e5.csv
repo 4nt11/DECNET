@@ -1,0 +1,27 @@
+Type	Name	# Requests	# Fails	Median (ms)	95%ile (ms)	99%ile (ms)	Average (ms)	Min (ms)	Max (ms)	Average size (bytes)	Current RPS	Current Failures/s
+GET	/api/v1/attackers	39	6	740	200000	203000	29246.96	25	203174	38.54	0	0
+GET	/api/v1/attackers?search=brute&sort_by=recent	28	7	1200	56000	154000	14268.48	45	153617	36	0	0
+POST	/api/v1/auth/login	16	3	950	148000	148000	16572.57	192	148264	213.06	0.1	0
+POST	/api/v1/auth/login [on_start]	656	470	132000	150000	185000	85098.96	1	186160	84.29	1.8	0
+GET	/api/v1/bounty	30	5	94	54000	157000	7398.01	2	156595	37.23	0	0
+GET	/api/v1/config	16	3	30	156000	156000	16329.52	3	156460	177.81	0	0
+GET	/api/v1/deckies	47	5	54	4200	11000	718.24	2	10973	1.79	0	0
+GET	/api/v1/health	31	0	41	1400	141000	4687.97	2	140959	337	0	0
+GET	/api/v1/logs/histogram	27	3	70	189000	189000	27019.37	6	189346	111.89	0.3	0
+GET	/api/v1/logs?limit=100&offset=159	1	0	60.16	60	60	60.16	60	60	47	0	0
+GET	/api/v1/logs?limit=100&offset=250	1	0	150.95	150	150	150.95	151	151	47	0	0
+GET	/api/v1/logs?limit=100&offset=261	1	0	22.63	23	23	22.63	23	23	47	0	0
+GET	/api/v1/logs?limit=100&offset=273	1	0	623.45	620	620	623.45	623	623	47	0	0
+GET	/api/v1/logs?limit=100&offset=44	1	0	8257.6	8300	8300	8257.6	8258	8258	16072	0	0
+GET	/api/v1/logs?limit=100&offset=582	1	0	645	640	640	645	645	645	47	0	0
+GET	/api/v1/logs?limit=100&offset=600	1	0	97.69	98	98	97.69	98	98	47	0	0
+GET	/api/v1/logs?limit=100&offset=703	1	0	945.58	950	950	945.58	946	946	47	0	0
+GET	/api/v1/logs?limit=100&offset=820	1	0	958.48	960	960	958.48	958	958	47	0	0
+GET	/api/v1/logs?limit=100&offset=837	1	0	666.2	670	670	666.2	666	666	47	0	0
+GET	/api/v1/logs?limit=100&offset=907	1	0	34.44	34	34	34.44	34	34	47	0	0
+GET	/api/v1/logs?limit=100&offset=938	1	0	30.41	30	30	30.41	30	30	47	0	0
+GET	/api/v1/logs?limit=50	45	4	990	197000	201000	22659.61	6	201035	23341.78	0.1	0
+GET	/api/v1/logs?search=ssh&limit=100	36	7	1400	157000	167000	22343.82	21	167298	1545.78	0	0
+GET	/api/v1/stats	53	1	41	3700	48000	1867.95	2	48067	76.53	0	0
+GET	/api/v1/stream	6	0	3100	142000	142000	58181.66	199	141698	0	0	0
+	Aggregated	1042	514	6700	150000	186000	58835.59	1	203174	1156.81	2.3	0

@@ -14,6 +14,118 @@ interface BountyEntry {
   payload: any;
 }
 
+const _FINGERPRINT_LABELS: Record<string, string> = {
+  fingerprint_type: 'TYPE',
+  ja3: 'JA3',
+  ja3s: 'JA3S',
+  ja4: 'JA4',
+  ja4s: 'JA4S',
+  ja4l: 'JA4L',
+  sni: 'SNI',
+  alpn: 'ALPN',
+  dst_port: 'PORT',
+  mechanisms: 'MECHANISM',
+  raw_ciphers: 'CIPHERS',
+  hash: 'HASH',
+  target_ip: 'TARGET',
+  target_port: 'PORT',
+  ssh_banner: 'BANNER',
+  kex_algorithms: 'KEX',
+  encryption_s2c: 'ENC (S→C)',
+  mac_s2c: 'MAC (S→C)',
+  compression_s2c: 'COMP (S→C)',
+  raw: 'RAW',
+  ttl: 'TTL',
+  window_size: 'WINDOW',
+  df_bit: 'DF',
+  mss: 'MSS',
+  window_scale: 'WSCALE',
+  sack_ok: 'SACK',
+  timestamp: 'TS',
+  options_order: 'OPTS ORDER',
+};
+
+const _TAG_STYLE: React.CSSProperties = {
+  fontSize: '0.65rem',
+  padding: '1px 6px',
+  borderRadius: '3px',
+  border: '1px solid rgba(238, 130, 238, 0.4)',
+  backgroundColor: 'rgba(238, 130, 238, 0.08)',
+  color: 'var(--accent-color)',
+  whiteSpace: 'nowrap',
+  flexShrink: 0,
+};
+
+const _HASH_STYLE: React.CSSProperties = {
+  fontSize: '0.75rem',
+  fontFamily: 'monospace',
+  opacity: 0.85,
+  wordBreak: 'break-all',
+};
+
+const FingerprintPayload: React.FC<{ payload: any }> = ({ payload }) => {
+  if (!payload || typeof payload !== 'object') {
+    return <span className="dim" style={{ fontSize: '0.8rem' }}>{JSON.stringify(payload)}</span>;
+  }
+
+  // For simple payloads like tls_resumption with just type + mechanism
+  const keys = Object.keys(payload);
+  const isSimple = keys.length <= 3;
+
+  if (isSimple) {
+    return (
+      <div style={{ display: 'flex', gap: '10px', alignItems: 'center', flexWrap: 'wrap' }}>
+        {keys.map((k) => {
+          const val = payload[k];
+          if (val === null || val === undefined) return null;
+          const label = _FINGERPRINT_LABELS[k] || k.toUpperCase();
+          return (
+            <span key={k} style={{ display: 'inline-flex', alignItems: 'center', gap: '5px' }}>
+              <span style={_TAG_STYLE}>{label}</span>
+              <span style={_HASH_STYLE}>{String(val)}</span>
+            </span>
+          );
+        })}
+      </div>
+    );
+  }
+
+  // Full fingerprint — show priority fields as labeled rows
+  const priorityKeys = ['fingerprint_type', 'ja3', 'ja3s', 'ja4', 'ja4s', 'ja4l', 'sni', 'alpn', 'dst_port', 'mechanisms', 'hash', 'target_ip', 'target_port', 'ssh_banner', 'ttl', 'window_size', 'mss', 'options_order'];
+  const shown = priorityKeys.filter((k) => payload[k] !== undefined && payload[k] !== null);
+  const rest = keys.filter((k) => !priorityKeys.includes(k) && payload[k] !== null && payload[k] !== undefined);
+
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
+      {shown.map((k) => {
+        const label = _FINGERPRINT_LABELS[k] || k.toUpperCase();
+        const val = String(payload[k]);
+        return (
+          <div key={k} style={{ display: 'flex', alignItems: 'flex-start', gap: '6px' }}>
+            <span style={_TAG_STYLE}>{label}</span>
+            <span style={_HASH_STYLE}>{val}</span>
+          </div>
+        );
+      })}
+      {rest.length > 0 && (
+        <details style={{ marginTop: '2px' }}>
+          <summary className="dim" style={{ fontSize: '0.7rem', cursor: 'pointer', letterSpacing: '1px' }}>
+            +{rest.length} MORE FIELDS
+          </summary>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '3px', marginTop: '4px' }}>
+            {rest.map((k) => (
+              <div key={k} style={{ display: 'flex', alignItems: 'flex-start', gap: '6px' }}>
+                <span style={_TAG_STYLE}>{(_FINGERPRINT_LABELS[k] || k).toUpperCase()}</span>
+                <span style={{ ..._HASH_STYLE, fontSize: '0.7rem', opacity: 0.6 }}>{String(payload[k])}</span>
+              </div>
+            ))}
+          </div>
+        </details>
+      )}
+    </div>
+  );
+};
+
 const Bounty: React.FC = () => {
   const [searchParams, setSearchParams] = useSearchParams();
   const query = searchParams.get('q') || '';
@@ -83,6 +195,7 @@ const Bounty: React.FC = () => {
             >
               <option value="">ALL TYPES</option>
               <option value="credential">CREDENTIALS</option>
+              <option value="fingerprint">FINGERPRINTS</option>
               <option value="payload">PAYLOADS</option>
             </select>
           </div>
@@ -167,6 +280,8 @@ const Bounty: React.FC = () => {
                           <span><span className="dim" style={{ marginRight: '4px' }}>user:</span>{b.payload.username}</span>
                           <span><span className="dim" style={{ marginRight: '4px' }}>pass:</span>{b.payload.password}</span>
                         </div>
+                      ) : b.bounty_type === 'fingerprint' ? (
+                        <FingerprintPayload payload={b.payload} />
                       ) : (
                         <span className="dim" style={{ fontSize: '0.8rem' }}>{JSON.stringify(b.payload)}</span>
                       )}

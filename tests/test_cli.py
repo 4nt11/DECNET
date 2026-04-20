@@ -60,10 +60,10 @@ class TestArchetypesCommand:
 
 class TestDeployCommand:
     @patch("decnet.engine.deploy")
-    @patch("decnet.cli.allocate_ips", return_value=["192.168.1.10"])
-    @patch("decnet.cli.get_host_ip", return_value="192.168.1.2")
-    @patch("decnet.cli.detect_subnet", return_value=("192.168.1.0/24", "192.168.1.1"))
-    @patch("decnet.cli.detect_interface", return_value="eth0")
+    @patch("decnet.cli.deploy.allocate_ips", return_value=["192.168.1.10"])
+    @patch("decnet.cli.deploy.get_host_ip", return_value="192.168.1.2")
+    @patch("decnet.cli.deploy.detect_subnet", return_value=("192.168.1.0/24", "192.168.1.1"))
+    @patch("decnet.cli.deploy.detect_interface", return_value="eth0")
     def test_deploy_dry_run(self, mock_iface, mock_subnet, mock_hip,
                              mock_ips, mock_deploy):
         result = runner.invoke(app, [
@@ -73,13 +73,13 @@ class TestDeployCommand:
         mock_deploy.assert_called_once()
 
     def test_deploy_no_interface_found(self):
-        with patch("decnet.cli.detect_interface", side_effect=ValueError("No interface")):
+        with patch("decnet.cli.deploy.detect_interface", side_effect=ValueError("No interface")):
             result = runner.invoke(app, ["deploy", "--deckies", "1"])
             assert result.exit_code == 1
 
     def test_deploy_no_subnet_found(self):
-        with patch("decnet.cli.detect_interface", return_value="eth0"), \
-             patch("decnet.cli.detect_subnet", side_effect=ValueError("No subnet")):
+        with patch("decnet.cli.deploy.detect_interface", return_value="eth0"), \
+             patch("decnet.cli.deploy.detect_subnet", side_effect=ValueError("No subnet")):
             result = runner.invoke(app, ["deploy", "--deckies", "1", "--services", "ssh"])
             assert result.exit_code == 1
 
@@ -87,21 +87,21 @@ class TestDeployCommand:
         result = runner.invoke(app, ["deploy", "--mode", "invalid", "--deckies", "1"])
         assert result.exit_code == 1
 
-    @patch("decnet.cli.detect_interface", return_value="eth0")
+    @patch("decnet.cli.deploy.detect_interface", return_value="eth0")
     def test_deploy_no_deckies_no_config(self, mock_iface):
         result = runner.invoke(app, ["deploy", "--services", "ssh"])
         assert result.exit_code == 1
 
-    @patch("decnet.cli.detect_interface", return_value="eth0")
+    @patch("decnet.cli.deploy.detect_interface", return_value="eth0")
     def test_deploy_no_services_no_randomize(self, mock_iface):
         result = runner.invoke(app, ["deploy", "--deckies", "1"])
         assert result.exit_code == 1
 
     @patch("decnet.engine.deploy")
-    @patch("decnet.cli.allocate_ips", return_value=["192.168.1.10"])
-    @patch("decnet.cli.get_host_ip", return_value="192.168.1.2")
-    @patch("decnet.cli.detect_subnet", return_value=("192.168.1.0/24", "192.168.1.1"))
-    @patch("decnet.cli.detect_interface", return_value="eth0")
+    @patch("decnet.cli.deploy.allocate_ips", return_value=["192.168.1.10"])
+    @patch("decnet.cli.deploy.get_host_ip", return_value="192.168.1.2")
+    @patch("decnet.cli.deploy.detect_subnet", return_value=("192.168.1.0/24", "192.168.1.1"))
+    @patch("decnet.cli.deploy.detect_interface", return_value="eth0")
     def test_deploy_with_archetype(self, mock_iface, mock_subnet, mock_hip,
                                     mock_ips, mock_deploy):
         result = runner.invoke(app, [
@@ -117,10 +117,10 @@ class TestDeployCommand:
 
     @patch("decnet.engine.deploy")
     @patch("subprocess.Popen")
-    @patch("decnet.cli.allocate_ips", return_value=["192.168.1.10"])
-    @patch("decnet.cli.get_host_ip", return_value="192.168.1.2")
-    @patch("decnet.cli.detect_subnet", return_value=("192.168.1.0/24", "192.168.1.1"))
-    @patch("decnet.cli.detect_interface", return_value="eth0")
+    @patch("decnet.cli.deploy.allocate_ips", return_value=["192.168.1.10"])
+    @patch("decnet.cli.deploy.get_host_ip", return_value="192.168.1.2")
+    @patch("decnet.cli.deploy.detect_subnet", return_value=("192.168.1.0/24", "192.168.1.1"))
+    @patch("decnet.cli.deploy.detect_interface", return_value="eth0")
     def test_deploy_full_with_api(self, mock_iface, mock_subnet, mock_hip,
                                   mock_ips, mock_popen, mock_deploy):
         # Test non-dry-run with API and collector starts
@@ -131,10 +131,10 @@ class TestDeployCommand:
         assert mock_popen.call_count >= 1 # API
 
     @patch("decnet.engine.deploy")
-    @patch("decnet.cli.allocate_ips", return_value=["192.168.1.10"])
-    @patch("decnet.cli.get_host_ip", return_value="192.168.1.2")
-    @patch("decnet.cli.detect_subnet", return_value=("192.168.1.0/24", "192.168.1.1"))
-    @patch("decnet.cli.detect_interface", return_value="eth0")
+    @patch("decnet.cli.deploy.allocate_ips", return_value=["192.168.1.10"])
+    @patch("decnet.cli.deploy.get_host_ip", return_value="192.168.1.2")
+    @patch("decnet.cli.deploy.detect_subnet", return_value=("192.168.1.0/24", "192.168.1.1"))
+    @patch("decnet.cli.deploy.detect_interface", return_value="eth0")
     def test_deploy_with_distro(self, mock_iface, mock_subnet, mock_hip,
                                  mock_ips, mock_deploy):
         result = runner.invoke(app, [
@@ -149,10 +149,10 @@ class TestDeployCommand:
         assert result.exit_code == 1
 
     @patch("decnet.engine.deploy")
-    @patch("decnet.cli.load_ini")
-    @patch("decnet.cli.get_host_ip", return_value="192.168.1.2")
-    @patch("decnet.cli.detect_subnet", return_value=("192.168.1.0/24", "192.168.1.1"))
-    @patch("decnet.cli.detect_interface", return_value="eth0")
+    @patch("decnet.cli.deploy.load_ini")
+    @patch("decnet.cli.deploy.get_host_ip", return_value="192.168.1.2")
+    @patch("decnet.cli.deploy.detect_subnet", return_value=("192.168.1.0/24", "192.168.1.1"))
+    @patch("decnet.cli.deploy.detect_interface", return_value="eth0")
     def test_deploy_with_config_file(self, mock_iface, mock_subnet, mock_hip,
                                       mock_load_ini, mock_deploy, tmp_path):
         from decnet.ini_loader import IniConfig, DeckySpec
@@ -181,7 +181,7 @@ class TestTeardownCommand:
         result = runner.invoke(app, ["teardown"])
         assert result.exit_code == 1
 
-    @patch("decnet.cli._kill_api")
+    @patch("decnet.cli.utils._kill_all_services")
     @patch("decnet.engine.teardown")
     def test_teardown_all(self, mock_teardown, mock_kill):
         result = runner.invoke(app, ["teardown", "--all"])
@@ -216,6 +216,28 @@ class TestStatusCommand:
     def test_status_active(self, mock_status):
         result = runner.invoke(app, ["status"])
         assert result.exit_code == 0
+
+    def test_status_available_in_agent_mode(self, monkeypatch):
+        # Agents run deckies locally and must be able to inspect them;
+        # `status` is intentionally NOT in MASTER_ONLY_COMMANDS.
+        import importlib
+
+        import decnet.cli as cli_mod
+
+        monkeypatch.setenv("DECNET_MODE", "agent")
+        monkeypatch.setenv("DECNET_DISALLOW_MASTER", "true")
+        reloaded = importlib.reload(cli_mod)
+        try:
+            names = {
+                (c.name or c.callback.__name__)
+                for c in reloaded.app.registered_commands
+            }
+            assert "status" in names
+            assert "deploy" not in names  # sanity: master-only still gated
+        finally:
+            monkeypatch.delenv("DECNET_MODE", raising=False)
+            monkeypatch.delenv("DECNET_DISALLOW_MASTER", raising=False)
+            importlib.reload(cli_mod)
 
 
 # ── mutate command ────────────────────────────────────────────────────────────
@@ -275,13 +297,29 @@ class TestWebCommand:
         assert result.exit_code == 1
         assert "Frontend build not found" in result.stdout
 
-    @patch("socketserver.TCPServer")
-    @patch("os.chdir")
-    @patch("pathlib.Path.exists", return_value=True)
-    def test_web_success(self, mock_exists, mock_chdir, mock_server):
-        # We need to simulate a KeyboardInterrupt to stop serve_forever
-        mock_server.return_value.__enter__.return_value.serve_forever.side_effect = KeyboardInterrupt
-        result = runner.invoke(app, ["web"])
+    def test_web_success(self):
+        with (
+            patch("pathlib.Path.exists", return_value=True),
+            patch("os.chdir"),
+            patch(
+                "socketserver.TCPServer.__init__",
+                lambda self, *a, **kw: None,
+            ),
+            patch(
+                "socketserver.TCPServer.__enter__",
+                lambda self: self,
+            ),
+            patch(
+                "socketserver.TCPServer.__exit__",
+                lambda self, *a: None,
+            ),
+            patch(
+                "socketserver.TCPServer.serve_forever",
+                side_effect=KeyboardInterrupt,
+            ),
+        ):
+            result = runner.invoke(app, ["web"])
+
         assert result.exit_code == 0
         assert "Serving DECNET Web Dashboard" in result.stdout
 
@@ -300,7 +338,7 @@ class TestCorrelateCommand:
         log_file = tmp_path / "test.log"
         log_file.write_text(
             "<134>1 2024-01-15T12:00:00+00:00 decky-01 ssh - auth "
-            '[decnet@55555 src_ip="10.0.0.5" username="admin"] login\n'
+            '[relay@55555 src_ip="10.0.0.5" username="admin"] login\n'
         )
         result = runner.invoke(app, ["correlate", "--log-file", str(log_file)])
         assert result.exit_code == 0
@@ -309,24 +347,34 @@ class TestCorrelateCommand:
 # ── api command ───────────────────────────────────────────────────────────────
 
 class TestApiCommand:
-    @patch("subprocess.run", side_effect=KeyboardInterrupt)
-    def test_api_keyboard_interrupt(self, mock_run):
+    @patch("os.killpg")
+    @patch("subprocess.Popen")
+    def test_api_keyboard_interrupt(self, mock_popen, mock_killpg, monkeypatch):
+        monkeypatch.setenv("DECNET_MODE", "master")
+        monkeypatch.delenv("DECNET_DISALLOW_MASTER", raising=False)
+        proc = MagicMock()
+        proc.wait.side_effect = [KeyboardInterrupt, 0]
+        proc.pid = 4321
+        mock_popen.return_value = proc
+        result = runner.invoke(app, ["api"])
+        assert result.exit_code == 0
+        mock_killpg.assert_called()
+
+    @patch("subprocess.Popen", side_effect=FileNotFoundError)
+    def test_api_not_found(self, mock_popen, monkeypatch):
+        monkeypatch.setenv("DECNET_MODE", "master")
+        monkeypatch.delenv("DECNET_DISALLOW_MASTER", raising=False)
         result = runner.invoke(app, ["api"])
         assert result.exit_code == 0
 
-    @patch("subprocess.run", side_effect=FileNotFoundError)
-    def test_api_not_found(self, mock_run):
-        result = runner.invoke(app, ["api"])
-        assert result.exit_code == 0
 
+# ── _kill_all_services ────────────────────────────────────────────────────────
 
-# ── _kill_api ─────────────────────────────────────────────────────────────────
-
-class TestKillApi:
+class TestKillAllServices:
     @patch("os.kill")
     @patch("psutil.process_iter")
     def test_kills_matching_processes(self, mock_iter, mock_kill):
-        from decnet.cli import _kill_api
+        from decnet.cli import _kill_all_services
         mock_uvicorn = MagicMock()
         mock_uvicorn.info = {
             "pid": 111, "name": "python",
@@ -337,22 +385,27 @@ class TestKillApi:
             "pid": 222, "name": "python",
             "cmdline": ["python", "decnet.cli", "mutate", "--watch"],
         }
-        mock_iter.return_value = [mock_uvicorn, mock_mutate]
-        _kill_api()
-        assert mock_kill.call_count == 2
+        mock_collector = MagicMock()
+        mock_collector.info = {
+            "pid": 333, "name": "python",
+            "cmdline": ["python", "-m", "decnet.cli", "collect", "--log-file", "/tmp/decnet.log"],
+        }
+        mock_iter.return_value = [mock_uvicorn, mock_mutate, mock_collector]
+        _kill_all_services()
+        assert mock_kill.call_count == 3
 
     @patch("psutil.process_iter")
     def test_no_matching_processes(self, mock_iter):
-        from decnet.cli import _kill_api
+        from decnet.cli import _kill_all_services
         mock_proc = MagicMock()
         mock_proc.info = {"pid": 1, "name": "bash", "cmdline": ["bash"]}
         mock_iter.return_value = [mock_proc]
-        _kill_api()
+        _kill_all_services()
 
     @patch("psutil.process_iter")
     def test_handles_empty_cmdline(self, mock_iter):
-        from decnet.cli import _kill_api
+        from decnet.cli import _kill_all_services
         mock_proc = MagicMock()
         mock_proc.info = {"pid": 1, "name": "bash", "cmdline": None}
         mock_iter.return_value = [mock_proc]
-        _kill_api()
+        _kill_all_services()

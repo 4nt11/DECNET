@@ -15,6 +15,15 @@ class BaseRepository(ABC):
         """Add a new log entry to the database."""
         pass
 
+    async def add_logs(self, log_entries: list[dict[str, Any]]) -> None:
+        """Bulk-insert log entries in a single transaction.
+
+        Default implementation falls back to per-row add_log; concrete
+        repositories should override for a real single-commit insert.
+        """
+        for _entry in log_entries:
+            await self.add_log(_entry)
+
     @abstractmethod
     async def get_logs(
         self,
@@ -61,6 +70,26 @@ class BaseRepository(ABC):
         pass
 
     @abstractmethod
+    async def list_users(self) -> list[dict[str, Any]]:
+        """Retrieve all users (caller must strip password_hash before returning to clients)."""
+        pass
+
+    @abstractmethod
+    async def delete_user(self, uuid: str) -> bool:
+        """Delete a user by UUID. Returns True if user was found and deleted."""
+        pass
+
+    @abstractmethod
+    async def update_user_role(self, uuid: str, role: str) -> None:
+        """Update a user's role."""
+        pass
+
+    @abstractmethod
+    async def purge_logs_and_bounties(self) -> dict[str, int]:
+        """Delete all logs, bounties, and attacker profiles. Returns counts of deleted rows."""
+        pass
+
+    @abstractmethod
     async def add_bounty(self, bounty_data: dict[str, Any]) -> None:
         """Add a new harvested artifact (bounty) to the database."""
         pass
@@ -90,3 +119,118 @@ class BaseRepository(ABC):
     async def set_state(self, key: str, value: Any) -> None:
         """Store a specific state entry by key."""
         pass
+
+    @abstractmethod
+    async def get_max_log_id(self) -> int:
+        """Return the highest log ID, or 0 if the table is empty."""
+        pass
+
+    @abstractmethod
+    async def get_logs_after_id(self, last_id: int, limit: int = 500) -> list[dict[str, Any]]:
+        """Return logs with id > last_id, ordered by id ASC, up to limit."""
+        pass
+
+    @abstractmethod
+    async def get_all_bounties_by_ip(self) -> dict[str, list[dict[str, Any]]]:
+        """Retrieve all bounty rows grouped by attacker_ip."""
+        pass
+
+    @abstractmethod
+    async def get_bounties_for_ips(self, ips: set[str]) -> dict[str, list[dict[str, Any]]]:
+        """Retrieve bounty rows grouped by attacker_ip, filtered to only the given IPs."""
+        pass
+
+    @abstractmethod
+    async def upsert_attacker(self, data: dict[str, Any]) -> str:
+        """Insert or replace an attacker profile record. Returns the row's UUID."""
+        pass
+
+    @abstractmethod
+    async def upsert_attacker_behavior(self, attacker_uuid: str, data: dict[str, Any]) -> None:
+        """Insert or replace the behavioral/fingerprint row for an attacker."""
+        pass
+
+    @abstractmethod
+    async def get_attacker_behavior(self, attacker_uuid: str) -> Optional[dict[str, Any]]:
+        """Retrieve the behavioral/fingerprint row for an attacker UUID."""
+        pass
+
+    @abstractmethod
+    async def get_behaviors_for_ips(self, ips: set[str]) -> dict[str, dict[str, Any]]:
+        """Bulk-fetch behavior rows keyed by attacker IP (JOIN to attackers)."""
+        pass
+
+    @abstractmethod
+    async def get_attacker_by_uuid(self, uuid: str) -> Optional[dict[str, Any]]:
+        """Retrieve a single attacker profile by UUID."""
+        pass
+
+    @abstractmethod
+    async def get_attackers(
+        self,
+        limit: int = 50,
+        offset: int = 0,
+        search: Optional[str] = None,
+        sort_by: str = "recent",
+        service: Optional[str] = None,
+    ) -> list[dict[str, Any]]:
+        """Retrieve paginated attacker profile records."""
+        pass
+
+    @abstractmethod
+    async def get_total_attackers(self, search: Optional[str] = None, service: Optional[str] = None) -> int:
+        """Retrieve the total count of attacker profile records, optionally filtered."""
+        pass
+
+    @abstractmethod
+    async def get_attacker_commands(
+        self,
+        uuid: str,
+        limit: int = 50,
+        offset: int = 0,
+        service: Optional[str] = None,
+    ) -> dict[str, Any]:
+        """Retrieve paginated commands for an attacker, optionally filtered by service."""
+        pass
+
+    @abstractmethod
+    async def get_attacker_artifacts(self, uuid: str) -> list[dict[str, Any]]:
+        """Return `file_captured` log rows for this attacker, newest first."""
+        pass
+
+    # ------------------------------------------------------------- swarm
+    # Swarm methods have default no-op / empty implementations so existing
+    # subclasses and non-swarm deployments continue to work without change.
+
+    async def add_swarm_host(self, data: dict[str, Any]) -> None:
+        raise NotImplementedError
+
+    async def get_swarm_host_by_name(self, name: str) -> Optional[dict[str, Any]]:
+        raise NotImplementedError
+
+    async def get_swarm_host_by_uuid(self, uuid: str) -> Optional[dict[str, Any]]:
+        raise NotImplementedError
+
+    async def get_swarm_host_by_fingerprint(self, fingerprint: str) -> Optional[dict[str, Any]]:
+        raise NotImplementedError
+
+    async def list_swarm_hosts(self, status: Optional[str] = None) -> list[dict[str, Any]]:
+        raise NotImplementedError
+
+    async def update_swarm_host(self, uuid: str, fields: dict[str, Any]) -> None:
+        raise NotImplementedError
+
+    async def delete_swarm_host(self, uuid: str) -> bool:
+        raise NotImplementedError
+
+    async def upsert_decky_shard(self, data: dict[str, Any]) -> None:
+        raise NotImplementedError
+
+    async def list_decky_shards(self, host_uuid: Optional[str] = None) -> list[dict[str, Any]]:
+        raise NotImplementedError
+
+    async def delete_decky_shards_for_host(self, host_uuid: str) -> int:
+        raise NotImplementedError
+
+    async def delete_decky_shard(self, decky_name: str) -> bool:
+        raise NotImplementedError

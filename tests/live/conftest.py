@@ -20,7 +20,7 @@ from pathlib import Path
 import pytest
 
 _REPO_ROOT = Path(__file__).parent.parent.parent
-_TEMPLATES = _REPO_ROOT / "templates"
+_TEMPLATES = _REPO_ROOT / "decnet" / "templates"
 
 # Prefer the project venv's Python (has Flask, Twisted, etc.) over system Python
 _VENV_PYTHON = _REPO_ROOT / ".venv" / "bin" / "python"
@@ -30,6 +30,13 @@ _PYTHON = str(_VENV_PYTHON) if _VENV_PYTHON.exists() else sys.executable
 # Use search (not match) so lines prefixed by Twisted timestamps are handled.
 _RFC5424_RE = re.compile(r"<\d+>1 \S+ \S+ \S+ - \S+ ")
 
+def _mysql_available() -> bool:
+    try:
+        s = socket.create_connection(("127.0.0.1", 3307), timeout=1)
+        s.close()
+        return True
+    except OSError:
+        return False
 
 def _free_port() -> int:
     with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:

@@ -1,18 +1,25 @@
 """
-Schemathesis contract tests.
-
-Generates requests from the OpenAPI spec and verifies that no input causes a 5xx.
-
-Currently scoped to `not_a_server_error` only — full response-schema conformance
-(including undocumented 401 responses) is blocked by DEBT-020 (missing error
-response declarations across all protected endpoints). Once DEBT-020 is resolved,
-replace the checks list with the default (remove the argument) for full compliance.
+Schemathesis contract tests — full compliance, all checks enabled.
 
 Requires DECNET_DEVELOPER=true (set in tests/conftest.py) to expose /openapi.json.
 """
 import pytest
 import schemathesis as st
-from hypothesis import settings, Verbosity
+from schemathesis.checks import not_a_server_error
+from schemathesis.specs.openapi.checks import (
+    status_code_conformance,
+    content_type_conformance,
+    response_headers_conformance,
+    response_schema_conformance,
+    positive_data_acceptance,
+    negative_data_rejection,
+    missing_required_header,
+    unsupported_method,
+    use_after_free,
+    ensure_resource_availability,
+    ignored_auth,
+)
+from hypothesis import settings, Verbosity, HealthCheck
 from decnet.web.auth import create_access_token
 
 import subprocess
@@ -24,49 +31,65 @@ import time
 from datetime import datetime, timezone
 from pathlib import Path
 
+
 def _free_port() -> int:
-    """Bind to port 0, let the OS pick a free port, return it."""
     with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
         s.bind(("127.0.0.1", 0))
         return s.getsockname()[1]
 
-# Configuration for the automated live server
+
 LIVE_PORT = _free_port()
 LIVE_SERVER_URL = f"http://127.0.0.1:{LIVE_PORT}"
 TEST_SECRET = "test-secret-for-automated-fuzzing"
 
-# Standardize the secret for the test process too so tokens can be verified
 import decnet.web.auth
 decnet.web.auth.SECRET_KEY = TEST_SECRET
 
-# Create a valid token for an admin-like user
 TEST_TOKEN = create_access_token({"uuid": "00000000-0000-0000-0000-000000000001"})
+
+ALL_CHECKS = (
+    not_a_server_error,
+    status_code_conformance,
+    content_type_conformance,
+    response_headers_conformance,
+    response_schema_conformance,
+    positive_data_acceptance,
+    negative_data_rejection,
+    missing_required_header,
+    unsupported_method,
+    use_after_free,
+    ensure_resource_availability,
+)
+
+AUTH_CHECKS = (
+    not_a_server_error,
+    ignored_auth,
+)
+
 
 @st.hook
 def before_call(context, case, *args):
-    # Logged-in admin for all requests
     case.headers = case.headers or {}
     case.headers["Authorization"] = f"Bearer {TEST_TOKEN}"
-    # Force SSE stream to close after the initial snapshot so the test doesn't hang
     if case.path and case.path.endswith("/stream"):
         case.query = case.query or {}
         case.query["maxOutput"] = 0
 
-def wait_for_port(port, timeout=10):
-    start_time = time.time()
-    while time.time() - start_time < timeout:
+
+def wait_for_port(port: int, timeout: float = 10.0) -> bool:
+    deadline = time.time() + timeout
+    while time.time() < deadline:
         with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as sock:
-            if sock.connect_ex(('127.0.0.1', port)) == 0:
+            if sock.connect_ex(("127.0.0.1", port)) == 0:
                 return True
         time.sleep(0.2)
     return False
 
-def start_automated_server():
-    # Use the current venv's uvicorn
+
+def start_automated_server() -> subprocess.Popen:
     uvicorn_bin = "uvicorn" if os.name != "nt" else "uvicorn.exe"
     uvicorn_path = str(Path(sys.executable).parent / uvicorn_bin)
 
-    # Force developer and contract test modes for the sub-process
     env = os.environ.copy()
     env["DECNET_DEVELOPER"] = "true"
     env["DECNET_CONTRACT_TEST"] = "true"
@@ -78,13 +101,18 @@ def start_automated_server():
     log_file = open(log_dir / f"fuzz_server_{LIVE_PORT}_{ts}.log", "w")
 
     proc = subprocess.Popen(
-        [uvicorn_path, "decnet.web.api:app", "--host", "127.0.0.1", "--port", str(LIVE_PORT), "--log-level", "info"],
+        [
+            uvicorn_path,
+            "decnet.web.api:app",
+            "--host", "127.0.0.1",
+            "--port", str(LIVE_PORT),
+            "--log-level", "info",
+        ],
         env=env,
         stdout=log_file,
         stderr=log_file,
     )
 
-    # Register cleanup
     atexit.register(proc.terminate)
     atexit.register(log_file.close)
 
@@ -94,14 +122,47 @@ def start_automated_server():
 
     return proc
 
-# Stir up the server!
+
 _server_proc = start_automated_server()
 
-# Now Schemathesis can pull the schema from the real network port
 schema = st.openapi.from_url(f"{LIVE_SERVER_URL}/openapi.json")
+
 
 @pytest.mark.fuzz
 @st.pytest.parametrize(api=schema)
-@settings(max_examples=3000, deadline=None, verbosity=Verbosity.debug)
+@settings(
+    max_examples=3000,
+    deadline=None,
+    verbosity=Verbosity.debug,
+    suppress_health_check=[
+        HealthCheck.filter_too_much,
+        HealthCheck.too_slow,
+        HealthCheck.data_too_large,
+    ],
+)
 def test_schema_compliance(case):
-    case.call_and_validate()
+    """Full contract test: valid + invalid inputs, all response checks."""
+    case.call_and_validate(checks=ALL_CHECKS)
+
+
+@pytest.mark.fuzz
+@st.pytest.parametrize(api=schema)
+@settings(
+    max_examples=500,
+    deadline=None,
+    verbosity=Verbosity.normal,
+    suppress_health_check=[
+        HealthCheck.filter_too_much,
+        HealthCheck.too_slow,
+    ],
+)
+def test_auth_enforcement(case):
+    """Verify every protected endpoint rejects requests with no token."""
+    case.headers = {
+        k: v for k, v in (case.headers or {}).items()
+        if k.lower() != "authorization"
+    }
+    if case.path and case.path.endswith("/stream"):
+        case.query = case.query or {}
+        case.query["maxOutput"] = 0
+    case.call_and_validate(checks=AUTH_CHECKS)

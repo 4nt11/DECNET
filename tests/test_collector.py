@@ -9,7 +9,9 @@ from decnet.collector import parse_rfc5424, is_service_container, is_service_eve
 from decnet.collector.worker import (
     _stream_container,
     _load_service_container_names,
-    log_collector_worker
+    _should_ingest,
+    _reset_rate_limiter,
+    log_collector_worker,
 )
 
 _KNOWN_NAMES = {"omega-decky-http", "omega-decky-smtp", "relay-decky-ftp"}
@@ -21,7 +23,7 @@ def _make_container(name="omega-decky-http"):
 
 class TestParseRfc5424:
     def _make_line(self, fields_str="", msg=""):
-        sd = f"[decnet@55555 {fields_str}]" if fields_str else "-"
+        sd = f"[relay@55555 {fields_str}]" if fields_str else "-"
         suffix = f" {msg}" if msg else ""
         return f"<134>1 2024-01-15T12:00:00+00:00 decky-01 http - request {sd}{suffix}"
 
@@ -77,6 +79,48 @@ class TestParseRfc5424:
         result = parse_rfc5424(line)
         assert result["attacker_ip"] == "Unknown"
 
+    def test_parses_line_with_real_procid(self):
+        """sshd/sudo log via native syslog, so rsyslog fills PROCID with the
+        real PID instead of NILVALUE. The parser must accept either form."""
+        line = (
+            "<38>1 2026-04-18T08:27:21.862365+00:00 omega-decky sshd 940 - - "
+            "Accepted password for root from 192.168.1.5 port 43210 ssh2"
+        )
+        result = parse_rfc5424(line)
+        assert result is not None
+        assert result["decky"] == "omega-decky"
+        assert result["service"] == "sshd"
+        assert "Accepted password" in result["msg"]
+        assert result["attacker_ip"] == "Unknown"  # no key=value in this msg
+
+    def test_extracts_attacker_ip_from_msg_body_kv(self):
+        """SSH container's bash PROMPT_COMMAND uses `logger -t bash "CMD ... src=IP ..."`
+        which produces an RFC 5424 line with NILVALUE SD — the IP lives in the
+        free-form msg, not in SD params. The collector should still pick it up."""
+        line = (
+            "<134>1 2024-01-15T12:00:00+00:00 decky-01 bash - - - "
+            "CMD uid=0 user=root src=198.51.100.7 pwd=/root cmd=ls -la"
+        )
+        result = parse_rfc5424(line)
+        assert result is not None
+        assert result["attacker_ip"] == "198.51.100.7"
+        # `fields` stays empty — the frontend's parseEventBody renders kv
+        # pairs straight from msg; we don't want duplicate pills.
+        assert result["fields"] == {}
+        assert "CMD uid=0" in result["msg"]
+
+    def test_sd_ip_wins_over_msg_body(self):
+        """If SD params carry an IP, the msg-body fallback must not overwrite it."""
+        line = (
+            '<134>1 2024-01-15T12:00:00+00:00 decky-01 ssh - login '
+            '[relay@55555 src_ip="1.2.3.4"] rogue src=9.9.9.9 entry'
+        )
+        result = parse_rfc5424(line)
+        assert result["attacker_ip"] == "1.2.3.4"
+        # SD wins; `src=` from msg isn't folded into fields (msg retains it).
+        assert result["fields"]["src_ip"] == "1.2.3.4"
+        assert "src" not in result["fields"]
+
     def test_parses_msg(self):
         line = self._make_line(msg="hello world")
         result = parse_rfc5424(line)
@@ -124,7 +168,7 @@ class TestParseRfc5424:
         assert result["msg"] == "hello world"
 
     def test_sd_with_msg_after_bracket(self):
-        line = '<134>1 2024-01-15T12:00:00+00:00 decky-01 http - request [decnet@55555 src_ip="1.2.3.4"] login attempt'
+        line = '<134>1 2024-01-15T12:00:00+00:00 decky-01 http - request [relay@55555 src_ip="1.2.3.4"] login attempt'
         result = parse_rfc5424(line)
         assert result is not None
         assert result["fields"]["src_ip"] == "1.2.3.4"
@@ -225,7 +269,7 @@ class TestStreamContainer:
         json_path = tmp_path / "test.json"
 
         mock_container = MagicMock()
-        rfc_line = '<134>1 2024-01-15T12:00:00+00:00 decky-01 ssh - auth [decnet@55555 src_ip="1.2.3.4"] login\n'
+        rfc_line = '<134>1 2024-01-15T12:00:00+00:00 decky-01 ssh - auth [relay@55555 src_ip="1.2.3.4"] login\n'
         mock_container.logs.return_value = [rfc_line.encode("utf-8")]
 
         mock_client = MagicMock()
@@ -257,7 +301,8 @@ class TestStreamContainer:
             _stream_container("test-id", log_path, json_path)
 
         assert log_path.exists()
-        assert json_path.read_text() == ""  # No JSON written for non-RFC lines
+        # JSON file is only created when RFC5424 lines are parsed — not for plain lines.
+        assert not json_path.exists() or json_path.read_text() == ""
 
     def test_handles_docker_error(self, tmp_path):
         log_path = tmp_path / "test.log"
@@ -284,7 +329,188 @@ class TestStreamContainer:
         with patch("docker.from_env", return_value=mock_client):
             _stream_container("test-id", log_path, json_path)
 
-        assert log_path.read_text() == ""
+        # All lines were empty — no file is created (lazy open).
+        assert not log_path.exists() or log_path.read_text() == ""
+
+    def test_log_file_recreated_after_deletion(self, tmp_path):
+        log_path = tmp_path / "test.log"
+        json_path = tmp_path / "test.json"
+
+        line1 = b"first line\n"
+        line2 = b"second line\n"
+
+        def _chunks():
+            yield line1
+            log_path.unlink()   # simulate deletion between writes
+            yield line2
+
+        mock_container = MagicMock()
+        mock_container.logs.return_value = _chunks()
+        mock_client = MagicMock()
+        mock_client.containers.get.return_value = mock_container
+
+        with patch("docker.from_env", return_value=mock_client):
+            _stream_container("test-id", log_path, json_path)
+
+        assert log_path.exists(), "log file must be recreated after deletion"
+        content = log_path.read_text()
+        assert "second line" in content
+
+    def test_json_file_recreated_after_deletion(self, tmp_path):
+        log_path = tmp_path / "test.log"
+        json_path = tmp_path / "test.json"
+
+        rfc_line = (
+            '<134>1 2024-01-15T12:00:00+00:00 decky-01 ssh - auth '
+            '[relay@55555 src_ip="1.2.3.4"] login\n'
+        )
+        encoded = rfc_line.encode("utf-8")
+
+        def _chunks():
+            yield encoded
+            # Remove the json file between writes; the second RFC line should
+            # trigger a fresh file open.
+            if json_path.exists():
+                json_path.unlink()
+            yield encoded
+
+        mock_container = MagicMock()
+        mock_container.logs.return_value = _chunks()
+        mock_client = MagicMock()
+        mock_client.containers.get.return_value = mock_container
+
+        with patch("docker.from_env", return_value=mock_client):
+            _stream_container("test-id", log_path, json_path)
+
+        assert json_path.exists(), "json file must be recreated after deletion"
+        lines = [l for l in json_path.read_text().splitlines() if l.strip()]
+        assert len(lines) >= 1
+
+    def test_rotated_file_detected(self, tmp_path):
+        """Simulate logrotate: rename old file away, new write should go to a fresh file."""
+        log_path = tmp_path / "test.log"
+        json_path = tmp_path / "test.json"
+
+        line1 = b"before rotation\n"
+        line2 = b"after rotation\n"
+        rotated = tmp_path / "test.log.1"
+
+        def _chunks():
+            yield line1
+            log_path.rename(rotated)   # logrotate renames old file
+            yield line2
+
+        mock_container = MagicMock()
+        mock_container.logs.return_value = _chunks()
+        mock_client = MagicMock()
+        mock_client.containers.get.return_value = mock_container
+
+        with patch("docker.from_env", return_value=mock_client):
+            _stream_container("test-id", log_path, json_path)
+
+        assert log_path.exists(), "new log file must be created after rotation"
+        assert "after rotation" in log_path.read_text()
+        assert "before rotation" in rotated.read_text()
+
+
+class TestIngestRateLimiter:
+    def setup_method(self):
+        _reset_rate_limiter()
+
+    def _event(self, event_type="connect", attacker_ip="1.2.3.4",
+               decky="decky-01", service="ssh"):
+        return {
+            "event_type": event_type,
+            "attacker_ip": attacker_ip,
+            "decky": decky,
+            "service": service,
+        }
+
+    def test_non_limited_event_types_always_pass(self):
+        # login_attempt / request / etc. carry distinguishing payload — never deduped.
+        for _ in range(5):
+            assert _should_ingest(self._event(event_type="login_attempt")) is True
+            assert _should_ingest(self._event(event_type="request")) is True
+
+    def test_first_connect_passes(self):
+        assert _should_ingest(self._event()) is True
+
+    def test_duplicate_connect_within_window_is_dropped(self):
+        assert _should_ingest(self._event()) is True
+        assert _should_ingest(self._event()) is False
+        assert _should_ingest(self._event()) is False
+
+    def test_different_attackers_tracked_independently(self):
+        assert _should_ingest(self._event(attacker_ip="1.1.1.1")) is True
+        assert _should_ingest(self._event(attacker_ip="2.2.2.2")) is True
+
+    def test_different_deckies_tracked_independently(self):
+        assert _should_ingest(self._event(decky="a")) is True
+        assert _should_ingest(self._event(decky="b")) is True
+
+    def test_different_services_tracked_independently(self):
+        assert _should_ingest(self._event(service="ssh")) is True
+        assert _should_ingest(self._event(service="http")) is True
+
+    def test_disconnect_and_connect_tracked_independently(self):
+        assert _should_ingest(self._event(event_type="connect")) is True
+        assert _should_ingest(self._event(event_type="disconnect")) is True
+
+    def test_window_expiry_allows_next_event(self, monkeypatch):
+        import decnet.collector.worker as worker
+        t = [1000.0]
+        monkeypatch.setattr(worker.time, "monotonic", lambda: t[0])
+        assert _should_ingest(self._event()) is True
+        assert _should_ingest(self._event()) is False
+        # Advance past 1-second window.
+        t[0] += 1.5
+        assert _should_ingest(self._event()) is True
+
+    def test_window_zero_disables_limiter(self, monkeypatch):
+        import decnet.collector.worker as worker
+        monkeypatch.setattr(worker, "_RL_WINDOW_SEC", 0.0)
+        for _ in range(10):
+            assert _should_ingest(self._event()) is True
+
+    def test_raw_log_gets_all_lines_json_dedupes(self, tmp_path):
+        """End-to-end: duplicates hit the .log file but NOT the .json stream."""
+        log_path = tmp_path / "test.log"
+        json_path = tmp_path / "test.json"
+        line = (
+            '<134>1 2024-01-15T12:00:00+00:00 decky-01 ssh - connect '
+            '[relay@55555 src_ip="1.2.3.4"]\n'
+        )
+        payload = (line * 5).encode("utf-8")
+
+        mock_container = MagicMock()
+        mock_container.logs.return_value = [payload]
+        mock_client = MagicMock()
+        mock_client.containers.get.return_value = mock_container
+
+        with patch("docker.from_env", return_value=mock_client):
+            _stream_container("test-id", log_path, json_path)
+
+        # Raw log: all 5 lines preserved (forensic fidelity).
+        assert log_path.read_text().count("\n") == 5
+        # JSON ingest: only the first one written (4 dropped by the limiter).
+        json_lines = [l for l in json_path.read_text().splitlines() if l.strip()]
+        assert len(json_lines) == 1
+
+    def test_gc_trims_oversized_map(self, monkeypatch):
+        import decnet.collector.worker as worker
+        # Seed the map with stale entries, then push past the cap.
+        monkeypatch.setattr(worker, "_RL_MAX_ENTRIES", 10)
+        t = [1000.0]
+        monkeypatch.setattr(worker.time, "monotonic", lambda: t[0])
+        for i in range(9):
+            assert _should_ingest(self._event(attacker_ip=f"10.0.0.{i}")) is True
+        # Jump well past 60 windows to make prior entries stale.
+        t[0] += 1000.0
+        # This insertion pushes len to 10; GC triggers on >10 so stays.
+        assert _should_ingest(self._event(attacker_ip="10.0.0.99")) is True
+        assert _should_ingest(self._event(attacker_ip="10.0.0.100")) is True
+        # After the map exceeds the cap, stale entries must be purged.
+        assert len(worker._rl_last) < 10
 
 
 class TestLogCollectorWorker:

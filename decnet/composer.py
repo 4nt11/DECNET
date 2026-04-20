@@ -64,6 +64,8 @@ def generate_compose(config: DecnetConfig) -> dict:
         # --- Service containers: share base network namespace ---
         for svc_name in decky.services:
             svc = get_service(svc_name)
+            if svc.fleet_singleton:
+                continue
             svc_cfg = decky.service_config.get(svc_name, {})
             fragment = svc.compose_fragment(decky.name, service_cfg=svc_cfg)
 

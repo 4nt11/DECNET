@@ -271,7 +271,8 @@ def test_ssh_default_env():
     env = _fragment("ssh").get("environment", {})
     assert env.get("SSH_ROOT_PASSWORD") == "admin"
     assert not any(k.startswith("COWRIE_") for k in env)
-    assert "NODE_NAME" not in env
+    # SSH propagates NODE_NAME for log attribution / artifact bind-mount paths.
+    assert env.get("NODE_NAME") == "test-decky"
 
 
 def test_ssh_custom_password():

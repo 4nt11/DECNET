@@ -4,7 +4,7 @@ from decnet.services.base import BaseService
 
 # Reuses the same template as the smtp service — only difference is
 # SMTP_OPEN_RELAY=1 in the environment, which enables the open relay persona.
-_TEMPLATES_DIR = Path(__file__).parent.parent.parent / "templates" / "smtp"
+_TEMPLATES_DIR = Path(__file__).parent.parent / "templates" / "smtp"
 
 
 class SMTPRelayService(BaseService):

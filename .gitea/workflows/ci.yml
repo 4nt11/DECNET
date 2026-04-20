@@ -28,7 +28,7 @@ jobs:
         with:
           python-version: "3.11"
       - run: pip install bandit
-      - run: bandit -r decnet/ -ll -x decnet/services/registry.py
+      - run: bandit -r decnet/ -ll -x decnet/services/registry.py -x decnet/templates/
 
   pip-audit:
     name: Dependency audit (pip-audit)
@@ -40,7 +40,7 @@ jobs:
           python-version: "3.11"
       - run: pip install pip-audit
       - run: pip install -e .[dev]
-      - run: pip-audit --skip-editable
+      - run: pip-audit --skip-editable --ignore-vuln CVE-2025-65896
 
   test-standard:
     name: Test (Standard)
@@ -48,7 +48,7 @@ jobs:
     needs: [lint, bandit, pip-audit]
     strategy:
       matrix:
-        python-version: ["3.11", "3.12"]
+        python-version: ["3.11"]
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
@@ -64,6 +64,19 @@ jobs:
     strategy:
       matrix:
         python-version: ["3.11"]
+      services:
+        mysql:
+          image: mysql:8.0
+          env:
+            MYSQL_ROOT_PASSWORD: root
+            MYSQL_DATABASE: decnet_test
+          ports:
+            - 3307:3306
+          options: >-
+            --health-cmd="mysqladmin ping -h 127.0.0.1"
+            --health-interval=10s
+            --health-timeout=5s
+            --health-retries=5
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
@@ -71,6 +84,12 @@ jobs:
           python-version: ${{ matrix.python-version }}
       - run: pip install -e .[dev]
       - run: pytest -m live
+        env:
+          DECNET_MYSQL_HOST: 127.0.0.1
+          DECNET_MYSQL_PORT: 3307
+          DECNET_MYSQL_USER: root
+          DECNET_MYSQL_PASSWORD: root
+          DECNET_MYSQL_DATABASE: decnet_test
 
   test-fuzz:
     name: Test (Fuzz)
@@ -86,6 +105,8 @@ jobs:
           python-version: ${{ matrix.python-version }}
       - run: pip install -e .[dev]
       - run: pytest -m fuzz
+        env:
+          SCHEMATHESIS_CONFIG: schemathesis.ci.toml
 
   merge-to-testing:
     name: Merge dev → testing

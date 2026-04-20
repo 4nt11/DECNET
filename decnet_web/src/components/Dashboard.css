@@ -127,3 +127,96 @@
   from { transform: rotate(0deg); }
   to { transform: rotate(360deg); }
 }
+
+/* Attacker Profiles */
+.attacker-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(340px, 1fr));
+  gap: 16px;
+  padding: 16px;
+}
+
+.attacker-card {
+  background: var(--secondary-color);
+  border: 1px solid var(--border-color);
+  padding: 16px;
+  cursor: pointer;
+  transition: transform 0.15s ease, box-shadow 0.15s ease, border-color 0.15s ease;
+}
+
+.attacker-card:hover {
+  transform: translateY(-2px);
+  border-color: var(--text-color);
+  box-shadow: var(--matrix-green-glow);
+}
+
+.traversal-badge {
+  font-size: 0.65rem;
+  padding: 2px 8px;
+  border: 1px solid var(--accent-color);
+  background: rgba(238, 130, 238, 0.1);
+  color: var(--accent-color);
+  letter-spacing: 2px;
+}
+
+.service-badge {
+  font-size: 0.7rem;
+  padding: 2px 8px;
+  border: 1px solid var(--text-color);
+  background: rgba(0, 255, 65, 0.05);
+  color: var(--text-color);
+}
+
+.back-button {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 16px;
+  border: 1px solid var(--border-color);
+  background: transparent;
+  color: var(--text-color);
+  cursor: pointer;
+  font-size: 0.8rem;
+  letter-spacing: 2px;
+  transition: border-color 0.15s ease, box-shadow 0.15s ease;
+}
+
+.back-button:hover {
+  border-color: var(--text-color);
+  box-shadow: var(--matrix-green-glow);
+}
+
+/* Fingerprint cards */
+.fp-card {
+  border: 1px solid var(--border-color);
+  background: rgba(0, 0, 0, 0.2);
+  transition: border-color 0.15s ease;
+}
+
+.fp-card:hover {
+  border-color: var(--accent-color);
+}
+
+.fp-card-header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 16px;
+  border-bottom: 1px solid var(--border-color);
+}
+
+.fp-card-icon {
+  color: var(--accent-color);
+  display: flex;
+  align-items: center;
+}
+
+.fp-card-label {
+  font-size: 0.7rem;
+  letter-spacing: 2px;
+  opacity: 0.7;
+}
+
+.fp-card-body {
+  padding: 12px 16px;
+}

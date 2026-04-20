@@ -11,8 +11,32 @@ from .fleet.api_mutate_decky import router as mutate_decky_router
 from .fleet.api_mutate_interval import router as mutate_interval_router
 from .fleet.api_deploy_deckies import router as deploy_deckies_router
 from .stream.api_stream_events import router as stream_router
+from .attackers.api_get_attackers import router as attackers_router
+from .attackers.api_get_attacker_detail import router as attacker_detail_router
+from .attackers.api_get_attacker_commands import router as attacker_commands_router
+from .attackers.api_get_attacker_artifacts import router as attacker_artifacts_router
+from .config.api_get_config import router as config_get_router
+from .config.api_update_config import router as config_update_router
+from .config.api_manage_users import router as config_users_router
+from .config.api_reinit import router as config_reinit_router
+from .health.api_get_health import router as health_router
+from .artifacts.api_get_artifact import router as artifacts_router
+from .swarm_updates import swarm_updates_router
+from .swarm_mgmt import swarm_mgmt_router
+from .system import system_router
 
-api_router = APIRouter()
+api_router = APIRouter(
+    # Every route under /api/v1 is auth-guarded (either by an explicit
+    # require_* Depends or by the global auth middleware). Document 401/403
+    # here so the OpenAPI schema reflects reality for contract tests.
+    responses={
+        400: {"description": "Malformed request body"},
+        401: {"description": "Missing or invalid credentials"},
+        403: {"description": "Authenticated but not authorized"},
+        404: {"description": "Referenced resource does not exist"},
+        409: {"description": "Conflict with existing resource"},
+    },
+)
 
 # Authentication
 api_router.include_router(login_router)
@@ -31,6 +55,31 @@ api_router.include_router(mutate_decky_router)
 api_router.include_router(mutate_interval_router)
 api_router.include_router(deploy_deckies_router)
 
+# Attacker Profiles
+api_router.include_router(attackers_router)
+api_router.include_router(attacker_detail_router)
+api_router.include_router(attacker_commands_router)
+api_router.include_router(attacker_artifacts_router)
+
 # Observability
 api_router.include_router(stats_router)
 api_router.include_router(stream_router)
+api_router.include_router(health_router)
+
+# Configuration
+api_router.include_router(config_get_router)
+api_router.include_router(config_update_router)
+api_router.include_router(config_users_router)
+api_router.include_router(config_reinit_router)
+
+# Artifacts (captured attacker file drops)
+api_router.include_router(artifacts_router)
+
+# Remote Updates (dashboard → worker updater daemons)
+api_router.include_router(swarm_updates_router)
+
+# Swarm Management (dashboard: hosts, deckies, agent enrollment bundles)
+api_router.include_router(swarm_mgmt_router)
+
+# System info (deployment-mode auto-detection, etc.)
+api_router.include_router(system_router)

@@ -1,7 +1,7 @@
 from pathlib import Path
 from decnet.services.base import BaseService
 
-TEMPLATES_DIR = Path(__file__).parent.parent.parent / "templates" / "k8s"
+TEMPLATES_DIR = Path(__file__).parent.parent / "templates" / "k8s"
 
 
 class KubernetesAPIService(BaseService):

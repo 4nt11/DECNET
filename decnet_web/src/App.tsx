@@ -6,18 +6,37 @@ import Dashboard from './components/Dashboard';
 import DeckyFleet from './components/DeckyFleet';
 import LiveLogs from './components/LiveLogs';
 import Attackers from './components/Attackers';
+import AttackerDetail from './components/AttackerDetail';
 import Config from './components/Config';
 import Bounty from './components/Bounty';
+import RemoteUpdates from './components/RemoteUpdates';
+import SwarmHosts from './components/SwarmHosts';
+import AgentEnrollment from './components/AgentEnrollment';
+
+function isTokenValid(token: string): boolean {
+  try {
+    const payload = JSON.parse(atob(token.split('.')[1].replace(/-/g, '+').replace(/_/g, '/')));
+    return typeof payload.exp === 'number' && payload.exp * 1000 > Date.now();
+  } catch {
+    return false;
+  }
+}
+
+function getValidToken(): string | null {
+  const stored = localStorage.getItem('token');
+  if (stored && isTokenValid(stored)) return stored;
+  if (stored) localStorage.removeItem('token');
+  return null;
+}
 
 function App() {
-  const [token, setToken] = useState<string | null>(localStorage.getItem('token'));
+  const [token, setToken] = useState<string | null>(getValidToken);
   const [searchQuery, setSearchQuery] = useState('');
 
   useEffect(() => {
-    const savedToken = localStorage.getItem('token');
-    if (savedToken) {
-      setToken(savedToken);
-    }
+    const onAuthLogout = () => setToken(null);
+    window.addEventListener('auth:logout', onAuthLogout);
+    return () => window.removeEventListener('auth:logout', onAuthLogout);
   }, []);
 
   const handleLogin = (newToken: string) => {
@@ -46,7 +65,11 @@ function App() {
           <Route path="/live-logs" element={<LiveLogs />} />
           <Route path="/bounty" element={<Bounty />} />
           <Route path="/attackers" element={<Attackers />} />
+          <Route path="/attackers/:id" element={<AttackerDetail />} />
           <Route path="/config" element={<Config />} />
+          <Route path="/swarm-updates" element={<RemoteUpdates />} />
+          <Route path="/swarm/hosts" element={<SwarmHosts />} />
+          <Route path="/swarm/enroll" element={<AgentEnrollment />} />
           <Route path="*" element={<Navigate to="/" replace />} />
         </Routes>
       </Layout>

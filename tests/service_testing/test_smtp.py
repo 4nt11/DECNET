@@ -1,5 +1,5 @@
 """
-Tests for templates/smtp/server.py
+Tests for decnet/templates/smtp/server.py
 
 Exercises both modes:
   - credential-harvester (SMTP_OPEN_RELAY=0, default)
@@ -19,9 +19,9 @@ import pytest
 
 # ── Helpers ───────────────────────────────────────────────────────────────────
 
-def _make_fake_decnet_logging() -> ModuleType:
-    """Return a stub decnet_logging module that does nothing."""
-    mod = ModuleType("decnet_logging")
+def _make_fake_syslog_bridge() -> ModuleType:
+    """Return a stub syslog_bridge module that does nothing."""
+    mod = ModuleType("syslog_bridge")
     mod.syslog_line = MagicMock(return_value="")
     mod.write_syslog_file = MagicMock()
     mod.forward_syslog = MagicMock()
@@ -33,17 +33,17 @@ def _make_fake_decnet_logging() -> ModuleType:
 def _load_smtp(open_relay: bool):
     """Import smtp server module with desired OPEN_RELAY value.
 
-    Injects a stub decnet_logging into sys.modules so the template can import
+    Injects a stub syslog_bridge into sys.modules so the template can import
     it without needing the real file on sys.path.
     """
     env = {"SMTP_OPEN_RELAY": "1" if open_relay else "0", "NODE_NAME": "testhost"}
     for key in list(sys.modules):
-        if key in ("smtp_server", "decnet_logging"):
+        if key in ("smtp_server", "syslog_bridge"):
             del sys.modules[key]
 
-    sys.modules["decnet_logging"] = _make_fake_decnet_logging()
+    sys.modules["syslog_bridge"] = _make_fake_syslog_bridge()
 
-    spec = importlib.util.spec_from_file_location("smtp_server", "templates/smtp/server.py")
+    spec = importlib.util.spec_from_file_location("smtp_server", "decnet/templates/smtp/server.py")
     mod = importlib.util.module_from_spec(spec)
     with patch.dict("os.environ", env, clear=False):
         spec.loader.exec_module(mod)
@@ -112,6 +112,20 @@ def test_ehlo_returns_250_multiline(relay_mod):
     assert "250" in combined
     assert "AUTH" in combined
     assert "PIPELINING" in combined
+
+
+def test_ehlo_empty_domain_rejected(relay_mod):
+    proto, _, written = _make_protocol(relay_mod)
+    _send(proto, "EHLO")
+    replies = _replies(written)
+    assert any(r.startswith("501") for r in replies)
+
+
+def test_helo_empty_domain_rejected(relay_mod):
+    proto, _, written = _make_protocol(relay_mod)
+    _send(proto, "HELO")
+    replies = _replies(written)
+    assert any(r.startswith("501") for r in replies)
 
 
 # ── OPEN RELAY MODE ───────────────────────────────────────────────────────────
@@ -301,3 +315,78 @@ def test_decode_auth_plain_garbage_no_raise(relay_mod):
     user, pw = relay_mod._decode_auth_plain("!!!notbase64!!!")
     assert isinstance(user, str)
     assert isinstance(pw, str)
+
+
+# ── Bare LF line endings ────────────────────────────────────────────────────
+
+def _send_bare_lf(proto, *lines: str) -> None:
+    """Feed LF-only terminated lines to the protocol (simulates telnet/nc)."""
+    for line in lines:
+        proto.data_received((line + "\n").encode())
+
+
+def test_ehlo_works_with_bare_lf(relay_mod):
+    """Clients sending bare LF (telnet, nc) must get EHLO responses."""
+    proto, _, written = _make_protocol(relay_mod)
+    _send_bare_lf(proto, "EHLO attacker.com")
+    combined = b"".join(written).decode()
+    assert "250" in combined
+    assert "AUTH" in combined
+
+
+def test_full_session_with_bare_lf(relay_mod):
+    """A complete relay session using bare LF line endings."""
+    proto, _, written = _make_protocol(relay_mod)
+    _send_bare_lf(
+        proto,
+        "EHLO attacker.com",
+        "MAIL FROM:<hacker@evil.com>",
+        "RCPT TO:<admin@target.com>",
+        "DATA",
+        "Subject: test",
+        "",
+        "body",
+        ".",
+        "QUIT",
+    )
+    replies = _replies(written)
+    assert any("queued as" in r for r in replies)
+    assert any(r.startswith("221") for r in replies)
+
+
+def test_mixed_line_endings(relay_mod):
+    """A single data_received call containing a mix of CRLF and bare LF."""
+    proto, _, written = _make_protocol(relay_mod)
+    proto.data_received(b"EHLO test.com\r\nMAIL FROM:<a@b.com>\nRCPT TO:<c@d.com>\r\n")
+    replies = _replies(written)
+    assert any("250" in r for r in replies)
+    assert any(r.startswith("250 2.1.0") for r in replies)
+    assert any(r.startswith("250 2.1.5") for r in replies)
+
+
+# ── AUTH PLAIN continuation (no inline credentials) ──────────────────────────
+
+def test_auth_plain_continuation_relay(relay_mod):
+    """AUTH PLAIN without inline creds should prompt then accept on next line."""
+    proto, _, written = _make_protocol(relay_mod)
+    _send(proto, "AUTH PLAIN")
+    replies = _replies(written)
+    assert any(r.startswith("334") for r in replies), "Expected 334 continuation"
+    written.clear()
+    creds = base64.b64encode(b"\x00admin\x00password").decode()
+    _send(proto, creds)
+    replies = _replies(written)
+    assert any(r.startswith("235") for r in replies), "Expected 235 auth success"
+
+
+def test_auth_plain_continuation_harvester(harvester_mod):
+    """AUTH PLAIN continuation in harvester mode should reject with 535."""
+    proto, _, written = _make_protocol(harvester_mod)
+    _send(proto, "AUTH PLAIN")
+    replies = _replies(written)
+    assert any(r.startswith("334") for r in replies)
+    written.clear()
+    creds = base64.b64encode(b"\x00admin\x00password").decode()
+    _send(proto, creds)
+    replies = _replies(written)
+    assert any(r.startswith("535") for r in replies)

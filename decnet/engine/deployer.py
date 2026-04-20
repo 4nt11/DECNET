@@ -11,6 +11,8 @@ import docker
 from rich.console import Console
 from rich.table import Table
 
+from decnet.logging import get_logger
+from decnet.telemetry import traced as _traced
 from decnet.config import DecnetConfig, clear_state, load_state, save_state
 from decnet.composer import write_compose
 from decnet.network import (
@@ -26,13 +28,14 @@ from decnet.network import (
     teardown_host_macvlan,
 )
 
+log = get_logger("engine")
 console = Console()
 COMPOSE_FILE = Path("decnet-compose.yml")
-_CANONICAL_LOGGING = Path(__file__).parent.parent.parent / "templates" / "decnet_logging.py"
+_CANONICAL_LOGGING = Path(__file__).parent.parent / "templates" / "syslog_bridge.py"
 
 
 def _sync_logging_helper(config: DecnetConfig) -> None:
-    """Copy the canonical decnet_logging.py into every active template build context."""
+    """Copy the canonical syslog_bridge.py into every active template build context."""
     from decnet.services.registry import get_service
     seen: set[Path] = set()
     for decky in config.deckies:
@@ -44,16 +47,32 @@ def _sync_logging_helper(config: DecnetConfig) -> None:
             if ctx is None or ctx in seen:
                 continue
             seen.add(ctx)
-            dest = ctx / "decnet_logging.py"
+            dest = ctx / "syslog_bridge.py"
             if not dest.exists() or dest.read_bytes() != _CANONICAL_LOGGING.read_bytes():
                 shutil.copy2(_CANONICAL_LOGGING, dest)
 
 
 def _compose(*args: str, compose_file: Path = COMPOSE_FILE, env: dict | None = None) -> None:
     import os
-    cmd = ["docker", "compose", "-f", str(compose_file), *args]
+    # -p decnet pins the compose project name. Without it, docker compose
+    # derives the project from basename($PWD); when a daemon (systemd) runs
+    # with WorkingDirectory=/ that basename is empty and compose aborts with
+    # "project name must not be empty".
+    cmd = ["docker", "compose", "-p", "decnet", "-f", str(compose_file), *args]
     merged = {**os.environ, **(env or {})}
-    subprocess.run(cmd, check=True, env=merged)  # nosec B603
+    result = subprocess.run(cmd, capture_output=True, text=True, env=merged)  # nosec B603
+    if result.stdout:
+        print(result.stdout, end="")
+    if result.returncode != 0:
+        # Docker emits the useful detail ("Address already in use", which IP,
+        # which port) on stderr. Surface it to the structured log so the
+        # agent's journal carries it — without this the upstream traceback
+        # just shows the exit code.
+        if result.stderr:
+            log.error("docker compose %s failed: %s", " ".join(args), result.stderr.strip())
+        raise subprocess.CalledProcessError(
+            result.returncode, cmd, result.stdout, result.stderr
+        )
 
 
 _PERMANENT_ERRORS = (
@@ -65,6 +84,7 @@ _PERMANENT_ERRORS = (
 )
 
 
+@_traced("engine.compose_with_retry")
 def _compose_with_retry(
     *args: str,
     compose_file: Path = COMPOSE_FILE,
@@ -75,7 +95,11 @@ def _compose_with_retry(
     """Run a docker compose command, retrying on transient failures."""
     import os
     last_exc: subprocess.CalledProcessError | None = None
-    cmd = ["docker", "compose", "-f", str(compose_file), *args]
+    # -p decnet pins the compose project name. Without it, docker compose
+    # derives the project from basename($PWD); when a daemon (systemd) runs
+    # with WorkingDirectory=/ that basename is empty and compose aborts with
+    # "project name must not be empty".
+    cmd = ["docker", "compose", "-p", "decnet", "-f", str(compose_file), *args]
     merged = {**os.environ, **(env or {})}
     for attempt in range(1, retries + 1):
         result = subprocess.run(cmd, capture_output=True, text=True, env=merged)  # nosec B603
@@ -102,15 +126,21 @@ def _compose_with_retry(
         else:
             if result.stderr:
                 console.print(f"[red]{result.stderr.strip()}[/]")
+                log.error("docker compose %s failed after %d attempts: %s",
+                          " ".join(args), retries, result.stderr.strip())
     raise last_exc
 
 
+@_traced("engine.deploy")
 def deploy(config: DecnetConfig, dry_run: bool = False, no_cache: bool = False, parallel: bool = False) -> None:
+    log.info("deployment started n_deckies=%d interface=%s subnet=%s dry_run=%s", len(config.deckies), config.interface, config.subnet, dry_run)
+    log.debug("deploy: deckies=%s", [d.name for d in config.deckies])
     client = docker.from_env()
 
     ip_list = [d.ip for d in config.deckies]
     decky_range = ips_to_range(ip_list)
     host_ip = get_host_ip(config.interface)
+    log.debug("deploy: ip_range=%s host_ip=%s", decky_range, host_ip)
 
     net_driver = "IPvlan L2" if config.ipvlan else "MACVLAN"
     console.print(f"[bold cyan]Creating {net_driver} network[/] ({MACVLAN_NETWORK_NAME}) on {config.interface}")
@@ -140,10 +170,20 @@ def deploy(config: DecnetConfig, dry_run: bool = False, no_cache: bool = False, 
     console.print(f"[bold cyan]Compose file written[/] → {compose_path}")
 
     if dry_run:
+        log.info("deployment dry-run complete compose_path=%s", compose_path)
         console.print("[yellow]Dry run — no containers started.[/]")
         return
 
     save_state(config, compose_path)
+
+    # Pre-up cleanup: a prior half-failed `up` can leave containers still
+    # holding the IPs/ports this run wants, which surfaces as the recurring
+    # "Address already in use" from Docker's IPAM. Best-effort — ignore
+    # failure (e.g. nothing to tear down on a clean host).
+    try:
+        _compose("down", "--remove-orphans", compose_file=compose_path)
+    except subprocess.CalledProcessError:
+        log.debug("pre-up cleanup: compose down failed (likely nothing to remove)")
 
     build_env = {"DOCKER_BUILDKIT": "1"} if parallel else {}
 
@@ -161,12 +201,16 @@ def deploy(config: DecnetConfig, dry_run: bool = False, no_cache: bool = False, 
             _compose_with_retry("build", "--no-cache", compose_file=compose_path)
         _compose_with_retry("up", "--build", "-d", compose_file=compose_path)
 
+    log.info("deployment complete n_deckies=%d", len(config.deckies))
     _print_status(config)
 
 
+@_traced("engine.teardown")
 def teardown(decky_id: str | None = None) -> None:
+    log.info("teardown requested decky_id=%s", decky_id or "all")
     state = load_state()
     if state is None:
+        log.warning("teardown: no active deployment found")
         console.print("[red]No active deployment found (no decnet-state.json).[/]")
         return
 
@@ -174,9 +218,13 @@ def teardown(decky_id: str | None = None) -> None:
     client = docker.from_env()
 
     if decky_id:
-        svc_names = [f"{decky_id}-{svc}" for svc in [d.services for d in config.deckies if d.name == decky_id]]
-        if not svc_names:
+        decky = next((d for d in config.deckies if d.name == decky_id), None)
+        if decky is None:
             console.print(f"[red]Decky '{decky_id}' not found in current deployment.[/]")
+            return
+        svc_names = [f"{decky_id}-{svc}" for svc in decky.services]
+        if not svc_names:
+            log.warning("teardown: decky %s has no services to stop", decky_id)
             return
         _compose("stop", *svc_names, compose_file=compose_path)
         _compose("rm", "-f", *svc_names, compose_file=compose_path)
@@ -193,6 +241,7 @@ def teardown(decky_id: str | None = None) -> None:
         clear_state()
 
         net_driver = "IPvlan" if config.ipvlan else "MACVLAN"
+        log.info("teardown complete all deckies removed network_driver=%s", net_driver)
         console.print(f"[green]All deckies torn down. {net_driver} network removed.[/]")
 
 

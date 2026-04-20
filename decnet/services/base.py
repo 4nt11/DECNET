@@ -13,6 +13,7 @@ class BaseService(ABC):
     name: str           # unique slug, e.g. "ssh", "smb"
     ports: list[int]    # ports this service listens on inside the container
     default_image: str  # Docker image tag, or "build" if a Dockerfile is needed
+    fleet_singleton: bool = False  # True = runs once fleet-wide, not per-decky
 
     @abstractmethod
     def compose_fragment(

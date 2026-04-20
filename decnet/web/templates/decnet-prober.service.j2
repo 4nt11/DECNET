@@ -1,0 +1,20 @@
+[Unit]
+Description=DECNET attacker prober (JARM/HASSH/TCP fingerprint) — {{ agent_name }}
+Documentation=https://github.com/anti/DECNET
+After=network-online.target decnet-agent.service
+Wants=network-online.target
+PartOf=decnet-agent.service
+
+[Service]
+Type=simple
+WorkingDirectory=/opt/decnet
+Environment=DECNET_MODE=agent
+Environment=DECNET_SYSTEM_LOGS=/var/log/decnet/decnet.prober.log
+ExecStart=/usr/local/bin/decnet probe --log-file /var/log/decnet/decnet.log --interval 300
+Restart=on-failure
+RestartSec=5
+StandardOutput=append:/var/log/decnet/decnet.prober.log
+StandardError=append:/var/log/decnet/decnet.prober.log
+
+[Install]
+WantedBy=multi-user.target

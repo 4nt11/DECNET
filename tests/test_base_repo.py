@@ -21,6 +21,23 @@ class DummyRepo(BaseRepository):
     async def get_total_bounties(self, **kw): await super().get_total_bounties(**kw)
     async def get_state(self, k): await super().get_state(k)
     async def set_state(self, k, v): await super().set_state(k, v)
+    async def get_max_log_id(self): await super().get_max_log_id()
+    async def get_logs_after_id(self, last_id, limit=500): await super().get_logs_after_id(last_id, limit)
+    async def get_all_bounties_by_ip(self): await super().get_all_bounties_by_ip()
+    async def get_bounties_for_ips(self, ips): await super().get_bounties_for_ips(ips)
+    async def upsert_attacker(self, d): await super().upsert_attacker(d); return ""
+    async def upsert_attacker_behavior(self, u, d): await super().upsert_attacker_behavior(u, d)
+    async def get_attacker_behavior(self, u): await super().get_attacker_behavior(u)
+    async def get_behaviors_for_ips(self, ips): await super().get_behaviors_for_ips(ips)
+    async def get_attacker_by_uuid(self, u): await super().get_attacker_by_uuid(u)
+    async def get_attackers(self, **kw): await super().get_attackers(**kw)
+    async def get_total_attackers(self, **kw): await super().get_total_attackers(**kw)
+    async def get_attacker_commands(self, **kw): await super().get_attacker_commands(**kw)
+    async def list_users(self): await super().list_users()
+    async def delete_user(self, u): await super().delete_user(u)
+    async def update_user_role(self, u, r): await super().update_user_role(u, r)
+    async def purge_logs_and_bounties(self): await super().purge_logs_and_bounties()
+    async def get_attacker_artifacts(self, uuid): await super().get_attacker_artifacts(uuid)
 
 @pytest.mark.asyncio
 async def test_base_repo_coverage():
@@ -41,3 +58,36 @@ async def test_base_repo_coverage():
     await dr.get_total_bounties()
     await dr.get_state("k")
     await dr.set_state("k", "v")
+    await dr.get_max_log_id()
+    await dr.get_logs_after_id(0)
+    await dr.get_all_bounties_by_ip()
+    await dr.get_bounties_for_ips({"1.1.1.1"})
+    await dr.upsert_attacker({})
+    await dr.upsert_attacker_behavior("a", {})
+    await dr.get_attacker_behavior("a")
+    await dr.get_behaviors_for_ips({"1.1.1.1"})
+    await dr.get_attacker_by_uuid("a")
+    await dr.get_attackers()
+    await dr.get_total_attackers()
+    await dr.get_attacker_commands(uuid="a")
+    await dr.list_users()
+    await dr.delete_user("a")
+    await dr.update_user_role("a", "admin")
+    await dr.purge_logs_and_bounties()
+    await dr.get_attacker_artifacts("a")
+
+    # Swarm methods: default NotImplementedError on BaseRepository.  Covering
+    # them here keeps the coverage contract honest for the swarm CRUD surface.
+    for coro, args in [
+        (dr.add_swarm_host, ({},)),
+        (dr.get_swarm_host_by_name, ("w",)),
+        (dr.get_swarm_host_by_uuid, ("u",)),
+        (dr.list_swarm_hosts, ()),
+        (dr.update_swarm_host, ("u", {})),
+        (dr.delete_swarm_host, ("u",)),
+        (dr.upsert_decky_shard, ({},)),
+        (dr.list_decky_shards, ()),
+        (dr.delete_decky_shards_for_host, ("u",)),
+    ]:
+        with pytest.raises(NotImplementedError):
+            await coro(*args)
