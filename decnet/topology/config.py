@@ -1,0 +1,94 @@
+"""MazeNET topology config + in-memory generation output."""
+from __future__ import annotations
+
+from dataclasses import dataclass, field
+from typing import Optional
+
+from pydantic import BaseModel, Field, model_validator
+
+
+class TopologyConfig(BaseModel):
+    """Parameters driving :func:`decnet.topology.generator.generate`."""
+
+    name: str = Field(..., min_length=1, max_length=64)
+    mode: str = Field(default="unihost", pattern=r"^(unihost|agent)$")
+
+    # Topology shape
+    depth: int = Field(..., ge=1, le=16, description="Max depth from DMZ")
+    branching_factor: int = Field(..., ge=1, le=8, description="Max child LANs per LAN")
+    deckies_per_lan_min: int = Field(default=1, ge=0, le=32)
+    deckies_per_lan_max: int = Field(default=3, ge=1, le=32)
+
+    # Probability a given non-DMZ LAN's connection to its parent uses a
+    # bridge decky that forwards L3 (enables attacker pivot).  Bridge
+    # existence between parent/child is implicit — every non-DMZ LAN
+    # has exactly one parent bridge.  This controls *forwarding*, not
+    # the existence of the bridge.
+    bridge_forward_probability: float = Field(default=1.0, ge=0.0, le=1.0)
+
+    # Probability of injecting a DAG cross-edge: a decky also bridged
+    # from its LAN to a non-parent, non-child LAN.  0.0 yields a tree.
+    cross_edge_probability: float = Field(default=0.0, ge=0.0, le=1.0)
+
+    # IP allocation base.  LANs get sequential /24s starting here.
+    subnet_base_prefix: str = Field(default="172.20", pattern=r"^\d{1,3}\.\d{1,3}$")
+
+    # Service selection — reuses decnet.fleet.build_deckies' randomizer.
+    randomize_services: bool = Field(default=True)
+    services_explicit: Optional[list[str]] = None
+
+    seed: Optional[int] = Field(default=None, ge=0)
+
+    @model_validator(mode="after")
+    def _check_min_max(self) -> "TopologyConfig":
+        if self.deckies_per_lan_min > self.deckies_per_lan_max:
+            raise ValueError(
+                "deckies_per_lan_min must be <= deckies_per_lan_max"
+            )
+        if not self.randomize_services and not self.services_explicit:
+            raise ValueError(
+                "either randomize_services=True or services_explicit must be set"
+            )
+        return self
+
+
+@dataclass
+class _PlannedLAN:
+    """In-memory LAN record emitted by the generator."""
+    name: str
+    subnet: str
+    is_dmz: bool
+    parent: Optional[str]  # name of parent LAN, None for DMZ
+
+
+@dataclass
+class _PlannedDecky:
+    """In-memory decky record emitted by the generator."""
+    name: str
+    services: list[str]
+    # Mapping LAN-name → assigned IP within that LAN's subnet.
+    ips_by_lan: dict[str, str] = field(default_factory=dict)
+    forwards_l3: bool = False  # only meaningful when present on ≥2 LANs
+
+
+@dataclass
+class _PlannedEdge:
+    """In-memory (decky, LAN) membership edge."""
+    decky_name: str
+    lan_name: str
+    is_bridge: bool
+    forwards_l3: bool
+
+
+@dataclass
+class GeneratedTopology:
+    """Full in-memory output of :func:`decnet.topology.generator.generate`.
+
+    Names are unique within the topology.  No UUIDs are assigned here —
+    those are minted by :mod:`decnet.topology.persistence` when the
+    topology is written to the repo.
+    """
+    config: TopologyConfig
+    lans: list[_PlannedLAN]
+    deckies: list[_PlannedDecky]
+    edges: list[_PlannedEdge]
