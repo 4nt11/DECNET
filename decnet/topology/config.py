@@ -69,6 +69,10 @@ class _PlannedDecky:
     # Mapping LAN-name → assigned IP within that LAN's subnet.
     ips_by_lan: dict[str, str] = field(default_factory=dict)
     forwards_l3: bool = False  # only meaningful when present on ≥2 LANs
+    # Per-service config overrides: {service_name: {field: value}}.
+    # Mirrors ``DeckyConfig.service_config`` from the flat-fleet path;
+    # services read these via ``compose_fragment(service_cfg=...)``.
+    service_config: dict[str, dict] = field(default_factory=dict)
 
 
 @dataclass

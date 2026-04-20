@@ -52,6 +52,7 @@ async def persist(repo: Any, plan: GeneratedTopology) -> str:
                     "services": decky.services,
                     "ips_by_lan": decky.ips_by_lan,
                     "forwards_l3": decky.forwards_l3,
+                    "service_config": decky.service_config,
                 },
                 "ip": primary_ip,
             }

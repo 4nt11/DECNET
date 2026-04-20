@@ -62,6 +62,7 @@ def generate_topology_compose(hydrated: dict[str, Any]) -> dict:
         name = cfg["name"]
         ips_by_lan: dict[str, str] = cfg["ips_by_lan"]
         forwards_l3: bool = cfg.get("forwards_l3", False)
+        service_config: dict[str, dict] = cfg.get("service_config", {}) or {}
         svc_names: list[str] = decky["services"]
 
         base_key = name
@@ -92,7 +93,9 @@ def generate_topology_compose(hydrated: dict[str, Any]) -> dict:
             svc = get_service(svc_name)
             if svc is None or svc.fleet_singleton:
                 continue
-            fragment = svc.compose_fragment(name, service_cfg={})
+            fragment = svc.compose_fragment(
+                name, service_cfg=service_config.get(svc_name, {})
+            )
             if "build" in fragment:
                 fragment["build"].setdefault("args", {}).setdefault(
                     "BASE_IMAGE", _DEFAULT_BASE_IMAGE
