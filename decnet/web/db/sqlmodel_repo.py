@@ -949,11 +949,18 @@ class SQLModelRepository(BaseRepository):
             return self._deserialize_json_fields(d, ("config_snapshot",))
 
     async def list_topologies(
-        self, status: Optional[str] = None
+        self,
+        status: Optional[str] = None,
+        limit: Optional[int] = None,
+        offset: Optional[int] = None,
     ) -> list[dict[str, Any]]:
         statement = select(Topology).order_by(desc(Topology.created_at))
         if status:
             statement = statement.where(Topology.status == status)
+        if offset is not None:
+            statement = statement.offset(offset)
+        if limit is not None:
+            statement = statement.limit(limit)
         async with self._session() as session:
             result = await session.execute(statement)
             return [
@@ -962,6 +969,15 @@ class SQLModelRepository(BaseRepository):
                 )
                 for r in result.scalars().all()
             ]
+
+    async def count_topologies(self, status: Optional[str] = None) -> int:
+        from sqlalchemy import func
+        statement = select(func.count(Topology.id))
+        if status:
+            statement = statement.where(Topology.status == status)
+        async with self._session() as session:
+            result = await session.execute(statement)
+            return int(result.scalar_one() or 0)
 
     async def update_topology_status(
         self,

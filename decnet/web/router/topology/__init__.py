@@ -9,10 +9,20 @@ live one-per-file and are aggregated here.
 """
 from fastapi import APIRouter
 
+from .api_catalog import router as _catalog_router
+from .api_get_topology import router as _get_router
+from .api_list_topologies import router as _list_router
+
 topology_router = APIRouter(prefix="/topologies", tags=["topologies"])
 
-# Sub-routers land in later steps; this skeleton keeps the package
-# import-safe so the main api router can mount it immediately.
+# Order matters: catalog routes use literal path segments (e.g.
+# /services, /next-subnet) that would otherwise be shadowed by the
+# `/{topology_id}` path in api_get_topology.  Keep the catalog router
+# included first so FastAPI's trie resolves literals before the
+# parameterized fallback.
+topology_router.include_router(_catalog_router)
+topology_router.include_router(_list_router)
+topology_router.include_router(_get_router)
 
 
 __all__ = ["topology_router"]

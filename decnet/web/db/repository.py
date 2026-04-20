@@ -247,8 +247,14 @@ class BaseRepository(ABC):
         raise NotImplementedError
 
     async def list_topologies(
-        self, status: Optional[str] = None
+        self,
+        status: Optional[str] = None,
+        limit: Optional[int] = None,
+        offset: Optional[int] = None,
     ) -> list[dict[str, Any]]:
+        raise NotImplementedError
+
+    async def count_topologies(self, status: Optional[str] = None) -> int:
         raise NotImplementedError
 
     async def update_topology_status(
