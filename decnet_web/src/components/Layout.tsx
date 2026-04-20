@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { NavLink } from 'react-router-dom';
-import { Menu, X, Search, Activity, LayoutDashboard, Terminal, Settings, LogOut, Server, Archive, Package, Network, ChevronDown, ChevronRight, HardDrive, Boxes, UserPlus } from 'lucide-react';
+import { Menu, X, Search, Activity, LayoutDashboard, Terminal, Settings, LogOut, Server, Archive, Package, Network, ChevronDown, ChevronRight, HardDrive, UserPlus } from 'lucide-react';
 import './Layout.css';
 
 interface LayoutProps {
@@ -48,7 +48,6 @@ const Layout: React.FC<LayoutProps> = ({ children, onLogout, onSearch }) => {
           <NavItem to="/attackers" icon={<Activity size={20} />} label="Attackers" open={sidebarOpen} />
           <NavGroup label="SWARM" icon={<Network size={20} />} open={sidebarOpen}>
             <NavItem to="/swarm/hosts" icon={<HardDrive size={18} />} label="SWARM Hosts" open={sidebarOpen} indent />
-            <NavItem to="/swarm/deckies" icon={<Boxes size={18} />} label="SWARM Deckies" open={sidebarOpen} indent />
             <NavItem to="/swarm-updates" icon={<Package size={18} />} label="Remote Updates" open={sidebarOpen} indent />
             <NavItem to="/swarm/enroll" icon={<UserPlus size={18} />} label="Agent Enrollment" open={sidebarOpen} indent />
           </NavGroup>
