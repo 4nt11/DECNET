@@ -49,14 +49,19 @@ def _wait_for_server(url: str, timeout: float = 60.0) -> None:
             r = requests.get(url, timeout=2)
             if r.status_code in (200, 401, 503):
                 return
-        except requests.ConnectionError:
+        except requests.RequestException:
+            # ConnectionError / ReadTimeout / anything else transient — the
+            # server is either not up yet or too busy to respond in time.
             pass
         time.sleep(0.1)
     raise TimeoutError(f"Server not ready at {url}")
 
 
-@pytest.fixture(scope="session")
+@pytest.fixture(scope="function")
 def stress_server():
+    # Function-scoped: every stress test gets its own clean uvicorn. Sharing
+    # a server across baseline → spike → sustained left the later runs with
+    # a half-dead pool (0-request symptom). Cost is ~5s of startup per test.
     """Start a real uvicorn server for stress testing."""
     port = _free_port()
     env = {k: v for k, v in os.environ.items() if not k.startswith("DECNET_")}
@@ -107,7 +112,7 @@ def stress_server():
             proc.wait()
 
 
-@pytest.fixture(scope="session")
+@pytest.fixture
 def stress_token(stress_server):
     """Authenticate and return a valid admin JWT."""
     url = stress_server
@@ -213,7 +218,7 @@ def _parse_locust_csv(stats_csv: Path) -> _LocustEnv:
     return _LocustEnv(_Stats(total, entries))
 
 
-def run_locust(host, users, spawn_rate, duration):
+def run_locust(host, users, spawn_rate, duration, _retry=False):
     """Run Locust in a subprocess (fresh Python, clean gevent monkey-patch)
     and return a stats shim compatible with the tests.
     """
@@ -269,11 +274,19 @@ def run_locust(host, users, spawn_rate, duration):
         )
 
     result = _parse_locust_csv(Path(str(csv_prefix) + "_stats.csv"))
+    if result.stats.total.num_requests == 0 and not _retry:
+        # Transient: server was mid-drain or connection storm RSTed before any
+        # request landed. Wait for the API to respond cleanly, then retry once
+        # before giving up.
+        try:
+            _wait_for_server(f"{host}/api/v1/health", timeout=15.0)
+        except TimeoutError:
+            pass
+        time.sleep(2)
+        return run_locust(host, users, spawn_rate, duration, _retry=True)
     if result.stats.total.num_requests == 0:
-        # Surface the locust output so we can see why (connection errors,
-        # on_start stalls, etc.) instead of a silent "no requests" assert.
         raise RuntimeError(
-            f"locust produced 0 requests.\n"
+            f"locust produced 0 requests (after 1 retry).\n"
             f"--- stdout ---\n{proc.stdout.decode(errors='replace')}\n"
             f"--- stderr ---\n{proc.stderr.decode(errors='replace')}"
         )

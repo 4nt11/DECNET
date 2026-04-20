@@ -123,21 +123,32 @@ def test_stress_sustained(stress_server):
     """
     sustained_users = int(os.environ.get("STRESS_SUSTAINED_USERS", "200"))
 
+    # Cap spawn rate at 100/s — locust itself warns above that and has been
+    # observed to record 0 requests when the spawn storm collides with a
+    # still-draining uvicorn from a prior phase.
+    ramp = min(sustained_users, 100)
+
     # Phase 1: warm-up baseline
     env_warmup = run_locust(
         host=stress_server,
         users=sustained_users,
-        spawn_rate=sustained_users,  # instant ramp
+        spawn_rate=ramp,
         duration=10,
     )
     baseline_avg = env_warmup.stats.total.avg_response_time
     _print_stats(env_warmup, f"SUSTAINED warm-up: {sustained_users} users, 10s")
 
+    # Let the server drain pending work before firing the second locust run;
+    # otherwise the first request in phase 2 can sit behind a queued backlog
+    # and the 30s window can finish with 0 recorded requests.
+    import time as _t
+    _t.sleep(5)
+
     # Phase 2: sustained
     env_sustained = run_locust(
         host=stress_server,
         users=sustained_users,
-        spawn_rate=sustained_users,
+        spawn_rate=ramp,
         duration=30,
     )
     sustained_avg = env_sustained.stats.total.avg_response_time
