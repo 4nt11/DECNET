@@ -23,6 +23,13 @@ const SwarmDeckies: React.FC = () => {
   const [loading, setLoading] = useState(true);
   const [tearingDown, setTearingDown] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+  // Two-click arm/commit replaces window.confirm() — browsers silently
+  // suppress confirm() after the "prevent additional dialogs" opt-out.
+  const [armed, setArmed] = useState<string | null>(null);
+  const arm = (key: string) => {
+    setArmed(key);
+    setTimeout(() => setArmed((prev) => (prev === key ? null : prev)), 4000);
+  };
 
   const fetch = async () => {
     try {
@@ -43,7 +50,9 @@ const SwarmDeckies: React.FC = () => {
   }, []);
 
   const handleTeardown = async (s: DeckyShard) => {
-    if (!window.confirm(`Tear down decky ${s.decky_name} on ${s.host_name}?`)) return;
+    const key = `td:${s.host_uuid}:${s.decky_name}`;
+    if (armed !== key) { arm(key); return; }
+    setArmed(null);
     setTearingDown(s.decky_name);
     try {
       await api.post(`/swarm/hosts/${s.host_uuid}/teardown`, { decky_id: s.decky_name });
@@ -110,7 +119,12 @@ const SwarmDeckies: React.FC = () => {
                         onClick={() => handleTeardown(s)}
                         title="Stop this decky on its host"
                       >
-                        <PowerOff size={14} /> {tearingDown === s.decky_name ? 'Tearing down…' : 'Teardown'}
+                        <PowerOff size={14} />{' '}
+                        {tearingDown === s.decky_name
+                          ? 'Tearing down…'
+                          : armed === `td:${s.host_uuid}:${s.decky_name}`
+                            ? 'Click again to confirm'
+                            : 'Teardown'}
                       </button>
                     </td>
                   </tr>

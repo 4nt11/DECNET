@@ -25,6 +25,15 @@ const SwarmHosts: React.FC = () => {
   const [decommissioning, setDecommissioning] = useState<string | null>(null);
   const [tearingDown, setTearingDown] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+  // Two-click arm/commit replaces window.confirm(). Browsers silently
+  // suppress confirm() after the "prevent additional dialogs" opt-out,
+  // which manifests as a dead button — no network request, no console
+  // error. Key format: "<action>:<uuid>".
+  const [armed, setArmed] = useState<string | null>(null);
+  const arm = (key: string) => {
+    setArmed(key);
+    setTimeout(() => setArmed((prev) => (prev === key ? null : prev)), 4000);
+  };
 
   const fetchHosts = async () => {
     try {
@@ -45,7 +54,9 @@ const SwarmHosts: React.FC = () => {
   }, []);
 
   const handleTeardownAll = async (host: SwarmHost) => {
-    if (!window.confirm(`Tear down ALL deckies on ${host.name}? The host stays enrolled.`)) return;
+    const key = `teardown:${host.uuid}`;
+    if (armed !== key) { arm(key); return; }
+    setArmed(null);
     setTearingDown(host.uuid);
     try {
       await api.post(`/swarm/hosts/${host.uuid}/teardown`, {});
@@ -58,7 +69,9 @@ const SwarmHosts: React.FC = () => {
   };
 
   const handleDecommission = async (host: SwarmHost) => {
-    if (!window.confirm(`Decommission ${host.name} (${host.address})? This removes certs and decky mappings.`)) return;
+    const key = `decom:${host.uuid}`;
+    if (armed !== key) { arm(key); return; }
+    setArmed(null);
     setDecommissioning(host.uuid);
     try {
       await api.delete(`/swarm/hosts/${host.uuid}`);
@@ -112,19 +125,29 @@ const SwarmHosts: React.FC = () => {
                   <td>{new Date(h.enrolled_at).toLocaleString()}</td>
                   <td>
                     <button
-                      className="control-btn"
+                      className={`control-btn${armed === `teardown:${h.uuid}` ? ' danger' : ''}`}
                       disabled={tearingDown === h.uuid || h.status !== 'active'}
                       onClick={() => handleTeardownAll(h)}
                       title="Stop all deckies on this host (keeps it enrolled)"
                     >
-                      <PowerOff size={14} /> {tearingDown === h.uuid ? 'Tearing down…' : 'Teardown all'}
+                      <PowerOff size={14} />{' '}
+                      {tearingDown === h.uuid
+                        ? 'Tearing down…'
+                        : armed === `teardown:${h.uuid}`
+                          ? 'Click again to confirm'
+                          : 'Teardown all'}
                     </button>
                     <button
                       className="control-btn danger"
                       disabled={decommissioning === h.uuid}
                       onClick={() => handleDecommission(h)}
                     >
-                      <Trash2 size={14} /> {decommissioning === h.uuid ? 'Decommissioning…' : 'Decommission'}
+                      <Trash2 size={14} />{' '}
+                      {decommissioning === h.uuid
+                        ? 'Decommissioning…'
+                        : armed === `decom:${h.uuid}`
+                          ? 'Click again to confirm'
+                          : 'Decommission'}
                     </button>
                   </td>
                 </tr>
