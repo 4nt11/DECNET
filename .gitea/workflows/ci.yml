@@ -64,6 +64,19 @@ jobs:
     strategy:
       matrix:
         python-version: ["3.11"]
+      services:
+        mysql:
+          image: mysql:8.0
+          env:
+            MYSQL_ROOT_PASSWORD: root
+            MYSQL_DATABASE: decnet_test
+          ports:
+            - 3307:3306
+          options: >-
+            --health-cmd="mysqladmin ping -h 127.0.0.1"
+            --health-interval=10s
+            --health-timeout=5s
+            --health-retries=5
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
@@ -71,6 +84,12 @@ jobs:
           python-version: ${{ matrix.python-version }}
       - run: pip install -e .[dev]
       - run: pytest -m live
+        env:
+          DECNET_MYSQL_HOST: 127.0.0.1
+          DECNET_MYSQL_PORT: 3307
+          DECNET_MYSQL_USER: root
+          DECNET_MYSQL_PASSWORD: root
+          DECNET_MYSQL_DATABASE: decnet_test
 
   test-fuzz:
     name: Test (Fuzz)
