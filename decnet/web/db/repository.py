@@ -211,6 +211,9 @@ class BaseRepository(ABC):
     async def get_swarm_host_by_uuid(self, uuid: str) -> Optional[dict[str, Any]]:
         raise NotImplementedError
 
+    async def get_swarm_host_by_fingerprint(self, fingerprint: str) -> Optional[dict[str, Any]]:
+        raise NotImplementedError
+
     async def list_swarm_hosts(self, status: Optional[str] = None) -> list[dict[str, Any]]:
         raise NotImplementedError
 

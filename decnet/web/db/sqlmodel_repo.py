@@ -782,6 +782,14 @@ class SQLModelRepository(BaseRepository):
             row = result.scalar_one_or_none()
             return row.model_dump(mode="json") if row else None
 
+    async def get_swarm_host_by_fingerprint(self, fingerprint: str) -> Optional[dict[str, Any]]:
+        async with self._session() as session:
+            result = await session.execute(
+                select(SwarmHost).where(SwarmHost.client_cert_fingerprint == fingerprint)
+            )
+            row = result.scalar_one_or_none()
+            return row.model_dump(mode="json") if row else None
+
     async def list_swarm_hosts(self, status: Optional[str] = None) -> list[dict[str, Any]]:
         statement = select(SwarmHost).order_by(asc(SwarmHost.name))
         if status:
