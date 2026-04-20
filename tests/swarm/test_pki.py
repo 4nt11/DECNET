@@ -52,6 +52,38 @@ def test_load_worker_bundle_returns_none_if_missing(tmp_path: pathlib.Path) -> N
     assert pki.load_worker_bundle(tmp_path / "empty") is None
 
 
+def test_ensure_swarmctl_cert_issues_from_same_ca(tmp_path: pathlib.Path) -> None:
+    ca_dir = tmp_path / "ca"
+    swarmctl_dir = tmp_path / "swarmctl"
+    cert_path, key_path, ca_path = pki.ensure_swarmctl_cert(
+        "0.0.0.0", ca_dir=ca_dir, swarmctl_dir=swarmctl_dir
+    )
+    assert cert_path.exists() and key_path.exists() and ca_path.exists()
+    # Server cert is signed by the same CA that workers will ship — that's
+    # the whole point of the auto-issue path.
+    cert = x509.load_pem_x509_certificate(cert_path.read_bytes())
+    ca_cert = x509.load_pem_x509_certificate(ca_path.read_bytes())
+    assert cert.issuer == ca_cert.subject
+    san = cert.extensions.get_extension_for_class(x509.SubjectAlternativeName).value
+    ips = {str(v) for v in san.get_values_for_type(x509.IPAddress)}
+    dns = set(san.get_values_for_type(x509.DNSName))
+    assert "0.0.0.0" in ips
+    assert "localhost" in dns
+    # Key perm is the same 0600 we enforce on worker.key.
+    assert (key_path.stat().st_mode & 0o777) == 0o600
+
+
+def test_ensure_swarmctl_cert_is_idempotent(tmp_path: pathlib.Path) -> None:
+    # Second call must NOT re-issue — otherwise a restart of swarmctl
+    # would rotate the server cert and break any worker mid-TLS-session.
+    ca_dir = tmp_path / "ca"
+    swarmctl_dir = tmp_path / "swarmctl"
+    first = pki.ensure_swarmctl_cert("0.0.0.0", ca_dir=ca_dir, swarmctl_dir=swarmctl_dir)
+    first_pem = first[0].read_bytes()
+    second = pki.ensure_swarmctl_cert("0.0.0.0", ca_dir=ca_dir, swarmctl_dir=swarmctl_dir)
+    assert second[0].read_bytes() == first_pem
+
+
 def test_fingerprint_stable_across_calls(tmp_path: pathlib.Path) -> None:
     ca = pki.ensure_ca(tmp_path / "ca")
     issued = pki.issue_worker_cert(ca, "worker-03", ["127.0.0.1"])

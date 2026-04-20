@@ -43,6 +43,7 @@ from cryptography.x509.oid import NameOID
 
 DEFAULT_CA_DIR = pathlib.Path(os.path.expanduser("~/.decnet/ca"))
 DEFAULT_AGENT_DIR = pathlib.Path(os.path.expanduser("~/.decnet/agent"))
+DEFAULT_SWARMCTL_DIR = pathlib.Path(os.path.expanduser("~/.decnet/swarmctl"))
 
 CA_KEY_BITS = 4096
 WORKER_KEY_BITS = 2048
@@ -275,6 +276,45 @@ def load_worker_bundle(
         ca_cert_pem=ca.read_bytes(),
         fingerprint_sha256=fp,
     )
+
+
+def ensure_swarmctl_cert(
+    bind_host: str,
+    ca_dir: pathlib.Path = DEFAULT_CA_DIR,
+    swarmctl_dir: pathlib.Path = DEFAULT_SWARMCTL_DIR,
+    extra_sans: Optional[list[str]] = None,
+) -> tuple[pathlib.Path, pathlib.Path, pathlib.Path]:
+    """Return (cert_path, key_path, ca_path), auto-issuing if missing.
+
+    Uses the existing DECNET CA (ensuring it exists first) so workers
+    whose bundle already includes ``ca.crt`` can verify the swarmctl
+    endpoint without additional trust configuration. Self-signed is
+    intentionally not the default — a cert signed by the same CA the
+    workers already trust is the friction-free path.
+
+    Callers that want BYOC should skip this and pass their own
+    cert/key paths directly to uvicorn.
+    """
+    swarmctl_dir.mkdir(parents=True, exist_ok=True)
+    os.chmod(swarmctl_dir, 0o700)
+    cert_path = swarmctl_dir / "server.crt"
+    key_path = swarmctl_dir / "server.key"
+    ca_cert_path = ca_dir / "ca.crt"
+
+    if cert_path.exists() and key_path.exists() and ca_cert_path.exists():
+        return cert_path, key_path, ca_cert_path
+
+    ca = ensure_ca(ca_dir)
+    sans = list({bind_host, "127.0.0.1", "localhost", *(extra_sans or [])})
+    issued = issue_worker_cert(ca, "swarmctl", sans)
+    cert_path.write_bytes(issued.cert_pem)
+    key_path.write_bytes(issued.key_pem)
+    os.chmod(key_path, 0o600)
+    # ensure_ca already wrote ca.crt under ca_dir, but save_ca is only
+    # called on generate — re-mirror it here to guarantee the path exists.
+    if not ca_cert_path.exists():
+        ca_cert_path.write_bytes(ca.cert_pem)
+    return cert_path, key_path, ca_cert_path
 
 
 def fingerprint(cert_pem: bytes) -> str:

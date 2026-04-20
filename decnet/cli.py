@@ -188,6 +188,10 @@ def swarmctl(
     host: str = typer.Option("127.0.0.1", "--host", help="Bind address for the swarm controller"),
     daemon: bool = typer.Option(False, "--daemon", "-d", help="Detach to background as a daemon process"),
     no_listener: bool = typer.Option(False, "--no-listener", help="Do not auto-spawn the syslog-TLS listener alongside swarmctl"),
+    tls: bool = typer.Option(False, "--tls", help="Serve over HTTPS with mTLS (required for cross-host worker heartbeats)"),
+    cert: Optional[str] = typer.Option(None, "--cert", help="BYOC: path to TLS server cert (PEM). Auto-issues from the DECNET CA if omitted."),
+    key: Optional[str] = typer.Option(None, "--key", help="BYOC: path to TLS server private key (PEM)."),
+    client_ca: Optional[str] = typer.Option(None, "--client-ca", help="CA bundle used to verify worker client certs. Defaults to the DECNET CA."),
 ) -> None:
     """Run the DECNET SWARM controller (master-side, separate process from `decnet api`).
 
@@ -197,6 +201,12 @@ def swarmctl(
     survives swarmctl restarts and crashes — if it dies on its own,
     restart it manually with `decnet listener --daemon …`. Pass
     --no-listener to skip.
+
+    Pass ``--tls`` to serve over HTTPS with mutual-TLS enforcement. By
+    default the server cert is auto-issued from the DECNET CA under
+    ``~/.decnet/swarmctl/`` so enrolled workers (which already ship that
+    CA's ``ca.crt``) trust it out of the box. BYOC via ``--cert``/``--key``
+    if you need a publicly-trusted or externally-managed cert.
     """
     import subprocess  # nosec B404
     import sys
@@ -226,10 +236,35 @@ def swarmctl(
             log.warning("swarmctl could not auto-spawn listener: %s", e)
             console.print(f"[yellow]listener auto-spawn skipped: {e}[/]")
 
-    log.info("swarmctl command invoked host=%s port=%d", host, port)
-    console.print(f"[green]Starting DECNET SWARM controller on {host}:{port}...[/]")
+    log.info("swarmctl command invoked host=%s port=%d tls=%s", host, port, tls)
+    scheme = "https" if tls else "http"
+    console.print(f"[green]Starting DECNET SWARM controller on {scheme}://{host}:{port}...[/]")
     _cmd = [sys.executable, "-m", "uvicorn", "decnet.web.swarm_api:app",
             "--host", host, "--port", str(port)]
+    if tls:
+        from decnet.swarm import pki as _pki
+        # BYOC path: operator supplied cert+key explicitly. Else auto-issue
+        # from the existing DECNET CA so workers' already-deployed ca.crt
+        # verifies the endpoint with no extra steps.
+        if cert and key:
+            cert_path, key_path = cert, key
+        elif cert or key:
+            console.print("[red]--cert and --key must be provided together.[/]")
+            raise typer.Exit(code=2)
+        else:
+            auto_cert, auto_key, _auto_ca = _pki.ensure_swarmctl_cert(host)
+            cert_path, key_path = str(auto_cert), str(auto_key)
+            console.print(f"[dim]Auto-issued swarmctl server cert → {cert_path}[/]")
+        ca_path = client_ca or str(_pki.DEFAULT_CA_DIR / "ca.crt")
+        _cmd += [
+            "--ssl-keyfile", key_path,
+            "--ssl-certfile", cert_path,
+            "--ssl-ca-certs", ca_path,
+            # CERT_REQUIRED — a worker must present a CA-signed client cert
+            # before FastAPI sees the request. The heartbeat endpoint then
+            # pins the cert fingerprint per-host on top of this.
+            "--ssl-cert-reqs", "2",
+        ]
     try:
         proc = subprocess.Popen(_cmd, start_new_session=True)  # nosec B603 B404
         try:
