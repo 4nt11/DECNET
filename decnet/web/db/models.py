@@ -644,3 +644,228 @@ class RollbackResponse(BaseModel):
     status: Literal["rolled-back", "failed"]
     http_status: Optional[int] = None
     detail: Optional[str] = None
+
+
+# --- MazeNET Topology REST DTOs (phase 3) ---
+# Request/response shapes for /api/v1/topologies. All write paths are
+# admin-only; reads accept admin or viewer. Child CRUD is pending-only;
+# mutations of active|degraded topologies go through the queue.
+
+
+class TopologyGenerateRequest(BaseModel):
+    """Body for POST /topologies — mirrors the `topology generate` CLI."""
+    name: str = PydanticField(..., min_length=1, max_length=64)
+    depth: int = PydanticField(..., ge=1, le=16)
+    branching_factor: int = PydanticField(..., ge=1, le=8)
+    deckies_per_lan_min: int = PydanticField(default=1, ge=0, le=32)
+    deckies_per_lan_max: int = PydanticField(default=3, ge=1, le=32)
+    bridge_forward_probability: float = PydanticField(default=1.0, ge=0.0, le=1.0)
+    cross_edge_probability: float = PydanticField(default=0.0, ge=0.0, le=1.0)
+    services_explicit: Optional[list[str]] = None
+    randomize_services: bool = True
+    seed: Optional[int] = PydanticField(default=None, ge=0)
+
+
+class TopologySummary(BaseModel):
+    """List-row shape for GET /topologies."""
+    model_config = ConfigDict(extra="ignore")
+    id: str
+    name: str
+    mode: str
+    status: str
+    version: int
+    created_at: datetime
+    status_changed_at: Optional[datetime] = None
+
+
+class TopologyListResponse(BaseModel):
+    total: int
+    limit: Optional[int] = None
+    offset: Optional[int] = None
+    data: list[TopologySummary]
+
+
+class LANRow(BaseModel):
+    model_config = ConfigDict(extra="ignore")
+    id: str
+    topology_id: str
+    name: str
+    subnet: str
+    is_dmz: bool = False
+    docker_network_id: Optional[str] = None
+    x: Optional[float] = None
+    y: Optional[float] = None
+
+
+class DeckyRow(BaseModel):
+    model_config = ConfigDict(extra="ignore")
+    uuid: str
+    topology_id: str
+    name: str
+    services: list[str] = PydanticField(default_factory=list)
+    decky_config: Optional[dict[str, Any]] = None
+    ip: Optional[str] = None
+    state: str
+    last_error: Optional[str] = None
+    x: Optional[float] = None
+    y: Optional[float] = None
+
+
+class EdgeRow(BaseModel):
+    model_config = ConfigDict(extra="ignore")
+    id: str
+    topology_id: str
+    decky_uuid: str
+    lan_id: str
+    is_bridge: bool = False
+    forwards_l3: bool = False
+
+
+class TopologyDetail(BaseModel):
+    """Hydrated topology — mirrors persistence.hydrate() output."""
+    topology: TopologySummary
+    lans: list[LANRow]
+    deckies: list[DeckyRow]
+    edges: list[EdgeRow]
+
+
+class TopologyStatusEventRow(BaseModel):
+    model_config = ConfigDict(extra="ignore")
+    id: str
+    topology_id: str
+    from_status: str
+    to_status: str
+    at: datetime
+    reason: Optional[str] = None
+
+
+class LANCreateRequest(BaseModel):
+    name: str = PydanticField(..., min_length=1, max_length=64)
+    subnet: Optional[str] = None
+    is_dmz: bool = False
+    x: Optional[float] = None
+    y: Optional[float] = None
+    expected_version: Optional[int] = None
+
+
+class LANUpdateRequest(BaseModel):
+    name: Optional[str] = None
+    subnet: Optional[str] = None
+    is_dmz: Optional[bool] = None
+    x: Optional[float] = None
+    y: Optional[float] = None
+    expected_version: Optional[int] = None
+
+
+class DeckyCreateRequest(BaseModel):
+    name: str = PydanticField(..., min_length=1, max_length=64)
+    services: list[str] = PydanticField(default_factory=list)
+    decky_config: Optional[dict[str, Any]] = None
+    x: Optional[float] = None
+    y: Optional[float] = None
+    expected_version: Optional[int] = None
+
+
+class DeckyUpdateRequest(BaseModel):
+    name: Optional[str] = None
+    services: Optional[list[str]] = None
+    decky_config: Optional[dict[str, Any]] = None
+    x: Optional[float] = None
+    y: Optional[float] = None
+    expected_version: Optional[int] = None
+
+
+class EdgeCreateRequest(BaseModel):
+    decky_uuid: str
+    lan_id: str
+    is_bridge: bool = False
+    forwards_l3: bool = False
+    expected_version: Optional[int] = None
+
+
+_MUTATION_OPS = Literal[
+    "add_lan",
+    "remove_lan",
+    "attach_decky",
+    "detach_decky",
+    "remove_decky",
+    "update_decky",
+    "update_lan",
+]
+
+
+class MutationEnqueueRequest(BaseModel):
+    op: _MUTATION_OPS
+    payload: dict[str, Any] = PydanticField(default_factory=dict)
+    expected_version: Optional[int] = None
+
+
+def _decode_json_payload(v: Any) -> Any:
+    """Accept either a dict or a JSON-encoded string for mutation payloads."""
+    if isinstance(v, str):
+        import json as _json
+        return _json.loads(v) if v else {}
+    return v
+
+
+_MutationPayload = Annotated[dict[str, Any], BeforeValidator(_decode_json_payload)]
+
+
+class MutationRow(BaseModel):
+    model_config = ConfigDict(extra="ignore")
+    id: str
+    topology_id: str
+    op: str
+    payload: _MutationPayload = PydanticField(default_factory=dict)
+    state: str
+    requested_at: datetime
+    applied_at: Optional[datetime] = None
+    reason: Optional[str] = None
+
+
+class MutationEnqueueResponse(BaseModel):
+    mutation_id: str
+    state: str = "pending"
+
+
+class ValidationIssueResponse(BaseModel):
+    severity: str
+    code: str
+    message: str
+    target: dict[str, Any] = PydanticField(default_factory=dict)
+
+
+class ValidationErrorResponse(BaseModel):
+    detail: str = "Topology validation failed"
+    issues: list[ValidationIssueResponse]
+
+
+class VersionConflictResponse(BaseModel):
+    detail: str = "Topology version conflict"
+    current: int
+    expected: int
+
+
+class NotEditableResponse(BaseModel):
+    detail: str = "Topology not editable"
+    status: str
+    reason: Optional[str] = None
+
+
+class ServiceCatalogResponse(BaseModel):
+    services: list[str]
+
+
+class NextIPResponse(BaseModel):
+    subnet: str
+    ip: str
+
+
+class NextSubnetResponse(BaseModel):
+    subnet: str
+
+
+class DeployAcceptedResponse(BaseModel):
+    topology_id: str
+    status: str
+    dry_run: bool = False
