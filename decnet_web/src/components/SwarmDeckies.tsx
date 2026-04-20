@@ -21,7 +21,7 @@ interface DeckyShard {
 const SwarmDeckies: React.FC = () => {
   const [shards, setShards] = useState<DeckyShard[]>([]);
   const [loading, setLoading] = useState(true);
-  const [tearingDown, setTearingDown] = useState<string | null>(null);
+  const [tearingDown, setTearingDown] = useState<Set<string>>(new Set());
   const [error, setError] = useState<string | null>(null);
   // Two-click arm/commit replaces window.confirm() — browsers silently
   // suppress confirm() after the "prevent additional dialogs" opt-out.
@@ -53,14 +53,22 @@ const SwarmDeckies: React.FC = () => {
     const key = `td:${s.host_uuid}:${s.decky_name}`;
     if (armed !== key) { arm(key); return; }
     setArmed(null);
-    setTearingDown(s.decky_name);
+    setTearingDown((prev) => new Set(prev).add(s.decky_name));
     try {
+      // Endpoint returns 202 immediately; the actual teardown runs in the
+      // background on the backend. Shard state flips to 'tearing_down' and
+      // the 10s poll picks up the final state (gone on success, or
+      // 'teardown_failed' with an error).
       await api.post(`/swarm/hosts/${s.host_uuid}/teardown`, { decky_id: s.decky_name });
       await fetch();
     } catch (err: any) {
       alert(err?.response?.data?.detail || 'Teardown failed');
     } finally {
-      setTearingDown(null);
+      setTearingDown((prev) => {
+        const next = new Set(prev);
+        next.delete(s.decky_name);
+        return next;
+      });
     }
   };
 
@@ -115,12 +123,12 @@ const SwarmDeckies: React.FC = () => {
                     <td>
                       <button
                         className="control-btn danger"
-                        disabled={tearingDown === s.decky_name}
+                        disabled={tearingDown.has(s.decky_name) || s.state === 'tearing_down'}
                         onClick={() => handleTeardown(s)}
                         title="Stop this decky on its host"
                       >
                         <PowerOff size={14} />{' '}
-                        {tearingDown === s.decky_name
+                        {tearingDown.has(s.decky_name) || s.state === 'tearing_down'
                           ? 'Tearing down…'
                           : armed === `td:${s.host_uuid}:${s.decky_name}`
                             ? 'Click again to confirm'

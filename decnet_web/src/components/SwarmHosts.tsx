@@ -22,8 +22,8 @@ const shortFp = (fp: string): string => (fp ? fp.slice(0, 16) + '…' : '—');
 const SwarmHosts: React.FC = () => {
   const [hosts, setHosts] = useState<SwarmHost[]>([]);
   const [loading, setLoading] = useState(true);
-  const [decommissioning, setDecommissioning] = useState<string | null>(null);
-  const [tearingDown, setTearingDown] = useState<string | null>(null);
+  const [decommissioning, setDecommissioning] = useState<Set<string>>(new Set());
+  const [tearingDown, setTearingDown] = useState<Set<string>>(new Set());
   const [error, setError] = useState<string | null>(null);
   // Two-click arm/commit replaces window.confirm(). Browsers silently
   // suppress confirm() after the "prevent additional dialogs" opt-out,
@@ -53,18 +53,22 @@ const SwarmHosts: React.FC = () => {
     return () => clearInterval(t);
   }, []);
 
+  const addTo = (set: Set<string>, id: string) => { const n = new Set(set); n.add(id); return n; };
+  const removeFrom = (set: Set<string>, id: string) => { const n = new Set(set); n.delete(id); return n; };
+
   const handleTeardownAll = async (host: SwarmHost) => {
     const key = `teardown:${host.uuid}`;
     if (armed !== key) { arm(key); return; }
     setArmed(null);
-    setTearingDown(host.uuid);
+    setTearingDown((s) => addTo(s, host.uuid));
     try {
+      // 202 Accepted — teardown runs async on the backend.
       await api.post(`/swarm/hosts/${host.uuid}/teardown`, {});
       await fetchHosts();
     } catch (err: any) {
       alert(err?.response?.data?.detail || 'Teardown failed');
     } finally {
-      setTearingDown(null);
+      setTearingDown((s) => removeFrom(s, host.uuid));
     }
   };
 
@@ -72,14 +76,14 @@ const SwarmHosts: React.FC = () => {
     const key = `decom:${host.uuid}`;
     if (armed !== key) { arm(key); return; }
     setArmed(null);
-    setDecommissioning(host.uuid);
+    setDecommissioning((s) => addTo(s, host.uuid));
     try {
       await api.delete(`/swarm/hosts/${host.uuid}`);
       await fetchHosts();
     } catch (err: any) {
       alert(err?.response?.data?.detail || 'Decommission failed');
     } finally {
-      setDecommissioning(null);
+      setDecommissioning((s) => removeFrom(s, host.uuid));
     }
   };
 
@@ -126,12 +130,12 @@ const SwarmHosts: React.FC = () => {
                   <td>
                     <button
                       className={`control-btn${armed === `teardown:${h.uuid}` ? ' danger' : ''}`}
-                      disabled={tearingDown === h.uuid || h.status !== 'active'}
+                      disabled={tearingDown.has(h.uuid) || h.status !== 'active'}
                       onClick={() => handleTeardownAll(h)}
                       title="Stop all deckies on this host (keeps it enrolled)"
                     >
                       <PowerOff size={14} />{' '}
-                      {tearingDown === h.uuid
+                      {tearingDown.has(h.uuid)
                         ? 'Tearing down…'
                         : armed === `teardown:${h.uuid}`
                           ? 'Click again to confirm'
@@ -139,11 +143,11 @@ const SwarmHosts: React.FC = () => {
                     </button>
                     <button
                       className="control-btn danger"
-                      disabled={decommissioning === h.uuid}
+                      disabled={decommissioning.has(h.uuid)}
                       onClick={() => handleDecommission(h)}
                     >
                       <Trash2 size={14} />{' '}
-                      {decommissioning === h.uuid
+                      {decommissioning.has(h.uuid)
                         ? 'Decommissioning…'
                         : armed === `decom:${h.uuid}`
                           ? 'Click again to confirm'

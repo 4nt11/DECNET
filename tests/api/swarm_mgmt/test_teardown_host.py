@@ -84,10 +84,12 @@ async def test_teardown_all_deckies_on_host(client, auth_token, fake_agent):
         headers={"Authorization": f"Bearer {auth_token}"},
         json={},
     )
-    assert resp.status_code == 200, resp.text
+    assert resp.status_code == 202, resp.text
     body = resp.json()
-    assert body["ok"] is True
+    assert body["accepted"] is True
     assert body["decky_id"] is None
+
+    await mod.drain_pending()
 
     assert ("teardown", None) in fake_agent.calls
     remaining = await repo.list_decky_shards(uuid)
@@ -106,13 +108,53 @@ async def test_teardown_single_decky(client, auth_token, fake_agent):
         headers={"Authorization": f"Bearer {auth_token}"},
         json={"decky_id": "decky-drop"},
     )
-    assert resp.status_code == 200, resp.text
-    body = resp.json()
-    assert body["decky_id"] == "decky-drop"
+    assert resp.status_code == 202, resp.text
+    assert resp.json()["decky_id"] == "decky-drop"
+
+    await mod.drain_pending()
 
     assert ("teardown", "decky-drop") in fake_agent.calls
     remaining = {s["decky_name"] for s in await repo.list_decky_shards(uuid)}
     assert remaining == {"decky-keep"}
+
+
+@pytest.mark.anyio
+async def test_teardown_returns_immediately_and_marks_tearing_down(
+    client, auth_token, monkeypatch
+):
+    """The 202 must fire before the background agent call completes —
+    otherwise multiple queued teardowns still serialize on the UI."""
+    import asyncio as _asyncio
+    from decnet.web.dependencies import repo
+
+    gate = _asyncio.Event()
+
+    class _SlowAgent(_FakeAgent):
+        async def teardown(self, decky_id=None):
+            await gate.wait()
+            return {"status": "torn_down"}
+
+    monkeypatch.setattr(mod, "AgentClient", _SlowAgent)
+
+    uuid = await _seed_host(repo, name="slow", uuid="slow-uuid")
+    await _seed_shard(repo, host_uuid=uuid, decky_name="decky-slow")
+
+    resp = await client.post(
+        f"/api/v1/swarm/hosts/{uuid}/teardown",
+        headers={"Authorization": f"Bearer {auth_token}"},
+        json={"decky_id": "decky-slow"},
+    )
+    assert resp.status_code == 202
+
+    # Agent is still blocked — shard should be in 'tearing_down', not gone.
+    shards = {s["decky_name"]: s for s in await repo.list_decky_shards(uuid)}
+    assert shards["decky-slow"]["state"] == "tearing_down"
+
+    gate.set()
+    await mod.drain_pending()
+
+    remaining = {s["decky_name"] for s in await repo.list_decky_shards(uuid)}
+    assert remaining == set()
 
 
 @pytest.mark.anyio
@@ -126,9 +168,12 @@ async def test_teardown_unknown_host_404(client, auth_token, fake_agent):
 
 
 @pytest.mark.anyio
-async def test_teardown_agent_failure_502(client, auth_token, failing_agent):
-    """When the worker is unreachable the DB shards MUST NOT be deleted —
-    otherwise the master's view diverges from reality."""
+async def test_teardown_agent_failure_marks_shard_failed(
+    client, auth_token, failing_agent
+):
+    """Background-task failure: the shard must NOT be deleted and its
+    state flips to teardown_failed with the error recorded so the UI
+    surfaces it."""
     from decnet.web.dependencies import repo
     uuid = await _seed_host(repo, name="tear-fail", uuid="tear-fail-uuid")
     await _seed_shard(repo, host_uuid=uuid, decky_name="survivor")
@@ -138,10 +183,15 @@ async def test_teardown_agent_failure_502(client, auth_token, failing_agent):
         headers={"Authorization": f"Bearer {auth_token}"},
         json={},
     )
-    assert resp.status_code == 502
+    # Acceptance is unconditional — the failure happens in the background.
+    assert resp.status_code == 202
 
-    remaining = {s["decky_name"] for s in await repo.list_decky_shards(uuid)}
-    assert remaining == {"survivor"}
+    await mod.drain_pending()
+
+    shards = {s["decky_name"]: s for s in await repo.list_decky_shards(uuid)}
+    assert "survivor" in shards
+    assert shards["survivor"]["state"] == "teardown_failed"
+    assert "network unreachable" in (shards["survivor"]["last_error"] or "")
 
 
 @pytest.mark.anyio
