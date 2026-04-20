@@ -29,6 +29,7 @@ router = APIRouter()
     response_model=SwarmEnrolledBundle,
     status_code=status.HTTP_201_CREATED,
     tags=["Swarm Hosts"],
+    responses={409: {"description": "A worker with this name is already enrolled"}},
 )
 async def api_enroll_host(
     req: SwarmEnrollRequest,

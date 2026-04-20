@@ -21,7 +21,12 @@ log = get_logger("swarm.teardown")
 router = APIRouter()
 
 
-@router.post("/teardown", response_model=SwarmDeployResponse, tags=["Swarm Deployments"])
+@router.post(
+    "/teardown",
+    response_model=SwarmDeployResponse,
+    tags=["Swarm Deployments"],
+    responses={404: {"description": "A targeted host does not exist"}},
+)
 async def api_teardown_swarm(
     req: SwarmTeardownRequest,
     repo: BaseRepository = Depends(get_repo),

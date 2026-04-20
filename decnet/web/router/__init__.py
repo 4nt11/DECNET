@@ -25,7 +25,15 @@ from .swarm_updates import swarm_updates_router
 from .swarm_mgmt import swarm_mgmt_router
 from .system import system_router
 
-api_router = APIRouter()
+api_router = APIRouter(
+    # Every route under /api/v1 is auth-guarded (either by an explicit
+    # require_* Depends or by the global auth middleware). Document 401/403
+    # here so the OpenAPI schema reflects reality for contract tests.
+    responses={
+        401: {"description": "Missing or invalid credentials"},
+        403: {"description": "Authenticated but not authorized"},
+    },
+)
 
 # Authentication
 api_router.include_router(login_router)

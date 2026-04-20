@@ -18,7 +18,17 @@ from .api_check_hosts import router as check_hosts_router
 from .api_heartbeat import router as heartbeat_router
 from .api_list_deckies import router as list_deckies_router
 
-swarm_router = APIRouter(prefix="/swarm")
+swarm_router = APIRouter(
+    prefix="/swarm",
+    # Error responses that every swarm route can surface. Route-level
+    # `responses=` entries still override/extend these for route-specific
+    # codes (e.g. 409 on /enroll).
+    responses={
+        400: {"description": "Malformed request"},
+        403: {"description": "Peer cert missing or fingerprint mismatch"},
+        404: {"description": "Referenced host does not exist"},
+    },
+)
 
 # Hosts
 swarm_router.include_router(enroll_host_router)

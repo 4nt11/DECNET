@@ -26,6 +26,7 @@ router = APIRouter()
     "/hosts/{uuid}",
     status_code=status.HTTP_204_NO_CONTENT,
     tags=["Swarm Hosts"],
+    responses={404: {"description": "No host with this UUID is enrolled"}},
 )
 async def api_decommission_host(
     uuid: str,

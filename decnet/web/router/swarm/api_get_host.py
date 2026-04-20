@@ -10,7 +10,12 @@ from decnet.web.db.models import SwarmHostView
 router = APIRouter()
 
 
-@router.get("/hosts/{uuid}", response_model=SwarmHostView, tags=["Swarm Hosts"])
+@router.get(
+    "/hosts/{uuid}",
+    response_model=SwarmHostView,
+    tags=["Swarm Hosts"],
+    responses={404: {"description": "No host with this UUID is enrolled"}},
+)
 async def api_get_host(
     uuid: str,
     repo: BaseRepository = Depends(get_repo),

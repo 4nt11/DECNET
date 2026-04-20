@@ -96,7 +96,15 @@ async def _verify_peer_matches_host(
     return host
 
 
-@router.post("/heartbeat", status_code=204, tags=["Swarm Health"])
+@router.post(
+    "/heartbeat",
+    status_code=204,
+    tags=["Swarm Health"],
+    responses={
+        403: {"description": "Peer cert missing, or its fingerprint does not match the host's pinned cert"},
+        404: {"description": "host_uuid is not enrolled"},
+    },
+)
 async def heartbeat(
     req: HeartbeatRequest,
     request: Request,

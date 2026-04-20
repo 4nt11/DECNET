@@ -135,7 +135,15 @@ async def dispatch_decnet_config(
     return SwarmDeployResponse(results=list(results))
 
 
-@router.post("/deploy", response_model=SwarmDeployResponse, tags=["Swarm Deployments"])
+@router.post(
+    "/deploy",
+    response_model=SwarmDeployResponse,
+    tags=["Swarm Deployments"],
+    responses={
+        400: {"description": "Deployment mode must be 'swarm'"},
+        404: {"description": "A referenced host_uuid is not enrolled"},
+    },
+)
 async def api_deploy_swarm(
     req: SwarmDeployRequest,
     repo: BaseRepository = Depends(get_repo),
