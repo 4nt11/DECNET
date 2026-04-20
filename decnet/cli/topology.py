@@ -1,0 +1,209 @@
+"""MazeNET topology CLI: generate / deploy / teardown / list / show."""
+from __future__ import annotations
+
+import asyncio
+from typing import Optional
+
+import typer
+from rich.console import Console
+from rich.table import Table
+
+from decnet.topology.config import TopologyConfig
+from decnet.topology.generator import generate
+from decnet.topology.persistence import hydrate, persist
+from decnet.topology.status import TopologyStatus
+from decnet.web.db.factory import get_repository
+
+from .gating import _require_master_mode
+
+_console = Console()
+
+_group = typer.Typer(
+    name="topology",
+    help="MazeNET nested-topology commands (DECNET master only).",
+    no_args_is_help=True,
+)
+
+
+async def _repo():
+    r = get_repository()
+    await r.initialize()
+    return r
+
+
+@_group.command("generate")
+def _generate(
+    name: str = typer.Option(..., "--name", help="Topology name"),
+    depth: int = typer.Option(3, "--depth", min=1, max=16),
+    branching: int = typer.Option(2, "--branching", min=1, max=8),
+    deckies_per_lan: str = typer.Option(
+        "1-3",
+        "--deckies-per-lan",
+        help="Min-max deckies per LAN, e.g. 1-3",
+    ),
+    bridge_forward_probability: float = typer.Option(1.0, "--bridge-forward-p", min=0.0, max=1.0),
+    cross_edge_probability: float = typer.Option(0.0, "--cross-edge-p", min=0.0, max=1.0),
+    services: Optional[str] = typer.Option(None, "--services", help="Comma-separated explicit services"),
+    randomize_services: bool = typer.Option(True, "--randomize-services/--no-randomize-services"),
+    seed: Optional[int] = typer.Option(None, "--seed", min=0),
+) -> None:
+    """Generate a topology plan and persist it as pending."""
+    _require_master_mode("topology generate")
+
+    try:
+        lo, hi = (int(x) for x in deckies_per_lan.split("-", 1))
+    except ValueError:
+        _console.print("[red]--deckies-per-lan must be formatted as MIN-MAX, e.g. 1-3.[/]")
+        raise typer.Exit(1)
+
+    services_explicit = (
+        [s.strip() for s in services.split(",") if s.strip()] if services else None
+    )
+
+    try:
+        cfg = TopologyConfig(
+            name=name,
+            depth=depth,
+            branching_factor=branching,
+            deckies_per_lan_min=lo,
+            deckies_per_lan_max=hi,
+            bridge_forward_probability=bridge_forward_probability,
+            cross_edge_probability=cross_edge_probability,
+            services_explicit=services_explicit,
+            randomize_services=randomize_services if not services_explicit else False,
+            seed=seed,
+        )
+    except ValueError as e:
+        _console.print(f"[red]{e}[/]")
+        raise typer.Exit(1)
+
+    plan = generate(cfg)
+
+    async def _go() -> str:
+        repo = await _repo()
+        return await persist(repo, plan)
+
+    tid = asyncio.run(_go())
+    _console.print(f"[green]Topology persisted as pending[/] — id=[bold]{tid}[/]")
+    _console.print(
+        f"  LANs: {len(plan.lans)}  deckies: {len(plan.deckies)}  edges: {len(plan.edges)}"
+    )
+
+
+@_group.command("list")
+def _list() -> None:
+    """List all topologies."""
+    _require_master_mode("topology list")
+
+    async def _go() -> list[dict]:
+        repo = await _repo()
+        return await repo.list_topologies()
+
+    rows = asyncio.run(_go())
+    if not rows:
+        _console.print("[yellow]No topologies.[/]")
+        return
+    table = Table(title="DECNET / MazeNET Topologies")
+    for col in ("id", "name", "mode", "status", "created_at"):
+        table.add_column(col)
+    for r in rows:
+        table.add_row(
+            str(r["id"]),
+            str(r["name"]),
+            str(r["mode"]),
+            str(r["status"]),
+            str(r.get("created_at", "")),
+        )
+    _console.print(table)
+
+
+@_group.command("show")
+def _show(topology_id: str = typer.Argument(..., help="Topology id")) -> None:
+    """Print a structured summary of a topology."""
+    _require_master_mode("topology show")
+
+    async def _go():
+        repo = await _repo()
+        return await hydrate(repo, topology_id)
+
+    hydrated = asyncio.run(_go())
+    if hydrated is None:
+        _console.print(f"[red]No such topology: {topology_id}[/]")
+        raise typer.Exit(1)
+
+    topo = hydrated["topology"]
+    _console.print(
+        f"[bold]{topo['name']}[/]  id={topo['id']}  status={topo['status']}"
+        f"  mode={topo['mode']}"
+    )
+
+    deckies_by_name = {d["decky_config"]["name"]: d for d in hydrated["deckies"]}
+    edges_by_lan: dict[str, list[dict]] = {}
+    for e in hydrated["edges"]:
+        edges_by_lan.setdefault(e["lan_id"], []).append(e)
+
+    for lan in hydrated["lans"]:
+        dmz_tag = " [dim](DMZ)[/]" if lan["is_dmz"] else ""
+        _console.print(f"\n[cyan]LAN[/] {lan['name']}  {lan['subnet']}{dmz_tag}")
+        lan_edges = edges_by_lan.get(lan["id"], [])
+        for e in lan_edges:
+            # Find the decky name via uuid.
+            decky = next(
+                (d for d in hydrated["deckies"] if d["uuid"] == e["decky_uuid"]),
+                None,
+            )
+            if decky is None:
+                continue
+            cfg = decky["decky_config"]
+            name = cfg["name"]
+            ip = cfg["ips_by_lan"].get(lan["name"], "?")
+            tags = []
+            if e["is_bridge"]:
+                tags.append("bridge")
+            if e["forwards_l3"]:
+                tags.append("L3-forward")
+            tag_s = f" [yellow]({', '.join(tags)})[/]" if tags else ""
+            svcs = ",".join(cfg.get("services") or []) or "-"
+            _console.print(f"  • {name}  {ip}  svcs={svcs}{tag_s}")
+
+    _ = deckies_by_name  # for future cross-reference extensions
+
+
+@_group.command("deploy")
+def _deploy(
+    topology_id: str = typer.Argument(..., help="Topology id (must be pending)"),
+    dry_run: bool = typer.Option(False, "--dry-run", help="Write compose + create nets, skip containers"),
+) -> None:
+    """Deploy a pending topology."""
+    _require_master_mode("topology deploy")
+    from decnet.engine.deployer import deploy_topology
+
+    async def _go() -> None:
+        repo = await _repo()
+        await deploy_topology(repo, topology_id, dry_run=dry_run)
+
+    asyncio.run(_go())
+    _console.print(f"[green]Topology {topology_id} deployed.[/]")
+
+
+@_group.command("teardown")
+def _teardown(
+    topology_id: str = typer.Argument(..., help="Topology id"),
+) -> None:
+    """Tear down a topology. Legal from active|degraded|failed|deploying."""
+    _require_master_mode("topology teardown")
+    from decnet.engine.deployer import teardown_topology
+
+    async def _go() -> None:
+        repo = await _repo()
+        await teardown_topology(repo, topology_id)
+
+    asyncio.run(_go())
+    _console.print(f"[green]Topology {topology_id} torn down.[/]")
+
+
+def register(app: typer.Typer) -> None:
+    app.add_typer(_group, name="topology")
+
+
+__all__ = ["register", "TopologyStatus"]

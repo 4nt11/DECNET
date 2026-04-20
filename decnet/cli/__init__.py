@@ -31,6 +31,7 @@ from . import (
     sniffer,
     swarm,
     swarmctl,
+    topology,
     updater,
     web,
     workers,
@@ -50,6 +51,7 @@ for _mod in (
     swarm,
     deploy, lifecycle, workers, inventory,
     web, profiler, sniffer, db,
+    topology,
 ):
     _mod.register(app)
 
