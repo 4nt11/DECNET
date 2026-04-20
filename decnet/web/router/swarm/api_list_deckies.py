@@ -34,6 +34,7 @@ async def api_list_deckies(
         host = hosts.get(s["host_uuid"], {})
         out.append(DeckyShardView(
             decky_name=s["decky_name"],
+            decky_ip=s.get("decky_ip"),
             host_uuid=s["host_uuid"],
             host_name=host.get("name") or "<unknown>",
             host_address=host.get("address") or "",
@@ -43,5 +44,12 @@ async def api_list_deckies(
             last_error=s.get("last_error"),
             compose_hash=s.get("compose_hash"),
             updated_at=s["updated_at"],
+            hostname=s.get("hostname"),
+            distro=s.get("distro"),
+            archetype=s.get("archetype"),
+            service_config=s.get("service_config") or {},
+            mutate_interval=s.get("mutate_interval"),
+            last_mutated=s.get("last_mutated") or 0.0,
+            last_seen=s.get("last_seen"),
         ))
     return out

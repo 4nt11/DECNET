@@ -850,6 +850,27 @@ class SQLModelRepository(BaseRepository):
                         d["services"] = json.loads(raw)
                     except (json.JSONDecodeError, TypeError):
                         d["services"] = []
+                # Flatten the stored DeckyConfig snapshot into the row so
+                # routers can hand it to DeckyShardView without re-parsing.
+                # Rows predating the migration have decky_config=NULL and
+                # fall through with the default (None/{}) view values.
+                cfg_raw = d.get("decky_config")
+                if isinstance(cfg_raw, str):
+                    try:
+                        cfg = json.loads(cfg_raw)
+                    except (json.JSONDecodeError, TypeError):
+                        cfg = {}
+                    if isinstance(cfg, dict):
+                        for k in ("hostname", "distro", "archetype",
+                                  "service_config", "mutate_interval",
+                                  "last_mutated"):
+                            if k in cfg and d.get(k) is None:
+                                d[k] = cfg[k]
+                        # Keep decky_ip authoritative from the column (newer
+                        # heartbeats overwrite it) but fall back to the
+                        # snapshot if the column is still NULL.
+                        if not d.get("decky_ip") and cfg.get("ip"):
+                            d["decky_ip"] = cfg["ip"]
                 out.append(d)
             return out
 

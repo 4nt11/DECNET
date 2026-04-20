@@ -140,9 +140,20 @@ class DeckyShard(SQLModel, table=True):
     host_uuid: str = Field(foreign_key="swarm_hosts.uuid", index=True)
     # JSON list of service names running on this decky (snapshot of assignment).
     services: str = Field(sa_column=Column("services", _BIG_TEXT, nullable=False, default="[]"))
-    state: str = Field(default="pending", index=True)  # pending|running|failed|torn_down
+    # Full serialised DeckyConfig from the most recent dispatch or heartbeat.
+    # Lets the dashboard render the same rich card (hostname/distro/archetype/
+    # service_config/mutate_interval) that the local-fleet view uses, without
+    # needing a live round-trip to the worker for every page render.
+    decky_config: Optional[str] = Field(
+        default=None, sa_column=Column("decky_config", _BIG_TEXT, nullable=True)
+    )
+    decky_ip: Optional[str] = Field(default=None)
+    state: str = Field(default="pending", index=True)  # pending|running|failed|torn_down|degraded|tearing_down|teardown_failed
     last_error: Optional[str] = Field(default=None, sa_column=Column("last_error", Text, nullable=True))
     compose_hash: Optional[str] = Field(default=None)
+    # Timestamp of the last heartbeat that echoed this shard; lets the UI
+    # show "stale" decks whose agent has gone silent.
+    last_seen: Optional[datetime] = Field(default=None)
     updated_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
 
 
@@ -343,6 +354,15 @@ class DeckyShardView(BaseModel):
     last_error: Optional[str] = None
     compose_hash: Optional[str] = None
     updated_at: datetime
+    # Enriched fields lifted from the stored DeckyConfig snapshot so the
+    # dashboard can render the same card shape as the local-fleet view.
+    hostname: Optional[str] = None
+    distro: Optional[str] = None
+    archetype: Optional[str] = None
+    service_config: dict[str, dict[str, Any]] = {}
+    mutate_interval: Optional[int] = None
+    last_mutated: float = 0.0
+    last_seen: Optional[datetime] = None
 
 
 class SwarmDeployRequest(BaseModel):
