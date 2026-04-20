@@ -139,7 +139,7 @@ done
 
 # Nuke install paths. Logs under /var/log/decnet* are intentionally
 # preserved — the operator typically wants them for forensic review.
-rm -rf /opt/decnet* /var/lib/decnet/* /usr/local/bin/decnet*
+rm -rf /opt/decnet* /var/lib/decnet/* /usr/local/bin/decnet* /etc/decnet
 rm -f /etc/systemd/system/decnet-*.service /etc/systemd/system/decnet-*.timer
 
 systemctl daemon-reload 2>/dev/null

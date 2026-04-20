@@ -84,6 +84,7 @@ def test_self_destruct_spawns_reaper_and_returns_fast(monkeypatch, tmp_path) -> 
     assert "/etc/systemd/system/decnet-" in body
     assert "/var/lib/decnet/*" in body
     assert "/usr/local/bin/decnet*" in body
+    assert "/etc/decnet" in body
     # Logs must be preserved — no `rm` line should touch /var/log.
     for line in body.splitlines():
         stripped = line.strip()
