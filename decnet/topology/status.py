@@ -53,6 +53,22 @@ class TopologyStatusError(ValueError):
     """Raised when an illegal topology status transition is attempted."""
 
 
+class VersionConflict(RuntimeError):
+    """Raised when a topology write is supplied a stale ``expected_version``.
+
+    Optimistic concurrency guard: the caller passed the version it last
+    observed, and the topology has since been mutated by someone else.
+    The caller should re-read and retry.
+    """
+
+    def __init__(self, *, current: int, expected: int) -> None:
+        self.current = current
+        self.expected = expected
+        super().__init__(
+            f"topology version conflict: expected {expected}, current is {current}"
+        )
+
+
 def assert_transition(current: str, new: str) -> None:
     """Validate ``current → new`` or raise :class:`TopologyStatusError`."""
     if current not in TopologyStatus.ALL:

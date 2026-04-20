@@ -216,6 +216,10 @@ class Topology(SQLModel, table=True):
     created_at: datetime = Field(
         default_factory=lambda: datetime.now(timezone.utc), index=True
     )
+    # Optimistic-concurrency token.  Bumped by repo methods that mutate
+    # the topology or any child row when an expected_version is supplied.
+    # Callers pass their last-seen version; mismatch raises VersionConflict.
+    version: int = Field(default=1, nullable=False)
 
 
 class LAN(SQLModel, table=True):

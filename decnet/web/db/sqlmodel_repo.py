@@ -1027,18 +1027,76 @@ class SQLModelRepository(BaseRepository):
             await session.commit()
             return True
 
-    async def add_lan(self, data: dict[str, Any]) -> str:
+    async def _check_and_bump_version(
+        self,
+        session,
+        topology_id: str,
+        expected_version: Optional[int],
+    ) -> None:
+        """Optimistic-concurrency guard used by child-row mutators.
+
+        If ``expected_version`` is None, no check happens (backward-compat
+        for internal callers that don't need concurrency protection).
+
+        If supplied, loads the Topology row in the same session,
+        compares ``version == expected_version``, raises VersionConflict
+        on mismatch, otherwise bumps ``version += 1``.  The caller must
+        commit the enclosing session.
+        """
+        from decnet.topology.status import VersionConflict
+
+        if expected_version is None:
+            return
+        result = await session.execute(
+            select(Topology).where(Topology.id == topology_id)
+        )
+        topo = result.scalar_one_or_none()
+        if topo is None:
+            raise ValueError(f"topology {topology_id!r} not found")
+        if topo.version != expected_version:
+            raise VersionConflict(
+                current=topo.version, expected=expected_version
+            )
+        topo.version = topo.version + 1
+        session.add(topo)
+
+    async def add_lan(
+        self,
+        data: dict[str, Any],
+        *,
+        expected_version: Optional[int] = None,
+    ) -> str:
         async with self._session() as session:
+            await self._check_and_bump_version(
+                session, data["topology_id"], expected_version
+            )
             row = LAN(**data)
             session.add(row)
             await session.commit()
             await session.refresh(row)
             return row.id
 
-    async def update_lan(self, lan_id: str, fields: dict[str, Any]) -> None:
+    async def update_lan(
+        self,
+        lan_id: str,
+        fields: dict[str, Any],
+        *,
+        expected_version: Optional[int] = None,
+    ) -> None:
         if not fields:
             return
         async with self._session() as session:
+            if expected_version is not None:
+                # Need the LAN's topology_id to check version.
+                result = await session.execute(
+                    select(LAN).where(LAN.id == lan_id)
+                )
+                lan = result.scalar_one_or_none()
+                if lan is None:
+                    raise ValueError(f"lan {lan_id!r} not found")
+                await self._check_and_bump_version(
+                    session, lan.topology_id, expected_version
+                )
             await session.execute(
                 update(LAN).where(LAN.id == lan_id).values(**fields)
             )
@@ -1053,9 +1111,17 @@ class SQLModelRepository(BaseRepository):
             )
             return [r.model_dump(mode="json") for r in result.scalars().all()]
 
-    async def add_topology_decky(self, data: dict[str, Any]) -> str:
+    async def add_topology_decky(
+        self,
+        data: dict[str, Any],
+        *,
+        expected_version: Optional[int] = None,
+    ) -> str:
         payload = self._serialize_json_fields(data, ("services", "decky_config"))
         async with self._session() as session:
+            await self._check_and_bump_version(
+                session, data["topology_id"], expected_version
+            )
             row = TopologyDecky(**payload)
             session.add(row)
             await session.commit()
@@ -1063,13 +1129,27 @@ class SQLModelRepository(BaseRepository):
             return row.uuid
 
     async def update_topology_decky(
-        self, decky_uuid: str, fields: dict[str, Any]
+        self,
+        decky_uuid: str,
+        fields: dict[str, Any],
+        *,
+        expected_version: Optional[int] = None,
     ) -> None:
         if not fields:
             return
         payload = self._serialize_json_fields(fields, ("services", "decky_config"))
         payload.setdefault("updated_at", datetime.now(timezone.utc))
         async with self._session() as session:
+            if expected_version is not None:
+                result = await session.execute(
+                    select(TopologyDecky).where(TopologyDecky.uuid == decky_uuid)
+                )
+                d = result.scalar_one_or_none()
+                if d is None:
+                    raise ValueError(f"decky {decky_uuid!r} not found")
+                await self._check_and_bump_version(
+                    session, d.topology_id, expected_version
+                )
             await session.execute(
                 update(TopologyDecky)
                 .where(TopologyDecky.uuid == decky_uuid)
@@ -1093,8 +1173,16 @@ class SQLModelRepository(BaseRepository):
                 for r in result.scalars().all()
             ]
 
-    async def add_topology_edge(self, data: dict[str, Any]) -> str:
+    async def add_topology_edge(
+        self,
+        data: dict[str, Any],
+        *,
+        expected_version: Optional[int] = None,
+    ) -> str:
         async with self._session() as session:
+            await self._check_and_bump_version(
+                session, data["topology_id"], expected_version
+            )
             row = TopologyEdge(**data)
             session.add(row)
             await session.commit()
