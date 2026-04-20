@@ -1,7 +1,9 @@
 import React, { useEffect, useState } from 'react';
+import { useSearchParams } from 'react-router-dom';
 import { PanelRightOpen, PanelRightClose, RotateCcw, UploadCloud } from 'lucide-react';
 import './MazeNET.css';
 import Palette from './Palette';
+import Canvas from './Canvas';
 import Inspector from './Inspector';
 import type { Selection } from './Inspector';
 import { DEFAULT_SERVICES, DEMO_NETS, DEMO_NODES, DEMO_EDGES } from './data';
@@ -11,6 +13,8 @@ import { useMazeApi } from './useMazeApi';
 
 const MazeNET: React.FC = () => {
   const api = useMazeApi();
+  const [params] = useSearchParams();
+  const topologyId = params.get('topology');
 
   const [nets,  setNets]  = useState<Net[]>(DEMO_NETS);
   const [nodes, setNodes] = useState<MazeNode[]>(DEMO_NODES);
@@ -19,15 +23,40 @@ const MazeNET: React.FC = () => {
   const [selection, setSelection] = useState<Selection>(null);
   const [inspectorOpen, setInspectorOpen] = useState(true);
   const [services, setServices] = useState<ServiceDef[]>(DEFAULT_SERVICES);
+  const [loadErr, setLoadErr] = useState<string | null>(null);
 
+  /* Load service catalog from API (fall back to defaults if 401/offline). */
   useEffect(() => {
     let cancelled = false;
     api.getServices().then((s) => { if (!cancelled) setServices(s); }).catch(() => {});
     return () => { cancelled = true; };
   }, [api]);
 
+  /* If ?topology=<id> is present, hydrate from the real backend. */
+  useEffect(() => {
+    if (!topologyId) return;
+    let cancelled = false;
+    api.getTopology(topologyId)
+      .then((h) => {
+        if (cancelled) return;
+        setNets(h.nets); setNodes(h.nodes); setEdges(h.edges);
+        setSelection(null);
+        setLoadErr(null);
+      })
+      .catch((err) => {
+        if (!cancelled) setLoadErr(err?.message ?? 'topology load failed');
+      });
+    return () => { cancelled = true; };
+  }, [api, topologyId]);
+
   const onReset = () => {
-    setNets(DEMO_NETS); setNodes(DEMO_NODES); setEdges(DEMO_EDGES);
+    if (topologyId) {
+      api.getTopology(topologyId).then((h) => {
+        setNets(h.nets); setNodes(h.nodes); setEdges(h.edges);
+      }).catch(() => {});
+    } else {
+      setNets(DEMO_NETS); setNodes(DEMO_NODES); setEdges(DEMO_EDGES);
+    }
     setSelection(null);
   };
 
@@ -37,8 +66,10 @@ const MazeNET: React.FC = () => {
         <div>
           <h1>MAZENET</h1>
           <div className="maze-page-sub">
-            NETWORK OF NETWORKS · {nets.length} NETS · {nodes.length} NODES · {edges.length} PATHS ·{' '}
+            {topologyId ? `TOPOLOGY ${topologyId} · ` : 'DEMO · '}
+            {nets.length} NETS · {nodes.length} NODES · {edges.length} PATHS ·{' '}
             {pending.length > 0 ? `${pending.length} UNCOMMITTED` : 'LIVE'}
+            {loadErr && <span className="alert-text"> · {loadErr}</span>}
           </div>
         </div>
         <div className="maze-page-actions">
@@ -58,7 +89,7 @@ const MazeNET: React.FC = () => {
             type="button"
             className="maze-btn"
             disabled={pending.length === 0}
-            onClick={() => api.commit('', pending)}
+            onClick={() => api.commit(topologyId ?? '', pending)}
           >
             <UploadCloud size={12} /> COMMIT {pending.length > 0 ? `(${pending.length})` : ''}
           </button>
@@ -70,21 +101,13 @@ const MazeNET: React.FC = () => {
         style={{ gridTemplateColumns: inspectorOpen ? '240px 1fr 320px' : '240px 1fr' }}
       >
         <Palette services={services} />
-
-        <div className="maze-canvas-wrap">
-          <div className="maze-grid-bg">
-            <svg xmlns="http://www.w3.org/2000/svg">
-              <defs>
-                <pattern id="maze-grid-pat" x={0} y={0} width="40" height="40" patternUnits="userSpaceOnUse">
-                  <path d="M 40 0 L 0 0 0 40" fill="none" stroke="var(--grid-line)" strokeWidth="1" />
-                </pattern>
-              </defs>
-              <rect width="100%" height="100%" fill="url(#maze-grid-pat)" />
-            </svg>
-          </div>
-          <div className="maze-empty-hint">CANVAS COMES ONLINE IN STEP 4</div>
-        </div>
-
+        <Canvas
+          nets={nets}
+          nodes={nodes}
+          edges={edges}
+          selection={selection}
+          setSelection={setSelection}
+        />
         {inspectorOpen && (
           <Inspector
             selection={selection}
