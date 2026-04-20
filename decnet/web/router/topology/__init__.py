@@ -10,6 +10,9 @@ live one-per-file and are aggregated here.
 from fastapi import APIRouter
 
 from .api_catalog import router as _catalog_router
+from .api_create_topology import router as _create_router
+from .api_delete_topology import router as _delete_router
+from .api_deploy_topology import router as _deploy_router
 from .api_get_topology import router as _get_router
 from .api_list_topologies import router as _list_router
 
@@ -22,6 +25,9 @@ topology_router = APIRouter(prefix="/topologies", tags=["topologies"])
 # parameterized fallback.
 topology_router.include_router(_catalog_router)
 topology_router.include_router(_list_router)
+topology_router.include_router(_create_router)
+topology_router.include_router(_deploy_router)
+topology_router.include_router(_delete_router)
 topology_router.include_router(_get_router)
 
 
