@@ -1,5 +1,5 @@
 """
-Tests for templates/pop3/server.py
+Tests for decnet/templates/pop3/server.py
 
 Exercises the full POP3 state machine:
   AUTHORIZATION → TRANSACTION
@@ -40,7 +40,7 @@ def _load_pop3():
     sys.modules["syslog_bridge"] = _make_fake_syslog_bridge()
 
     spec = importlib.util.spec_from_file_location(
-        "pop3_server", "templates/pop3/server.py"
+        "pop3_server", "decnet/templates/pop3/server.py"
     )
     mod = importlib.util.module_from_spec(spec)
     with patch.dict("os.environ", env, clear=False):

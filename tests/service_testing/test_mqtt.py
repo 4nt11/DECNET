@@ -1,5 +1,5 @@
 """
-Tests for templates/mqtt/server.py
+Tests for decnet/templates/mqtt/server.py
 
 Exercises behavior with MQTT_ACCEPT_ALL=1 and customizable topics.
 Uses asyncio transport/protocol directly.
@@ -39,7 +39,7 @@ def _load_mqtt(accept_all: bool = True, custom_topics: str = "", persona: str = 
 
     sys.modules["syslog_bridge"] = _make_fake_syslog_bridge()
 
-    spec = importlib.util.spec_from_file_location("mqtt_server", "templates/mqtt/server.py")
+    spec = importlib.util.spec_from_file_location("mqtt_server", "decnet/templates/mqtt/server.py")
     mod = importlib.util.module_from_spec(spec)
     with patch.dict("os.environ", env, clear=False):
         spec.loader.exec_module(mod)

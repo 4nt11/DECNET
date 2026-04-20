@@ -349,7 +349,9 @@ class TestCorrelateCommand:
 class TestApiCommand:
     @patch("os.killpg")
     @patch("subprocess.Popen")
-    def test_api_keyboard_interrupt(self, mock_popen, mock_killpg):
+    def test_api_keyboard_interrupt(self, mock_popen, mock_killpg, monkeypatch):
+        monkeypatch.setenv("DECNET_MODE", "master")
+        monkeypatch.delenv("DECNET_DISALLOW_MASTER", raising=False)
         proc = MagicMock()
         proc.wait.side_effect = [KeyboardInterrupt, 0]
         proc.pid = 4321
@@ -359,7 +361,9 @@ class TestApiCommand:
         mock_killpg.assert_called()
 
     @patch("subprocess.Popen", side_effect=FileNotFoundError)
-    def test_api_not_found(self, mock_popen):
+    def test_api_not_found(self, mock_popen, monkeypatch):
+        monkeypatch.setenv("DECNET_MODE", "master")
+        monkeypatch.delenv("DECNET_DISALLOW_MASTER", raising=False)
         result = runner.invoke(app, ["api"])
         assert result.exit_code == 0
 

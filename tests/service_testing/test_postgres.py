@@ -1,5 +1,5 @@
 """
-Tests for templates/postgres/server.py
+Tests for decnet/templates/postgres/server.py
 
 Covers the PostgreSQL startup / MD5-auth handshake happy path and regression
 tests for zero/tiny/huge msg_len in both the startup and auth states.
@@ -24,7 +24,7 @@ def _load_postgres():
         if key in ("postgres_server", "syslog_bridge"):
             del sys.modules[key]
     sys.modules["syslog_bridge"] = make_fake_syslog_bridge()
-    spec = importlib.util.spec_from_file_location("postgres_server", "templates/postgres/server.py")
+    spec = importlib.util.spec_from_file_location("postgres_server", "decnet/templates/postgres/server.py")
     mod = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(mod)
     return mod

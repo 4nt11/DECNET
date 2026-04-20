@@ -1,14 +1,20 @@
 """
-Stress-test fixtures: real uvicorn server + programmatic Locust runner.
+Stress-test fixtures: real uvicorn server + out-of-process Locust runner.
+
+Locust is run via its CLI in a fresh subprocess so its gevent monkey-patching
+happens before ssl/urllib3 are imported. Running it in-process here causes a
+RecursionError in urllib3's create_urllib3_context on Python 3.11+.
 """
 
+import csv
+import json
 import multiprocessing
 import os
 import sys
 import time
 import socket
-import signal
 import subprocess
+from pathlib import Path
 
 import pytest
 import requests
@@ -17,7 +23,7 @@ import requests
 # ---------------------------------------------------------------------------
 # Configuration (env-var driven for CI flexibility)
 # ---------------------------------------------------------------------------
-STRESS_USERS = int(os.environ.get("STRESS_USERS", "500"))
+STRESS_USERS = int(os.environ.get("STRESS_USERS", "1000"))
 STRESS_SPAWN_RATE = int(os.environ.get("STRESS_SPAWN_RATE", "50"))
 STRESS_DURATION = int(os.environ.get("STRESS_DURATION", "60"))
 STRESS_WORKERS = int(os.environ.get("STRESS_WORKERS", str(min(multiprocessing.cpu_count(), 4))))
@@ -26,6 +32,9 @@ ADMIN_USER = "admin"
 ADMIN_PASS = "test-password-123"
 JWT_SECRET = "stable-test-secret-key-at-least-32-chars-long"
 
+_REPO_ROOT = Path(__file__).resolve().parent.parent.parent
+_LOCUSTFILE = Path(__file__).resolve().parent / "locustfile.py"
+
 
 def _free_port() -> int:
     with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
@@ -33,12 +42,12 @@ def _free_port() -> int:
         return s.getsockname()[1]
 
 
-def _wait_for_server(url: str, timeout: float = 15.0) -> None:
+def _wait_for_server(url: str, timeout: float = 60.0) -> None:
     deadline = time.monotonic() + timeout
     while time.monotonic() < deadline:
         try:
             r = requests.get(url, timeout=2)
-            if r.status_code in (200, 503):
+            if r.status_code in (200, 401, 503):
                 return
         except requests.ConnectionError:
             pass
@@ -50,14 +59,15 @@ def _wait_for_server(url: str, timeout: float = 15.0) -> None:
 def stress_server():
     """Start a real uvicorn server for stress testing."""
     port = _free_port()
-    env = {
-        **os.environ,
+    env = {k: v for k, v in os.environ.items() if not k.startswith("DECNET_")}
+    env.update({
         "DECNET_JWT_SECRET": JWT_SECRET,
         "DECNET_ADMIN_PASSWORD": ADMIN_PASS,
-        "DECNET_DEVELOPER": "true",
+        "DECNET_DEVELOPER": "false",
         "DECNET_DEVELOPER_TRACING": "false",
         "DECNET_DB_TYPE": "sqlite",
-    }
+        "DECNET_MODE": "master",
+    })
     proc = subprocess.Popen(
         [
             sys.executable, "-m", "uvicorn",
@@ -73,7 +83,20 @@ def stress_server():
     )
     base_url = f"http://127.0.0.1:{port}"
     try:
-        _wait_for_server(f"{base_url}/api/v1/health")
+        try:
+            _wait_for_server(f"{base_url}/api/v1/health", timeout=60.0)
+        except TimeoutError:
+            proc.terminate()
+            try:
+                out, err = proc.communicate(timeout=5)
+            except subprocess.TimeoutExpired:
+                proc.kill()
+                out, err = proc.communicate()
+            raise TimeoutError(
+                f"uvicorn did not become ready.\n"
+                f"--- stdout ---\n{out.decode(errors='replace')}\n"
+                f"--- stderr ---\n{err.decode(errors='replace')}"
+            )
         yield base_url
     finally:
         proc.terminate()
@@ -109,22 +132,149 @@ def stress_token(stress_server):
     return resp2.json()["access_token"]
 
 
+# ---------------------------------------------------------------------------
+# Locust subprocess runner + stats shim
+# ---------------------------------------------------------------------------
+
+class _StatsEntry:
+    """Shim mimicking locust.stats.StatsEntry for the fields our tests use."""
+    def __init__(self, row: dict, percentile_rows: dict):
+        self.method = row.get("Type", "") or ""
+        self.name = row.get("Name", "")
+        self.num_requests = int(float(row.get("Request Count", 0) or 0))
+        self.num_failures = int(float(row.get("Failure Count", 0) or 0))
+        self.avg_response_time = float(row.get("Average Response Time", 0) or 0)
+        self.min_response_time = float(row.get("Min Response Time", 0) or 0)
+        self.max_response_time = float(row.get("Max Response Time", 0) or 0)
+        self.total_rps = float(row.get("Requests/s", 0) or 0)
+        self._percentiles = percentile_rows  # {0.5: ms, 0.95: ms, ...}
+
+    def get_response_time_percentile(self, p: float):
+        # Accept either 0.99 or 99 form; normalize to 0..1
+        if p > 1:
+            p = p / 100.0
+        # Exact match first
+        if p in self._percentiles:
+            return self._percentiles[p]
+        # Fuzzy match on closest declared percentile
+        if not self._percentiles:
+            return 0
+        closest = min(self._percentiles.keys(), key=lambda k: abs(k - p))
+        return self._percentiles[closest]
+
+
+class _Stats:
+    def __init__(self, total: _StatsEntry, entries: dict):
+        self.total = total
+        self.entries = entries
+
+
+class _LocustEnv:
+    def __init__(self, stats: _Stats):
+        self.stats = stats
+
+
+# Locust CSV column names for percentile fields (varies slightly by version).
+_PCT_COL_MAP = {
+    "50%": 0.50, "66%": 0.66, "75%": 0.75, "80%": 0.80,
+    "90%": 0.90, "95%": 0.95, "98%": 0.98, "99%": 0.99,
+    "99.9%": 0.999, "99.99%": 0.9999, "100%": 1.0,
+}
+
+
+def _parse_locust_csv(stats_csv: Path) -> _LocustEnv:
+    if not stats_csv.exists():
+        raise RuntimeError(f"locust stats csv missing: {stats_csv}")
+
+    entries: dict = {}
+    total: _StatsEntry | None = None
+
+    with stats_csv.open() as fh:
+        reader = csv.DictReader(fh)
+        for row in reader:
+            pcts = {}
+            for col, frac in _PCT_COL_MAP.items():
+                v = row.get(col)
+                if v not in (None, "", "N/A"):
+                    try:
+                        pcts[frac] = float(v)
+                    except ValueError:
+                        pass
+            entry = _StatsEntry(row, pcts)
+            if row.get("Name") == "Aggregated":
+                total = entry
+            else:
+                key = (entry.method, entry.name)
+                entries[key] = entry
+
+    if total is None:
+        # Fallback: synthesize a zero-row total
+        total = _StatsEntry({}, {})
+    return _LocustEnv(_Stats(total, entries))
+
+
 def run_locust(host, users, spawn_rate, duration):
-    """Run Locust programmatically and return the Environment with stats."""
-    import gevent
-    from locust.env import Environment
-    from locust.stats import stats_printer, stats_history, StatsCSVFileWriter
-    from tests.stress.locustfile import DecnetUser
+    """Run Locust in a subprocess (fresh Python, clean gevent monkey-patch)
+    and return a stats shim compatible with the tests.
+    """
+    import tempfile
 
-    env = Environment(user_classes=[DecnetUser], host=host)
-    env.create_local_runner()
+    tmp = tempfile.mkdtemp(prefix="locust-stress-")
+    csv_prefix = Path(tmp) / "run"
 
-    env.runner.start(users, spawn_rate=spawn_rate)
+    env = {k: v for k, v in os.environ.items()}
+    # Ensure DecnetUser.on_start can log in with the right creds
+    env.setdefault("DECNET_ADMIN_USER", ADMIN_USER)
+    env.setdefault("DECNET_ADMIN_PASSWORD", ADMIN_PASS)
 
-    # Let it run for the specified duration
-    gevent.sleep(duration)
+    cmd = [
+        sys.executable, "-m", "locust",
+        "-f", str(_LOCUSTFILE),
+        "--headless",
+        "--host", host,
+        "-u", str(users),
+        "-r", str(spawn_rate),
+        "-t", f"{duration}s",
+        "--csv", str(csv_prefix),
+        "--only-summary",
+        "--loglevel", "WARNING",
+    ]
 
-    env.runner.quit()
-    env.runner.greenlet.join(timeout=10)
+    # Generous timeout: locust run-time + spawn ramp + shutdown grace
+    wall_timeout = duration + max(30, users // max(1, spawn_rate)) + 30
 
-    return env
+    try:
+        proc = subprocess.run(
+            cmd,
+            env=env,
+            cwd=str(_REPO_ROOT),
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            timeout=wall_timeout,
+        )
+    except subprocess.TimeoutExpired as e:
+        raise RuntimeError(
+            f"locust subprocess timed out after {wall_timeout}s.\n"
+            f"--- stdout ---\n{(e.stdout or b'').decode(errors='replace')}\n"
+            f"--- stderr ---\n{(e.stderr or b'').decode(errors='replace')}"
+        )
+
+    # Locust exits non-zero on failure-rate threshold; we don't set one, so any
+    # non-zero is a real error.
+    if proc.returncode != 0:
+        raise RuntimeError(
+            f"locust subprocess exited {proc.returncode}.\n"
+            f"--- stdout ---\n{proc.stdout.decode(errors='replace')}\n"
+            f"--- stderr ---\n{proc.stderr.decode(errors='replace')}"
+        )
+
+    result = _parse_locust_csv(Path(str(csv_prefix) + "_stats.csv"))
+    if result.stats.total.num_requests == 0:
+        # Surface the locust output so we can see why (connection errors,
+        # on_start stalls, etc.) instead of a silent "no requests" assert.
+        raise RuntimeError(
+            f"locust produced 0 requests.\n"
+            f"--- stdout ---\n{proc.stdout.decode(errors='replace')}\n"
+            f"--- stderr ---\n{proc.stderr.decode(errors='replace')}"
+        )
+    return result

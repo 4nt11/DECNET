@@ -24,7 +24,7 @@ def _load_redis():
 
     sys.modules["syslog_bridge"] = _make_fake_syslog_bridge()
 
-    spec = importlib.util.spec_from_file_location("redis_server", "templates/redis/server.py")
+    spec = importlib.util.spec_from_file_location("redis_server", "decnet/templates/redis/server.py")
     mod = importlib.util.module_from_spec(spec)
     with patch.dict("os.environ", env, clear=False):
         spec.loader.exec_module(mod)

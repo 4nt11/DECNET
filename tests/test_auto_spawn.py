@@ -71,7 +71,8 @@ def test_pid_file_parent_is_created(fake_popen, tmp_path):
 def test_agent_autospawns_forwarder(fake_popen, monkeypatch, tmp_path):
     """`decnet agent` calls _spawn_detached once with a forwarder argv."""
     # Isolate PID dir to tmp_path so the test doesn't touch /opt/decnet.
-    monkeypatch.setattr(fake_popen, "_pid_dir", lambda: tmp_path)
+    from decnet.cli import utils as _cli_utils
+    monkeypatch.setattr(_cli_utils, "_pid_dir", lambda: tmp_path)
     # Set master host so the auto-spawn branch fires.
     monkeypatch.setenv("DECNET_SWARM_MASTER_HOST", "10.0.0.1")
     monkeypatch.setenv("DECNET_SWARM_SYSLOG_PORT", "6514")
@@ -103,7 +104,8 @@ def test_agent_autospawns_forwarder(fake_popen, monkeypatch, tmp_path):
 
 
 def test_agent_no_forwarder_flag_suppresses_spawn(fake_popen, monkeypatch, tmp_path):
-    monkeypatch.setattr(fake_popen, "_pid_dir", lambda: tmp_path)
+    from decnet.cli import utils as _cli_utils
+    monkeypatch.setattr(_cli_utils, "_pid_dir", lambda: tmp_path)
     monkeypatch.setenv("DECNET_SWARM_MASTER_HOST", "10.0.0.1")
     from decnet.agent import server as _agent_server
     monkeypatch.setattr(_agent_server, "run", lambda *a, **k: 0)
@@ -121,7 +123,8 @@ def test_agent_no_forwarder_flag_suppresses_spawn(fake_popen, monkeypatch, tmp_p
 def test_agent_skips_forwarder_when_master_unset(fake_popen, monkeypatch, tmp_path):
     """If DECNET_SWARM_MASTER_HOST is not set, auto-spawn is silently
     skipped — we don't know where to ship logs to."""
-    monkeypatch.setattr(fake_popen, "_pid_dir", lambda: tmp_path)
+    from decnet.cli import utils as _cli_utils
+    monkeypatch.setattr(_cli_utils, "_pid_dir", lambda: tmp_path)
     monkeypatch.delenv("DECNET_SWARM_MASTER_HOST", raising=False)
     from decnet.agent import server as _agent_server
     monkeypatch.setattr(_agent_server, "run", lambda *a, **k: 0)
@@ -173,7 +176,8 @@ def fake_swarmctl_popen(monkeypatch):
 
 def test_swarmctl_autospawns_listener(fake_swarmctl_popen, monkeypatch, tmp_path):
     cli_mod, calls = fake_swarmctl_popen
-    monkeypatch.setattr(cli_mod, "_pid_dir", lambda: tmp_path)
+    from decnet.cli import utils as _cli_utils
+    monkeypatch.setattr(_cli_utils, "_pid_dir", lambda: tmp_path)
     monkeypatch.setenv("DECNET_LISTENER_HOST", "0.0.0.0")
     monkeypatch.setenv("DECNET_SWARM_SYSLOG_PORT", "6514")
 
@@ -194,7 +198,8 @@ def test_swarmctl_autospawns_listener(fake_swarmctl_popen, monkeypatch, tmp_path
 
 def test_swarmctl_no_listener_flag_suppresses_spawn(fake_swarmctl_popen, monkeypatch, tmp_path):
     cli_mod, calls = fake_swarmctl_popen
-    monkeypatch.setattr(cli_mod, "_pid_dir", lambda: tmp_path)
+    from decnet.cli import utils as _cli_utils
+    monkeypatch.setattr(_cli_utils, "_pid_dir", lambda: tmp_path)
 
     from typer.testing import CliRunner
     runner = CliRunner()

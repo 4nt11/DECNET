@@ -1,5 +1,5 @@
 """
-Tests for templates/mqtt/server.py — protocol boundary and fuzz cases.
+Tests for decnet/templates/mqtt/server.py — protocol boundary and fuzz cases.
 
 Focuses on the variable-length remaining-length field (MQTT spec: max 4 bytes).
 A 5th continuation byte used to cause the server to get stuck waiting for a
@@ -25,7 +25,7 @@ def _load_mqtt():
         if key in ("mqtt_server", "syslog_bridge"):
             del sys.modules[key]
     sys.modules["syslog_bridge"] = make_fake_syslog_bridge()
-    spec = importlib.util.spec_from_file_location("mqtt_server", "templates/mqtt/server.py")
+    spec = importlib.util.spec_from_file_location("mqtt_server", "decnet/templates/mqtt/server.py")
     mod = importlib.util.module_from_spec(spec)
     with patch.dict("os.environ", {"MQTT_ACCEPT_ALL": "1", "MQTT_PERSONA": "water_plant"}, clear=False):
         spec.loader.exec_module(mod)

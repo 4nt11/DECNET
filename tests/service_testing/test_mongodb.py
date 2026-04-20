@@ -1,5 +1,5 @@
 """
-Tests for templates/mongodb/server.py
+Tests for decnet/templates/mongodb/server.py
 
 Covers the MongoDB wire-protocol (OP_MSG / OP_QUERY) happy path and regression
 tests for the zero-length msg_len infinite-loop bug and oversized msg_len.
@@ -24,7 +24,7 @@ def _load_mongodb():
         if key in ("mongodb_server", "syslog_bridge"):
             del sys.modules[key]
     sys.modules["syslog_bridge"] = make_fake_syslog_bridge()
-    spec = importlib.util.spec_from_file_location("mongodb_server", "templates/mongodb/server.py")
+    spec = importlib.util.spec_from_file_location("mongodb_server", "decnet/templates/mongodb/server.py")
     mod = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(mod)
     return mod

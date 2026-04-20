@@ -1,5 +1,5 @@
 """
-Tests for templates/mssql/server.py
+Tests for decnet/templates/mssql/server.py
 
 Covers the TDS pre-login / login7 happy path and regression tests for the
 zero-length pkt_len infinite-loop bug that was fixed (pkt_len < 8 guard).
@@ -24,7 +24,7 @@ def _load_mssql():
         if key in ("mssql_server", "syslog_bridge"):
             del sys.modules[key]
     sys.modules["syslog_bridge"] = make_fake_syslog_bridge()
-    spec = importlib.util.spec_from_file_location("mssql_server", "templates/mssql/server.py")
+    spec = importlib.util.spec_from_file_location("mssql_server", "decnet/templates/mssql/server.py")
     mod = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(mod)
     return mod

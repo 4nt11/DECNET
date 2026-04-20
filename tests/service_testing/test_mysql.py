@@ -1,5 +1,5 @@
 """
-Tests for templates/mysql/server.py
+Tests for decnet/templates/mysql/server.py
 
 Covers the MySQL handshake happy path and regression tests for oversized
 length fields that could cause huge buffer allocations.
@@ -24,7 +24,7 @@ def _load_mysql():
         if key in ("mysql_server", "syslog_bridge"):
             del sys.modules[key]
     sys.modules["syslog_bridge"] = make_fake_syslog_bridge()
-    spec = importlib.util.spec_from_file_location("mysql_server", "templates/mysql/server.py")
+    spec = importlib.util.spec_from_file_location("mysql_server", "decnet/templates/mysql/server.py")
     mod = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(mod)
     return mod

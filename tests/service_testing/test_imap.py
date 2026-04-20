@@ -1,5 +1,5 @@
 """
-Tests for templates/imap/server.py
+Tests for decnet/templates/imap/server.py
 
 Exercises the full IMAP4rev1 state machine:
   NOT_AUTHENTICATED → AUTHENTICATED → SELECTED
@@ -41,7 +41,7 @@ def _load_imap():
     sys.modules["syslog_bridge"] = _make_fake_syslog_bridge()
 
     spec = importlib.util.spec_from_file_location(
-        "imap_server", "templates/imap/server.py"
+        "imap_server", "decnet/templates/imap/server.py"
     )
     mod = importlib.util.module_from_spec(spec)
     with patch.dict("os.environ", env, clear=False):

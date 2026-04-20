@@ -13,7 +13,7 @@ done
 echo "MySQL up."
 
 export DECNET_DB_TYPE=mysql
-export DECNET_DB_URL='mysql+aiomysql://decnet:decnet@127.0.0.1:3307/decnet'
+export DECNET_DB_URL='mysql+asyncmy://root:root@127.0.0.1:3307/decnet'
 
 source .venv/bin/activate
 

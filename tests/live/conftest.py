@@ -20,7 +20,7 @@ from pathlib import Path
 import pytest
 
 _REPO_ROOT = Path(__file__).parent.parent.parent
-_TEMPLATES = _REPO_ROOT / "templates"
+_TEMPLATES = _REPO_ROOT / "decnet" / "templates"
 
 # Prefer the project venv's Python (has Flask, Twisted, etc.) over system Python
 _VENV_PYTHON = _REPO_ROOT / ".venv" / "bin" / "python"

@@ -1,5 +1,5 @@
 """
-Tests for templates/smtp/server.py
+Tests for decnet/templates/smtp/server.py
 
 Exercises both modes:
   - credential-harvester (SMTP_OPEN_RELAY=0, default)
@@ -43,7 +43,7 @@ def _load_smtp(open_relay: bool):
 
     sys.modules["syslog_bridge"] = _make_fake_syslog_bridge()
 
-    spec = importlib.util.spec_from_file_location("smtp_server", "templates/smtp/server.py")
+    spec = importlib.util.spec_from_file_location("smtp_server", "decnet/templates/smtp/server.py")
     mod = importlib.util.module_from_spec(spec)
     with patch.dict("os.environ", env, clear=False):
         spec.loader.exec_module(mod)

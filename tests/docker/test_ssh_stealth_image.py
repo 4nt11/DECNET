@@ -1,7 +1,7 @@
 """
 End-to-end stealth assertions for the built SSH honeypot image.
 
-These tests build the `templates/ssh/` Dockerfile and then introspect the
+These tests build the `decnet/templates/ssh/` Dockerfile and then introspect the
 running container to verify that:
 
 - `/opt/emit_capture.py`, `/opt/syslog_bridge.py` are absent.

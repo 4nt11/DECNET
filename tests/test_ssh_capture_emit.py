@@ -1,5 +1,5 @@
 """
-Round-trip tests for templates/ssh/emit_capture.py.
+Round-trip tests for decnet/templates/ssh/emit_capture.py.
 
 emit_capture reads a JSON event from stdin and writes one RFC 5424 line
 to stdout. The collector's parse_rfc5424 must then recover the same

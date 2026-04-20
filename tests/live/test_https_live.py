@@ -16,7 +16,7 @@ from urllib3.exceptions import InsecureRequestWarning
 from tests.live.conftest import assert_rfc5424
 
 _REPO_ROOT = Path(__file__).parent.parent.parent
-_TEMPLATES = _REPO_ROOT / "templates"
+_TEMPLATES = _REPO_ROOT / "decnet" / "templates"
 _VENV_PYTHON = _REPO_ROOT / ".venv" / "bin" / "python"
 _PYTHON = str(_VENV_PYTHON) if _VENV_PYTHON.exists() else sys.executable
 

@@ -1,5 +1,5 @@
 """
-Tests for templates/snmp/server.py
+Tests for decnet/templates/snmp/server.py
 
 Exercises behavior with SNMP_ARCHETYPE modifications.
 Uses asyncio DatagramProtocol directly.
@@ -39,7 +39,7 @@ def _load_snmp(archetype: str = "default"):
 
     sys.modules["syslog_bridge"] = _make_fake_syslog_bridge()
 
-    spec = importlib.util.spec_from_file_location("snmp_server", "templates/snmp/server.py")
+    spec = importlib.util.spec_from_file_location("snmp_server", "decnet/templates/snmp/server.py")
     mod = importlib.util.module_from_spec(spec)
     with patch.dict("os.environ", env, clear=False):
         spec.loader.exec_module(mod)
