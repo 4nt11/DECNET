@@ -293,10 +293,30 @@ class HealthResponse(BaseModel):
 # DeckyShard — live above; these are the HTTP-facing shapes.
 
 class SwarmEnrollRequest(BaseModel):
-    name: str = PydanticField(..., min_length=1, max_length=128)
-    address: str = PydanticField(..., description="IP or DNS the master uses to reach the worker")
+    # x509 CommonName is capped at 64 bytes (RFC 5280 UB-common-name) — the
+    # cert issuer would reject anything longer with a ValueError.
+    # Pattern: ASCII hostname-safe characters only. The name is embedded
+    # both in the CN and as a SAN DNS entry; x509.DNSName only accepts
+    # A-label ASCII, so non-ASCII would blow up at issuance.
+    name: str = PydanticField(
+        ..., min_length=1, max_length=64,
+        pattern=r"^[A-Za-z0-9][A-Za-z0-9._\-]*$",
+    )
+    address: str = PydanticField(
+        ..., min_length=1, max_length=253,
+        pattern=r"^[A-Za-z0-9][A-Za-z0-9._:\-]*$",
+        description="IP or DNS the master uses to reach the worker",
+    )
     agent_port: int = PydanticField(default=8765, ge=1, le=65535)
-    sans: list[str] = PydanticField(
+    sans: list[
+        Annotated[
+            str,
+            PydanticField(
+                min_length=1, max_length=253,
+                pattern=r"^[A-Za-z0-9][A-Za-z0-9._:\-]*$",
+            ),
+        ]
+    ] = PydanticField(
         default_factory=list,
         description="Extra SANs (IPs / hostnames) to embed in the worker cert",
     )
