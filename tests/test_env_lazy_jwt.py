@@ -5,6 +5,7 @@ from __future__ import annotations
 import importlib
 import os
 import sys
+from pathlib import Path
 
 import pytest
 
@@ -41,7 +42,8 @@ def test_agent_cli_imports_without_jwt_secret(monkeypatch, tmp_path):
     clean_env["PATH"] = os.environ["PATH"]
     clean_env["HOME"] = str(tmp_path)
     repo = pathlib.Path(__file__).resolve().parent.parent
-    binary = repo / ".venv" / "bin" / "decnet"
+    # binary = repo / ".venv" / "bin" / "decnet"
+    binary = Path(sys.executable).parent / "decnet"
     result = subprocess.run(
         [str(binary), "agent", "--help"],
         cwd=str(tmp_path),
