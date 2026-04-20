@@ -31,8 +31,8 @@ import pytest
 from sqlalchemy import text
 from sqlalchemy.ext.asyncio import create_async_engine
 
+from tests.live.conftest import _mysql_available
 from decnet.web.db.mysql.repository import MySQLRepository
-
 
 LIVE_URL = "mysql+asyncmy://root:root@127.0.0.1:3307/decnet"
 
@@ -42,6 +42,10 @@ pytestmark = [
         not (LIVE_URL and LIVE_URL.startswith("mysql")),
         reason="Set DECNET_DB_URL=mysql+aiomysql://... to run MySQL live tests",
     ),
+    pytest.mark.skipif(
+        not _mysql_available(),
+        reason="MySQL not available on 127.0.0.1:3307"
+    )
 ]
 
 
@@ -63,7 +67,7 @@ def _url_with_db(server_url: str, db_name: str) -> str:
     return urlunparse(parsed._replace(path=f"/{db_name}"))
 
 
-@pytest.fixture(scope="session")
+@pytest.fixture(scope="module")
 async def mysql_test_db_url():
     """Create a per-worker throwaway database, yield its URL, drop it on teardown.
 
