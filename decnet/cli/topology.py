@@ -202,6 +202,86 @@ def _teardown(
     _console.print(f"[green]Topology {topology_id} torn down.[/]")
 
 
+@_group.command("mutate")
+def _mutate(
+    topology_id: str = typer.Argument(..., help="Topology id (active or degraded)"),
+    op: str = typer.Argument(
+        ...,
+        help=(
+            "One of: add_lan, remove_lan, attach_decky, detach_decky, "
+            "remove_decky, update_decky, update_lan"
+        ),
+    ),
+    payload_json: str = typer.Option(
+        "{}",
+        "--payload-json",
+        help="JSON payload for the op (see mutator.ops for keys)",
+    ),
+    expected_version: Optional[int] = typer.Option(
+        None,
+        "--expected-version",
+        help="Optimistic-concurrency guard; enqueue fails with a "
+        "VersionConflict if the topology has since been mutated.",
+    ),
+) -> None:
+    """Enqueue a live mutation.  The mutator's watch loop applies it."""
+    _require_master_mode("topology mutate")
+    import json
+
+    try:
+        payload = json.loads(payload_json)
+    except ValueError as e:
+        _console.print(f"[red]Invalid JSON: {e}[/]")
+        raise typer.Exit(1)
+
+    async def _go() -> str:
+        repo = await _repo()
+        return await repo.enqueue_topology_mutation(
+            topology_id, op, payload, expected_version=expected_version,
+        )
+
+    mid = asyncio.run(_go())
+    _console.print(
+        f"[green]Mutation enqueued[/] — id=[bold]{mid}[/] op={op} "
+        f"(watch for state=applied on [cyan]topology mutations {topology_id}[/])"
+    )
+
+
+@_group.command("mutations")
+def _mutations(
+    topology_id: str = typer.Argument(..., help="Topology id"),
+    state: Optional[str] = typer.Option(
+        None,
+        "--state",
+        help="Filter to one of pending|applying|applied|failed",
+    ),
+) -> None:
+    """List queued/applied mutations for a topology."""
+    _require_master_mode("topology mutations")
+
+    async def _go() -> list[dict]:
+        repo = await _repo()
+        return await repo.list_topology_mutations(topology_id, state=state)
+
+    rows = asyncio.run(_go())
+    if not rows:
+        _console.print("[yellow]No mutations.[/]")
+        return
+    table = Table(title=f"Mutations — topology {topology_id}")
+    for col in ("id", "op", "state", "requested_at", "applied_at", "reason"):
+        table.add_column(col)
+    for r in rows:
+        table.add_row(
+            str(r["id"]),
+            str(r["op"]),
+            str(r["state"]),
+            str(r.get("requested_at", "")),
+            str(r.get("applied_at") or ""),
+            str(r.get("reason") or ""),
+        )
+    _console.print(table)
+
+
 def register(app: typer.Typer) -> None:
     app.add_typer(_group, name="topology")
 

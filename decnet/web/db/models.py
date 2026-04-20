@@ -1,7 +1,7 @@
 from datetime import datetime, timezone
 from typing import Literal, Optional, Any, List, Annotated
 from uuid import uuid4
-from sqlalchemy import Column, Text, UniqueConstraint
+from sqlalchemy import Column, Index, Text, UniqueConstraint
 from sqlalchemy.dialects.mysql import MEDIUMTEXT
 from sqlmodel import SQLModel, Field
 from pydantic import BaseModel, ConfigDict, Field as PydanticField, BeforeValidator
@@ -304,6 +304,44 @@ class TopologyStatusEvent(SQLModel, table=True):
     at: datetime = Field(
         default_factory=lambda: datetime.now(timezone.utc), index=True
     )
+    reason: Optional[str] = Field(
+        default=None, sa_column=Column("reason", Text, nullable=True)
+    )
+
+
+class TopologyMutation(SQLModel, table=True):
+    """Operator-requested live mutation for an active MazeNET topology.
+
+    Each row is one intent (add LAN, attach decky, etc.).  The mutator's
+    reconciler claims ``pending`` rows atomically (see
+    ``SQLModelRepository.claim_next_mutation``), applies them against
+    Docker, and writes ``applied`` or ``failed`` back.  The ``(state,
+    topology_id)`` composite index keeps the watch-loop guard query
+    cheap even with years of mutation history.
+    """
+    __tablename__ = "topology_mutations"
+    __table_args__ = (
+        Index(
+            "ix_topology_mutations_state_topology",
+            "state",
+            "topology_id",
+        ),
+    )
+    id: str = Field(default_factory=lambda: str(uuid4()), primary_key=True)
+    topology_id: str = Field(foreign_key="topologies.id", index=True)
+    # add_lan|remove_lan|attach_decky|detach_decky|remove_decky|
+    # update_decky|update_lan
+    op: str = Field(index=True)
+    # JSON-serialised op payload (keys depend on ``op``).
+    payload: str = Field(
+        sa_column=Column("payload", _BIG_TEXT, nullable=False, default="{}")
+    )
+    # pending|applying|applied|failed
+    state: str = Field(default="pending", index=True)
+    requested_at: datetime = Field(
+        default_factory=lambda: datetime.now(timezone.utc), index=True
+    )
+    applied_at: Optional[datetime] = Field(default=None)
     reason: Optional[str] = Field(
         default=None, sa_column=Column("reason", Text, nullable=True)
     )

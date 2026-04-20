@@ -327,3 +327,41 @@ class BaseRepository(ABC):
         self, edge_id: str, *, expected_version: Optional[int] = None
     ) -> None:
         raise NotImplementedError
+
+    # -------------------- live mutation queue (reconciler) --------------------
+
+    async def enqueue_topology_mutation(
+        self,
+        topology_id: str,
+        op: str,
+        payload: dict[str, Any],
+        *,
+        expected_version: Optional[int] = None,
+    ) -> str:
+        raise NotImplementedError
+
+    async def claim_next_mutation(
+        self, topology_id: str
+    ) -> Optional[dict[str, Any]]:
+        raise NotImplementedError
+
+    async def mark_mutation_applied(self, mutation_id: str) -> None:
+        raise NotImplementedError
+
+    async def mark_mutation_failed(
+        self, mutation_id: str, reason: str
+    ) -> None:
+        raise NotImplementedError
+
+    async def list_topology_mutations(
+        self,
+        topology_id: str,
+        state: Optional[str] = None,
+    ) -> list[dict[str, Any]]:
+        raise NotImplementedError
+
+    async def has_pending_topology_mutation(self) -> bool:
+        return False
+
+    async def list_live_topology_ids(self) -> list[str]:
+        return []
