@@ -26,7 +26,8 @@ router = APIRouter()
         403: {"description": "Insufficient permissions"},
         409: {"description": "Configuration conflict (e.g. invalid IP allocation or network mismatch)"},
         422: {"description": "Invalid INI config or schema validation error"},
-        500: {"description": "Deployment failed"}
+        500: {"description": "Deployment failed"},
+        502: {"description": "Partial swarm deploy failure — one or more worker hosts returned an error"},
     }
 )
 @_traced("api.deploy_deckies")

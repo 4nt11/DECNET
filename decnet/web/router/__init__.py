@@ -30,8 +30,11 @@ api_router = APIRouter(
     # require_* Depends or by the global auth middleware). Document 401/403
     # here so the OpenAPI schema reflects reality for contract tests.
     responses={
+        400: {"description": "Malformed request body"},
         401: {"description": "Missing or invalid credentials"},
         403: {"description": "Authenticated but not authorized"},
+        404: {"description": "Referenced resource does not exist"},
+        409: {"description": "Conflict with existing resource"},
     },
 )
 
