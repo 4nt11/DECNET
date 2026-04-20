@@ -318,12 +318,22 @@ async def deploy_topology(repo, topology_id: str, *, dry_run: bool = False) -> N
     if hydrated is None:
         raise ValueError(f"topology {topology_id!r} not found")
 
-    await transition_status(repo, topology_id, TopologyStatus.DEPLOYING)
-
-    client = docker.from_env()
     lans = hydrated["lans"]
     compose_path = _topology_compose_path(topology_id)
 
+    if dry_run:
+        # Plan-only: don't touch repo status or Docker — write the compose
+        # so operators can diff it, nothing else.
+        write_topology_compose(hydrated, compose_path)
+        console.print(
+            f"[bold cyan]Dry run — topology compose file written[/] → {compose_path}"
+        )
+        log.info("topology %s dry-run complete", topology_id)
+        return
+
+    await transition_status(repo, topology_id, TopologyStatus.DEPLOYING)
+
+    client = docker.from_env()
     try:
         for lan in lans:
             net_name = _topology_network_name(topology_id, lan["name"])
@@ -337,9 +347,6 @@ async def deploy_topology(repo, topology_id: str, *, dry_run: bool = False) -> N
         console.print(
             f"[bold cyan]Topology compose file written[/] → {compose_path}"
         )
-        if dry_run:
-            log.info("topology %s dry-run complete", topology_id)
-            return
         _compose_with_retry("up", "--build", "-d", compose_file=compose_path)
     except Exception as exc:
         log.error("topology %s deploy failed: %s", topology_id, exc)
