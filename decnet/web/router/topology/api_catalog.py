@@ -30,6 +30,7 @@ router = APIRouter()
     tags=["MazeNET Topologies"],
     response_model=ServiceCatalogResponse,
     responses={
+        400: {"description": "Malformed query parameters"},
         401: {"description": "Missing or invalid credentials"},
         403: {"description": "Insufficient permissions"},
     },
@@ -70,6 +71,7 @@ async def api_next_subnet(
     tags=["MazeNET Topologies"],
     response_model=NextIPResponse,
     responses={
+        400: {"description": "Malformed path parameters"},
         401: {"description": "Missing or invalid credentials"},
         403: {"description": "Insufficient permissions"},
         404: {"description": "Topology or LAN not found"},

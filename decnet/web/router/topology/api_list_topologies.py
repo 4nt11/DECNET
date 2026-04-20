@@ -17,6 +17,7 @@ router = APIRouter()
     tags=["MazeNET Topologies"],
     response_model=TopologyListResponse,
     responses={
+        400: {"description": "Malformed query parameters"},
         401: {"description": "Missing or invalid credentials"},
         403: {"description": "Insufficient permissions"},
     },

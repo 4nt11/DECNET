@@ -23,6 +23,7 @@ router = APIRouter()
     tags=["MazeNET Topologies"],
     response_model=TopologyDetail,
     responses={
+        400: {"description": "Malformed path parameters"},
         401: {"description": "Missing or invalid credentials"},
         403: {"description": "Insufficient permissions"},
         404: {"description": "Topology not found"},
@@ -49,6 +50,7 @@ async def api_get_topology(
     tags=["MazeNET Topologies"],
     response_model=list[TopologyStatusEventRow],
     responses={
+        400: {"description": "Malformed query parameters"},
         401: {"description": "Missing or invalid credentials"},
         403: {"description": "Insufficient permissions"},
         404: {"description": "Topology not found"},
