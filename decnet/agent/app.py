@@ -18,16 +18,30 @@ Endpoints mirror the existing unihost CLI verbs:
 """
 from __future__ import annotations
 
+from contextlib import asynccontextmanager
 from typing import Optional
 
 from fastapi import FastAPI, HTTPException
 from pydantic import BaseModel, Field
 
 from decnet.agent import executor as _exec
+from decnet.agent import heartbeat as _heartbeat
 from decnet.config import DecnetConfig
 from decnet.logging import get_logger
 
 log = get_logger("agent.app")
+
+
+@asynccontextmanager
+async def _lifespan(app: FastAPI):
+    # Best-effort: if identity/bundle plumbing isn't configured (e.g. dev
+    # runs or non-enrolled hosts), heartbeat.start() is a silent no-op.
+    _heartbeat.start()
+    try:
+        yield
+    finally:
+        await _heartbeat.stop()
+
 
 app = FastAPI(
     title="DECNET SWARM Agent",
@@ -35,6 +49,7 @@ app = FastAPI(
     docs_url=None,    # no interactive docs on worker — narrow attack surface
     redoc_url=None,
     openapi_url=None,
+    lifespan=_lifespan,
 )
 
 
