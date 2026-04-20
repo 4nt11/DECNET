@@ -53,6 +53,24 @@ class TopologyStatusError(ValueError):
     """Raised when an illegal topology status transition is attempted."""
 
 
+class TopologyNotEditable(RuntimeError):
+    """Raised when a pending-only mutation hits a non-pending topology.
+
+    Pre-deploy edits (update_lan, delete_lan, update/delete decky,
+    delete_edge) are only legal while the topology is ``pending``.
+    After deploy the mutator's reconciler + topology_mutations table
+    take over.
+    """
+
+    def __init__(self, *, status: str, reason: str = "") -> None:
+        self.status = status
+        self.reason = reason
+        super().__init__(
+            f"topology not editable (status={status!r})"
+            + (f": {reason}" if reason else "")
+        )
+
+
 class VersionConflict(RuntimeError):
     """Raised when a topology write is supplied a stale ``expected_version``.
 

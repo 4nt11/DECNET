@@ -265,7 +265,14 @@ class BaseRepository(ABC):
     async def add_lan(self, data: dict[str, Any]) -> str:
         raise NotImplementedError
 
-    async def update_lan(self, lan_id: str, fields: dict[str, Any]) -> None:
+    async def update_lan(
+        self,
+        lan_id: str,
+        fields: dict[str, Any],
+        *,
+        expected_version: Optional[int] = None,
+        enforce_pending: bool = False,
+    ) -> None:
         raise NotImplementedError
 
     async def list_lans_for_topology(
@@ -277,7 +284,12 @@ class BaseRepository(ABC):
         raise NotImplementedError
 
     async def update_topology_decky(
-        self, decky_uuid: str, fields: dict[str, Any]
+        self,
+        decky_uuid: str,
+        fields: dict[str, Any],
+        *,
+        expected_version: Optional[int] = None,
+        enforce_pending: bool = False,
     ) -> None:
         raise NotImplementedError
 
@@ -297,4 +309,21 @@ class BaseRepository(ABC):
     async def list_topology_status_events(
         self, topology_id: str, limit: int = 100
     ) -> list[dict[str, Any]]:
+        raise NotImplementedError
+
+    # -------------------- pre-deploy (pending-only) mutations --------------------
+
+    async def delete_lan(
+        self, lan_id: str, *, expected_version: Optional[int] = None
+    ) -> None:
+        raise NotImplementedError
+
+    async def delete_topology_decky(
+        self, decky_uuid: str, *, expected_version: Optional[int] = None
+    ) -> None:
+        raise NotImplementedError
+
+    async def delete_topology_edge(
+        self, edge_id: str, *, expected_version: Optional[int] = None
+    ) -> None:
         raise NotImplementedError

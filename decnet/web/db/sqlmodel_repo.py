@@ -1027,6 +1027,23 @@ class SQLModelRepository(BaseRepository):
             await session.commit()
             return True
 
+    async def _assert_pending(self, session, topology_id: str) -> None:
+        """Pre-deploy edits are pending-only.  Raises TopologyNotEditable."""
+        from decnet.topology.status import TopologyNotEditable, TopologyStatus
+
+        result = await session.execute(
+            select(Topology).where(Topology.id == topology_id)
+        )
+        topo = result.scalar_one_or_none()
+        if topo is None:
+            raise ValueError(f"topology {topology_id!r} not found")
+        if topo.status != TopologyStatus.PENDING:
+            raise TopologyNotEditable(
+                status=topo.status,
+                reason="free-form edits are pending-only; use the "
+                "mutator (topology_mutations) after deploy",
+            )
+
     async def _check_and_bump_version(
         self,
         session,
@@ -1082,24 +1099,78 @@ class SQLModelRepository(BaseRepository):
         fields: dict[str, Any],
         *,
         expected_version: Optional[int] = None,
+        enforce_pending: bool = False,
     ) -> None:
         if not fields:
             return
         async with self._session() as session:
+            result = await session.execute(
+                select(LAN).where(LAN.id == lan_id)
+            )
+            lan = result.scalar_one_or_none()
+            if lan is None:
+                raise ValueError(f"lan {lan_id!r} not found")
+            if enforce_pending:
+                await self._assert_pending(session, lan.topology_id)
             if expected_version is not None:
-                # Need the LAN's topology_id to check version.
-                result = await session.execute(
-                    select(LAN).where(LAN.id == lan_id)
-                )
-                lan = result.scalar_one_or_none()
-                if lan is None:
-                    raise ValueError(f"lan {lan_id!r} not found")
                 await self._check_and_bump_version(
                     session, lan.topology_id, expected_version
                 )
             await session.execute(
                 update(LAN).where(LAN.id == lan_id).values(**fields)
             )
+            await session.commit()
+
+    async def delete_lan(
+        self,
+        lan_id: str,
+        *,
+        expected_version: Optional[int] = None,
+    ) -> None:
+        """Cascade-delete a LAN from a pending topology.
+
+        Rejects if any decky declares this LAN as its home (i.e. has a
+        non-bridge edge to it — the only LAN that decky lives in).  The
+        caller must delete or reassign the home-deckies first.
+        """
+        from decnet.topology.status import TopologyNotEditable  # noqa: F401
+
+        async with self._session() as session:
+            result = await session.execute(select(LAN).where(LAN.id == lan_id))
+            lan = result.scalar_one_or_none()
+            if lan is None:
+                return
+            await self._assert_pending(session, lan.topology_id)
+
+            # Home-decky check: any decky whose only edge lands here?
+            edges_result = await session.execute(
+                select(TopologyEdge).where(TopologyEdge.lan_id == lan_id)
+            )
+            edges_here = edges_result.scalars().all()
+            decky_uuids_on_this_lan = {e.decky_uuid for e in edges_here}
+            for decky_uuid in decky_uuids_on_this_lan:
+                other = await session.execute(
+                    select(TopologyEdge).where(
+                        TopologyEdge.decky_uuid == decky_uuid,
+                        TopologyEdge.lan_id != lan_id,
+                    )
+                )
+                if other.scalar_one_or_none() is None:
+                    raise ValueError(
+                        f"cannot delete LAN {lan.name!r}: decky "
+                        f"{decky_uuid} has no other LAN (would be orphaned)"
+                    )
+
+            if expected_version is not None:
+                await self._check_and_bump_version(
+                    session, lan.topology_id, expected_version
+                )
+            # Cascade edges → LAN.
+            await session.execute(
+                text("DELETE FROM topology_edges WHERE lan_id = :l"),
+                {"l": lan_id},
+            )
+            await session.execute(text("DELETE FROM lans WHERE id = :l"), {"l": lan_id})
             await session.commit()
 
     async def list_lans_for_topology(
@@ -1134,19 +1205,22 @@ class SQLModelRepository(BaseRepository):
         fields: dict[str, Any],
         *,
         expected_version: Optional[int] = None,
+        enforce_pending: bool = False,
     ) -> None:
         if not fields:
             return
         payload = self._serialize_json_fields(fields, ("services", "decky_config"))
         payload.setdefault("updated_at", datetime.now(timezone.utc))
         async with self._session() as session:
+            result = await session.execute(
+                select(TopologyDecky).where(TopologyDecky.uuid == decky_uuid)
+            )
+            d = result.scalar_one_or_none()
+            if d is None:
+                raise ValueError(f"decky {decky_uuid!r} not found")
+            if enforce_pending:
+                await self._assert_pending(session, d.topology_id)
             if expected_version is not None:
-                result = await session.execute(
-                    select(TopologyDecky).where(TopologyDecky.uuid == decky_uuid)
-                )
-                d = result.scalar_one_or_none()
-                if d is None:
-                    raise ValueError(f"decky {decky_uuid!r} not found")
                 await self._check_and_bump_version(
                     session, d.topology_id, expected_version
                 )
@@ -1154,6 +1228,35 @@ class SQLModelRepository(BaseRepository):
                 update(TopologyDecky)
                 .where(TopologyDecky.uuid == decky_uuid)
                 .values(**payload)
+            )
+            await session.commit()
+
+    async def delete_topology_decky(
+        self,
+        decky_uuid: str,
+        *,
+        expected_version: Optional[int] = None,
+    ) -> None:
+        """Cascade-delete a decky + all its edges from a pending topology."""
+        async with self._session() as session:
+            result = await session.execute(
+                select(TopologyDecky).where(TopologyDecky.uuid == decky_uuid)
+            )
+            d = result.scalar_one_or_none()
+            if d is None:
+                return
+            await self._assert_pending(session, d.topology_id)
+            if expected_version is not None:
+                await self._check_and_bump_version(
+                    session, d.topology_id, expected_version
+                )
+            await session.execute(
+                text("DELETE FROM topology_edges WHERE decky_uuid = :u"),
+                {"u": decky_uuid},
+            )
+            await session.execute(
+                text("DELETE FROM topology_deckies WHERE uuid = :u"),
+                {"u": decky_uuid},
             )
             await session.commit()
 
@@ -1188,6 +1291,30 @@ class SQLModelRepository(BaseRepository):
             await session.commit()
             await session.refresh(row)
             return row.id
+
+    async def delete_topology_edge(
+        self,
+        edge_id: str,
+        *,
+        expected_version: Optional[int] = None,
+    ) -> None:
+        async with self._session() as session:
+            result = await session.execute(
+                select(TopologyEdge).where(TopologyEdge.id == edge_id)
+            )
+            edge = result.scalar_one_or_none()
+            if edge is None:
+                return
+            await self._assert_pending(session, edge.topology_id)
+            if expected_version is not None:
+                await self._check_and_bump_version(
+                    session, edge.topology_id, expected_version
+                )
+            await session.execute(
+                text("DELETE FROM topology_edges WHERE id = :e"),
+                {"e": edge_id},
+            )
+            await session.commit()
 
     async def list_topology_edges(
         self, topology_id: str
