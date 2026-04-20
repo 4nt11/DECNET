@@ -105,6 +105,8 @@ jobs:
           python-version: ${{ matrix.python-version }}
       - run: pip install -e .[dev]
       - run: pytest -m fuzz
+        env:
+          SCHEMATHESIS_CONFIG: schemathesis.ci.toml
 
   merge-to-testing:
     name: Merge dev → testing

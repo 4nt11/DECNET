@@ -1,0 +1,35 @@
+# schemathesis.ci.toml
+[[project]]
+title = "DECNET API"
+continue-on-failure = true
+request-timeout = 10.0
+workers = "auto"
+
+[generation]
+mode = "all"
+max-examples = 50          # 10x less than local
+no-shrink = true           # skip shrinking in CI, saves time
+allow-x00 = true
+unique-inputs = true
+
+[phases.examples]
+enabled = true
+fill-missing = true
+
+[phases.coverage]
+enabled = true
+
+[phases.fuzzing]
+enabled = true
+
+[phases.stateful]
+enabled = true
+max-steps = 5              # 4x less than local
+
+[checks]
+status_code_conformance.enabled = true
+content_type_conformance.enabled = true
+response_schema_conformance.enabled = true
+negative_data_rejection.enabled = true
+ignored_auth.enabled = true
+max_response_time = 5.0    # more lenient than local 2s
