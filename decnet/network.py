@@ -228,6 +228,60 @@ def remove_macvlan_network(client: docker.DockerClient) -> None:
 
 
 # ---------------------------------------------------------------------------
+# Plain Docker bridge networks (MazeNET topologies — one per LAN)
+# ---------------------------------------------------------------------------
+
+def create_bridge_network(
+    client: docker.DockerClient,
+    name: str,
+    subnet: str,
+    *,
+    internal: bool = False,
+) -> str:
+    """Create (or reuse) a plain Docker bridge network and return its id.
+
+    ``internal=True`` blocks outbound routing via the host — used for
+    non-DMZ MazeNET LANs so deckies can only reach what the bridge
+    deckies let them reach.
+    """
+    for net in client.networks.list(names=[name]):
+        pools = (net.attrs.get("IPAM") or {}).get("Config") or []
+        cur = pools[0] if pools else {}
+        if net.attrs.get("Driver") == "bridge" and cur.get("Subnet") == subnet:
+            return net.id
+        for cid in (net.attrs.get("Containers") or {}):
+            try:
+                net.disconnect(cid, force=True)
+            except docker.errors.APIError:
+                pass
+        net.remove()
+
+    net = client.networks.create(
+        name=name,
+        driver="bridge",
+        internal=internal,
+        ipam=docker.types.IPAMConfig(
+            driver="default",
+            pool_configs=[docker.types.IPAMPool(subnet=subnet)],
+        ),
+    )
+    return net.id
+
+
+def remove_bridge_network(client: docker.DockerClient, name: str) -> None:
+    for net in client.networks.list(names=[name]):
+        for cid in (net.attrs.get("Containers") or {}):
+            try:
+                net.disconnect(cid, force=True)
+            except docker.errors.APIError:
+                pass
+        try:
+            net.remove()
+        except docker.errors.APIError:
+            pass
+
+
+# ---------------------------------------------------------------------------
 # Host-side macvlan interface (hairpin fix)
 # ---------------------------------------------------------------------------
 

@@ -17,16 +17,24 @@ from decnet.config import DecnetConfig, clear_state, load_state, save_state
 from decnet.composer import write_compose
 from decnet.network import (
     MACVLAN_NETWORK_NAME,
+    create_bridge_network,
     create_ipvlan_network,
     create_macvlan_network,
     get_host_ip,
     ips_to_range,
+    remove_bridge_network,
     remove_macvlan_network,
     setup_host_ipvlan,
     setup_host_macvlan,
     teardown_host_ipvlan,
     teardown_host_macvlan,
 )
+from decnet.topology.compose import (
+    _network_name as _topology_network_name,
+    write_topology_compose,
+)
+from decnet.topology.persistence import hydrate, transition_status
+from decnet.topology.status import TopologyStatus
 
 log = get_logger("engine")
 console = Console()
@@ -279,6 +287,106 @@ def status() -> None:
         )
 
     console.print(table)
+
+
+def _teardown_order(lans: list[dict]) -> list[str]:
+    """Return LAN names in leaf-first (DMZ-last) teardown order.
+
+    The generator names LANs in BFS order (``LAN-00`` = DMZ root,
+    then children, then grandchildren), so reverse-name order is a
+    correct leaf-first topological sort for the tree.  Cross-edges
+    are membership-only — they don't introduce parent/child
+    relationships, so the BFS numbering remains valid.
+    """
+    return sorted((lan["name"] for lan in lans), reverse=True)
+
+
+def _topology_compose_path(topology_id: str) -> Path:
+    return Path(f"decnet-topology-{topology_id[:8]}-compose.yml")
+
+
+@_traced("engine.deploy_topology")
+async def deploy_topology(repo, topology_id: str, *, dry_run: bool = False) -> None:
+    """Deploy a persisted MazeNET topology.
+
+    Assumes ``repo`` has the topology in ``pending`` state.  Creates one
+    Docker bridge network per LAN, writes a per-topology compose file,
+    and brings all deckies up.  Marks ``active`` on success, ``failed``
+    on exception (partial state left for later teardown).
+    """
+    hydrated = await hydrate(repo, topology_id)
+    if hydrated is None:
+        raise ValueError(f"topology {topology_id!r} not found")
+
+    await transition_status(repo, topology_id, TopologyStatus.DEPLOYING)
+
+    client = docker.from_env()
+    lans = hydrated["lans"]
+    compose_path = _topology_compose_path(topology_id)
+
+    try:
+        for lan in lans:
+            net_name = _topology_network_name(topology_id, lan["name"])
+            # DMZ LAN is publicly routable; internal LANs are isolated
+            # from the host's default egress.
+            internal = not lan["is_dmz"]
+            create_bridge_network(
+                client, net_name, lan["subnet"], internal=internal
+            )
+        write_topology_compose(hydrated, compose_path)
+        console.print(
+            f"[bold cyan]Topology compose file written[/] → {compose_path}"
+        )
+        if dry_run:
+            log.info("topology %s dry-run complete", topology_id)
+            return
+        _compose_with_retry("up", "--build", "-d", compose_file=compose_path)
+    except Exception as exc:
+        log.error("topology %s deploy failed: %s", topology_id, exc)
+        await transition_status(
+            repo, topology_id, TopologyStatus.FAILED, reason=str(exc)
+        )
+        raise
+
+    await transition_status(repo, topology_id, TopologyStatus.ACTIVE)
+    log.info("topology %s deployed n_lans=%d", topology_id, len(lans))
+
+
+@_traced("engine.teardown_topology")
+async def teardown_topology(repo, topology_id: str) -> None:
+    """Tear down a persisted MazeNET topology.
+
+    Legal from ``active|degraded|failed|deploying``.  Brings compose
+    down, removes each LAN's Docker bridge network in leaf-first order,
+    and marks ``torn_down``.
+    """
+    hydrated = await hydrate(repo, topology_id)
+    if hydrated is None:
+        raise ValueError(f"topology {topology_id!r} not found")
+
+    await transition_status(repo, topology_id, TopologyStatus.TEARING_DOWN)
+
+    client = docker.from_env()
+    compose_path = _topology_compose_path(topology_id)
+
+    if compose_path.exists():
+        try:
+            _compose("down", "--remove-orphans", compose_file=compose_path)
+        except subprocess.CalledProcessError as exc:
+            log.warning(
+                "topology %s compose down failed (continuing): %s",
+                topology_id, exc,
+            )
+
+    for lan_name in _teardown_order(hydrated["lans"]):
+        net_name = _topology_network_name(topology_id, lan_name)
+        remove_bridge_network(client, net_name)
+
+    if compose_path.exists():
+        compose_path.unlink()
+
+    await transition_status(repo, topology_id, TopologyStatus.TORN_DOWN)
+    log.info("topology %s torn down", topology_id)
 
 
 def _print_status(config: DecnetConfig) -> None:
