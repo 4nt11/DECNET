@@ -50,6 +50,10 @@ app = FastAPI(
     redoc_url=None,
     openapi_url=None,
     lifespan=_lifespan,
+    responses={
+        400: {"description": "Malformed request body"},
+        500: {"description": "Executor error"},
+    },
 )
 
 
@@ -82,7 +86,10 @@ async def status() -> dict:
     return await _exec.status()
 
 
-@app.post("/deploy")
+@app.post(
+    "/deploy",
+    responses={500: {"description": "Deployer raised an exception materialising the config"}},
+)
 async def deploy(req: DeployRequest) -> dict:
     try:
         await _exec.deploy(req.config, dry_run=req.dry_run, no_cache=req.no_cache)
@@ -92,7 +99,10 @@ async def deploy(req: DeployRequest) -> dict:
     return {"status": "deployed", "deckies": len(req.config.deckies)}
 
 
-@app.post("/teardown")
+@app.post(
+    "/teardown",
+    responses={500: {"description": "Teardown raised an exception"}},
+)
 async def teardown(req: TeardownRequest) -> dict:
     try:
         await _exec.teardown(req.decky_id)
@@ -102,7 +112,10 @@ async def teardown(req: TeardownRequest) -> dict:
     return {"status": "torn_down", "decky_id": req.decky_id}
 
 
-@app.post("/self-destruct")
+@app.post(
+    "/self-destruct",
+    responses={500: {"description": "Reaper could not be scheduled"}},
+)
 async def self_destruct() -> dict:
     """Stop all DECNET services on this worker and delete the install
     footprint. Called by the master during decommission. Logs under
@@ -116,13 +129,15 @@ async def self_destruct() -> dict:
     return {"status": "self_destruct_scheduled"}
 
 
-@app.post("/mutate")
+@app.post(
+    "/mutate",
+    responses={501: {"description": "Worker-side mutate not yet implemented"}},
+)
 async def mutate(req: MutateRequest) -> dict:
-    # Service rotation is routed through the deployer's existing mutate path
-    # by the master (worker-side mutate is a redeploy of a single decky with
-    # the new service set).  For v1 we accept the request and ask the master
-    # to send a full /deploy with the updated DecnetConfig — simpler and
-    # avoids duplicating mutation logic on the worker.
+    # TODO: implement worker-side mutate. Currently the master performs
+    # mutation by re-sending a full /deploy with the updated DecnetConfig;
+    # this avoids duplicating mutation logic on the worker for v1. When
+    # ready, replace the 501 with a real redeploy-of-a-single-decky path.
     raise HTTPException(
         status_code=501,
         detail="Per-decky mutate is performed via /deploy with updated services",
