@@ -11,10 +11,10 @@ containers is :mod:`decnet.engine.deployer`.
 from __future__ import annotations
 
 import random
-from ipaddress import IPv4Network
 from typing import Optional
 
 from decnet.fleet import all_service_names
+from decnet.topology.allocator import IPAllocator, SubnetAllocator
 from decnet.topology.config import (
     GeneratedTopology,
     TopologyConfig,
@@ -29,25 +29,24 @@ _SVC_MAX = 3
 
 
 def _plan_lans(
-    config: TopologyConfig, rng: random.Random
+    config: TopologyConfig,
+    rng: random.Random,
+    subnets: SubnetAllocator,
 ) -> list[_PlannedLAN]:
     """Plan LANs as a tree of depth ``config.depth``.
 
     Each non-leaf level adds [1, branching_factor] children per parent.
-    LAN names and subnets are assigned in BFS order.
+    LAN names and subnets are assigned in BFS order; subnets come from
+    ``subnets``, which the caller may have pre-seeded with reservations
+    from other topologies.
     """
     lans: list[_PlannedLAN] = []
 
-    def _subnet(idx: int) -> str:
-        # Exhausting /24s at 172.X.0..255 caps topologies at 256 LANs on
-        # the default base.  Well above the v1 envelope (depth=16 cap).
-        if idx > 255:
-            raise ValueError("too many LANs for the configured subnet_base_prefix")
-        return f"{config.subnet_base_prefix}.{idx}.0/24"
-
     # DMZ root.
     lans.append(
-        _PlannedLAN(name="LAN-00", subnet=_subnet(0), is_dmz=True, parent=None)
+        _PlannedLAN(
+            name="LAN-00", subnet=subnets.next_free(), is_dmz=True, parent=None
+        )
     )
     frontier: list[_PlannedLAN] = [lans[0]]
 
@@ -59,7 +58,7 @@ def _plan_lans(
                 idx = len(lans)
                 child = _PlannedLAN(
                     name=f"LAN-{idx:02d}",
-                    subnet=_subnet(idx),
+                    subnet=subnets.next_free(),
                     is_dmz=False,
                     parent=parent.name,
                 )
@@ -69,13 +68,6 @@ def _plan_lans(
         if not frontier:
             break
     return lans
-
-
-def _host_pool(subnet: str) -> list[str]:
-    """Usable host IPs in ``subnet``, skipping .1 (gateway)."""
-    net = IPv4Network(subnet, strict=False)
-    gateway = str(next(net.hosts()))
-    return [str(ip) for ip in net.hosts() if str(ip) != gateway]
 
 
 def _pick_services(
@@ -99,32 +91,38 @@ def _pick_services(
     return list(chosen)
 
 
-def generate(config: TopologyConfig) -> GeneratedTopology:
+def generate(
+    config: TopologyConfig,
+    *,
+    reserved_subnets: Optional[set[str]] = None,
+) -> GeneratedTopology:
     """Generate a topology plan deterministically under ``config.seed``.
 
     The caller is responsible for persisting the plan via
     :mod:`decnet.topology.persistence` and then deploying it.
+
+    ``reserved_subnets`` (optional): /24s already claimed by other
+    topologies.  The subnet allocator skips these so two concurrent
+    drafts can't collide.  Populate via
+    :func:`decnet.topology.allocator.reserved_subnets`.
     """
     rng = random.Random(config.seed)  # nosec B311
     svc_pool = all_service_names() if config.randomize_services else []
     used_combos: set[frozenset] = set()
 
-    lans = _plan_lans(config, rng)
+    subnets = SubnetAllocator(
+        config.subnet_base_prefix, reserved=reserved_subnets or set()
+    )
+    lans = _plan_lans(config, rng, subnets)
     lans_by_name = {lan.name: lan for lan in lans}
 
-    # Per-LAN IP pools for deterministic assignment.
-    ip_iters: dict[str, list[str]] = {
-        lan.name: _host_pool(lan.subnet) for lan in lans
+    # Per-LAN IP allocators for deterministic assignment.
+    ip_allocs: dict[str, IPAllocator] = {
+        lan.name: IPAllocator(lan.subnet) for lan in lans
     }
-    ip_cursors: dict[str, int] = {lan.name: 0 for lan in lans}
 
     def _take_ip(lan_name: str) -> str:
-        pool = ip_iters[lan_name]
-        i = ip_cursors[lan_name]
-        if i >= len(pool):
-            raise RuntimeError(f"LAN {lan_name} ran out of IPs")
-        ip_cursors[lan_name] = i + 1
-        return pool[i]
+        return ip_allocs[lan_name].next_free()
 
     deckies: list[_PlannedDecky] = []
     edges: list[_PlannedEdge] = []
