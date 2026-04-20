@@ -64,6 +64,10 @@ async def _probe_host(host: dict[str, Any]) -> HostReleaseInfo:
     "/hosts",
     response_model=HostReleasesResponse,
     tags=["Swarm Updates"],
+    responses={
+        401: {"description": "Could not validate credentials"},
+        403: {"description": "Insufficient permissions"},
+    },
 )
 async def api_list_host_releases(
     admin: dict = Depends(require_admin),

@@ -25,7 +25,11 @@ router = APIRouter()
     "/teardown",
     response_model=SwarmDeployResponse,
     tags=["Swarm Deployments"],
-    responses={404: {"description": "A targeted host does not exist"}},
+    responses={
+        400: {"description": "Bad Request (malformed JSON body)"},
+        404: {"description": "A targeted host does not exist"},
+        422: {"description": "Request body validation error"},
+    },
 )
 async def api_teardown_swarm(
     req: SwarmTeardownRequest,

@@ -15,6 +15,7 @@ router = APIRouter()
         401: {"description": "Could not validate credentials"},
         403: {"description": "Insufficient permissions"},
         404: {"description": "Attacker not found"},
+        422: {"description": "Query parameter validation error (limit/offset out of range or invalid)"},
     },
 )
 @_traced("api.get_attacker_commands")

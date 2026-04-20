@@ -11,7 +11,12 @@ router = APIRouter()
 @router.post(
     "/deckies/{decky_name}/mutate",
     tags=["Fleet Management"],
-    responses={401: {"description": "Could not validate credentials"}, 403: {"description": "Insufficient permissions"}, 404: {"description": "Decky not found"}}
+    responses={
+        401: {"description": "Could not validate credentials"},
+        403: {"description": "Insufficient permissions"},
+        404: {"description": "Decky not found"},
+        422: {"description": "Path parameter validation error (decky_name must match ^[a-z0-9\\-]{1,64}$)"},
+    }
 )
 @_traced("api.mutate_decky")
 async def api_mutate_decky(

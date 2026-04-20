@@ -23,6 +23,13 @@ router = APIRouter()
     "/rollback",
     response_model=RollbackResponse,
     tags=["Swarm Updates"],
+    responses={
+        400: {"description": "Bad Request (malformed JSON body or host has no updater bundle)"},
+        401: {"description": "Could not validate credentials"},
+        403: {"description": "Insufficient permissions"},
+        404: {"description": "Unknown host, or no previous release slot on the worker"},
+        422: {"description": "Request body validation error"},
+    },
 )
 async def api_rollback_host(
     req: RollbackRequest,

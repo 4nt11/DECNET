@@ -128,6 +128,13 @@ def _is_expected_connection_drop(exc: BaseException) -> bool:
     "/push",
     response_model=PushUpdateResponse,
     tags=["Swarm Updates"],
+    responses={
+        400: {"description": "Bad Request (malformed JSON body or conflicting host_uuids/all flags)"},
+        401: {"description": "Could not validate credentials"},
+        403: {"description": "Insufficient permissions"},
+        404: {"description": "No matching target hosts or no updater-capable hosts enrolled"},
+        422: {"description": "Request body validation error"},
+    },
 )
 async def api_push_update(
     req: PushUpdateRequest,

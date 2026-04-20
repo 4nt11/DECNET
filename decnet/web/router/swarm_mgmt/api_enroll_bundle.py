@@ -322,6 +322,13 @@ def _render_bootstrap(
     response_model=EnrollBundleResponse,
     status_code=status.HTTP_201_CREATED,
     tags=["Swarm Management"],
+    responses={
+        400: {"description": "Bad Request (malformed JSON body)"},
+        401: {"description": "Could not validate credentials"},
+        403: {"description": "Insufficient permissions"},
+        409: {"description": "A worker with this name is already enrolled"},
+        422: {"description": "Request body validation error"},
+    },
 )
 async def create_enroll_bundle(
     req: EnrollBundleRequest,

@@ -24,6 +24,12 @@ router = APIRouter()
     "/hosts/{uuid}",
     status_code=status.HTTP_204_NO_CONTENT,
     tags=["Swarm Management"],
+    responses={
+        401: {"description": "Could not validate credentials"},
+        403: {"description": "Insufficient permissions"},
+        404: {"description": "Host not found"},
+        422: {"description": "Path parameter validation error"},
+    },
 )
 async def decommission_host(
     uuid: str,

@@ -101,8 +101,10 @@ async def _verify_peer_matches_host(
     status_code=204,
     tags=["Swarm Health"],
     responses={
+        400: {"description": "Bad Request (malformed JSON body)"},
         403: {"description": "Peer cert missing, or its fingerprint does not match the host's pinned cert"},
         404: {"description": "host_uuid is not enrolled"},
+        422: {"description": "Request body validation error"},
     },
 )
 async def heartbeat(

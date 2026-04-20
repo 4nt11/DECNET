@@ -115,6 +115,13 @@ async def _run_teardown(
     response_model=TeardownHostResponse,
     status_code=status.HTTP_202_ACCEPTED,
     tags=["Swarm Management"],
+    responses={
+        400: {"description": "Bad Request (malformed JSON body)"},
+        401: {"description": "Could not validate credentials"},
+        403: {"description": "Insufficient permissions"},
+        404: {"description": "Host not found"},
+        422: {"description": "Request body or path parameter validation error"},
+    },
 )
 async def teardown_host(
     uuid: str,
