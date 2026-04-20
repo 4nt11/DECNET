@@ -16,6 +16,8 @@ shared DB.
 """
 from __future__ import annotations
 
+from decnet.web import _uvicorn_tls_scope  # noqa: F401  # patches uvicorn on import
+
 from contextlib import asynccontextmanager
 from typing import AsyncGenerator
 
