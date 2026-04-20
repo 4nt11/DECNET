@@ -5,12 +5,14 @@ import os
 import pathlib
 import subprocess
 import sys
+from pathlib import Path
 
 import pytest
 
 
 REPO = pathlib.Path(__file__).resolve().parent.parent
-DECNET_BIN = REPO / ".venv" / "bin" / "decnet"
+#DECNET_BIN = REPO / ".venv" / "bin" / "decnet"
+DECNET_BIN = Path(sys.executable).parent / "decnet"
 
 
 def _clean_env(**overrides: str) -> dict[str, str]:
