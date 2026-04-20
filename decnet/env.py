@@ -89,6 +89,13 @@ DECNET_INGEST_LOG_FILE: str | None = os.environ.get("DECNET_INGEST_LOG_FILE", "/
 DECNET_SWARM_SYSLOG_PORT: int = _port("DECNET_SWARM_SYSLOG_PORT", 6514)
 DECNET_SWARM_MASTER_HOST: str | None = os.environ.get("DECNET_SWARM_MASTER_HOST")
 
+# Worker-side identity + swarmctl locator, seeded by the enroll bundle's
+# /etc/decnet/decnet.ini ([agent] host-uuid / master-host / swarmctl-port).
+# The agent heartbeat loop uses these to self-identify to the master.
+DECNET_HOST_UUID: str | None = os.environ.get("DECNET_HOST_UUID")
+DECNET_MASTER_HOST: str | None = os.environ.get("DECNET_MASTER_HOST")
+DECNET_SWARMCTL_PORT: int = _port("DECNET_SWARMCTL_PORT", 8770)
+
 # Ingester batching: how many log rows to accumulate per commit, and the
 # max wait (ms) before flushing a partial batch. Larger batches reduce
 # SQLite write-lock contention; the timeout keeps latency bounded during
