@@ -232,6 +232,10 @@ class LAN(SQLModel, table=True):
     docker_network_id: Optional[str] = Field(default=None)
     subnet: str
     is_dmz: bool = Field(default=False)
+    # Canvas layout coordinates (set by the web editor).  Nullable so
+    # generator-emitted LANs don't need auto-layout at generation time.
+    x: Optional[float] = Field(default=None)
+    y: Optional[float] = Field(default=None)
 
 
 class TopologyDecky(SQLModel, table=True):
@@ -270,6 +274,10 @@ class TopologyDecky(SQLModel, table=True):
     updated_at: datetime = Field(
         default_factory=lambda: datetime.now(timezone.utc)
     )
+    # Canvas layout coordinates (set by the web editor).  Nullable so
+    # generator-emitted deckies don't need auto-layout at generation time.
+    x: Optional[float] = Field(default=None)
+    y: Optional[float] = Field(default=None)
 
 
 class TopologyEdge(SQLModel, table=True):

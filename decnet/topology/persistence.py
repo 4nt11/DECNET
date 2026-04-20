@@ -31,6 +31,8 @@ async def persist(repo: Any, plan: GeneratedTopology) -> str:
                 "name": lan.name,
                 "subnet": lan.subnet,
                 "is_dmz": lan.is_dmz,
+                "x": lan.x,
+                "y": lan.y,
             }
         )
         lan_ids[lan.name] = lan_id
@@ -55,6 +57,8 @@ async def persist(repo: Any, plan: GeneratedTopology) -> str:
                     "service_config": decky.service_config,
                 },
                 "ip": primary_ip,
+                "x": decky.x,
+                "y": decky.y,
             }
         )
         decky_ids[decky.name] = decky_uuid

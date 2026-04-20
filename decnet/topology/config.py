@@ -59,6 +59,10 @@ class _PlannedLAN:
     subnet: str
     is_dmz: bool
     parent: Optional[str]  # name of parent LAN, None for DMZ
+    # Canvas coordinates — generator leaves them None; the web editor
+    # (or a future auto-layouter) fills them in.
+    x: Optional[float] = None
+    y: Optional[float] = None
 
 
 @dataclass
@@ -73,6 +77,9 @@ class _PlannedDecky:
     # Mirrors ``DeckyConfig.service_config`` from the flat-fleet path;
     # services read these via ``compose_fragment(service_cfg=...)``.
     service_config: dict[str, dict] = field(default_factory=dict)
+    # Canvas coordinates — see _PlannedLAN.x/y.
+    x: Optional[float] = None
+    y: Optional[float] = None
 
 
 @dataclass
