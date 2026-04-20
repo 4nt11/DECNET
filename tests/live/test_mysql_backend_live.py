@@ -34,7 +34,7 @@ from sqlalchemy.ext.asyncio import create_async_engine
 from decnet.web.db.mysql.repository import MySQLRepository
 
 
-LIVE_URL = os.environ.get("DECNET_MYSQL_TEST_URL") or os.environ.get("DECNET_DB_URL")
+LIVE_URL = "mysql+asyncmy://root:root@127.0.0.1:3307/decnet"
 
 pytestmark = [
     pytest.mark.live,

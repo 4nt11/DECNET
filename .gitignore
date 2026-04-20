@@ -1,6 +1,7 @@
 .venv/
 logs/
-.claude/
+.claude/*
+CLAUDE.md
 __pycache__/
 *.pyc
 *.pyo
