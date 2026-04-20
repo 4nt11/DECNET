@@ -1,6 +1,7 @@
 from datetime import datetime, timezone
 from typing import Literal, Optional, Any, List, Annotated
-from sqlalchemy import Column, Text
+from uuid import uuid4
+from sqlalchemy import Column, Text, UniqueConstraint
 from sqlalchemy.dialects.mysql import MEDIUMTEXT
 from sqlmodel import SQLModel, Field
 from pydantic import BaseModel, ConfigDict, Field as PydanticField, BeforeValidator
@@ -191,6 +192,110 @@ class AttackerBehavior(SQLModel, table=True):
     updated_at: datetime = Field(
         default_factory=lambda: datetime.now(timezone.utc), index=True
     )
+
+# --- MazeNET tables ---
+# Nested deception topologies: an arbitrary-depth DAG of LANs connected by
+# multi-homed "bridge" deckies.  Purpose-built; disjoint from DeckyShard which
+# remains SWARM-only.
+
+class Topology(SQLModel, table=True):
+    __tablename__ = "topologies"
+    id: str = Field(default_factory=lambda: str(uuid4()), primary_key=True)
+    name: str = Field(index=True, unique=True)
+    mode: str = Field(default="unihost")  # unihost|agent
+    # Full TopologyConfig snapshot (including seed) used at generation time.
+    config_snapshot: str = Field(
+        sa_column=Column("config_snapshot", _BIG_TEXT, nullable=False, default="{}")
+    )
+    status: str = Field(
+        default="pending", index=True
+    )  # pending|deploying|active|degraded|failed|tearing_down|torn_down
+    status_changed_at: datetime = Field(
+        default_factory=lambda: datetime.now(timezone.utc)
+    )
+    created_at: datetime = Field(
+        default_factory=lambda: datetime.now(timezone.utc), index=True
+    )
+
+
+class LAN(SQLModel, table=True):
+    __tablename__ = "lans"
+    __table_args__ = (UniqueConstraint("topology_id", "name", name="uq_lan_topology_name"),)
+    id: str = Field(default_factory=lambda: str(uuid4()), primary_key=True)
+    topology_id: str = Field(foreign_key="topologies.id", index=True)
+    name: str
+    # Populated after the Docker network is created; nullable before deploy.
+    docker_network_id: Optional[str] = Field(default=None)
+    subnet: str
+    is_dmz: bool = Field(default=False)
+
+
+class TopologyDecky(SQLModel, table=True):
+    """A decky belonging to a MazeNET topology.
+
+    Disjoint from DeckyShard (which is SWARM-only).  UUID PK; decky name is
+    unique only within a topology, so two topologies can both have a
+    ``decky-01`` without colliding.
+    """
+    __tablename__ = "topology_deckies"
+    __table_args__ = (
+        UniqueConstraint("topology_id", "name", name="uq_topology_decky_name"),
+    )
+    uuid: str = Field(default_factory=lambda: str(uuid4()), primary_key=True)
+    topology_id: str = Field(foreign_key="topologies.id", index=True)
+    name: str
+    # JSON list[str] of service names on this decky (snapshot of assignment).
+    services: str = Field(
+        sa_column=Column("services", _BIG_TEXT, nullable=False, default="[]")
+    )
+    # Full serialised DeckyConfig snapshot — lets the dashboard render the
+    # same card shape as DeckyShard without a live round-trip.
+    decky_config: Optional[str] = Field(
+        default=None, sa_column=Column("decky_config", _BIG_TEXT, nullable=True)
+    )
+    ip: Optional[str] = Field(default=None)
+    # Same vocabulary as DeckyShard.state to keep dashboard rendering uniform.
+    state: str = Field(
+        default="pending", index=True
+    )  # pending|running|failed|torn_down|degraded|tearing_down|teardown_failed
+    last_error: Optional[str] = Field(
+        default=None, sa_column=Column("last_error", Text, nullable=True)
+    )
+    compose_hash: Optional[str] = Field(default=None)
+    last_seen: Optional[datetime] = Field(default=None)
+    updated_at: datetime = Field(
+        default_factory=lambda: datetime.now(timezone.utc)
+    )
+
+
+class TopologyEdge(SQLModel, table=True):
+    """Membership edge: a decky attached to a LAN.
+
+    A decky appearing in ≥2 edges is multi-homed (a bridge decky).
+    """
+    __tablename__ = "topology_edges"
+    id: str = Field(default_factory=lambda: str(uuid4()), primary_key=True)
+    topology_id: str = Field(foreign_key="topologies.id", index=True)
+    decky_uuid: str = Field(foreign_key="topology_deckies.uuid", index=True)
+    lan_id: str = Field(foreign_key="lans.id", index=True)
+    is_bridge: bool = Field(default=False)
+    forwards_l3: bool = Field(default=False)
+
+
+class TopologyStatusEvent(SQLModel, table=True):
+    """Append-only audit log of topology status transitions."""
+    __tablename__ = "topology_status_events"
+    id: str = Field(default_factory=lambda: str(uuid4()), primary_key=True)
+    topology_id: str = Field(foreign_key="topologies.id", index=True)
+    from_status: str
+    to_status: str
+    at: datetime = Field(
+        default_factory=lambda: datetime.now(timezone.utc), index=True
+    )
+    reason: Optional[str] = Field(
+        default=None, sa_column=Column("reason", Text, nullable=True)
+    )
+
 
 # --- API Request/Response Models (Pydantic) ---
 
