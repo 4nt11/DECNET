@@ -24,6 +24,11 @@ from pathlib import Path
 import httpx
 import pytest
 
+pytestmark = pytest.mark.skipif(
+    os.environ.get("CI") == "true",
+    reason="live tests run locally, CI environment not advanced enough to handle this."
+)
+
 # Must be set before any decnet import
 os.environ.setdefault("DECNET_JWT_SECRET", "test-secret-key-at-least-32-chars-long!!")
 os.environ.setdefault("DECNET_ADMIN_PASSWORD", "test-password-123")
