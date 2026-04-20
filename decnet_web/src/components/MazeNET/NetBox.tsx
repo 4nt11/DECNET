@@ -1,6 +1,7 @@
 import React from 'react';
 import { Globe, GitMerge } from 'lucide-react';
 import type { Net } from './types';
+import type { ResizeHandle } from './useMazeInteraction';
 
 interface Props {
   net: Net;
@@ -8,10 +9,14 @@ interface Props {
   dropTarget: boolean;
   inactive: boolean;
   onSelect?: (id: string) => void;
+  onHeaderMouseDown?: (id: string) => (e: React.MouseEvent) => void;
+  onResizeMouseDown?: (id: string, handle: ResizeHandle) => (e: React.MouseEvent) => void;
   children?: React.ReactNode;
 }
 
-const NetBox: React.FC<Props> = ({ net, selected, dropTarget, inactive, onSelect, children }) => {
+const NetBox: React.FC<Props> = ({
+  net, selected, dropTarget, inactive, onSelect, onHeaderMouseDown, onResizeMouseDown, children,
+}) => {
   const classes = [
     'maze-net-box',
     net.kind === 'internet' ? 'internet' : '',
@@ -23,42 +28,45 @@ const NetBox: React.FC<Props> = ({ net, selected, dropTarget, inactive, onSelect
   const Icon = net.kind === 'internet' ? Globe : GitMerge;
   const resizable = net.kind !== 'internet';
 
+  const handleBoxDown = (e: React.MouseEvent) => {
+    if (e.target !== e.currentTarget) return;
+    onSelect?.(net.id);
+  };
+
+  const handleHeadDown = (e: React.MouseEvent) => {
+    onSelect?.(net.id);
+    onHeaderMouseDown?.(net.id)(e);
+  };
+
   return (
     <div
       className={classes}
       style={{ left: net.x, top: net.y, width: net.w, height: net.h }}
-      onMouseDown={(e) => {
-        if (e.target === e.currentTarget) { e.stopPropagation(); onSelect?.(net.id); }
-      }}
+      onMouseDown={handleBoxDown}
     >
-      <div
-        className="maze-net-box-head"
-        onMouseDown={(e) => { e.stopPropagation(); onSelect?.(net.id); }}
-      >
+      <div className="maze-net-box-head" onMouseDown={handleHeadDown}>
         <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
           <Icon size={10} />
           <span>{net.label}</span>
           {inactive && (
-            <span
-              className="chip-mini"
-              style={{ marginLeft: 4, borderColor: 'var(--border)', color: 'rgba(255,255,255,0.45)' }}
-            >
+            <span className="chip-mini"
+                  style={{ marginLeft: 4, borderColor: 'var(--border)', color: 'rgba(255,255,255,0.45)' }}>
               INACTIVE
             </span>
           )}
         </div>
         <span className="cidr">{net.cidr}</span>
       </div>
-      {resizable && (
+      {resizable && onResizeMouseDown && (
         <>
-          <div className="net-resize net-resize-e" />
-          <div className="net-resize net-resize-w" />
-          <div className="net-resize net-resize-s" />
-          <div className="net-resize net-resize-n" />
-          <div className="net-resize net-resize-se" />
-          <div className="net-resize net-resize-sw" />
-          <div className="net-resize net-resize-ne" />
-          <div className="net-resize net-resize-nw" />
+          <div className="net-resize net-resize-e"  onMouseDown={onResizeMouseDown(net.id, 'e')} />
+          <div className="net-resize net-resize-w"  onMouseDown={onResizeMouseDown(net.id, 'w')} />
+          <div className="net-resize net-resize-s"  onMouseDown={onResizeMouseDown(net.id, 's')} />
+          <div className="net-resize net-resize-n"  onMouseDown={onResizeMouseDown(net.id, 'n')} />
+          <div className="net-resize net-resize-se" onMouseDown={onResizeMouseDown(net.id, 'se')} />
+          <div className="net-resize net-resize-sw" onMouseDown={onResizeMouseDown(net.id, 'sw')} />
+          <div className="net-resize net-resize-ne" onMouseDown={onResizeMouseDown(net.id, 'ne')} />
+          <div className="net-resize net-resize-nw" onMouseDown={onResizeMouseDown(net.id, 'nw')} />
         </>
       )}
       {children}

@@ -1,8 +1,9 @@
-import React, { useMemo } from 'react';
+import React, { forwardRef, useMemo } from 'react';
 import NetBox from './NetBox';
 import NodeCard from './NodeCard';
 import type { Net, MazeNode, Edge } from './types';
 import type { Selection } from './Inspector';
+import type { ResizeHandle } from './useMazeInteraction';
 
 interface Props {
   nets: Net[];
@@ -10,13 +11,23 @@ interface Props {
   edges: Edge[];
   selection: Selection;
   setSelection: (s: Selection) => void;
-  pan?: { x: number; y: number };
+  pan: { x: number; y: number };
+  dropTargetId: string | null;
+  dragging: boolean;
+  onCanvasMouseDown: (e: React.MouseEvent) => void;
+  onNodeMouseDown: (id: string) => (e: React.MouseEvent) => void;
+  onNetMouseDown: (id: string) => (e: React.MouseEvent) => void;
+  onNetResizeMouseDown: (id: string, handle: ResizeHandle) => (e: React.MouseEvent) => void;
 }
 
 const NODE_W = 140;
 const NODE_HEAD_H = 22;
 
-const Canvas: React.FC<Props> = ({ nets, nodes, edges, selection, setSelection, pan = { x: 0, y: 0 } }) => {
+const Canvas = forwardRef<HTMLDivElement, Props>(function Canvas(
+  { nets, nodes, edges, selection, setSelection, pan, dropTargetId, dragging,
+    onCanvasMouseDown, onNodeMouseDown, onNetMouseDown, onNetResizeMouseDown },
+  ref,
+) {
   const netById = useMemo(() => new Map(nets.map((n) => [n.id, n])), [nets]);
 
   const absPos = (node: MazeNode) => {
@@ -24,7 +35,6 @@ const Canvas: React.FC<Props> = ({ nets, nodes, edges, selection, setSelection, 
     return { x: (net?.x ?? 0) + node.x, y: (net?.y ?? 0) + node.y };
   };
 
-  /* nets touched by any edge */
   const activeNetIds = useMemo(() => {
     const nodeNet = new Map(nodes.map((n) => [n.id, n.netId]));
     const ids = new Set<string>();
@@ -41,8 +51,13 @@ const Canvas: React.FC<Props> = ({ nets, nodes, edges, selection, setSelection, 
 
   return (
     <div
+      ref={ref}
       className="maze-canvas-wrap"
-      onMouseDown={(e) => { if (e.target === e.currentTarget) setSelection(null); }}
+      onMouseDown={(e) => {
+        if (e.target === e.currentTarget) setSelection(null);
+        onCanvasMouseDown(e);
+      }}
+      style={{ cursor: dragging ? 'grabbing' : 'grab' }}
     >
       <div className="maze-grid-bg">
         <svg xmlns="http://www.w3.org/2000/svg">
@@ -106,9 +121,11 @@ const Canvas: React.FC<Props> = ({ nets, nodes, edges, selection, setSelection, 
                 key={net.id}
                 net={net}
                 selected={net.id === selNetId}
-                dropTarget={false}
+                dropTarget={dropTargetId === net.id}
                 inactive={inactive}
                 onSelect={(id) => setSelection({ type: 'net', id })}
+                onHeaderMouseDown={onNetMouseDown}
+                onResizeMouseDown={onNetResizeMouseDown}
               />
             );
           })}
@@ -121,7 +138,9 @@ const Canvas: React.FC<Props> = ({ nets, nodes, edges, selection, setSelection, 
                 absX={p.x}
                 absY={p.y}
                 selected={n.id === selNodeId}
+                dragging={dragging && n.id === selNodeId}
                 onSelect={(id) => setSelection({ type: 'node', id })}
+                onMouseDown={onNodeMouseDown}
               />
             );
           })}
@@ -135,6 +154,6 @@ const Canvas: React.FC<Props> = ({ nets, nodes, edges, selection, setSelection, 
       </div>
     </div>
   );
-};
+});
 
 export default Canvas;
