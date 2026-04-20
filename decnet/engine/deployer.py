@@ -35,6 +35,7 @@ from decnet.topology.compose import (
 )
 from decnet.topology.persistence import hydrate, transition_status
 from decnet.topology.status import TopologyStatus
+from decnet.topology.validate import ValidationError, errors as _validation_errors, validate as _validate_topology
 
 log = get_logger("engine")
 console = Console()
@@ -317,6 +318,12 @@ async def deploy_topology(repo, topology_id: str, *, dry_run: bool = False) -> N
     hydrated = await hydrate(repo, topology_id)
     if hydrated is None:
         raise ValueError(f"topology {topology_id!r} not found")
+
+    # Precondition: validate before any status transition or Docker call.
+    # Errors bubble up as ValidationError and leave status untouched.
+    issues = _validate_topology(hydrated)
+    if _validation_errors(issues):
+        raise ValidationError(issues)
 
     lans = hydrated["lans"]
     compose_path = _topology_compose_path(topology_id)
