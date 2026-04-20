@@ -93,22 +93,21 @@ async def api_deploy_deckies(req: DeployIniRequest, admin: dict = Depends(requir
             mutate_interval=ini.mutate_interval or DEFAULT_MUTATE_INTERVAL,
         )
 
-    # Merge deckies
-    existing_deckies_map = {d.name: d for d in config.deckies}
-    for new_decky in new_decky_configs:
-        existing_deckies_map[new_decky.name] = new_decky
+    # The INI is the source of truth for *which* deckies exist this deploy.
+    # The old "merge with prior state" behaviour meant submitting `[decky1]`
+    # after a 3-decky run silently redeployed decky2/decky3 too — and then
+    # collided on their stale IPs ("Address already in use"). Full replace
+    # matches what the operator sees in the submitted config.
+    config.deckies = list(new_decky_configs)
 
-    # Enforce deployment limit
     limits_state = await repo.get_state("config_limits")
     deployment_limit = limits_state.get("deployment_limit", 10) if limits_state else 10
-    if len(existing_deckies_map) > deployment_limit:
+    if len(config.deckies) > deployment_limit:
         raise HTTPException(
             status_code=409,
-            detail=f"Deployment would result in {len(existing_deckies_map)} deckies, "
+            detail=f"Deployment would result in {len(config.deckies)} deckies, "
                    f"exceeding the configured limit of {deployment_limit}",
         )
-
-    config.deckies = list(existing_deckies_map.values())
 
     # Auto-mode: if we're a master with at least one enrolled/active SWARM
     # host, shard the deckies across those workers instead of spawning docker
