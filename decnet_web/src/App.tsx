@@ -12,6 +12,7 @@ import Bounty from './components/Bounty';
 import RemoteUpdates from './components/RemoteUpdates';
 import SwarmHosts from './components/SwarmHosts';
 import AgentEnrollment from './components/AgentEnrollment';
+import MazeNET from './components/MazeNET/MazeNET';
 
 function isTokenValid(token: string): boolean {
   try {
@@ -62,6 +63,7 @@ function App() {
         <Routes>
           <Route path="/" element={<Dashboard searchQuery={searchQuery} />} />
           <Route path="/fleet" element={<DeckyFleet />} />
+          <Route path="/mazenet" element={<MazeNET />} />
           <Route path="/live-logs" element={<LiveLogs />} />
           <Route path="/bounty" element={<Bounty />} />
           <Route path="/attackers" element={<Attackers />} />
