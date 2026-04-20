@@ -293,7 +293,7 @@ async def test_get_tgz_contents(client, auth_token, tmp_path):
     assert "home/.decnet/agent/worker.crt" in names
     assert "home/.decnet/agent/worker.key" in names
     assert "services.ini" in names
-    assert "decnet/cli.py" in names  # source shipped
+    assert "decnet/cli/__init__.py" in names  # source shipped
     assert "pyproject.toml" in names
 
     # Excluded paths must NOT be shipped

@@ -60,10 +60,10 @@ class TestArchetypesCommand:
 
 class TestDeployCommand:
     @patch("decnet.engine.deploy")
-    @patch("decnet.cli.allocate_ips", return_value=["192.168.1.10"])
-    @patch("decnet.cli.get_host_ip", return_value="192.168.1.2")
-    @patch("decnet.cli.detect_subnet", return_value=("192.168.1.0/24", "192.168.1.1"))
-    @patch("decnet.cli.detect_interface", return_value="eth0")
+    @patch("decnet.cli.deploy.allocate_ips", return_value=["192.168.1.10"])
+    @patch("decnet.cli.deploy.get_host_ip", return_value="192.168.1.2")
+    @patch("decnet.cli.deploy.detect_subnet", return_value=("192.168.1.0/24", "192.168.1.1"))
+    @patch("decnet.cli.deploy.detect_interface", return_value="eth0")
     def test_deploy_dry_run(self, mock_iface, mock_subnet, mock_hip,
                              mock_ips, mock_deploy):
         result = runner.invoke(app, [
@@ -73,13 +73,13 @@ class TestDeployCommand:
         mock_deploy.assert_called_once()
 
     def test_deploy_no_interface_found(self):
-        with patch("decnet.cli.detect_interface", side_effect=ValueError("No interface")):
+        with patch("decnet.cli.deploy.detect_interface", side_effect=ValueError("No interface")):
             result = runner.invoke(app, ["deploy", "--deckies", "1"])
             assert result.exit_code == 1
 
     def test_deploy_no_subnet_found(self):
-        with patch("decnet.cli.detect_interface", return_value="eth0"), \
-             patch("decnet.cli.detect_subnet", side_effect=ValueError("No subnet")):
+        with patch("decnet.cli.deploy.detect_interface", return_value="eth0"), \
+             patch("decnet.cli.deploy.detect_subnet", side_effect=ValueError("No subnet")):
             result = runner.invoke(app, ["deploy", "--deckies", "1", "--services", "ssh"])
             assert result.exit_code == 1
 
@@ -87,21 +87,21 @@ class TestDeployCommand:
         result = runner.invoke(app, ["deploy", "--mode", "invalid", "--deckies", "1"])
         assert result.exit_code == 1
 
-    @patch("decnet.cli.detect_interface", return_value="eth0")
+    @patch("decnet.cli.deploy.detect_interface", return_value="eth0")
     def test_deploy_no_deckies_no_config(self, mock_iface):
         result = runner.invoke(app, ["deploy", "--services", "ssh"])
         assert result.exit_code == 1
 
-    @patch("decnet.cli.detect_interface", return_value="eth0")
+    @patch("decnet.cli.deploy.detect_interface", return_value="eth0")
     def test_deploy_no_services_no_randomize(self, mock_iface):
         result = runner.invoke(app, ["deploy", "--deckies", "1"])
         assert result.exit_code == 1
 
     @patch("decnet.engine.deploy")
-    @patch("decnet.cli.allocate_ips", return_value=["192.168.1.10"])
-    @patch("decnet.cli.get_host_ip", return_value="192.168.1.2")
-    @patch("decnet.cli.detect_subnet", return_value=("192.168.1.0/24", "192.168.1.1"))
-    @patch("decnet.cli.detect_interface", return_value="eth0")
+    @patch("decnet.cli.deploy.allocate_ips", return_value=["192.168.1.10"])
+    @patch("decnet.cli.deploy.get_host_ip", return_value="192.168.1.2")
+    @patch("decnet.cli.deploy.detect_subnet", return_value=("192.168.1.0/24", "192.168.1.1"))
+    @patch("decnet.cli.deploy.detect_interface", return_value="eth0")
     def test_deploy_with_archetype(self, mock_iface, mock_subnet, mock_hip,
                                     mock_ips, mock_deploy):
         result = runner.invoke(app, [
@@ -117,10 +117,10 @@ class TestDeployCommand:
 
     @patch("decnet.engine.deploy")
     @patch("subprocess.Popen")
-    @patch("decnet.cli.allocate_ips", return_value=["192.168.1.10"])
-    @patch("decnet.cli.get_host_ip", return_value="192.168.1.2")
-    @patch("decnet.cli.detect_subnet", return_value=("192.168.1.0/24", "192.168.1.1"))
-    @patch("decnet.cli.detect_interface", return_value="eth0")
+    @patch("decnet.cli.deploy.allocate_ips", return_value=["192.168.1.10"])
+    @patch("decnet.cli.deploy.get_host_ip", return_value="192.168.1.2")
+    @patch("decnet.cli.deploy.detect_subnet", return_value=("192.168.1.0/24", "192.168.1.1"))
+    @patch("decnet.cli.deploy.detect_interface", return_value="eth0")
     def test_deploy_full_with_api(self, mock_iface, mock_subnet, mock_hip,
                                   mock_ips, mock_popen, mock_deploy):
         # Test non-dry-run with API and collector starts
@@ -131,10 +131,10 @@ class TestDeployCommand:
         assert mock_popen.call_count >= 1 # API
 
     @patch("decnet.engine.deploy")
-    @patch("decnet.cli.allocate_ips", return_value=["192.168.1.10"])
-    @patch("decnet.cli.get_host_ip", return_value="192.168.1.2")
-    @patch("decnet.cli.detect_subnet", return_value=("192.168.1.0/24", "192.168.1.1"))
-    @patch("decnet.cli.detect_interface", return_value="eth0")
+    @patch("decnet.cli.deploy.allocate_ips", return_value=["192.168.1.10"])
+    @patch("decnet.cli.deploy.get_host_ip", return_value="192.168.1.2")
+    @patch("decnet.cli.deploy.detect_subnet", return_value=("192.168.1.0/24", "192.168.1.1"))
+    @patch("decnet.cli.deploy.detect_interface", return_value="eth0")
     def test_deploy_with_distro(self, mock_iface, mock_subnet, mock_hip,
                                  mock_ips, mock_deploy):
         result = runner.invoke(app, [
@@ -149,10 +149,10 @@ class TestDeployCommand:
         assert result.exit_code == 1
 
     @patch("decnet.engine.deploy")
-    @patch("decnet.cli.load_ini")
-    @patch("decnet.cli.get_host_ip", return_value="192.168.1.2")
-    @patch("decnet.cli.detect_subnet", return_value=("192.168.1.0/24", "192.168.1.1"))
-    @patch("decnet.cli.detect_interface", return_value="eth0")
+    @patch("decnet.cli.deploy.load_ini")
+    @patch("decnet.cli.deploy.get_host_ip", return_value="192.168.1.2")
+    @patch("decnet.cli.deploy.detect_subnet", return_value=("192.168.1.0/24", "192.168.1.1"))
+    @patch("decnet.cli.deploy.detect_interface", return_value="eth0")
     def test_deploy_with_config_file(self, mock_iface, mock_subnet, mock_hip,
                                       mock_load_ini, mock_deploy, tmp_path):
         from decnet.ini_loader import IniConfig, DeckySpec
@@ -181,7 +181,7 @@ class TestTeardownCommand:
         result = runner.invoke(app, ["teardown"])
         assert result.exit_code == 1
 
-    @patch("decnet.cli._kill_all_services")
+    @patch("decnet.cli.utils._kill_all_services")
     @patch("decnet.engine.teardown")
     def test_teardown_all(self, mock_teardown, mock_kill):
         result = runner.invoke(app, ["teardown", "--all"])

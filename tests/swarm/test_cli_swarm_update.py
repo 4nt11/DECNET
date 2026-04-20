@@ -14,7 +14,7 @@ import pytest
 from typer.testing import CliRunner
 
 from decnet import cli as cli_mod
-from decnet.cli import app
+from decnet.cli import app, utils as cli_utils
 
 
 runner = CliRunner()
@@ -40,7 +40,7 @@ def http_stub(monkeypatch: pytest.MonkeyPatch) -> dict:
             return _FakeResp(state["hosts"])
         raise AssertionError(f"Unscripted HTTP call: {method} {url}")
 
-    monkeypatch.setattr(cli_mod, "_http_request", _fake)
+    monkeypatch.setattr(cli_utils, "_http_request", _fake)
     return state
 
 

@@ -56,7 +56,7 @@ class TestDbResetDispatch:
         monkeypatch.setenv("DECNET_DB_URL", "mysql+aiomysql://u:p@h/d")
 
         mock = AsyncMock()
-        with patch("decnet.cli._db_reset_mysql_async", new=mock):
+        with patch("decnet.cli.db._db_reset_mysql_async", new=mock):
             result = runner.invoke(app, ["db-reset"])
 
         assert result.exit_code == 0, result.stdout
@@ -70,7 +70,7 @@ class TestDbResetDispatch:
         monkeypatch.setenv("DECNET_DB_URL", "mysql+aiomysql://u:p@h/d")
 
         mock = AsyncMock()
-        with patch("decnet.cli._db_reset_mysql_async", new=mock):
+        with patch("decnet.cli.db._db_reset_mysql_async", new=mock):
             result = runner.invoke(app, ["db-reset", "--i-know-what-im-doing"])
 
         assert result.exit_code == 0, result.stdout
@@ -81,7 +81,7 @@ class TestDbResetDispatch:
         monkeypatch.setenv("DECNET_DB_URL", "mysql+aiomysql://u:p@h/d")
 
         mock = AsyncMock()
-        with patch("decnet.cli._db_reset_mysql_async", new=mock):
+        with patch("decnet.cli.db._db_reset_mysql_async", new=mock):
             result = runner.invoke(
                 app, ["db-reset", "--mode", "drop-tables", "--i-know-what-im-doing"]
             )
@@ -94,7 +94,7 @@ class TestDbResetDispatch:
         monkeypatch.setenv("DECNET_DB_URL", "mysql+aiomysql://from-env/db")
 
         mock = AsyncMock()
-        with patch("decnet.cli._db_reset_mysql_async", new=mock):
+        with patch("decnet.cli.db._db_reset_mysql_async", new=mock):
             result = runner.invoke(app, [
                 "db-reset", "--url", "mysql+aiomysql://override/db2",
             ])

@@ -15,7 +15,7 @@ import pytest
 from typer.testing import CliRunner
 
 from decnet import cli as cli_mod
-from decnet.cli import app
+from decnet.cli import app, deploy as cli_deploy, utils as cli_utils
 
 
 runner = CliRunner()
@@ -49,7 +49,7 @@ def http_stub(monkeypatch: pytest.MonkeyPatch) -> _HttpStub:
                 return resp
         raise AssertionError(f"Unscripted HTTP call: {method} {url}")
 
-    monkeypatch.setattr(cli_mod, "_http_request", _fake)
+    monkeypatch.setattr(cli_utils, "_http_request", _fake)
     return calls
 
 
@@ -259,9 +259,9 @@ def test_deploy_swarm_round_robins_and_posts(http_stub, monkeypatch: pytest.Monk
     })
 
     # Stub network detection so we don't need root / real NICs.
-    monkeypatch.setattr(cli_mod, "detect_interface", lambda: "eth0")
-    monkeypatch.setattr(cli_mod, "detect_subnet", lambda _iface: ("10.0.0.0/24", "10.0.0.254"))
-    monkeypatch.setattr(cli_mod, "get_host_ip", lambda _iface: "10.0.0.100")
+    monkeypatch.setattr(cli_deploy, "detect_interface", lambda: "eth0")
+    monkeypatch.setattr(cli_deploy, "detect_subnet", lambda _iface: ("10.0.0.0/24", "10.0.0.254"))
+    monkeypatch.setattr(cli_deploy, "get_host_ip", lambda _iface: "10.0.0.100")
 
     result = runner.invoke(app, [
         "deploy", "--mode", "swarm", "--deckies", "3",
@@ -280,9 +280,9 @@ def test_deploy_swarm_round_robins_and_posts(http_stub, monkeypatch: pytest.Monk
 def test_deploy_swarm_fails_if_no_workers(http_stub, monkeypatch: pytest.MonkeyPatch) -> None:
     http_stub.script[("GET", "/swarm/hosts?host_status=enrolled")] = _FakeResp([])
     http_stub.script[("GET", "/swarm/hosts?host_status=active")] = _FakeResp([])
-    monkeypatch.setattr(cli_mod, "detect_interface", lambda: "eth0")
-    monkeypatch.setattr(cli_mod, "detect_subnet", lambda _iface: ("10.0.0.0/24", "10.0.0.254"))
-    monkeypatch.setattr(cli_mod, "get_host_ip", lambda _iface: "10.0.0.100")
+    monkeypatch.setattr(cli_deploy, "detect_interface", lambda: "eth0")
+    monkeypatch.setattr(cli_deploy, "detect_subnet", lambda _iface: ("10.0.0.0/24", "10.0.0.254"))
+    monkeypatch.setattr(cli_deploy, "get_host_ip", lambda _iface: "10.0.0.100")
 
     result = runner.invoke(app, [
         "deploy", "--mode", "swarm", "--deckies", "2",
