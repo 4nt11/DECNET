@@ -152,6 +152,7 @@ async def self_destruct() -> None:
     install footprint. Returns immediately so the HTTP response can drain
     before the reaper starts deleting files out from under the agent."""
     import os
+    import shutil
     import subprocess  # nosec B404
     import tempfile
 
@@ -172,17 +173,39 @@ async def self_destruct() -> None:
         os.close(fd)
     os.chmod(path, 0o700)  # nosec B103 — root-owned reaper, needs exec
 
-    # start_new_session detaches from the agent process group so the
-    # reaper isn't killed when systemctl stop decnet-agent fires.
+    # The reaper MUST run outside decnet-agent.service's cgroup — otherwise
+    # `systemctl stop decnet-agent` SIGTERMs the whole cgroup (reaper included)
+    # before rm -rf completes. `start_new_session=True` gets us a fresh POSIX
+    # session but does NOT escape the systemd cgroup. So we prefer
+    # `systemd-run --scope` (launches the command in a transient scope
+    # detached from the caller's service), falling back to a bare Popen if
+    # systemd-run is unavailable (non-systemd host / container).
+    systemd_run = shutil.which("systemd-run")
+    if systemd_run:
+        argv = [
+            systemd_run,
+            "--collect",
+            "--unit", f"decnet-reaper-{os.getpid()}",
+            "--description", "DECNET agent self-destruct reaper",
+            "/bin/bash", path,
+        ]
+        spawn_kwargs = {"start_new_session": True}
+    else:
+        argv = ["/bin/bash", path]
+        spawn_kwargs = {"start_new_session": True}
+
     subprocess.Popen(  # nosec B603
-        ["/bin/bash", path],
+        argv,
         stdin=subprocess.DEVNULL,
         stdout=subprocess.DEVNULL,
         stderr=subprocess.DEVNULL,
-        start_new_session=True,
         close_fds=True,
+        **spawn_kwargs,
     )
-    log.warning("self_destruct: reaper spawned path=%s — agent will die in ~3s", path)
+    log.warning(
+        "self_destruct: reaper spawned path=%s via=%s — agent will die in ~3s",
+        path, "systemd-run" if systemd_run else "popen",
+    )
 
 
 async def status() -> dict[str, Any]:

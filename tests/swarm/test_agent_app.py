@@ -71,8 +71,12 @@ def test_self_destruct_spawns_reaper_and_returns_fast(monkeypatch, tmp_path) -> 
     assert resp.json()["status"] == "self_destruct_scheduled"
     assert len(spawned) == 1
     assert spawned[0]["kw"].get("start_new_session") is True
-    script_path = spawned[0]["args"][1]
-    assert script_path.startswith("/tmp/decnet-reaper-")
+    script_candidates = [
+        a for a in spawned[0]["args"]
+        if isinstance(a, str) and a.startswith("/tmp/decnet-reaper-")
+    ]
+    assert len(script_candidates) == 1, spawned[0]["args"]
+    script_path = script_candidates[0]
     # Reaper content sanity check — covers the paths the operator asked for.
     import pathlib
     body = pathlib.Path(script_path).read_text()
