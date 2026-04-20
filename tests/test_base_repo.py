@@ -88,6 +88,20 @@ async def test_base_repo_coverage():
         (dr.upsert_decky_shard, ({},)),
         (dr.list_decky_shards, ()),
         (dr.delete_decky_shards_for_host, ("u",)),
+        (dr.create_topology, ({},)),
+        (dr.get_topology, ("t",)),
+        (dr.list_topologies, ()),
+        (dr.update_topology_status, ("t", "active")),
+        (dr.delete_topology_cascade, ("t",)),
+        (dr.add_lan, ({},)),
+        (dr.update_lan, ("l", {})),
+        (dr.list_lans_for_topology, ("t",)),
+        (dr.add_topology_decky, ({},)),
+        (dr.update_topology_decky, ("d", {})),
+        (dr.list_topology_deckies, ("t",)),
+        (dr.add_topology_edge, ({},)),
+        (dr.list_topology_edges, ("t",)),
+        (dr.list_topology_status_events, ("t",)),
     ]:
         with pytest.raises(NotImplementedError):
             await coro(*args)

@@ -234,3 +234,67 @@ class BaseRepository(ABC):
 
     async def delete_decky_shard(self, decky_name: str) -> bool:
         raise NotImplementedError
+
+    # ----------------------------------------------------------- mazenet
+    # MazeNET topology persistence.  Default no-op / NotImplementedError so
+    # non-default backends stay functional; SQLModelRepository provides the
+    # real implementation used by SQLite and MySQL.
+
+    async def create_topology(self, data: dict[str, Any]) -> str:
+        raise NotImplementedError
+
+    async def get_topology(self, topology_id: str) -> Optional[dict[str, Any]]:
+        raise NotImplementedError
+
+    async def list_topologies(
+        self, status: Optional[str] = None
+    ) -> list[dict[str, Any]]:
+        raise NotImplementedError
+
+    async def update_topology_status(
+        self,
+        topology_id: str,
+        new_status: str,
+        reason: Optional[str] = None,
+    ) -> None:
+        raise NotImplementedError
+
+    async def delete_topology_cascade(self, topology_id: str) -> bool:
+        raise NotImplementedError
+
+    async def add_lan(self, data: dict[str, Any]) -> str:
+        raise NotImplementedError
+
+    async def update_lan(self, lan_id: str, fields: dict[str, Any]) -> None:
+        raise NotImplementedError
+
+    async def list_lans_for_topology(
+        self, topology_id: str
+    ) -> list[dict[str, Any]]:
+        raise NotImplementedError
+
+    async def add_topology_decky(self, data: dict[str, Any]) -> str:
+        raise NotImplementedError
+
+    async def update_topology_decky(
+        self, decky_uuid: str, fields: dict[str, Any]
+    ) -> None:
+        raise NotImplementedError
+
+    async def list_topology_deckies(
+        self, topology_id: str
+    ) -> list[dict[str, Any]]:
+        raise NotImplementedError
+
+    async def add_topology_edge(self, data: dict[str, Any]) -> str:
+        raise NotImplementedError
+
+    async def list_topology_edges(
+        self, topology_id: str
+    ) -> list[dict[str, Any]]:
+        raise NotImplementedError
+
+    async def list_topology_status_events(
+        self, topology_id: str, limit: int = 100
+    ) -> list[dict[str, Any]]:
+        raise NotImplementedError
