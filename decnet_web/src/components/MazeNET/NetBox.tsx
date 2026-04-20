@@ -11,11 +11,12 @@ interface Props {
   onSelect?: (id: string) => void;
   onHeaderMouseDown?: (id: string) => (e: React.MouseEvent) => void;
   onResizeMouseDown?: (id: string, handle: ResizeHandle) => (e: React.MouseEvent) => void;
+  onContextMenu?: (e: React.MouseEvent) => void;
   children?: React.ReactNode;
 }
 
 const NetBox: React.FC<Props> = ({
-  net, selected, dropTarget, inactive, onSelect, onHeaderMouseDown, onResizeMouseDown, children,
+  net, selected, dropTarget, inactive, onSelect, onHeaderMouseDown, onResizeMouseDown, onContextMenu, children,
 }) => {
   const classes = [
     'maze-net-box',
@@ -43,6 +44,7 @@ const NetBox: React.FC<Props> = ({
       className={classes}
       style={{ left: net.x, top: net.y, width: net.w, height: net.h }}
       onMouseDown={handleBoxDown}
+      onContextMenu={onContextMenu}
     >
       <div className="maze-net-box-head" onMouseDown={handleHeadDown}>
         <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>

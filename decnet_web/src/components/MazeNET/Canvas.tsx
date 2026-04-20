@@ -14,18 +14,25 @@ interface Props {
   pan: { x: number; y: number };
   dropTargetId: string | null;
   dragging: boolean;
+  edgeDraw: { fromX: number; fromY: number; toX: number; toY: number; hoverTarget: string | null } | null;
   onCanvasMouseDown: (e: React.MouseEvent) => void;
   onNodeMouseDown: (id: string) => (e: React.MouseEvent) => void;
   onNetMouseDown: (id: string) => (e: React.MouseEvent) => void;
   onNetResizeMouseDown: (id: string, handle: ResizeHandle) => (e: React.MouseEvent) => void;
+  onPortMouseDown: (id: string) => (e: React.MouseEvent) => void;
+  onNodeContextMenu?: (id: string) => (e: React.MouseEvent) => void;
+  onNetContextMenu?: (id: string) => (e: React.MouseEvent) => void;
+  onEdgeContextMenu?: (id: string) => (e: React.MouseEvent) => void;
+  onCanvasContextMenu?: (e: React.MouseEvent) => void;
 }
 
 const NODE_W = 140;
 const NODE_HEAD_H = 22;
 
 const Canvas = forwardRef<HTMLDivElement, Props>(function Canvas(
-  { nets, nodes, edges, selection, setSelection, pan, dropTargetId, dragging,
-    onCanvasMouseDown, onNodeMouseDown, onNetMouseDown, onNetResizeMouseDown },
+  { nets, nodes, edges, selection, setSelection, pan, dropTargetId, dragging, edgeDraw,
+    onCanvasMouseDown, onNodeMouseDown, onNetMouseDown, onNetResizeMouseDown, onPortMouseDown,
+    onNodeContextMenu, onNetContextMenu, onEdgeContextMenu, onCanvasContextMenu },
   ref,
 ) {
   const netById = useMemo(() => new Map(nets.map((n) => [n.id, n])), [nets]);
@@ -56,6 +63,9 @@ const Canvas = forwardRef<HTMLDivElement, Props>(function Canvas(
       onMouseDown={(e) => {
         if (e.target === e.currentTarget) setSelection(null);
         onCanvasMouseDown(e);
+      }}
+      onContextMenu={(e) => {
+        if (e.target === e.currentTarget && onCanvasContextMenu) onCanvasContextMenu(e);
       }}
       style={{ cursor: dragging ? 'grabbing' : 'grab' }}
     >
@@ -97,7 +107,8 @@ const Canvas = forwardRef<HTMLDivElement, Props>(function Canvas(
             const isSel  = e.id === selEdgeId;
             return (
               <g key={e.id} style={{ pointerEvents: 'auto' }}
-                 onClick={(ev) => { ev.stopPropagation(); setSelection({ type: 'edge', id: e.id }); }}>
+                 onClick={(ev) => { ev.stopPropagation(); setSelection({ type: 'edge', id: e.id }); }}
+                 onContextMenu={onEdgeContextMenu?.(e.id)}>
                 <path d={d} className={`maze-edge ${klass} maze-edge-dash`} markerEnd={`url(#${marker})`}
                       style={{ strokeWidth: isSel ? 2.5 : 1.5 }} />
                 <path d={d} stroke="transparent" strokeWidth="12" fill="none" style={{ cursor: 'pointer' }} />
@@ -111,6 +122,11 @@ const Canvas = forwardRef<HTMLDivElement, Props>(function Canvas(
               </g>
             );
           })}
+          {edgeDraw && (() => {
+            const cx = (edgeDraw.fromX + edgeDraw.toX) / 2;
+            const d = `M${edgeDraw.fromX},${edgeDraw.fromY} C${cx},${edgeDraw.fromY} ${cx},${edgeDraw.toY} ${edgeDraw.toX},${edgeDraw.toY}`;
+            return <path d={d} className={`ghost-edge ${edgeDraw.hoverTarget ? 'snap' : ''}`} />;
+          })()}
         </svg>
 
         <div className="maze-nodes">
@@ -126,6 +142,7 @@ const Canvas = forwardRef<HTMLDivElement, Props>(function Canvas(
                 onSelect={(id) => setSelection({ type: 'net', id })}
                 onHeaderMouseDown={onNetMouseDown}
                 onResizeMouseDown={onNetResizeMouseDown}
+                onContextMenu={onNetContextMenu?.(net.id)}
               />
             );
           })}
@@ -141,6 +158,8 @@ const Canvas = forwardRef<HTMLDivElement, Props>(function Canvas(
                 dragging={dragging && n.id === selNodeId}
                 onSelect={(id) => setSelection({ type: 'node', id })}
                 onMouseDown={onNodeMouseDown}
+                onPortMouseDown={onPortMouseDown}
+                onContextMenu={onNodeContextMenu}
               />
             );
           })}

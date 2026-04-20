@@ -9,9 +9,11 @@ interface Props {
   dragging?: boolean;
   onSelect?: (id: string) => void;
   onMouseDown?: (id: string) => (e: React.MouseEvent) => void;
+  onPortMouseDown?: (id: string) => (e: React.MouseEvent) => void;
+  onContextMenu?: (id: string) => (e: React.MouseEvent) => void;
 }
 
-const NodeCard: React.FC<Props> = ({ node, absX, absY, selected, dragging, onSelect, onMouseDown }) => {
+const NodeCard: React.FC<Props> = ({ node, absX, absY, selected, dragging, onSelect, onMouseDown, onPortMouseDown, onContextMenu }) => {
   const classes = [
     'maze-node',
     node.kind === 'observed' ? 'observed' : '',
@@ -26,7 +28,12 @@ const NodeCard: React.FC<Props> = ({ node, absX, absY, selected, dragging, onSel
   };
 
   return (
-    <div className={classes} style={{ left: absX, top: absY }} onMouseDown={handleDown}>
+    <div
+      className={classes}
+      style={{ left: absX, top: absY }}
+      onMouseDown={handleDown}
+      onContextMenu={onContextMenu?.(node.id)}
+    >
       <div className="mn-head">{node.name}</div>
       <div className="mn-sub">{node.archetype.toUpperCase()}</div>
       {node.services.length > 0 && (
@@ -40,9 +47,11 @@ const NodeCard: React.FC<Props> = ({ node, absX, absY, selected, dragging, onSel
       )}
       {node.kind === 'decky' && <>
         <span className="mn-port in" />
-        <span className="mn-port out" />
+        <span className="mn-port out" onMouseDown={onPortMouseDown?.(node.id)} />
       </>}
-      {node.kind === 'observed' && <span className="mn-port out" />}
+      {node.kind === 'observed' && (
+        <span className="mn-port out" onMouseDown={onPortMouseDown?.(node.id)} />
+      )}
     </div>
   );
 };

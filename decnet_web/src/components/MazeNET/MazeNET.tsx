@@ -6,6 +6,7 @@ import Palette from './Palette';
 import Canvas from './Canvas';
 import Inspector from './Inspector';
 import type { Selection } from './Inspector';
+import ContextMenu, { type MenuItem } from './ContextMenu';
 import { DEFAULT_SERVICES, DEMO_NETS, DEMO_NODES, DEMO_EDGES } from './data';
 import type { ServiceDef } from './data';
 import type { Net, MazeNode, Edge, PendingChange } from './types';
@@ -29,8 +30,102 @@ const MazeNET: React.FC = () => {
   const canvasRef = useRef<HTMLDivElement>(null);
   const applyChange = useCallback((pc: PendingChange) => {
     setPending((p) => [...p, pc]);
+    if (pc.op === 'add_edge') {
+      const payload = pc.payload;
+      setEdges((prev) => prev.some((e) => e.id === payload.id)
+        ? prev
+        : [...prev, { id: payload.id, from: payload.from, to: payload.to, traffic: 'active' as const }]);
+    }
   }, []);
   const interaction = useMazeInteraction({ nets, nodes, setNets, setNodes, applyChange, canvasRef });
+
+  const [ctxMenu, setCtxMenu] = useState<{ x: number; y: number; items: MenuItem[] } | null>(null);
+
+  const removeNet = (id: string) => {
+    const net = nets.find((n) => n.id === id);
+    if (!net || net.kind === 'internet') return;
+    setNets((p) => p.filter((n) => n.id !== id));
+    setNodes((p) => p.filter((n) => n.netId !== id));
+    setEdges((p) => p.filter((e) => {
+      const a = nodes.find((x) => x.id === e.from)?.netId;
+      const b = nodes.find((x) => x.id === e.to)?.netId;
+      return a !== id && b !== id;
+    }));
+    applyChange({ op: 'remove_lan', payload: { id } });
+    setSelection(null);
+  };
+
+  const removeNode = (id: string) => {
+    const node = nodes.find((n) => n.id === id);
+    if (!node || node.kind === 'observed') return;
+    setNodes((p) => p.filter((n) => n.id !== id));
+    setEdges((p) => p.filter((e) => e.from !== id && e.to !== id));
+    applyChange({ op: 'remove_decky', payload: { nodeId: id } });
+    setSelection(null);
+  };
+
+  const removeEdge = (id: string) => {
+    setEdges((p) => p.filter((e) => e.id !== id));
+    applyChange({ op: 'remove_edge', payload: { id } });
+    setSelection(null);
+  };
+
+  const onNodeContextMenu = (id: string) => (e: React.MouseEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    const node = nodes.find((n) => n.id === id);
+    if (!node) return;
+    setSelection({ type: 'node', id });
+    const isObs = node.kind === 'observed';
+    setCtxMenu({
+      x: e.clientX, y: e.clientY,
+      items: [
+        { label: 'INSPECT', onClick: () => setSelection({ type: 'node', id }) },
+        { separator: true, label: '' },
+        {
+          label: 'DELETE NODE',
+          danger: true,
+          disabled: isObs,
+          title: isObs ? 'observed entity — not a deployed decky' : undefined,
+          onClick: () => removeNode(id),
+        },
+      ],
+    });
+  };
+
+  const onNetContextMenu = (id: string) => (e: React.MouseEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    const net = nets.find((n) => n.id === id);
+    if (!net) return;
+    setSelection({ type: 'net', id });
+    setCtxMenu({
+      x: e.clientX, y: e.clientY,
+      items: [
+        { label: 'INSPECT', onClick: () => setSelection({ type: 'net', id }) },
+        { separator: true, label: '' },
+        {
+          label: 'DELETE NET',
+          danger: true,
+          disabled: net.kind === 'internet',
+          title: net.kind === 'internet' ? 'internet zone cannot be removed' : undefined,
+          onClick: () => removeNet(id),
+        },
+      ],
+    });
+  };
+
+  const onEdgeContextMenu = (id: string) => (e: React.MouseEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    setSelection({ type: 'edge', id });
+    setCtxMenu({
+      x: e.clientX, y: e.clientY,
+      items: [
+        { label: 'REMOVE EDGE', danger: true, onClick: () => removeEdge(id) },
+      ],
+    });
+  };
 
   /* Load service catalog from API (fall back to defaults if 401/offline). */
   useEffect(() => {
@@ -128,11 +223,19 @@ const MazeNET: React.FC = () => {
           pan={interaction.pan}
           dropTargetId={interaction.dropTargetId}
           dragging={interaction.dragging}
+          edgeDraw={interaction.edgeDraw}
           onCanvasMouseDown={interaction.onCanvasMouseDown}
           onNodeMouseDown={interaction.onNodeMouseDown}
           onNetMouseDown={interaction.onNetMouseDown}
           onNetResizeMouseDown={interaction.onNetResizeMouseDown}
+          onPortMouseDown={interaction.onPortMouseDown}
+          onNodeContextMenu={onNodeContextMenu}
+          onNetContextMenu={onNetContextMenu}
+          onEdgeContextMenu={onEdgeContextMenu}
         />
+        {ctxMenu && (
+          <ContextMenu x={ctxMenu.x} y={ctxMenu.y} items={ctxMenu.items} onClose={() => setCtxMenu(null)} />
+        )}
         {inspectorOpen && (
           <Inspector
             selection={selection}
@@ -141,6 +244,9 @@ const MazeNET: React.FC = () => {
             edges={edges}
             pending={pending}
             onClose={() => setInspectorOpen(false)}
+            onDeleteNet={removeNet}
+            onDeleteNode={removeNode}
+            onDeleteEdge={removeEdge}
           />
         )}
       </div>

@@ -277,7 +277,8 @@
 /* ── Context menu ───────────────────────────── */
 .ctx-scrim { position: absolute; inset: 0; z-index: 30; }
 .ctx-menu {
-  position: absolute; z-index: 40;
+  position: fixed; z-index: 1000;
+  width: auto; border-radius: var(--radius-0, 0);
   background: var(--panel); border: 1px solid var(--violet);
   min-width: 200px;
   box-shadow: 0 8px 24px rgba(0, 0, 0, 0.8), var(--violet-glow);
@@ -289,9 +290,14 @@
   margin-bottom: 4px;
 }
 .ctx-item {
-  display: flex; align-items: center; gap: 8px;
+  display: flex; align-items: center; gap: 8px; width: 100%;
   padding: 7px 12px; font-size: 0.74rem; cursor: pointer; letter-spacing: 0.5px;
+  background: transparent; border: 0; color: var(--matrix); text-align: left;
+  font-family: inherit;
 }
+.ctx-item:disabled { opacity: 0.35; cursor: not-allowed; }
+.ctx-item:disabled:hover { background: transparent; color: inherit; }
+.ghost-edge.snap { stroke: var(--matrix); opacity: 0.9; }
 .ctx-item:hover { background: var(--violet-tint-10); color: var(--violet); }
 .ctx-item.danger { color: var(--alert); }
 .ctx-item.danger:hover { background: rgba(255, 65, 65, 0.12); }

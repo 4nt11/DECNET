@@ -19,10 +19,20 @@ interface Args {
   canvasRef: React.RefObject<HTMLDivElement | null>;
 }
 
+interface EdgeDraw {
+  fromId: string;
+  fromX: number; fromY: number;
+  toX: number;   toY: number;
+  hoverTarget: string | null;
+}
+
 export function useMazeInteraction({ nets, nodes, setNets, setNodes, applyChange, canvasRef }: Args) {
   const [pan, setPan] = useState({ x: 0, y: 0 });
   const [drag, setDrag] = useState<Drag>(null);
   const [dropTargetId, setDropTargetId] = useState<string | null>(null);
+  const [edgeDraw, setEdgeDraw] = useState<EdgeDraw | null>(null);
+  const edgeDrawRef = useRef<EdgeDraw | null>(null);
+  useEffect(() => { edgeDrawRef.current = edgeDraw; }, [edgeDraw]);
 
   /* Refs to avoid re-binding global listeners on every state change. */
   const netsRef = useRef(nets);
@@ -74,6 +84,19 @@ export function useMazeInteraction({ nets, nodes, setNets, setNodes, applyChange
     setDrag({ type: 'net', id, offX: w.x - net.x, offY: w.y - net.y });
   }, [toWorld]);
 
+  const onPortMouseDown = useCallback((id: string) => (e: React.MouseEvent) => {
+    if (e.button !== 0) return;
+    e.stopPropagation();
+    const node = nodesRef.current.find((n) => n.id === id);
+    if (!node) return;
+    const parent = netsRef.current.find((n) => n.id === node.netId);
+    if (!parent) return;
+    const fx = parent.x + node.x + 140;
+    const fy = parent.y + node.y + 22;
+    const w = toWorld(e.clientX, e.clientY);
+    setEdgeDraw({ fromId: id, fromX: fx, fromY: fy, toX: w.x, toY: w.y, hoverTarget: null });
+  }, [toWorld]);
+
   const onNetResizeMouseDown = useCallback((id: string, handle: ResizeHandle) => (e: React.MouseEvent) => {
     if (e.button !== 0) return;
     e.stopPropagation();
@@ -86,6 +109,24 @@ export function useMazeInteraction({ nets, nodes, setNets, setNodes, applyChange
 
   useEffect(() => {
     const onMove = (e: MouseEvent) => {
+      const ed = edgeDrawRef.current;
+      if (ed) {
+        const o = canvasOriginRef.current();
+        const p = panRef.current;
+        const wx = e.clientX - o.x - p.x;
+        const wy = e.clientY - o.y - p.y;
+        const hover = nodesRef.current.find((n) => {
+          if (n.id === ed.fromId) return false;
+          const parent = netsRef.current.find((nn) => nn.id === n.netId);
+          if (!parent) return false;
+          const ax = parent.x + n.x;
+          const ay = parent.y + n.y;
+          return wx >= ax - 8 && wx <= ax + 8 && wy >= ay + 14 && wy <= ay + 30;
+        });
+        setEdgeDraw({ ...ed, toX: wx, toY: wy, hoverTarget: hover?.id ?? null });
+        return;
+      }
+
       const d = dragRef.current;
       if (!d) return;
 
@@ -147,6 +188,19 @@ export function useMazeInteraction({ nets, nodes, setNets, setNodes, applyChange
     };
 
     const onUp = () => {
+      const ed = edgeDrawRef.current;
+      if (ed) {
+        if (ed.hoverTarget && ed.hoverTarget !== ed.fromId) {
+          const target = nodesRef.current.find((n) => n.id === ed.hoverTarget);
+          if (target && target.kind !== 'observed') {
+            const id = `e-${ed.fromId}-${ed.hoverTarget}-${Date.now()}`;
+            applyChange({ op: 'add_edge', payload: { id, from: ed.fromId, to: ed.hoverTarget } });
+          }
+        }
+        setEdgeDraw(null);
+        return;
+      }
+
       const d = dragRef.current;
       if (!d) return;
 
@@ -197,10 +251,12 @@ export function useMazeInteraction({ nets, nodes, setNets, setNodes, applyChange
     pan,
     dropTargetId,
     dragging: drag !== null,
+    edgeDraw,
     onCanvasMouseDown,
     onNodeMouseDown,
     onNetMouseDown,
     onNetResizeMouseDown,
+    onPortMouseDown,
     resetPan,
   };
 }
