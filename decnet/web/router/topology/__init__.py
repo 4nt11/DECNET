@@ -18,6 +18,7 @@ from .api_edge_crud import router as _edge_router
 from .api_get_topology import router as _get_router
 from .api_lan_crud import router as _lan_router
 from .api_list_topologies import router as _list_router
+from .api_mutations import router as _mutations_router
 
 topology_router = APIRouter(prefix="/topologies", tags=["topologies"])
 
@@ -34,6 +35,7 @@ topology_router.include_router(_delete_router)
 topology_router.include_router(_lan_router)
 topology_router.include_router(_decky_router)
 topology_router.include_router(_edge_router)
+topology_router.include_router(_mutations_router)
 topology_router.include_router(_get_router)
 
 
