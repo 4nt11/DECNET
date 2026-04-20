@@ -185,6 +185,12 @@ class AgentClient:
         resp.raise_for_status()
         return resp.json()
 
+    async def self_destruct(self) -> dict[str, Any]:
+        """Trigger the worker to stop services and wipe its install."""
+        resp = await self._require_client().post("/self-destruct")
+        resp.raise_for_status()
+        return resp.json()
+
     # -------------------------------------------------------------- diagnostics
 
     def __repr__(self) -> str:

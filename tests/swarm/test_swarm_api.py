@@ -158,6 +158,60 @@ def test_decommission_removes_host_and_bundle(
     assert not bundle_dir.exists()
 
 
+def test_decommission_dispatches_self_destruct_to_agent(
+    client: TestClient, ca_dir: pathlib.Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Decommission must ask the worker to wipe its own install. Otherwise
+    the agent keeps running after the dashboard forgets it exists."""
+    calls: list[str] = []
+
+    class _SelfDestructAgent:
+        def __init__(self, host=None, **_):
+            self._host = host or {}
+
+        async def __aenter__(self): return self
+        async def __aexit__(self, *exc): return None
+
+        async def self_destruct(self):
+            calls.append(self._host.get("name") or "?")
+            return {"status": "self_destruct_scheduled"}
+
+    from decnet.web.router.swarm import api_decommission_host as decom_mod
+    monkeypatch.setattr(decom_mod, "AgentClient", _SelfDestructAgent)
+
+    reg = client.post(
+        "/swarm/enroll",
+        json={"name": "worker-nuke", "address": "10.0.0.8", "agent_port": 8765},
+    ).json()
+    resp = client.delete(f"/swarm/hosts/{reg['host_uuid']}")
+    assert resp.status_code == 204
+    assert calls == ["worker-nuke"]
+
+
+def test_decommission_proceeds_when_agent_unreachable(
+    client: TestClient, ca_dir: pathlib.Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """A dead worker must not block the operator from cleaning up the
+    dashboard. Self-destruct failure is logged, decommission proceeds."""
+    class _DeadAgent:
+        def __init__(self, host=None, **_): pass
+        async def __aenter__(self): return self
+        async def __aexit__(self, *exc): return None
+        async def self_destruct(self):
+            raise RuntimeError("connection refused")
+
+    from decnet.web.router.swarm import api_decommission_host as decom_mod
+    monkeypatch.setattr(decom_mod, "AgentClient", _DeadAgent)
+
+    reg = client.post(
+        "/swarm/enroll",
+        json={"name": "worker-dead", "address": "10.0.0.8", "agent_port": 8765},
+    ).json()
+    resp = client.delete(f"/swarm/hosts/{reg['host_uuid']}")
+    assert resp.status_code == 204
+    assert client.get(f"/swarm/hosts/{reg['host_uuid']}").status_code == 404
+
+
 # ---------------------------------------------------------------- /deploy
 
 

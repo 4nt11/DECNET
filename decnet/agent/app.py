@@ -87,6 +87,20 @@ async def teardown(req: TeardownRequest) -> dict:
     return {"status": "torn_down", "decky_id": req.decky_id}
 
 
+@app.post("/self-destruct")
+async def self_destruct() -> dict:
+    """Stop all DECNET services on this worker and delete the install
+    footprint. Called by the master during decommission. Logs under
+    /var/log/decnet* are preserved. Fire-and-forget — returns 202 before
+    the reaper starts deleting files."""
+    try:
+        await _exec.self_destruct()
+    except Exception as exc:
+        log.exception("agent.self_destruct failed")
+        raise HTTPException(status_code=500, detail=str(exc)) from exc
+    return {"status": "self_destruct_scheduled"}
+
+
 @app.post("/mutate")
 async def mutate(req: MutateRequest) -> dict:
     # Service rotation is routed through the deployer's existing mutate path

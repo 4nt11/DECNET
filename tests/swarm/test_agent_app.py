@@ -42,4 +42,49 @@ def test_deploy_rejects_malformed_body() -> None:
 
 def test_route_set() -> None:
     paths = {r.path for r in app.routes if hasattr(r, "path")}
-    assert {"/health", "/status", "/deploy", "/teardown", "/mutate"} <= paths
+    assert {"/health", "/status", "/deploy", "/teardown", "/mutate", "/self-destruct"} <= paths
+
+
+def test_self_destruct_spawns_reaper_and_returns_fast(monkeypatch, tmp_path) -> None:
+    """/self-destruct must write the reaper script and spawn it detached
+    (start_new_session=True). We intercept Popen so the test doesn't
+    actually nuke anything."""
+    from decnet.agent import executor as _exec
+
+    spawned: list[dict] = []
+
+    class _FakePopen:
+        def __init__(self, args, **kw):
+            spawned.append({"args": args, "kw": kw})
+
+    monkeypatch.setattr(_exec, "_deployer", type("X", (), {
+        "teardown": staticmethod(lambda _id: None),
+    })())
+    monkeypatch.setattr(_exec, "clear_state", lambda: None)
+
+    import subprocess as _sp
+    monkeypatch.setattr(_sp, "Popen", _FakePopen)
+
+    client = TestClient(app)
+    resp = client.post("/self-destruct")
+    assert resp.status_code == 200
+    assert resp.json()["status"] == "self_destruct_scheduled"
+    assert len(spawned) == 1
+    assert spawned[0]["kw"].get("start_new_session") is True
+    script_path = spawned[0]["args"][1]
+    assert script_path.startswith("/tmp/decnet-reaper-")
+    # Reaper content sanity check — covers the paths the operator asked for.
+    import pathlib
+    body = pathlib.Path(script_path).read_text()
+    assert "/opt/decnet*" in body
+    assert "/etc/systemd/system/decnet-" in body
+    assert "/var/lib/decnet/*" in body
+    assert "/usr/local/bin/decnet*" in body
+    # Logs must be preserved — no `rm` line should touch /var/log.
+    for line in body.splitlines():
+        stripped = line.strip()
+        if stripped.startswith("#") or not stripped:
+            continue
+        if stripped.startswith("rm "):
+            assert "/var/log" not in stripped
+    pathlib.Path(script_path).unlink(missing_ok=True)
