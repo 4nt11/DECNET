@@ -87,14 +87,44 @@ async def teardown(decky_id: str | None = None) -> None:
         await asyncio.to_thread(clear_state)
 
 
+def _decky_runtime_states(config: DecnetConfig) -> dict[str, dict[str, Any]]:
+    """Map decky_name → {"running": bool, "services": {svc: container_state}}.
+
+    Queried so the master can tell, after a partial-failure deploy, which
+    deckies actually came up instead of tainting the whole shard as failed.
+    Best-effort: a docker error returns an empty map, not an exception.
+    """
+    try:
+        import docker  # local import — agent-only path
+        client = docker.from_env()
+        live = {c.name: c.status for c in client.containers.list(all=True, ignore_removed=True)}
+    except Exception:  # pragma: no cover — defensive
+        log.exception("_decky_runtime_states: docker query failed")
+        return {}
+
+    out: dict[str, dict[str, Any]] = {}
+    for d in config.deckies:
+        svc_states = {
+            svc: live.get(f"{d.name}-{svc.replace('_', '-')}", "absent")
+            for svc in d.services
+        }
+        out[d.name] = {
+            "running": bool(svc_states) and all(s == "running" for s in svc_states.values()),
+            "services": svc_states,
+        }
+    return out
+
+
 async def status() -> dict[str, Any]:
     state = await asyncio.to_thread(load_state)
     if state is None:
         return {"deployed": False, "deckies": []}
     config, _compose_path = state
+    runtime = await asyncio.to_thread(_decky_runtime_states, config)
     return {
         "deployed": True,
         "mode": config.mode,
         "compose_path": str(_compose_path),
         "deckies": [d.model_dump() for d in config.deckies],
+        "runtime": runtime,
     }

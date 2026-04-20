@@ -273,6 +273,68 @@ def test_deploy_rejects_missing_host_uuid(client: TestClient, stub_agent) -> Non
     assert "host_uuid" in resp.json()["detail"]
 
 
+def test_deploy_partial_failure_only_marks_actually_failed_decky(
+    client: TestClient, repo, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """docker compose up is partial-success-friendly: one failed service
+    doesn't roll back the ones already up. The master must probe /status
+    after a dispatch exception so healthy deckies aren't painted red just
+    because a sibling in the same shard failed."""
+
+    class _PartialFailAgent:
+        def __init__(self, host=None, **_):
+            self._host = host or {}
+
+        async def __aenter__(self):
+            return self
+
+        async def __aexit__(self, *exc):
+            return None
+
+        async def deploy(self, config, **kw):
+            raise RuntimeError("Server error '500 Internal Server Error'")
+
+        async def status(self):
+            return {
+                "deployed": True,
+                "runtime": {
+                    "decky1": {"running": True, "services": {"ssh": "running"}},
+                    "decky2": {"running": True, "services": {"ssh": "running"}},
+                    "decky3": {"running": False, "services": {"ssh": "absent"}},
+                },
+            }
+
+    from decnet.web.router.swarm import api_deploy_swarm as deploy_mod
+    monkeypatch.setattr(deploy_mod, "AgentClient", _PartialFailAgent)
+
+    h1 = client.post(
+        "/swarm/enroll",
+        json={"name": "decktest", "address": "192.168.1.47", "agent_port": 8765},
+    ).json()
+
+    cfg = {
+        "mode": "swarm",
+        "interface": "eth0",
+        "subnet": "192.168.1.0/24",
+        "gateway": "192.168.1.1",
+        "deckies": [
+            _decky_dict("decky1", h1["host_uuid"], "192.168.1.2"),
+            _decky_dict("decky2", h1["host_uuid"], "192.168.1.3"),
+            _decky_dict("decky3", h1["host_uuid"], "192.168.1.4"),
+        ],
+    }
+    resp = client.post("/swarm/deploy", json={"config": cfg})
+    assert resp.status_code == 200
+    assert resp.json()["results"][0]["ok"] is False
+
+    shards = {s["decky_name"]: s for s in client.get("/swarm/deckies").json()}
+    assert shards["decky1"]["state"] == "running"
+    assert shards["decky1"]["last_error"] is None
+    assert shards["decky2"]["state"] == "running"
+    assert shards["decky3"]["state"] == "failed"
+    assert "500" in (shards["decky3"]["last_error"] or "")
+
+
 def test_deploy_rejects_non_swarm_mode(client: TestClient, stub_agent) -> None:
     cfg = {
         "mode": "unihost",

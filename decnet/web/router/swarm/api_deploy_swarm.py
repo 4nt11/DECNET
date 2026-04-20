@@ -98,14 +98,28 @@ async def dispatch_decnet_config(
             return SwarmHostResult(host_uuid=host_uuid, host_name=host["name"], ok=True, detail=body)
         except Exception as exc:
             log.exception("swarm.deploy dispatch failed host=%s", host["name"])
+            # Compose-up is partial-success-friendly: one decky failing to
+            # build doesn't roll back the ones that already came up. Ask the
+            # agent which containers actually exist before painting the whole
+            # shard red — otherwise decky1 and decky2 look "failed" even
+            # though they're live on the worker.
+            runtime: dict[str, Any] = {}
+            try:
+                async with AgentClient(host=host) as probe:
+                    snap = await probe.status()
+                runtime = snap.get("runtime") or {}
+            except Exception:
+                log.warning("swarm.deploy: runtime probe failed host=%s — marking shard failed", host["name"])
             for d in shard:
+                rstate = runtime.get(d.name) or {}
+                is_up = bool(rstate.get("running"))
                 await repo.upsert_decky_shard(
                     {
                         "decky_name": d.name,
                         "host_uuid": host_uuid,
                         "services": json.dumps(d.services),
-                        "state": "failed",
-                        "last_error": str(exc)[:512],
+                        "state": "running" if is_up else "failed",
+                        "last_error": None if is_up else str(exc)[:512],
                         "updated_at": datetime.now(timezone.utc),
                     }
                 )
