@@ -86,6 +86,19 @@ def generate_topology_compose(hydrated: dict[str, Any]) -> dict:
         }
         if forwards_l3:
             base["sysctls"] = {"net.ipv4.ip_forward": 1}
+            # Gateway decky — publish its service ports on the host so
+            # attackers can reach the DMZ via the host's public IP.
+            # Service containers share this base's namespace (see below),
+            # so ports declared here expose every service's listener.
+            published: list[str] = []
+            for svc_name in svc_names:
+                svc = get_service(svc_name)
+                if svc is None or svc.fleet_singleton:
+                    continue
+                for port in svc.ports:
+                    published.append(f"{port}:{port}")
+            if published:
+                base["ports"] = published
 
         services[base_key] = base
 
