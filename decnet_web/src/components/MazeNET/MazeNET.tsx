@@ -17,6 +17,7 @@ import type { Net, MazeNode, Edge, DeckyNode } from './types';
 import { useMazeApi } from './useMazeApi';
 import { useMazeInteraction, type PaletteDrag } from './useMazeInteraction';
 import { useLayoutPersistor } from './useMazeLayoutStore';
+import { useTopologyStream, type TopologyStreamEvent } from './useTopologyStream';
 import { ARCHETYPES as DEFAULT_ARCHETYPES } from './data';
 
 /* Short unique suffix for default names — avoids the DB uniqueness
@@ -424,6 +425,29 @@ const MazeNET: React.FC = () => {
 
   useEffect(() => { refetch(); }, [refetch]);
 
+  /* Live topology stream. Open only when the topology is deployed —
+   * pending topologies have no mutator loop and would just idle on
+   * keepalives.  On any state-transition event we refetch; DB is the
+   * source of truth and the bus is at-most-once. */
+  const [streamLive, setStreamLive] = useState(false);
+  const streamEnabled = topoStatus === 'active' || topoStatus === 'degraded';
+  const onStreamEvent = useCallback((event: TopologyStreamEvent) => {
+    setStreamLive(true);
+    if (event.name === 'mutation.applied'
+      || event.name === 'mutation.failed'
+      || event.name === 'status') {
+      refetch();
+    }
+  }, [refetch]);
+  const onStreamError = useCallback(() => { setStreamLive(false); }, []);
+  useTopologyStream({
+    topologyId: streamEnabled ? topologyId : null,
+    enabled: streamEnabled,
+    onEvent: onStreamEvent,
+    onError: onStreamError,
+  });
+  useEffect(() => { if (!streamEnabled) setStreamLive(false); }, [streamEnabled]);
+
   const onDeploy = async () => {
     if (!topologyId) return;
     setDeploying(true);
@@ -455,6 +479,11 @@ const MazeNET: React.FC = () => {
           <div className="maze-page-sub">
             NETWORK OF NETWORKS · {topoStatus.toUpperCase()} · v{topoVersion} ·{' '}
             {nets.length} NETS · {nodes.length} NODES · {edges.length} PATHS
+            {streamEnabled && (
+              <span className="alert-text" style={{ color: streamLive ? undefined : 'var(--fg-dim)' }}>
+                {' '}· {streamLive ? 'LIVE' : 'CONNECTING…'}
+              </span>
+            )}
             {loadErr && <span className="alert-text"> · {loadErr}</span>}
             {actionErr && <span className="alert-text"> · {actionErr}</span>}
           </div>

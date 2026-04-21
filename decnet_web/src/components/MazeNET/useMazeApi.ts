@@ -193,6 +193,15 @@ export interface CreateDeckyBody {
   decky_config?: Record<string, unknown>;
 }
 
+export type MutationOp =
+  | 'add_lan' | 'remove_lan' | 'update_lan'
+  | 'attach_decky' | 'detach_decky' | 'remove_decky' | 'update_decky';
+
+export interface EnqueueMutationResponse {
+  mutation_id: string;
+  state: string;
+}
+
 export interface MazeApi {
   listTopologies:       () => Promise<TopologySummary[]>;
   createBlankTopology:  (name: string) => Promise<TopologySummary>;
@@ -212,6 +221,13 @@ export interface MazeApi {
 
   attachEdge:  (topologyId: string, body: { decky_uuid: string; lan_id: string; is_bridge?: boolean; forwards_l3?: boolean }) => Promise<EdgeRow>;
   detachEdge:  (topologyId: string, edgeId: string) => Promise<void>;
+
+  enqueueMutation: (
+    topologyId: string,
+    op: MutationOp,
+    payload: Record<string, unknown>,
+    expectedVersion?: number,
+  ) => Promise<EnqueueMutationResponse>;
 
   deployTopology: (topologyId: string) => Promise<void>;
 }
@@ -356,6 +372,24 @@ export function useMazeApi(): MazeApi {
     [],
   );
 
+  const enqueueMutation = useCallback(
+    async (
+      topologyId: string,
+      op: MutationOp,
+      payload: Record<string, unknown>,
+      expectedVersion?: number,
+    ): Promise<EnqueueMutationResponse> => {
+      const body: { op: MutationOp; payload: Record<string, unknown>; expected_version?: number } = { op, payload };
+      if (expectedVersion !== undefined) body.expected_version = expectedVersion;
+      const { data } = await api.post<EnqueueMutationResponse>(
+        `/topologies/${topologyId}/mutations`,
+        body,
+      );
+      return data;
+    },
+    [],
+  );
+
   return useMemo(
     () => ({
       listTopologies, createBlankTopology, getTopology, getServices, getArchetypes,
@@ -363,6 +397,7 @@ export function useMazeApi(): MazeApi {
       createLan, updateLan, deleteLan,
       createDecky, updateDecky, deleteDecky,
       attachEdge, detachEdge,
+      enqueueMutation,
       deployTopology,
     }),
     [
@@ -371,6 +406,7 @@ export function useMazeApi(): MazeApi {
       createLan, updateLan, deleteLan,
       createDecky, updateDecky, deleteDecky,
       attachEdge, detachEdge,
+      enqueueMutation,
       deployTopology,
     ],
   );
