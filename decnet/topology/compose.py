@@ -83,6 +83,14 @@ def generate_topology_compose(hydrated: dict[str, Any]) -> dict:
             "networks": nets,
             "cap_add": ["NET_ADMIN"],
             "logging": _DOCKER_LOGGING,
+            # Labels let the host collector discover topology containers
+            # without consulting decnet-state.json (which only knows about
+            # legacy fleet deckies).  See decnet/collector/worker.py.
+            "labels": {
+                "decnet.topology.id": topology_id,
+                "decnet.topology.decky": name,
+                "decnet.topology.role": "base",
+            },
         }
         if forwards_l3:
             base["sysctls"] = {"net.ipv4.ip_forward": 1}
@@ -120,6 +128,17 @@ def generate_topology_compose(hydrated: dict[str, Any]) -> dict:
             fragment.pop("hostname", None)
             fragment.pop("networks", None)
             fragment["logging"] = _DOCKER_LOGGING
+            # ``decnet.topology.service=true`` is the marker the collector
+            # filters on — without it, log streams for this container are
+            # never attached.
+            labels = dict(fragment.get("labels") or {})
+            labels.update({
+                "decnet.topology.id": topology_id,
+                "decnet.topology.decky": name,
+                "decnet.topology.service_name": svc_name,
+                "decnet.topology.service": "true",
+            })
+            fragment["labels"] = labels
             services[f"{name}-{svc_name}"] = fragment
 
     networks: dict[str, dict] = {

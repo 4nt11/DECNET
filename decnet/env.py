@@ -84,6 +84,16 @@ DECNET_API_PORT: int = _port("DECNET_API_PORT", 8000)
 # the master's JWT secret being present in the environment.
 DECNET_INGEST_LOG_FILE: str | None = os.environ.get("DECNET_INGEST_LOG_FILE", "/var/log/decnet/decnet.log")
 
+# Agent-side RFC 5424 sink written by decnet.collector.worker when run on
+# a SWARM worker.  The forwarder tails this file and ships lines over
+# syslog-TLS to the master listener.  Kept separate from
+# DECNET_INGEST_LOG_FILE so a workstation-dev box (which may run both the
+# master and a throwaway agent pointed at itself) can't accidentally
+# recurse by forwarding its own ingest file back to itself.
+DECNET_AGENT_LOG_FILE: str = os.environ.get(
+    "DECNET_AGENT_LOG_FILE", "/var/log/decnet/agent.log"
+)
+
 # SWARM log pipeline — RFC 5425 syslog-over-TLS between worker forwarders
 # and the master listener.  Plaintext syslog across hosts is forbidden.
 DECNET_SWARM_SYSLOG_PORT: int = _port("DECNET_SWARM_SYSLOG_PORT", 6514)

@@ -8,8 +8,8 @@ an agent — here we operate purely on a hydrated dict + the local
 :class:`TopologyStore`.
 
 v1 constraint: one topology per agent.  A second apply for a different
-``topology_id`` raises :class:`AlreadyApplied` (the endpoint maps that
-to 409).
+``topology_id`` triggers an on-the-spot teardown of the predecessor
+before the new apply proceeds — master is authoritative.
 """
 from __future__ import annotations
 
@@ -20,7 +20,6 @@ from typing import Any
 import docker
 
 from decnet.agent.topology_store import (
-    AlreadyApplied,
     TopologyStore,
     observed,
 )
@@ -70,7 +69,6 @@ async def apply(
     Raises:
       HashMismatch: master and agent disagree on the canonical hash —
         don't touch docker, fail the apply.
-      AlreadyApplied: a different topology is already applied here.
       ValidationError: topology fails structural validation.
       Any docker / compose error propagates up; the endpoint maps it
         to 500 and records the message on the store row.
@@ -87,15 +85,28 @@ async def apply(
         raise ValidationError(issues)
 
     topology_id = _topology_id(hydrated)
-    # v1 guard: refuse cross-topology overwrite up-front.  Same check
-    # lives in store.put() but we want a clean 409 path before we
-    # start mutating docker state.
+    # Master is authoritative.  If a different topology is pinned here
+    # — whether it fully applied, only partially applied (failure
+    # marker row + orphan containers), or drifted — teardown first,
+    # then accept the new one.  Refusing with 409 would leave the
+    # agent stuck in a state only a human could resolve.
     existing = store.current()
     if existing is not None and existing.topology_id != topology_id:
-        raise AlreadyApplied(
-            f"agent already has topology {existing.topology_id!r}; "
-            f"cannot apply {topology_id!r}"
+        log.info(
+            "superseding topology %s with %s on master authority",
+            existing.topology_id, topology_id,
         )
+        try:
+            await teardown(existing.topology_id, store)
+        except Exception as exc:  # noqa: BLE001 — we still want to try applying
+            log.warning(
+                "best-effort teardown of superseded topology %s failed: %s",
+                existing.topology_id, exc,
+            )
+            # Hard-clear the store row so the new apply isn't blocked
+            # by a half-torn-down predecessor.  Leftover docker objects
+            # will surface via the next heartbeat's observed block.
+            store.clear(existing.topology_id)
 
     lans = hydrated["lans"]
     compose_path = _topology_compose_path(topology_id)

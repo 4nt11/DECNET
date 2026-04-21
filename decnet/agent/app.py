@@ -18,6 +18,7 @@ Endpoints mirror the existing unihost CLI verbs:
 """
 from __future__ import annotations
 
+import asyncio
 import os
 import pathlib
 from contextlib import asynccontextmanager
@@ -60,6 +61,40 @@ def _store() -> TopologyStore:
     return _topology_store
 
 
+_collector_task: Optional[asyncio.Task] = None
+
+
+def _ensure_collector_started() -> None:
+    """Spawn the log collector on demand — called from /topology/apply
+    after a successful materialise.  We must NOT start this in the
+    lifespan hook: the agent's boot invariant is "never touch docker
+    until master tells us to" (see tests/swarm/test_agent_no_auto_restore.py).
+
+    The collector watches ``decnet.topology.service=true`` labels via
+    docker events, writing RFC 5424 lines to ``DECNET_AGENT_LOG_FILE``
+    which the forwarder ships to the master over syslog-TLS.  Idempotent:
+    subsequent calls while the task is still running are no-ops.
+    """
+    global _collector_task
+    if _collector_task is not None and not _collector_task.done():
+        return
+    from decnet.env import DECNET_AGENT_LOG_FILE
+
+    try:
+        from decnet.collector.worker import log_collector_worker
+    except Exception:  # noqa: BLE001 — docker may be unavailable on dev
+        log.warning(
+            "agent log collector not starting — collector worker import failed",
+            exc_info=True,
+        )
+        return
+    _collector_task = asyncio.create_task(
+        log_collector_worker(DECNET_AGENT_LOG_FILE),
+        name="agent-log-collector",
+    )
+    log.info("agent log collector started log_file=%s", DECNET_AGENT_LOG_FILE)
+
+
 @asynccontextmanager
 async def _lifespan(app: FastAPI):
     # Best-effort: if identity/bundle plumbing isn't configured (e.g. dev
@@ -69,6 +104,14 @@ async def _lifespan(app: FastAPI):
         yield
     finally:
         await _heartbeat.stop()
+        global _collector_task
+        if _collector_task is not None and not _collector_task.done():
+            _collector_task.cancel()
+            try:
+                await _collector_task
+            except (asyncio.CancelledError, Exception):  # noqa: BLE001
+                pass
+        _collector_task = None
         global _topology_store
         if _topology_store is not None:
             _topology_store.close()
@@ -200,10 +243,13 @@ async def topology_apply(req: ApplyTopologyRequest) -> dict:
         topology_id = (req.hydrated.get("topology") or {}).get("id")
         if topology_id:
             try:
-                store.record_error(str(topology_id), str(exc)[:500])
+                store.record_error(
+                    str(topology_id), str(exc)[:500], hydrated=req.hydrated,
+                )
             except Exception:  # noqa: BLE001 — don't mask original failure
                 log.exception("failed to record apply error")
         raise HTTPException(status_code=500, detail=str(exc)) from exc
+    _ensure_collector_started()
     return {"status": "applied", "version_hash": req.version_hash}
 
 

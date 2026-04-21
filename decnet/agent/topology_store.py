@@ -130,7 +130,12 @@ class TopologyStore:
         )
         self._conn.commit()
 
-    def record_error(self, topology_id: str, message: str) -> None:
+    def record_error(
+        self,
+        topology_id: str,
+        message: str,
+        hydrated: Optional[dict[str, Any]] = None,
+    ) -> None:
         """Attach a last-error message for *topology_id*.
 
         Upserts a marker row when no apply has yet succeeded for this
@@ -139,14 +144,24 @@ class TopologyStore:
         /topology/state and the next heartbeat.  The marker row uses an
         empty ``applied_version_hash`` so master's heartbeat check sees
         the hash mismatch and schedules a resync.
+
+        If *hydrated* is provided it is stored so a later teardown can
+        still walk the LAN list — otherwise a partial deploy is strands
+        containers + bridges with no breadcrumb back to them.
         """
+        blob = json.dumps(hydrated, sort_keys=True) if hydrated else "{}"
         self._conn.execute(
             "INSERT INTO applied_topology"
             " (topology_id, applied_version_hash, hydrated_blob_json,"
             "  applied_at, last_error)"
-            " VALUES (?, '', '{}', 0, ?)"
-            " ON CONFLICT(topology_id) DO UPDATE SET last_error=excluded.last_error",
-            (topology_id, message),
+            " VALUES (?, '', ?, 0, ?)"
+            " ON CONFLICT(topology_id) DO UPDATE SET"
+            "  last_error=excluded.last_error,"
+            "  hydrated_blob_json=CASE"
+            "   WHEN applied_topology.hydrated_blob_json='{}'"
+            "   THEN excluded.hydrated_blob_json"
+            "   ELSE applied_topology.hydrated_blob_json END",
+            (topology_id, blob, message),
         )
         self._conn.commit()
 

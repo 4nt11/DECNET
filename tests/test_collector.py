@@ -233,6 +233,76 @@ class TestIsServiceEvent:
             assert is_service_event({}) is False
 
 
+class TestTopologyLabelDiscovery:
+    """MazeNET topology containers aren't in decnet-state.json — the
+    collector discovers them via compose-time labels instead."""
+
+    def _labelled(self, name: str, labels: dict):
+        return SimpleNamespace(
+            name=name,
+            attrs={"Config": {"Labels": labels}},
+            labels=labels,
+        )
+
+    def test_topology_labelled_container_matches(self):
+        """Unknown name + decnet.topology.service=true label → True."""
+        with patch("decnet.collector.worker._load_service_container_names", return_value=set()):
+            c = self._labelled(
+                "decky-2966-ssh",
+                {"decnet.topology.service": "true", "decnet.topology.id": "abc"},
+            )
+            assert is_service_container(c) is True
+
+    def test_base_container_label_does_not_match(self):
+        """Base containers carry decnet.topology.role=base but NOT the
+        service marker — collector must ignore them or we double-capture
+        the sshd auth stream from both the base and the service share."""
+        with patch("decnet.collector.worker._load_service_container_names", return_value=set()):
+            c = self._labelled(
+                "decnet_t_af22dae8_decky-2966",
+                {"decnet.topology.role": "base", "decnet.topology.id": "abc"},
+            )
+            assert is_service_container(c) is False
+
+    def test_unrelated_container_with_labels_does_not_match(self):
+        with patch("decnet.collector.worker._load_service_container_names", return_value=set()):
+            c = self._labelled("portainer", {"com.docker.compose.project": "portainer"})
+            assert is_service_container(c) is False
+
+    def test_topology_event_matches_via_label(self):
+        """Docker start events flatten labels alongside 'name' in attrs —
+        is_service_event must detect that shape."""
+        with patch("decnet.collector.worker._load_service_container_names", return_value=set()):
+            attrs = {
+                "name": "decky-2966-ssh",
+                "decnet.topology.service": "true",
+                "decnet.topology.id": "abc",
+            }
+            assert is_service_event(attrs) is True
+
+    def test_fleet_and_topology_coexist(self):
+        """Fleet match wins when the name is in state; topology label
+        catches containers that aren't."""
+        with patch("decnet.collector.worker._load_service_container_names", return_value=_KNOWN_NAMES):
+            fleet_c = _make_container("omega-decky-http")
+            topo_c = self._labelled(
+                "decky-2966-ssh",
+                {"decnet.topology.service": "true"},
+            )
+            assert is_service_container(fleet_c) is True
+            assert is_service_container(topo_c) is True
+
+    def test_stub_without_attrs_still_works_via_labels(self):
+        """Older test stubs use SimpleNamespace(name=…) with no .attrs —
+        falling back to .labels should still evaluate."""
+        with patch("decnet.collector.worker._load_service_container_names", return_value=set()):
+            c = SimpleNamespace(
+                name="decky-2966-ssh",
+                labels={"decnet.topology.service": "true"},
+            )
+            assert is_service_container(c) is True
+
+
 class TestLoadServiceContainerNames:
     def test_with_valid_state(self, tmp_path, monkeypatch):
         import decnet.config
