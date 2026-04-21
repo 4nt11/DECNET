@@ -1,10 +1,13 @@
 """Step 7 — topology_mutations queue + mutator reconciler branch."""
 from __future__ import annotations
 
+import asyncio
 import json
 
 import pytest
 
+from decnet.bus import topics as _topics
+from decnet.bus.fake import FakeBus
 from decnet.mutator import engine as _engine
 from decnet.mutator.ops import MutationError, apply_add_lan, apply_update_decky
 from decnet.topology.config import TopologyConfig
@@ -272,3 +275,104 @@ def test_ops_payload_shape_docstring_present():
 
 def _payload_json(d: dict) -> str:
     return json.dumps(d)
+
+
+# ---------------------------------------------------- bus publishing (DEBT-030)
+
+
+async def _drain(sub, expected: int, timeout: float = 2.0) -> list:
+    """Collect up to *expected* events from *sub* with a hard timeout.
+
+    Used to assert bus publishes without racing against the in-process
+    FakeBus queue — drains are short by construction (the reconciler
+    produces a bounded number of events per claim).
+    """
+    events: list = []
+    sub_iter = sub.__aiter__()
+    for _ in range(expected):
+        events.append(await asyncio.wait_for(sub_iter.__anext__(), timeout=timeout))
+    return events
+
+
+@pytest.mark.anyio
+async def test_reconcile_publishes_applying_and_applied(repo):
+    tid = await _make_active(repo)
+    await repo.enqueue_topology_mutation(
+        tid, "add_lan",
+        {"name": "LAN-PUB", "subnet": "172.20.45.0/24"},
+    )
+    bus = FakeBus()
+    await bus.connect()
+    sub = bus.subscribe(f"{_topics.TOPOLOGY}.{tid}.>")
+    try:
+        async with sub:
+            drained = await _engine.reconcile_topologies(repo, bus=bus)
+            assert drained == 1
+            events = await _drain(sub, expected=2)
+    finally:
+        await bus.close()
+    types = [e.type for e in events]
+    assert types == [_topics.MUTATION_APPLYING, _topics.MUTATION_APPLIED]
+
+
+@pytest.mark.anyio
+async def test_reconcile_publishes_failed_and_status(repo):
+    tid = await _make_active(repo)
+    existing = (await repo.list_lans_for_topology(tid))[0]["name"]
+    await repo.enqueue_topology_mutation(
+        tid, "add_lan", {"name": existing, "subnet": "172.20.89.0/24"},
+    )
+    bus = FakeBus()
+    await bus.connect()
+    sub = bus.subscribe(f"{_topics.TOPOLOGY}.{tid}.>")
+    try:
+        async with sub:
+            await _engine.reconcile_topologies(repo, bus=bus)
+            # applying + failed + status(degraded)
+            events = await _drain(sub, expected=3)
+    finally:
+        await bus.close()
+    types = [e.type for e in events]
+    assert types == [
+        _topics.MUTATION_APPLYING, _topics.MUTATION_FAILED, _topics.TOPOLOGY_STATUS,
+    ]
+    assert events[-1].payload["state"] == TopologyStatus.DEGRADED
+
+
+@pytest.mark.anyio
+async def test_reconcile_with_null_bus_is_safe(repo):
+    """Passing ``bus=None`` must not break the reconciler — publish is
+    a fire-and-forget nicety, the DB is the source of truth."""
+    tid = await _make_active(repo)
+    await repo.enqueue_topology_mutation(
+        tid, "add_lan",
+        {"name": "LAN-NULL", "subnet": "172.20.46.0/24"},
+    )
+    drained = await _engine.reconcile_topologies(repo, bus=None)
+    assert drained == 1
+
+
+@pytest.mark.anyio
+async def test_wake_on_enqueue_sets_event(repo):
+    """``_wake_on_enqueue`` flips the asyncio.Event on every matching event."""
+    bus = FakeBus()
+    await bus.connect()
+    wake = asyncio.Event()
+    task = asyncio.create_task(_engine._wake_on_enqueue(bus, wake))
+    try:
+        # Give the subscription a tick to register.
+        await asyncio.sleep(0)
+        await bus.publish(
+            _topics.topology_mutation("abc", _topics.MUTATION_ENQUEUED),
+            {"mutation_id": "m1", "op": "add_lan"},
+            event_type=_topics.MUTATION_ENQUEUED,
+        )
+        await asyncio.wait_for(wake.wait(), timeout=1.0)
+        assert wake.is_set()
+    finally:
+        task.cancel()
+        try:
+            await task
+        except (asyncio.CancelledError, Exception):
+            pass
+        await bus.close()

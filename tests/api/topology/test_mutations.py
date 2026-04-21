@@ -3,6 +3,9 @@ from __future__ import annotations
 
 import pytest
 
+from decnet.bus import app as _bus_app
+from decnet.bus import topics as _topics
+from decnet.bus.fake import FakeBus
 from decnet.topology.config import TopologyConfig
 from decnet.topology.generator import generate
 from decnet.topology.persistence import persist, transition_status
@@ -157,3 +160,44 @@ async def test_list_viewer_ok(client, viewer_token):
         headers=_hdr(viewer_token),
     )
     assert r.status_code == 200
+
+
+# ── Bus publish on enqueue (DEBT-030) ─────────────────────────────
+
+
+@pytest.fixture
+def _fake_app_bus(monkeypatch):
+    """Replace the process-wide app bus with an in-process FakeBus."""
+    bus = FakeBus()
+
+    async def _get() -> FakeBus:
+        if not bus._connected:
+            await bus.connect()
+        return bus
+
+    monkeypatch.setattr(_bus_app, "get_app_bus", _get)
+    # Also patch the re-export in the route module.
+    from decnet.web.router.topology import api_mutations as _mod
+    monkeypatch.setattr(_mod, "get_app_bus", _get)
+    return bus
+
+
+@pytest.mark.anyio
+async def test_enqueue_publishes_on_bus(client, auth_token, _fake_app_bus):
+    topology_id = await _seed_active("enq-pub")
+    sub = _fake_app_bus.subscribe(
+        _topics.topology_mutation(topology_id, _topics.MUTATION_ENQUEUED),
+    )
+    async with sub:
+        r = await client.post(
+            f"{_V1}/{topology_id}/mutations",
+            json={"op": "add_lan", "payload": {"name": "pub-lan"}},
+            headers=_hdr(auth_token),
+        )
+        assert r.status_code == 202
+        mutation_id = r.json()["mutation_id"]
+        import asyncio
+        event = await asyncio.wait_for(sub.__aiter__().__anext__(), timeout=1.0)
+    assert event.type == _topics.MUTATION_ENQUEUED
+    assert event.payload["mutation_id"] == mutation_id
+    assert event.payload["op"] == "add_lan"
