@@ -12,7 +12,6 @@ from decnet.topology.config import TopologyConfig
 from decnet.topology.generator import generate
 from decnet.topology.persistence import hydrate, persist
 from decnet.topology.status import TopologyStatus
-from decnet.web.db.factory import get_repository
 
 from .gating import _require_master_mode
 
@@ -26,6 +25,7 @@ _group = typer.Typer(
 
 
 async def _repo():
+    from decnet.web.db.factory import get_repository
     r = get_repository()
     await r.initialize()
     return r
@@ -137,7 +137,11 @@ def _show(topology_id: str = typer.Argument(..., help="Topology id")) -> None:
         f"  mode={topo['mode']}"
     )
 
-    deckies_by_name = {d["decky_config"]["name"]: d for d in hydrated["deckies"]}
+    def _decky_name(d: dict) -> str:
+        cfg = d.get("decky_config") or {}
+        return cfg.get("name") or d.get("name") or d["uuid"]
+
+    deckies_by_name = {_decky_name(d): d for d in hydrated["deckies"]}
     edges_by_lan: dict[str, list[dict]] = {}
     for e in hydrated["edges"]:
         edges_by_lan.setdefault(e["lan_id"], []).append(e)
@@ -154,16 +158,16 @@ def _show(topology_id: str = typer.Argument(..., help="Topology id")) -> None:
             )
             if decky is None:
                 continue
-            cfg = decky["decky_config"]
-            name = cfg["name"]
-            ip = cfg["ips_by_lan"].get(lan["name"], "?")
+            cfg = decky.get("decky_config") or {}
+            name = _decky_name(decky)
+            ip = (cfg.get("ips_by_lan") or {}).get(lan["name"]) or decky.get("ip") or "?"
             tags = []
             if e["is_bridge"]:
                 tags.append("bridge")
             if e["forwards_l3"]:
                 tags.append("L3-forward")
             tag_s = f" [yellow]({', '.join(tags)})[/]" if tags else ""
-            svcs = ",".join(cfg.get("services") or []) or "-"
+            svcs = ",".join(cfg.get("services") or decky.get("services") or []) or "-"
             _console.print(f"  • {name}  {ip}  svcs={svcs}{tag_s}")
 
     _ = deckies_by_name  # for future cross-reference extensions
@@ -200,6 +204,61 @@ def _teardown(
 
     asyncio.run(_go())
     _console.print(f"[green]Topology {topology_id} torn down.[/]")
+
+
+@_group.command("delete")
+def _delete(
+    topology_id: str = typer.Argument(..., help="Topology id"),
+    force: bool = typer.Option(
+        False,
+        "--force",
+        help="Skip the confirmation prompt (required for non-interactive use).",
+    ),
+) -> None:
+    """Delete a topology and all its children (LANs, deckies, edges, mutations).
+
+    Refuses while containers are running — teardown first.
+    """
+    _require_master_mode("topology delete")
+
+    _RUNNING = {
+        TopologyStatus.DEPLOYING,
+        TopologyStatus.ACTIVE,
+        TopologyStatus.DEGRADED,
+        TopologyStatus.TEARING_DOWN,
+    }
+
+    async def _go() -> tuple[bool, Optional[str]]:
+        repo = await _repo()
+        topo = await repo.get_topology(topology_id)
+        if topo is None:
+            return False, "not-found"
+        if topo["status"] in _RUNNING:
+            return False, str(topo["status"])
+        ok = await repo.delete_topology_cascade(topology_id)
+        return ok, None
+
+    if not force and not typer.confirm(
+        f"Delete topology {topology_id} and all its children? This cannot be undone.",
+        default=False,
+    ):
+        _console.print("[yellow]Cancelled.[/]")
+        raise typer.Exit(0)
+
+    ok, reason = asyncio.run(_go())
+    if reason == "not-found":
+        _console.print(f"[red]No such topology: {topology_id}[/]")
+        raise typer.Exit(1)
+    if reason is not None:
+        _console.print(
+            f"[red]Cannot delete while status={reason!r}. Run "
+            f"[bold]decnet topology teardown {topology_id}[/] first.[/]"
+        )
+        raise typer.Exit(1)
+    if not ok:
+        _console.print(f"[red]Delete failed: {topology_id}[/]")
+        raise typer.Exit(1)
+    _console.print(f"[green]Topology {topology_id} deleted.[/]")
 
 
 @_group.command("mutate")
