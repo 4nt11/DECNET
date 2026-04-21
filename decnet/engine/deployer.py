@@ -311,6 +311,33 @@ def _topology_compose_path(topology_id: str) -> Path:
     return Path(f"decnet-topology-{topology_id[:8]}-compose.yml")
 
 
+def _warn_if_userland_proxy_enabled(hydrated: dict) -> None:
+    """Soft warning: docker-proxy masks attacker source IPs.
+
+    Only log if the topology will publish ports (gateway deckies with
+    ``forwards_l3=True``) — no point scaring operators on port-less
+    topologies.  Best-effort: any failure talking to the daemon is
+    silently ignored.
+    """
+    publishes = any(
+        (d.get("decky_config") or {}).get("forwards_l3")
+        for d in hydrated.get("deckies", [])
+    )
+    if not publishes:
+        return
+    try:
+        info = docker.from_env().info()
+    except Exception:
+        return
+    if info.get("UserlandProxy") or info.get("Userland Proxy"):
+        log.warning(
+            "[USERLAND_PROXY] docker-proxy is enabled; attacker source IPs "
+            "will appear as the bridge gateway. Set "
+            '"userland-proxy": false in /etc/docker/daemon.json to preserve '
+            "real source IPs."
+        )
+
+
 @_traced("engine.deploy_topology")
 async def deploy_topology(repo, topology_id: str, *, dry_run: bool = False) -> None:
     """Deploy a persisted MazeNET topology.
@@ -348,6 +375,8 @@ async def deploy_topology(repo, topology_id: str, *, dry_run: bool = False) -> N
     # the clearer log line up-front).  Only runs at live deploy.
     for w in check_no_host_port_collision(hydrated):
         log.warning("[%s] %s", w.code, w.message)
+
+    _warn_if_userland_proxy_enabled(hydrated)
 
     await transition_status(repo, topology_id, TopologyStatus.DEPLOYING)
 
