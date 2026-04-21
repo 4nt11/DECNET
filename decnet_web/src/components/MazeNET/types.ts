@@ -47,14 +47,3 @@ export interface Edge {
   label?: string;
 }
 
-/* ── Pending changes — mirrors Phase-3 MutationEnqueueRequest.op ── */
-export type PendingChange =
-  | { op: 'add_lan';       payload: { id: string; label: string; cidr: string; x: number; y: number; w: number; h: number } }
-  | { op: 'remove_lan';    payload: { id: string } }
-  | { op: 'update_lan';    payload: { id: string; patch: Partial<Net> } }
-  | { op: 'attach_decky';  payload: { nodeId: string; netId: string; archetype: string; name: string; x: number; y: number; services: string[] } }
-  | { op: 'detach_decky';  payload: { nodeId: string; netId: string } }
-  | { op: 'remove_decky';  payload: { nodeId: string } }
-  | { op: 'update_decky';  payload: { nodeId: string; patch: Partial<DeckyNode> } }
-  | { op: 'add_edge';      payload: { id: string; from: string; to: string } }
-  | { op: 'remove_edge';   payload: { id: string } };

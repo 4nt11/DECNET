@@ -1,5 +1,3 @@
-import type { Net, MazeNode, Edge } from './types';
-
 export interface Archetype {
   slug: string;
   name: string;
@@ -43,29 +41,3 @@ export const DEFAULT_SERVICES: ServiceDef[] = [
   { slug: 'coap',     name: 'CoAP',     port: 5683, proto: 'udp', icon: 'wifi',       risk: 'low' },
 ];
 
-/* Demo seed mirroring design-handoff/.../MazeNET.jsx INITIAL_* */
-export const DEMO_NETS: Net[] = [
-  { id: 'net-internet', label: 'INTERNET', cidr: '0.0.0.0/0',    kind: 'internet', x: 40,  y: 40,  w: 240, h: 220 },
-  { id: 'net-dmz',      label: 'DMZ',      cidr: '10.4.2.0/24',  kind: 'subnet',   x: 340, y: 40,  w: 340, h: 260 },
-  { id: 'net-corp',     label: 'CORP-LAN', cidr: '10.20.0.0/16', kind: 'subnet',   x: 340, y: 340, w: 340, h: 240 },
-  { id: 'net-vault',    label: 'DB-VAULT', cidr: '10.88.1.0/24', kind: 'subnet',   x: 740, y: 200, w: 260, h: 220 },
-];
-
-export const DEMO_NODES: MazeNode[] = [
-  { id: 'n-scan', kind: 'observed', netId: 'net-internet', name: 'SCANNERS',  archetype: 'attacker-pool',       services: ['*'],              status: 'hot',    x: 60,  y: 80 },
-  { id: 'n-edge', kind: 'decky',    netId: 'net-dmz',      name: 'decky-01',  archetype: 'linux-server',        services: ['ssh', 'http'],    status: 'active', x: 20,  y: 60 },
-  { id: 'n-jump', kind: 'decky',    netId: 'net-dmz',      name: 'decky-03',  archetype: 'linux-server',        services: ['ssh'],            status: 'hot',    x: 180, y: 60 },
-  { id: 'n-web',  kind: 'decky',    netId: 'net-dmz',      name: 'decky-07',  archetype: 'web-application',     services: ['http'],           status: 'active', x: 20,  y: 160 },
-  { id: 'n-ws',   kind: 'decky',    netId: 'net-corp',     name: 'decky-02',  archetype: 'windows-workstation', services: ['smb', 'rdp'],     status: 'active', x: 20,  y: 60 },
-  { id: 'n-dc',   kind: 'decky',    netId: 'net-corp',     name: 'decky-05',  archetype: 'domain-controller',   services: ['ldap', 'smb'],    status: 'active', x: 180, y: 60 },
-  { id: 'n-db',   kind: 'decky',    netId: 'net-vault',    name: 'decky-12',  archetype: 'database-server',     services: ['mysql', 'postgres'], status: 'active', x: 50, y: 80 },
-];
-
-export const DEMO_EDGES: Edge[] = [
-  { id: 'e1', from: 'n-scan', to: 'n-edge', traffic: 'hot',    label: 'TCP 443' },
-  { id: 'e2', from: 'n-scan', to: 'n-jump', traffic: 'hot',    label: 'TCP 22' },
-  { id: 'e3', from: 'n-edge', to: 'n-ws',   traffic: 'active', label: '' },
-  { id: 'e4', from: 'n-jump', to: 'n-dc',   traffic: 'hot',    label: 'LAT-MOV' },
-  { id: 'e5', from: 'n-dc',   to: 'n-db',   traffic: 'active', label: '' },
-  { id: 'e6', from: 'n-web',  to: 'n-db',   traffic: 'active', label: 'SQL' },
-];

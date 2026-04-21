@@ -1,4 +1,5 @@
-import React, { useEffect, useRef } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
+import { ChevronRight } from 'lucide-react';
 
 export interface MenuItem {
   label: string;
@@ -7,6 +8,8 @@ export interface MenuItem {
   title?: string;
   danger?: boolean;
   separator?: boolean;
+  icon?: React.ReactNode;
+  submenu?: MenuItem[];
 }
 
 interface Props {
@@ -14,10 +17,12 @@ interface Props {
   y: number;
   items: MenuItem[];
   onClose: () => void;
+  title?: string;
 }
 
-const ContextMenu: React.FC<Props> = ({ x, y, items, onClose }) => {
+const ContextMenu: React.FC<Props> = ({ x, y, items, onClose, title }) => {
   const ref = useRef<HTMLDivElement>(null);
+  const [openSub, setOpenSub] = useState<number | null>(null);
 
   useEffect(() => {
     const onDown = (e: MouseEvent) => {
@@ -32,24 +37,60 @@ const ContextMenu: React.FC<Props> = ({ x, y, items, onClose }) => {
     };
   }, [onClose]);
 
+  const renderItem = (it: MenuItem, i: number) => {
+    if (it.separator) return <div key={i} className="ctx-divider" />;
+    const hasSub = !!it.submenu?.length;
+    return (
+      <div
+        key={i}
+        className="ctx-item-wrap"
+        onMouseEnter={() => setOpenSub(hasSub ? i : null)}
+      >
+        <button
+          type="button"
+          className={`ctx-item ${it.danger ? 'danger' : ''}`}
+          disabled={it.disabled}
+          title={it.title}
+          onClick={() => {
+            if (it.disabled) return;
+            if (hasSub) return;
+            it.onClick?.();
+            onClose();
+          }}
+        >
+          {it.icon && <span className="ctx-icon">{it.icon}</span>}
+          <span className="ctx-label">{it.label}</span>
+          {hasSub && <ChevronRight size={12} className="ctx-chev" />}
+        </button>
+        {hasSub && openSub === i && (
+          <div className="ctx-submenu">
+            {it.submenu!.map((s, j) =>
+              s.separator ? (
+                <div key={j} className="ctx-divider" />
+              ) : (
+                <button
+                  key={j}
+                  type="button"
+                  className={`ctx-item ${s.danger ? 'danger' : ''}`}
+                  disabled={s.disabled}
+                  title={s.title}
+                  onClick={() => { if (!s.disabled) { s.onClick?.(); onClose(); } }}
+                >
+                  {s.icon && <span className="ctx-icon">{s.icon}</span>}
+                  <span className="ctx-label">{s.label}</span>
+                </button>
+              ),
+            )}
+          </div>
+        )}
+      </div>
+    );
+  };
+
   return (
     <div ref={ref} className="ctx-menu" style={{ left: x, top: y }}>
-      {items.map((it, i) =>
-        it.separator ? (
-          <div key={i} className="ctx-divider" />
-        ) : (
-          <button
-            key={i}
-            type="button"
-            className={`ctx-item ${it.danger ? 'danger' : ''}`}
-            disabled={it.disabled}
-            title={it.title}
-            onClick={() => { if (!it.disabled) { it.onClick?.(); onClose(); } }}
-          >
-            {it.label}
-          </button>
-        ),
-      )}
+      {title && <div className="ctx-title">{title}</div>}
+      {items.map(renderItem)}
     </div>
   );
 };

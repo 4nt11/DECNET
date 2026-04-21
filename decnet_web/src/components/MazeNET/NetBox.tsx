@@ -1,5 +1,5 @@
 import React from 'react';
-import { Globe, GitMerge } from 'lucide-react';
+import { Globe, GitMerge, ShieldAlert } from 'lucide-react';
 import type { Net } from './types';
 import type { ResizeHandle } from './useMazeInteraction';
 
@@ -8,6 +8,7 @@ interface Props {
   selected: boolean;
   dropTarget: boolean;
   inactive: boolean;
+  deployed?: boolean;
   onSelect?: (id: string) => void;
   onHeaderMouseDown?: (id: string) => (e: React.MouseEvent) => void;
   onResizeMouseDown?: (id: string, handle: ResizeHandle) => (e: React.MouseEvent) => void;
@@ -16,17 +17,19 @@ interface Props {
 }
 
 const NetBox: React.FC<Props> = ({
-  net, selected, dropTarget, inactive, onSelect, onHeaderMouseDown, onResizeMouseDown, onContextMenu, children,
+  net, selected, dropTarget, inactive, deployed, onSelect, onHeaderMouseDown, onResizeMouseDown, onContextMenu, children,
 }) => {
   const classes = [
     'maze-net-box',
     net.kind === 'internet' ? 'internet' : '',
+    net.kind === 'dmz' ? 'dmz' : '',
     selected ? 'selected' : '',
     dropTarget ? 'drop-target' : '',
     inactive ? 'inactive' : '',
+    deployed ? 'deployed' : '',
   ].filter(Boolean).join(' ');
 
-  const Icon = net.kind === 'internet' ? Globe : GitMerge;
+  const Icon = net.kind === 'internet' ? Globe : net.kind === 'dmz' ? ShieldAlert : GitMerge;
   const resizable = net.kind !== 'internet';
 
   const handleBoxDown = (e: React.MouseEvent) => {

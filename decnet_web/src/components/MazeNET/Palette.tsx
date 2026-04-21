@@ -1,12 +1,13 @@
 import React from 'react';
-import { GitMerge, Server, Monitor, Shield, Database, Cpu, Globe,
+import { GitMerge, ShieldAlert, Server, Monitor, Shield, Database, Cpu, Globe,
          Terminal, Lock, Folder, HardDrive, Users, KeyRound,
          Radio, Zap, Wifi, Circle } from 'lucide-react';
-import { ARCHETYPES } from './data';
 import type { ServiceDef, Archetype } from './data';
+import type { PaletteDrag } from './useMazeInteraction';
 
 const ICON: Record<string, React.ComponentType<{ size?: number; className?: string }>> = {
-  'git-merge': GitMerge, server: Server, monitor: Monitor, shield: Shield,
+  'git-merge': GitMerge, 'shield-alert': ShieldAlert,
+  server: Server, monitor: Monitor, shield: Shield,
   database: Database, cpu: Cpu, globe: Globe, terminal: Terminal, lock: Lock,
   folder: Folder, 'hard-drive': HardDrive, users: Users, 'key-round': KeyRound,
   radio: Radio, zap: Zap, wifi: Wifi, circle: Circle,
@@ -19,28 +20,42 @@ function Icon({ name, size = 14, className }: { name: string; size?: number; cla
 
 interface Props {
   services: ServiceDef[];
-  onPaletteDragStart?: (kind: 'network' | 'archetype' | 'service', slug: string, label: string) => void;
+  archetypes: Archetype[];
+  startPaletteDrag: (d: Omit<PaletteDrag, 'clientX' | 'clientY'>, e: React.MouseEvent) => void;
 }
 
-const Palette: React.FC<Props> = ({ services, onPaletteDragStart }) => {
-  const start = (kind: 'network' | 'archetype' | 'service', slug: string, label: string) =>
-    (e: React.MouseEvent) => { e.preventDefault(); onPaletteDragStart?.(kind, slug, label); };
+const Palette: React.FC<Props> = ({ services, archetypes, startPaletteDrag }) => {
+  const start = (d: Omit<PaletteDrag, 'clientX' | 'clientY'>) =>
+    (e: React.MouseEvent) => {
+      if (e.button !== 0) return;
+      e.preventDefault();
+      startPaletteDrag(d, e);
+    };
 
   return (
     <div className="maze-palette">
       <div className="palette-group">
         <label>① NETWORKS</label>
-        <div className="palette-item" onMouseDown={start('network', 'subnet', 'SUBNET')}>
+        <div className="palette-item" onMouseDown={start({ kind: 'network-subnet', slug: 'subnet', label: 'SUBNET' })}>
           <Icon name="git-merge" className="violet-accent" />
           <span>Subnet</span>
           <span className="chip-mini">VLAN</span>
+        </div>
+        <div className="palette-item" onMouseDown={start({ kind: 'network-dmz', slug: 'dmz', label: 'DMZ' })}>
+          <Icon name="shield-alert" className="alert-text" />
+          <span>DMZ</span>
+          <span className="chip-mini">HOST</span>
         </div>
       </div>
 
       <div className="palette-group">
         <label>② ARCHETYPES</label>
-        {ARCHETYPES.map((a: Archetype) => (
-          <div key={a.slug} className="palette-item" onMouseDown={start('archetype', a.slug, a.name)}>
+        {archetypes.map((a: Archetype) => (
+          <div
+            key={a.slug}
+            className="palette-item"
+            onMouseDown={start({ kind: 'archetype', slug: a.slug, label: a.name, services: a.services })}
+          >
             <Icon name={a.icon} className="violet-accent" />
             <span>{a.name}</span>
             <span className="chip-mini">{a.services.length}</span>
@@ -51,7 +66,11 @@ const Palette: React.FC<Props> = ({ services, onPaletteDragStart }) => {
       <div className="palette-group">
         <label>③ SERVICES</label>
         {services.map((s) => (
-          <div key={s.slug} className="palette-item" onMouseDown={start('service', s.slug, s.name)}>
+          <div
+            key={s.slug}
+            className="palette-item"
+            onMouseDown={start({ kind: 'service', slug: s.slug, label: s.name })}
+          >
             <Icon
               name={s.icon}
               size={12}
@@ -66,8 +85,8 @@ const Palette: React.FC<Props> = ({ services, onPaletteDragStart }) => {
       <div className="palette-group">
         <label>HINT</label>
         <div className="palette-hint">
-          Drag empty canvas to pan. Right-click anything for a menu. Subnets
-          must be wired to something or they go inactive.
+          Drag a network onto the canvas, or an archetype onto a network,
+          or a service onto a decky. Right-click for menus.
         </div>
       </div>
     </div>

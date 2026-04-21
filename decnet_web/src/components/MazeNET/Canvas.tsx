@@ -9,6 +9,7 @@ interface Props {
   nets: Net[];
   nodes: MazeNode[];
   edges: Edge[];
+  deployed: boolean;
   selection: Selection;
   setSelection: (s: Selection) => void;
   pan: { x: number; y: number };
@@ -30,7 +31,7 @@ const NODE_W = 140;
 const NODE_HEAD_H = 22;
 
 const Canvas = forwardRef<HTMLDivElement, Props>(function Canvas(
-  { nets, nodes, edges, selection, setSelection, pan, dropTargetId, dragging, edgeDraw,
+  { nets, nodes, edges, deployed, selection, setSelection, pan, dropTargetId, dragging, edgeDraw,
     onCanvasMouseDown, onNodeMouseDown, onNetMouseDown, onNetResizeMouseDown, onPortMouseDown,
     onNodeContextMenu, onNetContextMenu, onEdgeContextMenu, onCanvasContextMenu },
   ref,
@@ -139,6 +140,7 @@ const Canvas = forwardRef<HTMLDivElement, Props>(function Canvas(
                 selected={net.id === selNetId}
                 dropTarget={dropTargetId === net.id}
                 inactive={inactive}
+                deployed={deployed}
                 onSelect={(id) => setSelection({ type: 'net', id })}
                 onHeaderMouseDown={onNetMouseDown}
                 onResizeMouseDown={onNetResizeMouseDown}
@@ -155,6 +157,7 @@ const Canvas = forwardRef<HTMLDivElement, Props>(function Canvas(
                 absX={p.x}
                 absY={p.y}
                 selected={n.id === selNodeId}
+                deployed={deployed}
                 dragging={dragging && n.id === selNodeId}
                 onSelect={(id) => setSelection({ type: 'node', id })}
                 onMouseDown={onNodeMouseDown}

@@ -89,8 +89,22 @@ export function adaptTopology(detail: TopologyDetail): HydratedTopology {
 
   // Home LAN = first edge; a multi-homed gateway is drawn inside its
   // home LAN, membership in others is expressed via the edge list.
+  // Gateways (forwards_l3) MUST render inside a DMZ — auto-bridge adds
+  // subnet edges after the original DMZ edge, but edge ordering from the
+  // backend is not guaranteed, so we pick DMZ explicitly for gateways.
+  const dmzIds = new Set(detail.lans.filter((l) => l.is_dmz).map((l) => l.id));
+  const gatewayUuids = new Set(
+    detail.edges.filter((e) => e.forwards_l3).map((e) => e.decky_uuid),
+  );
   const firstLanFor = new Map<string, string>();
   for (const e of detail.edges) {
+    if (gatewayUuids.has(e.decky_uuid)) {
+      // Only accept a DMZ edge as home for a gateway.
+      if (dmzIds.has(e.lan_id) && !firstLanFor.has(e.decky_uuid)) {
+        firstLanFor.set(e.decky_uuid, e.lan_id);
+      }
+      continue;
+    }
     if (!firstLanFor.has(e.decky_uuid)) firstLanFor.set(e.decky_uuid, e.lan_id);
   }
 
