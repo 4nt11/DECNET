@@ -35,7 +35,12 @@ from decnet.topology.compose import (
 )
 from decnet.topology.persistence import hydrate, transition_status
 from decnet.topology.status import TopologyStatus
-from decnet.topology.validate import ValidationError, errors as _validation_errors, validate as _validate_topology
+from decnet.topology.validate import (
+    ValidationError,
+    check_no_host_port_collision,
+    errors as _validation_errors,
+    validate as _validate_topology,
+)
 
 log = get_logger("engine")
 console = Console()
@@ -337,6 +342,12 @@ async def deploy_topology(repo, topology_id: str, *, dry_run: bool = False) -> N
         )
         log.info("topology %s dry-run complete", topology_id)
         return
+
+    # Host-state precheck: PORT_COLLISION is a warning (docker-compose
+    # will hard-fail if the port is actually unavailable; we just want
+    # the clearer log line up-front).  Only runs at live deploy.
+    for w in check_no_host_port_collision(hydrated):
+        log.warning("[%s] %s", w.code, w.message)
 
     await transition_status(repo, topology_id, TopologyStatus.DEPLOYING)
 

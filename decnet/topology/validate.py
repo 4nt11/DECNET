@@ -16,6 +16,7 @@ from ipaddress import IPv4Address, IPv4Network
 from typing import Any, Callable, Literal
 
 from decnet.fleet import all_service_names
+from decnet.services.registry import get_service
 
 Severity = Literal["error", "warning"]
 
@@ -282,6 +283,55 @@ def check_service_config_shape(h: dict[str, Any]) -> list[ValidationIssue]:
     return issues
 
 
+def check_no_host_port_collision(h: dict[str, Any]) -> list[ValidationIssue]:
+    """Flag gateway service ports that are already bound on the host.
+
+    Only gateway deckies (``forwards_l3=True`` in decky_config) publish
+    ports (see decnet/topology/compose.py).  Best-effort: if ``psutil``
+    isn't importable or probing fails, returns no issues.
+    """
+    wanted: dict[int, str] = {}  # host_port → gateway decky name
+    for d in h["deckies"]:
+        cfg = d.get("decky_config") or {}
+        if not cfg.get("forwards_l3"):
+            continue
+        for svc_name in d.get("services", []):
+            svc = get_service(svc_name)
+            if svc is None or getattr(svc, "fleet_singleton", False):
+                continue
+            for port in getattr(svc, "ports", []) or []:
+                wanted.setdefault(int(port), d["name"])
+    if not wanted:
+        return []
+
+    try:
+        import psutil  # type: ignore
+        bound = {
+            c.laddr.port
+            for c in psutil.net_connections(kind="inet")
+            if c.status == psutil.CONN_LISTEN and c.laddr
+        }
+    except Exception:
+        return []
+
+    issues: list[ValidationIssue] = []
+    for port, decky_name in wanted.items():
+        if port in bound:
+            issues.append(
+                ValidationIssue(
+                    "warning",
+                    "PORT_COLLISION",
+                    f"host port {port} is already bound; "
+                    f"gateway {decky_name!r} may fail to publish it",
+                    target={"decky": decky_name, "port": port},
+                )
+            )
+    return issues
+
+
+# Pure-data rules.  Host-state rules (like PORT_COLLISION) are
+# *not* listed here — they're called separately by the live deployer
+# so that unit tests exercising validate() stay hermetic.
 _RULES: list[Callable[[dict[str, Any]], list[ValidationIssue]]] = [
     check_exactly_one_dmz,
     check_all_lans_connected_to_dmz,
