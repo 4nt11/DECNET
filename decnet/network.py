@@ -256,6 +256,24 @@ def create_bridge_network(
                 pass
         net.remove()
 
+    # Orphaned networks from a prior half-torn-down topology can still
+    # claim the subnet under a different name — Docker then rejects our
+    # create with "Pool overlaps".  Sweep any unused bridge that sits on
+    # the same subnet and owns no running containers.
+    for net in client.networks.list(filters={"driver": "bridge"}):
+        if net.name == name:
+            continue
+        pools = (net.attrs.get("IPAM") or {}).get("Config") or []
+        cur = pools[0] if pools else {}
+        if cur.get("Subnet") != subnet:
+            continue
+        if net.attrs.get("Containers"):
+            continue
+        try:
+            net.remove()
+        except docker.errors.APIError:
+            pass
+
     net = client.networks.create(
         name=name,
         driver="bridge",
