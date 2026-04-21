@@ -469,6 +469,14 @@ const MazeNET: React.FC = () => {
       || event.name === 'status') {
       setStreamLive(true);
     }
+    if (event.name === 'mutation.failed') {
+      const p = event.payload ?? {};
+      const reason = typeof p.reason === 'string' ? p.reason
+        : typeof p.error === 'string' ? p.error
+        : 'mutation failed — check mutator logs';
+      setActionErr(`mutation failed: ${reason}`);
+      setTimeout(() => setActionErr(null), 6000);
+    }
     if (event.name === 'mutation.applied'
       || event.name === 'mutation.failed'
       || event.name === 'status') {
