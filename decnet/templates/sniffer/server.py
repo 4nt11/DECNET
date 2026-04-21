@@ -639,7 +639,8 @@ def _ja3(ch: dict[str, Any]) -> tuple[str, str]:
         "-".join(str(p) for p in ch["ec_point_formats"]),
     ]
     ja3_str = ",".join(parts)
-    return ja3_str, hashlib.md5(ja3_str.encode()).hexdigest()
+    # JA3 fingerprint spec uses MD5; not security-relevant.
+    return ja3_str, hashlib.md5(ja3_str.encode(), usedforsecurity=False).hexdigest()
 
 
 def _ja3s(sh: dict[str, Any]) -> tuple[str, str]:
@@ -650,7 +651,8 @@ def _ja3s(sh: dict[str, Any]) -> tuple[str, str]:
         "-".join(str(e) for e in sh["extensions"]),
     ]
     ja3s_str = ",".join(parts)
-    return ja3s_str, hashlib.md5(ja3s_str.encode()).hexdigest()
+    # JA3S fingerprint spec uses MD5; not security-relevant.
+    return ja3s_str, hashlib.md5(ja3s_str.encode(), usedforsecurity=False).hexdigest()
 
 
 # ─── JA4 / JA4S computation ──────────────────────────────────────────────────
