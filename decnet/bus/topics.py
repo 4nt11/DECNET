@@ -55,6 +55,12 @@ DECKY_TRAFFIC = "traffic"
 # without waiting for its scheduled interval.  Underscored (not dotted)
 # to stay a single NATS token so the builder's validator accepts it.
 DECKY_MUTATE_REQUEST = "mutate_request"
+# Mutation transition event — distinct from DECKY_STATE ("current
+# shape") because a mutation is a *transition* that carries old/new
+# services + trigger + timing.  Correlator consumes these (via the
+# syslog sidechannel too) to interleave substrate-change markers into
+# attacker traversals.
+DECKY_MUTATION = "mutation"
 
 # Attacker event types (second token under the ``attacker`` root).  First
 # sighting, session boundary transitions, and score-threshold crossings
@@ -102,6 +108,12 @@ def decky(decky_id: str, event_type: str) -> str:
     """
     _reject_tokens(decky_id, event_type)
     return f"{DECKY}.{decky_id}.{event_type}"
+
+
+def decky_mutation(decky_id: str) -> str:
+    """Build ``decky.<id>.mutation``."""
+    _reject_tokens(decky_id)
+    return f"{DECKY}.{decky_id}.{DECKY_MUTATION}"
 
 
 def system(event_type: str) -> str:

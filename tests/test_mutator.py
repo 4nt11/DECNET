@@ -8,9 +8,12 @@ from unittest.mock import MagicMock, patch, AsyncMock
 
 import pytest
 
+from decnet.bus.fake import FakeBus
 from decnet.config import DeckyConfig, DecnetConfig
+from decnet.correlation.parser import parse_line
 from decnet.engine import _compose_with_retry
 from decnet.mutator import mutate_all, mutate_decky
+from decnet.mutator.events import emit_decky_mutated
 
 
 # ---------------------------------------------------------------------------
@@ -222,6 +225,107 @@ class TestMutateDeckyBusPublish:
             ok = await mutate_decky("decky-01", repo=mock_repo, bus=bus)
         assert ok is False
         bus.publish.assert_not_awaited()
+
+
+# ---------------------------------------------------------------------------
+# emit_decky_mutated — syslog + bus round-trip
+# ---------------------------------------------------------------------------
+
+class TestEmitDeckyMutated:
+    @pytest.mark.asyncio
+    async def test_writes_syslog_line_and_publishes_bus_event(self, tmp_path):
+        bus = FakeBus()
+        await bus.connect()
+        log_path = tmp_path / "subdir" / "decnet.log"
+        sub = bus.subscribe("decky.*.mutation")
+        try:
+            async with sub:
+                await emit_decky_mutated(
+                    bus,
+                    decky="decky-01",
+                    old_services=["ssh", "http"],
+                    new_services=["rdp"],
+                    trigger="operator",
+                    actor="anti",
+                    log_path=log_path,
+                )
+                event = await sub.__aiter__().__anext__()
+        finally:
+            await bus.close()
+
+        assert event.topic == "decky.decky-01.mutation"
+        assert event.payload["trigger"] == "operator"
+        assert event.payload["old_services"] == ["ssh", "http"]
+        assert event.payload["new_services"] == ["rdp"]
+        assert event.payload["actor"] == "anti"
+
+        assert log_path.exists()
+        lines = log_path.read_text().splitlines()
+        assert len(lines) == 1
+        parsed = parse_line(lines[0])
+        assert parsed is not None
+        assert parsed.service == "mutator"
+        assert parsed.decky == "decky-01"
+        assert parsed.event_type == "decky_mutated"
+        assert parsed.fields["trigger"] == "operator"
+        assert parsed.fields["old_services"] == "ssh,http"
+        assert parsed.fields["new_services"] == "rdp"
+        assert parsed.attacker_ip is None
+
+    @pytest.mark.asyncio
+    async def test_empty_set_symmetry_creation_and_retirement(self, tmp_path):
+        """Creation has old_services=[]; retirement has new_services=[]."""
+        bus = FakeBus()
+        await bus.connect()
+        log_path = tmp_path / "decnet.log"
+        try:
+            await emit_decky_mutated(
+                bus, decky="new-decky",
+                old_services=[], new_services=["ssh"],
+                trigger="creation", log_path=log_path,
+            )
+            await emit_decky_mutated(
+                bus, decky="old-decky",
+                old_services=["ftp"], new_services=[],
+                trigger="retirement", log_path=log_path,
+            )
+        finally:
+            await bus.close()
+
+        lines = log_path.read_text().splitlines()
+        assert len(lines) == 2
+        create = parse_line(lines[0])
+        retire = parse_line(lines[1])
+        assert create.fields["old_services"] == ""
+        assert create.fields["trigger"] == "creation"
+        assert retire.fields["new_services"] == ""
+        assert retire.fields["trigger"] == "retirement"
+
+    @pytest.mark.asyncio
+    async def test_bus_none_still_writes_syslog(self, tmp_path):
+        """Bus is optional; syslog is the durable record and must land alone."""
+        log_path = tmp_path / "decnet.log"
+        await emit_decky_mutated(
+            None, decky="d1",
+            old_services=["ssh"], new_services=["rdp"],
+            trigger="scheduled", log_path=log_path,
+        )
+        assert log_path.exists()
+        parsed = parse_line(log_path.read_text().strip())
+        assert parsed is not None
+        assert parsed.fields["trigger"] == "scheduled"
+
+    @pytest.mark.asyncio
+    async def test_syslog_failure_does_not_block_bus_publish(self):
+        """If the log path is unwritable, the bus event still fires."""
+        bus = AsyncMock()
+        bad = Path("/dev/null/nope/decnet.log")
+        await emit_decky_mutated(
+            bus, decky="d1",
+            old_services=[], new_services=["ssh"],
+            trigger="creation", log_path=bad,
+        )
+        bus.publish.assert_awaited_once()
 
 
 # ---------------------------------------------------------------------------
