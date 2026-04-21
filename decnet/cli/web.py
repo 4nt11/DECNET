@@ -67,6 +67,18 @@ def register(app: typer.Typer) -> None:
                     return
                 self.send_error(405)
 
+            def do_PATCH(self):
+                if self.path.startswith("/api/"):
+                    self._proxy("PATCH")
+                    return
+                self.send_error(405)
+
+            def do_OPTIONS(self):
+                if self.path.startswith("/api/"):
+                    self._proxy("OPTIONS")
+                    return
+                self.send_error(405)
+
             def _proxy(self, method: str) -> None:
                 content_length = int(self.headers.get("Content-Length", 0))
                 body = self.rfile.read(content_length) if content_length else None
