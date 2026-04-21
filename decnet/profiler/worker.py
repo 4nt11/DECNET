@@ -17,7 +17,7 @@ import contextlib
 import json
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
-from typing import Any
+from typing import Any, Callable
 
 from decnet.bus import topics as _topics
 from decnet.bus.factory import get_bus
@@ -49,6 +49,9 @@ class _WorkerState:
     engine: CorrelationEngine = field(default_factory=CorrelationEngine)
     last_log_id: int = 0
     initialized: bool = False
+    # Optional bus hook — fires ``("scored", payload)`` per profile upsert.
+    # None when the bus is disabled or unreachable.
+    publish_attacker: Callable[[str, dict[str, Any]], None] | None = None
 
 
 async def attacker_profile_worker(repo: BaseRepository, *, interval: int = 30) -> None:
@@ -75,7 +78,10 @@ async def attacker_profile_worker(repo: BaseRepository, *, interval: int = 30) -
             return
         raw_publish(_topics.attacker(event_type), payload, event_type)
 
-    state = _WorkerState(engine=CorrelationEngine(publish_fn=_publish_attacker))
+    state = _WorkerState(
+        engine=CorrelationEngine(publish_fn=_publish_attacker),
+        publish_attacker=_publish_attacker,
+    )
     _saved_cursor = await repo.get_state(_STATE_KEY)
     if _saved_cursor:
         state.last_log_id = _saved_cursor.get("last_log_id", 0)
@@ -159,6 +165,20 @@ async def _update_profiles(
             _span.set_attribute("is_traversal", traversal is not None)
             _span.set_attribute("bounty_count", len(bounties))
             _span.set_attribute("command_count", len(commands))
+
+            if state.publish_attacker is not None:
+                try:
+                    state.publish_attacker("scored", {
+                        "attacker_ip": ip,
+                        "event_count": record["event_count"],
+                        "service_count": record["service_count"],
+                        "decky_count": record["decky_count"],
+                        "bounty_count": record["bounty_count"],
+                        "credential_count": record["credential_count"],
+                        "is_traversal": record["is_traversal"],
+                    })
+                except Exception as exc:
+                    logger.warning("attacker worker: scored publish failed for %s: %s", ip, exc)
 
             # Behavioral / fingerprint rollup lives in a sibling table so failures
             # here never block the core attacker profile upsert.
