@@ -25,30 +25,11 @@ import contextlib
 from decnet.bus import topics as _topics
 from decnet.bus.base import BaseBus
 from decnet.bus.factory import get_bus
+from decnet.bus.publish import publish_safely as _publish_safely
 from decnet.web.db.repository import BaseRepository
 
 log = get_logger("mutator")
 console = Console()
-
-
-async def _publish_safely(
-    bus: BaseBus | None,
-    topic: str,
-    payload: dict,
-    event_type: str = "",
-) -> None:
-    """Fire-and-forget bus publish.
-
-    A bus failure must never break the reconciler — the DB write already
-    happened before we got here, so losing the notification is at most a
-    few seconds of UI latency (the next poll tick picks it up).
-    """
-    if bus is None:
-        return
-    try:
-        await bus.publish(topic, payload, event_type=event_type)
-    except Exception as exc:  # noqa: BLE001
-        log.warning("bus publish failed topic=%s: %s", topic, exc)
 
 
 @_traced("mutator.mutate_decky")

@@ -11,8 +11,12 @@ Token structure (NATS-style, dot-separated):
     decky.{decky_id}.state
     decky.{decky_id}.traffic
     attacker.observed
+    attacker.scored
+    attacker.session.started
+    attacker.session.ended
     system.log
     system.bus.health
+    system.{worker}.health
 
 Wildcards (per :func:`decnet.bus.base.matches`):
 
@@ -47,9 +51,22 @@ TOPOLOGY_STATUS = "status"
 DECKY_STATE = "state"
 DECKY_TRAFFIC = "traffic"
 
+# Attacker event types (second token under the ``attacker`` root).  First
+# sighting, session boundary transitions, and score-threshold crossings
+# published by correlator + profiler.  Consumers typically subscribe to
+# the wildcard ``attacker.>``.
+ATTACKER_OBSERVED = "observed"
+ATTACKER_SCORED = "scored"
+ATTACKER_SESSION_STARTED = "session.started"
+ATTACKER_SESSION_ENDED = "session.ended"
+
 # System event types.
 SYSTEM_LOG = "log"
 SYSTEM_BUS_HEALTH = "bus.health"
+# Worker-health leaf — built per-worker as ``system.<worker>.health`` via
+# :func:`system_health`.  The leaf constant stays the same across workers;
+# the worker name goes in the middle token.
+SYSTEM_HEALTH = "health"
 
 
 # ─── Builders ────────────────────────────────────────────────────────────────
@@ -87,6 +104,31 @@ def system(event_type: str) -> str:
     if not event_type:
         raise ValueError("system topic requires a non-empty event_type")
     return f"{SYSTEM}.{event_type}"
+
+
+def attacker(event_type: str) -> str:
+    """Build ``attacker.<event_type>``.
+
+    *event_type* is typically one of ``ATTACKER_OBSERVED``,
+    ``ATTACKER_SCORED``, ``ATTACKER_SESSION_STARTED``,
+    ``ATTACKER_SESSION_ENDED``.  Dotted leaves (``session.started``) are
+    permitted — same rationale as :func:`system`.
+    """
+    if not event_type:
+        raise ValueError("attacker topic requires a non-empty event_type")
+    return f"{ATTACKER}.{event_type}"
+
+
+def system_health(worker: str) -> str:
+    """Build ``system.<worker>.health``.
+
+    Worker-health heartbeats live as a nested leaf under ``system`` so
+    consumers can subscribe to ``system.*.health`` for every worker at
+    once, or to ``system.mutator.health`` for a single one.  *worker* is
+    validated as a regular segment — no dots, wildcards, or whitespace.
+    """
+    _reject_tokens(worker)
+    return f"{SYSTEM}.{worker}.{SYSTEM_HEALTH}"
 
 
 def _reject_tokens(*parts: str) -> None:

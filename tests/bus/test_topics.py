@@ -40,3 +40,23 @@ def test_segment_validation(bad: str) -> None:
         topics.topology_status(bad)
     with pytest.raises(ValueError):
         topics.decky(bad, topics.DECKY_STATE)
+    with pytest.raises(ValueError):
+        topics.system_health(bad)
+
+
+def test_attacker_builder() -> None:
+    assert topics.attacker(topics.ATTACKER_OBSERVED) == "attacker.observed"
+    assert topics.attacker(topics.ATTACKER_SCORED) == "attacker.scored"
+    # Dotted leaf is intentional — same as system.bus.health.
+    assert topics.attacker(topics.ATTACKER_SESSION_STARTED) == "attacker.session.started"
+    assert topics.attacker(topics.ATTACKER_SESSION_ENDED) == "attacker.session.ended"
+
+
+def test_attacker_builder_rejects_empty() -> None:
+    with pytest.raises(ValueError):
+        topics.attacker("")
+
+
+def test_system_health_builder() -> None:
+    assert topics.system_health("sniffer") == "system.sniffer.health"
+    assert topics.system_health("mutator") == "system.mutator.health"
