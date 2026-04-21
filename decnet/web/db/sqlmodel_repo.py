@@ -1172,7 +1172,7 @@ class SQLModelRepository(BaseRepository):
                         TopologyEdge.lan_id != lan_id,
                     )
                 )
-                if other.scalar_one_or_none() is None:
+                if other.scalars().first() is None:
                     raise ValueError(
                         f"cannot delete LAN {lan.name!r}: decky "
                         f"{decky_uuid} has no other LAN (would be orphaned)"

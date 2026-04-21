@@ -8,6 +8,7 @@ from __future__ import annotations
 
 from fastapi import APIRouter, Depends, HTTPException, Response, status
 
+from decnet.logging import get_logger
 from decnet.telemetry import traced as _traced
 from decnet.topology.allocator import reserved_subnets
 from decnet.topology.status import (
@@ -19,6 +20,7 @@ from decnet.web.dependencies import repo, require_admin
 
 from ._guards import assert_pending_or_409, map_repo_exception
 
+log = get_logger("api.topology.lan")
 router = APIRouter()
 
 
@@ -51,7 +53,7 @@ async def api_create_lan(
         from decnet.topology.allocator import SubnetAllocator
 
         allocator = SubnetAllocator(
-            "10.0.0.0/16", reserved=await reserved_subnets(repo)
+            "10.0", reserved=await reserved_subnets(repo)
         )
         subnet = allocator.next_free()
 
@@ -74,7 +76,58 @@ async def api_create_lan(
     row = next((r for r in rows if r["id"] == lan_id), None)
     if row is None:  # pragma: no cover — would mean insert vanished
         raise HTTPException(status_code=500, detail="LAN insert vanished")
+
+    # Auto-bridge: if this is a non-DMZ LAN, attach the topology's
+    # DMZ gateway (the decky with forwards_l3=True that lives on the
+    # DMZ LAN) to it.  Satisfies the DMZ_ORPHAN invariant by
+    # construction — every internal LAN always has a bridge path.
+    if not body.is_dmz:
+        try:
+            await _auto_attach_gateway(topology_id, lan_id)
+        except Exception as exc:
+            # Best-effort: if the gateway is missing or the edge can't
+            # be written, the deploy-time validator will surface it.
+            log.warning(
+                "auto-bridge skipped for LAN %s in topology %s: %s",
+                lan_id, topology_id, exc,
+            )
+
     return LANRow(**row)
+
+
+async def _auto_attach_gateway(topology_id: str, new_lan_id: str) -> None:
+    """Attach the topology's DMZ gateway to a newly created non-DMZ LAN."""
+    lans = await repo.list_lans_for_topology(topology_id)
+    dmz = next((lan for lan in lans if lan.get("is_dmz")), None)
+    if dmz is None:
+        return
+
+    edges = await repo.list_topology_edges(topology_id)
+    gateway_uuid: str | None = None
+    for e in edges:
+        if e["lan_id"] != dmz["id"]:
+            continue
+        if e.get("forwards_l3"):
+            gateway_uuid = e["decky_uuid"]
+            break
+    if gateway_uuid is None:
+        return
+
+    if any(
+        e["decky_uuid"] == gateway_uuid and e["lan_id"] == new_lan_id
+        for e in edges
+    ):
+        return
+
+    await repo.add_topology_edge(
+        {
+            "topology_id": topology_id,
+            "decky_uuid": gateway_uuid,
+            "lan_id": new_lan_id,
+            "is_bridge": True,
+            "forwards_l3": True,
+        }
+    )
 
 
 @router.patch(
