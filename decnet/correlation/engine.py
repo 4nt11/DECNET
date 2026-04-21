@@ -24,6 +24,7 @@ from __future__ import annotations
 
 from collections import defaultdict
 from pathlib import Path
+from typing import Any, Callable
 
 from rich.table import Table
 
@@ -33,17 +34,35 @@ from decnet.logging.syslog_formatter import (
     SEVERITY_WARNING,
     format_rfc5424,
 )
+from decnet.logging import get_logger
 from decnet.telemetry import traced as _traced, get_tracer as _get_tracer
+
+log = get_logger("correlation.engine")
+
+
+# ``publish_fn(event_type, payload_dict)``.  Sync to avoid rippling
+# ``async`` through every call site of :meth:`CorrelationEngine.ingest`;
+# the caller wraps bus-publish via
+# :func:`decnet.bus.publish.make_thread_safe_publisher`, which is safe to
+# invoke from any thread including the event-loop thread.
+CorrelationPublishFn = Callable[[str, dict[str, Any]], None]
 
 
 class CorrelationEngine:
-    def __init__(self) -> None:
+    def __init__(
+        self,
+        *,
+        publish_fn: CorrelationPublishFn | None = None,
+    ) -> None:
         # attacker_ip → chronological list of events (only events with an IP)
         self._events: dict[str, list[LogEvent]] = defaultdict(list)
         # Total lines parsed (including no-IP and non-DECNET lines)
         self.lines_parsed: int = 0
         # Total events indexed (had an attacker_ip)
         self.events_indexed: int = 0
+        # Optional bus hook — invoked on first-sighting of an attacker IP.
+        # Always fires exactly once per IP for the lifetime of the engine.
+        self._publish_fn = publish_fn
 
     # ------------------------------------------------------------------ #
     # Ingestion                                                            #
@@ -61,8 +80,23 @@ class CorrelationEngine:
         if event is None:
             return None
         if event.attacker_ip:
+            first_sighting = event.attacker_ip not in self._events
             self._events[event.attacker_ip].append(event)
             self.events_indexed += 1
+            if first_sighting and self._publish_fn is not None:
+                try:
+                    self._publish_fn(
+                        "observed",
+                        {
+                            "attacker_ip": event.attacker_ip,
+                            "decky": event.decky,
+                            "service": event.service,
+                            "event_type": event.event_type,
+                            "first_seen": event.timestamp.isoformat(),
+                        },
+                    )
+                except Exception as exc:
+                    log.warning("correlation publish hook failed: %s", exc)
         return event
 
     @_traced("correlation.ingest_file")

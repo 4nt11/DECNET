@@ -13,11 +13,15 @@ Complexity per cycle: O(new_logs + affected_ips) instead of O(total_logs²).
 from __future__ import annotations
 
 import asyncio
+import contextlib
 import json
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from typing import Any
 
+from decnet.bus import topics as _topics
+from decnet.bus.factory import get_bus
+from decnet.bus.publish import make_thread_safe_publisher
 from decnet.correlation.engine import CorrelationEngine
 from decnet.correlation.parser import LogEvent
 from decnet.logging import get_logger
@@ -50,18 +54,44 @@ class _WorkerState:
 async def attacker_profile_worker(repo: BaseRepository, *, interval: int = 30) -> None:
     """Periodically updates the Attacker table incrementally. Designed to run as an asyncio Task."""
     logger.info("attacker profile worker started interval=%ds", interval)
-    state = _WorkerState()
+
+    # Optional bus wiring — correlator-family publishes ride on the profiler
+    # worker because CorrelationEngine lives inside it.  If the bus is off or
+    # unreachable the engine runs with publish_fn=None and downstream degrades
+    # to DB-only.
+    bus = None
+    try:
+        bus = get_bus(client_name="profiler")
+        await bus.connect()
+    except Exception as exc:
+        logger.warning("profiler: bus unavailable, continuing without publish: %s", exc)
+        bus = None
+
+    loop = asyncio.get_running_loop()
+    raw_publish = make_thread_safe_publisher(bus, loop) if bus is not None else None
+
+    def _publish_attacker(event_type: str, payload: dict[str, Any]) -> None:
+        if raw_publish is None:
+            return
+        raw_publish(_topics.attacker(event_type), payload, event_type)
+
+    state = _WorkerState(engine=CorrelationEngine(publish_fn=_publish_attacker))
     _saved_cursor = await repo.get_state(_STATE_KEY)
     if _saved_cursor:
         state.last_log_id = _saved_cursor.get("last_log_id", 0)
         state.initialized = True
         logger.info("attacker worker: resumed from cursor last_log_id=%d", state.last_log_id)
-    while True:
-        await asyncio.sleep(interval)
-        try:
-            await _incremental_update(repo, state)
-        except Exception as exc:
-            logger.error("attacker worker: update failed: %s", exc)
+    try:
+        while True:
+            await asyncio.sleep(interval)
+            try:
+                await _incremental_update(repo, state)
+            except Exception as exc:
+                logger.error("attacker worker: update failed: %s", exc)
+    finally:
+        if bus is not None:
+            with contextlib.suppress(Exception):
+                await bus.close()
 
 
 @_traced("profiler.incremental_update")
