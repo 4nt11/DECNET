@@ -203,6 +203,11 @@ class Topology(SQLModel, table=True):
     id: str = Field(default_factory=lambda: str(uuid4()), primary_key=True)
     name: str = Field(index=True, unique=True)
     mode: str = Field(default="unihost")  # unihost|agent
+    # When ``mode == "agent"``, pins this topology to a specific enrolled
+    # worker.  ``None`` for unihost topologies (master-local deploy).
+    target_host_uuid: Optional[str] = Field(
+        default=None, foreign_key="swarm_hosts.uuid", index=True
+    )
     # Full TopologyConfig snapshot (including seed) used at generation time.
     config_snapshot: str = Field(
         sa_column=Column("config_snapshot", _BIG_TEXT, nullable=False, default="{}")
@@ -655,6 +660,8 @@ class RollbackResponse(BaseModel):
 class TopologyGenerateRequest(BaseModel):
     """Body for POST /topologies — mirrors the `topology generate` CLI."""
     name: str = PydanticField(..., min_length=1, max_length=64)
+    mode: str = PydanticField(default="unihost", pattern=r"^(unihost|agent)$")
+    target_host_uuid: Optional[str] = None
     depth: int = PydanticField(..., ge=1, le=16)
     branching_factor: int = PydanticField(..., ge=1, le=8)
     deckies_per_lan_min: int = PydanticField(default=1, ge=0, le=32)
@@ -672,6 +679,7 @@ class TopologySummary(BaseModel):
     id: str
     name: str
     mode: str
+    target_host_uuid: Optional[str] = None
     status: str
     version: int
     created_at: datetime
@@ -722,7 +730,12 @@ class EdgeRow(BaseModel):
 
 
 class TopologyDetail(BaseModel):
-    """Hydrated topology — mirrors persistence.hydrate() output."""
+    """Hydrated topology — mirrors persistence.hydrate() output.
+
+    ``topology`` uses :class:`TopologySummary` which already exposes
+    ``target_host_uuid`` — agent-targeted topologies surface their
+    pinned host through that field.
+    """
     topology: TopologySummary
     lans: list[LANRow]
     deckies: list[DeckyRow]
@@ -854,6 +867,19 @@ class NotEditableResponse(BaseModel):
 
 class ServiceCatalogResponse(BaseModel):
     services: list[str]
+
+
+class ArchetypeEntry(BaseModel):
+    slug: str
+    display_name: str
+    description: str
+    services: list[str]
+    preferred_distros: list[str]
+    nmap_os: str
+
+
+class ArchetypeCatalogResponse(BaseModel):
+    archetypes: list[ArchetypeEntry]
 
 
 class NextIPResponse(BaseModel):

@@ -18,13 +18,16 @@ from decnet.telemetry import traced as _traced
 from decnet.topology.allocator import SubnetAllocator, reserved_subnets
 from decnet.web.db.models import TopologySummary
 from decnet.web.dependencies import repo, require_admin
+from decnet.web.router.topology._target_host import validate_target_host
 
 router = APIRouter()
 
 
 class BlankTopologyRequest(BaseModel):
-    """Body for POST /topologies/blank — name only."""
+    """Body for POST /topologies/blank — name plus optional agent pinning."""
     name: str = PydanticField(..., min_length=1, max_length=64)
+    mode: str = PydanticField(default="unihost", pattern=r"^(unihost|agent)$")
+    target_host_uuid: str | None = PydanticField(default=None)
 
 
 @router.post(
@@ -44,12 +47,16 @@ async def api_create_blank_topology(
     body: BlankTopologyRequest,
     _admin: dict = Depends(require_admin),
 ) -> TopologySummary:
+    # 0. Validate mode/host pairing before any writes.
+    await validate_target_host(repo, body.mode, body.target_host_uuid)
+
     # 1. Topology row
     try:
         topology_id = await repo.create_topology(
             {
                 "name": body.name,
-                "mode": "unihost",
+                "mode": body.mode,
+                "target_host_uuid": body.target_host_uuid,
                 "status": "pending",
                 "config_snapshot": json.dumps({"blank": True}),
             }

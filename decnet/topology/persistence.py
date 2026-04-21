@@ -9,18 +9,28 @@ from decnet.topology.config import GeneratedTopology
 from decnet.topology.status import TopologyStatus, assert_transition
 
 
-async def persist(repo: Any, plan: GeneratedTopology) -> str:
+async def persist(
+    repo: Any,
+    plan: GeneratedTopology,
+    *,
+    target_host_uuid: str | None = None,
+) -> str:
     """Write a generated plan to the repo as a ``pending`` topology.
 
     Returns the newly created topology id.  All child rows are written
     atomically relative to each other (SQLite transactions are per-call
     here; the repo methods each commit — good enough for initial create
     since the whole chain is invoked before any external side effects).
+
+    ``target_host_uuid`` — pin the topology to a specific swarm agent.
+    Only meaningful when ``plan.config.mode == "agent"`` (caller
+    validates; this function just stores what it's told).
     """
     topology_id = await repo.create_topology(
         {
             "name": plan.config.name,
             "mode": plan.config.mode,
+            "target_host_uuid": target_host_uuid,
             "config_snapshot": plan.config.model_dump(),
         }
     )

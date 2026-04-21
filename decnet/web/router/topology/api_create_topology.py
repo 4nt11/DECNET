@@ -10,6 +10,7 @@ from decnet.topology.generator import generate
 from decnet.topology.persistence import persist
 from decnet.web.db.models import TopologyGenerateRequest, TopologySummary
 from decnet.web.dependencies import repo, require_admin
+from decnet.web.router.topology._target_host import validate_target_host
 
 router = APIRouter()
 
@@ -31,9 +32,11 @@ async def api_create_topology(
     body: TopologyGenerateRequest,
     _admin: dict = Depends(require_admin),
 ) -> TopologySummary:
+    await validate_target_host(repo, body.mode, body.target_host_uuid)
     try:
         config = TopologyConfig(
             name=body.name,
+            mode=body.mode,
             depth=body.depth,
             branching_factor=body.branching_factor,
             deckies_per_lan_min=body.deckies_per_lan_min,
@@ -55,6 +58,6 @@ async def api_create_topology(
     except (ValueError, TypeError) as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
 
-    topology_id = await persist(repo, plan)
+    topology_id = await persist(repo, plan, target_host_uuid=body.target_host_uuid)
     row = await repo.get_topology(topology_id)
     return TopologySummary(**row)

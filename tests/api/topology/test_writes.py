@@ -189,3 +189,110 @@ async def test_deploy_requires_admin(client, viewer_token):
         headers={"Authorization": f"Bearer {viewer_token}"},
     )
     assert r.status_code == 403
+
+
+# ── mode / target_host_uuid pairing (Step 1) ──────────────────────
+
+
+async def _seed_swarm_host(uuid_: str = "host-uuid-1", status: str = "enrolled") -> None:
+    await _repo.add_swarm_host(
+        {
+            "uuid": uuid_,
+            "name": f"host-{uuid_}",
+            "address": "10.9.9.9",
+            "agent_port": 8765,
+            "status": status,
+            "client_cert_fingerprint": "a" * 64,
+            "cert_bundle_path": "/tmp/ignored",
+        }
+    )
+
+
+@pytest.mark.anyio
+async def test_create_blank_agent_mode_ok(client, auth_token):
+    await _seed_swarm_host("host-ok", status="active")
+    r = await client.post(
+        f"{_V1}/blank",
+        json={"name": "blank-agent", "mode": "agent", "target_host_uuid": "host-ok"},
+        headers={"Authorization": f"Bearer {auth_token}"},
+    )
+    assert r.status_code == 201, r.text
+    body = r.json()
+    assert body["mode"] == "agent"
+    assert body["target_host_uuid"] == "host-ok"
+
+
+@pytest.mark.anyio
+async def test_create_blank_agent_without_host_is_400(client, auth_token):
+    r = await client.post(
+        f"{_V1}/blank",
+        json={"name": "blank-agent-no-host", "mode": "agent"},
+        headers={"Authorization": f"Bearer {auth_token}"},
+    )
+    assert r.status_code == 400
+    assert "target_host_uuid" in r.json()["detail"]
+
+
+@pytest.mark.anyio
+async def test_create_blank_agent_unknown_host_is_400(client, auth_token):
+    r = await client.post(
+        f"{_V1}/blank",
+        json={
+            "name": "blank-agent-unknown",
+            "mode": "agent",
+            "target_host_uuid": "does-not-exist",
+        },
+        headers={"Authorization": f"Bearer {auth_token}"},
+    )
+    assert r.status_code == 400
+    assert "unknown" in r.json()["detail"].lower()
+
+
+@pytest.mark.anyio
+async def test_create_blank_unihost_with_host_is_400(client, auth_token):
+    await _seed_swarm_host("host-unused")
+    r = await client.post(
+        f"{_V1}/blank",
+        json={
+            "name": "blank-unihost-with-host",
+            "mode": "unihost",
+            "target_host_uuid": "host-unused",
+        },
+        headers={"Authorization": f"Bearer {auth_token}"},
+    )
+    assert r.status_code == 400
+
+
+@pytest.mark.anyio
+async def test_create_agent_mode_ok(client, auth_token):
+    await _seed_swarm_host("host-gen")
+    payload = {
+        **_generate_payload("gen-agent"),
+        "mode": "agent",
+        "target_host_uuid": "host-gen",
+    }
+    r = await client.post(
+        f"{_V1}/",
+        json=payload,
+        headers={"Authorization": f"Bearer {auth_token}"},
+    )
+    assert r.status_code == 201, r.text
+    body = r.json()
+    assert body["mode"] == "agent"
+    assert body["target_host_uuid"] == "host-gen"
+
+
+@pytest.mark.anyio
+async def test_create_agent_unreachable_host_is_400(client, auth_token):
+    await _seed_swarm_host("host-dead", status="unreachable")
+    payload = {
+        **_generate_payload("gen-agent-dead"),
+        "mode": "agent",
+        "target_host_uuid": "host-dead",
+    }
+    r = await client.post(
+        f"{_V1}/",
+        json=payload,
+        headers={"Authorization": f"Bearer {auth_token}"},
+    )
+    assert r.status_code == 400
