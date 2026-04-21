@@ -21,6 +21,7 @@ import typer
 from . import (
     agent,
     api,
+    bus,
     db,
     deploy,
     forwarder,
@@ -51,7 +52,7 @@ for _mod in (
     swarm,
     deploy, lifecycle, workers, inventory,
     web, profiler, sniffer, db,
-    topology,
+    topology, bus,
 ):
     _mod.register(app)
 

@@ -131,6 +131,15 @@ DECNET_DISALLOW_MASTER: bool = (
     os.environ.get("DECNET_DISALLOW_MASTER", "true").lower() == "true"
 )
 
+# ServiceBus — host-local UNIX-socket pub/sub.  Workers consume via
+# ``decnet.bus.factory.get_bus()``.  Disabled → NullBus (publishes drop,
+# subscriptions yield nothing) so dev environments without a bus daemon
+# can still boot.  See DEBT-029 for the MVP design.
+DECNET_BUS_ENABLED: bool = os.environ.get("DECNET_BUS_ENABLED", "true").lower() != "false"
+DECNET_BUS_TYPE: str = os.environ.get("DECNET_BUS_TYPE", "unix").lower()
+DECNET_BUS_SOCKET: Optional[str] = os.environ.get("DECNET_BUS_SOCKET")
+DECNET_BUS_GROUP: str = os.environ.get("DECNET_BUS_GROUP", "decnet")
+
 # Tracing — set to "true" to enable OpenTelemetry distributed tracing.
 # Separate from DECNET_DEVELOPER so tracing can be toggled independently.
 DECNET_DEVELOPER_TRACING: bool = os.environ.get("DECNET_DEVELOPER_TRACING", "").lower() == "true"

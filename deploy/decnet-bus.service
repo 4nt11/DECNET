@@ -1,0 +1,43 @@
+[Unit]
+Description=DECNET Service Bus (host-local UNIX-socket pub/sub)
+Documentation=https://github.com/4nt11/DECNET/wiki/Service-Bus
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=decnet
+Group=decnet
+WorkingDirectory=/opt/decnet
+EnvironmentFile=-/opt/decnet/.env.local
+# /run/decnet is created automatically with the RuntimeDirectory= directive
+# below (mode 0755, owned by User/Group) and cleaned up on stop. The bus
+# socket is placed inside it with 0660 perms so only the decnet group can
+# connect.
+RuntimeDirectory=decnet
+RuntimeDirectoryMode=0755
+ExecStart=/opt/decnet/venv/bin/decnet bus \
+    --socket /run/decnet/bus.sock \
+    --group decnet
+
+# No privileged network operations — UNIX-domain socket only.
+CapabilityBoundingSet=
+AmbientCapabilities=
+
+# Security Hardening
+NoNewPrivileges=yes
+ProtectSystem=full
+ProtectHome=read-only
+PrivateTmp=yes
+ProtectKernelTunables=yes
+ProtectKernelModules=yes
+ProtectControlGroups=yes
+RestrictSUIDSGID=yes
+LockPersonality=yes
+ReadWritePaths=/run/decnet /var/log/decnet
+
+Restart=on-failure
+RestartSec=5
+
+[Install]
+WantedBy=multi-user.target
