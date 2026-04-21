@@ -1,8 +1,10 @@
 """Adapter between :class:`GeneratedTopology` and the repository layer."""
 from __future__ import annotations
 
+from ipaddress import IPv4Address, IPv4Network
 from typing import Any
 
+from decnet.topology.allocator import IPAllocator
 from decnet.topology.config import GeneratedTopology
 from decnet.topology.status import TopologyStatus, assert_transition
 
@@ -115,12 +117,90 @@ async def hydrate(repo: Any, topology_id: str) -> dict[str, Any] | None:
     lans = await repo.list_lans_for_topology(topology_id)
     deckies = await repo.list_topology_deckies(topology_id)
     edges = await repo.list_topology_edges(topology_id)
+    _backfill_decky_configs(lans, deckies, edges)
     return {
         "topology": topo,
         "lans": lans,
         "deckies": deckies,
         "edges": edges,
     }
+
+
+def _backfill_decky_configs(
+    lans: list[dict[str, Any]],
+    deckies: list[dict[str, Any]],
+    edges: list[dict[str, Any]],
+) -> None:
+    """Fill in ``decky_config['name']`` and ``ips_by_lan`` for UI-created rows.
+
+    The generator path writes these fields at persist-time; the REST
+    CRUD path writes whatever the client sends (often just archetype
+    flags).  Compose generation requires both, so we normalise here so
+    every write path feeds the same shape downstream.
+    """
+    lans_by_id = {lan["id"]: lan for lan in lans}
+    allocators: dict[str, IPAllocator] = {}
+
+    def _alloc(lan_id: str) -> IPAllocator | None:
+        lan = lans_by_id.get(lan_id)
+        if lan is None or not lan.get("subnet"):
+            return None
+        if lan_id not in allocators:
+            allocators[lan_id] = IPAllocator(lan["subnet"])
+        return allocators[lan_id]
+
+    decky_edges: dict[str, list[str]] = {}
+    for e in edges:
+        decky_edges.setdefault(e["decky_uuid"], []).append(e["lan_id"])
+
+    ordered = sorted(deckies, key=lambda d: (d.get("name", ""), d["uuid"]))
+
+    # Pass 1: reserve IPs already declared in decky_config.
+    for decky in ordered:
+        cfg = decky.get("decky_config") or {}
+        existing = cfg.get("ips_by_lan") or {}
+        for lan_id in decky_edges.get(decky["uuid"], []):
+            lan = lans_by_id.get(lan_id)
+            if lan is None:
+                continue
+            alloc = _alloc(lan_id)
+            if alloc is None:
+                continue
+            ip = existing.get(lan["name"])
+            if ip and alloc.is_free(ip):
+                alloc.reserve(ip)
+
+    # Pass 2: fill gaps; rewrite decky_config.
+    for decky in ordered:
+        cfg = dict(decky.get("decky_config") or {})
+        cfg.setdefault("name", decky.get("name"))
+        ips_by_lan: dict[str, str] = dict(cfg.get("ips_by_lan") or {})
+        primary_ip = decky.get("ip")
+        for lan_id in decky_edges.get(decky["uuid"], []):
+            lan = lans_by_id.get(lan_id)
+            if lan is None:
+                continue
+            if lan["name"] in ips_by_lan:
+                continue
+            alloc = _alloc(lan_id)
+            if alloc is None:
+                continue
+            ip: str | None = None
+            if primary_ip:
+                try:
+                    if (
+                        IPv4Address(primary_ip) in IPv4Network(lan["subnet"])
+                        and alloc.is_free(primary_ip)
+                    ):
+                        ip = primary_ip
+                        alloc.reserve(ip)
+                except (ValueError, TypeError):
+                    pass
+            if ip is None:
+                ip = alloc.next_free()
+            ips_by_lan[lan["name"]] = ip
+        cfg["ips_by_lan"] = ips_by_lan
+        decky["decky_config"] = cfg
 
 
 # Re-export the status constants so callers can ``from decnet.topology.persistence
