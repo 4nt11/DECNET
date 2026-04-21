@@ -3,14 +3,17 @@ import { useNavigate } from 'react-router-dom';
 import { Network, Plus, Power, Trash2, UploadCloud, RefreshCw } from 'lucide-react';
 import api from '../../utils/api';
 import { clearLayout } from '../MazeNET/useMazeLayoutStore';
+import CreateTopologyWizard from './CreateTopologyWizard';
 import './TopologyList.css';
 
 interface TopologySummary {
   id: string;
   name: string;
   mode: string;
+  target_host_uuid: string | null;
   status: string;
   version: number;
+  needs_resync?: boolean;
   created_at: string;
   status_changed_at: string | null;
 }
@@ -42,7 +45,6 @@ const TopologyList: React.FC = () => {
   const [loading, setLoading] = useState(true);
   const [err, setErr] = useState<string | null>(null);
   const [creating, setCreating] = useState(false);
-  const [newName, setNewName] = useState('');
   const [busy, setBusy] = useState<string | null>(null);
   const [armed, setArmed] = useState<string | null>(null);
 
@@ -71,20 +73,9 @@ const TopologyList: React.FC = () => {
     return () => { cancelled = true; clearInterval(iv); };
   }, [fetchRows]);
 
-  const onCreate = async () => {
-    const name = newName.trim();
-    if (!name) return;
-    setBusy('create');
-    try {
-      const { data: created } = await api.post<TopologySummary>('/topologies/blank', { name });
-      navigate(`/mazenet?topology=${created.id}`);
-    } catch (e) {
-      setErr((e as Error)?.message ?? 'create failed');
-    } finally {
-      setBusy(null);
-      setCreating(false);
-      setNewName('');
-    }
+  const onCreated = (row: TopologySummary) => {
+    setCreating(false);
+    navigate(`/mazenet?topology=${row.id}`);
   };
 
   const onDelete = async (id: string) => {
@@ -140,33 +131,17 @@ const TopologyList: React.FC = () => {
           <button type="button" className="tlist-btn ghost" onClick={fetchRows} title="Refresh">
             <RefreshCw size={12} /> REFRESH
           </button>
-          <button type="button" className="tlist-btn" onClick={() => setCreating((v) => !v)}>
+          <button type="button" className="tlist-btn" onClick={() => setCreating(true)}>
             <Plus size={12} /> NEW TOPOLOGY
           </button>
         </div>
       </div>
 
-      {creating && (
-        <div className="tlist-create-row">
-          <input
-            type="text"
-            autoFocus
-            placeholder="topology name (e.g. honeynet-dev)"
-            value={newName}
-            onChange={(e) => setNewName(e.target.value)}
-            onKeyDown={(e) => {
-              if (e.key === 'Enter') onCreate();
-              if (e.key === 'Escape') { setCreating(false); setNewName(''); }
-            }}
-          />
-          <button type="button" className="tlist-btn" disabled={!newName.trim() || busy === 'create'} onClick={onCreate}>
-            CREATE
-          </button>
-          <button type="button" className="tlist-btn ghost" onClick={() => { setCreating(false); setNewName(''); }}>
-            CANCEL
-          </button>
-        </div>
-      )}
+      <CreateTopologyWizard
+        open={creating}
+        onClose={() => setCreating(false)}
+        onCreated={onCreated}
+      />
 
       <div className="tlist-grid">
         {rows.map((r) => (
