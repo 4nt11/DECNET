@@ -58,7 +58,11 @@ class TopologyStore:
 
     def __init__(self, db_path: pathlib.Path) -> None:
         db_path.parent.mkdir(parents=True, exist_ok=True)
-        self._conn = sqlite3.connect(str(db_path))
+        # check_same_thread=False: Starlette/FastAPI runs sync endpoint
+        # bodies on a worker thread distinct from where `app` is imported.
+        # The agent is single-process, so there's no real contention —
+        # sqlite's own connection lock is enough.
+        self._conn = sqlite3.connect(str(db_path), check_same_thread=False)
         self._conn.execute(
             "CREATE TABLE IF NOT EXISTS applied_topology ("
             " topology_id TEXT PRIMARY KEY,"

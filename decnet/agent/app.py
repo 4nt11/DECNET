@@ -18,18 +18,46 @@ Endpoints mirror the existing unihost CLI verbs:
 """
 from __future__ import annotations
 
+import os
+import pathlib
 from contextlib import asynccontextmanager
-from typing import Optional
+from typing import Any, Optional
 
 from fastapi import FastAPI, HTTPException
 from pydantic import BaseModel, Field
 
 from decnet.agent import executor as _exec
 from decnet.agent import heartbeat as _heartbeat
+from decnet.agent import topology_ops as _topology_ops
+from decnet.swarm.pki import DEFAULT_AGENT_DIR
+from decnet.agent.topology_store import AlreadyApplied, TopologyStore
 from decnet.config import DecnetConfig
 from decnet.logging import get_logger
+from decnet.topology.validate import ValidationError
 
 log = get_logger("agent.app")
+
+
+def _resolve_agent_dir() -> pathlib.Path:
+    env = os.environ.get("DECNET_AGENT_DIR")
+    if env:
+        return pathlib.Path(env)
+    system = pathlib.Path("/etc/decnet/agent")
+    if system.exists():
+        return system
+    return DEFAULT_AGENT_DIR
+
+
+# Module-level singleton.  Created lazily on first use so tests can
+# monkeypatch DECNET_AGENT_DIR before the store binds to a path.
+_topology_store: Optional[TopologyStore] = None
+
+
+def _store() -> TopologyStore:
+    global _topology_store
+    if _topology_store is None:
+        _topology_store = TopologyStore(_resolve_agent_dir() / "topology.db")
+    return _topology_store
 
 
 @asynccontextmanager
@@ -41,6 +69,10 @@ async def _lifespan(app: FastAPI):
         yield
     finally:
         await _heartbeat.stop()
+        global _topology_store
+        if _topology_store is not None:
+            _topology_store.close()
+            _topology_store = None
 
 
 app = FastAPI(
@@ -127,6 +159,70 @@ async def self_destruct() -> dict:
         log.exception("agent.self_destruct failed")
         raise HTTPException(status_code=500, detail=str(exc)) from exc
     return {"status": "self_destruct_scheduled"}
+
+
+# ------------------------------------------------------- topology endpoints
+
+
+class ApplyTopologyRequest(BaseModel):
+    hydrated: dict[str, Any] = Field(
+        ..., description="Hydrated topology dict from master.persistence.hydrate()"
+    )
+    version_hash: str = Field(
+        ..., description="Master's canonical_hash(hydrated); must match ours"
+    )
+
+
+class TeardownTopologyRequest(BaseModel):
+    topology_id: str = Field(..., description="Topology UUID to dismantle")
+
+
+@app.post(
+    "/topology/apply",
+    responses={
+        400: {"description": "Malformed hydrated topology or hash mismatch"},
+        409: {"description": "A different topology is already applied"},
+        500: {"description": "Docker or compose raised while applying"},
+    },
+)
+async def topology_apply(req: ApplyTopologyRequest) -> dict:
+    store = _store()
+    try:
+        await _topology_ops.apply(req.hydrated, req.version_hash, store)
+    except _topology_ops.HashMismatch as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    except ValidationError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    except AlreadyApplied as exc:
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
+    except Exception as exc:
+        log.exception("agent.topology_apply failed")
+        topology_id = (req.hydrated.get("topology") or {}).get("id")
+        if topology_id:
+            try:
+                store.record_error(str(topology_id), str(exc)[:500])
+            except Exception:  # noqa: BLE001 — don't mask original failure
+                log.exception("failed to record apply error")
+        raise HTTPException(status_code=500, detail=str(exc)) from exc
+    return {"status": "applied", "version_hash": req.version_hash}
+
+
+@app.post(
+    "/topology/teardown",
+    responses={500: {"description": "Docker or compose raised while tearing down"}},
+)
+async def topology_teardown(req: TeardownTopologyRequest) -> dict:
+    try:
+        await _topology_ops.teardown(req.topology_id, _store())
+    except Exception as exc:
+        log.exception("agent.topology_teardown failed")
+        raise HTTPException(status_code=500, detail=str(exc)) from exc
+    return {"status": "torn_down", "topology_id": req.topology_id}
+
+
+@app.get("/topology/state")
+async def topology_state() -> dict:
+    return _topology_ops.state(_store())
 
 
 @app.post(
