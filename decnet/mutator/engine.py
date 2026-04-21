@@ -190,6 +190,40 @@ async def reconcile_topologies(repo: BaseRepository) -> int:
     return drained
 
 
+@_traced("mutator.reconcile_agent_resyncs")
+async def reconcile_agent_resyncs(repo: BaseRepository) -> int:
+    """Re-push agent-targeted topologies flagged by the heartbeat handler.
+
+    The heartbeat sets ``needs_resync=True`` when an agent's reported
+    applied_version_hash diverges from master's expectation.  Here we
+    re-run the agent branch of ``deploy_topology`` which pushes the
+    current hydrated blob back down over mTLS and clears the flag on
+    success.  Any push failure leaves the flag set so the next tick
+    retries — it also logs loudly so ops can see that a specific agent
+    is stuck.
+    """
+    from decnet.engine import deployer as _deployer
+
+    try:
+        pending = await repo.list_topologies_needing_resync()
+    except NotImplementedError:
+        return 0
+    drained = 0
+    for topo in pending:
+        tid = topo["id"]
+        try:
+            await _deployer.resync_agent_topology(repo, tid)
+            await repo.set_topology_resync(tid, False)
+            drained += 1
+            log.info("topology %s resynced to agent %s",
+                     tid, topo.get("target_host_uuid"))
+        except Exception as exc:  # noqa: BLE001
+            log.warning(
+                "topology %s resync failed (will retry): %s", tid, exc,
+            )
+    return drained
+
+
 @_traced("mutator.watch_loop")
 async def run_watch_loop(repo: BaseRepository, poll_interval_secs: int = 10) -> None:
     """Run an infinite loop checking for deckies that need mutation.
@@ -216,6 +250,12 @@ async def run_watch_loop(repo: BaseRepository, poll_interval_secs: int = 10) -> 
             except NotImplementedError:
                 # Backend without MazeNET support — nothing to reconcile.
                 pass
+            try:
+                await reconcile_agent_resyncs(repo)
+            except NotImplementedError:
+                pass
+            except Exception:
+                log.exception("reconcile_agent_resyncs tick raised")
             await asyncio.sleep(poll_interval_secs)
     except KeyboardInterrupt:
         log.info("mutator watch loop stopped")

@@ -225,6 +225,11 @@ class Topology(SQLModel, table=True):
     # the topology or any child row when an expected_version is supplied.
     # Callers pass their last-seen version; mismatch raises VersionConflict.
     version: int = Field(default=1, nullable=False)
+    # Set by the heartbeat handler when an agent's reported
+    # ``applied_version_hash`` diverges from what we expect it to be
+    # running.  Drained by the mutator watch loop, which re-pushes via
+    # AgentClient and clears the flag.  NULL for unihost topologies.
+    needs_resync: bool = Field(default=False, nullable=False)
 
 
 class LAN(SQLModel, table=True):

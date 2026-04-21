@@ -1013,6 +1013,30 @@ class SQLModelRepository(BaseRepository):
             )
             await session.commit()
 
+    async def set_topology_resync(self, topology_id: str, value: bool) -> None:
+        async with self._session() as session:
+            result = await session.execute(
+                select(Topology).where(Topology.id == topology_id)
+            )
+            topo = result.scalar_one_or_none()
+            if topo is None:
+                return
+            topo.needs_resync = bool(value)
+            session.add(topo)
+            await session.commit()
+
+    async def list_topologies_needing_resync(self) -> list[dict[str, Any]]:
+        async with self._session() as session:
+            result = await session.execute(
+                select(Topology).where(Topology.needs_resync == True)  # noqa: E712
+            )
+            return [
+                self._deserialize_json_fields(
+                    r.model_dump(mode="json"), ("config_snapshot",)
+                )
+                for r in result.scalars().all()
+            ]
+
     async def delete_topology_cascade(self, topology_id: str) -> bool:
         """Delete topology and all children.  No portable ON DELETE CASCADE."""
         async with self._session() as session:

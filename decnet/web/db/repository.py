@@ -268,6 +268,12 @@ class BaseRepository(ABC):
     async def delete_topology_cascade(self, topology_id: str) -> bool:
         raise NotImplementedError
 
+    async def set_topology_resync(self, topology_id: str, value: bool) -> None:
+        raise NotImplementedError
+
+    async def list_topologies_needing_resync(self) -> list[dict[str, Any]]:
+        raise NotImplementedError
+
     async def add_lan(self, data: dict[str, Any]) -> str:
         raise NotImplementedError
 

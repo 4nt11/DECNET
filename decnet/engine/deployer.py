@@ -355,6 +355,36 @@ async def _deploy_on_agent(repo, topology_id: str, hydrated: dict) -> None:
     )
 
 
+async def resync_agent_topology(repo, topology_id: str) -> None:
+    """Re-push an ACTIVE agent-targeted topology without status churn.
+
+    Used by the mutator reconcile loop when an agent's reported
+    applied_version_hash drifts from what master expects.  Unlike the
+    initial deploy, we do NOT flip status — the topology is already
+    ACTIVE; we just want the agent's cache + live state to match
+    master's current hydrated blob.
+    """
+    from decnet.swarm.client import AgentClient
+
+    hydrated = await hydrate(repo, topology_id)
+    if hydrated is None:
+        raise ValueError(f"topology {topology_id!r} not found")
+    target_host_uuid = hydrated["topology"].get("target_host_uuid")
+    if not target_host_uuid:
+        raise ValueError(
+            f"topology {topology_id!r} has no target_host_uuid; "
+            "resync is agent-only"
+        )
+    host = await _resolve_swarm_host(repo, target_host_uuid)
+    version_hash = canonical_hash(hydrated)
+    async with AgentClient(host=host) as agent:
+        await agent.apply_topology(hydrated, version_hash)
+    log.info(
+        "topology %s resynced to agent %s (hash=%s)",
+        topology_id, host.get("name"), version_hash[:12],
+    )
+
+
 async def _teardown_on_agent(repo, topology_id: str, hydrated: dict) -> None:
     """Route a topology teardown to the pinned agent."""
     from decnet.swarm.client import AgentClient
