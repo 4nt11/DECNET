@@ -199,32 +199,84 @@ class TestMutateAll:
 
 class TestMutateDeckyBusPublish:
     @pytest.mark.asyncio
-    async def test_publishes_decky_state_on_success(self, mock_repo):
+    async def test_publishes_decky_mutation_on_success(self, mock_repo, tmp_path):
         cfg = _make_config()
         mock_repo.get_state.return_value = {"config": cfg.model_dump(), "compose_path": "c.yml"}
         bus = AsyncMock()
+        log_path = tmp_path / "decnet.log"
         with patch("decnet.mutator.engine.write_compose"), \
-             patch("anyio.to_thread.run_sync", new_callable=AsyncMock):
+             patch("anyio.to_thread.run_sync", new_callable=AsyncMock), \
+             patch("decnet.mutator.events.DECNET_INGEST_LOG_FILE", str(log_path)):
             ok = await mutate_decky("decky-01", repo=mock_repo, bus=bus)
         assert ok is True
         bus.publish.assert_awaited_once()
         topic = bus.publish.await_args.args[0]
         payload = bus.publish.await_args.args[1]
-        assert topic == "decky.decky-01.state"
-        assert payload["name"] == "decky-01"
-        assert isinstance(payload["services"], list)
+        assert topic == "decky.decky-01.mutation"
+        assert payload["decky"] == "decky-01"
+        assert payload["old_services"] == ["ssh"]
+        assert isinstance(payload["new_services"], list)
+        assert payload["trigger"] == "operator"  # direct mutate_decky call
 
     @pytest.mark.asyncio
-    async def test_no_publish_on_compose_failure(self, mock_repo):
+    async def test_no_publish_on_compose_failure(self, mock_repo, tmp_path):
         cfg = _make_config()
         mock_repo.get_state.return_value = {"config": cfg.model_dump(), "compose_path": "c.yml"}
         bus = AsyncMock()
+        log_path = tmp_path / "decnet.log"
         with patch("decnet.mutator.engine.write_compose"), \
              patch("anyio.to_thread.run_sync",
-                   new_callable=AsyncMock, side_effect=RuntimeError("boom")):
+                   new_callable=AsyncMock, side_effect=RuntimeError("boom")), \
+             patch("decnet.mutator.events.DECNET_INGEST_LOG_FILE", str(log_path)):
             ok = await mutate_decky("decky-01", repo=mock_repo, bus=bus)
         assert ok is False
         bus.publish.assert_not_awaited()
+        # No syslog line either — mutation didn't land
+        assert not log_path.exists()
+
+    @pytest.mark.asyncio
+    async def test_scheduled_trigger_on_interval_tick(self, mock_repo, tmp_path):
+        """mutate_all on an interval tick stamps trigger=scheduled."""
+        old_ts = time.time() - 7200  # due
+        cfg = _make_config(deckies=[_make_decky(mutate_interval=30, last_mutated=old_ts)])
+        mock_repo.get_state.return_value = {"config": cfg.model_dump(), "compose_path": "c.yml"}
+        bus = AsyncMock()
+        log_path = tmp_path / "decnet.log"
+        with patch("decnet.mutator.engine.write_compose"), \
+             patch("anyio.to_thread.run_sync", new_callable=AsyncMock), \
+             patch("decnet.mutator.events.DECNET_INGEST_LOG_FILE", str(log_path)):
+            await mutate_all(repo=mock_repo, bus=bus, force=False)
+        bus.publish.assert_awaited_once()
+        assert bus.publish.await_args.args[1]["trigger"] == "scheduled"
+
+    @pytest.mark.asyncio
+    async def test_operator_trigger_on_force(self, mock_repo, tmp_path):
+        """mutate_all(force=True) stamps trigger=operator."""
+        cfg = _make_config()
+        mock_repo.get_state.return_value = {"config": cfg.model_dump(), "compose_path": "c.yml"}
+        bus = AsyncMock()
+        log_path = tmp_path / "decnet.log"
+        with patch("decnet.mutator.engine.write_compose"), \
+             patch("anyio.to_thread.run_sync", new_callable=AsyncMock), \
+             patch("decnet.mutator.events.DECNET_INGEST_LOG_FILE", str(log_path)):
+            await mutate_all(repo=mock_repo, bus=bus, force=True)
+        bus.publish.assert_awaited_once()
+        assert bus.publish.await_args.args[1]["trigger"] == "operator"
+
+    @pytest.mark.asyncio
+    async def test_operator_trigger_on_only_filter(self, mock_repo, tmp_path):
+        """mutate_all(only={'d1'}) is a targeted operator action."""
+        now = time.time()
+        cfg = _make_config(deckies=[_make_decky("d1", mutate_interval=30, last_mutated=now)])
+        mock_repo.get_state.return_value = {"config": cfg.model_dump(), "compose_path": "c.yml"}
+        bus = AsyncMock()
+        log_path = tmp_path / "decnet.log"
+        with patch("decnet.mutator.engine.write_compose"), \
+             patch("anyio.to_thread.run_sync", new_callable=AsyncMock), \
+             patch("decnet.mutator.events.DECNET_INGEST_LOG_FILE", str(log_path)):
+            await mutate_all(repo=mock_repo, bus=bus, only={"d1"})
+        bus.publish.assert_awaited_once()
+        assert bus.publish.await_args.args[1]["trigger"] == "operator"
 
 
 # ---------------------------------------------------------------------------

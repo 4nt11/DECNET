@@ -29,6 +29,7 @@ from decnet.bus.publish import (
     publish_safely as _publish_safely,
     run_health_heartbeat as _run_health_heartbeat,
 )
+from decnet.mutator.events import MutationTrigger, emit_decky_mutated
 from decnet.web.db.repository import BaseRepository
 
 log = get_logger("mutator")
@@ -40,6 +41,7 @@ async def mutate_decky(
     decky_name: str,
     repo: BaseRepository,
     bus: BaseBus | None = None,
+    trigger: MutationTrigger = "operator",
 ) -> bool:
     """
     Perform an Intra-Archetype Shuffle for a specific decky.
@@ -73,6 +75,7 @@ async def mutate_decky(
         console.print(f"[yellow]No services available for mutating '{decky_name}'.[/]")
         return False
 
+    old_services = list(decky.services)
     current_services = set(decky.services)
 
     attempts = 0
@@ -103,15 +106,12 @@ async def mutate_decky(
         console.print(f"[red]Failed to mutate '{decky_name}': {e}[/]")
         return False
 
-    await _publish_safely(
+    await emit_decky_mutated(
         bus,
-        _topics.decky(decky_name, _topics.DECKY_STATE),
-        {
-            "name": decky_name,
-            "services": list(decky.services),
-            "last_mutated": decky.last_mutated,
-        },
-        event_type=_topics.DECKY_STATE,
+        decky=decky_name,
+        old_services=old_services,
+        new_services=list(decky.services),
+        trigger=trigger,
     )
     return True
 
@@ -143,6 +143,11 @@ async def mutate_all(
     config = DecnetConfig(**state_dict["config"])
     now = time.time()
 
+    # Trigger derivation: explicit force / targeted only-list come from
+    # an operator action (CLI --all, API mutate-now, UI bus request).
+    # Scheduled-interval ticks carry trigger=scheduled.
+    trigger: MutationTrigger = "operator" if (force or only is not None) else "scheduled"
+
     mutated_count = 0
     next_due_in: float | None = None
     for decky in config.deckies:
@@ -162,7 +167,9 @@ async def mutate_all(
                 next_due_in = remaining
 
         if due:
-            success = await mutate_decky(decky.name, repo=repo, bus=bus)
+            success = await mutate_decky(
+                decky.name, repo=repo, bus=bus, trigger=trigger,
+            )
             if success:
                 mutated_count += 1
 
