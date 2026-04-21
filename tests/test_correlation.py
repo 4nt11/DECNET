@@ -416,3 +416,133 @@ class TestFmtDuration:
 
     def test_hours(self):
         assert _fmt_duration(7200) == "2.0h"
+
+
+# ---------------------------------------------------------------------------
+# Mutation-event stream (parser kind + engine index + graph markers)
+# ---------------------------------------------------------------------------
+
+def _mutation_line(
+    decky: str,
+    *,
+    old: str = "",
+    new: str = "ssh",
+    trigger: str = "scheduled",
+    timestamp: str = _TS,
+) -> str:
+    return format_rfc5424(
+        service="mutator",
+        hostname=decky,
+        event_type="decky_mutated",
+        severity=SEVERITY_INFO,
+        timestamp=datetime.fromisoformat(timestamp),
+        decky=decky,
+        old_services=old,
+        new_services=new,
+        trigger=trigger,
+    )
+
+
+class TestParserMutationKind:
+    def test_mutator_line_kind_is_mutation(self):
+        ev = parse_line(_mutation_line("decky-01", old="ssh", new="rdp",
+                                       trigger="scheduled"))
+        assert ev is not None
+        assert ev.kind == "mutation"
+
+    def test_default_kind_is_attacker(self):
+        ev = parse_line(_make_line())
+        assert ev is not None
+        assert ev.kind == "attacker"
+
+    def test_non_mutator_service_stays_attacker(self):
+        # Same event_type but different service ⇒ not a mutation
+        line = format_rfc5424(
+            service="ssh",
+            hostname="decky-01",
+            event_type="decky_mutated",
+            severity=SEVERITY_INFO,
+            timestamp=datetime.fromisoformat(_TS),
+            src_ip="1.1.1.1",
+        )
+        ev = parse_line(line)
+        assert ev is not None
+        assert ev.kind == "attacker"
+
+
+class TestEngineMutationIndex:
+    def test_mutation_indexed_separately(self):
+        engine = CorrelationEngine()
+        engine.ingest(_mutation_line("decky-01", old="ssh", new="rdp"))
+        assert engine.mutations_indexed == 1
+        assert engine.events_indexed == 0
+        assert "decky-01" in engine._mutations
+        assert "decky-01" not in engine._events
+
+    def test_mutations_interleaved_into_traversal(self):
+        engine = CorrelationEngine()
+        # Attacker hits decky-01 and decky-02; decky-01 mutates in between
+        engine.ingest(_make_line(hostname="decky-01", src_ip="9.9.9.9",
+                                 timestamp=_TS))
+        engine.ingest(_mutation_line("decky-01", old="ssh", new="rdp",
+                                     trigger="scheduled", timestamp=_TS2))
+        engine.ingest(_make_line(hostname="decky-02", src_ip="9.9.9.9",
+                                 timestamp=_TS3))
+        traversals = engine.traversals()
+        assert len(traversals) == 1
+        t = traversals[0]
+        assert len(t.mutations_during) == 1
+        m = t.mutations_during[0]
+        assert m.decky == "decky-01"
+        assert m.old_services == ["ssh"]
+        assert m.new_services == ["rdp"]
+        assert m.trigger == "scheduled"
+
+    def test_mutation_outside_window_excluded(self):
+        engine = CorrelationEngine()
+        # Mutation at _TS — before attacker first_seen at _TS2
+        engine.ingest(_mutation_line("decky-01", old="", new="ssh",
+                                     trigger="creation", timestamp=_TS))
+        engine.ingest(_make_line(hostname="decky-01", src_ip="9.9.9.9",
+                                 timestamp=_TS2))
+        engine.ingest(_make_line(hostname="decky-02", src_ip="9.9.9.9",
+                                 timestamp=_TS3))
+        t = engine.traversals()[0]
+        # The creation happened BEFORE first contact, so it's not "during"
+        assert t.mutations_during == []
+
+    def test_mutation_on_untouched_decky_excluded(self):
+        engine = CorrelationEngine()
+        engine.ingest(_make_line(hostname="decky-01", src_ip="9.9.9.9",
+                                 timestamp=_TS))
+        engine.ingest(_make_line(hostname="decky-02", src_ip="9.9.9.9",
+                                 timestamp=_TS3))
+        # decky-03 mutates mid-window but the attacker never touched it
+        engine.ingest(_mutation_line("decky-03", old="ftp", new="smtp",
+                                     trigger="operator", timestamp=_TS2))
+        t = engine.traversals()[0]
+        assert t.mutations_during == []
+
+    def test_to_dict_includes_timeline_with_markers(self):
+        engine = CorrelationEngine()
+        engine.ingest(_make_line(hostname="decky-01", src_ip="9.9.9.9",
+                                 timestamp=_TS))
+        engine.ingest(_mutation_line("decky-01", old="ssh", new="rdp",
+                                     trigger="scheduled", timestamp=_TS2))
+        engine.ingest(_make_line(hostname="decky-02", src_ip="9.9.9.9",
+                                 timestamp=_TS3))
+        d = engine.traversals()[0].to_dict()
+        assert len(d["mutations_during"]) == 1
+        assert d["mutations_during"][0]["trigger"] == "scheduled"
+        kinds = [entry["kind"] for entry in d["timeline"]]
+        assert kinds == ["hop", "mutation", "hop"]
+
+    def test_report_json_serialisable_with_mutations(self):
+        engine = CorrelationEngine()
+        engine.ingest(_make_line(hostname="decky-01", src_ip="9.9.9.9",
+                                 timestamp=_TS))
+        engine.ingest(_mutation_line("decky-01", old="ssh", new="rdp",
+                                     trigger="scheduled", timestamp=_TS2))
+        engine.ingest(_make_line(hostname="decky-02", src_ip="9.9.9.9",
+                                 timestamp=_TS3))
+        json.dumps(engine.report_json())  # must not raise

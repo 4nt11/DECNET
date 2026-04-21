@@ -17,8 +17,9 @@ The attacker IP may appear under several field names depending on service:
 from __future__ import annotations
 
 import re
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from datetime import datetime
+from typing import Literal
 
 # RFC 5424 line structure
 _RFC5424_RE = re.compile(
@@ -41,6 +42,9 @@ _PARAM_RE = re.compile(r'(\w+)="((?:[^"\\]|\\.)*)"')
 _IP_FIELDS = ("src_ip", "src", "client_ip", "remote_ip", "remote_addr", "target_ip", "ip")
 
 
+EventKind = Literal["attacker", "mutation"]
+
+
 @dataclass
 class LogEvent:
     """A single parsed event from a DECNET syslog line."""
@@ -52,6 +56,12 @@ class LogEvent:
     attacker_ip: str | None  # extracted from SD params; None if not present
     fields: dict[str, str]   # all structured data params
     raw: str            # original log line (stripped)
+    # ``attacker`` = service-emitted event keyed on a source IP (the
+    # existing correlation input).  ``mutation`` = ``mutator`` worker
+    # event — same RFC 5424 wire format but routed into a separate
+    # per-decky index so substrate transitions can be interleaved into
+    # attacker traversals without polluting the per-IP event stream.
+    kind: EventKind = field(default="attacker")
 
 
 def _parse_sd_params(sd_rest: str) -> dict[str, str]:
@@ -101,6 +111,14 @@ def parse_line(line: str) -> LogEvent | None:
     fields = _parse_sd_params(sd_rest)
     attacker_ip = _extract_attacker_ip(fields)
 
+    # Mutator-emitted transitions arrive on the same ingest stream but
+    # belong in the substrate-state index, not the per-IP attacker one.
+    kind: EventKind = (
+        "mutation"
+        if service == "mutator" and event_type == "decky_mutated"
+        else "attacker"
+    )
+
     return LogEvent(
         timestamp=timestamp,
         decky=decky,
@@ -109,4 +127,5 @@ def parse_line(line: str) -> LogEvent | None:
         attacker_ip=attacker_ip,
         fields=fields,
         raw=line,
+        kind=kind,
     )
