@@ -51,7 +51,7 @@
 - [x] **Dynamic decky mutation** — Rotate exposed services or OS fingerprints over time.
 - [x] **Credential harvesting DB** — Centralized database for all username/password attempts.
 - [ ] **Session recording** — Full capture for SSH/Telnet sessions.
-- [ ] **Payload capture** — Store and hash files uploaded by attackers.
+- [x] **Payload capture** — Store and hash files uploaded by attackers. -> Via inotifywait and custom C wrappers.
 
 ## Detection & Intelligence
 
@@ -65,24 +65,24 @@
 
 - [x] **Web dashboard** — Real-time React SPA + FastAPI backend for logs and fleet status.
 - [x] **Decky Inventory** — Dedicated "Decoy Fleet" page showing all deployed assets.
-- [ ] **Pre-built Kibana/Grafana dashboards** — Ship JSON exports for ELK/Grafana.
+- [~] **Pre-built Kibana/Grafana dashboards** — Ship JSON exports for ELK/Grafana. -> Deferred to post-v1 release.
 - [~] **CLI live feed** — `decnet watch` — WON'T IMPLEMENT: redundant with `tail -f` on the existing log file; adds bloat without meaningful value.
 - [x] **Traversal graph export** — Export attacker movement as JSON (via CLI).
 
 ## Deployment & Infrastructure
 
-- [ ] **SWARM / multihost mode** — Ansible-based orchestration for multi-node deployments.
-- [ ] **Terraform/Pulumi provider** — Cloud-hosted decky deployment.
-- [ ] **Kubernetes deployment mode** — Run deckies as K8s pods.
+- [x] **SWARM / multihost mode** — Ansible-based orchestration for multi-node deployments. -> Not Ansible based, but bundle based via the UI.
+- [~] **Terraform/Pulumi provider** — Cloud-hosted decky deployment. -> Deferred to post-v1 release.
+- [~] **Kubernetes deployment mode** — Run deckies as K8s pods. -> Deferred to post-v1 release.
 - [x] **Lifecycle Management** — Automatic API process termination on `teardown`.
 - [x] **Health monitoring** — Active vs. Deployed decky tracking in the dashboard.
 
 ## Services & Realism
 
 - [x] **HTTPS/TLS support** — Honeypots with SSL certificates.
-- [ ] **Fake Active Directory** — Convincing AD/LDAP emulation.
-- [ ] **Realistic web apps** — Fake WordPress, Grafana, and phpMyAdmin templates.
-- [ ] **OT/ICS profiles** — Expanded Modbus, DNP3, and BACnet support.
+- [~] **Fake Active Directory** — Convincing AD/LDAP emulation. -> Deferred to post-v1 release.
+- [~] **Realistic web apps** — Fake WordPress, Grafana, and phpMyAdmin templates. -> Deferred to post-v1 release.
+- [~] **OT/ICS profiles** — Expanded Modbus, DNP3, and BACnet support. -> Deferred to post-v1 release. Some profiles exist, but they are not comprehensive.
 
 ## Attacker Intelligence Collection
 *Goal: Build the richest possible attacker profile from passive observation across all 26 services.*
@@ -98,16 +98,16 @@
 ### Timing & Behavioral
 - [x] **Inter-packet arrival times** — OS TCP stack fingerprint + beaconing interval detection
 - [ ] **TTL values** — Rough OS / hop-distance inference
-- [ ] **TCP window size & scaling** — p0f-style OS fingerprinting
-- [ ] **Retransmission patterns** — Identify lossy paths / throttled connections
-- [ ] **Beacon jitter variance** — Attribute tooling: Cobalt Strike vs. Sliver vs. Havoc have distinct profiles
+- [x] **TCP window size & scaling** — p0f-style OS fingerprinting
+- [x] **Retransmission patterns** — Identify lossy paths / throttled connections
+- [x] **Beacon jitter variance** — Attribute tooling: Cobalt Strike vs. Sliver vs. Havoc have distinct profiles
 - [x] **C2 check-in cadence** — Detect beaconing vs. interactive sessions
-- [ ] **Data exfil timing** — Behavioral sequencing relative to recon phase
+- [x] **Data exfil timing** — Behavioral sequencing relative to recon phase
 
 ### Protocol Fingerprinting
 - [ ] **TCP/IP stack** — ISN patterns, DF bit, ToS/DSCP, IP ID sequence (random/incremental/zero)
-- [ ] **HASSH / HASSHServer** — SSH KEX algo, cipher, MAC order → tool fingerprint
-- [ ] **HTTP/2 fingerprint** — GREASE values, settings frame order, header pseudo-field ordering
+- [x] **HASSH / HASSHServer** — SSH KEX algo, cipher, MAC order → tool fingerprint
+- [x] **HTTP/2 fingerprint** — GREASE values, settings frame order, header pseudo-field ordering
 - [ ] **QUIC fingerprint** — Connection ID length, transport parameters order
 - [ ] **DNS behavior** — Query patterns, recursion flags, EDNS0 options, resolver fingerprint
 - [ ] **HTTP header ordering** — Tool-specific capitalization and ordering quirks
@@ -129,7 +129,7 @@
 - [ ] **Services actively interacted with** — Distinguish port scans from live exploitation attempts
 - [ ] **Tooling attribution** — Byte-sequence signatures from known C2 frameworks in handshakes
 - [ ] **Credential reuse patterns** — Same username/password tried across multiple deckies/services
-- [ ] **Payload signatures** — Hash and classify uploaded files, shellcode, exploit payloads
+- [x] **Payload signatures** — Hash and classify uploaded files, shellcode, exploit payloads
 
 ---
 
@@ -138,11 +138,20 @@
 - [x] **API Fuzzing** — Property-based testing for all web endpoints.
 - [x] **CI/CD pipeline** — Automated testing and linting via Gitea Actions.
 - [x] **Strict Typing** — Project-wide enforcement of PEP 484 type hints.
-- [ ] **Plugin SDK docs** — Documentation for adding custom services.
+- [x] **Plugin SDK docs** — Documentation for adding custom services.
 - [ ] **Config generator wizard** — `decnet wizard` for interactive setup.
 
 ## API Improvements
 
-- [ ] Enable up to 250 concurrent users with close to zero performance degradation.
-- [ ] Enable up to 100 requests per second with close to zero performance degradation.
+- [x] Enable up to 250 concurrent users with close to zero performance degradation.
+- [x] Enable up to 100 requests per second with close to zero performance degradation.
 
+## MazeNET
+
+- [x] Initial MazeNET implementation via DAG recursive graphs.
+- [ ] Usable UI.
+- [ ] Random, seed-based network topologies.
+- [ ] Manual topology creation via war map.
+- [ ] UI based topology teardowns.
+- [ ] SWARM-based topology deployment.
+- [ ] UI based SWARM topology deployments.
