@@ -159,6 +159,25 @@ async def test_apply_add_lan_persists(repo):
 
 
 @pytest.mark.anyio
+async def test_apply_update_decky_replaces_services(repo):
+    """Top-level ``services`` payload key replaces the decky's services list."""
+    tid = await _make_active(repo)
+    decky = (await repo.list_topology_deckies(tid))[0]
+    await apply_update_decky(
+        repo, tid,
+        {
+            "decky": decky["decky_config"]["name"],
+            "services": ["ssh", "http"],
+        },
+    )
+    updated = next(
+        d for d in await repo.list_topology_deckies(tid)
+        if d["uuid"] == decky["uuid"]
+    )
+    assert sorted(updated["services"]) == ["http", "ssh"]
+
+
+@pytest.mark.anyio
 async def test_apply_rejected_on_validator_error(repo):
     """Unknown service name must trip the post-apply validator."""
     tid = await _make_active(repo)

@@ -280,6 +280,7 @@ async def apply_update_decky(
     ``payload`` keys:
         ``decky``         — decky name.
         ``patch``         — dict merged into existing ``decky_config``.
+        ``services``      — replacement top-level services list.
         ``x``,``y``       — layout coords.
     """
     hydrated = await _hydrated(repo, topology_id)
@@ -291,6 +292,8 @@ async def apply_update_decky(
         merged = dict(decky["decky_config"])
         merged.update(payload["patch"])
         patch["decky_config"] = merged
+    if "services" in payload:
+        patch["services"] = list(payload["services"])
     for key in ("x", "y"):
         if key in payload:
             patch[key] = payload[key]
