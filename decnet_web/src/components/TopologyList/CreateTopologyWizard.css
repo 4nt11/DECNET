@@ -176,6 +176,27 @@
   accent-color: var(--violet);
 }
 
+.ctw-note {
+  padding: 10px 12px;
+  border: 1px dashed var(--violet);
+  color: var(--text-color);
+  font-size: 0.7rem;
+  line-height: 1.5;
+  letter-spacing: 0.3px;
+  background: var(--violet-tint-10, rgba(238, 130, 238, 0.08));
+}
+.ctw-note strong {
+  color: var(--violet);
+  letter-spacing: 1px;
+  margin-right: 6px;
+}
+.ctw-note code {
+  background: #000;
+  padding: 1px 5px;
+  font-family: var(--font-mono);
+  color: var(--matrix, #33ff66);
+}
+
 .ctw-error {
   padding: 10px 12px;
   border: 1px solid var(--alert, #e74c3c);

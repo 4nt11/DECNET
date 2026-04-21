@@ -13,6 +13,15 @@ import RemoteUpdates from './components/RemoteUpdates';
 import SwarmHosts from './components/SwarmHosts';
 import AgentEnrollment from './components/AgentEnrollment';
 import MazeNET from './components/MazeNET/MazeNET';
+import TopologyList from './components/TopologyList/TopologyList';
+
+/* Guard the /mazenet route so it's always bound to a real topology.
+ * Bare /mazenet → /topologies; ?topology=<id> → editor. */
+function MazeNETRoute() {
+  const qs = typeof window !== 'undefined' ? window.location.search : '';
+  const hasId = new URLSearchParams(qs).get('topology');
+  return hasId ? <MazeNET /> : <Navigate to="/topologies" replace />;
+}
 
 function isTokenValid(token: string): boolean {
   try {
@@ -63,7 +72,8 @@ function App() {
         <Routes>
           <Route path="/" element={<Dashboard searchQuery={searchQuery} />} />
           <Route path="/fleet" element={<DeckyFleet />} />
-          <Route path="/mazenet" element={<MazeNET />} />
+          <Route path="/topologies" element={<TopologyList />} />
+          <Route path="/mazenet" element={<MazeNETRoute />} />
           <Route path="/live-logs" element={<LiveLogs />} />
           <Route path="/bounty" element={<Bounty />} />
           <Route path="/attackers" element={<Attackers />} />

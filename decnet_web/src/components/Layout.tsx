@@ -43,6 +43,7 @@ const Layout: React.FC<LayoutProps> = ({ children, onLogout, onSearch }) => {
         <nav className="sidebar-nav">
           <NavItem to="/" icon={<LayoutDashboard size={20} />} label="Dashboard" open={sidebarOpen} />
           <NavItem to="/fleet" icon={<Server size={20} />} label="Decoy Fleet" open={sidebarOpen} />
+          <NavItem to="/topologies" icon={<Network size={20} />} label="Topologies" open={sidebarOpen} />
           <NavItem to="/mazenet" icon={<Network size={20} />} label="MazeNET" open={sidebarOpen} />
           <NavItem to="/live-logs" icon={<Terminal size={20} />} label="Live Logs" open={sidebarOpen} />
           <NavItem to="/bounty" icon={<Archive size={20} />} label="Bounty" open={sidebarOpen} />

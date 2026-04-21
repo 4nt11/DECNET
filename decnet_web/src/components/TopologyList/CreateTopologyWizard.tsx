@@ -255,6 +255,14 @@ const CreateTopologyWizard: React.FC<Props> = ({ open, onClose, onCreated }) => 
             <>
               <div className="ctw-label">Where should this topology run?</div>
               <div className="ctw-grid-3">{step0Cards}</div>
+              <div className="ctw-note">
+                <strong>HEADS UP:</strong> the gateway decky publishes its
+                service ports on the target host (e.g. <code>0.0.0.0:22</code>{' '}
+                for SSH). Move any host-side daemons off collision ports
+                BEFORE deploying — otherwise docker will fail with{' '}
+                <code>address already in use</code>. On a fresh VPS this
+                usually means relocating sshd to <code>2222</code>.
+              </div>
             </>
           )}
 
