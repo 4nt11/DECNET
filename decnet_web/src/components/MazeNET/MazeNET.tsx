@@ -15,6 +15,7 @@ import { DEFAULT_SERVICES } from './data';
 import type { Archetype, ServiceDef } from './data';
 import type { Net, MazeNode, Edge, DeckyNode } from './types';
 import { useMazeApi } from './useMazeApi';
+import { useTopologyEditor } from './useTopologyEditor';
 import { useMazeInteraction, type PaletteDrag } from './useMazeInteraction';
 import { useLayoutPersistor } from './useMazeLayoutStore';
 import { useTopologyStream, type TopologyStreamEvent } from './useTopologyStream';
@@ -53,6 +54,8 @@ const MazeNET: React.FC = () => {
 
   const canvasRef = useRef<HTMLDivElement>(null);
 
+  const editor = useTopologyEditor({ api, topoStatus, topoVersion });
+
   const flashErr = useCallback((err: unknown, fallback: string) => {
     const msg = (err as { response?: { data?: { detail?: string } }; message?: string })
       ?.response?.data?.detail ?? (err as Error)?.message ?? fallback;
@@ -82,7 +85,9 @@ const MazeNET: React.FC = () => {
         const name = isDmz ? `dmz-${hex4()}` : `subnet-${hex4()}`;
         try {
           const subnet = await api.getNextSubnet().catch(() => undefined);
-          const lan = await api.createLan(topologyId, { name, is_dmz: isDmz, x, y, ...(subnet ? { subnet } : {}) });
+          const lanRes = await editor.createLan(topologyId, { name, is_dmz: isDmz, x, y, ...(subnet ? { subnet } : {}) });
+          if (lanRes.kind !== 'applied') return;
+          const lan = lanRes.data;
           const net: Net = {
             id: lan.id, label: lan.name.toUpperCase(), cidr: lan.subnet,
             kind: isDmz ? 'dmz' : 'subnet', x, y, w, h,
@@ -91,14 +96,16 @@ const MazeNET: React.FC = () => {
 
           if (isDmz) {
             const gwName = `dmz-gateway-${hex4()}`;
-            const gw = await api.createDecky(topologyId, {
+            const gwRes = await editor.createDecky(topologyId, {
               name: gwName, services: ['ssh'], x: 20, y: 40,
               decky_config: { archetype: 'deaddeck', forwards_l3: true },
             });
-            await api.attachEdge(topologyId, {
+            if (gwRes.kind !== 'applied') return;
+            const gw = gwRes.data;
+            await editor.attachEdge(topologyId, {
               decky_uuid: gw.uuid, lan_id: lan.id,
               is_bridge: true, forwards_l3: true,
-            });
+            }, gw.name, lan.name);
             const gwNode: DeckyNode = {
               kind: 'decky', id: gw.uuid, netId: lan.id, name: gw.name,
               archetype: 'deaddeck', services: ['ssh'], status: 'idle',
@@ -123,11 +130,15 @@ const MazeNET: React.FC = () => {
         const ny = Math.max(28, Math.round(world.y - net.y - 24));
         const name = `decky-${hex4()}`;
         try {
-          const decky = await api.createDecky(topologyId, {
+          const dRes = await editor.createDecky(topologyId, {
             name, services: dServices, x: nx, y: ny,
             decky_config: { archetype: archSlug },
           });
-          await api.attachEdge(topologyId, { decky_uuid: decky.uuid, lan_id: overNetId });
+          if (dRes.kind !== 'applied') return;
+          const decky = dRes.data;
+          await editor.attachEdge(topologyId,
+            { decky_uuid: decky.uuid, lan_id: overNetId },
+            decky.name, net.label);
           const node: DeckyNode = {
             kind: 'decky', id: decky.uuid, netId: overNetId, name: decky.name,
             archetype: archSlug, services: dServices, status: 'idle', x: nx, y: ny,
@@ -146,7 +157,8 @@ const MazeNET: React.FC = () => {
         if (target.services.includes(drag.slug)) return;
         const nextServices = [...target.services, drag.slug];
         try {
-          await api.updateDecky(topologyId, overNodeId, { services: nextServices });
+          const r = await editor.updateDecky(topologyId, overNodeId, target.name, { services: nextServices });
+          if (r.kind !== 'applied') return;
           setNodes((p) => p.map((n) => n.id === overNodeId && n.kind === 'decky'
             ? { ...n, services: nextServices }
             : n));
@@ -155,7 +167,7 @@ const MazeNET: React.FC = () => {
         }
       }
     },
-    [api, archetypes, flashErr, nets, nodes, topologyId],
+    [api, archetypes, editor, flashErr, nets, nodes, topologyId],
   );
 
   /* ── Cross-net reparent via node drag (detach + attach edge) ─── */
@@ -167,12 +179,18 @@ const MazeNET: React.FC = () => {
         (e: { decky_uuid: string; lan_id: string; id: string }) =>
           e.decky_uuid === nodeId && e.lan_id === fromNetId,
       );
-      if (existingEdge) await api.detachEdge(topologyId, existingEdge.id);
-      await api.attachEdge(topologyId, { decky_uuid: nodeId, lan_id: toNetId });
+      const node = nodes.find((n) => n.id === nodeId);
+      const fromNet = nets.find((n) => n.id === fromNetId);
+      const toNet = nets.find((n) => n.id === toNetId);
+      const nodeName = node?.kind === 'decky' ? node.name : '';
+      if (existingEdge) {
+        await editor.detachEdge(topologyId, existingEdge.id, nodeName, fromNet?.label ?? '');
+      }
+      await editor.attachEdge(topologyId, { decky_uuid: nodeId, lan_id: toNetId }, nodeName, toNet?.label ?? '');
     } catch (err) {
       flashErr(err, 'reparent failed');
     }
-  }, [api, flashErr, topologyId]);
+  }, [editor, flashErr, nets, nodes, topologyId]);
 
   /* Port→port edges stay UI-only (backend edges are decky↔LAN). */
   const onAddEdge = useCallback((fromId: string, toId: string) => {
@@ -195,8 +213,11 @@ const MazeNET: React.FC = () => {
     /* Cascade delete members first — backend will otherwise 400 on orphan risk. */
     const members = nodes.filter((n) => n.netId === id && n.kind === 'decky');
     try {
-      for (const m of members) await api.deleteDecky(topologyId, m.id);
-      await api.deleteLan(topologyId, id);
+      for (const m of members) {
+        const mName = m.kind === 'decky' ? m.name : '';
+        await editor.deleteDecky(topologyId, m.id, mName);
+      }
+      await editor.deleteLan(topologyId, id, net.label);
       setNets((p) => p.filter((n) => n.id !== id));
       setNodes((p) => p.filter((n) => n.netId !== id));
       setEdges((p) => p.filter((e) => {
@@ -215,7 +236,7 @@ const MazeNET: React.FC = () => {
     if (!node || node.kind === 'observed') return;
     if (node.kind === 'decky' && node.decky_config?.forwards_l3) return;
     try {
-      await api.deleteDecky(topologyId, id);
+      await editor.deleteDecky(topologyId, id, node.kind === 'decky' ? node.name : '');
       setNodes((p) => p.filter((n) => n.id !== id));
       setEdges((p) => p.filter((e) => e.from !== id && e.to !== id));
       setSelection(null);
@@ -235,11 +256,16 @@ const MazeNET: React.FC = () => {
     if (!n || n.kind !== 'decky') return;
     const name = `${n.name.replace(/-[0-9a-f]{4}$/, '')}-${hex4()}`;
     try {
-      const decky = await api.createDecky(topologyId, {
+      const dRes = await editor.createDecky(topologyId, {
         name, services: [...n.services], x: n.x + 24, y: n.y + 24,
         decky_config: { archetype: n.archetype },
       });
-      await api.attachEdge(topologyId, { decky_uuid: decky.uuid, lan_id: n.netId });
+      if (dRes.kind !== 'applied') return;
+      const decky = dRes.data;
+      const parentNet = nets.find((net) => net.id === n.netId);
+      await editor.attachEdge(topologyId,
+        { decky_uuid: decky.uuid, lan_id: n.netId },
+        decky.name, parentNet?.label ?? '');
       const copy: DeckyNode = {
         kind: 'decky', id: decky.uuid, netId: n.netId, name: decky.name,
         archetype: n.archetype, services: [...n.services], status: 'idle',
@@ -256,7 +282,8 @@ const MazeNET: React.FC = () => {
     if (!n || n.kind !== 'decky' || n.services.includes(slug)) return;
     const nextServices = [...n.services, slug];
     try {
-      await api.updateDecky(topologyId, id, { services: nextServices });
+      const r = await editor.updateDecky(topologyId, id, n.name, { services: nextServices });
+      if (r.kind !== 'applied') return;
       setNodes((p) => p.map((x) => x.id === id && x.kind === 'decky'
         ? { ...x, services: nextServices } : x));
     } catch (err) {
@@ -324,11 +351,15 @@ const MazeNET: React.FC = () => {
       onClick: async () => {
         const name = `decky-${hex4()}`;
         try {
-          const decky = await api.createDecky(topologyId, {
+          const dRes = await editor.createDecky(topologyId, {
             name, services: [...a.services], x: 20, y: 40,
             decky_config: { archetype: a.slug },
           });
-          await api.attachEdge(topologyId, { decky_uuid: decky.uuid, lan_id: id });
+          if (dRes.kind !== 'applied') return;
+          const decky = dRes.data;
+          await editor.attachEdge(topologyId,
+            { decky_uuid: decky.uuid, lan_id: id },
+            decky.name, net.label);
           const node: DeckyNode = {
             kind: 'decky', id: decky.uuid, netId: id, name: decky.name,
             archetype: a.slug, services: [...a.services], status: 'idle',
@@ -432,7 +463,12 @@ const MazeNET: React.FC = () => {
   const [streamLive, setStreamLive] = useState(false);
   const streamEnabled = topoStatus === 'active' || topoStatus === 'degraded';
   const onStreamEvent = useCallback((event: TopologyStreamEvent) => {
-    setStreamLive(true);
+    // Flip LIVE only on named, purposeful events — not incidental keepalives.
+    if (event.name === 'snapshot'
+      || event.name.startsWith('mutation.')
+      || event.name === 'status') {
+      setStreamLive(true);
+    }
     if (event.name === 'mutation.applied'
       || event.name === 'mutation.failed'
       || event.name === 'status') {
