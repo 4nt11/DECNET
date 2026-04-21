@@ -131,10 +131,22 @@ class TopologyStore:
         self._conn.commit()
 
     def record_error(self, topology_id: str, message: str) -> None:
-        """Attach a last-error message to the current row (for debugging)."""
+        """Attach a last-error message for *topology_id*.
+
+        Upserts a marker row when no apply has yet succeeded for this
+        topology — that way a failure *during* the first materialise
+        (put() hasn't been reached) still surfaces via GET
+        /topology/state and the next heartbeat.  The marker row uses an
+        empty ``applied_version_hash`` so master's heartbeat check sees
+        the hash mismatch and schedules a resync.
+        """
         self._conn.execute(
-            "UPDATE applied_topology SET last_error=? WHERE topology_id=?",
-            (message, topology_id),
+            "INSERT INTO applied_topology"
+            " (topology_id, applied_version_hash, hydrated_blob_json,"
+            "  applied_at, last_error)"
+            " VALUES (?, '', '{}', 0, ?)"
+            " ON CONFLICT(topology_id) DO UPDATE SET last_error=excluded.last_error",
+            (topology_id, message),
         )
         self._conn.commit()
 

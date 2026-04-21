@@ -101,6 +101,21 @@ def test_topology_apply_docker_failure_is_500_and_records_error(
         raise RuntimeError("docker down")
 
     monkeypatch.setattr(_ops, "apply", _boom)
+
+    # Stub docker.from_env for the /topology/state observed() call so
+    # the state endpoint doesn't need a real daemon.
+    class _StubDocker:
+        class networks:
+            @staticmethod
+            def list(): return []
+
+        class containers:
+            @staticmethod
+            def list(all=False): return []
+
+    import docker as _docker
+    monkeypatch.setattr(_docker, "from_env", lambda: _StubDocker)
+
     client = TestClient(_agent_app.app)
     resp = client.post(
         "/topology/apply",
@@ -108,6 +123,14 @@ def test_topology_apply_docker_failure_is_500_and_records_error(
     )
     assert resp.status_code == 500
     assert "docker down" in resp.json()["detail"]
+
+    # The error must be persisted so GET /topology/state surfaces it,
+    # and the stored hash stays empty so master's heartbeat check flags
+    # the topology for resync rather than assuming it's applied.
+    state = client.get("/topology/state").json()
+    assert state["topology_id"] == "top-err"
+    assert state["applied_version_hash"] == ""
+    assert state["last_error"] == "docker down"
 
 
 def test_topology_teardown_routes_to_ops(monkeypatch: pytest.MonkeyPatch) -> None:

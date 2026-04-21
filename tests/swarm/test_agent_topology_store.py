@@ -64,6 +64,34 @@ def test_record_error_then_put_clears(tmp_path: pathlib.Path) -> None:
     s.close()
 
 
+def test_record_error_upserts_when_no_prior_row(tmp_path: pathlib.Path) -> None:
+    """Apply failure mid-materialise: put() hasn't written a row yet but
+    we still want the error surfaced on GET /topology/state and the
+    next heartbeat.  The marker uses empty hash so master sees drift."""
+    s = _store(tmp_path)
+    s.record_error("t-fail", "docker refused connection")
+    row = s.current()
+    assert row is not None
+    assert row.topology_id == "t-fail"
+    assert row.applied_version_hash == ""
+    assert row.applied_at == 0
+    assert row.last_error == "docker refused connection"
+    s.close()
+
+
+def test_record_error_then_successful_put_replaces_marker(tmp_path: pathlib.Path) -> None:
+    """Once a retry succeeds, the marker row must be replaced with a
+    real applied row — no stale error or empty hash left behind."""
+    s = _store(tmp_path)
+    s.record_error("t-retry", "first try failed")
+    s.put("t-retry", "real-hash", {"topology": {"id": "t-retry"}})
+    row = s.current()
+    assert row.applied_version_hash == "real-hash"
+    assert row.last_error is None
+    assert row.applied_at > 0
+    s.close()
+
+
 def test_clear(tmp_path: pathlib.Path) -> None:
     s = _store(tmp_path)
     s.put("t1", "h", {})

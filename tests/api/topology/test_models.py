@@ -84,6 +84,22 @@ async def test_summary_accepts_repo_topology_row(repo):
     summary = TopologySummary(**row)
     assert summary.id == tid
     assert summary.version == 1
+    # Defaults surface cleanly on a fresh topology.
+    assert summary.needs_resync is False
+    assert summary.target_host_uuid is None
+
+
+@pytest.mark.anyio
+async def test_summary_surfaces_needs_resync_flag(repo):
+    """When the heartbeat handler flags a topology for resync, the API
+    list/detail views must expose it so operators can debug without
+    shelling into the DB."""
+    plan = generate(_cfg())
+    tid = await persist(repo, plan)
+    await repo.set_topology_resync(tid, True)
+    row = await repo.get_topology(tid)
+    summary = TopologySummary(**row)
+    assert summary.needs_resync is True
 
 
 @pytest.mark.anyio

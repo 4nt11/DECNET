@@ -687,6 +687,7 @@ class TopologySummary(BaseModel):
     target_host_uuid: Optional[str] = None
     status: str
     version: int
+    needs_resync: bool = False
     created_at: datetime
     status_changed_at: Optional[datetime] = None
 
