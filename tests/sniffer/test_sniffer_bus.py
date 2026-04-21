@@ -22,7 +22,7 @@ import pytest_asyncio
 from decnet.bus import topics as _topics
 from decnet.bus.fake import FakeBus
 from decnet.sniffer.fingerprint import SnifferEngine
-from decnet.sniffer.worker import _make_thread_safe_publisher
+from decnet.sniffer.worker import _make_decky_traffic_publisher
 
 
 @pytest_asyncio.fixture
@@ -145,7 +145,7 @@ async def test_sniffer_worker_degrades_cleanly_when_bus_disabled(
 @pytest.mark.asyncio
 async def test_thread_safe_publisher_routes_to_decky_traffic_topic(bus: FakeBus) -> None:
     loop = asyncio.get_running_loop()
-    publish = _make_thread_safe_publisher(bus, loop)
+    publish = _make_decky_traffic_publisher(bus, loop)
 
     sub = bus.subscribe(f"{_topics.DECKY}.*.{_topics.DECKY_TRAFFIC}")
     async with sub:

@@ -20,12 +20,17 @@ a shared log-sink abstraction.
 from __future__ import annotations
 
 import asyncio
+import contextlib
 import json
 import re
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Any
+from typing import Any, Callable
 
+from decnet.bus import topics as _topics
+from decnet.bus.base import BaseBus
+from decnet.bus.factory import get_bus
+from decnet.bus.publish import make_thread_safe_publisher
 from decnet.logging import get_logger
 from decnet.prober.hassh import hassh_server
 from decnet.prober.jarm import JARM_EMPTY_HASH, jarm_hash
@@ -221,6 +226,9 @@ def _discover_attackers(json_path: Path, position: int) -> tuple[set[str], int]:
 
 # ─── Probe cycle ─────────────────────────────────────────────────────────────
 
+ProbePublishFn = Callable[[str, dict[str, Any]], None]
+
+
 @_traced("prober.probe_cycle")
 def _probe_cycle(
     targets: set[str],
@@ -231,6 +239,7 @@ def _probe_cycle(
     log_path: Path,
     json_path: Path,
     timeout: float = 5.0,
+    publish_fn: ProbePublishFn | None = None,
 ) -> None:
     """
     Probe all known attacker IPs with JARM, HASSH, and TCP/IP fingerprinting.
@@ -249,13 +258,13 @@ def _probe_cycle(
         ip_probed = probed.setdefault(ip, {})
 
         # Phase 1: JARM (TLS fingerprinting)
-        _jarm_phase(ip, ip_probed, jarm_ports, log_path, json_path, timeout)
+        _jarm_phase(ip, ip_probed, jarm_ports, log_path, json_path, timeout, publish_fn)
 
         # Phase 2: HASSHServer (SSH fingerprinting)
-        _hassh_phase(ip, ip_probed, ssh_ports, log_path, json_path, timeout)
+        _hassh_phase(ip, ip_probed, ssh_ports, log_path, json_path, timeout, publish_fn)
 
         # Phase 3: TCP/IP stack fingerprinting
-        _tcpfp_phase(ip, ip_probed, tcpfp_ports, log_path, json_path, timeout)
+        _tcpfp_phase(ip, ip_probed, tcpfp_ports, log_path, json_path, timeout, publish_fn)
 
 
 @_traced("prober.jarm_phase")
@@ -266,6 +275,7 @@ def _jarm_phase(
     log_path: Path,
     json_path: Path,
     timeout: float,
+    publish_fn: ProbePublishFn | None = None,
 ) -> None:
     """JARM-fingerprint an IP on the given TLS ports."""
     done = ip_probed.setdefault("jarm", set())
@@ -286,6 +296,11 @@ def _jarm_phase(
                 msg=f"JARM {ip}:{port} = {h}",
             )
             logger.info("prober: JARM %s:%d = %s", ip, port, h)
+            if publish_fn is not None:
+                publish_fn(
+                    "jarm",
+                    {"attacker_ip": ip, "port": port, "jarm_hash": h},
+                )
         except Exception as exc:
             done.add(port)
             _write_event(
@@ -308,6 +323,7 @@ def _hassh_phase(
     log_path: Path,
     json_path: Path,
     timeout: float,
+    publish_fn: ProbePublishFn | None = None,
 ) -> None:
     """HASSHServer-fingerprint an IP on the given SSH ports."""
     done = ip_probed.setdefault("hassh", set())
@@ -333,6 +349,16 @@ def _hassh_phase(
                 msg=f"HASSH {ip}:{port} = {result['hassh_server']}",
             )
             logger.info("prober: HASSH %s:%d = %s", ip, port, result["hassh_server"])
+            if publish_fn is not None:
+                publish_fn(
+                    "hassh",
+                    {
+                        "attacker_ip": ip,
+                        "port": port,
+                        "hassh_server": result["hassh_server"],
+                        "ssh_banner": result["banner"],
+                    },
+                )
         except Exception as exc:
             done.add(port)
             _write_event(
@@ -355,6 +381,7 @@ def _tcpfp_phase(
     log_path: Path,
     json_path: Path,
     timeout: float,
+    publish_fn: ProbePublishFn | None = None,
 ) -> None:
     """TCP/IP stack fingerprint an IP on the given ports."""
     done = ip_probed.setdefault("tcpfp", set())
@@ -384,6 +411,17 @@ def _tcpfp_phase(
                 msg=f"TCPFP {ip}:{port} = {result['tcpfp_hash']}",
             )
             logger.info("prober: TCPFP %s:%d = %s", ip, port, result["tcpfp_hash"])
+            if publish_fn is not None:
+                publish_fn(
+                    "tcpfp",
+                    {
+                        "attacker_ip": ip,
+                        "port": port,
+                        "tcpfp_hash": result["tcpfp_hash"],
+                        "ttl": result["ttl"],
+                        "mss": result["mss"],
+                    },
+                )
         except Exception as exc:
             done.add(port)
             _write_event(
@@ -454,25 +492,58 @@ async def prober_worker(
     probed: dict[str, dict[str, set[int]]] = {}  # IP -> {type -> ports}
     log_position: int = 0
 
-    while True:
-        # Discover new attacker IPs from the log stream
-        new_ips, log_position = await asyncio.to_thread(
-            _discover_attackers, json_path, log_position,
+    loop = asyncio.get_running_loop()
+
+    # Connect to the bus for attacker.fingerprinted fan-out.  Failure is
+    # non-fatal: probes still run, results still land in the log file,
+    # they just don't push notifications to downstream consumers.
+    bus: BaseBus | None = None
+    try:
+        candidate = get_bus(client_name="prober")
+        await candidate.connect()
+        bus = candidate
+    except Exception as exc:  # noqa: BLE001
+        logger.warning(
+            "prober: bus unavailable, running in publish-off mode: %s", exc,
         )
 
-        if new_ips - known_attackers:
-            fresh = new_ips - known_attackers
-            known_attackers.update(fresh)
-            logger.info(
-                "prober: discovered %d new attacker(s), total=%d",
-                len(fresh), len(known_attackers),
+    raw_publish = make_thread_safe_publisher(bus, loop)
+
+    def _publish_attacker(event_type: str, payload: dict[str, Any]) -> None:
+        # Every successful probe fans out under the same topic; the probe
+        # family (jarm/hassh/tcpfp) goes in event_type so consumers can
+        # filter in-memory without needing a dedicated subscription each.
+        raw_publish(
+            _topics.attacker(_topics.ATTACKER_FINGERPRINTED),
+            payload,
+            event_type,
+        )
+
+    try:
+        while True:
+            # Discover new attacker IPs from the log stream
+            new_ips, log_position = await asyncio.to_thread(
+                _discover_attackers, json_path, log_position,
             )
 
-        if known_attackers:
-            await asyncio.to_thread(
-                _probe_cycle, known_attackers, probed,
-                jarm_ports, hassh_ports, tcp_ports,
-                log_path, json_path, timeout,
-            )
+            if new_ips - known_attackers:
+                fresh = new_ips - known_attackers
+                known_attackers.update(fresh)
+                logger.info(
+                    "prober: discovered %d new attacker(s), total=%d",
+                    len(fresh), len(known_attackers),
+                )
 
-        await asyncio.sleep(interval)
+            if known_attackers:
+                await asyncio.to_thread(
+                    _probe_cycle, known_attackers, probed,
+                    jarm_ports, hassh_ports, tcp_ports,
+                    log_path, json_path, timeout,
+                    _publish_attacker,
+                )
+
+            await asyncio.sleep(interval)
+    finally:
+        if bus is not None:
+            with contextlib.suppress(Exception):
+                await bus.close()

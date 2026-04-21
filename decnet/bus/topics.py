@@ -57,6 +57,10 @@ DECKY_TRAFFIC = "traffic"
 # the wildcard ``attacker.>``.
 ATTACKER_OBSERVED = "observed"
 ATTACKER_SCORED = "scored"
+# Published once per successful active probe result (JARM/HASSH/TCPfp).
+# Distinct from ``observed`` which is the correlator's first-sight signal —
+# a fingerprint is additional evidence about an already-observed attacker.
+ATTACKER_FINGERPRINTED = "fingerprinted"
 ATTACKER_SESSION_STARTED = "session.started"
 ATTACKER_SESSION_ENDED = "session.ended"
 

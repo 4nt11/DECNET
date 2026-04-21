@@ -22,7 +22,7 @@ from typing import Any, Callable
 from decnet.bus import topics as _topics
 from decnet.bus.base import BaseBus
 from decnet.bus.factory import get_bus
-from decnet.bus.publish import publish_safely
+from decnet.bus.publish import make_thread_safe_publisher
 from decnet.logging import get_logger
 from decnet.network import HOST_IPVLAN_IFACE, HOST_MACVLAN_IFACE
 from decnet.sniffer.fingerprint import SnifferEngine
@@ -47,26 +47,22 @@ def _load_ip_to_decky() -> dict[str, str]:
     return mapping
 
 
-def _make_thread_safe_publisher(
+def _make_decky_traffic_publisher(
     bus: BaseBus,
     loop: asyncio.AbstractEventLoop,
 ) -> Callable[[str, str, dict[str, Any]], None]:
-    """Build a sync callable that marshals bus publishes back to *loop*.
+    """Wrap :func:`make_thread_safe_publisher` with the decky-traffic topic.
 
-    The scapy sniff loop runs in a dedicated worker thread and cannot
-    ``await`` anything.  Every call here schedules the async publish on
-    the event loop and returns immediately; the sniff thread is never
-    blocked waiting for the publish to actually land on the wire.
+    The scapy sniff loop runs in a dedicated worker thread — this adapter
+    turns ``(decky_name, event_type, payload)`` calls from the engine into
+    a bus publish on ``decky.{name}.traffic`` without blocking the sniff
+    thread on the network round-trip.
     """
+    raw = make_thread_safe_publisher(bus, loop)
+
     def _publish(decky_name: str, event_type: str, payload: dict[str, Any]) -> None:
         topic = _topics.decky(decky_name, _topics.DECKY_TRAFFIC)
-        try:
-            asyncio.run_coroutine_threadsafe(
-                publish_safely(bus, topic, payload, event_type=event_type),
-                loop,
-            )
-        except Exception as exc:  # noqa: BLE001
-            logger.debug("sniffer: cross-thread bus publish failed: %s", exc)
+        raw(topic, payload, event_type)
 
     return _publish
 
@@ -200,7 +196,7 @@ async def sniffer_worker(log_file: str) -> None:
 
         publish_fn: Callable[[str, str, dict[str, Any]], None] | None = None
         if bus is not None:
-            publish_fn = _make_thread_safe_publisher(bus, loop)
+            publish_fn = _make_decky_traffic_publisher(bus, loop)
 
         # Dedicated thread pool so the long-running sniff loop doesn't
         # occupy a slot in the default asyncio executor.

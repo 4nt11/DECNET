@@ -47,6 +47,7 @@ def test_segment_validation(bad: str) -> None:
 def test_attacker_builder() -> None:
     assert topics.attacker(topics.ATTACKER_OBSERVED) == "attacker.observed"
     assert topics.attacker(topics.ATTACKER_SCORED) == "attacker.scored"
+    assert topics.attacker(topics.ATTACKER_FINGERPRINTED) == "attacker.fingerprinted"
     # Dotted leaf is intentional — same as system.bus.health.
     assert topics.attacker(topics.ATTACKER_SESSION_STARTED) == "attacker.session.started"
     assert topics.attacker(topics.ATTACKER_SESSION_ENDED) == "attacker.session.ended"
