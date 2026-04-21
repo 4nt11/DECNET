@@ -52,6 +52,17 @@ _TCP_ACK: int = 0x10
 _TCP_FIN: int = 0x01
 _TCP_RST: int = 0x04
 
+# Event types that should fan out on the service bus as ``decky.{id}.traffic``.
+# Intermediate parser artifacts (tls_client_hello, tls_certificate) are
+# intentionally excluded — tls_session covers the completed handshake and
+# tcp_flow_timing covers the flow summary; together they're the minimum
+# interesting signal for downstream consumers.
+_BUS_TRAFFIC_EVENTS: frozenset[str] = frozenset({
+    "tls_session",
+    "tcp_flow_timing",
+    "tcp_syn_fingerprint",
+})
+
 
 # ─── TCP option extraction for passive fingerprinting ───────────────────────
 
@@ -692,10 +703,16 @@ class SnifferEngine:
         ip_to_decky: dict[str, str],
         write_fn: Callable[[str], None],
         dedup_ttl: float = 300.0,
+        publish_fn: Callable[[str, str, dict[str, Any]], None] | None = None,
     ):
         self._ip_to_decky = ip_to_decky
         self._write_fn = write_fn
         self._dedup_ttl = dedup_ttl
+        # Optional bus publish hook. Called *after* dedup + syslog write, so
+        # every syslog line we emit has a matching bus event and duplicate
+        # storms are already suppressed upstream.  Signature:
+        # ``publish_fn(decky_name, event_type, payload_dict)``.
+        self._publish_fn = publish_fn
 
         self._sessions: dict[tuple[str, int, str, int], dict[str, Any]] = {}
         self._session_ts: dict[tuple[str, int, str, int], float] = {}
@@ -782,6 +799,15 @@ class SnifferEngine:
             return
         line = syslog_line(SERVICE_NAME, node_name, event_type, severity=severity, **fields)
         self._write_fn(line)
+        # Bus fan-out, fire-and-forget.  Only emit for traffic-summary event
+        # types — the ones that represent an observable decky interaction
+        # rather than an intermediate parser artifact.  Rate is naturally
+        # bounded by the dedup cache above.
+        if self._publish_fn is not None and event_type in _BUS_TRAFFIC_EVENTS:
+            try:
+                self._publish_fn(node_name, event_type, dict(fields))
+            except Exception:  # nosec B110 — bus must never break sniff thread
+                pass
 
     # ── Flow tracking (per-TCP-4-tuple timing + retransmits) ────────────────
 
