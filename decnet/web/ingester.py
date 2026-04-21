@@ -1,10 +1,14 @@
 import asyncio
+import contextlib
 import os
 import json
 import time
 from typing import Any
 from pathlib import Path
 
+from decnet.bus import topics as _topics
+from decnet.bus.factory import get_bus
+from decnet.bus.publish import publish_safely
 from decnet.env import DECNET_BATCH_SIZE, DECNET_BATCH_MAX_WAIT_MS
 from decnet.logging import get_logger
 from decnet.telemetry import (
@@ -37,6 +41,31 @@ async def log_ingestion_worker(repo: BaseRepository) -> None:
 
     logger.info("ingest worker started path=%s position=%d", _json_log_path, _position)
 
+    # Optional bus wiring — emit one system.log event per committed batch so
+    # downstream consumers (dashboard heartbeats, federation forwarder) can
+    # track DB-persisted progress without polling the state table.
+    _bus = None
+    try:
+        _bus = get_bus(client_name="ingester")
+        await _bus.connect()
+    except Exception as _exc:
+        logger.warning("ingester: bus unavailable, continuing without publish: %s", _exc)
+        _bus = None
+
+    try:
+        await _run_loop(repo, _json_log_path, _position, _bus)
+    finally:
+        if _bus is not None:
+            with contextlib.suppress(Exception):
+                await _bus.close()
+
+
+async def _run_loop(
+    repo: BaseRepository,
+    _json_log_path: Path,
+    _position: int,
+    _bus: Any,
+) -> None:
     while True:
         try:
             if not _json_log_path.exists():
@@ -97,13 +126,17 @@ async def log_ingestion_worker(repo: BaseRepository) -> None:
                     if len(_batch) >= DECNET_BATCH_SIZE or (
                         time.monotonic() - _batch_started >= _max_wait_s
                     ):
+                        _flushed = len(_batch)
                         _position = await _flush_batch(repo, _batch, _position)
                         _batch.clear()
                         _batch_started = time.monotonic()
+                        await _publish_batch(_bus, _flushed, _position)
 
             # Flush any remainder collected before EOF / partial-line break.
             if _batch:
+                _flushed = len(_batch)
                 _position = await _flush_batch(repo, _batch, _position)
+                await _publish_batch(_bus, _flushed, _position)
 
         except Exception as _e:
             _err_str = str(_e).lower()
@@ -115,6 +148,23 @@ async def log_ingestion_worker(repo: BaseRepository) -> None:
             await asyncio.sleep(5)
 
         await asyncio.sleep(1)
+
+
+async def _publish_batch(bus: Any, flushed: int, position: int) -> None:
+    """Emit one ``system.log`` event summarising a committed batch.
+
+    Fire-and-forget via :func:`publish_safely`; a dead bus never blocks the
+    ingestion loop.  Zero-row flushes are suppressed so the topic stays
+    meaningful.
+    """
+    if bus is None or flushed <= 0:
+        return
+    await publish_safely(
+        bus,
+        _topics.system(_topics.SYSTEM_LOG),
+        {"component": "ingester", "flushed": flushed, "position": position},
+        event_type="batch_committed",
+    )
 
 
 async def _flush_batch(
