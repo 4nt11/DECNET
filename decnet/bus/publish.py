@@ -7,8 +7,11 @@ loop" guarantee is audited in exactly one place.
 from __future__ import annotations
 
 import asyncio
+import contextlib
+import time
 from typing import Any, Callable
 
+from decnet.bus import topics as _topics
 from decnet.bus.base import BaseBus
 from decnet.logging import get_logger
 
@@ -65,3 +68,34 @@ def make_thread_safe_publisher(
             log.debug("cross-thread bus publish failed topic=%s: %s", topic, exc)
 
     return _publish
+
+
+async def run_health_heartbeat(
+    bus: BaseBus | None,
+    worker: str,
+    *,
+    interval: float = 30.0,
+    extra: Callable[[], dict[str, Any]] | None = None,
+) -> None:
+    """Publish ``system.<worker>.health`` every *interval* seconds.
+
+    Standard heartbeat loop shared across agent/forwarder/updater.  Emits
+    ``{"worker": <name>, "ts": <unix-ts>, **extra()}`` on each tick.  A
+    ``None`` bus turns the loop into a no-op sleep cycle — still cancellable
+    so the caller can use the same ``asyncio.create_task``/``.cancel()``
+    pattern regardless of bus state.
+
+    Cancellation-safe: unwraps the ``CancelledError`` so callers awaiting
+    the task during shutdown see a clean exit.
+    """
+    topic = _topics.system_health(worker)
+    with contextlib.suppress(asyncio.CancelledError):
+        while True:
+            payload: dict[str, Any] = {"worker": worker, "ts": time.time()}
+            if extra is not None:
+                try:
+                    payload.update(extra())
+                except Exception as exc:  # noqa: BLE001
+                    log.debug("heartbeat extra() failed worker=%s: %s", worker, exc)
+            await publish_safely(bus, topic, payload, event_type=_topics.SYSTEM_HEALTH)
+            await asyncio.sleep(interval)

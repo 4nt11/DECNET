@@ -27,9 +27,13 @@ from typing import Any, Optional
 from fastapi import FastAPI, HTTPException
 from pydantic import BaseModel, Field
 
+import contextlib
+
 from decnet.agent import executor as _exec
 from decnet.agent import heartbeat as _heartbeat
 from decnet.agent import topology_ops as _topology_ops
+from decnet.bus.factory import get_bus
+from decnet.bus.publish import run_health_heartbeat
 from decnet.swarm.pki import DEFAULT_AGENT_DIR
 from decnet.agent.topology_store import AlreadyApplied, TopologyStore
 from decnet.config import DecnetConfig
@@ -95,15 +99,45 @@ def _ensure_collector_started() -> None:
     log.info("agent log collector started log_file=%s", DECNET_AGENT_LOG_FILE)
 
 
+_bus_heartbeat_task: Optional[asyncio.Task] = None
+
+
 @asynccontextmanager
 async def _lifespan(app: FastAPI):
     # Best-effort: if identity/bundle plumbing isn't configured (e.g. dev
     # runs or non-enrolled hosts), heartbeat.start() is a silent no-op.
     _heartbeat.start()
+
+    # Host-local bus heartbeat (system.agent.health).  Separate channel
+    # from the mTLS master-facing heartbeat above; this one lets peers on
+    # the same host (dashboard, updater) see the agent is alive without
+    # hitting its HTTPS endpoint.  Bus-disabled path is a no-op loop.
+    bus = None
+    try:
+        bus = get_bus(client_name="agent")
+        await bus.connect()
+    except Exception as exc:  # noqa: BLE001
+        log.warning("agent: bus unavailable, skipping health heartbeat: %s", exc)
+        bus = None
+
+    global _bus_heartbeat_task
+    _bus_heartbeat_task = asyncio.create_task(
+        run_health_heartbeat(bus, "agent"),
+        name="agent-bus-heartbeat",
+    )
+
     try:
         yield
     finally:
         await _heartbeat.stop()
+        if _bus_heartbeat_task is not None:
+            _bus_heartbeat_task.cancel()
+            with contextlib.suppress(asyncio.CancelledError, Exception):
+                await _bus_heartbeat_task
+            _bus_heartbeat_task = None
+        if bus is not None:
+            with contextlib.suppress(Exception):
+                await bus.close()
         global _collector_task
         if _collector_task is not None and not _collector_task.done():
             _collector_task.cancel()

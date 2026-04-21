@@ -21,6 +21,7 @@ losing the log tail, and vice versa.
 from __future__ import annotations
 
 import asyncio
+import contextlib
 import os
 import pathlib
 import sqlite3
@@ -28,6 +29,8 @@ import ssl
 from dataclasses import dataclass
 from typing import Optional
 
+from decnet.bus.factory import get_bus
+from decnet.bus.publish import run_health_heartbeat
 from decnet.logging import get_logger
 from decnet.swarm import pki
 
@@ -187,6 +190,22 @@ async def run_forwarder(
         cfg.log_path, cfg.master_host, cfg.master_port, offset,
     )
 
+    # Host-local bus heartbeat (system.forwarder.health).  Peers on the
+    # same host can tail "is the log shipper alive" without hitting the
+    # master.  Bus-disabled path is a no-op loop.
+    bus = None
+    try:
+        bus = get_bus(client_name="forwarder")
+        await bus.connect()
+    except Exception as exc:  # noqa: BLE001
+        log.warning("forwarder: bus unavailable, skipping heartbeat: %s", exc)
+        bus = None
+
+    heartbeat_task = asyncio.create_task(
+        run_health_heartbeat(bus, "forwarder"),
+        name="forwarder-bus-heartbeat",
+    )
+
     try:
         while stop_event is None or not stop_event.is_set():
             try:
@@ -219,6 +238,12 @@ async def run_forwarder(
                     pass
                 backoff = min(_MAX_BACKOFF, backoff * 2)
     finally:
+        heartbeat_task.cancel()
+        with contextlib.suppress(asyncio.CancelledError, Exception):
+            await heartbeat_task
+        if bus is not None:
+            with contextlib.suppress(Exception):
+                await bus.close()
         store.close()
         log.info("forwarder stopped offset=%d", offset)
 
