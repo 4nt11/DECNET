@@ -16,6 +16,7 @@ from .api_decky_crud import router as _decky_router
 from .api_delete_topology import router as _delete_router
 from .api_deploy_topology import router as _deploy_router
 from .api_edge_crud import router as _edge_router
+from .api_events import router as _events_router
 from .api_get_topology import router as _get_router
 from .api_lan_crud import router as _lan_router
 from .api_list_topologies import router as _list_router
@@ -40,6 +41,7 @@ topology_router.include_router(_lan_router)
 topology_router.include_router(_decky_router)
 topology_router.include_router(_edge_router)
 topology_router.include_router(_mutations_router)
+topology_router.include_router(_events_router)
 topology_router.include_router(_get_router)
 
 

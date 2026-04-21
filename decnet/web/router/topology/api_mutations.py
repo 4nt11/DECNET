@@ -13,6 +13,9 @@ from typing import Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 
+from decnet.bus import topics as _topics
+from decnet.bus.app import get_app_bus
+from decnet.logging import get_logger
 from decnet.telemetry import traced as _traced
 from decnet.topology.status import (
     TopologyStatus,
@@ -26,6 +29,8 @@ from decnet.web.db.models import (
 from decnet.web.dependencies import repo, require_admin, require_viewer
 
 from ._guards import get_topology_or_404, map_repo_exception
+
+_log = get_logger("api.topology.mutations")
 
 router = APIRouter()
 
@@ -79,6 +84,20 @@ async def api_enqueue_mutation(
         raise map_repo_exception(exc) from exc
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+    # Fire-and-forget bus publish so the mutator can wake immediately and
+    # the SSE route can notify connected editors.  Bus failure here must
+    # never mask a successful enqueue — the DB row is authoritative.
+    bus = await get_app_bus()
+    if bus is not None:
+        try:
+            await bus.publish(
+                _topics.topology_mutation(topology_id, _topics.MUTATION_ENQUEUED),
+                {"mutation_id": mutation_id, "op": body.op, "payload": body.payload},
+                event_type=_topics.MUTATION_ENQUEUED,
+            )
+        except Exception as exc:  # noqa: BLE001
+            _log.warning("bus publish (enqueued) failed: %s", exc)
 
     return MutationEnqueueResponse(mutation_id=mutation_id, state="pending")
 

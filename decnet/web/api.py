@@ -127,6 +127,8 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
                 pass
             except Exception as exc:
                 log.warning("Task shutdown error: %s", exc)
+    from decnet.bus.app import close_app_bus
+    await close_app_bus()
     from decnet.telemetry import shutdown_tracing
     shutdown_tracing()
     log.info("API shutdown complete")

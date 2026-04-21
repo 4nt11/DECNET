@@ -20,10 +20,35 @@ from decnet.telemetry import traced as _traced
 from pathlib import Path
 import anyio
 import asyncio
+import contextlib
+
+from decnet.bus import topics as _topics
+from decnet.bus.base import BaseBus
+from decnet.bus.factory import get_bus
 from decnet.web.db.repository import BaseRepository
 
 log = get_logger("mutator")
 console = Console()
+
+
+async def _publish_safely(
+    bus: BaseBus | None,
+    topic: str,
+    payload: dict,
+    event_type: str = "",
+) -> None:
+    """Fire-and-forget bus publish.
+
+    A bus failure must never break the reconciler — the DB write already
+    happened before we got here, so losing the notification is at most a
+    few seconds of UI latency (the next poll tick picks it up).
+    """
+    if bus is None:
+        return
+    try:
+        await bus.publish(topic, payload, event_type=event_type)
+    except Exception as exc:  # noqa: BLE001
+        log.warning("bus publish failed topic=%s: %s", topic, exc)
 
 
 @_traced("mutator.mutate_decky")
@@ -134,7 +159,9 @@ async def mutate_all(repo: BaseRepository, force: bool = False) -> None:
 
 
 @_traced("mutator.reconcile_topologies")
-async def reconcile_topologies(repo: BaseRepository) -> int:
+async def reconcile_topologies(
+    repo: BaseRepository, bus: BaseBus | None = None,
+) -> int:
     """Drain pending ``topology_mutations`` rows against live topologies.
 
     For every topology in ``active|degraded`` with at least one pending
@@ -161,6 +188,12 @@ async def reconcile_topologies(repo: BaseRepository) -> int:
             mut = await repo.claim_next_mutation(tid)
             if mut is None:
                 break  # no more work for this topology this tick.
+            await _publish_safely(
+                bus,
+                _topics.topology_mutation(tid, _topics.MUTATION_APPLYING),
+                {"mutation_id": mut["id"], "op": mut["op"], "payload": mut["payload"]},
+                event_type=_topics.MUTATION_APPLYING,
+            )
             try:
                 await _op_dispatch(repo, tid, mut["op"], mut["payload"])
                 await repo.mark_mutation_applied(mut["id"])
@@ -169,6 +202,12 @@ async def reconcile_topologies(repo: BaseRepository) -> int:
                     "topology %s mutation %s applied op=%s",
                     tid, mut["id"], mut["op"],
                 )
+                await _publish_safely(
+                    bus,
+                    _topics.topology_mutation(tid, _topics.MUTATION_APPLIED),
+                    {"mutation_id": mut["id"], "op": mut["op"]},
+                    event_type=_topics.MUTATION_APPLIED,
+                )
             except (MutationError, Exception) as exc:  # noqa: BLE001
                 reason = f"{type(exc).__name__}: {exc}"
                 await repo.mark_mutation_failed(mut["id"], reason)
@@ -176,9 +215,21 @@ async def reconcile_topologies(repo: BaseRepository) -> int:
                     "topology %s mutation %s failed: %s",
                     tid, mut["id"], reason,
                 )
+                await _publish_safely(
+                    bus,
+                    _topics.topology_mutation(tid, _topics.MUTATION_FAILED),
+                    {"mutation_id": mut["id"], "op": mut["op"], "reason": reason},
+                    event_type=_topics.MUTATION_FAILED,
+                )
                 try:
                     await transition_status(
                         repo, tid, TopologyStatus.DEGRADED, reason=reason,
+                    )
+                    await _publish_safely(
+                        bus,
+                        _topics.topology_status(tid),
+                        {"state": TopologyStatus.DEGRADED, "reason": reason},
+                        event_type=_topics.TOPOLOGY_STATUS,
                     )
                 except TopologyStatusError:
                     # Already degraded / in a state that can't degrade
@@ -239,6 +290,21 @@ async def run_watch_loop(repo: BaseRepository, poll_interval_secs: int = 10) -> 
     """
     log.info("mutator watch loop started poll_interval_secs=%d", poll_interval_secs)
     console.print(f"[green]DECNET Mutator Watcher started (polling every {poll_interval_secs}s).[/]")
+
+    # Connect to the bus for publish + wake-on-enqueue.  Failure here is
+    # non-fatal: a mutator without a bus still works, it just runs at
+    # poll-interval latency and doesn't push notifications to UI clients.
+    bus: BaseBus | None = None
+    wake = asyncio.Event()
+    wake_task: asyncio.Task | None = None
+    try:
+        candidate = get_bus(client_name="mutator")
+        await candidate.connect()
+        bus = candidate
+        wake_task = asyncio.create_task(_wake_on_enqueue(bus, wake))
+    except Exception as exc:  # noqa: BLE001
+        log.warning("mutator: bus unavailable, running in poll-only mode: %s", exc)
+
     try:
         while True:
             await mutate_all(force=False, repo=repo)
@@ -246,7 +312,7 @@ async def run_watch_loop(repo: BaseRepository, poll_interval_secs: int = 10) -> 
             # entering the dispatch body when there's nothing to do.
             try:
                 if await repo.has_pending_topology_mutation():
-                    await reconcile_topologies(repo)
+                    await reconcile_topologies(repo, bus=bus)
             except NotImplementedError:
                 # Backend without MazeNET support — nothing to reconcile.
                 pass
@@ -256,7 +322,42 @@ async def run_watch_loop(repo: BaseRepository, poll_interval_secs: int = 10) -> 
                 pass
             except Exception:
                 log.exception("reconcile_agent_resyncs tick raised")
-            await asyncio.sleep(poll_interval_secs)
+            # Wait until either poll_interval_secs elapses OR an enqueued
+            # mutation wakes us early.  Clearing before the next tick
+            # means a second wake during the tick will re-fire after.
+            try:
+                await asyncio.wait_for(wake.wait(), timeout=poll_interval_secs)
+            except asyncio.TimeoutError:
+                pass
+            wake.clear()
     except KeyboardInterrupt:
         log.info("mutator watch loop stopped")
         console.print("\n[dim]Mutator watcher stopped.[/]")
+    finally:
+        if wake_task is not None:
+            wake_task.cancel()
+            with contextlib.suppress(asyncio.CancelledError, Exception):
+                await wake_task
+        if bus is not None:
+            with contextlib.suppress(Exception):
+                await bus.close()
+
+
+async def _wake_on_enqueue(bus: BaseBus, wake: asyncio.Event) -> None:
+    """Flip *wake* every time a ``mutation.enqueued`` event lands.
+
+    Subscribes to the wildcard ``topology.*.mutation.enqueued`` — a single
+    subscription covers every topology on the host.  Runs until cancelled
+    or the bus closes (NullBus yields nothing and returns immediately,
+    which is fine: the poll-interval fallback still ticks).
+    """
+    pattern = f"{_topics.TOPOLOGY}.*.mutation.{_topics.MUTATION_ENQUEUED}"
+    try:
+        sub = bus.subscribe(pattern)
+        async with sub:
+            async for _event in sub:
+                wake.set()
+    except asyncio.CancelledError:
+        raise
+    except Exception as exc:  # noqa: BLE001
+        log.warning("mutator: wake subscriber died (%s); falling back to poll", exc)
