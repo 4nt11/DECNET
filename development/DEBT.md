@@ -141,7 +141,7 @@ MVP scope (**host-local**):
 
 **Status:** ✅ Resolved — MVP shipped. Host-local UNIX-socket bus, `get_bus()` factory, `decnet bus` worker with heartbeats, systemd unit, 62 unit/integration tests green. DEBT-030 is now unblocked.
 
-### DEBT-030 — Live (hot) topology mutations via web UI
+### DEBT-030 — Live (hot) topology mutations via web UI ✅ RESOLVED (Phase A)
 **Files:** `decnet/web/router/topology/api_mutations.py` (enqueue endpoint already exists), `decnet/mutator/engine.py` + `ops.py` (reconciler already applies all 7 ops), `web/src/hooks/useMazeApi.ts` (missing enqueue methods), `web/src/components/MazeNET.tsx` (editor treats every topology as pending).
 
 **Backend is already there:**
@@ -162,7 +162,14 @@ MVP scope (**host-local**):
 - **Push via SSE over the bus** (not polling): new route `GET /api/v1/topologies/{id}/events` subscribes to `topology.{id}.*` on the service bus and forwards as SSE. Envelope: `{v, type, ts, payload}`. Day-one event types: `mutation.enqueued|applying|applied|failed`, `topology.status_changed`, `topology.version_bumped`. Room to grow: `decky.state_changed`, `decky.traffic`, `attacker.observed`.
 - **Separate from `/stream`** deliberately: different auth scopes, different fan-out shape (per-topology vs global), different failure isolation. Two routes, one bus.
 
-**Status:** Deferred — blocked on DEBT-029 (bus worker). Once the bus exists, this is ~1-2 days for route + frontend + tests.
+**Status:** ✅ Resolved (Phase A) — end-to-end bus→UI plumbing shipped.
+- Mutator publishes every state transition on the bus (`mutation.applying|applied|failed`, `status`); fire-and-forget, DB remains source of truth.
+- Mutator watch loop is bus-woken via `topology.*.mutation.enqueued`; 10s poll stays as fallback heartbeat so a dropped wake event costs latency, not correctness.
+- New route `GET /api/v1/topologies/{id}/events` streams per-topology SSE — snapshot on connect + live forwarding of bus events, 15s keepalive, `?token=` query-param auth matching `/stream`.
+- Web editor opens the SSE when topology is `active|degraded`, refetches on `mutation.applied|failed|status`, surfaces a `LIVE` / `CONNECTING…` header indicator.
+- Smoke: `scripts/bus/smoke-mutator.sh` verifies the full mutator-family topic hierarchy round-trips through a live bus worker.
+
+**Phase B follow-up (deferred):** staged-buffer editor (Apply (N changes) + optimistic visual states using `NodeBase.status='mutating'`). Today's Phase A refetches the whole topology on each applied event — correct but not yet optimistic. The hooks + API method + SSE consumer that Phase B needs are already in place (`useTopologyStream.ts`, `useMazeApi.enqueueMutation`).
 
 ---
 
@@ -219,7 +226,7 @@ MVP scope (**host-local**):
 | DEBT-027 | 🟡 Medium | Features | deferred (out of scope) |
 | DEBT-028 | 🟡 Medium | Testing | deferred (needs DinD CI) |
 | DEBT-029 | 🟡 Medium | Architecture / Bus | ✅ resolved |
-| DEBT-030 | 🟡 Medium | Web / Live mutations | deferred (unblocked) |
+| DEBT-030 | 🟡 Medium | Web / Live mutations | ✅ resolved (Phase A) |
 
-**Remaining open:** DEBT-011 (Alembic), DEBT-023 (image pinning), DEBT-026 (modular mailboxes), DEBT-027 (Dynamic bait store), DEBT-028 (deploy endpoint tests), DEBT-029 (service bus worker), DEBT-030 (live topology mutations)
-**Estimated remaining effort:** ~12 hours + ~3 days for DEBT-029/030
+**Remaining open:** DEBT-011 (Alembic), DEBT-023 (image pinning), DEBT-026 (modular mailboxes), DEBT-027 (Dynamic bait store), DEBT-028 (deploy endpoint tests)
+**Estimated remaining effort:** ~12 hours. DEBT-030 Phase B (optimistic staged-buffer editor) is a follow-up, not debt.
