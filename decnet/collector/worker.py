@@ -7,6 +7,7 @@ The ingester tails the .json file; rsyslog can consume the .log file independent
 """
 
 import asyncio
+import contextlib
 import json
 import os
 import re
@@ -15,10 +16,18 @@ import time
 from concurrent.futures import ThreadPoolExecutor
 from datetime import datetime
 from pathlib import Path
-from typing import Any, Optional
+from typing import Any, Callable, Optional
 
+from decnet.bus import topics as _topics
+from decnet.bus.factory import get_bus
+from decnet.bus.publish import make_thread_safe_publisher
 from decnet.logging import get_logger
 from decnet.telemetry import traced as _traced, get_tracer as _get_tracer, inject_context as _inject_ctx
+
+# Collector publish signature: ``publish_fn(parsed_event_dict)``.  Callable
+# from the container-stream threads; the worker wraps it around a thread-safe
+# bus publisher that marshals onto the asyncio loop.
+CollectorPublishFn = Callable[[dict[str, Any]], None]
 
 logger = get_logger("collector")
 
@@ -274,7 +283,12 @@ def _reopen_if_needed(path: Path, fh: Optional[Any]) -> Any:
 
 
 @_traced("collector.stream_container")
-def _stream_container(container_id: str, log_path: Path, json_path: Path) -> None:
+def _stream_container(
+    container_id: str,
+    log_path: Path,
+    json_path: Path,
+    publish_fn: CollectorPublishFn | None = None,
+) -> None:
     """Stream logs from one container and append to the host log files."""
     import docker  # type: ignore[import]
 
@@ -309,6 +323,13 @@ def _stream_container(container_id: str, log_path: Path, json_path: Path) -> Non
                             jf = _reopen_if_needed(json_path, jf)
                             jf.write(json.dumps(parsed) + "\n")
                             jf.flush()
+                            if publish_fn is not None:
+                                try:
+                                    publish_fn(parsed)
+                                except Exception as exc:
+                                    logger.debug(
+                                        "collector: bus publish failed: %s", exc,
+                                    )
                     else:
                         logger.debug(
                             "collector: rate-limited decky=%s service=%s type=%s attacker=%s",
@@ -326,6 +347,41 @@ def _stream_container(container_id: str, log_path: Path, json_path: Path) -> Non
                     fh.close()
                 except Exception:  # nosec B110 — best-effort file handle cleanup
                     pass
+
+
+# ─── Bus plumbing ─────────────────────────────────────────────────────────────
+
+def _make_system_log_publisher(
+    bus: Any, loop: asyncio.AbstractEventLoop,
+) -> CollectorPublishFn:
+    """Factory: returns a ``publish_fn(parsed)`` for use by stream threads.
+
+    When *bus* is ``None`` the returned callable is a no-op, so the stream
+    thread can call it unconditionally.  Otherwise each call is marshalled
+    onto *loop* (the asyncio event loop that owns the bus socket) via
+    ``make_thread_safe_publisher``.
+    """
+    raw_publish = make_thread_safe_publisher(bus, loop) if bus is not None else None
+    if raw_publish is None:
+        return lambda _parsed: None
+
+    topic = _topics.system(_topics.SYSTEM_LOG)
+
+    def _publish(parsed: dict[str, Any]) -> None:
+        event_type = parsed.get("event_type", "")
+        raw_publish(
+            topic,
+            {
+                "decky": parsed.get("decky", ""),
+                "service": parsed.get("service", ""),
+                "event_type": event_type,
+                "attacker_ip": parsed.get("attacker_ip", "Unknown"),
+                "timestamp": parsed.get("timestamp", ""),
+            },
+            event_type,
+        )
+
+    return _publish
 
 
 # ─── Async collector ──────────────────────────────────────────────────────────
@@ -347,6 +403,19 @@ async def log_collector_worker(log_file: str) -> None:
     active: dict[str, asyncio.Task[None]] = {}
     loop = asyncio.get_running_loop()
 
+    # Optional bus wiring — per-line system.log publish.  Fan-in from many
+    # container-stream threads is handled by make_thread_safe_publisher,
+    # which marshals each publish onto this loop.
+    bus = None
+    try:
+        bus = get_bus(client_name="collector")
+        await bus.connect()
+    except Exception as exc:
+        logger.warning("collector: bus unavailable, continuing without publish: %s", exc)
+        bus = None
+
+    _publish_log = _make_system_log_publisher(bus, loop)
+
     # Dedicated thread pool so long-running container log streams don't
     # saturate the default asyncio executor and starve short-lived
     # to_thread() calls elsewhere (e.g. load_state in the web API).
@@ -359,7 +428,7 @@ async def log_collector_worker(log_file: str) -> None:
             active[container_id] = asyncio.ensure_future(
                 loop.run_in_executor(
                     collector_pool, _stream_container,
-                    container_id, log_path, json_path,
+                    container_id, log_path, json_path, _publish_log,
                 ),
                 loop=loop,
             )
@@ -396,3 +465,6 @@ async def log_collector_worker(log_file: str) -> None:
         logger.error("collector error: %s", exc)
     finally:
         collector_pool.shutdown(wait=False)
+        if bus is not None:
+            with contextlib.suppress(Exception):
+                await bus.close()
