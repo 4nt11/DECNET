@@ -1,7 +1,17 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
-import type { Net, MazeNode, PendingChange } from './types';
+import type { Net, MazeNode } from './types';
 
 export type ResizeHandle = 'e' | 'w' | 'n' | 's' | 'ne' | 'nw' | 'se' | 'sw';
+
+export type PaletteDragKind = 'network-subnet' | 'network-dmz' | 'archetype' | 'service';
+export interface PaletteDrag {
+  kind: PaletteDragKind;
+  slug: string;
+  label: string;
+  services?: string[];
+  clientX: number;
+  clientY: number;
+}
 
 type Drag =
   | null
@@ -15,8 +25,11 @@ interface Args {
   nodes: MazeNode[];
   setNets: React.Dispatch<React.SetStateAction<Net[]>>;
   setNodes: React.Dispatch<React.SetStateAction<MazeNode[]>>;
-  applyChange: (pc: PendingChange) => void;
   canvasRef: React.RefObject<HTMLDivElement | null>;
+  onPaletteDrop?: (drag: PaletteDrag, world: { x: number; y: number }, overNetId: string | null, overNodeId: string | null) => void;
+  /** Structural callbacks — only these hit the backend. */
+  onReparent?: (nodeId: string, fromNetId: string, toNetId: string) => void;
+  onAddEdge?:  (fromNodeId: string, toNodeId: string) => void;
 }
 
 interface EdgeDraw {
@@ -26,13 +39,20 @@ interface EdgeDraw {
   hoverTarget: string | null;
 }
 
-export function useMazeInteraction({ nets, nodes, setNets, setNodes, applyChange, canvasRef }: Args) {
+export function useMazeInteraction({ nets, nodes, setNets, setNodes, canvasRef, onPaletteDrop, onReparent, onAddEdge }: Args) {
   const [pan, setPan] = useState({ x: 0, y: 0 });
   const [drag, setDrag] = useState<Drag>(null);
   const [dropTargetId, setDropTargetId] = useState<string | null>(null);
   const [edgeDraw, setEdgeDraw] = useState<EdgeDraw | null>(null);
+  const [paletteDrag, setPaletteDrag] = useState<PaletteDrag | null>(null);
   const edgeDrawRef = useRef<EdgeDraw | null>(null);
+  const paletteDragRef = useRef<PaletteDrag | null>(null);
   useEffect(() => { edgeDrawRef.current = edgeDraw; }, [edgeDraw]);
+  useEffect(() => { paletteDragRef.current = paletteDrag; }, [paletteDrag]);
+
+  const startPaletteDrag = useCallback((d: Omit<PaletteDrag, 'clientX' | 'clientY'>, e: React.MouseEvent) => {
+    setPaletteDrag({ ...d, clientX: e.clientX, clientY: e.clientY });
+  }, []);
 
   /* Refs to avoid re-binding global listeners on every state change. */
   const netsRef = useRef(nets);
@@ -109,6 +129,11 @@ export function useMazeInteraction({ nets, nodes, setNets, setNodes, applyChange
 
   useEffect(() => {
     const onMove = (e: MouseEvent) => {
+      const pd = paletteDragRef.current;
+      if (pd) {
+        setPaletteDrag({ ...pd, clientX: e.clientX, clientY: e.clientY });
+        return;
+      }
       const ed = edgeDrawRef.current;
       if (ed) {
         const o = canvasOriginRef.current();
@@ -121,7 +146,7 @@ export function useMazeInteraction({ nets, nodes, setNets, setNodes, applyChange
           if (!parent) return false;
           const ax = parent.x + n.x;
           const ay = parent.y + n.y;
-          return wx >= ax - 8 && wx <= ax + 8 && wy >= ay + 14 && wy <= ay + 30;
+          return wx >= ax - 12 && wx <= ax + 140 && wy >= ay && wy <= ay + 80;
         });
         setEdgeDraw({ ...ed, toX: wx, toY: wy, hoverTarget: hover?.id ?? null });
         return;
@@ -150,7 +175,8 @@ export function useMazeInteraction({ nets, nodes, setNets, setNodes, applyChange
         const node = nodesRef.current.find((n) => n.id === d.id);
         if (!node) return;
         const isObserved = node.kind === 'observed';
-        const targetNet = !isObserved ? netsRef.current.find((net) => {
+        const isPinned = node.kind === 'decky' && !!node.decky_config?.forwards_l3;
+        const targetNet = !isObserved && !isPinned ? netsRef.current.find((net) => {
           if (net.id === node.netId) return false;
           return w.x >= net.x && w.x <= net.x + net.w && w.y >= net.y && w.y <= net.y + net.h;
         }) : undefined;
@@ -158,8 +184,10 @@ export function useMazeInteraction({ nets, nodes, setNets, setNodes, applyChange
 
         const parent = netsRef.current.find((n) => n.id === node.netId);
         if (!parent) return;
-        const nx = Math.max(8, Math.round(w.x - d.offX - parent.x));
-        const ny = Math.max(28, Math.round(w.y - d.offY - parent.y));
+        const maxX = Math.max(8, parent.w - 148);
+        const maxY = Math.max(28, parent.h - 88);
+        const nx = Math.min(maxX, Math.max(8,  Math.round(w.x - d.offX - parent.x)));
+        const ny = Math.min(maxY, Math.max(28, Math.round(w.y - d.offY - parent.y)));
         setNodes((prev) => prev.map((n) => n.id === d.id ? { ...n, x: nx, y: ny } : n));
         return;
       }
@@ -187,14 +215,39 @@ export function useMazeInteraction({ nets, nodes, setNets, setNodes, applyChange
       }
     };
 
-    const onUp = () => {
+    const onUp = (e: MouseEvent) => {
+      const pd = paletteDragRef.current;
+      if (pd) {
+        setPaletteDrag(null);
+        const o = canvasOriginRef.current();
+        const p = panRef.current;
+        const wx = e.clientX - o.x - p.x;
+        const wy = e.clientY - o.y - p.y;
+        const rect = canvasRef.current?.getBoundingClientRect();
+        const inside = rect
+          ? e.clientX >= rect.left && e.clientX <= rect.right
+            && e.clientY >= rect.top && e.clientY <= rect.bottom
+          : false;
+        if (!inside) return;
+        const overNet = netsRef.current.find(
+          (n) => wx >= n.x && wx <= n.x + n.w && wy >= n.y && wy <= n.y + n.h,
+        );
+        const overNode = nodesRef.current.find((n) => {
+          const parent = netsRef.current.find((nn) => nn.id === n.netId);
+          if (!parent) return false;
+          const ax = parent.x + n.x;
+          const ay = parent.y + n.y;
+          return wx >= ax && wx <= ax + 140 && wy >= ay && wy <= ay + 80;
+        });
+        onPaletteDrop?.(pd, { x: wx, y: wy }, overNet?.id ?? null, overNode?.id ?? null);
+        return;
+      }
       const ed = edgeDrawRef.current;
       if (ed) {
         if (ed.hoverTarget && ed.hoverTarget !== ed.fromId) {
           const target = nodesRef.current.find((n) => n.id === ed.hoverTarget);
           if (target && target.kind !== 'observed') {
-            const id = `e-${ed.fromId}-${ed.hoverTarget}-${Date.now()}`;
-            applyChange({ op: 'add_edge', payload: { id, from: ed.fromId, to: ed.hoverTarget } });
+            onAddEdge?.(ed.fromId, ed.hoverTarget);
           }
         }
         setEdgeDraw(null);
@@ -215,22 +268,12 @@ export function useMazeInteraction({ nets, nodes, setNets, setNodes, applyChange
             const absY = parentOld.y + node.y;
             const relX = Math.max(8,  absX - parentNew.x);
             const relY = Math.max(28, absY - parentNew.y);
+            const fromNetId = node.netId;
             setNodes((prev) => prev.map((n) => n.id === d.id ? { ...n, netId: target, x: relX, y: relY } : n));
-            applyChange({ op: 'detach_decky', payload: { nodeId: d.id, netId: node.netId } });
-            applyChange({ op: 'attach_decky', payload: {
-              nodeId: d.id, netId: target, archetype: node.archetype, name: node.name,
-              x: relX, y: relY, services: node.services,
-            }});
+            onReparent?.(d.id, fromNetId, target);
           }
-        } else if (node && node.kind === 'decky') {
-          applyChange({ op: 'update_decky', payload: { nodeId: node.id, patch: { x: node.x, y: node.y } } });
         }
-      } else if (d.type === 'net') {
-        const net = netsRef.current.find((n) => n.id === d.id);
-        if (net) applyChange({ op: 'update_lan', payload: { id: net.id, patch: { x: net.x, y: net.y } } });
-      } else if (d.type === 'resize') {
-        const net = netsRef.current.find((n) => n.id === d.id);
-        if (net) applyChange({ op: 'update_lan', payload: { id: net.id, patch: { x: net.x, y: net.y, w: net.w, h: net.h } } });
+        /* Intra-net moves and net/resize drags are cosmetic — never persisted. */
       }
 
       setDropTargetId(null);
@@ -243,7 +286,7 @@ export function useMazeInteraction({ nets, nodes, setNets, setNodes, applyChange
       window.removeEventListener('mousemove', onMove);
       window.removeEventListener('mouseup', onUp);
     };
-  }, [applyChange, setNets, setNodes, dropTargetId]);
+  }, [setNets, setNodes, dropTargetId, onPaletteDrop, onReparent, onAddEdge, canvasRef]);
 
   const resetPan = useCallback(() => setPan({ x: 0, y: 0 }), []);
 
@@ -252,6 +295,8 @@ export function useMazeInteraction({ nets, nodes, setNets, setNodes, applyChange
     dropTargetId,
     dragging: drag !== null,
     edgeDraw,
+    paletteDrag,
+    startPaletteDrag,
     onCanvasMouseDown,
     onNodeMouseDown,
     onNetMouseDown,

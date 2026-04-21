@@ -7,19 +7,23 @@ interface Props {
   absY: number;
   selected: boolean;
   dragging?: boolean;
+  deployed?: boolean;
   onSelect?: (id: string) => void;
   onMouseDown?: (id: string) => (e: React.MouseEvent) => void;
   onPortMouseDown?: (id: string) => (e: React.MouseEvent) => void;
   onContextMenu?: (id: string) => (e: React.MouseEvent) => void;
 }
 
-const NodeCard: React.FC<Props> = ({ node, absX, absY, selected, dragging, onSelect, onMouseDown, onPortMouseDown, onContextMenu }) => {
+const NodeCard: React.FC<Props> = ({ node, absX, absY, selected, dragging, deployed, onSelect, onMouseDown, onPortMouseDown, onContextMenu }) => {
+  const isDmzGateway = !!(node as { decky_config?: { forwards_l3?: boolean } }).decky_config?.forwards_l3;
   const classes = [
     'maze-node',
     node.kind === 'observed' ? 'observed' : '',
     node.status === 'hot' ? 'hot' : '',
     selected ? 'selected' : '',
     dragging ? 'dragging' : '',
+    deployed ? 'deployed' : '',
+    deployed && isDmzGateway ? 'dmz-gateway' : '',
   ].filter(Boolean).join(' ');
 
   const handleDown = (e: React.MouseEvent) => {

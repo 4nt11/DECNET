@@ -1,11 +1,12 @@
-import { useCallback } from 'react';
+import { useCallback, useMemo } from 'react';
 import api from '../../utils/api';
-import { DEFAULT_SERVICES } from './data';
-import type { ServiceDef } from './data';
-import type { Net, MazeNode, Edge, DeckyNode, PendingChange } from './types';
+import { ARCHETYPES as DEFAULT_ARCHETYPES, DEFAULT_SERVICES } from './data';
+import type { Archetype, ServiceDef } from './data';
+import type { Net, MazeNode, Edge, DeckyNode } from './types';
 
-interface LANRow {
+export interface LANRow {
   id: string;
+  topology_id: string;
   name: string;
   subnet: string;
   is_dmz: boolean;
@@ -13,8 +14,9 @@ interface LANRow {
   y?: number | null;
 }
 
-interface DeckyRow {
+export interface DeckyRow {
   uuid: string;
+  topology_id: string;
   name: string;
   services: string[];
   decky_config?: Record<string, unknown> | null;
@@ -24,15 +26,16 @@ interface DeckyRow {
   y?: number | null;
 }
 
-interface EdgeRow {
+export interface EdgeRow {
   id: string;
+  topology_id: string;
   decky_uuid: string;
   lan_id: string;
   is_bridge: boolean;
   forwards_l3: boolean;
 }
 
-interface TopologySummary {
+export interface TopologySummary {
   id: string;
   name: string;
   mode: string;
@@ -47,17 +50,17 @@ interface TopologyDetail {
   edges: EdgeRow[];
 }
 
-interface HydratedTopology {
+export interface HydratedTopology {
   topology: TopologySummary;
   nets: Net[];
   nodes: MazeNode[];
   edges: Edge[];
 }
 
-/** Adapt the Phase-3 TopologyDetail wire shape to canvas entities.
- *  Backend edges are decky↔LAN membership (bipartite); we surface them
- *  as node-in-net placement. Decky-to-decky traffic edges are derived
- *  from shared-LAN co-membership for now (Step 4 may refine this). */
+/** Adapt the wire shape to canvas entities. Backend edges are
+ *  decky↔LAN membership (bipartite); we surface them as node-in-net
+ *  placement. Decky-to-decky traffic edges are derived from
+ *  shared-LAN co-membership for visualization only. */
 export function adaptTopology(detail: TopologyDetail): HydratedTopology {
   const nets: Net[] = detail.lans.map((lan, i) => ({
     id: lan.id,
@@ -70,7 +73,6 @@ export function adaptTopology(detail: TopologyDetail): HydratedTopology {
     h: 240,
   }));
 
-  /* A decky sits in the first LAN it attaches to. */
   const firstLanFor = new Map<string, string>();
   for (const e of detail.edges) {
     if (!firstLanFor.has(e.decky_uuid)) firstLanFor.set(e.decky_uuid, e.lan_id);
@@ -81,7 +83,7 @@ export function adaptTopology(detail: TopologyDetail): HydratedTopology {
     id: d.uuid,
     netId: firstLanFor.get(d.uuid) ?? (nets[0]?.id ?? ''),
     name: d.name,
-    archetype: 'linux-server',
+    archetype: (d.decky_config as { archetype?: string } | null)?.archetype ?? 'linux-server',
     services: d.services,
     status: d.state === 'running' ? 'active' : d.state === 'failed' ? 'hot' : 'idle',
     x: d.x ?? 20 + (i % 2) * 160,
@@ -90,7 +92,6 @@ export function adaptTopology(detail: TopologyDetail): HydratedTopology {
     decky_config: d.decky_config ?? undefined,
   }));
 
-  /* Derive decky-to-decky edges from shared-LAN membership. */
   const byLan = new Map<string, string[]>();
   for (const e of detail.edges) {
     const arr = byLan.get(e.lan_id) ?? [];
@@ -118,19 +119,69 @@ export function adaptTopology(detail: TopologyDetail): HydratedTopology {
   return { topology: detail.topology, nets, nodes, edges };
 }
 
-export interface MazeApi {
-  listTopologies: () => Promise<TopologySummary[]>;
-  getTopology:    (id: string) => Promise<HydratedTopology>;
-  getServices:    () => Promise<ServiceDef[]>;
-  getNextIp:      (topologyId: string, lanId: string) => Promise<string>;
-  getNextSubnet:  (base: string) => Promise<string>;
-  commit:         (topologyId: string, changes: PendingChange[]) => Promise<void>;
+interface ArchetypeRow {
+  slug: string;
+  display_name: string;
+  description: string;
+  services: string[];
+  preferred_distros: string[];
+  nmap_os: string;
 }
 
-export function useMazeApi(toast?: (msg: string) => void): MazeApi {
+const NMAP_OS_TO_ICON: Record<string, string> = {
+  linux: 'server',
+  windows: 'monitor',
+  embedded: 'cpu',
+};
+
+export interface CreateLanBody {
+  name: string;
+  is_dmz: boolean;
+  x: number;
+  y: number;
+  subnet?: string;
+}
+
+export interface CreateDeckyBody {
+  name: string;
+  services: string[];
+  x: number;
+  y: number;
+  decky_config?: Record<string, unknown>;
+}
+
+export interface MazeApi {
+  listTopologies:       () => Promise<TopologySummary[]>;
+  createBlankTopology:  (name: string) => Promise<TopologySummary>;
+  getTopology:          (id: string) => Promise<HydratedTopology>;
+  getServices:    () => Promise<ServiceDef[]>;
+  getArchetypes:  () => Promise<Archetype[]>;
+  getNextIp:      (topologyId: string, lanId: string) => Promise<string>;
+  getNextSubnet:  (base?: string) => Promise<string>;
+
+  createLan:   (topologyId: string, body: CreateLanBody) => Promise<LANRow>;
+  updateLan:   (topologyId: string, lanId: string, patch: Partial<LANRow>) => Promise<LANRow>;
+  deleteLan:   (topologyId: string, lanId: string) => Promise<void>;
+
+  createDecky: (topologyId: string, body: CreateDeckyBody) => Promise<DeckyRow>;
+  updateDecky: (topologyId: string, uuid: string, patch: Partial<DeckyRow>) => Promise<DeckyRow>;
+  deleteDecky: (topologyId: string, uuid: string) => Promise<void>;
+
+  attachEdge:  (topologyId: string, body: { decky_uuid: string; lan_id: string; is_bridge?: boolean; forwards_l3?: boolean }) => Promise<EdgeRow>;
+  detachEdge:  (topologyId: string, edgeId: string) => Promise<void>;
+
+  deployTopology: (topologyId: string) => Promise<void>;
+}
+
+export function useMazeApi(): MazeApi {
   const listTopologies = useCallback(async () => {
     const { data } = await api.get('/topologies/');
     return (data?.data ?? []) as TopologySummary[];
+  }, []);
+
+  const createBlankTopology = useCallback(async (name: string): Promise<TopologySummary> => {
+    const { data } = await api.post<TopologySummary>('/topologies/blank', { name });
+    return data;
   }, []);
 
   const getTopology = useCallback(async (id: string) => {
@@ -158,6 +209,21 @@ export function useMazeApi(toast?: (msg: string) => void): MazeApi {
     }
   }, []);
 
+  const getArchetypes = useCallback(async (): Promise<Archetype[]> => {
+    try {
+      const { data } = await api.get<{ archetypes: ArchetypeRow[] }>('/topologies/archetypes');
+      const known = new Map(DEFAULT_ARCHETYPES.map((a) => [a.slug, a.icon]));
+      return data.archetypes.map((a) => ({
+        slug: a.slug,
+        name: a.display_name,
+        services: a.services,
+        icon: known.get(a.slug) ?? NMAP_OS_TO_ICON[a.nmap_os] ?? 'server',
+      }));
+    } catch {
+      return DEFAULT_ARCHETYPES;
+    }
+  }, []);
+
   const getNextIp = useCallback(async (topologyId: string, lanId: string) => {
     const { data } = await api.get<{ subnet: string; ip: string }>(
       `/topologies/${topologyId}/lans/${lanId}/next-ip`,
@@ -165,7 +231,7 @@ export function useMazeApi(toast?: (msg: string) => void): MazeApi {
     return data.ip;
   }, []);
 
-  const getNextSubnet = useCallback(async (base: string) => {
+  const getNextSubnet = useCallback(async (base: string = '10.0') => {
     const { data } = await api.get<{ subnet: string }>(
       `/topologies/next-subnet`,
       { params: { base } },
@@ -173,14 +239,93 @@ export function useMazeApi(toast?: (msg: string) => void): MazeApi {
     return data.subnet;
   }, []);
 
-  const commit = useCallback(
-    async (_topologyId: string, changes: PendingChange[]) => {
-      /* Phase-3 Steps 3–5 land the real endpoints. For now, just surface. */
-      console.log('[MazeNET] commit stub — pending changes:', changes);
-      toast?.(`commit stubbed (${changes.length} change${changes.length === 1 ? '' : 's'})`);
+  const createLan = useCallback(
+    async (topologyId: string, body: CreateLanBody): Promise<LANRow> => {
+      const { data } = await api.post<LANRow>(`/topologies/${topologyId}/lans`, body);
+      return data;
     },
-    [toast],
+    [],
   );
 
-  return { listTopologies, getTopology, getServices, getNextIp, getNextSubnet, commit };
+  const updateLan = useCallback(
+    async (topologyId: string, lanId: string, patch: Partial<LANRow>): Promise<LANRow> => {
+      const { data } = await api.patch<LANRow>(`/topologies/${topologyId}/lans/${lanId}`, patch);
+      return data;
+    },
+    [],
+  );
+
+  const deleteLan = useCallback(
+    async (topologyId: string, lanId: string): Promise<void> => {
+      await api.delete(`/topologies/${topologyId}/lans/${lanId}`);
+    },
+    [],
+  );
+
+  const createDecky = useCallback(
+    async (topologyId: string, body: CreateDeckyBody): Promise<DeckyRow> => {
+      const { data } = await api.post<DeckyRow>(`/topologies/${topologyId}/deckies`, body);
+      return data;
+    },
+    [],
+  );
+
+  const updateDecky = useCallback(
+    async (topologyId: string, uuid: string, patch: Partial<DeckyRow>): Promise<DeckyRow> => {
+      const { data } = await api.patch<DeckyRow>(
+        `/topologies/${topologyId}/deckies/${uuid}`,
+        patch,
+      );
+      return data;
+    },
+    [],
+  );
+
+  const deleteDecky = useCallback(
+    async (topologyId: string, uuid: string): Promise<void> => {
+      await api.delete(`/topologies/${topologyId}/deckies/${uuid}`);
+    },
+    [],
+  );
+
+  const attachEdge = useCallback(
+    async (topologyId: string, body: { decky_uuid: string; lan_id: string; is_bridge?: boolean; forwards_l3?: boolean }): Promise<EdgeRow> => {
+      const { data } = await api.post<EdgeRow>(`/topologies/${topologyId}/edges`, body);
+      return data;
+    },
+    [],
+  );
+
+  const detachEdge = useCallback(
+    async (topologyId: string, edgeId: string): Promise<void> => {
+      await api.delete(`/topologies/${topologyId}/edges/${edgeId}`);
+    },
+    [],
+  );
+
+  const deployTopology = useCallback(
+    async (topologyId: string): Promise<void> => {
+      await api.post(`/topologies/${topologyId}/deploy`, {});
+    },
+    [],
+  );
+
+  return useMemo(
+    () => ({
+      listTopologies, createBlankTopology, getTopology, getServices, getArchetypes,
+      getNextIp, getNextSubnet,
+      createLan, updateLan, deleteLan,
+      createDecky, updateDecky, deleteDecky,
+      attachEdge, detachEdge,
+      deployTopology,
+    }),
+    [
+      listTopologies, createBlankTopology, getTopology, getServices, getArchetypes,
+      getNextIp, getNextSubnet,
+      createLan, updateLan, deleteLan,
+      createDecky, updateDecky, deleteDecky,
+      attachEdge, detachEdge,
+      deployTopology,
+    ],
+  );
 }
