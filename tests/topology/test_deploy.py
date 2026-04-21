@@ -75,7 +75,7 @@ async def test_deploy_failure_transitions_to_failed(repo, tmp_path, monkeypatch)
     class _BoomClient:
         def __init__(self):
             self.networks = self
-        def list(self, names=None):  # noqa: ARG002
+        def list(self, names=None, filters=None):  # noqa: ARG002
             return []
         def create(self, *a, **kw):  # noqa: ARG002
             raise RuntimeError("boom: docker daemon unreachable")
@@ -107,7 +107,7 @@ async def test_teardown_from_failed_marks_torn_down(repo, tmp_path, monkeypatch)
     class _StubClient:
         def __init__(self):
             self.networks = self
-        def list(self, names=None):  # noqa: ARG002
+        def list(self, names=None, filters=None):  # noqa: ARG002
             return []
 
     with patch("decnet.engine.deployer.docker.from_env", return_value=_StubClient()):

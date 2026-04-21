@@ -89,6 +89,39 @@ async def test_compose_forwards_l3_sets_sysctl(repo):
         assert "NET_ADMIN" in base["cap_add"]
 
 
+@pytest.mark.anyio
+async def test_compose_labels_service_containers_for_collector(repo):
+    """Service fragments must carry ``decnet.topology.service=true`` so
+    the host-side collector picks up their log streams — the old fleet
+    state file never mentions topology containers."""
+    plan = generate(_cfg())
+    tid = await persist(repo, plan)
+    hydrated = await hydrate(repo, tid)
+    data = generate_topology_compose(hydrated)
+
+    service_keys = [
+        k for k in data["services"]
+        if "-" in k and k not in {d["decky_config"]["name"] for d in hydrated["deckies"]}
+    ]
+    assert service_keys, "expected at least one service container"
+    for k in service_keys:
+        labels = data["services"][k].get("labels") or {}
+        assert labels.get("decnet.topology.service") == "true", (
+            f"service {k!r} missing collector-discovery label: {labels}"
+        )
+        assert labels.get("decnet.topology.id") == tid
+        assert "decnet.topology.decky" in labels
+        assert "decnet.topology.service_name" in labels
+
+    # Base containers get their own label (role=base) but MUST NOT carry
+    # the service marker — otherwise the collector double-attaches.
+    base_keys = {d["decky_config"]["name"] for d in hydrated["deckies"]}
+    for k in base_keys:
+        labels = data["services"][k].get("labels") or {}
+        assert labels.get("decnet.topology.role") == "base"
+        assert labels.get("decnet.topology.service") != "true"
+
+
 def test_teardown_order_is_leaf_first():
     lans = [
         {"name": "LAN-00"},
