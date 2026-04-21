@@ -12,6 +12,7 @@ _DB_RESET_TABLES: tuple[str, ...] = (
     # Order matters for DROP TABLE: child FKs first.
     # - attacker_behavior FK-references attackers.
     # - decky_shards FK-references swarm_hosts.
+    # - topology_* children FK-reference topologies / lans / topology_deckies.
     "attacker_behavior",
     "attackers",
     "logs",
@@ -20,6 +21,12 @@ _DB_RESET_TABLES: tuple[str, ...] = (
     "users",
     "decky_shards",
     "swarm_hosts",
+    "topology_status_events",
+    "topology_mutations",
+    "topology_edges",
+    "topology_deckies",
+    "lans",
+    "topologies",
 )
 
 
