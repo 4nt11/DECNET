@@ -1,6 +1,6 @@
 # DECNET — Technical Debt Register
 
-> Last updated: 2026-04-21 — All addressable debt cleared.
+> Last updated: 2026-04-21 — DEBT-032 opened (fingerprint rotation detection).
 > Severity: 🔴 Critical · 🟠 High · 🟡 Medium · 🟢 Low
 
 ---
@@ -218,6 +218,23 @@ DEBT-029 shipped the bus; DEBT-030 proved the pattern end-to-end through the mut
 - **Standalone `decnet correlate` worker** — the rollout plan presumed one; today the engine runs inside the profiler worker, which is the right shape for the current data flow.
 - **Bus-wake subscriptions** — publishes landed; subscribe-side (e.g. prober re-probe on `decky.*.state`) was not wired to avoid coupling the wake pattern to a subscriber we don't yet have.
 
+### DEBT-032 — Prober can't detect fingerprint rotation without mutation
+**Files:** `decnet/prober/worker.py` (~lines 235, 286, 334, 392), `decnet/web/db/models.py` (new `decky_service_fingerprints` table).
+
+Substrate identity is `(service_name, implementation_fingerprint)`, not service name alone. A base-image rebuild that rotates OpenSSH 8.4 → 9.2 — or any recompose that changes JARM / HASSH / TCP fingerprint without changing the service list — is a substrate transition from the attacker's recon POV, and today the correlation graph sees none of it.
+
+The prober already computes JARM (`worker.py:286`), HASSH (`worker.py:334`), and TCP fingerprint (`worker.py:392`), and emits each as RFC 5424 syslog + optional bus publish. What's missing is **per-(decky, service, probe_type) persistence** to diff against: the current dedup set `probed: dict[IP → {probe_type → set(ports)}]` (`worker.py:235`) is in-memory and scoped to one run, so any restart loses history and any same-IP probe on a changed substrate can't be detected as a change.
+
+**Design:**
+1. New SQLModel table `decky_service_fingerprints` keyed by `(decky_name, service, probe_type)` with `last_hash, last_seen_at, sample_count`. One upsert per probe; bounded by fleet × probe families.
+2. Prober reads `last_hash` before emitting; on diff, emits a new `substrate_fingerprint_changed` event (RFC 5424 syslog + `decky.{id}.fingerprint` bus topic) with `{decky, service, probe_type, old_hash, new_hash}`. On match, upsert the timestamp and skip the event.
+3. Correlator consumes the new event kind into a parallel per-decky index (mirroring the mutation index landed in this session) and interleaves `🔍 decky-03 hassh drift` markers in `AttackerTraversal.fingerprints_during`.
+4. Divergence detector: compare `substrate_state(t)` fold (mutations) vs `observed_identity(t)` fold (fingerprints) per decky. A fingerprint change without a preceding mutation ⇒ `substrate_divergence` finding — container drift, compromised base image, rootkit banner rewrite, or prober lag. Falls out of the data model for free once both streams exist.
+
+**Prerequisite satisfied:** mutation event stream + correlator mutation-kind parser landed alongside this DEBT entry (commits `f875350`, `fa0cdb3`, `bf5ed7a`, `d4d8a2a` on `dev`). The fingerprint stream plugs into the same substrate: same RFC 5424 emission pattern, sibling per-decky engine index, same timeline interleaving.
+
+**Status:** Open — deferred to its own commit sequence. The dedup state in `worker.py:235` is the only thing standing between "JARM hash computed" and "substrate rotation detected."
+
 ---
 
 ## 🟢 Low
@@ -275,6 +292,7 @@ DEBT-029 shipped the bus; DEBT-030 proved the pattern end-to-end through the mut
 | DEBT-029 | 🟡 Medium | Architecture / Bus | ✅ resolved |
 | DEBT-030 | 🟡 Medium | Web / Live mutations | ✅ resolved (Phase A) |
 | ~~DEBT-031~~ | ✅ | Workers / Bus integration | resolved |
+| DEBT-032 | 🟡 Medium | Correlation / Prober | open |
 
-**Remaining open:** DEBT-011 (Alembic), DEBT-023 (image pinning), DEBT-026 (modular mailboxes), DEBT-027 (Dynamic bait store), DEBT-028 (deploy endpoint tests)
-**Estimated remaining effort:** ~12 hours. DEBT-030 Phase B (optimistic staged-buffer editor) is a follow-up, not debt.
+**Remaining open:** DEBT-011 (Alembic), DEBT-023 (image pinning), DEBT-026 (modular mailboxes), DEBT-027 (Dynamic bait store), DEBT-028 (deploy endpoint tests), DEBT-032 (fingerprint rotation detection).
+**Estimated remaining effort:** ~16 hours. DEBT-030 Phase B (optimistic staged-buffer editor) is a follow-up, not debt.
