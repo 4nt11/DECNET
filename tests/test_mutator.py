@@ -162,6 +162,67 @@ class TestMutateAll:
             await mutate_all(repo=mock_repo, force=False)
         mock_mutate.assert_called_once()
 
+    async def test_no_state_returns_none_not_error(self, mock_repo):
+        """Missing deployment is idle, not an error — must return None."""
+        mock_repo.get_state.return_value = None
+        assert await mutate_all(repo=mock_repo) is None
+
+    async def test_returns_seconds_until_next_due(self, mock_repo):
+        # Two deckies: one 10 min to go, one 25 min to go → min is ~600s
+        now = time.time()
+        cfg = _make_config(deckies=[
+            _make_decky("d1", mutate_interval=30, last_mutated=now - 20 * 60),
+            _make_decky("d2", mutate_interval=30, last_mutated=now - 5 * 60),
+        ])
+        mock_repo.get_state.return_value = {"config": cfg.model_dump(), "compose_path": "c.yml"}
+        with patch("decnet.mutator.engine.mutate_decky", new_callable=AsyncMock):
+            next_due = await mutate_all(repo=mock_repo, force=False)
+        assert next_due is not None
+        assert 590 < next_due < 610  # ~10 min
+
+    async def test_only_filter_forces_named_decky(self, mock_repo):
+        """only={'d1'} mutates d1 regardless of schedule, skips others."""
+        now = time.time()
+        cfg = _make_config(deckies=[
+            _make_decky("d1", mutate_interval=30, last_mutated=now),  # not due
+            _make_decky("d2", mutate_interval=30, last_mutated=now),  # not due
+        ])
+        mock_repo.get_state.return_value = {"config": cfg.model_dump(), "compose_path": "c.yml"}
+        with patch("decnet.mutator.engine.mutate_decky", new_callable=AsyncMock, return_value=True) as mock_mutate:
+            await mutate_all(repo=mock_repo, force=False, only={"d1"})
+        assert mock_mutate.call_count == 1
+        assert mock_mutate.call_args.args[0] == "d1"
+
+
+class TestMutateDeckyBusPublish:
+    @pytest.mark.asyncio
+    async def test_publishes_decky_state_on_success(self, mock_repo):
+        cfg = _make_config()
+        mock_repo.get_state.return_value = {"config": cfg.model_dump(), "compose_path": "c.yml"}
+        bus = AsyncMock()
+        with patch("decnet.mutator.engine.write_compose"), \
+             patch("anyio.to_thread.run_sync", new_callable=AsyncMock):
+            ok = await mutate_decky("decky-01", repo=mock_repo, bus=bus)
+        assert ok is True
+        bus.publish.assert_awaited_once()
+        topic = bus.publish.await_args.args[0]
+        payload = bus.publish.await_args.args[1]
+        assert topic == "decky.decky-01.state"
+        assert payload["name"] == "decky-01"
+        assert isinstance(payload["services"], list)
+
+    @pytest.mark.asyncio
+    async def test_no_publish_on_compose_failure(self, mock_repo):
+        cfg = _make_config()
+        mock_repo.get_state.return_value = {"config": cfg.model_dump(), "compose_path": "c.yml"}
+        bus = AsyncMock()
+        with patch("decnet.mutator.engine.write_compose"), \
+             patch("anyio.to_thread.run_sync",
+                   new_callable=AsyncMock, side_effect=RuntimeError("boom")):
+            ok = await mutate_decky("decky-01", repo=mock_repo, bus=bus)
+        assert ok is False
+        bus.publish.assert_not_awaited()
+
 
 # ---------------------------------------------------------------------------
 # _compose_with_retry (Sync tests, keep as is or minimal update)

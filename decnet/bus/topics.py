@@ -50,6 +50,11 @@ TOPOLOGY_STATUS = "status"
 # Decky-level event types (second token).
 DECKY_STATE = "state"
 DECKY_TRAFFIC = "traffic"
+# On-demand mutation request — published by the API/CLI/UI, consumed by
+# the mutator's watch loop to force an immediate mutation of one decky
+# without waiting for its scheduled interval.  Underscored (not dotted)
+# to stay a single NATS token so the builder's validator accepts it.
+DECKY_MUTATE_REQUEST = "mutate_request"
 
 # Attacker event types (second token under the ``attacker`` root).  First
 # sighting, session boundary transitions, and score-threshold crossings
