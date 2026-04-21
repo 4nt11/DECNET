@@ -171,7 +171,7 @@ MVP scope (**host-local**):
 
 **Phase B follow-up (deferred):** staged-buffer editor (Apply (N changes) + optimistic visual states using `NodeBase.status='mutating'`). Today's Phase A refetches the whole topology on each applied event — correct but not yet optimistic. The hooks + API method + SSE consumer that Phase B needs are already in place (`useTopologyStream.ts`, `useMazeApi.enqueueMutation`).
 
-### DEBT-031 — Service workers don't use the bus
+### ~~DEBT-031 — Service workers don't use the bus~~ ✅ RESOLVED
 **Files:** `decnet/collector/`, `decnet/correlation/`, `decnet/profiler/`, `decnet/sniffer/`, `decnet/prober/`, `decnet/ingester/`, `decnet/agent/`, `decnet/forwarder/`, `decnet/updater/`.
 
 DEBT-029 shipped the bus; DEBT-030 proved the pattern end-to-end through the mutator and the web editor. Every other worker still ignores the bus entirely — they neither publish the state transitions their consumers would want nor subscribe to events that could replace polling / cut latency. The plumbing is ready; the workers aren't wired in.
@@ -201,7 +201,22 @@ DEBT-029 shipped the bus; DEBT-030 proved the pattern end-to-end through the mut
 
 **Suggested rollout order** (ship one worker at a time, one commit each): sniffer → prober → correlator → profiler → collector → ingester → agent/forwarder/updater. Sniffer and prober are the highest-value publishers for the live-topology visualization story; correlator/profiler unlock the attacker-pool push updates that MazeNET's observed-entities view currently polls for.
 
-**Status:** Open. Per-worker integration is mechanical once the pattern is in place; effort scales linearly with worker count.
+**Status:** Resolved. Nine-commit rollout landed on `dev`:
+
+1. Prep — extracted `publish_safely` + `make_thread_safe_publisher` to `decnet/bus/publish.py`; added `attacker.*`, `system.<worker>.health` topic builders.
+2. Sniffer — `decky.{id}.traffic` per flow-summary / fingerprint event (bounded by the bus's drop-oldest queue).
+3. Prober — `attacker.fingerprinted` with probe family (jarm/hassh/tcpfp) in `event.type`.
+4. Correlator — `attacker.observed` on first sighting, hooked via an optional `publish_fn` on `CorrelationEngine`; the profiler worker carries the bus.
+5. Profiler — `attacker.scored` per DB-committed profile upsert.
+6. Collector — `system.log` per ingested parsed event (compact payload: decky/service/event_type/attacker_ip/timestamp).
+7. Ingester — `system.log` per DB-committed batch (`event.type = "batch_committed"`, payload includes offset).
+8. Agent / Forwarder / Updater — shared `run_health_heartbeat` helper emits `system.<worker>.health` every 30s.
+
+**Deferred (out of DEBT-031 scope, tracked for follow-ups):**
+- **Realism-probe `decky.{id}.state`** — the prober as it exists today fingerprints attackers, not deckies. Publishing `decky.{id}.state` on realism-flip needs a separate realism probe path we don't have yet.
+- **Correlator `session.started` / `session.ended`** — `CorrelationEngine` is a batch class with no session state. A session-boundary signal would need session tracking introduced first; constants are reserved in `decnet/bus/topics.py`.
+- **Standalone `decnet correlate` worker** — the rollout plan presumed one; today the engine runs inside the profiler worker, which is the right shape for the current data flow.
+- **Bus-wake subscriptions** — publishes landed; subscribe-side (e.g. prober re-probe on `decky.*.state`) was not wired to avoid coupling the wake pattern to a subscriber we don't yet have.
 
 ---
 
@@ -259,7 +274,7 @@ DEBT-029 shipped the bus; DEBT-030 proved the pattern end-to-end through the mut
 | DEBT-028 | 🟡 Medium | Testing | deferred (needs DinD CI) |
 | DEBT-029 | 🟡 Medium | Architecture / Bus | ✅ resolved |
 | DEBT-030 | 🟡 Medium | Web / Live mutations | ✅ resolved (Phase A) |
-| DEBT-031 | 🟡 Medium | Workers / Bus integration | open |
+| ~~DEBT-031~~ | ✅ | Workers / Bus integration | resolved |
 
-**Remaining open:** DEBT-011 (Alembic), DEBT-023 (image pinning), DEBT-026 (modular mailboxes), DEBT-027 (Dynamic bait store), DEBT-028 (deploy endpoint tests), DEBT-031 (worker bus integration)
+**Remaining open:** DEBT-011 (Alembic), DEBT-023 (image pinning), DEBT-026 (modular mailboxes), DEBT-027 (Dynamic bait store), DEBT-028 (deploy endpoint tests)
 **Estimated remaining effort:** ~12 hours. DEBT-030 Phase B (optimistic staged-buffer editor) is a follow-up, not debt.
