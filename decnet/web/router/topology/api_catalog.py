@@ -7,6 +7,7 @@ from __future__ import annotations
 
 from fastapi import APIRouter, Depends, HTTPException, Query
 
+from decnet.archetypes import all_archetypes
 from decnet.fleet import all_service_names
 from decnet.telemetry import traced as _traced
 from decnet.topology.allocator import (
@@ -16,6 +17,8 @@ from decnet.topology.allocator import (
     reserved_subnets,
 )
 from decnet.web.db.models import (
+    ArchetypeCatalogResponse,
+    ArchetypeEntry,
     NextIPResponse,
     NextSubnetResponse,
     ServiceCatalogResponse,
@@ -40,6 +43,34 @@ async def api_list_services(
     _viewer: dict = Depends(require_viewer),
 ) -> ServiceCatalogResponse:
     return ServiceCatalogResponse(services=all_service_names())
+
+
+@router.get(
+    "/archetypes",
+    tags=["MazeNET Topologies"],
+    response_model=ArchetypeCatalogResponse,
+    responses={
+        401: {"description": "Missing or invalid credentials"},
+        403: {"description": "Insufficient permissions"},
+    },
+)
+@_traced("api.topology.catalog.archetypes")
+async def api_list_archetypes(
+    _viewer: dict = Depends(require_viewer),
+) -> ArchetypeCatalogResponse:
+    return ArchetypeCatalogResponse(
+        archetypes=[
+            ArchetypeEntry(
+                slug=a.slug,
+                display_name=a.display_name,
+                description=a.description,
+                services=list(a.services),
+                preferred_distros=list(a.preferred_distros),
+                nmap_os=a.nmap_os,
+            )
+            for a in all_archetypes().values()
+        ],
+    )
 
 
 @router.get(
