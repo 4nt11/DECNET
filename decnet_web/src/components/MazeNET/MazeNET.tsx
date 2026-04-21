@@ -445,7 +445,7 @@ const MazeNET: React.FC = () => {
         <div>
           <h1>MAZENET · {topoName || topologyId}</h1>
           <div className="maze-page-sub">
-            {topoStatus.toUpperCase()} · v{topoVersion} ·{' '}
+            NETWORK OF NETWORKS · {topoStatus.toUpperCase()} · v{topoVersion} ·{' '}
             {nets.length} NETS · {nodes.length} NODES · {edges.length} PATHS
             {loadErr && <span className="alert-text"> · {loadErr}</span>}
             {actionErr && <span className="alert-text"> · {actionErr}</span>}
@@ -514,6 +514,7 @@ const MazeNET: React.FC = () => {
         {inspectorOpen && (
           <Inspector
             selection={selection}
+            setSelection={setSelection}
             nets={nets}
             nodes={nodes}
             edges={edges}
@@ -522,6 +523,17 @@ const MazeNET: React.FC = () => {
             onDeleteNet={removeNet}
             onDeleteNode={removeNode}
             onDeleteEdge={removeEdge}
+            onAddDecky={(netId) => {
+              const net = nets.find((n) => n.id === netId);
+              if (!net) return;
+              onPaletteDrop(
+                { kind: 'archetype', slug: archetypes[0]?.slug ?? 'deaddeck',
+                  services: archetypes[0]?.services.slice(0, 2) ?? [],
+                  label: archetypes[0]?.name ?? 'DECKY',
+                  clientX: 0, clientY: 0 },
+                { x: net.x + 40, y: net.y + 60 }, netId, null,
+              );
+            }}
           />
         )}
       </div>
