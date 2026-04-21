@@ -2,6 +2,7 @@
 Deploy, teardown, and status via Docker SDK + subprocess docker compose.
 """
 
+import asyncio
 import shutil
 import subprocess  # nosec B404
 import time
@@ -147,6 +148,39 @@ def _compose_with_retry(
     raise last_exc
 
 
+def _emit_lifecycle_event(
+    *,
+    decky_name: str,
+    old_services: list[str],
+    new_services: list[str],
+    trigger: str,
+) -> None:
+    """Fire a ``decky_mutated`` event from a sync code path.
+
+    Deploy/teardown are sync functions; ``emit_decky_mutated`` is async
+    because its bus half awaits.  Bus is ``None`` here (CLI has no live
+    client), so only the syslog side actually does work — but running
+    the coroutine keeps the emission site a single call regardless.
+    Soft-fails: a missing log path or broken bus must not abort the
+    deploy.  The import is lazy to dodge the circular dependency between
+    ``decnet.mutator`` (which imports engine helpers) and this module.
+    """
+    try:
+        from decnet.mutator.events import emit_decky_mutated
+        asyncio.run(
+            emit_decky_mutated(
+                bus=None,
+                decky=decky_name,
+                old_services=old_services,
+                new_services=new_services,
+                trigger=trigger,  # type: ignore[arg-type]
+            )
+        )
+    except Exception as exc:  # noqa: BLE001
+        log.warning("lifecycle event emission failed decky=%s trigger=%s: %s",
+                    decky_name, trigger, exc)
+
+
 @_traced("engine.deploy")
 def deploy(config: DecnetConfig, dry_run: bool = False, no_cache: bool = False, parallel: bool = False) -> None:
     log.info("deployment started n_deckies=%d interface=%s subnet=%s dry_run=%s", len(config.deckies), config.interface, config.subnet, dry_run)
@@ -191,6 +225,17 @@ def deploy(config: DecnetConfig, dry_run: bool = False, no_cache: bool = False, 
         return
 
     save_state(config, compose_path)
+
+    # Emit one creation event per decky so the correlation graph has a
+    # well-formed lifecycle start (old_services=[] ⇒ new_services=<initial>).
+    # Bus is None here — the syslog line is what the correlator consumes.
+    for decky in config.deckies:
+        _emit_lifecycle_event(
+            decky_name=decky.name,
+            old_services=[],
+            new_services=list(decky.services),
+            trigger="creation",
+        )
 
     # Pre-up cleanup: a prior half-failed `up` can leave containers still
     # holding the IPs/ports this run wants, which surfaces as the recurring
@@ -242,9 +287,22 @@ def teardown(decky_id: str | None = None) -> None:
         if not svc_names:
             log.warning("teardown: decky %s has no services to stop", decky_id)
             return
+        _emit_lifecycle_event(
+            decky_name=decky.name,
+            old_services=list(decky.services),
+            new_services=[],
+            trigger="retirement",
+        )
         _compose("stop", *svc_names, compose_file=compose_path)
         _compose("rm", "-f", *svc_names, compose_file=compose_path)
     else:
+        for decky in config.deckies:
+            _emit_lifecycle_event(
+                decky_name=decky.name,
+                old_services=list(decky.services),
+                new_services=[],
+                trigger="retirement",
+            )
         _compose("down", compose_file=compose_path)
 
         ip_list = [d.ip for d in config.deckies]

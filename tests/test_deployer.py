@@ -168,6 +168,57 @@ class TestDeploy:
         mock_save.assert_called_once()
         mock_retry.assert_called()
 
+    @patch("decnet.engine.deployer._emit_lifecycle_event")
+    @patch("decnet.engine.deployer._print_status")
+    @patch("decnet.engine.deployer._compose_with_retry")
+    @patch("decnet.engine.deployer.save_state")
+    @patch("decnet.engine.deployer.write_compose", return_value=Path("test.yml"))
+    @patch("decnet.engine.deployer._sync_logging_helper")
+    @patch("decnet.engine.deployer.setup_host_macvlan")
+    @patch("decnet.engine.deployer.create_macvlan_network")
+    @patch("decnet.engine.deployer.get_host_ip", return_value="192.168.1.2")
+    @patch("decnet.engine.deployer.ips_to_range", return_value="192.168.1.10/32")
+    @patch("decnet.engine.deployer.docker.from_env")
+    def test_emits_creation_event_per_decky(
+        self, mock_docker, mock_range, mock_hip, mock_create, mock_setup,
+        mock_sync, mock_compose, mock_save, mock_retry, mock_print, mock_emit,
+    ):
+        from decnet.engine.deployer import deploy
+        deckies = [
+            _decky(name="decky-01", ip="192.168.1.10", services=["ssh"]),
+            _decky(name="decky-02", ip="192.168.1.11", services=["http", "ftp"]),
+        ]
+        deploy(_config(deckies=deckies))
+        assert mock_emit.call_count == 2
+        triggers = [c.kwargs["trigger"] for c in mock_emit.call_args_list]
+        assert triggers == ["creation", "creation"]
+        names = [c.kwargs["decky_name"] for c in mock_emit.call_args_list]
+        assert names == ["decky-01", "decky-02"]
+        # empty-set symmetry: creation has old=[] ⇒ new=<initial>
+        for call in mock_emit.call_args_list:
+            assert call.kwargs["old_services"] == []
+        assert mock_emit.call_args_list[0].kwargs["new_services"] == ["ssh"]
+        assert mock_emit.call_args_list[1].kwargs["new_services"] == ["http", "ftp"]
+
+    @patch("decnet.engine.deployer._emit_lifecycle_event")
+    @patch("decnet.engine.deployer._print_status")
+    @patch("decnet.engine.deployer._compose_with_retry")
+    @patch("decnet.engine.deployer.save_state")
+    @patch("decnet.engine.deployer.write_compose", return_value=Path("test.yml"))
+    @patch("decnet.engine.deployer._sync_logging_helper")
+    @patch("decnet.engine.deployer.setup_host_macvlan")
+    @patch("decnet.engine.deployer.create_macvlan_network")
+    @patch("decnet.engine.deployer.get_host_ip", return_value="192.168.1.2")
+    @patch("decnet.engine.deployer.ips_to_range", return_value="192.168.1.10/32")
+    @patch("decnet.engine.deployer.docker.from_env")
+    def test_dry_run_skips_creation_events(
+        self, mock_docker, mock_range, mock_hip, mock_create, mock_setup,
+        mock_sync, mock_compose, mock_save, mock_retry, mock_print, mock_emit,
+    ):
+        from decnet.engine.deployer import deploy
+        deploy(_config(), dry_run=True)
+        mock_emit.assert_not_called()
+
     @patch("decnet.engine.deployer._print_status")
     @patch("decnet.engine.deployer._compose_with_retry")
     @patch("decnet.engine.deployer.save_state")
@@ -295,6 +346,53 @@ class TestTeardown:
             assert svc_names == ["decky3-sip", "decky3-ssh"], svc_names
             for name in svc_names:
                 assert "[" not in name and "'" not in name
+
+    @patch("decnet.engine.deployer._emit_lifecycle_event")
+    @patch("decnet.engine.deployer.clear_state")
+    @patch("decnet.engine.deployer.remove_macvlan_network")
+    @patch("decnet.engine.deployer.teardown_host_macvlan")
+    @patch("decnet.engine.deployer._compose")
+    @patch("decnet.engine.deployer.ips_to_range", return_value="192.168.1.10/32")
+    @patch("decnet.engine.deployer.docker.from_env")
+    @patch("decnet.engine.deployer.load_state")
+    def test_full_teardown_emits_retirement_per_decky(
+        self, mock_load, mock_docker, mock_range, mock_compose,
+        mock_td_macvlan, mock_rm_net, mock_clear, mock_emit,
+    ):
+        deckies = [
+            _decky(name="decky-01", ip="192.168.1.10", services=["ssh"]),
+            _decky(name="decky-02", ip="192.168.1.11", services=["http"]),
+        ]
+        mock_load.return_value = (_config(deckies=deckies), Path("test.yml"))
+        from decnet.engine.deployer import teardown
+        teardown()
+        assert mock_emit.call_count == 2
+        for call in mock_emit.call_args_list:
+            assert call.kwargs["trigger"] == "retirement"
+            assert call.kwargs["new_services"] == []
+        assert mock_emit.call_args_list[0].kwargs["old_services"] == ["ssh"]
+        assert mock_emit.call_args_list[1].kwargs["old_services"] == ["http"]
+
+    @patch("decnet.engine.deployer._emit_lifecycle_event")
+    @patch("decnet.engine.deployer._compose")
+    @patch("decnet.engine.deployer.docker.from_env")
+    @patch("decnet.engine.deployer.load_state")
+    def test_single_decky_teardown_emits_one_retirement(
+        self, mock_load, mock_docker, mock_compose, mock_emit,
+    ):
+        deckies = [
+            _decky(name="decky-01", ip="192.168.1.10", services=["ssh", "ftp"]),
+            _decky(name="decky-02", ip="192.168.1.11", services=["http"]),
+        ]
+        mock_load.return_value = (_config(deckies=deckies), Path("test.yml"))
+        from decnet.engine.deployer import teardown
+        teardown(decky_id="decky-01")
+        assert mock_emit.call_count == 1
+        call = mock_emit.call_args_list[0]
+        assert call.kwargs["decky_name"] == "decky-01"
+        assert call.kwargs["trigger"] == "retirement"
+        assert call.kwargs["old_services"] == ["ssh", "ftp"]
+        assert call.kwargs["new_services"] == []
 
     @patch("decnet.engine.deployer._compose")
     @patch("decnet.engine.deployer.docker.from_env")
