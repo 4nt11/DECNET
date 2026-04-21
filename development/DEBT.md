@@ -171,6 +171,38 @@ MVP scope (**host-local**):
 
 **Phase B follow-up (deferred):** staged-buffer editor (Apply (N changes) + optimistic visual states using `NodeBase.status='mutating'`). Today's Phase A refetches the whole topology on each applied event — correct but not yet optimistic. The hooks + API method + SSE consumer that Phase B needs are already in place (`useTopologyStream.ts`, `useMazeApi.enqueueMutation`).
 
+### DEBT-031 — Service workers don't use the bus
+**Files:** `decnet/collector/`, `decnet/correlation/`, `decnet/profiler/`, `decnet/sniffer/`, `decnet/prober/`, `decnet/ingester/`, `decnet/agent/`, `decnet/forwarder/`, `decnet/updater/`.
+
+DEBT-029 shipped the bus; DEBT-030 proved the pattern end-to-end through the mutator and the web editor. Every other worker still ignores the bus entirely — they neither publish the state transitions their consumers would want nor subscribe to events that could replace polling / cut latency. The plumbing is ready; the workers aren't wired in.
+
+**Guiding principle: bus is optional.** Workers must not take a hard dependency on the bus. If `get_bus()` fails or `DECNET_BUS_ENABLED=false`, the worker logs one warning at startup and continues in pre-bus mode (poll loops, DB-only state). This mirrors `decnet/mutator/engine.py:run_watch_loop` — try to connect, catch broadly, log, degrade to poll-only. Copy that pattern; don't invent a new one.
+
+**Publish (per worker, what should land on the bus):**
+- `collector` — `system.log` batches / high-severity lines as they ingest (fan-out to dashboards / live views).
+- `correlator` — `attacker.observed` on first sighting, `attacker.session.{started|ended}` on session boundaries.
+- `profiler` — `attacker.scored` when a profile score crosses a threshold.
+- `sniffer` — `decky.{id}.traffic` summaries (bounded rate; drop-oldest is fine per bus semantics).
+- `prober` — `decky.{id}.state` transitions when a realism probe flips health.
+- `ingester` — `system.log` for structured forwarder-originated batches.
+- `agent` / `forwarder` / `updater` — `system.{worker}.health` heartbeats + lifecycle events (start, stop, self-update applied).
+
+**Subscribe (per worker, what they could react to instead of polling):**
+- `correlator` / `profiler` — wake on `system.log` instead of polling the logs table; poll stays as fallback.
+- `prober` — wake on `decky.*.state` to re-probe immediately after a mutation-applied event.
+- Any worker that currently polls the DB on a fixed interval — add a bus-wake `asyncio.Event` exactly like the mutator's.
+
+**Constraints (non-negotiable):**
+1. DB stays the source of truth. A dropped bus event costs latency, never correctness — every subscriber must still have a poll fallback.
+2. Publishes are fire-and-forget, wrapped in `try/except log.warning`. A bus publish failure must never break the worker's primary loop.
+3. No new topics outside the hierarchy documented in `CLAUDE.md` / `wiki-checkout/Service-Bus.md`. Extend `decnet/bus/topics.py` with helpers + constants; don't hand-roll topic strings at the callsite.
+4. Test with `FakeBus` (see `tests/bus/conftest.py::fake_bus`). Every new publish path gets a unit test asserting the event lands on a fake subscriber; every new wake path gets a test asserting the worker re-enters its loop faster than the poll interval.
+5. `DECNET_BUS_ENABLED=false` must leave every worker functional — add a CI matrix row or at minimum an explicit test per worker proving it.
+
+**Suggested rollout order** (ship one worker at a time, one commit each): sniffer → prober → correlator → profiler → collector → ingester → agent/forwarder/updater. Sniffer and prober are the highest-value publishers for the live-topology visualization story; correlator/profiler unlock the attacker-pool push updates that MazeNET's observed-entities view currently polls for.
+
+**Status:** Open. Per-worker integration is mechanical once the pattern is in place; effort scales linearly with worker count.
+
 ---
 
 ## 🟢 Low
@@ -227,6 +259,7 @@ MVP scope (**host-local**):
 | DEBT-028 | 🟡 Medium | Testing | deferred (needs DinD CI) |
 | DEBT-029 | 🟡 Medium | Architecture / Bus | ✅ resolved |
 | DEBT-030 | 🟡 Medium | Web / Live mutations | ✅ resolved (Phase A) |
+| DEBT-031 | 🟡 Medium | Workers / Bus integration | open |
 
-**Remaining open:** DEBT-011 (Alembic), DEBT-023 (image pinning), DEBT-026 (modular mailboxes), DEBT-027 (Dynamic bait store), DEBT-028 (deploy endpoint tests)
+**Remaining open:** DEBT-011 (Alembic), DEBT-023 (image pinning), DEBT-026 (modular mailboxes), DEBT-027 (Dynamic bait store), DEBT-028 (deploy endpoint tests), DEBT-031 (worker bus integration)
 **Estimated remaining effort:** ~12 hours. DEBT-030 Phase B (optimistic staged-buffer editor) is a follow-up, not debt.
