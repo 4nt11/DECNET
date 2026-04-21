@@ -67,9 +67,14 @@ const MazeNET: React.FC = () => {
           flashErr(null, 'topology already has a DMZ');
           return;
         }
-        const w = 320, h = 240;
-        const x = Math.round(world.x - w / 2);
-        const y = Math.round(world.y - h / 2);
+        // Append to the 3-col grid matching adaptTopology so new drops
+        // never land on top of existing LANs. The raw drop point is
+        // ignored — cleaner than trying to resolve collisions after.
+        const w = 300, h = 240;
+        const GAP = 40, COLS = 3;
+        const i = nets.filter((n) => n.kind !== 'internet').length;
+        const x = GAP + (i % COLS) * (w + GAP);
+        const y = GAP + Math.floor(i / COLS) * (h + GAP);
         const name = isDmz ? `dmz-${hex4()}` : `subnet-${hex4()}`;
         try {
           const subnet = await api.getNextSubnet().catch(() => undefined);

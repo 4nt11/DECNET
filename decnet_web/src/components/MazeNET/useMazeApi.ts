@@ -62,35 +62,63 @@ export interface HydratedTopology {
  *  placement. Decky-to-decky traffic edges are derived from
  *  shared-LAN co-membership for visualization only. */
 export function adaptTopology(detail: TopologyDetail): HydratedTopology {
-  const nets: Net[] = detail.lans.map((lan, i) => ({
+  // Auto-layout: DMZ pinned top-left, subnets flow in a grid to the right.
+  // We ignore lan.x/lan.y from the backend because canvas position
+  // persistence is deferred (handled via localStorage in a later pass).
+  // Computing layout from the graph keeps the canvas readable no matter
+  // how sloppy the original drop points were.
+  const NET_W = 300;
+  const NET_H = 240;
+  const GAP_X = 40;
+  const GAP_Y = 40;
+  const COLS = 3;
+  const dmzs = detail.lans.filter((l) => l.is_dmz);
+  const subnets = detail.lans.filter((l) => !l.is_dmz);
+  const ordered = [...dmzs, ...subnets];
+  const nets: Net[] = ordered.map((lan, i) => ({
     id: lan.id,
     label: lan.name.toUpperCase(),
     cidr: lan.subnet,
     kind: lan.is_dmz ? 'dmz' : 'subnet',
-    x: lan.x ?? 40 + (i % 3) * 320,
-    y: lan.y ?? 40 + Math.floor(i / 3) * 280,
-    w: 300,
-    h: 240,
+    x: GAP_X + (i % COLS) * (NET_W + GAP_X),
+    y: GAP_Y + Math.floor(i / COLS) * (NET_H + GAP_Y),
+    w: NET_W,
+    h: NET_H,
   }));
 
+  // Home LAN = first edge; a multi-homed gateway is drawn inside its
+  // home LAN, membership in others is expressed via the edge list.
   const firstLanFor = new Map<string, string>();
   for (const e of detail.edges) {
     if (!firstLanFor.has(e.decky_uuid)) firstLanFor.set(e.decky_uuid, e.lan_id);
   }
 
-  const nodes: MazeNode[] = detail.deckies.map((d, i): DeckyNode => ({
-    kind: 'decky',
-    id: d.uuid,
-    netId: firstLanFor.get(d.uuid) ?? (nets[0]?.id ?? ''),
-    name: d.name,
-    archetype: (d.decky_config as { archetype?: string } | null)?.archetype ?? 'linux-server',
-    services: d.services,
-    status: d.state === 'running' ? 'active' : d.state === 'failed' ? 'hot' : 'idle',
-    x: d.x ?? 20 + (i % 2) * 160,
-    y: d.y ?? 60 + Math.floor(i / 2) * 90,
-    ip: d.ip ?? undefined,
-    decky_config: d.decky_config ?? undefined,
-  }));
+  // Layout deckies in a 2-column grid inside their home LAN so two
+  // members never overlap regardless of backend x/y. Same reasoning as
+  // the LAN grid above.
+  const NODE_COL_W = 140;
+  const NODE_ROW_H = 82;
+  const NODE_X0 = 12;
+  const NODE_Y0 = 40;
+  const perNetIndex = new Map<string, number>();
+  const nodes: MazeNode[] = detail.deckies.map((d): DeckyNode => {
+    const homeNetId = firstLanFor.get(d.uuid) ?? (nets[0]?.id ?? '');
+    const idx = perNetIndex.get(homeNetId) ?? 0;
+    perNetIndex.set(homeNetId, idx + 1);
+    return {
+      kind: 'decky',
+      id: d.uuid,
+      netId: homeNetId,
+      name: d.name,
+      archetype: (d.decky_config as { archetype?: string } | null)?.archetype ?? 'linux-server',
+      services: d.services,
+      status: d.state === 'running' ? 'active' : d.state === 'failed' ? 'hot' : 'idle',
+      x: NODE_X0 + (idx % 2) * NODE_COL_W,
+      y: NODE_Y0 + Math.floor(idx / 2) * NODE_ROW_H,
+      ip: d.ip ?? undefined,
+      decky_config: d.decky_config ?? undefined,
+    };
+  });
 
   const byLan = new Map<string, string[]>();
   for (const e of detail.edges) {
