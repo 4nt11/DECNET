@@ -3,6 +3,7 @@ import api from '../../utils/api';
 import { ARCHETYPES as DEFAULT_ARCHETYPES, DEFAULT_SERVICES } from './data';
 import type { Archetype, ServiceDef } from './data';
 import type { Net, MazeNode, Edge, DeckyNode } from './types';
+import { applyLayout, loadLayout } from './useMazeLayoutStore';
 
 export interface LANRow {
   id: string;
@@ -214,7 +215,10 @@ export function useMazeApi(): MazeApi {
 
   const getTopology = useCallback(async (id: string) => {
     const { data } = await api.get<TopologyDetail>(`/topologies/${id}`);
-    return adaptTopology(data);
+    const hydrated = adaptTopology(data);
+    const layout = loadLayout(id);
+    const { nets, nodes } = applyLayout(hydrated.nets, hydrated.nodes, layout);
+    return { ...hydrated, nets, nodes };
   }, []);
 
   const getServices = useCallback(async () => {

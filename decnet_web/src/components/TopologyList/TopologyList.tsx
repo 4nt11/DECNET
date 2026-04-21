@@ -2,6 +2,7 @@ import React, { useCallback, useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Network, Plus, Power, Trash2, UploadCloud, RefreshCw } from 'lucide-react';
 import api from '../../utils/api';
+import { clearLayout } from '../MazeNET/useMazeLayoutStore';
 import './TopologyList.css';
 
 interface TopologySummary {
@@ -90,6 +91,7 @@ const TopologyList: React.FC = () => {
     setBusy(id);
     try {
       await api.delete(`/topologies/${id}`);
+      clearLayout(id);
       await fetchRows();
     } catch (e) {
       setErr((e as Error)?.message ?? 'delete failed');

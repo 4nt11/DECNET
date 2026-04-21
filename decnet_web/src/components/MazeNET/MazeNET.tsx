@@ -16,6 +16,7 @@ import type { Archetype, ServiceDef } from './data';
 import type { Net, MazeNode, Edge, DeckyNode } from './types';
 import { useMazeApi } from './useMazeApi';
 import { useMazeInteraction, type PaletteDrag } from './useMazeInteraction';
+import { useLayoutPersistor } from './useMazeLayoutStore';
 import { ARCHETYPES as DEFAULT_ARCHETYPES } from './data';
 
 /* Short unique suffix for default names — avoids the DB uniqueness
@@ -43,6 +44,8 @@ const MazeNET: React.FC = () => {
   const [inspectorOpen, setInspectorOpen] = useState(true);
   const [services, setServices] = useState<ServiceDef[]>(DEFAULT_SERVICES);
   const [archetypes, setArchetypes] = useState<Archetype[]>(DEFAULT_ARCHETYPES);
+
+  useLayoutPersistor(topologyId || null, nets, nodes);
   const [loadErr, setLoadErr] = useState<string | null>(null);
   const [actionErr, setActionErr] = useState<string | null>(null);
   const [deploying, setDeploying] = useState(false);
