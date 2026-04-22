@@ -25,6 +25,7 @@ from . import (
     db,
     deploy,
     forwarder,
+    init,
     inventory,
     lifecycle,
     listener,
@@ -52,7 +53,7 @@ for _mod in (
     swarm,
     deploy, lifecycle, workers, inventory,
     web, profiler, sniffer, db,
-    topology, bus,
+    topology, bus, init,
 ):
     _mod.register(app)
 
