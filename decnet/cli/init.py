@@ -207,6 +207,84 @@ def _install_polkit(
     )
 
 
+def _run_allow_fail(argv: List[str], *, dry_run: bool) -> str:
+    """Like ``_run`` but tolerates non-zero exits (stop/disable on an
+    already-absent unit is fine during deinit)."""
+    if dry_run:
+        console.print(f"  [dim]would run (allow fail):[/] {' '.join(argv)}")
+        return "ok"
+    log.info("init: exec (allow fail) %s", argv)
+    result = subprocess.run(argv, check=False)  # nosec B603
+    if result.returncode != 0:
+        return f"skip: rc={result.returncode} (already absent)"
+    return "ok"
+
+
+def _remove_file(path: Path, *, dry_run: bool) -> str:
+    if not path.exists() and not path.is_symlink():
+        return f"skip: {path} already absent"
+    if dry_run:
+        console.print(f"  [dim]would remove:[/] {path}")
+        return "ok"
+    path.unlink()
+    return "ok"
+
+
+def _uninstall_units(systemd_dir: Path, *, dry_run: bool) -> str:
+    removed = 0
+    present = sorted(systemd_dir.glob("decnet-*.service"))
+    target = systemd_dir / "decnet.target"
+    if target.exists():
+        present.append(target)
+    for path in present:
+        if dry_run:
+            console.print(f"  [dim]would remove:[/] {path}")
+            removed += 1
+            continue
+        path.unlink()
+        removed += 1
+    if removed == 0:
+        return "skip: no decnet unit files present"
+    return f"ok ({removed} removed)"
+
+
+def _remove_user(user: str, *, dry_run: bool) -> str:
+    try:
+        pwd.getpwnam(user)
+    except KeyError:
+        return f"skip: user {user} already absent"
+    # userdel returns non-zero if the user still owns running
+    # processes; that's the operator's problem to sort out, not ours.
+    return _run_allow_fail(["userdel", user], dry_run=dry_run)
+
+
+def _remove_group(group: str, *, dry_run: bool) -> str:
+    try:
+        grp.getgrnam(group)
+    except KeyError:
+        return f"skip: group {group} already absent"
+    return _run_allow_fail(["groupdel", group], dry_run=dry_run)
+
+
+def _remove_dir_if_present(
+    path: Path, *, dry_run: bool, recursive: bool = False
+) -> str:
+    if not path.exists():
+        return f"skip: {path} already absent"
+    if dry_run:
+        verb = "would rm -rf" if recursive else "would rmdir"
+        console.print(f"  [dim]{verb}:[/] {path}")
+        return "ok"
+    if recursive:
+        shutil.rmtree(path, ignore_errors=True)
+    else:
+        try:
+            path.rmdir()
+        except OSError as exc:
+            return f"skip: {path} not empty ({exc.strerror})"
+    return "ok"
+
+
 def _install_tmpfiles(
     deploy: Path, tmpfiles_dir: Path, *, force: bool, dry_run: bool
 ) -> str:
@@ -237,6 +315,18 @@ def register(app: typer.Typer) -> None:
             False, "--force",
             help="Overwrite unit / polkit / tmpfiles entries even if identical.",
         ),
+        deinit: bool = typer.Option(
+            False, "--deinit",
+            help="Undo a previous init: stop + disable decnet.target, remove "
+                 "unit files, polkit rule, tmpfiles.d entry, /etc/decnet, and "
+                 "the decnet user/group. Preserves /var/lib/decnet and "
+                 "/var/log/decnet — pass --purge to remove those too.",
+        ),
+        purge: bool = typer.Option(
+            False, "--purge",
+            help="With --deinit, also wipe /var/lib/decnet and "
+                 "/var/log/decnet. Destructive — operator data is gone.",
+        ),
         user: str = typer.Option(
             "decnet", "--user",
             help="System user to own DECNET processes.",
@@ -258,15 +348,118 @@ def register(app: typer.Typer) -> None:
         """
         _require_master_mode("init")
 
-        # Root check — skip when --prefix is set (tests don't run as root).
-        if not prefix and os.geteuid() != 0:
-            console.print("[red]decnet init: must run as root (use sudo)[/]")
+        if purge and not deinit:
+            console.print("[red]--purge only applies with --deinit[/]")
             raise typer.Exit(1)
 
-        for tool in ("systemctl", "useradd", "groupadd", "systemd-tmpfiles"):
+        # Root check — skip when --prefix is set (tests don't run as root).
+        if not prefix and os.geteuid() != 0:
+            verb = "deinit" if deinit else "init"
+            console.print(f"[red]decnet {verb}: must run as root (use sudo)[/]")
+            raise typer.Exit(1)
+
+        required_tools = ("systemctl",) if deinit else (
+            "systemctl", "useradd", "groupadd", "systemd-tmpfiles",
+        )
+        if deinit:
+            required_tools = required_tools + ("userdel", "groupdel")
+        for tool in required_tools:
             if shutil.which(tool) is None and not dry_run:
-                console.print(f"[red]decnet init: {tool!r} is required on PATH[/]")
+                verb = "deinit" if deinit else "init"
+                console.print(f"[red]decnet {verb}: {tool!r} is required on PATH[/]")
                 raise typer.Exit(1)
+
+        pfx = Path(prefix) if prefix else Path("/")
+        systemd_dir = pfx / "etc/systemd/system"
+        polkit_dir = pfx / "etc/polkit-1/rules.d"
+        tmpfiles_dir = pfx / "etc/tmpfiles.d"
+        etc_decnet = pfx / "etc/decnet"
+
+        if deinit:
+            console.print(
+                f"[bold cyan]DECNET deinit[/] "
+                f"(dry_run={dry_run}, purge={purge})"
+            )
+            _step(
+                "systemctl stop + disable decnet.target",
+                lambda: _run_allow_fail(
+                    ["systemctl", "disable", "--now", "decnet.target"],
+                    dry_run=dry_run,
+                ),
+            )
+            _step(
+                "remove systemd unit files",
+                lambda: _uninstall_units(systemd_dir, dry_run=dry_run),
+            )
+            _step(
+                "remove polkit rule",
+                lambda: _remove_file(
+                    polkit_dir / "50-decnet-workers.rules",
+                    dry_run=dry_run,
+                ),
+            )
+            _step(
+                "remove tmpfiles.d entry",
+                lambda: _remove_file(
+                    tmpfiles_dir / "decnet.conf",
+                    dry_run=dry_run,
+                ),
+            )
+            _step(
+                "systemctl daemon-reload",
+                lambda: (_run(["systemctl", "daemon-reload"], dry_run=dry_run), "ok")[1],
+            )
+            _step(
+                f"remove {etc_decnet / 'config.ini'}",
+                lambda: _remove_file(etc_decnet / "config.ini", dry_run=dry_run),
+            )
+            _step(
+                f"remove {etc_decnet}",
+                lambda: _remove_dir_if_present(etc_decnet, dry_run=dry_run),
+            )
+            _step(
+                f"remove {pfx / 'run/decnet'}",
+                lambda: _remove_dir_if_present(
+                    pfx / "run/decnet", dry_run=dry_run,
+                ),
+            )
+            _step(
+                f"remove {pfx / 'opt/decnet'}",
+                lambda: _remove_dir_if_present(
+                    pfx / "opt/decnet", dry_run=dry_run,
+                ),
+            )
+            if purge:
+                _step(
+                    f"purge {pfx / 'var/lib/decnet'}",
+                    lambda: _remove_dir_if_present(
+                        pfx / "var/lib/decnet",
+                        dry_run=dry_run, recursive=True,
+                    ),
+                )
+                _step(
+                    f"purge {pfx / 'var/log/decnet'}",
+                    lambda: _remove_dir_if_present(
+                        pfx / "var/log/decnet",
+                        dry_run=dry_run, recursive=True,
+                    ),
+                )
+            else:
+                console.print(
+                    f"[dim]preserved {pfx / 'var/lib/decnet'} and "
+                    f"{pfx / 'var/log/decnet'} (operator data); "
+                    "re-run with --purge to remove.[/]"
+                )
+            _step(
+                f"remove user {user!r}",
+                lambda: _remove_user(user, dry_run=dry_run),
+            )
+            _step(
+                f"remove group {group!r}",
+                lambda: _remove_group(group, dry_run=dry_run),
+            )
+            console.print("[bold green]DECNET deinit complete.[/]")
+            return
 
         try:
             deploy = _deploy_root()
@@ -274,11 +467,6 @@ def register(app: typer.Typer) -> None:
             console.print(f"[red]decnet init: {exc}[/]")
             raise typer.Exit(1) from exc
 
-        pfx = Path(prefix) if prefix else Path("/")
-        systemd_dir = pfx / "etc/systemd/system"
-        polkit_dir = pfx / "etc/polkit-1/rules.d"
-        tmpfiles_dir = pfx / "etc/tmpfiles.d"
-        etc_decnet = pfx / "etc/decnet"
         dirs = [
             (pfx / "opt/decnet", 0o755, user, group),
             (pfx / "var/lib/decnet", 0o750, user, group),

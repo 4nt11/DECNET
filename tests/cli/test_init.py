@@ -204,6 +204,113 @@ def test_default_invokes_target_start(
     assert ["systemctl", "daemon-reload"] in subprocess_calls
 
 
+def _seed_installed_state(prefix: Path) -> None:
+    """Create the files a prior `decnet init` would have installed."""
+    systemd = prefix / "etc/systemd/system"
+    systemd.mkdir(parents=True)
+    (systemd / "decnet-bus.service").write_text("# bus\n")
+    (systemd / "decnet-api.service").write_text("# api\n")
+    (systemd / "decnet.target").write_text("# target\n")
+    polkit = prefix / "etc/polkit-1/rules.d"
+    polkit.mkdir(parents=True)
+    (polkit / "50-decnet-workers.rules").write_text("// rule\n")
+    tmpfiles = prefix / "etc/tmpfiles.d"
+    tmpfiles.mkdir(parents=True)
+    (tmpfiles / "decnet.conf").write_text("d /run/decnet\n")
+    etc_decnet = prefix / "etc/decnet"
+    etc_decnet.mkdir(parents=True)
+    (etc_decnet / "config.ini").write_text("[decnet]\n")
+    (prefix / "opt/decnet").mkdir(parents=True)
+    (prefix / "run/decnet").mkdir(parents=True)
+    (prefix / "var/lib/decnet").mkdir(parents=True)
+    (prefix / "var/log/decnet").mkdir(parents=True)
+    (prefix / "var/log/decnet/events.jsonl").write_text("{}\n")
+
+
+def test_deinit_removes_units_polkit_tmpfiles_and_preserves_data(
+    tmp_path: Path, subprocess_calls: List[List[str]],
+    no_missing_tools: None, present_user_and_group: None,
+) -> None:
+    prefix = tmp_path / "root"
+    _seed_installed_state(prefix)
+    result = runner.invoke(
+        app, ["init", "--deinit", "--prefix", str(prefix)],
+    )
+    assert result.exit_code == 0, result.output
+
+    # Units + polkit + tmpfiles.d gone.
+    assert not (prefix / "etc/systemd/system/decnet-bus.service").exists()
+    assert not (prefix / "etc/systemd/system/decnet.target").exists()
+    assert not (prefix / "etc/polkit-1/rules.d/50-decnet-workers.rules").exists()
+    assert not (prefix / "etc/tmpfiles.d/decnet.conf").exists()
+    assert not (prefix / "etc/decnet").exists()
+    assert not (prefix / "opt/decnet").exists()
+
+    # Data dirs preserved.
+    assert (prefix / "var/lib/decnet").exists()
+    assert (prefix / "var/log/decnet/events.jsonl").read_text() == "{}\n"
+
+    # systemctl disable + daemon-reload + userdel + groupdel were invoked.
+    assert ["systemctl", "disable", "--now", "decnet.target"] in subprocess_calls
+    assert ["systemctl", "daemon-reload"] in subprocess_calls
+    assert ["userdel", "decnet"] in subprocess_calls
+    assert ["groupdel", "decnet"] in subprocess_calls
+
+
+def test_deinit_purge_wipes_data_dirs(
+    tmp_path: Path, subprocess_calls: List[List[str]],
+    no_missing_tools: None, present_user_and_group: None,
+) -> None:
+    prefix = tmp_path / "root"
+    _seed_installed_state(prefix)
+    result = runner.invoke(
+        app, ["init", "--deinit", "--purge", "--prefix", str(prefix)],
+    )
+    assert result.exit_code == 0, result.output
+    assert not (prefix / "var/lib/decnet").exists()
+    assert not (prefix / "var/log/decnet").exists()
+
+
+def test_deinit_is_idempotent_on_clean_host(
+    tmp_path: Path, subprocess_calls: List[List[str]],
+    no_missing_tools: None, missing_user_and_group: None,
+) -> None:
+    prefix = tmp_path / "root"
+    # Nothing seeded — everything should SKIP.
+    result = runner.invoke(
+        app, ["init", "--deinit", "--prefix", str(prefix)],
+    )
+    assert result.exit_code == 0, result.output
+    assert result.output.count("[SKIP]") >= 5
+    # userdel / groupdel never invoked because user/group are absent.
+    assert ["userdel", "decnet"] not in subprocess_calls
+    assert ["groupdel", "decnet"] not in subprocess_calls
+
+
+def test_deinit_dry_run_touches_nothing(
+    tmp_path: Path, subprocess_calls: List[List[str]],
+    no_missing_tools: None, present_user_and_group: None,
+) -> None:
+    prefix = tmp_path / "root"
+    _seed_installed_state(prefix)
+    result = runner.invoke(
+        app,
+        ["init", "--deinit", "--purge", "--dry-run", "--prefix", str(prefix)],
+    )
+    assert result.exit_code == 0, result.output
+    assert subprocess_calls == []
+    assert (prefix / "etc/systemd/system/decnet.target").exists()
+    assert (prefix / "var/lib/decnet").exists()
+
+
+def test_purge_without_deinit_errors(tmp_path: Path) -> None:
+    result = runner.invoke(
+        app, ["init", "--purge", "--prefix", str(tmp_path / "root")],
+    )
+    assert result.exit_code == 1
+    assert "--purge only applies with --deinit" in result.output
+
+
 def test_missing_deploy_dir_errors_clearly(monkeypatch: Any, tmp_path: Path) -> None:
     def _boom() -> Path:
         raise RuntimeError("cannot locate deploy/ directory (looked at /nope)")
