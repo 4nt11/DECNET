@@ -2,7 +2,7 @@ import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { useSearchParams, useNavigate } from 'react-router-dom';
 import {
   PanelRightOpen, PanelRightClose, PanelLeftOpen, PanelLeftClose,
-  RotateCcw, UploadCloud, ArrowLeft,
+  Maximize2, Minimize2, RotateCcw, UploadCloud, ArrowLeft,
   Plus, Trash2, Zap, Copy, Eye, ShieldAlert, GitMerge, Server,
 } from 'lucide-react';
 import './MazeNET.css';
@@ -48,6 +48,22 @@ const MazeNET: React.FC = () => {
   const [selection, setSelection] = useState<Selection>(null);
   const [inspectorOpen, setInspectorOpen] = useState(true);
   const [paletteOpen, setPaletteOpen] = useState(true);
+  const [fullscreen, setFullscreen] = useState(false);
+
+  useEffect(() => {
+    const cls = 'maze-fullscreen';
+    if (fullscreen) document.body.classList.add(cls);
+    else document.body.classList.remove(cls);
+    return () => document.body.classList.remove(cls);
+  }, [fullscreen]);
+
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === 'Escape' && fullscreen) setFullscreen(false);
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [fullscreen]);
   const [services, setServices] = useState<ServiceDef[]>(DEFAULT_SERVICES);
   const [archetypes, setArchetypes] = useState<Archetype[]>(DEFAULT_ARCHETYPES);
 
@@ -561,6 +577,15 @@ const MazeNET: React.FC = () => {
           </button>
           <button type="button" className="maze-btn ghost" onClick={() => setInspectorOpen((o) => !o)}>
             {inspectorOpen ? <PanelRightClose size={12} /> : <PanelRightOpen size={12} />} INSPECTOR
+          </button>
+          <button
+            type="button"
+            className="maze-btn ghost"
+            onClick={() => setFullscreen((f) => !f)}
+            title={fullscreen ? 'Exit fullscreen (Esc)' : 'Fullscreen canvas'}
+          >
+            {fullscreen ? <Minimize2 size={12} /> : <Maximize2 size={12} />}
+            {fullscreen ? ' EXIT FULL' : ' FULLSCREEN'}
           </button>
           <button type="button" className="maze-btn ghost" onClick={refetch} title="Revert local state to server">
             <RotateCcw size={12} /> REFRESH

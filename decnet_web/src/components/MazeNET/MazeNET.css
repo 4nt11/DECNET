@@ -1,5 +1,18 @@
 /* ── MazeNET canvas ─────────────────────────── */
 
+body.maze-fullscreen .sidebar,
+body.maze-fullscreen .topbar {
+  display: none !important;
+}
+body.maze-fullscreen .content-viewport {
+  padding: 16px 32px;
+}
+body.maze-fullscreen .maze-shell {
+  /* Full viewport minus content-viewport padding (16 top + 32 bottom) and header+gap. */
+  /* With flex:1 this stays correct because maze-page fills 100% of the new viewport. */
+}
+
+
 .maze-page {
   display: flex;
   flex-direction: column;
