@@ -1,6 +1,8 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { X, AlertTriangle } from 'lucide-react';
 import api from '../utils/api';
+import { useEscapeKey } from '../hooks/useEscapeKey';
+import { useFocusTrap } from '../hooks/useFocusTrap';
 // @ts-expect-error -- ships without type defs; 3.x CJS build is used directly
 import * as AsciinemaPlayer from 'asciinema-player';
 import 'asciinema-player/dist/bundle/asciinema-player.css';
@@ -46,6 +48,15 @@ function buildCastBlob(header: Record<string, any>, events: [number, string, str
 }
 
 const SessionDrawer: React.FC<SessionDrawerProps> = ({ decky, sid, fields, onClose }) => {
+  const panelRef = useRef<HTMLDivElement | null>(null);
+  useEscapeKey(onClose, true);
+  useFocusTrap(panelRef, true);
+  useEffect(() => {
+    const prev = document.body.style.overflow;
+    document.body.style.overflow = 'hidden';
+    return () => { document.body.style.overflow = prev; };
+  }, []);
+
   const [header, setHeader] = useState<Record<string, any> | null>(null);
   const [events, setEvents] = useState<[number, string, string][]>([]);
   const [loading, setLoading] = useState(true);
@@ -145,6 +156,9 @@ const SessionDrawer: React.FC<SessionDrawerProps> = ({ decky, sid, fields, onClo
       }}
     >
       <div
+        ref={panelRef}
+        role="dialog"
+        aria-modal="true"
         onClick={(e) => e.stopPropagation()}
         style={{
           width: 'min(920px, 100%)', height: '100%',

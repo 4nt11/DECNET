@@ -1,6 +1,8 @@
-import React, { useCallback, useEffect, useMemo, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { X, Server, Cpu, FileText, Sparkles, Check } from 'lucide-react';
 import api from '../../utils/api';
+import { useEscapeKey } from '../../hooks/useEscapeKey';
+import { useFocusTrap } from '../../hooks/useFocusTrap';
 import './CreateTopologyWizard.css';
 
 /* Shape of GET /swarm/hosts rows (mirrors SwarmHostView). */
@@ -36,6 +38,17 @@ interface Props {
 const LOCAL_CARD_ID = '__local__';
 
 const CreateTopologyWizard: React.FC<Props> = ({ open, onClose, onCreated }) => {
+  const panelRef = useRef<HTMLDivElement | null>(null);
+  useEscapeKey(onClose, open);
+  useFocusTrap(panelRef, open);
+
+  useEffect(() => {
+    if (!open) return;
+    const prev = document.body.style.overflow;
+    document.body.style.overflow = 'hidden';
+    return () => { document.body.style.overflow = prev; };
+  }, [open]);
+
   const [step, setStep] = useState<0 | 1>(0);
   const [targetId, setTargetId] = useState<string | null>(null); // LOCAL_CARD_ID or host uuid
   const [kind, setKind] = useState<Kind | null>(null);
@@ -228,7 +241,7 @@ const CreateTopologyWizard: React.FC<Props> = ({ open, onClose, onCreated }) => 
 
   return (
     <div className="ctw-backdrop" onClick={onClose}>
-      <div className="ctw-modal" onClick={(e) => e.stopPropagation()}>
+      <div className="ctw-modal" ref={panelRef} role="dialog" aria-modal="true" onClick={(e) => e.stopPropagation()}>
         <div className="ctw-head">
           <h3>
             <Sparkles size={14} style={{ marginRight: 8 }} /> NEW TOPOLOGY
