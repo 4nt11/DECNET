@@ -1,23 +1,22 @@
 [Unit]
-Description=DECNET API Service
-Documentation=https://git.resacachile.cl/anti/DECNET/wiki/REST-API-Reference
-After=network-online.target docker.service
-Wants=network-online.target
+Description=DECNET Mutator (runtime fleet mutation watch loop)
+Documentation=https://git.resacachile.cl/anti/DECNET/wiki/Workers#mutator
+After=network-online.target docker.service decnet-bus.service
+Wants=network-online.target decnet-bus.service
 Requires=docker.service
 
 [Service]
 Type=simple
 User=decnet
 Group=decnet
-# docker.sock is group-readable by 'docker'; the API ingester tails container logs.
+# Mutator recomposes decky services via docker compose.
 SupplementaryGroups=docker
 WorkingDirectory=/opt/decnet
 EnvironmentFile=-/opt/decnet/.env.local
-ExecStart=/opt/decnet/venv/bin/decnet api
+ExecStart=/opt/decnet/venv/bin/decnet mutate --watch
 
-# MACVLAN/IPVLAN setup runs from the API lifespan when the embedded sniffer is on.
-CapabilityBoundingSet=CAP_NET_ADMIN CAP_NET_RAW
-AmbientCapabilities=CAP_NET_ADMIN CAP_NET_RAW
+CapabilityBoundingSet=
+AmbientCapabilities=
 
 # Security Hardening
 NoNewPrivileges=yes

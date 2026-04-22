@@ -1,6 +1,6 @@
 [Unit]
 Description=DECNET Swarm Controller (master)
-Documentation=https://github.com/4nt11/DECNET/wiki/SWARM-Mode
+Documentation=https://git.resacachile.cl/anti/DECNET/wiki/SWARM-Mode
 After=network-online.target decnet-api.service
 Wants=network-online.target
 

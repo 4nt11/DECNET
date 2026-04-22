@@ -1,0 +1,36 @@
+[Unit]
+Description=DECNET Sniffer (fleet-wide MACVLAN TLS fingerprinting)
+Documentation=https://git.resacachile.cl/anti/DECNET/wiki/Workers#sniffer
+After=network-online.target decnet-bus.service
+Wants=network-online.target decnet-bus.service
+
+[Service]
+Type=simple
+User=decnet
+Group=decnet
+WorkingDirectory=/opt/decnet
+EnvironmentFile=-/opt/decnet/.env.local
+ExecStart=/opt/decnet/venv/bin/decnet sniffer
+
+# scapy needs raw packet access on the MACVLAN host interface.
+CapabilityBoundingSet=CAP_NET_RAW
+AmbientCapabilities=CAP_NET_RAW
+
+# Security Hardening
+NoNewPrivileges=yes
+ProtectSystem=full
+ProtectHome=read-only
+PrivateTmp=yes
+ProtectKernelTunables=yes
+ProtectKernelModules=yes
+ProtectControlGroups=yes
+RestrictSUIDSGID=yes
+LockPersonality=yes
+ReadWritePaths=/opt/decnet /var/log/decnet
+
+Restart=on-failure
+RestartSec=5
+TimeoutStopSec=15
+
+[Install]
+WantedBy=multi-user.target

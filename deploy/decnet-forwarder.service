@@ -1,6 +1,6 @@
 [Unit]
 Description=DECNET Syslog-over-TLS Forwarder (worker, RFC 5425)
-Documentation=https://github.com/4nt11/DECNET/wiki/Logging-and-Syslog
+Documentation=https://git.resacachile.cl/anti/DECNET/wiki/Logging-and-Syslog
 After=network-online.target
 Wants=network-online.target
 # The forwarder can run independently of the agent — it only needs the local

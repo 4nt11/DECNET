@@ -1,6 +1,6 @@
 [Unit]
 Description=DECNET Self-Updater (mTLS)
-Documentation=https://github.com/4nt11/DECNET/wiki/Remote-Updates
+Documentation=https://git.resacachile.cl/anti/DECNET/wiki/Remote-Updates
 After=network-online.target
 Wants=network-online.target
 # Deliberately NOT After=decnet-agent.service — the updater must come up even

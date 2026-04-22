@@ -1,6 +1,6 @@
 [Unit]
 Description=DECNET Service Bus (host-local UNIX-socket pub/sub)
-Documentation=https://github.com/4nt11/DECNET/wiki/Service-Bus
+Documentation=https://git.resacachile.cl/anti/DECNET/wiki/Service-Bus
 After=network-online.target
 Wants=network-online.target
 

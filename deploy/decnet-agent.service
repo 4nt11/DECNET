@@ -1,6 +1,6 @@
 [Unit]
 Description=DECNET Worker Agent (mTLS)
-Documentation=https://github.com/4nt11/DECNET/wiki/SWARM-Mode
+Documentation=https://git.resacachile.cl/anti/DECNET/wiki/SWARM-Mode
 After=network-online.target docker.service
 Wants=network-online.target
 Requires=docker.service

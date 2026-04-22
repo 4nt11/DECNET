@@ -1,0 +1,19 @@
+[Unit]
+Description=DECNET honeypot framework (all master-host workers)
+Documentation=https://git.resacachile.cl/anti/DECNET/wiki/Workers
+# Bring workers up in dependency order: bus first (everything else publishes
+# heartbeats to it), then the API + data-plane workers.  systemd resolves the
+# actual ordering via each unit's own After=/Wants= on decnet-bus.service —
+# this target is a convenience grouping, not an ordering primitive.
+Wants=decnet-bus.service \
+      decnet-api.service \
+      decnet-web.service \
+      decnet-collector.service \
+      decnet-profiler.service \
+      decnet-sniffer.service \
+      decnet-prober.service \
+      decnet-mutator.service
+After=decnet-bus.service
+
+[Install]
+WantedBy=multi-user.target
