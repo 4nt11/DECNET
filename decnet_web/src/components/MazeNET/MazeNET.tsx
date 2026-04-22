@@ -529,6 +529,8 @@ const MazeNET: React.FC = () => {
   }, []);
 
   const canDeploy = topoStatus === 'pending' && nets.length > 0;
+  const deckyNodes = nodes.filter((n) => n.kind === 'decky');
+  const runningDeckies = deckyNodes.filter((n) => n.status === 'active').length;
 
   return (
     <div className="maze-page">
@@ -537,7 +539,8 @@ const MazeNET: React.FC = () => {
           <h1>MAZENET · {topoName || topologyId}</h1>
           <div className="maze-page-sub">
             NETWORK OF NETWORKS · {topoStatus.toUpperCase()} · v{topoVersion} ·{' '}
-            {nets.length} NETS · {nodes.length} NODES · {edges.length} PATHS
+            {nets.length} NETS · {nodes.length} NODES · {edges.length} PATHS ·{' '}
+            {runningDeckies}/{deckyNodes.length} DECKIES RUNNING
             {streamEnabled && (
               <span className="alert-text" style={{ color: streamLive ? undefined : 'var(--fg-dim)' }}>
                 {' '}· {streamLive ? 'LIVE' : 'CONNECTING…'}

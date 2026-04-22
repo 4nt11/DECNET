@@ -349,15 +349,27 @@ class SQLModelRepository(BaseRepository):
                     select(func.count(func.distinct(Log.attacker_ip)))
                 )
             ).scalar() or 0
+            topo_total = (
+                await session.execute(select(func.count()).select_from(TopologyDecky))
+            ).scalar() or 0
+            topo_running = (
+                await session.execute(
+                    select(func.count())
+                    .select_from(TopologyDecky)
+                    .where(TopologyDecky.state == "running")
+                )
+            ).scalar() or 0
 
         _state = await asyncio.to_thread(load_state)
-        deployed_deckies = len(_state[0].deckies) if _state else 0
+        fleet_deckies = len(_state[0].deckies) if _state else 0
 
         return {
             "total_logs": total_logs,
             "unique_attackers": unique_attackers,
-            "active_deckies": deployed_deckies,
-            "deployed_deckies": deployed_deckies,
+            # Fleet state file doesn't track per-decky runtime; treat all
+            # fleet rows as active and add MazeNET running rows on top.
+            "active_deckies": fleet_deckies + topo_running,
+            "deployed_deckies": fleet_deckies + topo_total,
         }
 
     async def get_deckies(self) -> List[dict]:
