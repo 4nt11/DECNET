@@ -378,6 +378,12 @@
 
 .logs-table tr.empty-row td {
   border-bottom: none;
+  height: 360px;
+}
+
+.logs-table tr.empty-row .empty-state {
+  height: 100%;
+  min-height: 0;
 }
 
 .raw-line {
