@@ -22,7 +22,11 @@ from typing import Any, Callable
 from decnet.bus import topics as _topics
 from decnet.bus.base import BaseBus
 from decnet.bus.factory import get_bus
-from decnet.bus.publish import make_thread_safe_publisher
+from decnet.bus.publish import (
+    make_thread_safe_publisher,
+    run_control_listener_signal,
+    run_health_heartbeat,
+)
 from decnet.logging import get_logger
 from decnet.network import HOST_IPVLAN_IFACE, HOST_MACVLAN_IFACE
 from decnet.sniffer.fingerprint import SnifferEngine
@@ -198,6 +202,15 @@ async def sniffer_worker(log_file: str) -> None:
         if bus is not None:
             publish_fn = _make_decky_traffic_publisher(bus, loop)
 
+        # Workers panel: heartbeat + SIGTERM-based stop control.  The
+        # sniff loop is a blocking scapy thread, so an asyncio shutdown
+        # event can't reach it — translating the bus stop into SIGTERM
+        # routes through the existing CancelledError path below.
+        heartbeat_task = asyncio.create_task(run_health_heartbeat(bus, "sniffer"))
+        control_task = asyncio.create_task(
+            run_control_listener_signal(bus, "sniffer"),
+        )
+
         # Dedicated thread pool so the long-running sniff loop doesn't
         # occupy a slot in the default asyncio executor.
         sniffer_pool = ThreadPoolExecutor(
@@ -216,6 +229,10 @@ async def sniffer_worker(log_file: str) -> None:
             raise
         finally:
             sniffer_pool.shutdown(wait=False)
+            for t in (heartbeat_task, control_task):
+                t.cancel()
+                with contextlib.suppress(Exception, asyncio.CancelledError):
+                    await t
             if bus is not None:
                 with contextlib.suppress(Exception):
                     await bus.close()

@@ -61,3 +61,14 @@ def test_attacker_builder_rejects_empty() -> None:
 def test_system_health_builder() -> None:
     assert topics.system_health("sniffer") == "system.sniffer.health"
     assert topics.system_health("mutator") == "system.mutator.health"
+
+
+def test_system_control_builder() -> None:
+    assert topics.system_control("mutator") == "system.mutator.control"
+    assert topics.system_control("collector") == "system.collector.control"
+
+
+@pytest.mark.parametrize("bad", ["", "has.dot", "has*wildcard", "has>wild", "with space", "with\ttab"])
+def test_system_control_rejects_bad_segments(bad: str) -> None:
+    with pytest.raises(ValueError):
+        topics.system_control(bad)

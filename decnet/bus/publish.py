@@ -8,6 +8,8 @@ from __future__ import annotations
 
 import asyncio
 import contextlib
+import os
+import signal
 import time
 from typing import Any, Callable
 
@@ -99,3 +101,103 @@ async def run_health_heartbeat(
                     log.debug("heartbeat extra() failed worker=%s: %s", worker, exc)
             await publish_safely(bus, topic, payload, event_type=_topics.SYSTEM_HEALTH)
             await asyncio.sleep(interval)
+
+
+async def run_control_listener(
+    bus: BaseBus | None,
+    worker: str,
+    shutdown: asyncio.Event,
+) -> None:
+    """Subscribe to ``system.<worker>.control`` and honour stop intents.
+
+    On a well-formed ``{"action": "stop", ...}`` message the function sets
+    *shutdown* and returns — the worker's main loop is expected to check
+    the event and unwind cleanly, matching the SIGTERM path.
+
+    Malformed payloads (missing/unknown action, non-dict, exception from
+    the transport) are logged and ignored.  A ``None`` bus yields a noop
+    coroutine that simply awaits *shutdown* — callers can ``create_task``
+    this unconditionally regardless of bus state.
+
+    Cancellation-safe.
+    """
+    if bus is None:
+        with contextlib.suppress(asyncio.CancelledError):
+            await shutdown.wait()
+        return
+
+    topic = _topics.system_control(worker)
+    with contextlib.suppress(asyncio.CancelledError):
+        try:
+            async with bus.subscribe(topic) as sub:
+                async for event in sub:
+                    payload = event.payload or {}
+                    action = payload.get("action")
+                    requested_by = payload.get("requested_by", "<unknown>")
+                    if action == _topics.WORKER_CONTROL_STOP:
+                        log.info(
+                            "control: stop requested worker=%s by=%s",
+                            worker, requested_by,
+                        )
+                        shutdown.set()
+                        return
+                    log.debug(
+                        "control: ignoring unknown action worker=%s action=%r",
+                        worker, action,
+                    )
+        except Exception as exc:  # noqa: BLE001
+            log.warning(
+                "control listener failed worker=%s: %s — shutdown via bus disabled",
+                worker, exc,
+            )
+
+
+async def run_control_listener_signal(
+    bus: BaseBus | None,
+    worker: str,
+) -> None:
+    """Like :func:`run_control_listener` but signals the process on stop.
+
+    Preferred for workers whose main loop is a blocking thread
+    (container-log tail, PTY read, scapy sniff) — wiring an
+    ``asyncio.Event`` through the thread boundary is error-prone, and
+    every DECNET worker already has systemd-equivalent SIGTERM cleanup.
+    A SIGTERM self-signal routes the stop through that same path
+    without inventing a second shutdown mechanism.
+
+    Cancellation-safe.  Never raises: a failed self-signal is logged
+    and the loop simply exits (admin can fall back to ``systemctl``).
+    """
+    if bus is None:
+        return
+
+    topic = _topics.system_control(worker)
+    with contextlib.suppress(asyncio.CancelledError):
+        try:
+            async with bus.subscribe(topic) as sub:
+                async for event in sub:
+                    payload = event.payload or {}
+                    action = payload.get("action")
+                    requested_by = payload.get("requested_by", "<unknown>")
+                    if action == _topics.WORKER_CONTROL_STOP:
+                        log.info(
+                            "control: stop requested worker=%s by=%s → SIGTERM self",
+                            worker, requested_by,
+                        )
+                        try:
+                            os.kill(os.getpid(), signal.SIGTERM)
+                        except Exception as exc:  # noqa: BLE001
+                            log.warning(
+                                "control: self-signal failed worker=%s: %s",
+                                worker, exc,
+                            )
+                        return
+                    log.debug(
+                        "control: ignoring unknown action worker=%s action=%r",
+                        worker, action,
+                    )
+        except Exception as exc:  # noqa: BLE001
+            log.warning(
+                "control signal listener failed worker=%s: %s",
+                worker, exc,
+            )

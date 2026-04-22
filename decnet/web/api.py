@@ -30,6 +30,7 @@ ingestion_task: Optional[asyncio.Task[Any]] = None
 collector_task: Optional[asyncio.Task[Any]] = None
 attacker_task: Optional[asyncio.Task[Any]] = None
 sniffer_task: Optional[asyncio.Task[Any]] = None
+heartbeat_task: Optional[asyncio.Task[Any]] = None
 
 
 def get_background_tasks() -> dict[str, Optional[asyncio.Task[Any]]]:
@@ -45,6 +46,7 @@ def get_background_tasks() -> dict[str, Optional[asyncio.Task[Any]]]:
 @asynccontextmanager
 async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
     global ingestion_task, collector_task, attacker_task, sniffer_task
+    global heartbeat_task
 
     import resource
     soft, hard = resource.getrlimit(resource.RLIMIT_NOFILE)
@@ -115,10 +117,33 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
     else:
         log.info("Contract Test Mode: skipping background worker startup")
 
+    # Worker registry + API self-heartbeat — always on, even under
+    # contract-test mode, so the Workers panel can render the process
+    # without the dev needing to run a full stack.  A missing bus turns
+    # both into no-ops inside the helpers.
+    try:
+        from decnet.bus.app import get_app_bus
+        from decnet.bus.publish import run_health_heartbeat
+        from decnet.web.worker_registry import get_registry
+
+        _bus = await get_app_bus()
+        await get_registry().start(_bus)
+        if heartbeat_task is None or heartbeat_task.done():
+            heartbeat_task = asyncio.create_task(
+                run_health_heartbeat(_bus, "api"),
+            )
+    except Exception as exc:  # noqa: BLE001
+        log.warning("worker registry bootstrap failed: %s", exc)
+
     yield
 
     log.info("API shutdown cancelling background tasks")
-    for task in (ingestion_task, collector_task, attacker_task, sniffer_task):
+    try:
+        from decnet.web.worker_registry import get_registry
+        await get_registry().stop()
+    except Exception as exc:  # noqa: BLE001
+        log.warning("worker registry stop raised: %s", exc)
+    for task in (ingestion_task, collector_task, attacker_task, sniffer_task, heartbeat_task):
         if task and not task.done():
             task.cancel()
             try:

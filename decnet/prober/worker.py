@@ -30,7 +30,11 @@ from typing import Any, Callable
 from decnet.bus import topics as _topics
 from decnet.bus.base import BaseBus
 from decnet.bus.factory import get_bus
-from decnet.bus.publish import make_thread_safe_publisher
+from decnet.bus.publish import (
+    make_thread_safe_publisher,
+    run_control_listener,
+    run_health_heartbeat,
+)
 from decnet.logging import get_logger
 from decnet.prober.hassh import hassh_server
 from decnet.prober.jarm import JARM_EMPTY_HASH, jarm_hash
@@ -519,8 +523,13 @@ async def prober_worker(
             event_type,
         )
 
+    shutdown = asyncio.Event()
+    heartbeat_task = asyncio.create_task(run_health_heartbeat(bus, "prober"))
+    control_task = asyncio.create_task(
+        run_control_listener(bus, "prober", shutdown),
+    )
     try:
-        while True:
+        while not shutdown.is_set():
             # Discover new attacker IPs from the log stream
             new_ips, log_position = await asyncio.to_thread(
                 _discover_attackers, json_path, log_position,
@@ -542,8 +551,15 @@ async def prober_worker(
                     _publish_attacker,
                 )
 
-            await asyncio.sleep(interval)
+            try:
+                await asyncio.wait_for(shutdown.wait(), timeout=interval)
+            except asyncio.TimeoutError:
+                pass
     finally:
+        for t in (heartbeat_task, control_task):
+            t.cancel()
+            with contextlib.suppress(Exception, asyncio.CancelledError):
+                await t
         if bus is not None:
             with contextlib.suppress(Exception):
                 await bus.close()

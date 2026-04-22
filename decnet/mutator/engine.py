@@ -27,6 +27,7 @@ from decnet.bus.base import BaseBus
 from decnet.bus.factory import get_bus
 from decnet.bus.publish import (
     publish_safely as _publish_safely,
+    run_control_listener_signal as _run_control_listener_signal,
     run_health_heartbeat as _run_health_heartbeat,
 )
 from decnet.mutator.events import MutationTrigger, emit_decky_mutated
@@ -332,6 +333,11 @@ async def run_watch_loop(repo: BaseRepository, poll_interval_secs: int = 10) -> 
         heartbeat_task = asyncio.create_task(
             _run_health_heartbeat(bus, "mutator"),
         )
+        # Control listener: SIGTERM-based so the existing shutdown path
+        # (cancel wake_tasks + heartbeat_task) runs unchanged.
+        wake_tasks.append(asyncio.create_task(
+            _run_control_listener_signal(bus, "mutator"),
+        ))
     except Exception as exc:  # noqa: BLE001
         log.warning("mutator: bus unavailable, running in poll-only mode: %s", exc)
 

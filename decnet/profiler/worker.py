@@ -21,7 +21,11 @@ from typing import Any, Callable
 
 from decnet.bus import topics as _topics
 from decnet.bus.factory import get_bus
-from decnet.bus.publish import make_thread_safe_publisher
+from decnet.bus.publish import (
+    make_thread_safe_publisher,
+    run_control_listener,
+    run_health_heartbeat,
+)
 from decnet.correlation.engine import CorrelationEngine
 from decnet.correlation.parser import LogEvent
 from decnet.logging import get_logger
@@ -87,14 +91,32 @@ async def attacker_profile_worker(repo: BaseRepository, *, interval: int = 30) -
         state.last_log_id = _saved_cursor.get("last_log_id", 0)
         state.initialized = True
         logger.info("attacker worker: resumed from cursor last_log_id=%d", state.last_log_id)
+
+    # Workers panel wiring: heartbeat + bus-driven stop.  Main loop is
+    # pure asyncio sleep/await, so an event-based control listener
+    # drops in cleanly without a SIGTERM self-signal.
+    shutdown = asyncio.Event()
+    heartbeat_task = asyncio.create_task(run_health_heartbeat(bus, "profiler"))
+    control_task = asyncio.create_task(
+        run_control_listener(bus, "profiler", shutdown),
+    )
     try:
-        while True:
-            await asyncio.sleep(interval)
+        while not shutdown.is_set():
+            try:
+                await asyncio.wait_for(shutdown.wait(), timeout=interval)
+            except asyncio.TimeoutError:
+                pass  # normal tick
+            if shutdown.is_set():
+                break
             try:
                 await _incremental_update(repo, state)
             except Exception as exc:
                 logger.error("attacker worker: update failed: %s", exc)
     finally:
+        for t in (heartbeat_task, control_task):
+            t.cancel()
+            with contextlib.suppress(Exception, asyncio.CancelledError):
+                await t
         if bus is not None:
             with contextlib.suppress(Exception):
                 await bus.close()

@@ -20,7 +20,11 @@ from typing import Any, Callable, Optional
 
 from decnet.bus import topics as _topics
 from decnet.bus.factory import get_bus
-from decnet.bus.publish import make_thread_safe_publisher
+from decnet.bus.publish import (
+    make_thread_safe_publisher,
+    run_control_listener_signal,
+    run_health_heartbeat,
+)
 from decnet.logging import get_logger
 from decnet.telemetry import traced as _traced, get_tracer as _get_tracer, inject_context as _inject_ctx
 
@@ -416,6 +420,14 @@ async def log_collector_worker(log_file: str) -> None:
 
     _publish_log = _make_system_log_publisher(bus, loop)
 
+    # Workers panel health heartbeat + bus-driven stop control.  The
+    # heartbeat beacons on system.collector.health every 30s; the
+    # control listener translates a bus stop intent into a SIGTERM to
+    # this process (collector's main loop is a blocking thread pool, so
+    # self-signalling is cleaner than threading a shutdown event).
+    heartbeat_task = asyncio.create_task(run_health_heartbeat(bus, "collector"))
+    control_task = asyncio.create_task(run_control_listener_signal(bus, "collector"))
+
     # Dedicated thread pool so long-running container log streams don't
     # saturate the default asyncio executor and starve short-lived
     # to_thread() calls elsewhere (e.g. load_state in the web API).
@@ -465,6 +477,10 @@ async def log_collector_worker(log_file: str) -> None:
         logger.error("collector error: %s", exc)
     finally:
         collector_pool.shutdown(wait=False)
+        for t in (heartbeat_task, control_task):
+            t.cancel()
+            with contextlib.suppress(Exception, asyncio.CancelledError):
+                await t
         if bus is not None:
             with contextlib.suppress(Exception):
                 await bus.close()

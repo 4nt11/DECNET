@@ -82,6 +82,16 @@ SYSTEM_BUS_HEALTH = "bus.health"
 # :func:`system_health`.  The leaf constant stays the same across workers;
 # the worker name goes in the middle token.
 SYSTEM_HEALTH = "health"
+# Worker-control leaf — built per-worker as ``system.<worker>.control`` via
+# :func:`system_control`.  Admin-originated stop intents travel on this
+# topic; each worker subscribes to its own.
+SYSTEM_CONTROL = "control"
+
+# Control payload ``action`` values — the wire vocabulary.  Only ``stop`` is
+# handled in v1; ``start`` is reserved because a stopped worker has no
+# subscriber, so starting requires external supervision (systemd).
+WORKER_CONTROL_STOP = "stop"
+WORKER_CONTROL_START = "start"
 
 
 # ─── Builders ────────────────────────────────────────────────────────────────
@@ -150,6 +160,23 @@ def system_health(worker: str) -> str:
     """
     _reject_tokens(worker)
     return f"{SYSTEM}.{worker}.{SYSTEM_HEALTH}"
+
+
+def system_control(worker: str) -> str:
+    """Build ``system.<worker>.control``.
+
+    Admin-originated stop (and, eventually, start) intents are published
+    here; the worker in question subscribes to its own address and reacts.
+    Payload shape::
+
+        {"action": "stop", "requested_by": "<username>", "ts": <unix>}
+
+    *action* must be one of :data:`WORKER_CONTROL_STOP` /
+    :data:`WORKER_CONTROL_START`; any other value is ignored by the
+    listener.  Same segment rules as :func:`system_health`.
+    """
+    _reject_tokens(worker)
+    return f"{SYSTEM}.{worker}.{SYSTEM_CONTROL}"
 
 
 def _reject_tokens(*parts: str) -> None:
