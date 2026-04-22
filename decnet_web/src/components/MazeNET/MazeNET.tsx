@@ -1,7 +1,8 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { useSearchParams, useNavigate } from 'react-router-dom';
 import {
-  PanelRightOpen, PanelRightClose, RotateCcw, UploadCloud, ArrowLeft,
+  PanelRightOpen, PanelRightClose, PanelLeftOpen, PanelLeftClose,
+  RotateCcw, UploadCloud, ArrowLeft,
   Plus, Trash2, Zap, Copy, Eye, ShieldAlert, GitMerge, Server,
 } from 'lucide-react';
 import './MazeNET.css';
@@ -46,6 +47,7 @@ const MazeNET: React.FC = () => {
   const [topoVersion, setTopoVersion] = useState<number>(0);
   const [selection, setSelection] = useState<Selection>(null);
   const [inspectorOpen, setInspectorOpen] = useState(true);
+  const [paletteOpen, setPaletteOpen] = useState(true);
   const [services, setServices] = useState<ServiceDef[]>(DEFAULT_SERVICES);
   const [archetypes, setArchetypes] = useState<Archetype[]>(DEFAULT_ARCHETYPES);
 
@@ -554,6 +556,9 @@ const MazeNET: React.FC = () => {
           <button type="button" className="maze-btn ghost" onClick={() => navigate('/mazenet')}>
             <ArrowLeft size={12} /> TOPOLOGIES
           </button>
+          <button type="button" className="maze-btn ghost" onClick={() => setPaletteOpen((o) => !o)}>
+            {paletteOpen ? <PanelLeftClose size={12} /> : <PanelLeftOpen size={12} />} PALETTE
+          </button>
           <button type="button" className="maze-btn ghost" onClick={() => setInspectorOpen((o) => !o)}>
             {inspectorOpen ? <PanelRightClose size={12} /> : <PanelRightOpen size={12} />} INSPECTOR
           </button>
@@ -574,9 +579,13 @@ const MazeNET: React.FC = () => {
 
       <div
         className="maze-shell"
-        style={{ gridTemplateColumns: inspectorOpen ? '240px 1fr 320px' : '240px 1fr' }}
+        style={{
+          gridTemplateColumns: `${paletteOpen ? '240px ' : ''}1fr${inspectorOpen ? ' 320px' : ''}`,
+        }}
       >
-        <Palette services={services} archetypes={archetypes} startPaletteDrag={interaction.startPaletteDrag} />
+        {paletteOpen && (
+          <Palette services={services} archetypes={archetypes} startPaletteDrag={interaction.startPaletteDrag} />
+        )}
         <Canvas
           ref={canvasRef}
           nets={nets}
