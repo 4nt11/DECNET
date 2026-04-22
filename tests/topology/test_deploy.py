@@ -95,6 +95,64 @@ async def test_deploy_failure_transitions_to_failed(repo, tmp_path, monkeypatch)
 
 
 @pytest.mark.anyio
+async def test_deploy_failure_rolls_back_created_networks(repo, tmp_path, monkeypatch):
+    """Networks created before the failing op must be removed on rollback.
+
+    Reproduces the ``Pool overlaps`` regression: a failed deploy left
+    partial networks alive and the next deploy hit an IPAM conflict."""
+    monkeypatch.chdir(tmp_path)
+    plan = generate(_cfg())
+    tid = await persist(repo, plan)
+
+    class _PartialClient:
+        def __init__(self):
+            self.networks = self
+            self.created: list[str] = []
+            self.removed: list[str] = []
+            self._call = 0
+            self._created_objs: dict[str, _FakeNet] = {}
+        def list(self, names=None, filters=None):  # noqa: ARG002
+            if not names:
+                return []
+            return [self._created_objs[n] for n in names if n in self._created_objs]
+        def create(self, name, *a, **kw):  # noqa: ARG002
+            self._call += 1
+            # Succeed on the first N-1 creates, blow up on the last.
+            if self._call >= 2:
+                raise RuntimeError("boom: pool overlap")
+            self.created.append(name)
+            obj = _FakeNet(name, self)
+            self._created_objs[name] = obj
+            return obj
+
+    class _FakeNet:
+        def __init__(self, name, client):
+            self.name = name
+            self.id = f"id-{name}"
+            self.attrs = {"Containers": {}}
+            self._client = client
+        def remove(self):
+            self._client.removed.append(self.name)
+            self._client._created_objs.pop(self.name, None)
+
+    fake = _PartialClient()
+    with patch("decnet.engine.deployer.docker.from_env", return_value=fake):
+        with patch("decnet.engine.deployer._compose") as mock_down:
+            with pytest.raises(RuntimeError, match="boom"):
+                await deploy_topology(repo, tid)
+            # compose down is invoked only when compose was actually started
+            # OR a partial compose file exists; create_bridge_network failed
+            # before write_topology_compose, so _compose should not have run.
+            mock_down.assert_not_called()
+
+    # Every network created this attempt must have been removed on rollback.
+    assert set(fake.removed) == set(fake.created)
+
+    topo = await repo.get_topology(tid)
+    assert topo["status"] == TopologyStatus.FAILED
+
+
+@pytest.mark.anyio
 async def test_teardown_from_failed_marks_torn_down(repo, tmp_path, monkeypatch):
     monkeypatch.chdir(tmp_path)
     plan = generate(_cfg())

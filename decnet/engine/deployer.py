@@ -540,6 +540,8 @@ async def deploy_topology(repo, topology_id: str, *, dry_run: bool = False) -> N
     await transition_status(repo, topology_id, TopologyStatus.DEPLOYING)
 
     client = docker.from_env()
+    created_networks: list[str] = []
+    compose_started = False
     try:
         for lan in lans:
             net_name = _topology_network_name(topology_id, lan["name"])
@@ -549,13 +551,42 @@ async def deploy_topology(repo, topology_id: str, *, dry_run: bool = False) -> N
             create_bridge_network(
                 client, net_name, lan["subnet"], internal=internal
             )
+            created_networks.append(net_name)
         write_topology_compose(hydrated, compose_path)
         console.print(
             f"[bold cyan]Topology compose file written[/] → {compose_path}"
         )
         _compose_with_retry("up", "--build", "-d", compose_file=compose_path)
+        compose_started = True
     except Exception as exc:
         log.error("topology %s deploy failed: %s", topology_id, exc)
+        # Roll back any Docker state we created in this attempt so the
+        # next deploy doesn't trip over orphan networks or half-started
+        # containers. Best-effort: rollback errors must not mask the
+        # original deploy failure.
+        if compose_started or compose_path.exists():
+            try:
+                _compose(
+                    "down", "--remove-orphans", compose_file=compose_path
+                )
+            except Exception as rb_exc:  # pragma: no cover
+                log.warning(
+                    "topology %s rollback compose-down failed: %s",
+                    topology_id, rb_exc,
+                )
+        for net_name in reversed(created_networks):
+            try:
+                remove_bridge_network(client, net_name)
+            except Exception as rb_exc:  # pragma: no cover
+                log.warning(
+                    "topology %s rollback network %s removal failed: %s",
+                    topology_id, net_name, rb_exc,
+                )
+        if compose_path.exists():
+            try:
+                compose_path.unlink()
+            except OSError:  # pragma: no cover
+                pass
         await transition_status(
             repo, topology_id, TopologyStatus.FAILED, reason=str(exc)
         )
