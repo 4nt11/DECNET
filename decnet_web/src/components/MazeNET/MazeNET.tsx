@@ -57,6 +57,27 @@ const MazeNET: React.FC = () => {
     return () => document.body.classList.remove(cls);
   }, [fullscreen]);
 
+  // Request/exit browser fullscreen alongside the in-app chrome hide.
+  // Ignore failures (fullscreen requires a user gesture; the chrome-only
+  // mode still works if the API rejects).
+  useEffect(() => {
+    if (fullscreen && !document.fullscreenElement) {
+      document.documentElement.requestFullscreen?.().catch(() => {});
+    } else if (!fullscreen && document.fullscreenElement) {
+      document.exitFullscreen?.().catch(() => {});
+    }
+  }, [fullscreen]);
+
+  // Sync state if the user presses F11/Esc to leave fullscreen from
+  // outside our button.
+  useEffect(() => {
+    const onFsChange = () => {
+      if (!document.fullscreenElement) setFullscreen(false);
+    };
+    document.addEventListener('fullscreenchange', onFsChange);
+    return () => document.removeEventListener('fullscreenchange', onFsChange);
+  }, []);
+
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
       if (e.key === 'Escape' && fullscreen) setFullscreen(false);
