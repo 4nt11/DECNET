@@ -49,6 +49,8 @@ log = get_logger("engine")
 console = Console()
 COMPOSE_FILE = Path("decnet-compose.yml")
 _CANONICAL_LOGGING = Path(__file__).parent.parent / "templates" / "syslog_bridge.py"
+_CANONICAL_SESSREC_DIR = Path(__file__).parent.parent / "templates" / "_shared" / "sessrec"
+_SESSREC_SERVICES = {"ssh", "telnet"}
 
 
 def _sync_logging_helper(config: DecnetConfig) -> None:
@@ -67,6 +69,33 @@ def _sync_logging_helper(config: DecnetConfig) -> None:
             dest = ctx / "syslog_bridge.py"
             if not dest.exists() or dest.read_bytes() != _CANONICAL_LOGGING.read_bytes():
                 shutil.copy2(_CANONICAL_LOGGING, dest)
+
+
+def _sync_sessrec_sources(config: DecnetConfig) -> None:
+    """Copy sessrec.c + Makefile into SSH/Telnet build contexts as sessrec/."""
+    from decnet.services.registry import get_service
+    sources = [
+        _CANONICAL_SESSREC_DIR / "sessrec.c",
+        _CANONICAL_SESSREC_DIR / "Makefile",
+    ]
+    seen: set[Path] = set()
+    for decky in config.deckies:
+        for svc_name in decky.services:
+            if svc_name not in _SESSREC_SERVICES:
+                continue
+            svc = get_service(svc_name)
+            if svc is None:
+                continue
+            ctx = svc.dockerfile_context()
+            if ctx is None or ctx in seen:
+                continue
+            seen.add(ctx)
+            dest_dir = ctx / "sessrec"
+            dest_dir.mkdir(exist_ok=True)
+            for src in sources:
+                dest = dest_dir / src.name
+                if not dest.exists() or dest.read_bytes() != src.read_bytes():
+                    shutil.copy2(src, dest)
 
 
 def _compose(*args: str, compose_file: Path = COMPOSE_FILE, env: dict | None = None) -> None:
@@ -215,6 +244,7 @@ def deploy(config: DecnetConfig, dry_run: bool = False, no_cache: bool = False, 
             setup_host_macvlan(config.interface, host_ip, decky_range)
 
     _sync_logging_helper(config)
+    _sync_sessrec_sources(config)
 
     compose_path = write_compose(config, COMPOSE_FILE)
     console.print(f"[bold cyan]Compose file written[/] → {compose_path}")

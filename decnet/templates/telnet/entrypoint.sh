@@ -27,6 +27,13 @@ cat /root/.env
 HIST
 fi
 
+# sessrec needs the transcripts dir on the quarantine mount + a service
+# discriminant file (busybox /bin/login strips env, so we can't rely on
+# SESSREC_SERVICE env var here like the SSH template does).
+mkdir -p /var/lib/systemd/coredump/transcripts
+chmod 750 /var/lib/systemd/coredump/transcripts
+echo "telnet" > /etc/sessrec.service
+
 # Logging pipeline: named pipe → rsyslogd (RFC 5424) → stdout.
 # Cloak the pipe path and the relay `cat` so `ps aux` / `ls /run` don't
 # betray the honeypot — see ssh/entrypoint.sh for the same pattern.

@@ -8,6 +8,22 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     net-tools \
     && rm -rf /var/lib/apt/lists/*
 
+# sessrec (pty transcript recorder) becomes root's login shell so busybox
+# /bin/login exec's it after PAM auth. gcc + libc6-dev are installed only
+# for this compile step and purged in the same layer.
+COPY sessrec/ /tmp/build/sessrec/
+RUN set -eu \
+    && apt-get update \
+    && apt-get install -y --no-install-recommends gcc libc6-dev make \
+    && mkdir -p /usr/libexec \
+    && make -C /tmp/build/sessrec install PREFIX=/usr/libexec \
+    && grep -q '^/usr/libexec/login-session$' /etc/shells \
+        || echo '/usr/libexec/login-session' >> /etc/shells \
+    && sed -i 's|^root:\([^:]*\):\([^:]*\):\([^:]*\):\([^:]*\):\([^:]*\):.*$|root:\1:\2:\3:\4:\5:/usr/libexec/login-session|' /etc/passwd \
+    && apt-get purge -y gcc libc6-dev make \
+    && apt-get autoremove -y \
+    && rm -rf /var/lib/apt/lists/* /tmp/build
+
 # rsyslog: forward auth.* and user.* to named pipe in RFC 5424 format
 RUN printf '%s\n' \
     '# syslog-relay log bridge — auth + user events → named pipe as RFC 5424' \

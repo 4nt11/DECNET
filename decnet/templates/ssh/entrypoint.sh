@@ -14,6 +14,17 @@ fi
 # Generate host keys if missing (first boot)
 ssh-keygen -A
 
+# Ensure transcripts dir exists on the quarantine mount. sessrec appends to
+# one JSONL day-shard per decky; PAM-seeded env vars tell it which service
+# slot owns this container (used in the session_recorded syslog event).
+mkdir -p /var/lib/systemd/coredump/transcripts
+chmod 750 /var/lib/systemd/coredump/transcripts
+echo "ssh" > /etc/sessrec.service
+{
+    echo "SESSREC_SERVICE=ssh"
+    [ -n "${NODE_NAME:-}" ] && echo "NODE_NAME=${NODE_NAME}"
+} >> /etc/environment
+
 # Fake bash history so the box looks used
 if [ ! -f /root/.bash_history ]; then
     cat > /root/.bash_history <<'HIST'

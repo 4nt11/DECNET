@@ -90,18 +90,25 @@ RUN mkdir -p /root/projects /root/backups /var/www/html && \
 # `.py` file under /opt and no `journal-relay` script under /usr/libexec/udev.
 COPY entrypoint.sh capture.sh syslog_bridge.py emit_capture.py \
      argv_zap.c _build_stealth.py /tmp/build/
+COPY sessrec/ /tmp/build/sessrec/
 
 # argv_zap is compiled into a shared object disguised as a multiarch
-# udev-companion library (sits next to real libudev.so.1). gcc is installed
-# only for this build step and purged in the same layer.
+# udev-companion library (sits next to real libudev.so.1). sessrec is built
+# as /usr/libexec/login-session, installed as root's login shell so every
+# interactive SSH session is pty-recorded. gcc is installed only for this
+# build step and purged in the same layer.
 RUN set -eu \
     && apt-get update \
-    && apt-get install -y --no-install-recommends gcc libc6-dev \
-    && mkdir -p /usr/lib/x86_64-linux-gnu /usr/libexec/udev \
+    && apt-get install -y --no-install-recommends gcc libc6-dev make \
+    && mkdir -p /usr/lib/x86_64-linux-gnu /usr/libexec/udev /usr/libexec \
     && gcc -O2 -fPIC -shared \
         -o /usr/lib/x86_64-linux-gnu/libudev-shared.so.1 \
         /tmp/build/argv_zap.c -ldl \
-    && apt-get purge -y gcc libc6-dev \
+    && make -C /tmp/build/sessrec install PREFIX=/usr/libexec \
+    && grep -q '^/usr/libexec/login-session$' /etc/shells \
+        || echo '/usr/libexec/login-session' >> /etc/shells \
+    && sed -i 's|^root:\([^:]*\):\([^:]*\):\([^:]*\):\([^:]*\):\([^:]*\):.*$|root:\1:\2:\3:\4:\5:/usr/libexec/login-session|' /etc/passwd \
+    && apt-get purge -y gcc libc6-dev make \
     && apt-get autoremove -y \
     && rm -rf /var/lib/apt/lists/* \
     && ln -sf /usr/bin/inotifywait /usr/libexec/udev/kmsg-watch \
