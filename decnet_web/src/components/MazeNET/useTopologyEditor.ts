@@ -22,11 +22,11 @@ import type {
   DeckyRow,
   EdgeRow,
   LANRow,
-  UseMazeApi,
+  MazeApi,
 } from './useMazeApi';
 
 export interface UseTopologyEditorOptions {
-  api: UseMazeApi;
+  api: MazeApi;
   /** Current topology status from :func:`getTopology`. */
   topoStatus: string;
   /** Last-known topology version for optimistic concurrency. */
