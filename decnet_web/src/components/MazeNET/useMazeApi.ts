@@ -263,7 +263,7 @@ export function useMazeApi(): MazeApi {
             proto: 'tcp' as const,
             icon: 'circle',
             risk: 'low' as const,
-            group: 'Remote Access' as const,
+            group: 'Miscellaneous' as const,
           },
       );
     } catch {

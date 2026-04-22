@@ -1,7 +1,7 @@
 import React from 'react';
 import { GitMerge, ShieldAlert, Server, Monitor, Shield, Database, Cpu, Globe,
          Terminal, Lock, Folder, HardDrive, Users, KeyRound,
-         Radio, Zap, Wifi, Circle } from 'lucide-react';
+         Radio, Zap, Wifi, Circle, Mail, Phone, Activity, Box } from 'lucide-react';
 import type { ServiceDef, Archetype, ServiceGroup } from './data';
 import { SERVICE_GROUP_ORDER } from './data';
 import type { PaletteDrag } from './useMazeInteraction';
@@ -12,6 +12,7 @@ const ICON: Record<string, React.ComponentType<{ size?: number; className?: stri
   database: Database, cpu: Cpu, globe: Globe, terminal: Terminal, lock: Lock,
   folder: Folder, 'hard-drive': HardDrive, users: Users, 'key-round': KeyRound,
   radio: Radio, zap: Zap, wifi: Wifi, circle: Circle,
+  mail: Mail, phone: Phone, activity: Activity, box: Box,
 };
 
 function Icon({ name, size = 14, className }: { name: string; size?: number; className?: string }) {
@@ -70,7 +71,7 @@ const Palette: React.FC<Props> = ({ services, archetypes, startPaletteDrag, clas
         {(() => {
           const byGroup = new Map<ServiceGroup, ServiceDef[]>();
           for (const s of services) {
-            const g = (s.group ?? 'Remote Access') as ServiceGroup;
+            const g = (s.group ?? 'Miscellaneous') as ServiceGroup;
             const list = byGroup.get(g) ?? [];
             list.push(s);
             byGroup.set(g, list);
