@@ -376,6 +376,10 @@
   background-color: rgba(0, 255, 65, 0.03);
 }
 
+.logs-table tr.empty-row td {
+  border-bottom: none;
+}
+
 .raw-line {
   max-width: 400px;
   overflow: hidden;
