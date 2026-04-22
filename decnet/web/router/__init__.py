@@ -15,6 +15,8 @@ from .attackers.api_get_attackers import router as attackers_router
 from .attackers.api_get_attacker_detail import router as attacker_detail_router
 from .attackers.api_get_attacker_commands import router as attacker_commands_router
 from .attackers.api_get_attacker_artifacts import router as attacker_artifacts_router
+from .attackers.api_get_attacker_transcripts import router as attacker_transcripts_router
+from .transcripts import transcripts_router
 from .config.api_get_config import router as config_get_router
 from .config.api_update_config import router as config_update_router
 from .config.api_manage_users import router as config_users_router
@@ -61,6 +63,7 @@ api_router.include_router(attackers_router)
 api_router.include_router(attacker_detail_router)
 api_router.include_router(attacker_commands_router)
 api_router.include_router(attacker_artifacts_router)
+api_router.include_router(attacker_transcripts_router)
 
 # Observability
 api_router.include_router(stats_router)
@@ -75,6 +78,9 @@ api_router.include_router(config_reinit_router)
 
 # Artifacts (captured attacker file drops)
 api_router.include_router(artifacts_router)
+
+# Transcripts (PTY session recordings, paged asciinema events)
+api_router.include_router(transcripts_router)
 
 # Remote Updates (dashboard → worker updater daemons)
 api_router.include_router(swarm_updates_router)

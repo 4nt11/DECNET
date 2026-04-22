@@ -38,6 +38,8 @@ class DummyRepo(BaseRepository):
     async def update_user_role(self, u, r): await super().update_user_role(u, r)
     async def purge_logs_and_bounties(self): await super().purge_logs_and_bounties()
     async def get_attacker_artifacts(self, uuid): await super().get_attacker_artifacts(uuid)
+    async def get_attacker_transcripts(self, uuid): await super().get_attacker_transcripts(uuid)
+    async def get_session_log(self, sid): await super().get_session_log(sid)
 
 @pytest.mark.asyncio
 async def test_base_repo_coverage():
@@ -75,6 +77,8 @@ async def test_base_repo_coverage():
     await dr.update_user_role("a", "admin")
     await dr.purge_logs_and_bounties()
     await dr.get_attacker_artifacts("a")
+    await dr.get_attacker_transcripts("a")
+    await dr.get_session_log("a")
 
     # Swarm methods: default NotImplementedError on BaseRepository.  Covering
     # them here keeps the coverage contract honest for the swarm CRUD surface.

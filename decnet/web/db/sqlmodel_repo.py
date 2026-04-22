@@ -769,6 +769,48 @@ class SQLModelRepository(BaseRepository):
             )
             return [r.model_dump(mode="json") for r in rows.scalars().all()]
 
+    async def get_session_log(self, sid: str) -> Optional[dict[str, Any]]:
+        """Look up the `session_recorded` Log row that owns a given sid.
+
+        sid is a v4 UUID embedded in the row's ``fields`` JSON blob. Matched
+        with LIKE on the textual sid substring — cheap given the bounded
+        cardinality of session_recorded rows vs. the full logs table.
+        """
+        needle = f'"sid":"{sid}"'
+        async with self._session() as session:
+            rows = await session.execute(
+                select(Log)
+                .where(Log.event_type == "session_recorded")
+                .where(Log.fields.contains(needle))
+                .limit(1)
+            )
+            row = rows.scalars().first()
+            return row.model_dump(mode="json") if row else None
+
+    async def get_attacker_transcripts(self, uuid: str) -> list[dict[str, Any]]:
+        """Return `session_recorded` logs for the attacker identified by UUID.
+
+        Mirror of :meth:`get_attacker_artifacts` — sessions ride in the same
+        Log table with event_type=session_recorded; the ingester decodes the
+        RFC 5424 SD fields (sid, service, decky, src_ip, duration_s, bytes,
+        truncated, shard_path) into the returned ``fields`` blob.
+        """
+        async with self._session() as session:
+            ip_res = await session.execute(
+                select(Attacker.ip).where(Attacker.uuid == uuid)
+            )
+            ip = ip_res.scalar_one_or_none()
+            if not ip:
+                return []
+            rows = await session.execute(
+                select(Log)
+                .where(Log.attacker_ip == ip)
+                .where(Log.event_type == "session_recorded")
+                .order_by(desc(Log.timestamp))
+                .limit(200)
+            )
+            return [r.model_dump(mode="json") for r in rows.scalars().all()]
+
     # ------------------------------------------------------------- swarm
 
     async def add_swarm_host(self, data: dict[str, Any]) -> None:

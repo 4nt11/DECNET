@@ -198,6 +198,16 @@ class BaseRepository(ABC):
         """Return `file_captured` log rows for this attacker, newest first."""
         pass
 
+    @abstractmethod
+    async def get_attacker_transcripts(self, uuid: str) -> list[dict[str, Any]]:
+        """Return `session_recorded` log rows for this attacker, newest first."""
+        pass
+
+    @abstractmethod
+    async def get_session_log(self, sid: str) -> Optional[dict[str, Any]]:
+        """Look up the `session_recorded` Log row for a given session UUID."""
+        pass
+
     # ------------------------------------------------------------- swarm
     # Swarm methods have default no-op / empty implementations so existing
     # subclasses and non-swarm deployments continue to work without change.
