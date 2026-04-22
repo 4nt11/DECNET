@@ -1,8 +1,10 @@
+import os
 from pathlib import Path
 
 from decnet.services.base import BaseService
 
 TEMPLATES_DIR = Path(__file__).parent.parent / "templates" / "telnet"
+ARTIFACTS_ROOT = os.environ.get("DECNET_ARTIFACTS_ROOT", "/var/lib/decnet/artifacts")
 
 
 class TelnetService(BaseService):
@@ -42,7 +44,7 @@ class TelnetService(BaseService):
         # Quarantine mount symmetric to the SSH service — sessrec appends
         # pty transcripts to /var/lib/systemd/coredump/transcripts/ inside
         # the container, which the host sees under artifacts/<decky>/telnet/.
-        quarantine_host = f"/var/lib/decnet/artifacts/{decky_name}/telnet"
+        quarantine_host = f"{ARTIFACTS_ROOT}/{decky_name}/telnet"
         return {
             "build": {"context": str(TEMPLATES_DIR)},
             "container_name": f"{decky_name}-telnet",

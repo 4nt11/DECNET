@@ -1,8 +1,10 @@
+import os
 from pathlib import Path
 
 from decnet.services.base import BaseService
 
 TEMPLATES_DIR = Path(__file__).parent.parent / "templates" / "ssh"
+ARTIFACTS_ROOT = os.environ.get("DECNET_ARTIFACTS_ROOT", "/var/lib/decnet/artifacts")
 
 
 class SSHService(BaseService):
@@ -46,7 +48,7 @@ class SSHService(BaseService):
         # drops (scp/sftp/wget) are mirrored out-of-band for forensic analysis.
         # The in-container path masquerades as systemd-coredump so `mount`/`df`
         # from inside the container looks benign.
-        quarantine_host = f"/var/lib/decnet/artifacts/{decky_name}/ssh"
+        quarantine_host = f"{ARTIFACTS_ROOT}/{decky_name}/ssh"
         return {
             "build": {"context": str(TEMPLATES_DIR)},
             "container_name": f"{decky_name}-ssh",
