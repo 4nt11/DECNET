@@ -149,15 +149,15 @@ const TopologyList: React.FC = () => {
   };
 
   return (
-    <div className="tlist-page">
-      <div className="tlist-header">
-        <div>
+    <div className="tlist-root tlist-page">
+      <div className="page-header">
+        <div className="page-title-group">
           <h1>TOPOLOGIES</h1>
-          <div className="tlist-sub">
-            {loading ? 'loading…' : `${rows.length} topology${rows.length === 1 ? '' : 'ies'}`}
+          <span className="page-sub">
+            {loading ? 'LOADING…' : `${rows.length} ${rows.length === 1 ? 'TOPOLOGY' : 'TOPOLOGIES'}`}
             {err && <span className="alert-text"> · {err}</span>}
             {reapMsg && <span className="alert-text"> · reap: {reapMsg}</span>}
-          </div>
+          </span>
         </div>
         <div className="tlist-actions">
           <button type="button" className="tlist-btn ghost" onClick={fetchRows} title="Refresh">
@@ -186,6 +186,16 @@ const TopologyList: React.FC = () => {
         onCreated={onCreated}
       />
 
+      {!loading && rows.length === 0 ? (
+        <div className="tlist-empty-wrap">
+          <EmptyState
+            icon={Network}
+            title="NO TOPOLOGIES YET"
+            hint="spin one up to deploy a honeynet"
+            cta={{ label: 'NEW TOPOLOGY', icon: Plus, onClick: () => setCreating(true) }}
+          />
+        </div>
+      ) : (
       <div className="tlist-grid">
         {rows.map((r) => (
           <div key={r.id} className="tlist-card" onClick={() => navigate(`/mazenet?topology=${r.id}`)}>
@@ -237,15 +247,8 @@ const TopologyList: React.FC = () => {
             </div>
           </div>
         ))}
-        {!loading && rows.length === 0 && (
-          <EmptyState
-            icon={Network}
-            title="NO TOPOLOGIES YET"
-            hint="spin one up to deploy a honeynet"
-            cta={{ label: 'NEW TOPOLOGY', icon: Plus, onClick: () => setCreating(true) }}
-          />
-        )}
       </div>
+      )}
     </div>
   );
 };

@@ -2,20 +2,38 @@
   padding: 16px 20px;
   color: var(--text-color);
   font-family: var(--font-mono);
+  display: flex;
+  flex-direction: column;
+  gap: 24px;
+  min-height: calc(100vh - 80px);
 }
 
-.tlist-header {
-  display: flex;
-  justify-content: space-between;
-  align-items: flex-end;
-  gap: 16px;
-  margin-bottom: 14px;
-  border-bottom: 1px solid var(--panel-border);
-  padding-bottom: 10px;
+.tlist-root .page-header { gap: 24px; }
+.tlist-root .page-title-group { display: flex; flex-direction: column; gap: 6px; }
+.tlist-root .page-header h1 {
+  font-size: 1.3rem;
+  letter-spacing: 4px;
+  font-weight: 700;
+  margin: 0;
+  color: var(--matrix);
 }
-.tlist-header h1 { margin: 0; font-size: 18px; letter-spacing: 2px; }
-.tlist-sub { font-size: 11px; color: var(--dim-color); margin-top: 3px; }
-.tlist-actions { display: flex; gap: 8px; }
+.tlist-root .page-sub { font-size: 0.7rem; opacity: 0.5; letter-spacing: 1px; }
+.tlist-actions { display: flex; gap: 8px; align-items: center; }
+
+.tlist-empty-wrap {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+.tlist-empty-wrap .empty-state {
+  min-height: 0;
+  padding: 60px 24px;
+  gap: 14px;
+}
+.tlist-empty-wrap .empty-state-icon { width: 48px; height: 48px; }
+.tlist-empty-wrap .empty-state-title { font-size: 1rem; letter-spacing: 3px; }
+.tlist-empty-wrap .empty-state-hint { font-size: 0.75rem; letter-spacing: 1.5px; }
 
 .tlist-btn {
   display: inline-flex; align-items: center; gap: 6px;
