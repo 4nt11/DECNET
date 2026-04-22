@@ -4,7 +4,7 @@
   display: flex;
   flex-direction: column;
   gap: 24px;
-  min-height: calc(100vh - 80px);
+  min-height: calc(100vh - 128px);
 }
 
 .tlist-root .page-header { gap: 24px; }
