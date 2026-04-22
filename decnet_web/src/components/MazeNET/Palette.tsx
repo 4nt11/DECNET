@@ -2,7 +2,8 @@ import React from 'react';
 import { GitMerge, ShieldAlert, Server, Monitor, Shield, Database, Cpu, Globe,
          Terminal, Lock, Folder, HardDrive, Users, KeyRound,
          Radio, Zap, Wifi, Circle } from 'lucide-react';
-import type { ServiceDef, Archetype } from './data';
+import type { ServiceDef, Archetype, ServiceGroup } from './data';
+import { SERVICE_GROUP_ORDER } from './data';
 import type { PaletteDrag } from './useMazeInteraction';
 
 const ICON: Record<string, React.ComponentType<{ size?: number; className?: string }>> = {
@@ -66,21 +67,39 @@ const Palette: React.FC<Props> = ({ services, archetypes, startPaletteDrag, clas
 
       <div className="palette-group">
         <label>③ SERVICES</label>
-        {services.map((s) => (
-          <div
-            key={s.slug}
-            className="palette-item"
-            onMouseDown={start({ kind: 'service', slug: s.slug, label: s.name })}
-          >
-            <Icon
-              name={s.icon}
-              size={12}
-              className={s.risk === 'high' ? 'alert-text' : s.risk === 'med' ? 'violet-accent' : 'matrix-text'}
-            />
-            <span>{s.name}</span>
-            <span className="chip-mini">{s.proto.toUpperCase()}:{s.port}</span>
-          </div>
-        ))}
+        {(() => {
+          const byGroup = new Map<ServiceGroup, ServiceDef[]>();
+          for (const s of services) {
+            const g = (s.group ?? 'Remote Access') as ServiceGroup;
+            const list = byGroup.get(g) ?? [];
+            list.push(s);
+            byGroup.set(g, list);
+          }
+          const extras = [...byGroup.keys()].filter((g) => !SERVICE_GROUP_ORDER.includes(g));
+          const order = [...SERVICE_GROUP_ORDER, ...extras];
+          return order
+            .filter((g) => byGroup.has(g))
+            .map((g) => (
+              <div key={g} className="palette-subgroup">
+                <div className="palette-subgroup-label">{g.toUpperCase()}</div>
+                {byGroup.get(g)!.map((s) => (
+                  <div
+                    key={s.slug}
+                    className="palette-item"
+                    onMouseDown={start({ kind: 'service', slug: s.slug, label: s.name })}
+                  >
+                    <Icon
+                      name={s.icon}
+                      size={12}
+                      className={s.risk === 'high' ? 'alert-text' : s.risk === 'med' ? 'violet-accent' : 'matrix-text'}
+                    />
+                    <span>{s.name}</span>
+                    <span className="chip-mini">{s.proto.toUpperCase()}/{s.port}</span>
+                  </div>
+                ))}
+              </div>
+            ));
+        })()}
       </div>
 
       <div className="palette-group">

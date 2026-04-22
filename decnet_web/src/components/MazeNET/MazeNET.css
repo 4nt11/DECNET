@@ -110,6 +110,12 @@ body.maze-fullscreen .maze-shell {
 .palette-hint {
   font-size: 0.62rem; opacity: 0.5; line-height: 1.6; letter-spacing: 0.5px;
 }
+.palette-subgroup { display: flex; flex-direction: column; gap: 4px; margin-top: 4px; }
+.palette-subgroup:first-child { margin-top: 0; }
+.palette-subgroup-label {
+  font-size: 0.55rem; letter-spacing: 1.5px; opacity: 0.4;
+  color: var(--violet); margin-top: 6px;
+}
 
 .violet-accent { color: var(--violet); }
 .alert-text { color: var(--alert); }
