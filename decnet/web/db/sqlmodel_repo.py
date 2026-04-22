@@ -1111,6 +1111,10 @@ class SQLModelRepository(BaseRepository):
                 text("DELETE FROM lans WHERE topology_id = :t"),
                 params,
             )
+            await session.execute(
+                text("DELETE FROM topology_mutations WHERE topology_id = :t"),
+                params,
+            )
             result = await session.execute(
                 select(Topology).where(Topology.id == topology_id)
             )

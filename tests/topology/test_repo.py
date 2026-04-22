@@ -138,6 +138,7 @@ async def test_cascade_delete_clears_all_children(repo):
         {"topology_id": t_id, "decky_uuid": d_uuid, "lan_id": lan_id}
     )
     await repo.update_topology_status(t_id, "deploying")
+    await repo.enqueue_topology_mutation(t_id, "noop", {"x": 1})
 
     assert await repo.delete_topology_cascade(t_id) is True
     assert await repo.get_topology(t_id) is None
