@@ -1,7 +1,8 @@
 import React, { useEffect, useState } from 'react';
 import { useSearchParams, useNavigate } from 'react-router-dom';
-import { Search, ChevronLeft, ChevronRight, UserX } from 'lucide-react';
+import { Search, ChevronLeft, ChevronRight, Users } from 'lucide-react';
 import api from '../utils/api';
+import EmptyState from './EmptyState/EmptyState';
 import './Dashboard.css';
 import './Attackers.css';
 
@@ -163,14 +164,13 @@ const Attackers: React.FC = () => {
         </div>
 
         {loading ? (
-          <div className="empty-state">
-            <span className="type-label">SCANNING THREAT PROFILES...</span>
-          </div>
+          <EmptyState icon={Users} title="SCANNING THREAT PROFILES…" />
         ) : attackers.length === 0 ? (
-          <div className="empty-state">
-            <UserX size={28} />
-            <span className="type-label">NO ACTIVE THREATS PROFILED YET</span>
-          </div>
+          <EmptyState
+            icon={Users}
+            title="NO ACTIVE THREATS PROFILED YET"
+            hint="waiting on attacker traffic to correlate"
+          />
         ) : (
           <div className="ak-grid">
             {attackers.map(a => {

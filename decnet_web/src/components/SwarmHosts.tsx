@@ -1,8 +1,10 @@
 import React, { useEffect, useState } from 'react';
+import { useNavigate } from 'react-router-dom';
 import api from '../utils/api';
+import EmptyState from './EmptyState/EmptyState';
 import './Dashboard.css';
 import './Swarm.css';
-import { HardDrive, PowerOff, RefreshCw, Trash2, Wifi, WifiOff } from 'lucide-react';
+import { HardDrive, PowerOff, RefreshCw, Server, Trash2, Wifi, WifiOff } from 'lucide-react';
 
 interface SwarmHost {
   uuid: string;
@@ -20,6 +22,7 @@ interface SwarmHost {
 const shortFp = (fp: string): string => (fp ? fp.slice(0, 16) + '…' : '—');
 
 const SwarmHosts: React.FC = () => {
+  const navigate = useNavigate();
   const [hosts, setHosts] = useState<SwarmHost[]>([]);
   const [loading, setLoading] = useState(true);
   const [decommissioning, setDecommissioning] = useState<Set<string>>(new Set());
@@ -102,7 +105,12 @@ const SwarmHosts: React.FC = () => {
         {loading ? (
           <p>Loading hosts…</p>
         ) : hosts.length === 0 ? (
-          <p>No swarm hosts enrolled yet. Head to <strong>SWARM → Agent Enrollment</strong> to onboard one.</p>
+          <EmptyState
+            icon={Server}
+            title="NO SWARM HOSTS ENROLLED"
+            hint="onboard an agent to expand the fleet"
+            cta={{ label: 'ENROLL HOST', onClick: () => navigate('/swarm/enroll') }}
+          />
         ) : (
           <table className="data-table">
             <thead>

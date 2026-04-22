@@ -1,9 +1,10 @@
 import React, { useEffect, useState } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
-import { Activity, ArrowLeft, ChevronDown, ChevronLeft, ChevronRight, ChevronUp, Crosshair, Fingerprint, Shield, Clock, Wifi, Lock, FileKey, Radio, Timer, Paperclip } from 'lucide-react';
+import { Activity, ArrowLeft, ChevronDown, ChevronLeft, ChevronRight, ChevronUp, Crosshair, Fingerprint, Shield, Clock, Wifi, Lock, FileKey, Radio, Timer, Paperclip, Terminal, Package, FileText } from 'lucide-react';
 import api from '../utils/api';
 import ArtifactDrawer from './ArtifactDrawer';
 import SessionDrawer from './SessionDrawer';
+import EmptyState from './EmptyState/EmptyState';
 import './Dashboard.css';
 
 interface AttackerBehavior {
@@ -964,9 +965,12 @@ const AttackerDetail: React.FC = () => {
             </div>
           </div>
         ) : (
-          <div style={{ padding: '24px', textAlign: 'center', opacity: 0.5 }}>
-            NO BEHAVIORAL DATA YET — PROFILER HAS NOT RUN FOR THIS ATTACKER
-          </div>
+          <EmptyState
+            icon={Activity}
+            title="NO BEHAVIORAL DATA YET"
+            hint="profiler has not run for this attacker"
+            size="compact"
+          />
         )}
       </Section>
 
@@ -1028,9 +1032,11 @@ const AttackerDetail: React.FC = () => {
                 </table>
               </div>
             ) : (
-              <div style={{ padding: '24px', textAlign: 'center', opacity: 0.5 }}>
-                {serviceFilter ? `NO ${serviceFilter.toUpperCase()} COMMANDS CAPTURED` : 'NO COMMANDS CAPTURED'}
-              </div>
+              <EmptyState
+                icon={Terminal}
+                title={serviceFilter ? `NO ${serviceFilter.toUpperCase()} COMMANDS CAPTURED` : 'NO COMMANDS CAPTURED'}
+                size="compact"
+              />
             )}
           </Section>
         );
@@ -1177,9 +1183,11 @@ const AttackerDetail: React.FC = () => {
             </table>
           </div>
         ) : (
-          <div style={{ padding: '24px', textAlign: 'center', opacity: 0.5 }}>
-            NO ARTIFACTS CAPTURED FROM THIS ATTACKER
-          </div>
+          <EmptyState
+            icon={Package}
+            title="NO ARTIFACTS CAPTURED"
+            size="compact"
+          />
         )}
       </Section>
 
@@ -1258,9 +1266,11 @@ const AttackerDetail: React.FC = () => {
             </table>
           </div>
         ) : (
-          <div style={{ padding: '24px', textAlign: 'center', opacity: 0.5 }}>
-            NO SESSION TRANSCRIPTS RECORDED FROM THIS ATTACKER
-          </div>
+          <EmptyState
+            icon={FileText}
+            title="NO SESSION TRANSCRIPTS RECORDED"
+            size="compact"
+          />
         )}
       </Section>
 

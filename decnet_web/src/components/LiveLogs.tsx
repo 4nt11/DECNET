@@ -2,11 +2,12 @@ import React, { useEffect, useState, useRef, useMemo } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import {
   Terminal, Search, BarChart3, ChevronLeft, ChevronRight,
-  Play, Pause, Paperclip, Download, SearchX, X as XIcon,
+  Play, Pause, Paperclip, Download, Radio, X as XIcon,
 } from 'lucide-react';
 import api from '../utils/api';
 import { parseEventBody } from '../utils/parseEventBody';
 import ArtifactDrawer from './ArtifactDrawer';
+import EmptyState from './EmptyState/EmptyState';
 import './Dashboard.css';
 import './LiveLogs.css';
 
@@ -357,12 +358,11 @@ const LiveLogs: React.FC = () => {
               }) : (
                 <tr>
                   <td colSpan={5}>
-                    <div className="empty-state">
-                      <SearchX size={28} />
-                      <span className="type-label">
-                        {loading ? 'RETRIEVING DATA...' : 'NO LOGS MATCHING CRITERIA'}
-                      </span>
-                    </div>
+                    <EmptyState
+                      icon={Radio}
+                      title={loading ? 'RETRIEVING DATA…' : 'NO LOGS MATCHING CRITERIA'}
+                      hint={loading ? undefined : 'adjust filters or wait for new events'}
+                    />
                   </td>
                 </tr>
               )}

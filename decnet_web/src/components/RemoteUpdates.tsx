@@ -1,5 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import api from '../utils/api';
+import EmptyState from './EmptyState/EmptyState';
 import './Dashboard.css';
 import {
   Upload, RefreshCw, RotateCcw, Package, AlertTriangle, CheckCircle,
@@ -222,11 +223,11 @@ const RemoteUpdates: React.FC = () => {
       )}
 
       {hosts.length === 0 ? (
-        <div style={{ padding: '24px', color: 'var(--dim-color)' }}>
-          <Server size={16} style={{ verticalAlign: 'middle', marginRight: '8px' }} />
-          No workers with an updater bundle are enrolled. Run{' '}
-          <code>decnet swarm enroll --host &lt;name&gt; --updater</code> to add one.
-        </div>
+        <EmptyState
+          icon={Server}
+          title="NO UPDATER-ENABLED WORKERS"
+          hint="run `decnet swarm enroll --host <name> --updater` to add one"
+        />
       ) : (
         <div style={{ display: 'grid', gap: '16px' }}>
           {hosts.map((h) => {

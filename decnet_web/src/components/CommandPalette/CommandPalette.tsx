@@ -2,7 +2,9 @@ import React, { useEffect, useMemo, useRef, useState } from 'react';
 import {
   LayoutDashboard, Server, Network, Terminal, Archive, Crosshair,
   PlusCircle, Pause, RefreshCw, Download, HardDrive, Package, UserPlus, Settings,
+  SearchX,
 } from 'lucide-react';
+import EmptyState from '../EmptyState/EmptyState';
 import './CommandPalette.css';
 
 type IconComponent = React.ComponentType<{ size?: number; className?: string }>;
@@ -141,7 +143,7 @@ const CommandPalette: React.FC<Props> = ({ open, onClose, onNav, onAction }) => 
             </div>
           ))}
           {filtered.length === 0 && (
-            <div className="cmd-empty">NO COMMAND MATCHES</div>
+            <EmptyState icon={SearchX} title="NO COMMAND MATCHES" size="compact" />
           )}
         </div>
         <div className="cmd-hint">

@@ -1,9 +1,10 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import './Dashboard.css';
-import { Shield, Users, Activity, Clock, Paperclip, Crosshair, Flame, Archive } from 'lucide-react';
+import { Shield, Users, Activity, Clock, Paperclip, Crosshair, Flame, Archive, ShieldOff, Server } from 'lucide-react';
 import { parseEventBody } from '../utils/parseEventBody';
 import ArtifactDrawer from './ArtifactDrawer';
+import EmptyState from './EmptyState/EmptyState';
 
 interface Stats {
   total_logs: number;
@@ -417,7 +418,13 @@ const Dashboard: React.FC<DashboardProps> = ({ searchQuery }) => {
                   );
                 }) : (
                   <tr>
-                    <td colSpan={6} style={{ textAlign: 'center', padding: '40px' }}>NO INTERACTION DETECTED</td>
+                    <td colSpan={6} style={{ padding: 0 }}>
+                      <EmptyState
+                        icon={Activity}
+                        title="NO INTERACTION DETECTED"
+                        hint="waiting for the first decky hit"
+                      />
+                    </td>
                   </tr>
                 )}
               </tbody>
@@ -454,7 +461,7 @@ const Dashboard: React.FC<DashboardProps> = ({ searchQuery }) => {
                 ))}
               </div>
             ) : (
-              <div className="panel-empty">NO ACTIVITY</div>
+              <EmptyState icon={Server} title="NO ACTIVITY" hint="all deckies quiet" />
             )}
           </div>
 
@@ -486,7 +493,7 @@ const Dashboard: React.FC<DashboardProps> = ({ searchQuery }) => {
                 ))}
               </div>
             ) : (
-              <div className="panel-empty">NO ATTACKERS YET</div>
+              <EmptyState icon={ShieldOff} title="NO ATTACKERS YET" hint="nothing on the radar" />
             )}
           </div>
         </div>

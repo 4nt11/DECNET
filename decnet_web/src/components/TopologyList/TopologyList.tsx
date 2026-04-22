@@ -4,6 +4,7 @@ import { Network, Plus, Power, Trash2, UploadCloud, RefreshCw, Skull } from 'luc
 import api from '../../utils/api';
 import { clearLayout } from '../MazeNET/useMazeLayoutStore';
 import CreateTopologyWizard from './CreateTopologyWizard';
+import EmptyState from '../EmptyState/EmptyState';
 import './TopologyList.css';
 
 interface TopologySummary {
@@ -237,9 +238,12 @@ const TopologyList: React.FC = () => {
           </div>
         ))}
         {!loading && rows.length === 0 && (
-          <div className="tlist-empty">
-            No topologies yet. Click NEW TOPOLOGY to create one.
-          </div>
+          <EmptyState
+            icon={Network}
+            title="NO TOPOLOGIES YET"
+            hint="spin one up to deploy a honeynet"
+            cta={{ label: 'NEW TOPOLOGY', icon: Plus, onClick: () => setCreating(true) }}
+          />
         )}
       </div>
     </div>

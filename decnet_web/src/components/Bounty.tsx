@@ -2,10 +2,11 @@ import React, { useEffect, useState } from 'react';
 import { useSearchParams, useNavigate } from 'react-router-dom';
 import {
   Archive, Search, ChevronLeft, ChevronRight, Filter, Key, Package, ChevronRight as ChevR,
-  ArchiveX,
+  Target,
 } from 'lucide-react';
 import api from '../utils/api';
 import BountyInspector from './BountyInspector';
+import EmptyState from './EmptyState/EmptyState';
 import './Dashboard.css';
 import './Bounty.css';
 
@@ -220,12 +221,11 @@ const Bounty: React.FC = () => {
               }) : (
                 <tr>
                   <td colSpan={7}>
-                    <div className="empty-state">
-                      <ArchiveX size={30} />
-                      <span className="type-label">
-                        {loading ? 'RETRIEVING ARTIFACTS...' : 'THE VAULT IS EMPTY'}
-                      </span>
-                    </div>
+                    <EmptyState
+                      icon={Target}
+                      title={loading ? 'RETRIEVING ARTIFACTS…' : 'THE VAULT IS EMPTY'}
+                      hint={loading ? undefined : 'attacker-dropped artifacts will land here'}
+                    />
                   </td>
                 </tr>
               )}
