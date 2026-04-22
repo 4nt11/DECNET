@@ -68,6 +68,7 @@ dev = [
     "pymongo>=4.16.0",
     "locust>=2.29",
     "gevent>=24.0",
+    "pydeps>=3.0.3"
 ]
 
 [project.scripts]
