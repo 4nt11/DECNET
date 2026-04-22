@@ -15,16 +15,21 @@ import pytest
 from hypothesis import given, settings
 from hypothesis import strategies as st
 
-from .conftest import _FUZZ_SETTINGS, make_fake_syslog_bridge, run_with_timeout
+from .conftest import (
+    _FUZZ_SETTINGS,
+    load_real_instance_seed,
+    make_fake_syslog_bridge,
+    run_with_timeout,
+)
 
 
 # ── Helpers ───────────────────────────────────────────────────────────────────
 
 def _load_mqtt():
-    for key in list(sys.modules):
-        if key in ("mqtt_server", "syslog_bridge"):
-            del sys.modules[key]
+    for key in ("mqtt_server", "syslog_bridge", "instance_seed"):
+        sys.modules.pop(key, None)
     sys.modules["syslog_bridge"] = make_fake_syslog_bridge()
+    sys.modules["instance_seed"] = load_real_instance_seed()
     spec = importlib.util.spec_from_file_location("mqtt_server", "decnet/templates/mqtt/server.py")
     mod = importlib.util.module_from_spec(spec)
     with patch.dict("os.environ", {"MQTT_ACCEPT_ALL": "1", "MQTT_PERSONA": "water_plant"}, clear=False):

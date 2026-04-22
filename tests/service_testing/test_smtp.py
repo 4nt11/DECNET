@@ -36,16 +36,23 @@ def _load_smtp(open_relay: bool):
     Injects a stub syslog_bridge into sys.modules so the template can import
     it without needing the real file on sys.path.
     """
-    env = {"SMTP_OPEN_RELAY": "1" if open_relay else "0", "NODE_NAME": "testhost"}
-    for key in list(sys.modules):
-        if key in ("smtp_server", "syslog_bridge"):
-            del sys.modules[key]
+    env = {
+        "SMTP_OPEN_RELAY": "1" if open_relay else "0",
+        "NODE_NAME": "testhost",
+        # Force deterministic RCPT acceptance in tests; relay filtering is
+        # covered in its own dedicated test class below.
+        "SMTP_RCPT_DROP_RATE": "0",
+    }
+    for key in ("smtp_server", "syslog_bridge", "instance_seed"):
+        sys.modules.pop(key, None)
 
     sys.modules["syslog_bridge"] = _make_fake_syslog_bridge()
 
     spec = importlib.util.spec_from_file_location("smtp_server", "decnet/templates/smtp/server.py")
     mod = importlib.util.module_from_spec(spec)
     with patch.dict("os.environ", env, clear=False):
+        from .conftest import load_real_instance_seed
+        sys.modules["instance_seed"] = load_real_instance_seed()
         spec.loader.exec_module(mod)
     return mod
 
@@ -237,6 +244,63 @@ class TestOpenRelay:
         assert any("queued as" in r for r in replies)
 
 
+# ── OPEN-RELAY FILTERING ─────────────────────────────────────────────────────
+
+class TestOpenRelayFiltering:
+    """Real open relays reject malformed/bogus RCPTs even when they accept
+    external mail — a pure tarpit is a honeypot tell."""
+
+    @staticmethod
+    def _session_with_env(env_extra: dict, *lines) -> list[str]:
+        env = {
+            "SMTP_OPEN_RELAY": "1",
+            "NODE_NAME": "testhost",
+            "SMTP_RCPT_DROP_RATE": "0",
+            **env_extra,
+        }
+        for key in ("smtp_server", "syslog_bridge", "instance_seed"):
+            sys.modules.pop(key, None)
+        sys.modules["syslog_bridge"] = _make_fake_syslog_bridge()
+        spec = importlib.util.spec_from_file_location(
+            "smtp_server", "decnet/templates/smtp/server.py"
+        )
+        mod = importlib.util.module_from_spec(spec)
+        with patch.dict("os.environ", env, clear=False):
+            from .conftest import load_real_instance_seed
+            sys.modules["instance_seed"] = load_real_instance_seed()
+            spec.loader.exec_module(mod)
+        proto, _, written = _make_protocol(mod)
+        _send(proto, *lines)
+        return _replies(written)
+
+    def test_malformed_rcpt_returns_501(self):
+        replies = self._session_with_env(
+            {},
+            "EHLO x.com",
+            "MAIL FROM:<a@b.com>",
+            "RCPT TO:<notanaddress>",
+        )
+        assert any(r.startswith("501") for r in replies)
+
+    def test_blocked_tld_returns_550(self):
+        replies = self._session_with_env(
+            {},
+            "EHLO x.com",
+            "MAIL FROM:<a@b.com>",
+            "RCPT TO:<admin@foo.invalid>",
+        )
+        assert any(r.startswith("550") for r in replies)
+
+    def test_always_greylist_returns_451(self):
+        replies = self._session_with_env(
+            {"SMTP_RCPT_DROP_RATE": "1.0"},
+            "EHLO x.com",
+            "MAIL FROM:<a@b.com>",
+            "RCPT TO:<victim@legit-domain.com>",
+        )
+        assert any(r.startswith("451") for r in replies)
+
+
 # ── CREDENTIAL HARVESTER MODE ─────────────────────────────────────────────────
 
 class TestCredentialHarvester:
@@ -296,10 +360,14 @@ class TestCredentialHarvester:
 # ── Queue ID ──────────────────────────────────────────────────────────────────
 
 def test_rand_msg_id_format(relay_mod):
+    # Postfix queue IDs use a vowel-free alphabet (no aeiou, no 0/1) and
+    # vary in length with the current microsecond magnitude — typically
+    # 10-12 chars.
+    postfix_alphabet = set("BCDFGHJKLMNPQRSTVWXYZ23456789")
     for _ in range(50):
         mid = relay_mod._rand_msg_id()
-        assert len(mid) == 12
-        assert mid.isalnum()
+        assert 10 <= len(mid) <= 12
+        assert set(mid).issubset(postfix_alphabet)
 
 
 # ── AUTH PLAIN decode ─────────────────────────────────────────────────────────

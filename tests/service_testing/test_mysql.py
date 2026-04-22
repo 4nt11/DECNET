@@ -14,16 +14,21 @@ import pytest
 from hypothesis import given, settings
 from hypothesis import strategies as st
 
-from .conftest import _FUZZ_SETTINGS, make_fake_syslog_bridge, run_with_timeout
+from .conftest import (
+    _FUZZ_SETTINGS,
+    load_real_instance_seed,
+    make_fake_syslog_bridge,
+    run_with_timeout,
+)
 
 
 # ── Helpers ───────────────────────────────────────────────────────────────────
 
 def _load_mysql():
-    for key in list(sys.modules):
-        if key in ("mysql_server", "syslog_bridge"):
-            del sys.modules[key]
+    for key in ("mysql_server", "syslog_bridge", "instance_seed"):
+        sys.modules.pop(key, None)
     sys.modules["syslog_bridge"] = make_fake_syslog_bridge()
+    sys.modules["instance_seed"] = load_real_instance_seed()
     spec = importlib.util.spec_from_file_location("mysql_server", "decnet/templates/mysql/server.py")
     mod = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(mod)
@@ -33,6 +38,7 @@ def _load_mysql():
 def _make_protocol(mod):
     proto = mod.MySQLProtocol()
     transport = MagicMock()
+    transport.is_closing.return_value = False
     written: list[bytes] = []
     transport.write.side_effect = written.append
     proto.connection_made(transport)
@@ -66,6 +72,7 @@ def mysql_mod():
 def test_connection_sends_greeting(mysql_mod):
     proto = mysql_mod.MySQLProtocol()
     transport = MagicMock()
+    transport.is_closing.return_value = False
     written: list[bytes] = []
     transport.write.side_effect = written.append
     proto.connection_made(transport)

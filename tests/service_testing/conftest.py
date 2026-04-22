@@ -28,6 +28,20 @@ def make_fake_syslog_bridge() -> ModuleType:
     return mod
 
 
+def load_real_instance_seed() -> ModuleType:
+    """Load the real instance_seed helper so templates under test see the
+    actual per-instance seeding behavior, not a stub. Tests that need
+    determinism should pin NODE_NAME via monkeypatch before loading a
+    template."""
+    import importlib.util
+    spec = importlib.util.spec_from_file_location(
+        "instance_seed", "decnet/templates/instance_seed.py"
+    )
+    mod = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(mod)
+    return mod
+
+
 def run_with_timeout(fn, *args, timeout: float = 2.0) -> None:
     """Run fn(*args) in a daemon thread. pytest.fail if it doesn't return in time."""
     exc_box: list[BaseException] = []
