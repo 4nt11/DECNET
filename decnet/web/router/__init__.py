@@ -24,6 +24,8 @@ from .config.api_reinit import router as config_reinit_router
 from .health.api_get_health import router as health_router
 from .workers.api_list_workers import router as workers_list_router
 from .workers.api_control_worker import router as workers_control_router
+from .workers.api_start_worker import router as workers_start_router
+from .workers.api_start_all_workers import router as workers_start_all_router
 from .artifacts.api_get_artifact import router as artifacts_router
 from .swarm_updates import swarm_updates_router
 from .swarm_mgmt import swarm_mgmt_router
@@ -73,6 +75,8 @@ api_router.include_router(stream_router)
 api_router.include_router(health_router)
 api_router.include_router(workers_list_router)
 api_router.include_router(workers_control_router)
+api_router.include_router(workers_start_router)
+api_router.include_router(workers_start_all_router)
 
 # Configuration
 api_router.include_router(config_get_router)
