@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { useSearchParams, useNavigate } from 'react-router-dom';
 import {
   Archive, Search, ChevronLeft, ChevronRight, Filter, Key, Package, ChevronRight as ChevR,
@@ -7,6 +7,7 @@ import {
 import api from '../utils/api';
 import BountyInspector from './BountyInspector';
 import EmptyState from './EmptyState/EmptyState';
+import { useFocusSearch } from '../hooks/useFocusSearch';
 import './Dashboard.css';
 import './Bounty.css';
 
@@ -57,6 +58,8 @@ const Bounty: React.FC = () => {
   const [total, setTotal] = useState(0);
   const [loading, setLoading] = useState(true);
   const [searchInput, setSearchInput] = useState(query);
+  const searchRef = useRef<HTMLInputElement | null>(null);
+  useFocusSearch(searchRef);
   const [selected, setSelected] = useState<BountyEntry | null>(null);
 
   const limit = 50;
@@ -118,6 +121,7 @@ const Bounty: React.FC = () => {
         <div className="search-container">
           <Search size={14} className="search-icon" />
           <input
+            ref={searchRef}
             type="text"
             placeholder="Filter by IP, decky, payload..."
             value={searchInput}

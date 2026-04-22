@@ -4,6 +4,8 @@ import { useNavigate } from 'react-router-dom';
 interface Options {
   cmdOpen: boolean;
   setCmdOpen: (v: boolean | ((prev: boolean) => boolean)) => void;
+  helpOpen: boolean;
+  setHelpOpen: (v: boolean | ((prev: boolean) => boolean)) => void;
 }
 
 const G_NAV: Record<string, string> = {
@@ -27,7 +29,7 @@ function isEditable(el: EventTarget | null): boolean {
   return tag === 'INPUT' || tag === 'TEXTAREA' || el.isContentEditable;
 }
 
-export function useGlobalHotkeys({ cmdOpen, setCmdOpen }: Options): void {
+export function useGlobalHotkeys({ cmdOpen, setCmdOpen, helpOpen, setHelpOpen }: Options): void {
   const navigate = useNavigate();
   const pendingG = useRef(false);
   const gTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -52,9 +54,25 @@ export function useGlobalHotkeys({ cmdOpen, setCmdOpen }: Options): void {
         return;
       }
 
-      if (cmdOpen) return;
+      if (cmdOpen || helpOpen) return;
       if (isEditable(e.target)) return;
       if (e.metaKey || e.ctrlKey || e.altKey) return;
+
+      // `?` (Shift+/) — open shortcuts cheatsheet
+      if (e.key === '?') {
+        e.preventDefault();
+        setHelpOpen(true);
+        clearG();
+        return;
+      }
+
+      // `/` — focus page search (page listens for the event)
+      if (e.key === '/') {
+        e.preventDefault();
+        window.dispatchEvent(new CustomEvent('decnet:focus-search'));
+        clearG();
+        return;
+      }
 
       const k = e.key.toLowerCase();
 
@@ -77,5 +95,5 @@ export function useGlobalHotkeys({ cmdOpen, setCmdOpen }: Options): void {
       window.removeEventListener('keydown', onKey);
       if (gTimer.current) clearTimeout(gTimer.current);
     };
-  }, [cmdOpen, setCmdOpen, navigate]);
+  }, [cmdOpen, setCmdOpen, helpOpen, setHelpOpen, navigate]);
 }

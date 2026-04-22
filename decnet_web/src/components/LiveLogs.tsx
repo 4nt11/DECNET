@@ -1,4 +1,5 @@
 import React, { useEffect, useState, useRef, useMemo } from 'react';
+import { useFocusSearch } from '../hooks/useFocusSearch';
 import { useSearchParams } from 'react-router-dom';
 import {
   Terminal, Search, BarChart3, ChevronLeft, ChevronRight,
@@ -39,6 +40,8 @@ const LiveLogs: React.FC = () => {
   const [loading, setLoading] = useState(true);
   const [streaming, setStreaming] = useState(isLive);
   const [searchInput, setSearchInput] = useState(query);
+  const searchRef = useRef<HTMLInputElement | null>(null);
+  useFocusSearch(searchRef);
   const [selectedHour, setSelectedHour] = useState<number | null>(null);
 
   const eventSourceRef = useRef<EventSource | null>(null);
@@ -200,6 +203,7 @@ const LiveLogs: React.FC = () => {
         <div className="search-container">
           <Search size={14} className="search-icon" />
           <input
+            ref={searchRef}
             type="text"
             placeholder="Query (e.g. decky:decky-03 service:ssh attacker:89.248)"
             value={searchInput}

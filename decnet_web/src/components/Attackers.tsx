@@ -1,8 +1,9 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { useSearchParams, useNavigate } from 'react-router-dom';
 import { Search, ChevronLeft, ChevronRight, Users } from 'lucide-react';
 import api from '../utils/api';
 import EmptyState from './EmptyState/EmptyState';
+import { useFocusSearch } from '../hooks/useFocusSearch';
 import './Dashboard.css';
 import './Attackers.css';
 
@@ -63,6 +64,8 @@ const Attackers: React.FC = () => {
   const [total, setTotal] = useState(0);
   const [loading, setLoading] = useState(true);
   const [searchInput, setSearchInput] = useState(query);
+  const searchRef = useRef<HTMLInputElement | null>(null);
+  useFocusSearch(searchRef);
 
   const limit = 50;
 
@@ -122,6 +125,7 @@ const Attackers: React.FC = () => {
         <div className="search-container">
           <Search size={14} className="search-icon" />
           <input
+            ref={searchRef}
             type="text"
             placeholder="Search by IP..."
             value={searchInput}

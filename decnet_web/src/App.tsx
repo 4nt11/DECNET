@@ -15,6 +15,7 @@ import AgentEnrollment from './components/AgentEnrollment';
 import MazeNET from './components/MazeNET/MazeNET';
 import TopologyList from './components/TopologyList/TopologyList';
 import CommandPalette from './components/CommandPalette/CommandPalette';
+import ShortcutsHelp from './components/ShortcutsHelp/ShortcutsHelp';
 import { ToastProvider } from './components/Toasts/ToastProvider';
 import { useToast } from './components/Toasts/useToast';
 import { useGlobalHotkeys } from './hooks/useGlobalHotkeys';
@@ -60,10 +61,12 @@ const AuthedShell: React.FC<AuthedShellProps> = ({ onLogout, onSearch, searchQue
   const navigate = useNavigate();
   const { push } = useToast();
   const [cmdOpen, setCmdOpen] = useState(false);
+  const [helpOpen, setHelpOpen] = useState(false);
 
-  useGlobalHotkeys({ cmdOpen, setCmdOpen });
+  useGlobalHotkeys({ cmdOpen, setCmdOpen, helpOpen, setHelpOpen });
 
   const handleAction = (id: string) => {
+    if (id === 'shortcuts-help') { setHelpOpen(true); return; }
     if (id === 'deploy') navigate('/fleet');
     window.dispatchEvent(new CustomEvent('decnet:cmd', { detail: { id } }));
     push({ text: ACTION_LABELS[id] ?? `${id.toUpperCase()} · QUEUED`, tone: 'violet', icon: 'terminal' });
@@ -94,6 +97,7 @@ const AuthedShell: React.FC<AuthedShellProps> = ({ onLogout, onSearch, searchQue
         onNav={navigate}
         onAction={handleAction}
       />
+      <ShortcutsHelp open={helpOpen} onClose={() => setHelpOpen(false)} />
     </>
   );
 };

@@ -2,7 +2,7 @@ import React, { useEffect, useMemo, useRef, useState } from 'react';
 import {
   LayoutDashboard, Server, Network, Terminal, Archive, Crosshair,
   PlusCircle, Pause, RefreshCw, Download, HardDrive, Package, UserPlus, Settings,
-  SearchX,
+  SearchX, Keyboard,
 } from 'lucide-react';
 import EmptyState from '../EmptyState/EmptyState';
 import './CommandPalette.css';
@@ -33,6 +33,7 @@ const ITEMS: CmdItem[] = [
   { section: 'ACTIONS', label: 'Pause live stream',       icon: Pause,      kind: 'action', payload: 'pause-logs' },
   { section: 'ACTIONS', label: 'Force mutate all deckies', icon: RefreshCw, kind: 'action', payload: 'mutate-all' },
   { section: 'ACTIONS', label: 'Export bounty to JSON',   icon: Download,   kind: 'action', payload: 'export-bounty' },
+  { section: 'ACTIONS', label: 'Show keyboard shortcuts', icon: Keyboard,   kbd: '?', kind: 'action', payload: 'shortcuts-help' },
 ];
 
 interface Props {
