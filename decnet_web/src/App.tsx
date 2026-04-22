@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-dom';
+import { BrowserRouter as Router, Routes, Route, Navigate, useNavigate } from 'react-router-dom';
 import Login from './components/Login';
 import Layout from './components/Layout';
 import Dashboard from './components/Dashboard';
@@ -14,13 +14,17 @@ import SwarmHosts from './components/SwarmHosts';
 import AgentEnrollment from './components/AgentEnrollment';
 import MazeNET from './components/MazeNET/MazeNET';
 import TopologyList from './components/TopologyList/TopologyList';
+import CommandPalette from './components/CommandPalette/CommandPalette';
+import { ToastProvider } from './components/Toasts/ToastProvider';
+import { useToast } from './components/Toasts/useToast';
+import { useGlobalHotkeys } from './hooks/useGlobalHotkeys';
 
-/* Guard the /mazenet route so it's always bound to a real topology.
- * Bare /mazenet → /topologies; ?topology=<id> → editor. */
+/* Unified MazeNET entrypoint: no ?topology → topology selector,
+ * ?topology=<id> → editor bound to that topology. */
 function MazeNETRoute() {
   const qs = typeof window !== 'undefined' ? window.location.search : '';
   const hasId = new URLSearchParams(qs).get('topology');
-  return hasId ? <MazeNET /> : <Navigate to="/topologies" replace />;
+  return hasId ? <MazeNET /> : <TopologyList />;
 }
 
 function isTokenValid(token: string): boolean {
@@ -39,40 +43,39 @@ function getValidToken(): string | null {
   return null;
 }
 
-function App() {
-  const [token, setToken] = useState<string | null>(getValidToken);
-  const [searchQuery, setSearchQuery] = useState('');
+const ACTION_LABELS: Record<string, string> = {
+  'deploy': 'DEPLOY · OPENING WIZARD',
+  'pause-logs': 'STREAM · TOGGLE QUEUED',
+  'mutate-all': 'MUTATE ALL · QUEUED',
+  'export-bounty': 'EXPORT BOUNTY · QUEUED',
+};
 
-  useEffect(() => {
-    const onAuthLogout = () => setToken(null);
-    window.addEventListener('auth:logout', onAuthLogout);
-    return () => window.removeEventListener('auth:logout', onAuthLogout);
-  }, []);
+interface AuthedShellProps {
+  onLogout: () => void;
+  onSearch: (q: string) => void;
+  searchQuery: string;
+}
 
-  const handleLogin = (newToken: string) => {
-    setToken(newToken);
+const AuthedShell: React.FC<AuthedShellProps> = ({ onLogout, onSearch, searchQuery }) => {
+  const navigate = useNavigate();
+  const { push } = useToast();
+  const [cmdOpen, setCmdOpen] = useState(false);
+
+  useGlobalHotkeys({ cmdOpen, setCmdOpen });
+
+  const handleAction = (id: string) => {
+    if (id === 'deploy') navigate('/fleet');
+    window.dispatchEvent(new CustomEvent('decnet:cmd', { detail: { id } }));
+    push({ text: ACTION_LABELS[id] ?? `${id.toUpperCase()} · QUEUED`, tone: 'violet', icon: 'terminal' });
   };
-
-  const handleLogout = () => {
-    localStorage.removeItem('token');
-    setToken(null);
-  };
-
-  const handleSearch = (query: string) => {
-    setSearchQuery(query);
-  };
-
-  if (!token) {
-    return <Login onLogin={handleLogin} />;
-  }
 
   return (
-    <Router>
-      <Layout onLogout={handleLogout} onSearch={handleSearch}>
+    <>
+      <Layout onLogout={onLogout} onSearch={onSearch} onOpenCmd={() => setCmdOpen(true)}>
         <Routes>
           <Route path="/" element={<Dashboard searchQuery={searchQuery} />} />
-          <Route path="/fleet" element={<DeckyFleet />} />
-          <Route path="/topologies" element={<TopologyList />} />
+          <Route path="/fleet" element={<DeckyFleet searchQuery={searchQuery} />} />
+          <Route path="/topologies" element={<Navigate to="/mazenet" replace />} />
           <Route path="/mazenet" element={<MazeNETRoute />} />
           <Route path="/live-logs" element={<LiveLogs />} />
           <Route path="/bounty" element={<Bounty />} />
@@ -85,6 +88,51 @@ function App() {
           <Route path="*" element={<Navigate to="/" replace />} />
         </Routes>
       </Layout>
+      <CommandPalette
+        open={cmdOpen}
+        onClose={() => setCmdOpen(false)}
+        onNav={navigate}
+        onAction={handleAction}
+      />
+    </>
+  );
+};
+
+function App() {
+  const [token, setToken] = useState<string | null>(getValidToken);
+  const [searchQuery, setSearchQuery] = useState('');
+
+  useEffect(() => {
+    const onAuthLogout = () => setToken(null);
+    window.addEventListener('auth:logout', onAuthLogout);
+    return () => window.removeEventListener('auth:logout', onAuthLogout);
+  }, []);
+
+  useEffect(() => {
+    let accent = 'matrix';
+    try {
+      const raw = localStorage.getItem('decnet_tweaks');
+      if (raw) {
+        const parsed = JSON.parse(raw);
+        if (parsed?.accent === 'matrix' || parsed?.accent === 'violet') accent = parsed.accent;
+      }
+    } catch { /* fall through to default */ }
+    document.documentElement.setAttribute('data-accent', accent);
+  }, []);
+
+  const handleLogin = (newToken: string) => setToken(newToken);
+  const handleLogout = () => { localStorage.removeItem('token'); setToken(null); };
+  const handleSearch = (query: string) => setSearchQuery(query);
+
+  if (!token) {
+    return <Login onLogin={handleLogin} />;
+  }
+
+  return (
+    <Router>
+      <ToastProvider>
+        <AuthedShell onLogout={handleLogout} onSearch={handleSearch} searchQuery={searchQuery} />
+      </ToastProvider>
     </Router>
   );
 }

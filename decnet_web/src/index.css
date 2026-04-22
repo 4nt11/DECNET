@@ -93,6 +93,19 @@
   --blink-dur: 2s;
   --pulse-dur: 1s;
   --spin-dur:  1.5s;
+
+  /* ── Accent swap (matrix default) ──────────────── */
+  --accent:         var(--matrix);
+  --accent-tint-10: var(--matrix-tint-10);
+  --accent-tint-30: var(--matrix-tint-30);
+  --accent-glow:    var(--matrix-glow);
+}
+
+html[data-accent="violet"] {
+  --accent:         var(--violet);
+  --accent-tint-10: var(--violet-tint-10);
+  --accent-tint-30: rgba(238, 130, 238, 0.30);
+  --accent-glow:    var(--violet-glow);
 }
 
 *, *::before, *::after {
