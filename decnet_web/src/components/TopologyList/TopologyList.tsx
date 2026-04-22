@@ -1,6 +1,6 @@
 import React, { useCallback, useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Network, Plus, Power, Trash2, UploadCloud, RefreshCw } from 'lucide-react';
+import { Network, Plus, Power, Trash2, UploadCloud, RefreshCw, Skull } from 'lucide-react';
 import api from '../../utils/api';
 import { clearLayout } from '../MazeNET/useMazeLayoutStore';
 import CreateTopologyWizard from './CreateTopologyWizard';
@@ -47,6 +47,8 @@ const TopologyList: React.FC = () => {
   const [creating, setCreating] = useState(false);
   const [busy, setBusy] = useState<string | null>(null);
   const [armed, setArmed] = useState<string | null>(null);
+  const [reaping, setReaping] = useState(false);
+  const [reapMsg, setReapMsg] = useState<string | null>(null);
 
   const arm = (key: string) => {
     setArmed(key);
@@ -92,6 +94,34 @@ const TopologyList: React.FC = () => {
     }
   };
 
+  const onReapOrphans = async () => {
+    setReaping(true);
+    setReapMsg(null);
+    try {
+      const { data } = await api.post<{
+        orphan_prefixes: string[];
+        containers_removed: string[];
+        networks_removed: string[];
+        errors: string[];
+      }>('/topologies/reap-orphans', {});
+      const c = data.containers_removed.length;
+      const n = data.networks_removed.length;
+      const e = data.errors.length;
+      if (c === 0 && n === 0 && e === 0) {
+        setReapMsg('no orphans found');
+      } else {
+        setReapMsg(`removed ${c} container(s), ${n} network(s)${e ? `, ${e} error(s)` : ''}`);
+      }
+      await fetchRows();
+    } catch (e) {
+      setReapMsg((e as Error)?.message ?? 'reap failed');
+    } finally {
+      setReaping(false);
+      setArmed(null);
+      setTimeout(() => setReapMsg(null), 6000);
+    }
+  };
+
   const onDeploy = async (id: string) => {
     setBusy(id);
     try {
@@ -125,11 +155,23 @@ const TopologyList: React.FC = () => {
           <div className="tlist-sub">
             {loading ? 'loading…' : `${rows.length} topology${rows.length === 1 ? '' : 'ies'}`}
             {err && <span className="alert-text"> · {err}</span>}
+            {reapMsg && <span className="alert-text"> · reap: {reapMsg}</span>}
           </div>
         </div>
         <div className="tlist-actions">
           <button type="button" className="tlist-btn ghost" onClick={fetchRows} title="Refresh">
             <RefreshCw size={12} /> REFRESH
+          </button>
+          <button
+            type="button"
+            className={`tlist-btn ghost warn ${armed === 'reap' ? 'armed' : ''}`}
+            disabled={reaping}
+            onClick={() => armed === 'reap' ? onReapOrphans() : arm('reap')}
+            title={armed === 'reap'
+              ? 'Click again to force-remove Docker resources for deleted topologies'
+              : 'Reap orphan Docker resources (admin)'}
+          >
+            <Skull size={12} /> {reaping ? 'REAPING…' : armed === 'reap' ? 'CONFIRM?' : 'REAP ORPHANS'}
           </button>
           <button type="button" className="tlist-btn" onClick={() => setCreating(true)}>
             <Plus size={12} /> NEW TOPOLOGY
