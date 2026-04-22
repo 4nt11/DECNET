@@ -49,13 +49,15 @@ log = get_logger("engine")
 console = Console()
 COMPOSE_FILE = Path("decnet-compose.yml")
 _CANONICAL_LOGGING = Path(__file__).parent.parent / "templates" / "syslog_bridge.py"
+_CANONICAL_INSTANCE_SEED = Path(__file__).parent.parent / "templates" / "instance_seed.py"
 _CANONICAL_SESSREC_DIR = Path(__file__).parent.parent / "templates" / "_shared" / "sessrec"
 _SESSREC_SERVICES = {"ssh", "telnet"}
 
 
 def _sync_logging_helper(config: DecnetConfig) -> None:
-    """Copy the canonical syslog_bridge.py into every active template build context."""
+    """Copy canonical shared helpers into every active template build context."""
     from decnet.services.registry import get_service
+    shared_files = [_CANONICAL_LOGGING, _CANONICAL_INSTANCE_SEED]
     seen: set[Path] = set()
     for decky in config.deckies:
         for svc_name in decky.services:
@@ -66,9 +68,10 @@ def _sync_logging_helper(config: DecnetConfig) -> None:
             if ctx is None or ctx in seen:
                 continue
             seen.add(ctx)
-            dest = ctx / "syslog_bridge.py"
-            if not dest.exists() or dest.read_bytes() != _CANONICAL_LOGGING.read_bytes():
-                shutil.copy2(_CANONICAL_LOGGING, dest)
+            for src in shared_files:
+                dest = ctx / src.name
+                if not dest.exists() or dest.read_bytes() != src.read_bytes():
+                    shutil.copy2(src, dest)
 
 
 def _sync_sessrec_sources(config: DecnetConfig) -> None:
