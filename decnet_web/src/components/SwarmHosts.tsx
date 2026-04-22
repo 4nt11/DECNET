@@ -90,12 +90,19 @@ const SwarmHosts: React.FC = () => {
     }
   };
 
+  const online = hosts.filter((h) => h.status === 'online').length;
+
   return (
-    <div className="dashboard">
-      <div className="dashboard-header">
-        <h1><HardDrive size={28} /> SWARM Hosts</h1>
+    <div className="dashboard swarm-root">
+      <div className="page-header">
+        <div className="page-title-group">
+          <h1><HardDrive size={18} /> SWARM HOSTS</h1>
+          <span className="page-sub">
+            {loading ? 'LOADING…' : `${hosts.length} ENROLLED · ${online} ONLINE`}
+          </span>
+        </div>
         <button onClick={fetchHosts} className="control-btn" disabled={loading}>
-          <RefreshCw size={16} /> Refresh
+          <RefreshCw size={14} /> REFRESH
         </button>
       </div>
 

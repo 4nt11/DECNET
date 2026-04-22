@@ -91,9 +91,14 @@ const AgentEnrollment: React.FC = () => {
   const ss = (remainingSecs % 60).toString().padStart(2, '0');
 
   return (
-    <div className="dashboard">
-      <div className="dashboard-header">
-        <h1><UserPlus size={28} /> Agent Enrollment</h1>
+    <div className="dashboard swarm-root">
+      <div className="page-header">
+        <div className="page-title-group">
+          <h1><UserPlus size={18} /> AGENT ENROLLMENT</h1>
+          <span className="page-sub">
+            issue a one-shot bootstrap URL for a new swarm worker
+          </span>
+        </div>
       </div>
 
       {!result ? (

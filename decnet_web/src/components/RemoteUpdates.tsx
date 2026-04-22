@@ -166,29 +166,21 @@ const RemoteUpdates: React.FC = () => {
   }
 
   return (
-    <div className="dashboard">
-      <div
-        className="section-header"
-        style={{
-          display: 'flex', justifyContent: 'space-between', alignItems: 'center',
-          border: '1px solid var(--border-color)', backgroundColor: 'var(--secondary-color)',
-          marginBottom: '24px',
-        }}
-      >
-        <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
-          <Package size={20} />
-          <h2 style={{ margin: 0 }}>REMOTE UPDATES — WORKER FLEET</h2>
+    <div className="dashboard swarm-root">
+      <div className="page-header">
+        <div className="page-title-group">
+          <h1><Package size={18} /> REMOTE UPDATES</h1>
+          <span className="page-sub">
+            push updater bundles to enrolled workers · {hosts.length} WORKER{hosts.length === 1 ? '' : 'S'}
+          </span>
         </div>
         <button
           onClick={() => setShowFleetModal(true)}
           disabled={fleetBusy || hosts.length === 0}
-          style={{
-            display: 'flex', alignItems: 'center', gap: '8px',
-            border: '1px solid var(--accent-color)', color: 'var(--accent-color)',
-          }}
+          className="control-btn primary"
         >
           {fleetBusy ? <RefreshCw size={14} className="spin" /> : <Upload size={14} />}
-          {fleetBusy ? 'PUSHING...' : 'PUSH TO ALL'}
+          {fleetBusy ? 'PUSHING…' : 'PUSH TO ALL'}
         </button>
       </div>
 
