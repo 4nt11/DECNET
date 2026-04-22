@@ -5,32 +5,73 @@ Logs all requests (especially recon probes like /_cat/, /_cluster/, /_nodes/)
 as JSON. Designed to attract automated scanners and credential stuffers.
 """
 
+import base64
 import json
 import os
 from http.server import BaseHTTPRequestHandler, HTTPServer
+
+import instance_seed as _seed
 from syslog_bridge import syslog_line, write_syslog_file, forward_syslog
 
 NODE_NAME = os.environ.get("NODE_NAME", "esserver")
 SERVICE_NAME   = "elasticsearch"
 LOG_TARGET = os.environ.get("LOG_TARGET", "")
 
-_CLUSTER_UUID = "xC3Pr9abTq2mNkOeLvXwYA"
-_NODE_UUID = "dJH7Lm2sRqWvPn0kFiEtBo"
+# Real ES cluster/node UUIDs are 22-char base64 (16 random bytes,
+# URL-safe, unpadded). Generate deterministically per instance.
+def _es_uuid(namespace: str) -> str:
+    raw = _seed.random_bytes(16, namespace)
+    return base64.urlsafe_b64encode(raw).decode().rstrip("=")
+
+
+_CLUSTER_UUID = _es_uuid("es-cluster")
+_NODE_UUID = _es_uuid("es-node")
+_CLUSTER_NAME = os.environ.get("ES_CLUSTER_NAME") or _seed.pick([
+    "elasticsearch", "logs", "search-prod", "metrics", "siem-cluster",
+    "docker-cluster",
+])
+
+# Realistic (version, build_hash, build_date, lucene_version) tuples taken
+# from real ES release metadata. Build-hashes change per release; pairing
+# them correctly is what makes the version check survive a real client
+# reading /_nodes and comparing against its known-versions table.
+_ES_RELEASES = [
+    ("7.17.9",  "ef48222227ee6b9e70e502f0f0daa52435ee634d", "2023-01-31T05:34:43.305517834Z", "8.11.1"),
+    ("7.17.14", "774e3bfa4d52e2834e4d9fdbb4b462fa1ba1cc5a", "2023-10-05T12:16:58.531639647Z", "8.11.1"),
+    ("7.17.18", "8682172c2130b9a411b1bd1ff37c2f4f15f04c7b", "2024-02-02T16:43:31.000Z",        "8.11.1"),
+    ("8.10.4",  "b4a62ac808e886ff032700c391f45f1408b2538c", "2023-10-11T22:04:35.506990650Z", "9.7.0"),
+    ("8.11.4",  "49b9bd5ec73c11d7b49dbd6ffc70b9ea2cdb67d0", "2023-12-19T16:57:03.000Z",        "9.8.0"),
+    ("8.12.2",  "48a287ab9497e852de30327444b0809e55d46466", "2024-02-15T15:25:20.000Z",        "9.9.2"),
+    ("8.13.4",  "da95df118650b55a500dcc181889ac35c6d8da7c", "2024-05-07T15:39:32.000Z",        "9.10.0"),
+]
+_ES_VERSION, _ES_BUILD_HASH, _ES_BUILD_DATE, _ES_LUCENE = _seed.pick(_ES_RELEASES)
+
+# Wire-compat rules in ES are hard-coded per major: pick the right ones.
+if _ES_VERSION.startswith("8."):
+    _MIN_WIRE = "7.17.0"
+    _MIN_INDEX = "7.0.0"
+else:
+    _MIN_WIRE = "6.8.0"
+    _MIN_INDEX = "6.0.0-beta1"
+
+# Per-instance cluster size — shapes /_cat/nodes + /_cluster/health output.
+_CLUSTER_NODES = _seed.rng.choice([1, 1, 3, 3, 3, 5, 5, 7])
+
 
 _ROOT_RESPONSE = {
     "name": NODE_NAME,
-    "cluster_name": "elasticsearch",
+    "cluster_name": _CLUSTER_NAME,
     "cluster_uuid": _CLUSTER_UUID,
     "version": {
-        "number": "7.17.9",
+        "number": _ES_VERSION,
         "build_flavor": "default",
         "build_type": "docker",
-        "build_hash": "ef48222227ee6b9e70e502f0f0daa52435ee634d",
-        "build_date": "2023-01-31T05:34:43.305517834Z",
+        "build_hash": _ES_BUILD_HASH,
+        "build_date": _ES_BUILD_DATE,
         "build_snapshot": False,
-        "lucene_version": "8.11.1",
-        "minimum_wire_compatibility_version": "6.8.0",
-        "minimum_index_compatibility_version": "6.0.0-beta1",
+        "lucene_version": _ES_LUCENE,
+        "minimum_wire_compatibility_version": _MIN_WIRE,
+        "minimum_index_compatibility_version": _MIN_INDEX,
     },
     "tagline": "You Know, for Search",
 }
@@ -73,11 +114,28 @@ class ESHandler(BaseHTTPRequestHandler):
             self._send_json(200, [])
         elif path.startswith("/_cluster/"):
             _log("cluster_recon", src=src, method="GET", path=self.path)
-            self._send_json(200, {"cluster_name": "elasticsearch", "status": "green",
-                                   "number_of_nodes": 3, "number_of_data_nodes": 3})
+            self._send_json(200, {
+                "cluster_name": _CLUSTER_NAME,
+                "cluster_uuid": _CLUSTER_UUID,
+                "status": _seed.pick(["green", "green", "green", "yellow"]),
+                "timed_out": False,
+                "number_of_nodes": _CLUSTER_NODES,
+                "number_of_data_nodes": _CLUSTER_NODES,
+                "active_primary_shards": _seed.rng.randint(5, 180),
+                "active_shards": _seed.rng.randint(10, 360),
+                "relocating_shards": 0,
+                "initializing_shards": 0,
+                "unassigned_shards": 0,
+                "active_shards_percent_as_number": 100.0,
+            })
         elif path.startswith("/_nodes"):
             _log("nodes_recon", src=src, method="GET", path=self.path)
-            self._send_json(200, {"_nodes": {"total": 3, "successful": 3, "failed": 0}, "nodes": {}})
+            self._send_json(200, {
+                "_nodes": {"total": _CLUSTER_NODES, "successful": _CLUSTER_NODES, "failed": 0},
+                "cluster_name": _CLUSTER_NAME,
+                "nodes": {_NODE_UUID: {"name": NODE_NAME, "version": _ES_VERSION,
+                                       "build_hash": _ES_BUILD_HASH}},
+            })
         elif path.startswith("/_security/") or path.startswith("/_xpack/"):
             _log("security_probe", src=src, method="GET", path=self.path)
             self._send_json(200, {"enabled": True, "available": True})

@@ -9,14 +9,43 @@ returns an error. Logs all interactions as JSON.
 import asyncio
 import os
 import struct
+
+import instance_seed as _seed
 from syslog_bridge import syslog_line, write_syslog_file, forward_syslog
 
 NODE_NAME = os.environ.get("NODE_NAME", "pgserver")
 SERVICE_NAME   = "postgres"
 LOG_TARGET = os.environ.get("LOG_TARGET", "")
 PORT = int(os.environ.get("PORT", "5432"))
-def _error_response(message: str) -> bytes:
-    body = b"S" + b"FATAL\x00" + b"M" + message.encode() + b"\x00\x00"
+
+# Per-instance list of "existing" databases. A real server knows which dbs
+# it hosts and returns SQLSTATE 3D000 "database does not exist" for anything
+# else — refusing with "password authentication failed" for every single
+# probe is a strong honeypot signal.
+_BASE_DBS = {"postgres", "template0", "template1"}
+_APP_DB_CHOICES = [
+    ["app", "app_prod"],
+    ["webapp", "sessions"],
+    ["erp", "erp_hist"],
+    ["django", "django_cache"],
+    ["rails_production"],
+    ["wordpress"],
+    ["gitlabhq_production"],
+    ["metrics", "grafana"],
+]
+_DATABASES = _BASE_DBS | set(_seed.pick(_APP_DB_CHOICES))
+
+
+def _error_response(severity: str, sqlstate: str, message: str) -> bytes:
+    """Wire-level PG ErrorResponse. Fields: S (localized severity), V
+    (non-localized severity, PG 9.6+), C (SQLSTATE), M (message)."""
+    body = (
+        b"S" + severity.encode() + b"\x00"
+        + b"V" + severity.encode() + b"\x00"
+        + b"C" + sqlstate.encode() + b"\x00"
+        + b"M" + message.encode() + b"\x00"
+        + b"\x00"
+    )
     return b"E" + struct.pack(">I", len(body) + 4) + body
 
 
@@ -90,8 +119,18 @@ class PostgresProtocol(asyncio.Protocol):
             if k:
                 params[k] = v
         username = params.get("user", "")
-        database = params.get("database", "")
+        database = params.get("database", "") or username
+        self._username = username
+        self._database = database
         _log("startup", src=self._peer[0], username=username, database=database)
+        # If the requested DB doesn't exist on this instance, real Postgres
+        # rejects *before* asking for a password. Short-circuit so the decoy
+        # matches that behavior and exposes the per-decky DB list.
+        if database and database not in _DATABASES:
+            msg = f'database "{database}" does not exist'
+            self._transport.write(_error_response("FATAL", "3D000", msg))
+            self._transport.close()
+            return
         self._state = "auth"
         salt = os.urandom(4)
         auth_md5 = b"R" + struct.pack(">I", 12) + struct.pack(">I", 5) + salt
@@ -99,8 +138,13 @@ class PostgresProtocol(asyncio.Protocol):
 
     def _handle_password(self, payload: bytes):
         pw_hash = payload.rstrip(b"\x00").decode(errors="replace")
-        _log("auth", src=self._peer[0], pw_hash=pw_hash)
-        self._transport.write(_error_response("password authentication failed"))
+        _log("auth", src=self._peer[0], pw_hash=pw_hash,
+             username=getattr(self, "_username", ""),
+             database=getattr(self, "_database", ""))
+        user = getattr(self, "_username", "")
+        msg = f'password authentication failed for user "{user}"'
+        _seed.jitter_sync(20, 90)
+        self._transport.write(_error_response("FATAL", "28P01", msg))
         self._transport.close()
 
     def connection_lost(self, exc):

@@ -14,6 +14,8 @@ from pathlib import Path
 
 from flask import Flask, request, send_from_directory
 from werkzeug.serving import make_server, WSGIRequestHandler
+
+import instance_seed as _seed
 from syslog_bridge import syslog_line, write_syslog_file, forward_syslog
 
 logging.getLogger("werkzeug").setLevel(logging.ERROR)
@@ -22,7 +24,21 @@ NODE_NAME     = os.environ.get("NODE_NAME", "webserver")
 SERVICE_NAME   = "https"
 LOG_TARGET    = os.environ.get("LOG_TARGET", "")
 PORT          = int(os.environ.get("PORT", "443"))
-SERVER_HEADER = os.environ.get("SERVER_HEADER", "Apache/2.4.54 (Debian)")
+
+_SERVER_CHOICES = [
+    "Apache/2.4.41 (Ubuntu)",
+    "Apache/2.4.52 (Ubuntu)",
+    "Apache/2.4.54 (Debian)",
+    "Apache/2.4.56 (Debian)",
+    "Apache/2.4.57 (Debian)",
+    "Apache/2.4.58 (Ubuntu)",
+    "Apache/2.4.59 (Debian)",
+    "nginx/1.18.0 (Ubuntu)",
+    "nginx/1.22.1",
+    "nginx/1.24.0 (Ubuntu)",
+    "nginx/1.25.3",
+]
+SERVER_HEADER = os.environ.get("SERVER_HEADER") or _seed.pick(_SERVER_CHOICES)
 RESPONSE_CODE = int(os.environ.get("RESPONSE_CODE", "403"))
 FAKE_APP      = os.environ.get("FAKE_APP", "")
 EXTRA_HEADERS = json.loads(os.environ.get("EXTRA_HEADERS", "{}"))

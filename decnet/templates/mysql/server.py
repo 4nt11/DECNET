@@ -7,32 +7,56 @@ attempts as JSON.
 """
 
 import asyncio
+import itertools
 import os
 import struct
+
+import instance_seed as _seed
 from syslog_bridge import syslog_line, write_syslog_file, forward_syslog
 
 NODE_NAME     = os.environ.get("NODE_NAME", "dbserver")
 SERVICE_NAME   = "mysql"
 LOG_TARGET    = os.environ.get("LOG_TARGET", "")
 PORT          = int(os.environ.get("PORT", "3306"))
-_MYSQL_VER    = os.environ.get("MYSQL_VERSION", "5.7.38-log")
 
-# Minimal MySQL server greeting (protocol v10) — version string is configurable
-_GREETING = (
-    b"\x0a"                              # protocol version 10
-    + _MYSQL_VER.encode() + b"\x00"     # server version + NUL
-    + b"\x01\x00\x00\x00"               # connection id = 1
-    + b"\x70\x76\x21\x6d\x61\x67\x69\x63"  # auth-plugin-data part 1
-    + b"\x00"                            # filler
-    + b"\xff\xf7"                        # capability flags low
-    + b"\x21"                            # charset utf8
-    + b"\x02\x00"                        # status flags
-    + b"\xff\x81"                        # capability flags high
-    + b"\x15"                            # auth plugin data length
-    + b"\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00"  # reserved (10 bytes)
-    + b"\x21\x4f\x7d\x25\x3e\x55\x4d\x7c\x67\x75\x5e\x31\x00"  # auth part 2
-    + b"mysql_native_password\x00"       # auth plugin name
-)
+# Per-instance version. Real fleets never run one identical point release
+# across every host — weighted mix of still-in-the-wild 5.7/8.0 builds.
+_MYSQL_VER = os.environ.get("MYSQL_VERSION") or _seed.pick_weighted([
+    ("5.7.38-log", 1),
+    ("5.7.43-log", 2),
+    ("5.7.44-log", 2),
+    ("8.0.32", 2),
+    ("8.0.35", 3),
+    ("8.0.36", 3),
+    ("8.0.39", 2),
+    ("8.0.40", 1),
+])
+
+# Monotonic per-process counter for connection IDs. Seeded with a
+# per-instance base so two deckies never hand out id=1 to the same scanner.
+_CONN_ID_SEQ = itertools.count(_seed.rng.randint(17, 65_000))
+
+
+def _build_greeting(conn_id: int, salt: bytes) -> bytes:
+    """MySQL protocol v10 Initial Handshake Packet. salt is 20 bytes
+    (8 + 12 split across two sections) and must be freshly random per
+    connection — it's the challenge the client hashes its password against."""
+    assert len(salt) == 20
+    return (
+        b"\x0a"
+        + _MYSQL_VER.encode() + b"\x00"
+        + struct.pack("<I", conn_id)
+        + salt[:8]
+        + b"\x00"
+        + b"\xff\xf7"
+        + b"\x21"
+        + b"\x02\x00"
+        + b"\xff\x81"
+        + b"\x15"
+        + b"\x00" * 10
+        + salt[8:] + b"\x00"
+        + b"mysql_native_password\x00"
+    )
 
 
 def _make_packet(payload: bytes, seq: int = 0) -> bytes:
@@ -54,12 +78,17 @@ class MySQLProtocol(asyncio.Protocol):
         self._peer = None
         self._buf = b""
         self._greeted = False
+        self._conn_id = next(_CONN_ID_SEQ) & 0xFFFFFFFF
+        # 20-byte scramble; fresh per connection so two handshakes to the
+        # same decky never present identical auth challenges.
+        self._salt = _seed.fresh_bytes(20)
 
     def connection_made(self, transport):
         self._transport = transport
         self._peer = transport.get_extra_info("peername", ("?", 0))
-        _log("connect", src=self._peer[0], src_port=self._peer[1])
-        transport.write(_make_packet(_GREETING, seq=0))
+        _log("connect", src=self._peer[0], src_port=self._peer[1],
+             connection_id=self._conn_id)
+        transport.write(_make_packet(_build_greeting(self._conn_id, self._salt), seq=0))
         self._greeted = True
 
     def data_received(self, data):
@@ -81,19 +110,24 @@ class MySQLProtocol(asyncio.Protocol):
         if not payload:
             return
         # Login packet: capability flags (4), max_packet (4), charset (1), reserved (23), username (NUL-terminated)
+        username = "<unknown>"
         if len(payload) > 32:
             try:
-                # skip capability(4) + max_pkt(4) + charset(1) + reserved(23) = 32 bytes
                 username_start = 32
                 nul = payload.index(b"\x00", username_start)
                 username = payload[username_start:nul].decode(errors="replace")
             except (ValueError, IndexError):
                 username = "<parse_error>"
-            _log("auth", src=self._peer[0], username=username)
-        # Send Access Denied error
-        err = b"\xff" + struct.pack("<H", 1045) + b"#28000Access denied for user\x00"
-        self._transport.write(_make_packet(err, seq=2))
-        self._transport.close()
+            _log("auth", src=self._peer[0], username=username,
+                 connection_id=self._conn_id)
+        # Real mysqld includes client IP in the error text.
+        src_ip = self._peer[0] if self._peer else "?"
+        msg = f"Access denied for user '{username}'@'{src_ip}' (using password: YES)"
+        err = b"\xff" + struct.pack("<H", 1045) + b"#28000" + msg.encode()
+        _seed.jitter_sync(15, 90)
+        if self._transport and not self._transport.is_closing():
+            self._transport.write(_make_packet(err, seq=2))
+            self._transport.close()
 
     def connection_lost(self, exc):
         _log("disconnect", src=self._peer[0] if self._peer else "?")

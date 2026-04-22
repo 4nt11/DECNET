@@ -21,8 +21,11 @@ The DATA state machine (and the 502-per-line bug) is fixed in both modes.
 import asyncio
 import base64
 import os
-import random
-import string
+import random as _rand
+import re
+import time
+
+import instance_seed as _seed
 from syslog_bridge import SEVERITY_WARNING, syslog_line, write_syslog_file, forward_syslog
 
 NODE_NAME   = os.environ.get("NODE_NAME", "mailserver")
@@ -31,8 +34,26 @@ LOG_TARGET  = os.environ.get("LOG_TARGET", "")
 PORT        = int(os.environ.get("PORT", "25"))
 OPEN_RELAY  = os.environ.get("SMTP_OPEN_RELAY", "0").strip() == "1"
 
+# In open-relay mode, optionally restrict which creds succeed. Blank means
+# "accept anything". Format: "user1,user2,..." — any name not in the list
+# gets a 535 instead of 235, so the relay looks realistically selective.
+_AUTH_WHITELIST = {u.strip() for u in os.environ.get("SMTP_AUTH_WHITELIST", "").split(",") if u.strip()}
+
+# Open-relay filtering. Even compromised/misconfigured relays aren't pure
+# tarpits — Postfix rejects malformed addresses at RCPT time, and many drop
+# a small fraction of external recipients under greylisting or reputation
+# checks. Accepting literally every RCPT is a honeypot tell.
+_ADDR_RE = re.compile(r"^<?([^\s<>@]+)@([A-Za-z0-9.-]+\.[A-Za-z]{2,})>?$")
+_BLOCKED_TLDS = {"invalid", "test", "localhost", "local", "example"}
+_RCPT_DROP_RATE = float(os.environ.get("SMTP_RCPT_DROP_RATE", "0.08"))
+
 _SMTP_BANNER = os.environ.get("SMTP_BANNER", f"220 {NODE_NAME} ESMTP Postfix (Debian/GNU)")
 _SMTP_MTA    = os.environ.get("SMTP_MTA", NODE_NAME)
+
+# Postfix's queue-ID character set (real one: excludes vowels and look-alikes
+# like 0/O, 1/I, so scanners that know Postfix's alphabet are satisfied).
+_QUEUE_CHARS = "BCDFGHJKLMNPQRSTVWXYZ23456789"
+_Q_BASE = len(_QUEUE_CHARS)
 
 
 def _log(event_type: str, severity: int = 6, **kwargs) -> None:
@@ -42,9 +63,23 @@ def _log(event_type: str, severity: int = 6, **kwargs) -> None:
 
 
 def _rand_msg_id() -> str:
-    """Return a Postfix-style 12-char alphanumeric queue ID."""
-    chars = string.ascii_uppercase + string.digits
-    return "".join(random.choices(chars, k=12))
+    """Postfix-style queue ID.
+
+    Real Postfix derives its short queue IDs from the message's arrival
+    microseconds, base-encoded with a vowel-free alphabet — so IDs are
+    monotonically increasing and visually distinctive. We encode the current
+    microsecond count with Postfix's actual character set, then append a
+    short per-instance suffix so two deckies never emit identical IDs at
+    the same instant.
+    """
+    us = int(time.time() * 1_000_000)
+    out: list[str] = []
+    while us and len(out) < 10:
+        us, r = divmod(us, _Q_BASE)
+        out.append(_QUEUE_CHARS[r])
+    base = "".join(reversed(out)) or _QUEUE_CHARS[0]
+    suffix_idx = _seed.rng.randint(0, _Q_BASE - 1)
+    return base + _QUEUE_CHARS[suffix_idx]
 
 
 def _decode_auth_plain(blob: str) -> tuple[str, str]:
@@ -108,6 +143,9 @@ class SMTPProtocol(asyncio.Protocol):
                      rcpt_to=",".join(self._rcpt_to),
                      body_bytes=len(body),
                      msg_id=msg_id)
+                # Real MTAs take tens of ms to queue; instantaneous replies
+                # on DATA are a tell.
+                _seed.jitter_sync(30, 180)
                 self._transport.write(f"250 2.0.0 Ok: queued as {msg_id}\r\n".encode())
                 self._in_data   = False
                 self._data_buf  = []
@@ -172,9 +210,30 @@ class SMTPProtocol(asyncio.Protocol):
         elif cmd == "RCPT":
             addr = args.split(":", 1)[1].strip() if ":" in args else args
             if OPEN_RELAY:
-                self._rcpt_to.append(addr)
-                _log("rcpt_to", src=self._peer[0], value=addr)
-                self._transport.write(b"250 2.1.5 Ok\r\n")
+                match = _ADDR_RE.match(addr)
+                if not match:
+                    _log("rcpt_rejected_syntax", src=self._peer[0], value=addr,
+                         severity=SEVERITY_WARNING)
+                    self._transport.write(
+                        b"501 5.1.3 Bad recipient address syntax\r\n"
+                    )
+                elif match.group(2).rsplit(".", 1)[-1].lower() in _BLOCKED_TLDS:
+                    _log("rcpt_rejected_tld", src=self._peer[0], value=addr,
+                         severity=SEVERITY_WARNING)
+                    self._transport.write(
+                        b"550 5.1.2 <" + addr.encode()
+                        + b">: Recipient address rejected: Domain not found\r\n"
+                    )
+                elif _rand.random() < _RCPT_DROP_RATE:
+                    _log("rcpt_greylisted", src=self._peer[0], value=addr)
+                    self._transport.write(
+                        b"451 4.7.1 <" + addr.encode()
+                        + b">: Recipient address rejected: Greylisted, try again later\r\n"
+                    )
+                else:
+                    self._rcpt_to.append(addr)
+                    _log("rcpt_to", src=self._peer[0], value=addr)
+                    self._transport.write(b"250 2.1.5 Ok\r\n")
             else:
                 _log("rcpt_denied", src=self._peer[0], value=addr,
                      severity=SEVERITY_WARNING)
@@ -246,7 +305,14 @@ class SMTPProtocol(asyncio.Protocol):
         _log("auth_attempt", src=self._peer[0],
              username=username, password=password,
              severity=SEVERITY_WARNING)
-        if OPEN_RELAY:
+        if not OPEN_RELAY:
+            self._transport.write(b"535 5.7.8 Error: authentication failed\r\n")
+            return
+        # Open-relay mode: still be selective so the decoy doesn't look like a
+        # tarpit that accepts literally anything. If no whitelist is set,
+        # accept; otherwise gate on username presence.
+        accepted = not _AUTH_WHITELIST or username in _AUTH_WHITELIST
+        if accepted:
             self._transport.write(b"235 2.7.0 Authentication successful\r\n")
         else:
             self._transport.write(b"535 5.7.8 Error: authentication failed\r\n")
