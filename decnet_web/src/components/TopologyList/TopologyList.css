@@ -35,18 +35,29 @@
 .tlist-empty-wrap .empty-state-hint { font-size: 0.75rem; letter-spacing: 1.5px; }
 
 .tlist-btn {
-  display: inline-flex; align-items: center; gap: 6px;
-  padding: 6px 12px; font-family: var(--font-mono); font-size: 11px;
-  background: var(--violet); color: #000; border: none;
-  cursor: pointer; letter-spacing: 1px;
+  cursor: pointer;
+  background: transparent;
+  border: 1px solid var(--violet);
+  color: var(--violet);
+  padding: 7px 14px;
+  transition: all 0.3s;
+  font-family: inherit;
+  font-size: 0.78rem;
+  letter-spacing: 1.5px;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
 }
-.tlist-btn:hover { filter: brightness(1.15); }
-.tlist-btn:disabled { opacity: 0.45; cursor: not-allowed; }
-.tlist-btn.ghost { background: transparent; color: var(--text-color); border: 1px solid var(--panel-border); }
-.tlist-btn.small { padding: 4px 8px; font-size: 10px; }
-.tlist-btn.danger { background: transparent; border: 1px solid var(--alert, #e74c3c); color: var(--alert, #e74c3c); }
+.tlist-btn:hover { background: var(--violet); color: #000; box-shadow: var(--violet-glow); }
+.tlist-btn:disabled { opacity: 0.3; cursor: not-allowed; }
+.tlist-btn.ghost { border-color: var(--matrix); color: var(--matrix); }
+.tlist-btn.ghost:hover { background: var(--matrix); color: #000; box-shadow: var(--matrix-glow); }
+.tlist-btn.small { padding: 4px 10px; font-size: 0.68rem; }
+.tlist-btn.danger { border-color: var(--alert, #e74c3c); color: var(--alert, #e74c3c); }
+.tlist-btn.danger:hover { background: var(--alert, #e74c3c); color: #000; box-shadow: 0 0 10px rgba(231, 76, 60, 0.5); }
 .tlist-btn.danger.armed { background: var(--alert, #e74c3c); color: #000; }
-.tlist-btn.warn { background: transparent; border: 1px solid var(--warn, #e0a040); color: var(--warn, #e0a040); }
+.tlist-btn.warn { border-color: var(--warn, #e0a040); color: var(--warn, #e0a040); }
+.tlist-btn.warn:hover { background: var(--warn, #e0a040); color: #000; box-shadow: 0 0 10px rgba(224, 160, 64, 0.5); }
 .tlist-btn.warn.armed { background: var(--warn, #e0a040); color: #000; }
 
 .tlist-create-row {
