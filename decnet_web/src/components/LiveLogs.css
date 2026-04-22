@@ -8,16 +8,16 @@
 .logs-root .btn {
   display: inline-flex;
   align-items: center;
-  gap: 6px;
-  padding: 6px 14px;
+  gap: 8px;
+  padding: 7px 14px;
   font-family: inherit;
-  font-size: 0.72rem;
-  letter-spacing: 2px;
+  font-size: 0.78rem;
+  letter-spacing: 1.5px;
   background: transparent;
   border: 1px solid var(--matrix);
   color: var(--matrix);
   cursor: pointer;
-  transition: all 0.15s ease;
+  transition: all 0.3s ease;
 }
 .logs-root .btn:hover {
   background: var(--matrix);

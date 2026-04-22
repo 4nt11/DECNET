@@ -219,20 +219,23 @@
 }
 
 .ctw-btn {
-  padding: 6px 14px;
-  font-family: var(--font-mono);
-  font-size: 0.72rem;
-  letter-spacing: 1.5px;
-  background: var(--violet);
-  color: #000;
-  border: none;
   cursor: pointer;
-}
-.ctw-btn:hover { filter: brightness(1.15); }
-.ctw-btn:disabled { opacity: 0.45; cursor: not-allowed; }
-.ctw-btn.ghost {
   background: transparent;
-  color: var(--text-color);
-  border: 1px solid var(--border, var(--panel-border));
+  border: 1px solid var(--violet);
+  color: var(--violet);
+  padding: 7px 14px;
+  transition: all 0.3s;
+  font-family: inherit;
+  font-size: 0.78rem;
+  letter-spacing: 1.5px;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
 }
-.ctw-btn.ghost:hover { border-color: var(--violet); color: var(--violet); }
+.ctw-btn:hover { background: var(--violet); color: #000; box-shadow: var(--violet-glow); }
+.ctw-btn:disabled { opacity: 0.3; cursor: not-allowed; }
+.ctw-btn.ghost { border-color: var(--border); color: var(--matrix); opacity: 0.7; }
+.ctw-btn.ghost:hover {
+  background: transparent; color: var(--matrix); opacity: 1;
+  border-color: var(--matrix); box-shadow: var(--matrix-glow);
+}
