@@ -222,15 +222,17 @@ const TopologyList: React.FC = () => {
                   <Power size={10} /> {armed === `td:${r.id}` ? 'CONFIRM?' : 'TEARDOWN'}
                 </button>
               )}
-              <button
-                type="button"
-                className={`tlist-btn small danger ${armed === r.id ? 'armed' : ''}`}
-                disabled={busy === r.id}
-                onClick={() => armed === r.id ? onDelete(r.id) : arm(r.id)}
-                title={armed === r.id ? 'Click again to confirm' : 'Delete'}
-              >
-                <Trash2 size={10} /> {armed === r.id ? 'CONFIRM?' : 'DELETE'}
-              </button>
+              {!['active', 'degraded', 'deploying'].includes(r.status) && (
+                <button
+                  type="button"
+                  className={`tlist-btn small danger ${armed === r.id ? 'armed' : ''}`}
+                  disabled={busy === r.id}
+                  onClick={() => armed === r.id ? onDelete(r.id) : arm(r.id)}
+                  title={armed === r.id ? 'Click again to confirm' : 'Delete'}
+                >
+                  <Trash2 size={10} /> {armed === r.id ? 'CONFIRM?' : 'DELETE'}
+                </button>
+              )}
             </div>
           </div>
         ))}
