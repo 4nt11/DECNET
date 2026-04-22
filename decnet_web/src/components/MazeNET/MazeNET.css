@@ -46,8 +46,9 @@
   display: grid;
   grid-template-columns: 240px 1fr 320px;
   gap: 0;
-  height: calc(100vh - var(--topbar-h) - 56px);
-  margin: -28px -32px;
+  flex: 1;
+  min-height: 0;
+  margin: 0 -32px -32px;
   border-top: 1px solid var(--border);
 }
 
