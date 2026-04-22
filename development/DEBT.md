@@ -1,6 +1,6 @@
 # DECNET — Technical Debt Register
 
-> Last updated: 2026-04-21 — DEBT-032 opened (fingerprint rotation detection).
+> Last updated: 2026-04-21 — DEBT-033 opened (transcript day-shard rotation).
 > Severity: 🔴 Critical · 🟠 High · 🟡 Medium · 🟢 Low
 
 ---
@@ -218,6 +218,21 @@ DEBT-029 shipped the bus; DEBT-030 proved the pattern end-to-end through the mut
 - **Standalone `decnet correlate` worker** — the rollout plan presumed one; today the engine runs inside the profiler worker, which is the right shape for the current data flow.
 - **Bus-wake subscriptions** — publishes landed; subscribe-side (e.g. prober re-probe on `decky.*.state`) was not wired to avoid coupling the wake pattern to a subscriber we don't yet have.
 
+### DEBT-033 — Transcript day-shard rotation
+**Files:** `decnet/templates/_shared/sessrec/sessrec.c`, `decnet/web/router/transcripts/`.
+
+Session recording v1 (SSH/Telnet interactive-session capture) stores asciinema events in **one JSONL shard per (decky, UTC day)**: `sessions-YYYY-MM-DD.jsonl`. This bounds inode count (O(days) not O(sessions)) and blunts the obvious "`while true; do login; exit; done`" DoS, but a determined attacker can still keep a single day's shard growing until the 200 MB disk-free precheck trips. When that happens the recorder silently skips new recordings (`session_skipped reason=disk_pressure`) until midnight or until operator cleanup — which is *safe*, but it also means an attacker can blind the recorder for the rest of the day by filling disk once.
+
+Proper fix is size-based rotation on the day shard:
+1. Recorder (or a sidecar job) rotates `sessions-YYYY-MM-DD.jsonl` → `sessions-YYYY-MM-DD.1.jsonl` when size crosses e.g. 500 MB; keep last N rotations (default 4 → hard ceiling ≈ 2 GB/day/decky).
+2. Oldest rotations drop on write pressure (FIFO), not on read.
+3. API router shard-index cache (see `transcripts/` router, built from session-recording plan) gains an mtime-keyed scan across all rotations for the requested day when resolving a `sid`, not just the live shard. Cache invalidation already keys on `(path, st_mtime_ns)` so rotation drops stale entries automatically.
+4. Same trigger (disk pressure or a new config knob `DECNET_TRANSCRIPT_DAY_MAX_MB`) decides when to fire; no background timer needed if the recorder itself checks size before each append.
+
+**Why deferred from v1:** the per-session 10 MB cap + disk-free precheck together give bounded worst-case behavior ("recorder quietly stops; disk stays healthy") that is acceptable for a first release. Rotation is a correctness-under-load improvement, not a correctness baseline, and it couples recorder write-path + API read-path changes that are cleaner to land as one commit after v1 ships.
+
+**Status:** Open — implement after v1 session recording lands and we have real-world session sizes to calibrate the rotation threshold.
+
 ### DEBT-032 — Prober can't detect fingerprint rotation without mutation
 **Files:** `decnet/prober/worker.py` (~lines 235, 286, 334, 392), `decnet/web/db/models.py` (new `decky_service_fingerprints` table).
 
@@ -293,6 +308,7 @@ The prober already computes JARM (`worker.py:286`), HASSH (`worker.py:334`), and
 | DEBT-030 | 🟡 Medium | Web / Live mutations | ✅ resolved (Phase A) |
 | ~~DEBT-031~~ | ✅ | Workers / Bus integration | resolved |
 | DEBT-032 | 🟡 Medium | Correlation / Prober | open |
+| DEBT-033 | 🟡 Medium | Storage / Session recording | open |
 
-**Remaining open:** DEBT-011 (Alembic), DEBT-023 (image pinning), DEBT-026 (modular mailboxes), DEBT-027 (Dynamic bait store), DEBT-028 (deploy endpoint tests), DEBT-032 (fingerprint rotation detection).
-**Estimated remaining effort:** ~16 hours. DEBT-030 Phase B (optimistic staged-buffer editor) is a follow-up, not debt.
+**Remaining open:** DEBT-011 (Alembic), DEBT-023 (image pinning), DEBT-026 (modular mailboxes), DEBT-027 (Dynamic bait store), DEBT-028 (deploy endpoint tests), DEBT-032 (fingerprint rotation detection), DEBT-033 (transcript shard rotation).
+**Estimated remaining effort:** ~18 hours. DEBT-030 Phase B (optimistic staged-buffer editor) is a follow-up, not debt.
