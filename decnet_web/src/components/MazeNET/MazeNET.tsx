@@ -594,7 +594,7 @@ const MazeNET: React.FC = () => {
             <ArrowLeft size={12} /> TOPOLOGIES
           </button>
           <button type="button" className="maze-btn ghost" onClick={() => setPaletteOpen((o) => !o)}>
-            {paletteOpen ? <PanelLeftClose size={12} /> : <PanelLeftOpen size={12} />} PALETTE
+            {paletteOpen ? <PanelLeftClose size={12} /> : <PanelLeftOpen size={12} />} SERVICE FLEET
           </button>
           <button type="button" className="maze-btn ghost" onClick={() => setInspectorOpen((o) => !o)}>
             {inspectorOpen ? <PanelRightClose size={12} /> : <PanelRightOpen size={12} />} INSPECTOR
