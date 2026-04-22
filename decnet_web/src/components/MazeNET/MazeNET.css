@@ -104,8 +104,9 @@ body.maze-fullscreen .maze-shell {
 }
 .palette-item:active { cursor: grabbing; }
 .palette-item .chip-mini {
-  font-size: 0.55rem; padding: 1px 5px; border: 1px solid var(--border);
-  letter-spacing: 1px; margin-left: auto;
+  font-size: 0.68rem; padding: 2px 6px; border: 1px solid var(--border);
+  letter-spacing: 0.5px; margin-left: auto;
+  font-family: var(--font-mono); opacity: 0.85;
 }
 .palette-hint {
   font-size: 0.62rem; opacity: 0.5; line-height: 1.6; letter-spacing: 0.5px;
