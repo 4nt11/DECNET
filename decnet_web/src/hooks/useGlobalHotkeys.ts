@@ -18,7 +18,6 @@ const G_NAV: Record<string, string> = {
   c: '/config',
   s: '/swarm/hosts',
   u: '/swarm-updates',
-  e: '/swarm/enroll',
 };
 
 const G_TIMEOUT_MS = 800;

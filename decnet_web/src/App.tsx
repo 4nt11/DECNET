@@ -11,7 +11,6 @@ import Config from './components/Config';
 import Bounty from './components/Bounty';
 import RemoteUpdates from './components/RemoteUpdates';
 import SwarmHosts from './components/SwarmHosts';
-import AgentEnrollment from './components/AgentEnrollment';
 import MazeNET from './components/MazeNET/MazeNET';
 import TopologyList from './components/TopologyList/TopologyList';
 import CommandPalette from './components/CommandPalette/CommandPalette';
@@ -87,7 +86,7 @@ const AuthedShell: React.FC<AuthedShellProps> = ({ onLogout, onSearch, searchQue
           <Route path="/config" element={<Config />} />
           <Route path="/swarm-updates" element={<RemoteUpdates />} />
           <Route path="/swarm/hosts" element={<SwarmHosts />} />
-          <Route path="/swarm/enroll" element={<AgentEnrollment />} />
+          <Route path="/swarm/enroll" element={<Navigate to="/swarm/hosts" replace />} />
           <Route path="*" element={<Navigate to="/" replace />} />
         </Routes>
       </Layout>

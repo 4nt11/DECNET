@@ -1,7 +1,7 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import {
   LayoutDashboard, Server, Network, Terminal, Archive, Crosshair,
-  PlusCircle, Pause, RefreshCw, Download, HardDrive, Package, UserPlus, Settings,
+  PlusCircle, Pause, RefreshCw, Download, HardDrive, Package, Settings,
   SearchX, Keyboard,
 } from 'lucide-react';
 import EmptyState from '../EmptyState/EmptyState';
@@ -27,7 +27,6 @@ const ITEMS: CmdItem[] = [
   { section: 'GO TO', label: 'Attackers',    icon: Crosshair,       kbd: 'G A', kind: 'nav', payload: '/attackers' },
   { section: 'GO TO', label: 'SWARM Hosts',     icon: HardDrive, kbd: 'G S', kind: 'nav', payload: '/swarm/hosts' },
   { section: 'GO TO', label: 'Remote Updates',  icon: Package,   kbd: 'G U', kind: 'nav', payload: '/swarm-updates' },
-  { section: 'GO TO', label: 'Agent Enrollment', icon: UserPlus, kbd: 'G E', kind: 'nav', payload: '/swarm/enroll' },
   { section: 'GO TO', label: 'Config',          icon: Settings,  kbd: 'G C', kind: 'nav', payload: '/config' },
   { section: 'ACTIONS', label: 'Deploy new decky',        icon: PlusCircle, kind: 'action', payload: 'deploy' },
   { section: 'ACTIONS', label: 'Pause live stream',       icon: Pause,      kind: 'action', payload: 'pause-logs' },

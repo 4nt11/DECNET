@@ -3,7 +3,7 @@ import { NavLink, useLocation } from 'react-router-dom';
 import {
   Menu, X, Search, Activity, LayoutDashboard, Terminal, Settings, LogOut,
   Server, Archive, Package, Network, ChevronDown, ChevronRight, HardDrive,
-  UserPlus, ShieldAlert,
+  ShieldAlert,
 } from 'lucide-react';
 import './Layout.css';
 
@@ -31,7 +31,6 @@ const ROUTE_LABELS: Record<string, string> = {
   '/config': 'CONFIG',
   '/swarm-updates': 'REMOTE UPDATES',
   '/swarm/hosts': 'SWARM HOSTS',
-  '/swarm/enroll': 'AGENT ENROLLMENT',
 };
 
 function labelForPath(pathname: string): string {
@@ -117,7 +116,6 @@ const Layout: React.FC<LayoutProps> = ({
           <NavGroup label="SWARM" icon={<Network size={20} />} open={sidebarOpen}>
             <NavItem to="/swarm/hosts" icon={<HardDrive size={18} />} label="SWARM Hosts" open={sidebarOpen} indent />
             <NavItem to="/swarm-updates" icon={<Package size={18} />} label="Remote Updates" open={sidebarOpen} indent />
-            <NavItem to="/swarm/enroll" icon={<UserPlus size={18} />} label="Agent Enrollment" open={sidebarOpen} indent />
           </NavGroup>
           <NavItem to="/config" icon={<Settings size={20} />} label="Config" open={sidebarOpen} />
         </nav>
