@@ -39,8 +39,12 @@ interface EdgeDraw {
   hoverTarget: string | null;
 }
 
+const MIN_ZOOM = 0.25;
+const MAX_ZOOM = 2.5;
+
 export function useMazeInteraction({ nets, nodes, setNets, setNodes, canvasRef, onPaletteDrop, onReparent, onAddEdge }: Args) {
   const [pan, setPan] = useState({ x: 0, y: 0 });
+  const [zoom, setZoom] = useState(1);
   const [drag, setDrag] = useState<Drag>(null);
   const [dropTargetId, setDropTargetId] = useState<string | null>(null);
   const [edgeDraw, setEdgeDraw] = useState<EdgeDraw | null>(null);
@@ -58,10 +62,12 @@ export function useMazeInteraction({ nets, nodes, setNets, setNodes, canvasRef, 
   const netsRef = useRef(nets);
   const nodesRef = useRef(nodes);
   const panRef = useRef(pan);
+  const zoomRef = useRef(zoom);
   const dragRef = useRef(drag);
   useEffect(() => { netsRef.current = nets; }, [nets]);
   useEffect(() => { nodesRef.current = nodes; }, [nodes]);
   useEffect(() => { panRef.current = pan; }, [pan]);
+  useEffect(() => { zoomRef.current = zoom; }, [zoom]);
   useEffect(() => { dragRef.current = drag; }, [drag]);
 
   const canvasOriginRef = useRef(() => {
@@ -69,11 +75,12 @@ export function useMazeInteraction({ nets, nodes, setNets, setNodes, canvasRef, 
     return { x: r?.left ?? 0, y: r?.top ?? 0 };
   });
 
-  /* World-space coords from a client event (applies pan inverse). */
+  /* World-space coords from a client event (applies pan + zoom inverse). */
   const toWorld = useCallback((clientX: number, clientY: number) => {
     const o = canvasOriginRef.current();
     const p = panRef.current;
-    return { x: clientX - o.x - p.x, y: clientY - o.y - p.y };
+    const z = zoomRef.current;
+    return { x: (clientX - o.x - p.x) / z, y: (clientY - o.y - p.y) / z };
   }, []);
 
   /* ── Mousedown dispatchers ────────────────────────────── */
@@ -138,8 +145,9 @@ export function useMazeInteraction({ nets, nodes, setNets, setNodes, canvasRef, 
       if (ed) {
         const o = canvasOriginRef.current();
         const p = panRef.current;
-        const wx = e.clientX - o.x - p.x;
-        const wy = e.clientY - o.y - p.y;
+        const z = zoomRef.current;
+        const wx = (e.clientX - o.x - p.x) / z;
+        const wy = (e.clientY - o.y - p.y) / z;
         const hover = nodesRef.current.find((n) => {
           if (n.id === ed.fromId) return false;
           const parent = netsRef.current.find((nn) => nn.id === n.netId);
@@ -163,7 +171,8 @@ export function useMazeInteraction({ nets, nodes, setNets, setNodes, canvasRef, 
       const w = (() => {
         const o = canvasOriginRef.current();
         const p = panRef.current;
-        return { x: e.clientX - o.x - p.x, y: e.clientY - o.y - p.y };
+        const z = zoomRef.current;
+        return { x: (e.clientX - o.x - p.x) / z, y: (e.clientY - o.y - p.y) / z };
       })();
 
       if (d.type === 'net') {
@@ -193,8 +202,9 @@ export function useMazeInteraction({ nets, nodes, setNets, setNodes, canvasRef, 
       }
 
       if (d.type === 'resize') {
-        const dx = e.clientX - d.startX;
-        const dy = e.clientY - d.startY;
+        const z = zoomRef.current;
+        const dx = (e.clientX - d.startX) / z;
+        const dy = (e.clientY - d.startY) / z;
         setNets((prev) => prev.map((n) => {
           if (n.id !== d.id) return n;
           let { x, y, w: width, h: height } = d.start;
@@ -221,8 +231,9 @@ export function useMazeInteraction({ nets, nodes, setNets, setNodes, canvasRef, 
         setPaletteDrag(null);
         const o = canvasOriginRef.current();
         const p = panRef.current;
-        const wx = e.clientX - o.x - p.x;
-        const wy = e.clientY - o.y - p.y;
+        const z = zoomRef.current;
+        const wx = (e.clientX - o.x - p.x) / z;
+        const wy = (e.clientY - o.y - p.y) / z;
         const rect = canvasRef.current?.getBoundingClientRect();
         const inside = rect
           ? e.clientX >= rect.left && e.clientX <= rect.right
@@ -288,10 +299,50 @@ export function useMazeInteraction({ nets, nodes, setNets, setNodes, canvasRef, 
     };
   }, [setNets, setNodes, dropTargetId, onPaletteDrop, onReparent, onAddEdge, canvasRef]);
 
-  const resetPan = useCallback(() => setPan({ x: 0, y: 0 }), []);
+  const resetPan = useCallback(() => { setPan({ x: 0, y: 0 }); setZoom(1); }, []);
+
+  /* Wheel zoom anchored at cursor — attached as a native non-passive
+   * listener so preventDefault() actually stops the page from scrolling
+   * while zooming the canvas. */
+  useEffect(() => {
+    const el = canvasRef.current;
+    if (!el) return;
+    const onWheel = (e: WheelEvent) => {
+      e.preventDefault();
+      const o = canvasOriginRef.current();
+      const p = panRef.current;
+      const z = zoomRef.current;
+      const factor = Math.exp(-e.deltaY * 0.0015);
+      const nz = Math.max(MIN_ZOOM, Math.min(MAX_ZOOM, z * factor));
+      if (nz === z) return;
+      const mx = e.clientX - o.x;
+      const my = e.clientY - o.y;
+      const wx = (mx - p.x) / z;
+      const wy = (my - p.y) / z;
+      setZoom(nz);
+      setPan({ x: mx - wx * nz, y: my - wy * nz });
+    };
+    el.addEventListener('wheel', onWheel, { passive: false });
+    return () => el.removeEventListener('wheel', onWheel);
+  }, [canvasRef]);
+
+  const zoomBy = useCallback((mult: number) => {
+    const z = zoomRef.current;
+    const nz = Math.max(MIN_ZOOM, Math.min(MAX_ZOOM, z * mult));
+    if (nz === z) return;
+    const rect = canvasRef.current?.getBoundingClientRect();
+    const cx = (rect?.width ?? 0) / 2;
+    const cy = (rect?.height ?? 0) / 2;
+    const p = panRef.current;
+    const wx = (cx - p.x) / z;
+    const wy = (cy - p.y) / z;
+    setZoom(nz);
+    setPan({ x: cx - wx * nz, y: cy - wy * nz });
+  }, [canvasRef]);
 
   return {
     pan,
+    zoom,
     dropTargetId,
     dragging: drag !== null,
     edgeDraw,
@@ -303,5 +354,6 @@ export function useMazeInteraction({ nets, nodes, setNets, setNodes, canvasRef, 
     onNetResizeMouseDown,
     onPortMouseDown,
     resetPan,
+    zoomBy,
   };
 }

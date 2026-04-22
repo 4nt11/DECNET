@@ -1,5 +1,5 @@
 import React, { forwardRef, useMemo } from 'react';
-import { RotateCcw, LayoutGrid } from 'lucide-react';
+import { RotateCcw, LayoutGrid, ZoomIn, ZoomOut } from 'lucide-react';
 import NetBox from './NetBox';
 import NodeCard from './NodeCard';
 import type { Net, MazeNode, Edge } from './types';
@@ -14,6 +14,7 @@ interface Props {
   selection: Selection;
   setSelection: (s: Selection) => void;
   pan: { x: number; y: number };
+  zoom: number;
   dropTargetId: string | null;
   dragging: boolean;
   edgeDraw: { fromX: number; fromY: number; toX: number; toY: number; hoverTarget: string | null } | null;
@@ -28,6 +29,8 @@ interface Props {
   onCanvasContextMenu?: (e: React.MouseEvent) => void;
   onResetView?: () => void;
   onAutoLayout?: () => void;
+  onZoomIn?: () => void;
+  onZoomOut?: () => void;
   sseConnected?: boolean;
   lastEventAt?: Date | null;
   onSelectService?: (nodeId: string, slug: string) => void;
@@ -40,10 +43,10 @@ const NODE_W = 140;
 const NODE_HEAD_H = 22;
 
 const Canvas = forwardRef<HTMLDivElement, Props>(function Canvas(
-  { nets, nodes, edges, deployed, selection, setSelection, pan, dropTargetId, dragging, edgeDraw,
+  { nets, nodes, edges, deployed, selection, setSelection, pan, zoom, dropTargetId, dragging, edgeDraw,
     onCanvasMouseDown, onNodeMouseDown, onNetMouseDown, onNetResizeMouseDown, onPortMouseDown,
     onNodeContextMenu, onNetContextMenu, onEdgeContextMenu, onCanvasContextMenu,
-    onResetView, onAutoLayout, sseConnected, lastEventAt, onSelectService },
+    onResetView, onAutoLayout, onZoomIn, onZoomOut, sseConnected, lastEventAt, onSelectService },
   ref,
 ) {
   const netById = useMemo(() => new Map(nets.map((n) => [n.id, n])), [nets]);
@@ -86,16 +89,34 @@ const Canvas = forwardRef<HTMLDivElement, Props>(function Canvas(
       <div className="maze-grid-bg">
         <svg xmlns="http://www.w3.org/2000/svg">
           <defs>
-            <pattern id="maze-grid-pat" x={pan.x} y={pan.y} width="40" height="40" patternUnits="userSpaceOnUse">
-              <path d="M 40 0 L 0 0 0 40" fill="none" stroke="var(--grid-line)" strokeWidth="1" />
+            <pattern
+              id="maze-grid-pat"
+              x={pan.x}
+              y={pan.y}
+              width={40 * zoom}
+              height={40 * zoom}
+              patternUnits="userSpaceOnUse"
+            >
+              <path
+                d={`M ${40 * zoom} 0 L 0 0 0 ${40 * zoom}`}
+                fill="none"
+                stroke="var(--grid-line)"
+                strokeWidth="1"
+              />
             </pattern>
           </defs>
           <rect width="100%" height="100%" fill="url(#maze-grid-pat)" />
         </svg>
       </div>
 
-      <div className="maze-pan-layer" style={{ transform: `translate(${pan.x}px, ${pan.y}px)` }}>
-        <svg className="maze-svg">
+      <div
+        className="maze-pan-layer"
+        style={{
+          transform: `translate(${pan.x}px, ${pan.y}px) scale(${zoom})`,
+          transformOrigin: '0 0',
+        }}
+      >
+        <svg className="maze-svg" overflow="visible">
           <defs>
             <marker id="arrow-matrix" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="6" markerHeight="6" orient="auto">
               <path d="M0,0 L10,5 L0,10 z" fill="#00ff41" />
@@ -184,16 +205,26 @@ const Canvas = forwardRef<HTMLDivElement, Props>(function Canvas(
         </div>
       </div>
 
-      {(onResetView || onAutoLayout) && (
+      {(onResetView || onAutoLayout || onZoomIn || onZoomOut) && (
         <div className="maze-toolbar">
           {onResetView && (
-            <button type="button" className="maze-btn ghost small" onClick={onResetView} title="Reset pan to origin">
+            <button type="button" className="maze-btn ghost small" onClick={onResetView} title="Reset pan + zoom">
               <RotateCcw size={11} /> RESET VIEW
             </button>
           )}
           {onAutoLayout && (
             <button type="button" className="maze-btn ghost small" onClick={onAutoLayout} title="Auto-layout nodes">
               <LayoutGrid size={11} /> AUTO-LAYOUT
+            </button>
+          )}
+          {onZoomOut && (
+            <button type="button" className="maze-btn ghost small" onClick={onZoomOut} title="Zoom out">
+              <ZoomOut size={11} />
+            </button>
+          )}
+          {onZoomIn && (
+            <button type="button" className="maze-btn ghost small" onClick={onZoomIn} title="Zoom in">
+              <ZoomIn size={11} />
             </button>
           )}
         </div>
@@ -205,6 +236,7 @@ const Canvas = forwardRef<HTMLDivElement, Props>(function Canvas(
           GRAPH {sseConnected ? 'LIVE' : 'IDLE'}
         </span>
         <span className="status-seg">PAN: {Math.round(pan.x)},{Math.round(pan.y)}</span>
+        <span className="status-seg">ZOOM: {Math.round(zoom * 100)}%</span>
         <span className="status-seg">AS-OF {lastEventAt ? fmtTime(lastEventAt) : '--:--:--'}</span>
       </div>
 

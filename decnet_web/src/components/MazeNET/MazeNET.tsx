@@ -583,6 +583,7 @@ const MazeNET: React.FC = () => {
           selection={selection}
           setSelection={setSelection}
           pan={interaction.pan}
+          zoom={interaction.zoom}
           dropTargetId={interaction.dropTargetId}
           dragging={interaction.dragging}
           edgeDraw={interaction.edgeDraw}
@@ -597,6 +598,8 @@ const MazeNET: React.FC = () => {
           onCanvasContextMenu={onCanvasContextMenu}
           onResetView={interaction.resetPan}
           onAutoLayout={() => pushToast({ text: 'AUTO-LAYOUT COMING SOON', tone: 'violet', icon: 'info' })}
+          onZoomIn={() => interaction.zoomBy(1.2)}
+          onZoomOut={() => interaction.zoomBy(1 / 1.2)}
           sseConnected={streamLive}
           lastEventAt={lastEventAt}
           onSelectService={(nodeId, slug) => setSelection({ type: 'service', id: slug, nodeId })}
