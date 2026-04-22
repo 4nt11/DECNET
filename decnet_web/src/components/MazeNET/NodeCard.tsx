@@ -1,5 +1,21 @@
 import React from 'react';
+import {
+  Server, Monitor, Shield, Database, Cpu, Globe, Users, HardDrive, Eye,
+  type LucideIcon,
+} from 'lucide-react';
 import type { MazeNode } from './types';
+
+const ARCHETYPE_ICONS: Record<string, LucideIcon> = {
+  'linux-server': Server,
+  'windows-workstation': Monitor,
+  'domain-controller': Shield,
+  'database-server': Database,
+  'iot-device': Cpu,
+  'web-application': Globe,
+  'deaddeck': HardDrive,
+  'attacker-pool': Eye,
+  'directory-services': Users,
+};
 
 interface Props {
   node: MazeNode;
@@ -38,7 +54,14 @@ const NodeCard: React.FC<Props> = ({ node, absX, absY, selected, dragging, deplo
       onMouseDown={handleDown}
       onContextMenu={onContextMenu?.(node.id)}
     >
-      <div className="mn-head">{node.name}</div>
+      <div className="mn-head">
+        <span className={`status-dot ${node.status}`} />
+        {(() => {
+          const Icon = ARCHETYPE_ICONS[node.archetype] ?? Server;
+          return <Icon size={10} className="mn-head-icon" />;
+        })()}
+        <span className="mn-head-name">{node.name}</span>
+      </div>
       <div className="mn-sub">{node.archetype.toUpperCase()}</div>
       {node.services.length > 0 && (
         <div className="mn-services">

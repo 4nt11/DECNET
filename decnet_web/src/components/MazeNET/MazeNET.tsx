@@ -20,6 +20,7 @@ import { useMazeInteraction, type PaletteDrag } from './useMazeInteraction';
 import { useLayoutPersistor } from './useMazeLayoutStore';
 import { useTopologyStream, type TopologyStreamEvent } from './useTopologyStream';
 import { ARCHETYPES as DEFAULT_ARCHETYPES } from './data';
+import { useToast } from '../Toasts/useToast';
 
 /* Short unique suffix for default names — avoids the DB uniqueness
  * constraint regardless of delete/re-add sequencing on the client. */
@@ -33,6 +34,7 @@ const hex4 = (): string => {
 const MazeNET: React.FC = () => {
   const api = useMazeApi();
   const navigate = useNavigate();
+  const { push: pushToast } = useToast();
   const [params] = useSearchParams();
   const topologyId = params.get('topology') ?? '';
 
@@ -457,6 +459,7 @@ const MazeNET: React.FC = () => {
    * keepalives.  On any state-transition event we refetch; DB is the
    * source of truth and the bus is at-most-once. */
   const [streamLive, setStreamLive] = useState(false);
+  const [lastEventAt, setLastEventAt] = useState<Date | null>(null);
   const streamEnabled = topoStatus === 'active' || topoStatus === 'degraded';
   const onStreamEvent = useCallback((event: TopologyStreamEvent) => {
     // Flip LIVE only on named, purposeful events — not incidental keepalives.
@@ -464,6 +467,7 @@ const MazeNET: React.FC = () => {
       || event.name.startsWith('mutation.')
       || event.name === 'status') {
       setStreamLive(true);
+      setLastEventAt(new Date());
     }
     if (event.name === 'mutation.failed') {
       const p = event.payload ?? {};
@@ -529,7 +533,7 @@ const MazeNET: React.FC = () => {
           </div>
         </div>
         <div className="maze-page-actions">
-          <button type="button" className="maze-btn ghost" onClick={() => navigate('/topologies')}>
+          <button type="button" className="maze-btn ghost" onClick={() => navigate('/mazenet')}>
             <ArrowLeft size={12} /> TOPOLOGIES
           </button>
           <button type="button" className="maze-btn ghost" onClick={() => setInspectorOpen((o) => !o)}>
@@ -576,6 +580,10 @@ const MazeNET: React.FC = () => {
           onNetContextMenu={onNetContextMenu}
           onEdgeContextMenu={onEdgeContextMenu}
           onCanvasContextMenu={onCanvasContextMenu}
+          onResetView={interaction.resetPan}
+          onAutoLayout={() => pushToast({ text: 'AUTO-LAYOUT COMING SOON', tone: 'violet', icon: 'info' })}
+          sseConnected={streamLive}
+          lastEventAt={lastEventAt}
         />
         {ctxMenu && (
           <ContextMenu x={ctxMenu.x} y={ctxMenu.y} items={ctxMenu.items} onClose={() => setCtxMenu(null)} />

@@ -1,4 +1,5 @@
 import React, { forwardRef, useMemo } from 'react';
+import { RotateCcw, LayoutGrid } from 'lucide-react';
 import NetBox from './NetBox';
 import NodeCard from './NodeCard';
 import type { Net, MazeNode, Edge } from './types';
@@ -25,7 +26,14 @@ interface Props {
   onNetContextMenu?: (id: string) => (e: React.MouseEvent) => void;
   onEdgeContextMenu?: (id: string) => (e: React.MouseEvent) => void;
   onCanvasContextMenu?: (e: React.MouseEvent) => void;
+  onResetView?: () => void;
+  onAutoLayout?: () => void;
+  sseConnected?: boolean;
+  lastEventAt?: Date | null;
 }
+
+const fmtTime = (d: Date) =>
+  `${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}:${String(d.getSeconds()).padStart(2, '0')}`;
 
 const NODE_W = 140;
 const NODE_HEAD_H = 22;
@@ -33,7 +41,8 @@ const NODE_HEAD_H = 22;
 const Canvas = forwardRef<HTMLDivElement, Props>(function Canvas(
   { nets, nodes, edges, deployed, selection, setSelection, pan, dropTargetId, dragging, edgeDraw,
     onCanvasMouseDown, onNodeMouseDown, onNetMouseDown, onNetResizeMouseDown, onPortMouseDown,
-    onNodeContextMenu, onNetContextMenu, onEdgeContextMenu, onCanvasContextMenu },
+    onNodeContextMenu, onNetContextMenu, onEdgeContextMenu, onCanvasContextMenu,
+    onResetView, onAutoLayout, sseConnected, lastEventAt },
   ref,
 ) {
   const netById = useMemo(() => new Map(nets.map((n) => [n.id, n])), [nets]);
@@ -169,10 +178,35 @@ const Canvas = forwardRef<HTMLDivElement, Props>(function Canvas(
         </div>
       </div>
 
+      {(onResetView || onAutoLayout) && (
+        <div className="maze-toolbar">
+          {onResetView && (
+            <button type="button" className="maze-btn ghost small" onClick={onResetView} title="Reset pan to origin">
+              <RotateCcw size={11} /> RESET VIEW
+            </button>
+          )}
+          {onAutoLayout && (
+            <button type="button" className="maze-btn ghost small" onClick={onAutoLayout} title="Auto-layout nodes">
+              <LayoutGrid size={11} /> AUTO-LAYOUT
+            </button>
+          )}
+        </div>
+      )}
+
+      <div className="maze-status">
+        <span className={`status-seg ${sseConnected ? 'live' : 'dim'}`}>
+          <span className={`status-dot ${sseConnected ? 'active' : 'idle'}`} />
+          GRAPH {sseConnected ? 'LIVE' : 'IDLE'}
+        </span>
+        <span className="status-seg">PAN: {Math.round(pan.x)},{Math.round(pan.y)}</span>
+        <span className="status-seg">AS-OF {lastEventAt ? fmtTime(lastEventAt) : '--:--:--'}</span>
+      </div>
+
       <div className="maze-legend">
-        <div className="lg-row"><span className="lg-swatch" style={{ background: '#ff4141' }} /> HOT</div>
-        <div className="lg-row"><span className="lg-swatch" style={{ background: '#ee82ee' }} /> ACTIVE</div>
-        <div className="lg-row"><span className="lg-swatch" style={{ background: '#00ff41' }} /> IDLE</div>
+        <div className="lg-row"><span className="lg-swatch alert" /> ACTIVE ATTACK</div>
+        <div className="lg-row"><span className="lg-swatch violet" /> OBSERVED FLOW</div>
+        <div className="lg-row"><span className="lg-swatch matrix" /> CONFIGURED</div>
+        <div className="lg-row"><span className="lg-swatch inactive" /> INACTIVE NET</div>
       </div>
     </div>
   );

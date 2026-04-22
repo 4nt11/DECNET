@@ -274,7 +274,30 @@
   display: flex; flex-direction: column; gap: 4px;
 }
 .maze-legend .lg-row { display: flex; align-items: center; gap: 6px; }
-.maze-legend .lg-swatch { width: 14px; height: 2px; }
+.maze-legend .lg-swatch { width: 14px; height: 2px; background: var(--matrix); }
+.maze-legend .lg-swatch.alert    { background: var(--alert); box-shadow: 0 0 6px var(--alert); }
+.maze-legend .lg-swatch.violet   { background: var(--violet); box-shadow: 0 0 6px var(--violet); }
+.maze-legend .lg-swatch.matrix   { background: var(--matrix); }
+.maze-legend .lg-swatch.inactive {
+  background: transparent;
+  height: 0;
+  border-top: 1px dashed var(--border);
+}
+
+/* Status bar segments */
+.maze-status .status-seg { display: inline-flex; align-items: center; gap: 6px; white-space: nowrap; }
+.maze-status .status-seg.live   { color: var(--matrix); opacity: 0.9; }
+.maze-status .status-seg.dim    { opacity: 0.45; }
+
+/* Toolbar button sizing override */
+.maze-toolbar .maze-btn.small {
+  padding: 4px 10px; font-size: 0.62rem; letter-spacing: 1.5px;
+  background: rgba(0, 0, 0, 0.6);
+}
+
+/* NodeCard head icon alignment */
+.maze-node .mn-head .mn-head-icon { opacity: 0.8; flex-shrink: 0; }
+.maze-node .mn-head .mn-head-name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 
 /* ── Inspector ──────────────────────────────── */
 .maze-inspector {
