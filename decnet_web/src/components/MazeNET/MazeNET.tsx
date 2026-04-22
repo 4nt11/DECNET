@@ -276,6 +276,21 @@ const MazeNET: React.FC = () => {
     }
   };
 
+  const removeServiceFromNode = async (id: string, slug: string) => {
+    const n = nodes.find((x) => x.id === id);
+    if (!n || n.kind !== 'decky' || !n.services.includes(slug)) return;
+    const nextServices = n.services.filter((s) => s !== slug);
+    try {
+      const r = await editor.updateDecky(topologyId, id, n.name, { services: nextServices });
+      if (r.kind !== 'applied') return;
+      setNodes((p) => p.map((x) => x.id === id && x.kind === 'decky'
+        ? { ...x, services: nextServices } : x));
+      setSelection(null);
+    } catch (err) {
+      flashErr(err, 'remove service failed');
+    }
+  };
+
   const addServiceToNode = async (id: string, slug: string) => {
     const n = nodes.find((x) => x.id === id);
     if (!n || n.kind !== 'decky' || n.services.includes(slug)) return;
@@ -584,6 +599,7 @@ const MazeNET: React.FC = () => {
           onAutoLayout={() => pushToast({ text: 'AUTO-LAYOUT COMING SOON', tone: 'violet', icon: 'info' })}
           sseConnected={streamLive}
           lastEventAt={lastEventAt}
+          onSelectService={(nodeId, slug) => setSelection({ type: 'service', id: slug, nodeId })}
         />
         {ctxMenu && (
           <ContextMenu x={ctxMenu.x} y={ctxMenu.y} items={ctxMenu.items} onClose={() => setCtxMenu(null)} />
@@ -608,6 +624,7 @@ const MazeNET: React.FC = () => {
             onDeleteNet={removeNet}
             onDeleteNode={removeNode}
             onDeleteEdge={removeEdge}
+            onRemoveService={removeServiceFromNode}
             onAddDecky={(netId) => {
               const net = nets.find((n) => n.id === netId);
               if (!net) return;

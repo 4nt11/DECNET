@@ -1,14 +1,16 @@
 import React, { useMemo } from 'react';
 import {
   ArrowLeft, ArrowRight, Crosshair, Globe, GitMerge, MousePointer2, Plus,
-  Server, Trash2, X,
+  Server, Trash2, X, Shield,
 } from 'lucide-react';
 import type { Net, MazeNode, Edge } from './types';
+import { DEFAULT_SERVICES } from './data';
 
 export type Selection =
   | { type: 'net'; id: string }
   | { type: 'node'; id: string }
   | { type: 'edge'; id: string }
+  | { type: 'service'; id: string; nodeId: string }
   | null;
 
 interface Props {
@@ -21,6 +23,7 @@ interface Props {
   onDeleteNet?: (id: string) => void;
   onDeleteNode?: (id: string) => void;
   onDeleteEdge?: (id: string) => void;
+  onRemoveService?: (nodeId: string, slug: string) => void;
   onAddDecky?: (netId: string) => void;
   setSelection?: (sel: Selection) => void;
   pendingChanges?: number;
@@ -28,12 +31,16 @@ interface Props {
 
 const Inspector: React.FC<Props> = ({
   selection, nets, nodes, edges, topologyStatus, onClose,
-  onDeleteNet, onDeleteNode, onDeleteEdge, onAddDecky, setSelection,
+  onDeleteNet, onDeleteNode, onDeleteEdge, onRemoveService, onAddDecky, setSelection,
   pendingChanges = 0,
 }) => {
   const net  = selection?.type === 'net'  ? nets.find((n) => n.id === selection.id)  : undefined;
   const node = selection?.type === 'node' ? nodes.find((n) => n.id === selection.id) : undefined;
   const edge = selection?.type === 'edge' ? edges.find((e) => e.id === selection.id) : undefined;
+  const serviceSel = selection?.type === 'service' ? selection : undefined;
+  const serviceMeta = serviceSel ? DEFAULT_SERVICES.find((s) => s.slug === serviceSel.id) : undefined;
+  const serviceParent = serviceSel ? nodes.find((n) => n.id === serviceSel.nodeId) : undefined;
+  const serviceParentNet = serviceParent ? nets.find((n) => n.id === serviceParent.netId) : undefined;
 
   const activeNetIds = useMemo(() => {
     const s = new Set<string>();
@@ -219,6 +226,50 @@ const Inspector: React.FC<Props> = ({
                 onClick={() => onDeleteEdge(edge.id)}
               >
                 <Trash2 size={10} /> CUT EDGE
+              </button>
+            )}
+          </>
+        )}
+
+        {serviceSel && (
+          <>
+            <div className="inspector-head">
+              <Shield
+                size={14}
+                className={serviceMeta?.risk === 'high' ? 'alert-text' : 'violet-accent'}
+              />
+              <span className="inspector-head-title">
+                {serviceMeta?.name ?? serviceSel.id.toUpperCase()}
+              </span>
+              {serviceMeta && (
+                <span className={`chip inspector-head-chip ${
+                  serviceMeta.risk === 'high' ? 'alert'
+                  : serviceMeta.risk === 'med' ? 'violet'
+                  : 'dim-chip'
+                }`}>
+                  {serviceMeta.risk.toUpperCase()}
+                </span>
+              )}
+            </div>
+            <div className="kvs">
+              <div className="k">EXPOSED ON</div>
+              <div className="v violet-accent">{serviceParent?.name ?? '—'}</div>
+              <div className="k">PROTOCOL</div>
+              <div className="v">{(serviceMeta?.proto ?? '—').toUpperCase()}</div>
+              <div className="k">PORT</div>
+              <div className="v" style={{ fontWeight: 700 }}>{serviceMeta?.port ?? '—'}</div>
+              <div className="k">SUBNET</div>
+              <div className="v">{serviceParentNet?.label ?? '—'}</div>
+            </div>
+            {onRemoveService && serviceParent && serviceParent.kind !== 'observed' && (
+              <button
+                type="button"
+                className="maze-btn alert small"
+                disabled={topologyStatus === 'degraded'}
+                title={topologyStatus === 'degraded' ? 'topology degraded — mutations blocked' : undefined}
+                onClick={() => onRemoveService(serviceSel.nodeId, serviceSel.id)}
+              >
+                <Trash2 size={10} /> REMOVE SERVICE
               </button>
             )}
           </>

@@ -30,6 +30,7 @@ interface Props {
   onAutoLayout?: () => void;
   sseConnected?: boolean;
   lastEventAt?: Date | null;
+  onSelectService?: (nodeId: string, slug: string) => void;
 }
 
 const fmtTime = (d: Date) =>
@@ -42,7 +43,7 @@ const Canvas = forwardRef<HTMLDivElement, Props>(function Canvas(
   { nets, nodes, edges, deployed, selection, setSelection, pan, dropTargetId, dragging, edgeDraw,
     onCanvasMouseDown, onNodeMouseDown, onNetMouseDown, onNetResizeMouseDown, onPortMouseDown,
     onNodeContextMenu, onNetContextMenu, onEdgeContextMenu, onCanvasContextMenu,
-    onResetView, onAutoLayout, sseConnected, lastEventAt },
+    onResetView, onAutoLayout, sseConnected, lastEventAt, onSelectService },
   ref,
 ) {
   const netById = useMemo(() => new Map(nets.map((n) => [n.id, n])), [nets]);
@@ -63,8 +64,11 @@ const Canvas = forwardRef<HTMLDivElement, Props>(function Canvas(
   }, [nodes, edges]);
 
   const selNetId  = selection?.type === 'net'  ? selection.id : null;
-  const selNodeId = selection?.type === 'node' ? selection.id : null;
+  const selNodeId = selection?.type === 'node' ? selection.id
+                    : selection?.type === 'service' ? selection.nodeId : null;
   const selEdgeId = selection?.type === 'edge' ? selection.id : null;
+  const selServiceNodeId = selection?.type === 'service' ? selection.nodeId : null;
+  const selServiceSlug = selection?.type === 'service' ? selection.id : null;
 
   return (
     <div
@@ -168,7 +172,9 @@ const Canvas = forwardRef<HTMLDivElement, Props>(function Canvas(
                 selected={n.id === selNodeId}
                 deployed={deployed}
                 dragging={dragging && n.id === selNodeId}
+                selectedServiceSlug={n.id === selServiceNodeId ? selServiceSlug : null}
                 onSelect={(id) => setSelection({ type: 'node', id })}
+                onSelectService={onSelectService}
                 onMouseDown={onNodeMouseDown}
                 onPortMouseDown={onPortMouseDown}
                 onContextMenu={onNodeContextMenu}

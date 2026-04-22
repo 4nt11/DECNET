@@ -4,6 +4,7 @@ import {
   type LucideIcon,
 } from 'lucide-react';
 import type { MazeNode } from './types';
+import { DEFAULT_SERVICES } from './data';
 
 const ARCHETYPE_ICONS: Record<string, LucideIcon> = {
   'linux-server': Server,
@@ -24,13 +25,15 @@ interface Props {
   selected: boolean;
   dragging?: boolean;
   deployed?: boolean;
+  selectedServiceSlug?: string | null;
   onSelect?: (id: string) => void;
+  onSelectService?: (nodeId: string, slug: string) => void;
   onMouseDown?: (id: string) => (e: React.MouseEvent) => void;
   onPortMouseDown?: (id: string) => (e: React.MouseEvent) => void;
   onContextMenu?: (id: string) => (e: React.MouseEvent) => void;
 }
 
-const NodeCard: React.FC<Props> = ({ node, absX, absY, selected, dragging, deployed, onSelect, onMouseDown, onPortMouseDown, onContextMenu }) => {
+const NodeCard: React.FC<Props> = ({ node, absX, absY, selected, dragging, deployed, selectedServiceSlug, onSelect, onSelectService, onMouseDown, onPortMouseDown, onContextMenu }) => {
   const isDmzGateway = !!(node as { decky_config?: { forwards_l3?: boolean } }).decky_config?.forwards_l3;
   const classes = [
     'maze-node',
@@ -65,11 +68,25 @@ const NodeCard: React.FC<Props> = ({ node, absX, absY, selected, dragging, deplo
       <div className="mn-sub">{node.archetype.toUpperCase()}</div>
       {node.services.length > 0 && (
         <div className="mn-services">
-          {node.services.map((s) => (
-            <span key={s} className={`service-tag ${node.status === 'hot' ? 'hot' : ''}`}>
-              {s}
-            </span>
-          ))}
+          {node.services.map((s) => {
+            const meta = DEFAULT_SERVICES.find((x) => x.slug === s);
+            const isHigh = meta?.risk === 'high' || node.status === 'hot';
+            const isSel = selectedServiceSlug === s;
+            return (
+              <span
+                key={s}
+                className={`service-tag ${isHigh ? 'hot' : ''} ${isSel ? 'service-selected' : ''}`}
+                title={meta ? `${meta.name} · ${meta.proto.toUpperCase()}:${meta.port}` : s}
+                onMouseDown={(e) => {
+                  if (!onSelectService) return;
+                  e.stopPropagation();
+                  onSelectService(node.id, s);
+                }}
+              >
+                {s}
+              </span>
+            );
+          })}
         </div>
       )}
       {node.kind === 'decky' && <>
