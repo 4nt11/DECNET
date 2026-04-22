@@ -417,7 +417,7 @@ const Dashboard: React.FC<DashboardProps> = ({ searchQuery }) => {
                     </tr>
                   );
                 }) : (
-                  <tr>
+                  <tr className="empty-row">
                     <td colSpan={6} style={{ padding: 0 }}>
                       <EmptyState
                         icon={Activity}

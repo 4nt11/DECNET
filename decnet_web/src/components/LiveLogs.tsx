@@ -360,7 +360,7 @@ const LiveLogs: React.FC = () => {
                   </tr>
                 );
               }) : (
-                <tr>
+                <tr className="empty-row">
                   <td colSpan={5}>
                     <EmptyState
                       icon={Radio}
