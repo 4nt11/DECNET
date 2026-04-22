@@ -87,7 +87,10 @@ export function useMazeInteraction({ nets, nodes, setNets, setNodes, canvasRef, 
 
   const onCanvasMouseDown = useCallback((e: React.MouseEvent) => {
     if (e.button !== 0) return;
-    if (e.target !== e.currentTarget) return;
+    // Pan starts whenever a left-mousedown bubbles up to the canvas.
+    // Node/header/resize/port handlers call stopPropagation() and never
+    // reach here; net-box body mousedowns DO bubble so you can pan from
+    // "inside" a LAN when zoomed in and no bare grid is visible.
     setDrag({ type: 'pan', startX: e.clientX, startY: e.clientY, panX: panRef.current.x, panY: panRef.current.y });
   }, []);
 
