@@ -3,6 +3,7 @@ import { useParams, useNavigate } from 'react-router-dom';
 import { Activity, ArrowLeft, ChevronDown, ChevronLeft, ChevronRight, ChevronUp, Crosshair, Fingerprint, Shield, Clock, Wifi, Lock, FileKey, Radio, Timer, Paperclip } from 'lucide-react';
 import api from '../utils/api';
 import ArtifactDrawer from './ArtifactDrawer';
+import SessionDrawer from './SessionDrawer';
 import './Dashboard.css';
 
 interface AttackerBehavior {
@@ -707,6 +708,7 @@ const AttackerDetail: React.FC = () => {
     commands: true,
     fingerprints: true,
     artifacts: true,
+    sessions: true,
   });
 
   // Captured file-drop artifacts (ssh inotify farm) for this attacker.
@@ -719,6 +721,17 @@ const AttackerDetail: React.FC = () => {
   };
   const [artifacts, setArtifacts] = useState<ArtifactLog[]>([]);
   const [artifact, setArtifact] = useState<{ decky: string; storedAs: string; fields: Record<string, any> } | null>(null);
+
+  // PTY session transcripts (sessrec) for this attacker.
+  type SessionLog = {
+    id: number;
+    timestamp: string;
+    decky: string;
+    service: string;
+    fields: string;
+  };
+  const [sessions, setSessions] = useState<SessionLog[]>([]);
+  const [session, setSession] = useState<{ decky: string; sid: string; fields: Record<string, any> } | null>(null);
   const toggle = (key: string) => setOpenSections((prev) => ({ ...prev, [key]: !prev[key] }));
 
   // Commands pagination state
@@ -783,6 +796,19 @@ const AttackerDetail: React.FC = () => {
       }
     };
     fetchArtifacts();
+  }, [id]);
+
+  useEffect(() => {
+    if (!id) return;
+    const fetchSessions = async () => {
+      try {
+        const res = await api.get(`/attackers/${id}/transcripts`);
+        setSessions(res.data.data ?? []);
+      } catch {
+        setSessions([]);
+      }
+    };
+    fetchSessions();
   }, [id]);
 
   if (loading) {
@@ -1163,6 +1189,87 @@ const AttackerDetail: React.FC = () => {
           storedAs={artifact.storedAs}
           fields={artifact.fields}
           onClose={() => setArtifact(null)}
+        />
+      )}
+
+      {/* Recorded PTY Sessions (SSH / Telnet) */}
+      <Section
+        title={<>SESSION TRANSCRIPTS ({sessions.length})</>}
+        open={openSections.sessions}
+        onToggle={() => toggle('sessions')}
+      >
+        {sessions.length > 0 ? (
+          <div className="logs-table-container">
+            <table className="logs-table">
+              <thead>
+                <tr>
+                  <th>TIMESTAMP</th>
+                  <th>DECKY</th>
+                  <th>SERVICE</th>
+                  <th>DURATION</th>
+                  <th>BYTES</th>
+                  <th></th>
+                </tr>
+              </thead>
+              <tbody>
+                {sessions.map((row) => {
+                  let fields: Record<string, any> = {};
+                  try { fields = JSON.parse(row.fields || '{}'); } catch {}
+                  const sid = fields.sid ? String(fields.sid) : null;
+                  const dur = fields.duration_s;
+                  const bytes = fields.bytes;
+                  return (
+                    <tr key={row.id}>
+                      <td className="dim" style={{ fontSize: '0.75rem', whiteSpace: 'nowrap' }}>
+                        {new Date(row.timestamp).toLocaleString()}
+                      </td>
+                      <td className="violet-accent">{row.decky}</td>
+                      <td className="matrix-text">{fields.service ?? row.service}</td>
+                      <td className="matrix-text" style={{ fontFamily: 'monospace' }}>
+                        {dur ? `${dur}s` : '—'}
+                      </td>
+                      <td className="matrix-text" style={{ fontFamily: 'monospace' }}>
+                        {bytes ? `${bytes} B` : '—'}
+                      </td>
+                      <td>
+                        {sid && (
+                          <button
+                            onClick={() => setSession({ decky: row.decky, sid, fields })}
+                            title="Replay recorded session"
+                            style={{
+                              display: 'flex', alignItems: 'center', gap: '6px',
+                              fontSize: '0.7rem',
+                              backgroundColor: 'rgba(0, 200, 255, 0.1)',
+                              padding: '2px 8px',
+                              borderRadius: '4px',
+                              border: '1px solid rgba(0, 200, 255, 0.5)',
+                              color: '#00c8ff',
+                              cursor: 'pointer',
+                            }}
+                          >
+                            REPLAY
+                          </button>
+                        )}
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
+        ) : (
+          <div style={{ padding: '24px', textAlign: 'center', opacity: 0.5 }}>
+            NO SESSION TRANSCRIPTS RECORDED FROM THIS ATTACKER
+          </div>
+        )}
+      </Section>
+
+      {session && (
+        <SessionDrawer
+          decky={session.decky}
+          sid={session.sid}
+          fields={session.fields}
+          onClose={() => setSession(null)}
         />
       )}
 
