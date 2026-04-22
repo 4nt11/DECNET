@@ -1,10 +1,12 @@
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import {
   Cpu, Database, Globe, Monitor, Network, PlusCircle, PowerOff,
-  RefreshCw, Server, Shield, Terminal, X,
+  RefreshCw, Server, Shield, Terminal,
 } from 'lucide-react';
 import api from '../utils/api';
 import { ARCHETYPES as FALLBACK_ARCHETYPES, DEFAULT_SERVICES } from './MazeNET/data';
+import { useToast } from './Toasts/useToast';
+import Modal from './Modal/Modal';
 import './DeckyFleet.css';
 
 // ─── Types ────────────────────────────────────────────────────────────────
@@ -126,10 +128,12 @@ interface DeckyCardProps {
   onForce: (name: string) => void;
   onTeardown: (d: Decky) => void;
   onIntervalChange: (name: string, current: number | null) => void;
+  onInspect: (d: Decky) => void;
+  innerRef?: React.Ref<HTMLDivElement>;
 }
 
 const DeckyCard: React.FC<DeckyCardProps> = ({
-  decky, mutating, isAdmin, armed, tdBusy, onForce, onTeardown, onIntervalChange,
+  decky, mutating, isAdmin, armed, tdBusy, onForce, onTeardown, onIntervalChange, onInspect, innerRef,
 }) => {
   const dot = _dotFor(decky);
   const hits = _hitsFor(decky);
@@ -138,7 +142,15 @@ const DeckyCard: React.FC<DeckyCardProps> = ({
   const tdKey = decky.swarm ? `td:${decky.swarm.host_uuid}:${decky.name}` : '';
 
   return (
-    <div className={`decky-card ${hot ? 'hot' : ''}`}>
+    <div
+      ref={innerRef}
+      className={`decky-card ${hot ? 'hot' : ''}`}
+      onClick={(e) => {
+        if ((e.target as HTMLElement).closest('button, a, input')) return;
+        onInspect(decky);
+      }}
+      style={{ cursor: 'pointer' }}
+    >
       <div className="decky-head">
         <div className="decky-name">
           <span className={`status-dot ${dotClass}`} />
@@ -250,7 +262,7 @@ const DeckyCard: React.FC<DeckyCardProps> = ({
 interface DeployWizardProps {
   open: boolean;
   onClose: () => void;
-  onComplete: () => void;
+  onComplete: (count: number) => void;
   archetypes: Archetype[];
   fleetSize: number;
 }
@@ -337,7 +349,11 @@ const DeployWizard: React.FC<DeployWizardProps> = ({
     return out;
   }, [count, prefix, fleetSize, effectiveArchetypeName, effectiveServices]);
 
-  // Fake log stream during "deploying".
+  const [deployOk, setDeployOk] = useState(false);
+  const [deployFailures, setDeployFailures] = useState<string[]>([]);
+
+  // Fake log stream during "deploying" (runs as visual backdrop; real API
+  // lines are spliced in by startDeploy once the HTTP call resolves).
   useEffect(() => {
     if (step !== 3 || !deploying) return;
     const msgs = PLACEHOLDER_LINES(effectiveArchetypeName, effectiveServices, count, fleetSize);
@@ -347,13 +363,14 @@ const DeployWizard: React.FC<DeployWizardProps> = ({
       i++;
       if (i >= msgs.length) {
         window.clearInterval(t);
-        window.setTimeout(() => onComplete(), 500);
+        // Only auto-close if the server accepted.
+        if (deployOk) {
+          window.setTimeout(() => onComplete(count), 500);
+        }
       }
     }, 420);
     return () => window.clearInterval(t);
-  }, [step, deploying, effectiveArchetypeName, effectiveServices, count, fleetSize, onComplete]);
-
-  if (!open) return null;
+  }, [step, deploying, effectiveArchetypeName, effectiveServices, count, fleetSize, onComplete, deployOk]);
 
   const canNext = step === 0
     ? (pickMode === 'archetype' ? !!archetype : selectedServices.length > 0)
@@ -362,13 +379,28 @@ const DeployWizard: React.FC<DeployWizardProps> = ({
   const startDeploy = async () => {
     setDeployErr(null);
     setLog([]);
+    setDeployOk(false);
+    setDeployFailures([]);
     setDeploying(true);
     const ini = _buildIni(
       prefix, count, fleetSize, pickMode, archetype, selectedServices,
       mutate, mutateEvery,
     );
     try {
-      await api.post('/deckies/deploy', { ini_content: ini }, { timeout: 180000 });
+      const res = await api.post<{ failures?: { name: string; reason: string }[] }>(
+        '/deckies/deploy',
+        { ini_content: ini },
+        { timeout: 180000 },
+      );
+      const failures = res.data?.failures ?? [];
+      setDeployFailures(failures.map(f => `[FAIL] ${f.name}: ${f.reason}`));
+      if (failures.length > 0) {
+        setLog(prev => [...prev, `[OK]   server accepted ${count - failures.length}/${count}`,
+          ...failures.map(f => `[FAIL] ${f.name}: ${f.reason}`)]);
+      } else {
+        setLog(prev => [...prev, `[OK]   server accepted ${count} deckies`]);
+      }
+      setDeployOk(true);
     } catch (e: unknown) {
       const err = e as { response?: { data?: { detail?: string } }; message?: string };
       setDeployErr(err?.response?.data?.detail || err?.message || 'Deploy failed');
@@ -382,18 +414,45 @@ const DeployWizard: React.FC<DeployWizardProps> = ({
   };
 
   return (
-    <div className="modal-backdrop" onClick={onClose}>
-      <div className="modal wide violet" onClick={(e) => e.stopPropagation()}>
-        <div className="modal-head">
-          <h3>
-            <PlusCircle size={14} />
-            DEPLOY NEW DECKIES
-          </h3>
-          <button className="close-btn" onClick={onClose} aria-label="Close">
-            <X size={16} />
+    <Modal
+      open={open}
+      onClose={onClose}
+      title="DEPLOY NEW DECKIES"
+      icon={PlusCircle}
+      accent="violet"
+      width="wide"
+      footer={
+        <>
+          <button
+            className="btn ghost"
+            onClick={onClose}
+            disabled={deploying && !deployOk}
+          >
+            {deployOk ? 'CLOSE' : 'CANCEL'}
           </button>
-        </div>
-
+          <div style={{ display: 'flex', gap: 8 }}>
+            {step > 0 && !deploying && (
+              <button className="btn ghost" onClick={() => setStep((s) => s - 1)}>← BACK</button>
+            )}
+            {step < 3 && (
+              <button className="btn" disabled={!canNext} onClick={() => setStep((s) => s + 1)}>
+                NEXT →
+              </button>
+            )}
+            {step === 3 && !deploying && (
+              <button className="btn violet" onClick={startDeploy}>ESTABLISH FLEET</button>
+            )}
+            {step === 3 && deploying && !deployOk && (
+              <button className="btn" disabled>DEPLOYING...</button>
+            )}
+            {step === 3 && deployOk && deployFailures.length > 0 && (
+              <button className="btn alert" disabled>{deployFailures.length} FAILED</button>
+            )}
+          </div>
+        </>
+      }
+    >
+      <>
         <div className="wizard-steps">
           {['ARCHETYPE', 'CONFIGURATION', 'MUTATION', 'DEPLOY'].map((l, i) => (
             <div key={l} className={`wizard-step ${i === step ? 'active' : i < step ? 'done' : ''}`}>
@@ -610,33 +669,81 @@ const DeployWizard: React.FC<DeployWizardProps> = ({
           )}
         </div>
 
-        <div className="modal-foot">
+      </>
+    </Modal>
+  );
+};
+
+// ─── Interval editor modal ───────────────────────────────────────────────
+
+interface IntervalEditorProps {
+  open: boolean;
+  deckyName: string;
+  current: number | null;
+  onClose: () => void;
+  onSave: (minutes: number | null) => void;
+}
+
+const IntervalEditor: React.FC<IntervalEditorProps> = ({ open, deckyName, current, onClose, onSave }) => {
+  const [enabled, setEnabled] = useState<boolean>(current !== null);
+  const [minutes, setMinutes] = useState<number>(current ?? 30);
+
+  return (
+    <Modal
+      open={open}
+      onClose={onClose}
+      title={`MUTATION INTERVAL · ${deckyName}`}
+      icon={RefreshCw}
+      accent="violet"
+      footer={
+        <>
           <button className="btn ghost" onClick={onClose}>CANCEL</button>
-          <div style={{ display: 'flex', gap: 8 }}>
-            {step > 0 && !deploying && (
-              <button className="btn ghost" onClick={() => setStep((s) => s - 1)}>← BACK</button>
-            )}
-            {step < 3 && (
-              <button className="btn" disabled={!canNext} onClick={() => setStep((s) => s + 1)}>
-                NEXT →
-              </button>
-            )}
-            {step === 3 && !deploying && (
-              <button className="btn violet" onClick={startDeploy}>ESTABLISH FLEET</button>
-            )}
-            {step === 3 && deploying && log.length < 7 && (
-              <button className="btn" disabled>DEPLOYING...</button>
-            )}
-          </div>
+          <button className="btn violet" onClick={() => onSave(enabled ? minutes : null)}>SAVE</button>
+        </>
+      }
+    >
+      <div className="modal-body">
+        <div style={{ display: 'flex', gap: 10, alignItems: 'center', padding: 14, border: '1px solid var(--border)' }}>
+          <input
+            id="interval-enable"
+            type="checkbox"
+            checked={enabled}
+            onChange={(e) => setEnabled(e.target.checked)}
+            style={{ accentColor: 'var(--matrix)' }}
+          />
+          <label htmlFor="interval-enable" style={{ fontSize: '0.8rem', letterSpacing: 1 }}>
+            ENABLE PERIODIC MUTATION
+          </label>
         </div>
+        {enabled && (
+          <div className="tweak-group">
+            <label>INTERVAL ({minutes} minutes)</label>
+            <input
+              type="range"
+              min={5}
+              max={240}
+              step={5}
+              value={minutes}
+              onChange={(e) => setMinutes(parseInt(e.target.value, 10))}
+            />
+            <div className="dim" style={{ fontSize: '0.65rem', letterSpacing: 1 }}>
+              Applied on the next mutation cycle.
+            </div>
+          </div>
+        )}
       </div>
-    </div>
+    </Modal>
   );
 };
 
 // ─── Fleet page ──────────────────────────────────────────────────────────
 
-const DeckyFleet: React.FC = () => {
+interface FleetProps {
+  searchQuery?: string;
+}
+
+const DeckyFleet: React.FC<FleetProps> = ({ searchQuery = '' }) => {
+  const { push } = useToast();
   const [deckies, setDeckies] = useState<Decky[]>([]);
   const [loading, setLoading] = useState(true);
   const [mutating, setMutating] = useState<string | null>(null);
@@ -647,6 +754,17 @@ const DeckyFleet: React.FC = () => {
   const [armed, setArmed] = useState<string | null>(null);
   const [tearingDown, setTearingDown] = useState<Set<string>>(new Set());
   const [archetypes, setArchetypes] = useState<Archetype[]>(FALLBACK_ARCHETYPES);
+  const [localSearch, setLocalSearch] = useState<string>('');
+  const [intervalEditor, setIntervalEditor] = useState<{ name: string; current: number | null } | null>(null);
+  const cardRefs = useRef<Map<string, HTMLDivElement>>(new Map());
+
+  const lastSearchPropRef = useRef<string>(searchQuery);
+  if (lastSearchPropRef.current !== searchQuery) {
+    lastSearchPropRef.current = searchQuery;
+    // Mirror the topbar search into local state; filter-decky events can
+    // override it in-session.
+    if (localSearch !== searchQuery) setLocalSearch(searchQuery);
+  }
 
   const arm = (key: string) => {
     setArmed(key);
@@ -726,37 +844,70 @@ const DeckyFleet: React.FC = () => {
     }
   };
 
-  const handleMutate = async (name: string) => {
+  const handleMutate = async (name: string): Promise<boolean> => {
     setMutating(name);
     try {
       await api.post(`/deckies/${name}/mutate`, {}, { timeout: 120000 });
       await fetchDeckies(deployMode?.mode);
+      push({ text: `MUTATED · ${name.toUpperCase()}`, tone: 'matrix', icon: 'refresh-cw' });
+      return true;
     } catch (err: unknown) {
       console.error('Failed to mutate', err);
       const e = err as { code?: string };
-      if (e.code === 'ECONNABORTED') {
-        alert('Mutation is still running in the background but the UI timed out.');
-      } else {
-        alert('Mutation failed');
-      }
+      const msg = e.code === 'ECONNABORTED'
+        ? `MUTATION TIMED OUT · ${name.toUpperCase()}`
+        : `MUTATION FAILED · ${name.toUpperCase()}`;
+      push({ text: msg, tone: 'alert', icon: 'alert-triangle' });
+      return false;
     } finally {
       setMutating(null);
     }
   };
 
-  const handleIntervalChange = async (name: string, current: number | null) => {
-    const val = prompt(
-      `Enter new mutation interval in minutes for ${name} (leave empty to disable):`,
-      current?.toString() || '',
-    );
-    if (val === null) return;
-    const mutate_interval = val.trim() === '' ? null : parseInt(val, 10);
+  const handleMutateAll = async () => {
+    if (!isAdmin) {
+      push({ text: 'ADMIN REQUIRED', tone: 'alert', icon: 'alert-triangle' });
+      return;
+    }
+    const targets = deckies.filter(d => !d.swarm || d.swarm.state === 'running');
+    if (targets.length === 0) {
+      push({ text: 'NO DECKIES TO MUTATE', tone: 'violet', icon: 'info' });
+      return;
+    }
+    push({ text: `MUTATING FLEET · ${targets.length} DECKIES`, tone: 'violet', icon: 'refresh-cw' });
+    let failed = 0;
+    for (const d of targets) {
+      const ok = await handleMutate(d.name);
+      if (!ok) failed++;
+    }
+    if (failed === 0) {
+      push({ text: 'FLEET MUTATED', tone: 'matrix', icon: 'check-circle' });
+    } else {
+      push({ text: `FLEET MUTATED · ${failed} FAILED`, tone: 'alert', icon: 'alert-triangle' });
+    }
+  };
+
+  const handleIntervalChange = (name: string, current: number | null) => {
+    setIntervalEditor({ name, current });
+  };
+
+  const handleIntervalSave = async (minutes: number | null) => {
+    if (!intervalEditor) return;
+    const { name } = intervalEditor;
     try {
-      await api.put(`/deckies/${name}/mutate-interval`, { mutate_interval });
+      await api.put(`/deckies/${name}/mutate-interval`, { mutate_interval: minutes });
+      setIntervalEditor(null);
       fetchDeckies(deployMode?.mode);
+      push({
+        text: minutes === null
+          ? `INTERVAL · ${name.toUpperCase()} · DISABLED`
+          : `INTERVAL · ${name.toUpperCase()} · ${minutes}m`,
+        tone: 'matrix',
+        icon: 'refresh-cw',
+      });
     } catch (err) {
       console.error('Failed to update interval', err);
-      alert('Update failed');
+      push({ text: `INTERVAL UPDATE FAILED · ${name.toUpperCase()}`, tone: 'alert', icon: 'alert-triangle' });
     }
   };
 
@@ -769,9 +920,14 @@ const DeckyFleet: React.FC = () => {
     try {
       await api.post(`/swarm/hosts/${d.swarm.host_uuid}/teardown`, { decky_id: d.name });
       await fetchDeckies(deployMode?.mode);
+      push({ text: `TORN DOWN · ${d.name.toUpperCase()}`, tone: 'matrix', icon: 'check-circle' });
     } catch (err: unknown) {
       const e = err as { response?: { data?: { detail?: string } } };
-      alert(e?.response?.data?.detail || 'Teardown failed');
+      push({
+        text: `TEARDOWN FAILED · ${e?.response?.data?.detail || d.name}`,
+        tone: 'alert',
+        icon: 'alert-triangle',
+      });
     } finally {
       setTearingDown((prev) => {
         const next = new Set(prev);
@@ -779,6 +935,12 @@ const DeckyFleet: React.FC = () => {
         return next;
       });
     }
+  };
+
+  const handleInspect = (d: Decky) => {
+    window.dispatchEvent(new CustomEvent('decnet:cmd', {
+      detail: { id: 'filter-decky', payload: d.name },
+    }));
   };
 
   useEffect(() => {
@@ -795,6 +957,35 @@ const DeckyFleet: React.FC = () => {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
+  // Phase-2 decnet:cmd bus: deploy, mutate-all, filter-decky
+  useEffect(() => {
+    const onCmd = (e: Event) => {
+      const detail = (e as CustomEvent).detail as { id?: string; payload?: string };
+      if (!detail?.id) return;
+      if (detail.id === 'deploy') {
+        setShowDeploy(true);
+        return;
+      }
+      if (detail.id === 'mutate-all') {
+        void handleMutateAll();
+        return;
+      }
+      if (detail.id === 'filter-decky' && typeof detail.payload === 'string') {
+        const name = detail.payload;
+        setLocalSearch(name);
+        push({ text: `FILTERING · ${name.toUpperCase()}`, tone: 'violet', icon: 'crosshair' });
+        // Defer so React renders filtered grid first.
+        window.setTimeout(() => {
+          const el = cardRefs.current.get(name);
+          if (el) el.scrollIntoView({ block: 'center', behavior: 'smooth' });
+        }, 80);
+      }
+    };
+    window.addEventListener('decnet:cmd', onCmd);
+    return () => window.removeEventListener('decnet:cmd', onCmd);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [deckies, isAdmin]);
+
   const counts = useMemo(() => {
     const c = { all: deckies.length, active: 0, hot: 0, idle: 0 } as Record<FilterKey, number>;
     for (const d of deckies) {
@@ -804,7 +995,16 @@ const DeckyFleet: React.FC = () => {
     return c;
   }, [deckies]);
 
-  const visible = filter === 'all' ? deckies : deckies.filter((d) => _dotFor(d) === filter);
+  const visible = useMemo(() => {
+    const base = filter === 'all' ? deckies : deckies.filter((d) => _dotFor(d) === filter);
+    const q = localSearch.trim().toLowerCase();
+    if (!q) return base;
+    return base.filter((d) =>
+      d.name.toLowerCase().includes(q)
+      || (d.ip || '').toLowerCase().includes(q)
+      || (d.hostname || '').toLowerCase().includes(q),
+    );
+  }, [deckies, filter, localSearch]);
   const isSwarm = deployMode?.mode === 'swarm';
 
   if (loading) {
@@ -854,7 +1054,17 @@ const DeckyFleet: React.FC = () => {
       <div className="grid-fleet">
         {visible.length === 0 ? (
           <div className="fleet-empty">
-            <span className="dim">NO DECOYS CURRENTLY DEPLOYED IN THIS SECTOR</span>
+            <Server size={32} className="dim" />
+            <span className="dim">
+              {deckies.length === 0
+                ? 'NO DECOYS DEPLOYED IN THIS SECTOR'
+                : 'NO DECOYS MATCH CURRENT FILTER'}
+            </span>
+            {isAdmin && deckies.length === 0 && (
+              <button className="btn violet" onClick={() => setShowDeploy(true)}>
+                <PlusCircle size={12} /> DEPLOY DECKIES
+              </button>
+            )}
           </div>
         ) : (
           visible.map((d) => (
@@ -865,9 +1075,14 @@ const DeckyFleet: React.FC = () => {
               isAdmin={isAdmin}
               armed={armed}
               tdBusy={tearingDown.has(d.name) || d.swarm?.state === 'tearing_down'}
-              onForce={handleMutate}
+              onForce={(name) => { void handleMutate(name); }}
               onTeardown={handleTeardown}
               onIntervalChange={handleIntervalChange}
+              onInspect={handleInspect}
+              innerRef={(el: HTMLDivElement | null) => {
+                if (el) cardRefs.current.set(d.name, el);
+                else cardRefs.current.delete(d.name);
+              }}
             />
           ))
         )}
@@ -878,10 +1093,24 @@ const DeckyFleet: React.FC = () => {
         archetypes={archetypes}
         fleetSize={deckies.length}
         onClose={() => setShowDeploy(false)}
-        onComplete={() => {
+        onComplete={(count) => {
           setShowDeploy(false);
           fetchDeckies(deployMode?.mode);
+          push({
+            text: `DEPLOYED · ${count} DECK${count === 1 ? 'Y' : 'IES'}`,
+            tone: 'matrix',
+            icon: 'check-circle',
+          });
         }}
+      />
+
+      <IntervalEditor
+        key={intervalEditor?.name ?? 'closed'}
+        open={intervalEditor !== null}
+        deckyName={intervalEditor?.name ?? ''}
+        current={intervalEditor?.current ?? null}
+        onClose={() => setIntervalEditor(null)}
+        onSave={handleIntervalSave}
       />
     </div>
   );

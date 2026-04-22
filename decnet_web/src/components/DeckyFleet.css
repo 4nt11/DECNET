@@ -78,7 +78,7 @@
   transition: all 0.3s;
   position: relative;
 }
-.decky-card:hover { border-color: var(--violet); box-shadow: var(--violet-glow); }
+.decky-card:hover { border-color: var(--accent); box-shadow: var(--accent-glow); }
 .decky-card.hot { border-color: var(--alert); }
 .decky-card.hot::before {
   content: '';
@@ -103,6 +103,7 @@
   letter-spacing: 1px;
   display: flex;
   align-items: center;
+  gap: 10px;
 }
 .decky-ip {
   font-size: 0.7rem;
@@ -132,7 +133,6 @@
   width: 8px;
   height: 8px;
   border-radius: 50%;
-  margin-right: 6px;
   flex-shrink: 0;
 }
 .status-dot.active { background: var(--matrix); box-shadow: 0 0 8px var(--matrix); }
@@ -325,11 +325,17 @@
 .fleet-empty {
   grid-column: 1 / -1;
   padding: 48px 24px;
-  text-align: center;
-  opacity: 0.5;
   border: 1px dashed var(--border);
   background: var(--panel);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 14px;
+  letter-spacing: 1px;
+  font-size: 0.85rem;
 }
+.fleet-empty .dim { opacity: 0.5; }
 
 /* Animations */
 @keyframes dfleet-pulse { from { opacity: 0.5; } to { opacity: 1; } }
