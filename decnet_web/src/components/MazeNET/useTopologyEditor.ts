@@ -52,6 +52,17 @@ export interface UseTopologyEditor {
   ): Promise<PrimitiveResult<void>>;
 
   createDecky(topologyId: string, body: CreateDeckyBody): Promise<PrimitiveResult<DeckyRow>>;
+  /** Composite: create a decky and attach it to its home LAN. On pending
+   *  this is two CRUD calls; on active it's one ``add_decky`` enqueue.
+   *  Callers should prefer this over ``createDecky`` + ``attachEdge`` so
+   *  the active path doesn't 409 on the CRUD half. */
+  addDeckyToLan(
+    topologyId: string,
+    body: CreateDeckyBody,
+    lanId: string,
+    lanName: string,
+    opts?: { is_bridge?: boolean; forwards_l3?: boolean },
+  ): Promise<PrimitiveResult<DeckyRow>>;
   updateDecky(
     topologyId: string,
     uuid: string,
@@ -128,13 +139,35 @@ export function useTopologyEditor(
 
     // ── Decky ──────────────────────────────────────────────────────────
     async createDecky(topologyId, body) {
-      // No add_decky mutation op — decky creation on active topologies
-      // is a composite (attach_decky with the create implicit). Phase B
-      // step 3 handles that; for now creation stays direct-CRUD so the
-      // pending path keeps working.  On active this will 409 today until
-      // step 3 lands a combined flow.
+      // Bare create — only valid on pending. On active callers should use
+      // addDeckyToLan() instead; the backend guard will 409 here.
       const data = await api.createDecky(topologyId, body);
       return { kind: 'applied', data };
+    },
+    async addDeckyToLan(topologyId, body, lanId, lanName, opts) {
+      if (!live) {
+        const data = await api.createDecky(topologyId, body);
+        await api.attachEdge(topologyId, {
+          decky_uuid: data.uuid,
+          lan_id: lanId,
+          is_bridge: opts?.is_bridge,
+          forwards_l3: opts?.forwards_l3,
+        });
+        return { kind: 'applied', data };
+      }
+      const payload: Record<string, unknown> = {
+        name: body.name,
+        lan: lanName,
+        services: body.services,
+      };
+      const cfg = body.decky_config ?? {};
+      if (cfg.archetype !== undefined) payload.archetype = cfg.archetype;
+      const fwd = opts?.forwards_l3 ?? cfg.forwards_l3;
+      if (fwd !== undefined) payload.forwards_l3 = fwd;
+      if (body.x !== undefined) payload.x = body.x;
+      if (body.y !== undefined) payload.y = body.y;
+      const res = await api.enqueueMutation(topologyId, 'add_decky', payload, topoVersion);
+      return { kind: 'enqueued', mutationId: res.mutation_id };
     },
     async updateDecky(topologyId, uuid, deckyName, patch) {
       if (!live) {

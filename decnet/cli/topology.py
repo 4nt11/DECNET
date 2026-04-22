@@ -267,8 +267,8 @@ def _mutate(
     op: str = typer.Argument(
         ...,
         help=(
-            "One of: add_lan, remove_lan, attach_decky, detach_decky, "
-            "remove_decky, update_decky, update_lan"
+            "One of: add_lan, remove_lan, add_decky, attach_decky, "
+            "detach_decky, remove_decky, update_decky, update_lan"
         ),
     ),
     payload_json: str = typer.Option(

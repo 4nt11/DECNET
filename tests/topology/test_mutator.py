@@ -9,7 +9,12 @@ import pytest
 from decnet.bus import topics as _topics
 from decnet.bus.fake import FakeBus
 from decnet.mutator import engine as _engine
-from decnet.mutator.ops import MutationError, apply_add_lan, apply_update_decky
+from decnet.mutator.ops import (
+    MutationError,
+    apply_add_decky,
+    apply_add_lan,
+    apply_update_decky,
+)
 from decnet.topology.config import TopologyConfig
 from decnet.topology.generator import generate
 from decnet.topology.persistence import persist, transition_status
@@ -159,6 +164,55 @@ async def test_apply_add_lan_persists(repo):
 
 
 @pytest.mark.anyio
+async def test_apply_add_decky_creates_and_attaches(repo):
+    """add_decky creates a new decky row + home-LAN edge in one op."""
+    tid = await _make_active(repo)
+    lans = await repo.list_lans_for_topology(tid)
+    home_lan = lans[0]
+
+    await apply_add_decky(
+        repo, tid,
+        {
+            "name": "new-decky-mut",
+            "lan": home_lan["name"],
+            "services": ["ssh"],
+            "archetype": "deaddeck",
+        },
+    )
+
+    deckies = await repo.list_topology_deckies(tid)
+    new = next((d for d in deckies if d["decky_config"]["name"] == "new-decky-mut"), None)
+    assert new is not None
+    assert new["services"] == ["ssh"]
+    assert new["decky_config"]["archetype"] == "deaddeck"
+    assert home_lan["name"] in new["decky_config"]["ips_by_lan"]
+
+    edges = await repo.list_topology_edges(tid)
+    assert any(e["decky_uuid"] == new["uuid"] and e["lan_id"] == home_lan["id"] for e in edges)
+
+
+@pytest.mark.anyio
+async def test_apply_add_decky_rejects_duplicate_name(repo):
+    tid = await _make_active(repo)
+    lans = await repo.list_lans_for_topology(tid)
+    existing = (await repo.list_topology_deckies(tid))[0]
+    with pytest.raises(MutationError, match="already exists"):
+        await apply_add_decky(
+            repo, tid,
+            {"name": existing["decky_config"]["name"], "lan": lans[0]["name"]},
+        )
+
+
+@pytest.mark.anyio
+async def test_apply_add_decky_rejects_missing_lan(repo):
+    tid = await _make_active(repo)
+    with pytest.raises(MutationError, match="not found"):
+        await apply_add_decky(
+            repo, tid, {"name": "orphan-decky", "lan": "nonexistent-lan"},
+        )
+
+
+@pytest.mark.anyio
 async def test_apply_update_decky_replaces_services(repo):
     """Top-level ``services`` payload key replaces the decky's services list."""
     tid = await _make_active(repo)
@@ -287,8 +341,9 @@ def test_ops_payload_shape_docstring_present():
     from decnet.mutator.ops import DISPATCH
 
     assert set(DISPATCH) == {
-        "add_lan", "remove_lan", "attach_decky", "detach_decky",
-        "remove_decky", "update_decky", "update_lan",
+        "add_lan", "remove_lan",
+        "add_decky", "attach_decky", "detach_decky", "remove_decky",
+        "update_decky", "update_lan",
     }
 
 

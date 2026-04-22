@@ -96,16 +96,15 @@ const MazeNET: React.FC = () => {
 
           if (isDmz) {
             const gwName = `dmz-gateway-${hex4()}`;
-            const gwRes = await editor.createDecky(topologyId, {
-              name: gwName, services: ['ssh'], x: 20, y: 40,
-              decky_config: { archetype: 'deaddeck', forwards_l3: true },
-            });
+            const gwRes = await editor.addDeckyToLan(
+              topologyId,
+              { name: gwName, services: ['ssh'], x: 20, y: 40,
+                decky_config: { archetype: 'deaddeck', forwards_l3: true } },
+              lan.id, lan.name,
+              { is_bridge: true, forwards_l3: true },
+            );
             if (gwRes.kind !== 'applied') return;
             const gw = gwRes.data;
-            await editor.attachEdge(topologyId, {
-              decky_uuid: gw.uuid, lan_id: lan.id,
-              is_bridge: true, forwards_l3: true,
-            }, gw.name, lan.name);
             const gwNode: DeckyNode = {
               kind: 'decky', id: gw.uuid, netId: lan.id, name: gw.name,
               archetype: 'deaddeck', services: ['ssh'], status: 'idle',
@@ -130,15 +129,14 @@ const MazeNET: React.FC = () => {
         const ny = Math.max(28, Math.round(world.y - net.y - 24));
         const name = `decky-${hex4()}`;
         try {
-          const dRes = await editor.createDecky(topologyId, {
-            name, services: dServices, x: nx, y: ny,
-            decky_config: { archetype: archSlug },
-          });
+          const dRes = await editor.addDeckyToLan(
+            topologyId,
+            { name, services: dServices, x: nx, y: ny,
+              decky_config: { archetype: archSlug } },
+            overNetId, net.label,
+          );
           if (dRes.kind !== 'applied') return;
           const decky = dRes.data;
-          await editor.attachEdge(topologyId,
-            { decky_uuid: decky.uuid, lan_id: overNetId },
-            decky.name, net.label);
           const node: DeckyNode = {
             kind: 'decky', id: decky.uuid, netId: overNetId, name: decky.name,
             archetype: archSlug, services: dServices, status: 'idle', x: nx, y: ny,
@@ -256,16 +254,15 @@ const MazeNET: React.FC = () => {
     if (!n || n.kind !== 'decky') return;
     const name = `${n.name.replace(/-[0-9a-f]{4}$/, '')}-${hex4()}`;
     try {
-      const dRes = await editor.createDecky(topologyId, {
-        name, services: [...n.services], x: n.x + 24, y: n.y + 24,
-        decky_config: { archetype: n.archetype },
-      });
+      const parentNet = nets.find((net) => net.id === n.netId);
+      const dRes = await editor.addDeckyToLan(
+        topologyId,
+        { name, services: [...n.services], x: n.x + 24, y: n.y + 24,
+          decky_config: { archetype: n.archetype } },
+        n.netId, parentNet?.label ?? '',
+      );
       if (dRes.kind !== 'applied') return;
       const decky = dRes.data;
-      const parentNet = nets.find((net) => net.id === n.netId);
-      await editor.attachEdge(topologyId,
-        { decky_uuid: decky.uuid, lan_id: n.netId },
-        decky.name, parentNet?.label ?? '');
       const copy: DeckyNode = {
         kind: 'decky', id: decky.uuid, netId: n.netId, name: decky.name,
         archetype: n.archetype, services: [...n.services], status: 'idle',
@@ -351,15 +348,14 @@ const MazeNET: React.FC = () => {
       onClick: async () => {
         const name = `decky-${hex4()}`;
         try {
-          const dRes = await editor.createDecky(topologyId, {
-            name, services: [...a.services], x: 20, y: 40,
-            decky_config: { archetype: a.slug },
-          });
+          const dRes = await editor.addDeckyToLan(
+            topologyId,
+            { name, services: [...a.services], x: 20, y: 40,
+              decky_config: { archetype: a.slug } },
+            id, net.label,
+          );
           if (dRes.kind !== 'applied') return;
           const decky = dRes.data;
-          await editor.attachEdge(topologyId,
-            { decky_uuid: decky.uuid, lan_id: id },
-            decky.name, net.label);
           const node: DeckyNode = {
             kind: 'decky', id: decky.uuid, netId: id, name: decky.name,
             archetype: a.slug, services: [...a.services], status: 'idle',

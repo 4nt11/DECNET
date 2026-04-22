@@ -154,6 +154,78 @@ async def apply_remove_lan(
     await _assert_valid_after(repo, topology_id)
 
 
+async def apply_add_decky(
+    repo: Any, topology_id: str, payload: dict[str, Any]
+) -> None:
+    """Create a brand-new decky and attach it to its home LAN.
+
+    Used when the editor drags an archetype onto an active topology.
+    ``apply_attach_decky`` requires an existing decky, so without this
+    op there is no way to grow a live topology from the UI.
+
+    ``payload`` keys:
+        ``name``        — decky name (required, unique in topology).
+        ``lan``         — home LAN name (required).
+        ``services``    — list of service slugs (optional).
+        ``archetype``   — slug string; stored in ``decky_config`` (optional).
+        ``forwards_l3`` — bool; stored in ``decky_config`` (optional).
+        ``ip``          — pinned IP inside the LAN; else auto-allocated.
+        ``x``,``y``     — layout coords (optional).
+    """
+    name = payload["name"]
+    hydrated = await _hydrated(repo, topology_id)
+    if _decky_by_name(hydrated, name) is not None:
+        raise MutationError(f"decky {name!r} already exists")
+    lan = _lan_by_name(hydrated, payload["lan"])
+    if lan is None:
+        raise MutationError(f"LAN {payload['lan']!r} not found")
+
+    ip = payload.get("ip")
+    if ip is None:
+        taken = {
+            d["decky_config"]["ips_by_lan"].get(lan["name"])
+            for d in hydrated["deckies"]
+            if lan["name"] in d["decky_config"].get("ips_by_lan", {})
+        }
+        taken.discard(None)
+        alloc = IPAllocator(subnet=lan["subnet"])
+        for t in taken:
+            if t:
+                alloc.reserve(t)
+        ip = alloc.next_free()
+
+    decky_config: dict[str, Any] = {
+        "name": name,
+        "ips_by_lan": {lan["name"]: ip},
+    }
+    if "archetype" in payload:
+        decky_config["archetype"] = payload["archetype"]
+    forwards_l3 = bool(payload.get("forwards_l3", False))
+    if forwards_l3:
+        decky_config["forwards_l3"] = True
+
+    decky_uuid = await repo.add_topology_decky(
+        {
+            "topology_id": topology_id,
+            "name": name,
+            "services": list(payload.get("services", [])),
+            "decky_config": decky_config,
+            "x": payload.get("x"),
+            "y": payload.get("y"),
+        }
+    )
+    await repo.add_topology_edge(
+        {
+            "topology_id": topology_id,
+            "decky_uuid": decky_uuid,
+            "lan_id": lan["id"],
+            "is_bridge": False,
+            "forwards_l3": forwards_l3,
+        }
+    )
+    await _assert_valid_after(repo, topology_id)
+
+
 async def apply_attach_decky(
     repo: Any, topology_id: str, payload: dict[str, Any]
 ) -> None:
@@ -326,6 +398,7 @@ async def apply_update_lan(
 DISPATCH: dict[str, OpFunc] = {
     "add_lan": apply_add_lan,
     "remove_lan": apply_remove_lan,
+    "add_decky": apply_add_decky,
     "attach_decky": apply_attach_decky,
     "detach_decky": apply_detach_decky,
     "remove_decky": apply_remove_decky,
@@ -358,6 +431,7 @@ __all__ = [
     "dispatch",
     "apply_add_lan",
     "apply_remove_lan",
+    "apply_add_decky",
     "apply_attach_decky",
     "apply_detach_decky",
     "apply_remove_decky",

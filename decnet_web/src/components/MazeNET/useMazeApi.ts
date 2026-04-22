@@ -195,7 +195,7 @@ export interface CreateDeckyBody {
 
 export type MutationOp =
   | 'add_lan' | 'remove_lan' | 'update_lan'
-  | 'attach_decky' | 'detach_decky' | 'remove_decky' | 'update_decky';
+  | 'add_decky' | 'attach_decky' | 'detach_decky' | 'remove_decky' | 'update_decky';
 
 export interface EnqueueMutationResponse {
   mutation_id: string;

@@ -339,8 +339,8 @@ class TopologyMutation(SQLModel, table=True):
     )
     id: str = Field(default_factory=lambda: str(uuid4()), primary_key=True)
     topology_id: str = Field(foreign_key="topologies.id", index=True)
-    # add_lan|remove_lan|attach_decky|detach_decky|remove_decky|
-    # update_decky|update_lan
+    # add_lan|remove_lan|add_decky|attach_decky|detach_decky|
+    # remove_decky|update_decky|update_lan
     op: str = Field(index=True)
     # JSON-serialised op payload (keys depend on ``op``).
     payload: str = Field(
@@ -805,6 +805,7 @@ class EdgeCreateRequest(BaseModel):
 _MUTATION_OPS = Literal[
     "add_lan",
     "remove_lan",
+    "add_decky",
     "attach_decky",
     "detach_decky",
     "remove_decky",
