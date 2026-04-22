@@ -1,6 +1,6 @@
 # DECNET — Technical Debt Register
 
-> Last updated: 2026-04-21 — DEBT-033 opened (transcript day-shard rotation).
+> Last updated: 2026-04-22 — DEBT-034 opened (worker supervisor).
 > Severity: 🔴 Critical · 🟠 High · 🟡 Medium · 🟢 Low
 
 ---
@@ -232,6 +232,46 @@ Proper fix is size-based rotation on the day shard:
 **Why deferred from v1:** the per-session 10 MB cap + disk-free precheck together give bounded worst-case behavior ("recorder quietly stops; disk stays healthy") that is acceptable for a first release. Rotation is a correctness-under-load improvement, not a correctness baseline, and it couples recorder write-path + API read-path changes that are cleaner to land as one commit after v1 ships.
 
 **Status:** Open — implement after v1 session recording lands and we have real-world session sizes to calibrate the rotation threshold.
+
+### ✅ DEBT-034 — Worker supervisor (START buttons in Config → Workers)
+> **Shipped 2026-04-22.** systemd units for the five missing workers
+> (`collector` / `profiler` / `sniffer` / `prober` / `mutator`) +
+> `decnet.target`, polkit rule scoping `manage-units` to `decnet-*.service`
+> for the `decnet` group, `systemd_control` helper, single-worker +
+> `start-all` endpoints, `installed` flag on `WorkerStatus`, and UI
+> wiring. Deferred items (SWARM-host start/stop via mTLS API;
+> DECNET-side crash-quarantine policy) remain as named follow-ups.
+
+**Files:** `packaging/systemd/*.service` + `decnet.target` (**new**), `packaging/polkit/50-decnet-workers.rules` (**new**), `decnet/web/services/systemd_control.py` (**new**), `decnet/web/router/workers/api_start_worker.py` + `api_start_all_workers.py` (**new**), `decnet_web/src/components/Config.tsx` (enable START buttons).
+
+The Workers panel (Config → Workers) landed with bus-based STOP but every START button is a disabled placeholder. STOP works because a running worker can subscribe to its own `system.<name>.control` topic and SIGTERM-self-signal when it sees `{"action": "stop"}`. START has the inverse problem — a *stopped* worker has no subscriber, so the same bus pattern cannot bring it back up. Something outside the worker must own the process lifecycle.
+
+**Decision: lean on systemd.** DECNET workers are already systemd-supervised in production (`deploy/decnet-bus.service` shipped with DEBT-029; the rest follow the same pattern). Building a DECNET-native supervisor (`decnetd`) would duplicate `Restart=on-failure`, crash backoff, log routing into journald, and boot ordering — all of which systemd already does correctly. The only non-systemd host we care about is the dev box, where operators can start workers by hand.
+
+**v1 scope:**
+1. **Unit files** for every worker in `packaging/systemd/`: `decnet-bus`, `decnet-api`, `decnet-collector`, `decnet-profiler`, `decnet-sniffer`, `decnet-prober`, `decnet-mutator`. Each declares `Restart=on-failure`, `RestartSec=5s`, `User=decnet`, `Group=decnet`. A `decnet.target` groups them for `systemctl start decnet.target`. Bus is startable too — chicken-and-egg is fine: systemd brings it up, the API's cached `get_app_bus()` result won't self-heal without an API restart, but that's the existing singleton limitation (documented in `decnet/bus/app.py`), not a supervisor problem.
+2. **Polkit rule** (`packaging/polkit/50-decnet-workers.rules`) allowing the `decnet` group to `start` / `stop` / `restart` units matching `decnet-*.service` and `decnet.target` without a password. The API runs as `decnet`, so `systemctl --no-ask-password start decnet-<name>` just works.
+3. **`decnet/web/services/systemd_control.py`** — small helper wrapping `systemctl start|stop|status <unit>` via `asyncio.create_subprocess_exec`. Hardcoded unit name mapping from `KNOWN_WORKERS` (prevents command injection; name validation already enforced at the router). Exposes `start(name)`, `stop(name)`, `is_active(name)`, `list_installed()` returning `set[str]`.
+4. **New admin endpoints:**
+   - `POST /api/v1/workers/{name}/start` — validates against `KNOWN_WORKERS`, shells out via the helper, returns 202 on success with `{"accepted": true, "worker": <name>, "action": "start"}`. 503 if systemd is unreachable (e.g. dev box without systemd).
+   - `POST /api/v1/workers/start-all` — **best-effort**. Iterates `KNOWN_WORKERS`, calls `start()` on each, aggregates results. Returns `{"started": [...], "failed": [{name, reason}], "already_running": [...]}` with 200 even on partial success. UI surfaces a summary toast.
+   - Keep existing bus-based STOP endpoint — it already works without root; no need to route STOP through systemd.
+5. **UI (`Config.tsx`):**
+   - Detect unit availability once per panel mount via `GET /api/v1/workers` enriched with `installed: bool` per row (added to `WorkerStatus`). START button enabled only when `installed == true`.
+   - Existing "START ALL WORKERS" placeholder in the header wires to `POST /workers/start-all`; toast renders `"STARTED · 5 · ALREADY RUNNING · 2 · FAILED · 1 (bus: permission denied)"`.
+   - Add a `starting` row state (spinner) between intent and observed heartbeat; transitions to `ok` on next refresh, `unknown`/`stale` if the unit never comes up (systemd log link in tooltip).
+6. **Tests:**
+   - `tests/web/services/test_systemd_control.py` — monkeypatch `asyncio.create_subprocess_exec`, assert the right argv.
+   - `tests/api/workers/test_start_workers.py` — 202 admin / 403 viewer / 404 unknown name for single-worker start; aggregation shape for start-all with a mix of success/failure.
+   - Frontend test coverage stays out of scope (no harness in repo).
+
+**Deferred (documented on this ticket, not separate DEBTs):**
+
+- **a. SWARM-host worker start/stop.** Today `agent` / `forwarder` / `updater` publish heartbeats to their *own* host's bus, not the master's — the Workers panel rows stay `unknown` by design. A master-originated start/stop for those daemons needs to ride the existing swarm mTLS API (`/api/v1/swarm/hosts/{id}/workers/{name}/{action}`), not the bus. Out of v2 as well — not a near-term need. When we ship it, reuse the same systemd helper on the agent side behind the mTLS boundary.
+
+- **b. DECNET-side crash-quarantine policy.** v1 uses systemd's defaults (`Restart=on-failure`, `RestartSec=5s`, no upper bound on restart count) because they're battle-tested and cover 95% of operational reality. A sophisticated circuit-breaker — "quarantine worker X after N crashes in M minutes, expose the quarantine state in the panel" — is valuable for a honeypot-in-production context where a compromised template could cause tight crash loops that mask themselves as flapping. Design sketch: extend the worker_registry to track `(name, last_crash_ts)` triples sourced from `systemctl is-failed`, flip a row to `quarantined` state after threshold, require an admin "CLEAR QUARANTINE" click (→ `systemctl reset-failed`) before further auto-restart. Not blocking v1.
+
+**Status:** Open. Depends on the Workers panel (shipped) and `deploy/decnet-bus.service` pattern being extended to the other workers.
 
 ### DEBT-032 — Prober can't detect fingerprint rotation without mutation
 **Files:** `decnet/prober/worker.py` (~lines 235, 286, 334, 392), `decnet/web/db/models.py` (new `decky_service_fingerprints` table).
