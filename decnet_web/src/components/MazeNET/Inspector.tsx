@@ -27,12 +27,14 @@ interface Props {
   onAddDecky?: (netId: string) => void;
   setSelection?: (sel: Selection) => void;
   pendingChanges?: number;
+  className?: string;
 }
 
 const Inspector: React.FC<Props> = ({
   selection, nets, nodes, edges, topologyStatus, onClose,
   onDeleteNet, onDeleteNode, onDeleteEdge, onRemoveService, onAddDecky, setSelection,
   pendingChanges = 0,
+  className = '',
 }) => {
   const net  = selection?.type === 'net'  ? nets.find((n) => n.id === selection.id)  : undefined;
   const node = selection?.type === 'node' ? nodes.find((n) => n.id === selection.id) : undefined;
@@ -58,7 +60,7 @@ const Inspector: React.FC<Props> = ({
   const isObserved = node?.kind === 'observed';
 
   return (
-    <aside className="maze-inspector">
+    <aside className={`maze-inspector ${className}`}>
       <div className="maze-inspector-title">
         <Crosshair size={12} className="violet-accent" />
         <span>INSPECTOR</span>

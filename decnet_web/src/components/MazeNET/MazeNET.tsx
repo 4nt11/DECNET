@@ -626,12 +626,15 @@ const MazeNET: React.FC = () => {
       <div
         className="maze-shell"
         style={{
-          gridTemplateColumns: `${paletteOpen ? '240px ' : ''}1fr${inspectorOpen ? ' 320px' : ''}`,
+          gridTemplateColumns: `${paletteOpen ? '240px' : '0px'} 1fr ${inspectorOpen ? '320px' : '0px'}`,
         }}
       >
-        {paletteOpen && (
-          <Palette services={services} archetypes={archetypes} startPaletteDrag={interaction.startPaletteDrag} />
-        )}
+        <Palette
+          services={services}
+          archetypes={archetypes}
+          startPaletteDrag={interaction.startPaletteDrag}
+          className={paletteOpen ? '' : 'collapsed'}
+        />
         <Canvas
           ref={canvasRef}
           nets={nets}
@@ -673,32 +676,31 @@ const MazeNET: React.FC = () => {
             {interaction.paletteDrag.label}
           </div>
         )}
-        {inspectorOpen && (
-          <Inspector
-            selection={selection}
-            setSelection={setSelection}
-            nets={nets}
-            nodes={nodes}
-            edges={edges}
-            topologyStatus={topoStatus}
-            onClose={() => setInspectorOpen(false)}
-            onDeleteNet={removeNet}
-            onDeleteNode={removeNode}
-            onDeleteEdge={removeEdge}
-            onRemoveService={removeServiceFromNode}
-            onAddDecky={(netId) => {
-              const net = nets.find((n) => n.id === netId);
-              if (!net) return;
-              onPaletteDrop(
-                { kind: 'archetype', slug: archetypes[0]?.slug ?? 'deaddeck',
-                  services: archetypes[0]?.services.slice(0, 2) ?? [],
-                  label: archetypes[0]?.name ?? 'DECKY',
-                  clientX: 0, clientY: 0 },
-                { x: net.x + 40, y: net.y + 60 }, netId, null,
-              );
-            }}
-          />
-        )}
+        <Inspector
+          selection={selection}
+          setSelection={setSelection}
+          nets={nets}
+          nodes={nodes}
+          edges={edges}
+          topologyStatus={topoStatus}
+          onClose={() => setInspectorOpen(false)}
+          onDeleteNet={removeNet}
+          onDeleteNode={removeNode}
+          onDeleteEdge={removeEdge}
+          onRemoveService={removeServiceFromNode}
+          onAddDecky={(netId) => {
+            const net = nets.find((n) => n.id === netId);
+            if (!net) return;
+            onPaletteDrop(
+              { kind: 'archetype', slug: archetypes[0]?.slug ?? 'deaddeck',
+                services: archetypes[0]?.services.slice(0, 2) ?? [],
+                label: archetypes[0]?.name ?? 'DECKY',
+                clientX: 0, clientY: 0 },
+              { x: net.x + 40, y: net.y + 60 }, netId, null,
+            );
+          }}
+          className={inspectorOpen ? '' : 'collapsed'}
+        />
       </div>
     </div>
   );

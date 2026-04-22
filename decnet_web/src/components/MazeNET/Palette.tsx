@@ -22,9 +22,10 @@ interface Props {
   services: ServiceDef[];
   archetypes: Archetype[];
   startPaletteDrag: (d: Omit<PaletteDrag, 'clientX' | 'clientY'>, e: React.MouseEvent) => void;
+  className?: string;
 }
 
-const Palette: React.FC<Props> = ({ services, archetypes, startPaletteDrag }) => {
+const Palette: React.FC<Props> = ({ services, archetypes, startPaletteDrag, className = '' }) => {
   const start = (d: Omit<PaletteDrag, 'clientX' | 'clientY'>) =>
     (e: React.MouseEvent) => {
       if (e.button !== 0) return;
@@ -33,7 +34,7 @@ const Palette: React.FC<Props> = ({ services, archetypes, startPaletteDrag }) =>
     };
 
   return (
-    <div className="maze-palette">
+    <div className={`maze-palette ${className}`}>
       <div className="palette-group">
         <label>① NETWORKS</label>
         <div className="palette-item" onMouseDown={start({ kind: 'network-subnet', slug: 'subnet', label: 'SUBNET' })}>
