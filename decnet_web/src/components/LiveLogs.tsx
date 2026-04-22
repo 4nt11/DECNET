@@ -1,16 +1,14 @@
-import React, { useEffect, useState, useRef } from 'react';
+import React, { useEffect, useState, useRef, useMemo } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import {
-  Terminal, Search, Activity,
-  ChevronLeft, ChevronRight, Play, Pause, Paperclip
+  Terminal, Search, BarChart3, ChevronLeft, ChevronRight,
+  Play, Pause, Paperclip, Download, SearchX, X as XIcon,
 } from 'lucide-react';
-import {
-  BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Cell
-} from 'recharts';
 import api from '../utils/api';
 import { parseEventBody } from '../utils/parseEventBody';
 import ArtifactDrawer from './ArtifactDrawer';
 import './Dashboard.css';
+import './LiveLogs.css';
 
 interface LogEntry {
   id: number;
@@ -22,93 +20,64 @@ interface LogEntry {
   raw_line: string;
   fields: string;
   msg: string;
+  is_bounty?: boolean;
 }
 
-interface HistogramData {
-  time: string;
-  count: number;
-}
+const LIMIT = 50;
 
 const LiveLogs: React.FC = () => {
   const [searchParams, setSearchParams] = useSearchParams();
-  
-  // URL-synced state
+
   const query = searchParams.get('q') || '';
   const timeRange = searchParams.get('time') || '1h';
   const isLive = searchParams.get('live') !== 'false';
   const page = parseInt(searchParams.get('page') || '1');
 
-  // Local state
   const [logs, setLogs] = useState<LogEntry[]>([]);
-  const [histogram, setHistogram] = useState<HistogramData[]>([]);
   const [totalLogs, setTotalLogs] = useState(0);
   const [loading, setLoading] = useState(true);
   const [streaming, setStreaming] = useState(isLive);
   const [searchInput, setSearchInput] = useState(query);
-  
-  const eventSourceRef = useRef<EventSource | null>(null);
-  const limit = 50;
+  const [selectedHour, setSelectedHour] = useState<number | null>(null);
 
-  // Open artifact drawer when a log row with stored_as is clicked.
+  const eventSourceRef = useRef<EventSource | null>(null);
+
   const [artifact, setArtifact] = useState<{ decky: string; storedAs: string; fields: Record<string, any> } | null>(null);
 
-  // Sync search input if URL changes (e.g. back button)
-  useEffect(() => {
-    setSearchInput(query);
-  }, [query]);
+  useEffect(() => { setSearchInput(query); }, [query]);
+
+  const startTimeParam = (): string | null => {
+    if (timeRange === 'all') return null;
+    const minutes = timeRange === '15m' ? 15 : timeRange === '1h' ? 60 : timeRange === '24h' ? 1440 : 0;
+    if (!minutes) return null;
+    return new Date(Date.now() - minutes * 60000).toISOString().replace('T', ' ').substring(0, 19);
+  };
 
   const fetchData = async () => {
-    if (streaming) return; // Don't fetch historical if streaming
-    
     setLoading(true);
     try {
-      const offset = (page - 1) * limit;
-      let url = `/logs?limit=${limit}&offset=${offset}&search=${encodeURIComponent(query)}`;
-      
-      // Calculate time bounds for historical fetch
-      const now = new Date();
-      let startTime: string | null = null;
-      if (timeRange !== 'all') {
-        const minutes = timeRange === '15m' ? 15 : timeRange === '1h' ? 60 : timeRange === '24h' ? 1440 : 0;
-        if (minutes > 0) {
-          startTime = new Date(now.getTime() - minutes * 60000).toISOString().replace('T', ' ').substring(0, 19);
-          url += `&start_time=${startTime}`;
-        }
-      }
-
+      const offset = (page - 1) * LIMIT;
+      let url = `/logs?limit=${LIMIT}&offset=${offset}&search=${encodeURIComponent(query)}`;
+      const startTime = startTimeParam();
+      if (startTime) url += `&start_time=${startTime}`;
       const res = await api.get(url);
       setLogs(res.data.data);
       setTotalLogs(res.data.total);
-
-      // Fetch histogram for historical view
-      let histUrl = `/logs/histogram?search=${encodeURIComponent(query)}`;
-      if (startTime) histUrl += `&start_time=${startTime}`;
-      const histRes = await api.get(histUrl);
-      setHistogram(histRes.data);
-
     } catch (err) {
-      console.error('Failed to fetch historical logs', err);
+      console.error('Failed to fetch logs', err);
     } finally {
       setLoading(false);
     }
   };
 
   const setupSSE = () => {
-    if (eventSourceRef.current) {
-      eventSourceRef.current.close();
-    }
+    if (eventSourceRef.current) eventSourceRef.current.close();
 
     const token = localStorage.getItem('token');
     const baseUrl = import.meta.env.VITE_API_URL || 'http://localhost:8000/api/v1';
     let url = `${baseUrl}/stream?token=${token}&search=${encodeURIComponent(query)}`;
-    
-    if (timeRange !== 'all') {
-      const minutes = timeRange === '15m' ? 15 : timeRange === '1h' ? 60 : timeRange === '24h' ? 1440 : 0;
-      if (minutes > 0) {
-        const startTime = new Date(Date.now() - minutes * 60000).toISOString().replace('T', ' ').substring(0, 19);
-        url += `&start_time=${startTime}`;
-      }
-    }
+    const startTime = startTimeParam();
+    if (startTime) url += `&start_time=${startTime}`;
 
     const es = new EventSource(url);
     eventSourceRef.current = es;
@@ -118,8 +87,6 @@ const LiveLogs: React.FC = () => {
         const payload = JSON.parse(event.data);
         if (payload.type === 'logs') {
           setLogs(prev => [...payload.data, ...prev].slice(0, 500));
-        } else if (payload.type === 'histogram') {
-          setHistogram(payload.data);
         } else if (payload.type === 'stats') {
           setTotalLogs(payload.data.total_logs);
         }
@@ -128,29 +95,29 @@ const LiveLogs: React.FC = () => {
       }
     };
 
-    es.onerror = () => {
-      console.error('SSE connection lost, reconnecting...');
-    };
+    es.onerror = () => console.error('SSE connection lost, reconnecting...');
   };
 
+  // Always seed with REST backlog on mount / filter changes.
+  useEffect(() => {
+    fetchData();
+  }, [query, timeRange, page]);
+
+  // SSE follows the streaming toggle independently.
   useEffect(() => {
     if (streaming) {
       setupSSE();
-      setLoading(false);
-    } else {
+    } else if (eventSourceRef.current) {
+      eventSourceRef.current.close();
+      eventSourceRef.current = null;
+    }
+    return () => {
       if (eventSourceRef.current) {
         eventSourceRef.current.close();
         eventSourceRef.current = null;
       }
-      fetchData();
-    }
-
-    return () => {
-      if (eventSourceRef.current) {
-        eventSourceRef.current.close();
-      }
     };
-  }, [query, timeRange, streaming, page]);
+  }, [streaming, query, timeRange]);
 
   const handleSearch = (e: React.FormEvent) => {
     e.preventDefault();
@@ -171,135 +138,165 @@ const LiveLogs: React.FC = () => {
     setSearchParams({ q: query, time: timeRange, live: 'false', page: newPage.toString() });
   };
 
+  const buckets = useMemo(() => {
+    const b = Array.from({ length: 24 }, (_, i) => ({ i, count: 0, bounties: 0 }));
+    logs.forEach(l => {
+      const h = parseInt(String(l.timestamp).slice(11, 13), 10);
+      if (!isNaN(h) && h >= 0 && h < 24) {
+        b[h].count++;
+        if (l.is_bounty) b[h].bounties++;
+      }
+    });
+    return b;
+  }, [logs]);
+  const maxBar = Math.max(...buckets.map(b => b.count), 1);
+  const peakHour = buckets.findIndex(b => b.count === maxBar);
+
+  const filteredLogs = useMemo(() => {
+    if (selectedHour == null) return logs;
+    return logs.filter(l => parseInt(String(l.timestamp).slice(11, 13), 10) === selectedHour);
+  }, [logs, selectedHour]);
+
+  const handleExport = () => {
+    const header = 'timestamp,decky,service,attacker_ip,event_type,msg';
+    const rows = filteredLogs.map(l =>
+      [l.timestamp, l.decky, l.service, l.attacker_ip, l.event_type, (l.msg || '').replace(/"/g, '""')]
+        .map(v => `"${v ?? ''}"`).join(',')
+    );
+    const blob = new Blob([[header, ...rows].join('\n')], { type: 'text/csv' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `decnet-logs-${new Date().toISOString().slice(0, 19).replace(/[:T]/g, '-')}.csv`;
+    a.click();
+    URL.revokeObjectURL(url);
+  };
+
+  const totalPages = Math.max(1, Math.ceil(totalLogs / LIMIT));
+
   return (
-    <div className="dashboard">
-      {/* Control Bar */}
-      <div className="logs-section" style={{ border: 'none', background: 'transparent', padding: 0 }}>
-        <form onSubmit={handleSearch} style={{ display: 'flex', gap: '16px', marginBottom: '24px' }}>
-          <div className="search-container" style={{ flexGrow: 1, maxWidth: 'none' }}>
-            <Search className="search-icon" size={18} />
-            <input 
-              type="text" 
-              placeholder="Query logs (e.g. decky:decky-01 service:http attacker:192.168.1.5 status:failed)" 
-              value={searchInput}
-              onChange={(e) => setSearchInput(e.target.value)}
-            />
-          </div>
-          <select 
-            value={timeRange} 
-            onChange={(e) => handleTimeChange(e.target.value)}
-            className="search-container"
-            style={{ width: 'auto', color: 'var(--text-color)', cursor: 'pointer' }}
-          >
-            <option value="15m">LAST 15 MIN</option>
-            <option value="1h">LAST 1 HOUR</option>
-            <option value="24h">LAST 24 HOURS</option>
-            <option value="all">ALL TIME</option>
-          </select>
-          <button 
-            type="button"
-            onClick={handleToggleLive}
-            style={{ 
-              display: 'flex', alignItems: 'center', gap: '8px', 
-              border: `1px solid ${streaming ? 'var(--text-color)' : 'var(--accent-color)'}`,
-              color: streaming ? 'var(--text-color)' : 'var(--accent-color)',
-              minWidth: '120px', justifyContent: 'center'
-            }}
-          >
-            {streaming ? <><Play size={14} className="neon-blink" /> LIVE</> : <><Pause size={14} /> PAUSED</>}
-          </button>
-        </form>
-      </div>
-
-      {/* Histogram Chart */}
-      <div className="logs-section" style={{ height: '200px', padding: '20px', marginBottom: '24px', minWidth: 0 }}>
-        <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '10px' }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: '8px', fontSize: '0.7rem', color: 'var(--dim-color)' }}>
-            <Activity size={12} /> ATTACK VOLUME OVER TIME
-          </div>
-          <div style={{ fontSize: '0.7rem', color: 'var(--text-color)' }}>
-            MATCHES: {totalLogs.toLocaleString()}
-          </div>
+    <div className="logs-root">
+      <div className="page-header">
+        <div className="page-title-group">
+          <h1>LOGS</h1>
+          <span className="page-sub">
+            {filteredLogs.length.toLocaleString()} SHOWN · {totalLogs.toLocaleString()} MATCHES · STREAM {streaming ? 'LIVE' : 'PAUSED'}
+          </span>
         </div>
-        <ResponsiveContainer width="100%" height="100%">
-          <BarChart data={histogram}>
-            <CartesianGrid strokeDasharray="3 3" stroke="#30363d" vertical={false} />
-            <XAxis 
-              dataKey="time" 
-              hide 
-            />
-            <YAxis 
-              stroke="#30363d" 
-              fontSize={10} 
-              tickFormatter={(val) => Math.floor(val).toString()}
-            />
-            <Tooltip 
-              contentStyle={{ backgroundColor: '#0d1117', border: '1px solid #30363d', fontSize: '0.8rem' }}
-              itemStyle={{ color: 'var(--text-color)' }}
-              labelStyle={{ color: 'var(--dim-color)', marginBottom: '4px' }}
-              cursor={{ fill: 'rgba(0, 255, 65, 0.05)' }}
-            />
-            <Bar dataKey="count" fill="var(--text-color)" radius={[2, 2, 0, 0]}>
-              {histogram.map((entry, index) => (
-                <Cell key={`cell-${index}`} fillOpacity={0.6 + (entry.count / (Math.max(...histogram.map(h => h.count)) || 1)) * 0.4} />
-              ))}
-            </Bar>
-          </BarChart>
-        </ResponsiveContainer>
+        <div className="actions">
+          <button className={`btn ${streaming ? '' : 'violet'}`} onClick={handleToggleLive}>
+            {streaming
+              ? <><Pause size={12} className="fx-blink" /> PAUSE</>
+              : <><Play size={12} /> GO LIVE</>}
+          </button>
+          <button className="btn ghost" onClick={handleExport} disabled={filteredLogs.length === 0}>
+            <Download size={12} /> EXPORT
+          </button>
+        </div>
       </div>
 
-      {/* Logs Table */}
-      <div className="logs-section">
-        <div className="section-header" style={{ display: 'flex', justifyContent: 'space-between' }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-            <Terminal size={20} />
-            <h2>LOG EXPLORER</h2>
-          </div>
-          {!streaming && (
-            <div style={{ display: 'flex', alignItems: 'center', gap: '16px' }}>
-              <span className="dim" style={{ fontSize: '0.8rem' }}>
-                Page {page} of {Math.ceil(totalLogs / limit)}
-              </span>
-              <div style={{ display: 'flex', gap: '8px' }}>
-                <button 
-                  disabled={page === 1} 
-                  onClick={() => changePage(page - 1)}
-                  style={{ padding: '4px', border: '1px solid var(--border-color)', opacity: page === 1 ? 0.3 : 1 }}
-                >
-                  <ChevronLeft size={16} />
-                </button>
-                <button 
-                  disabled={page >= Math.ceil(totalLogs / limit)} 
-                  onClick={() => changePage(page + 1)}
-                  style={{ padding: '4px', border: '1px solid var(--border-color)', opacity: page >= Math.ceil(totalLogs / limit) ? 0.3 : 1 }}
-                >
-                  <ChevronRight size={16} />
-                </button>
-              </div>
-            </div>
+      <form className="logs-controls" onSubmit={handleSearch}>
+        <div className="search-container">
+          <Search size={14} className="search-icon" />
+          <input
+            type="text"
+            placeholder="Query (e.g. decky:decky-03 service:ssh attacker:89.248)"
+            value={searchInput}
+            onChange={(e) => setSearchInput(e.target.value)}
+          />
+          {searchInput && (
+            <button
+              type="button"
+              className="close-btn"
+              onClick={() => { setSearchInput(''); setSearchParams({ q: '', time: timeRange, live: streaming.toString(), page: '1' }); }}
+              style={{ background: 'transparent', border: 'none', color: 'inherit', cursor: 'pointer', padding: 0, display: 'flex' }}
+              aria-label="Clear search"
+            >
+              <XIcon size={12} />
+            </button>
           )}
         </div>
+        <select
+          className="time-select"
+          value={timeRange}
+          onChange={(e) => handleTimeChange(e.target.value)}
+        >
+          <option value="15m">LAST 15 MIN</option>
+          <option value="1h">LAST 1 HOUR</option>
+          <option value="24h">LAST 24 HOURS</option>
+          <option value="all">ALL TIME</option>
+        </select>
+      </form>
 
-        <div className="logs-table-container">
+      <div className="histogram-wrap">
+        <div className="histogram-header">
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+            <BarChart3 size={12} />
+            <span>ATTACK VOLUME — PAST 24 HOURS</span>
+            {selectedHour != null && (
+              <span className="violet-accent" style={{ marginLeft: 8 }}>
+                · {String(selectedHour).padStart(2, '0')}:00 SELECTED —
+                <span className="clear-sel" onClick={() => setSelectedHour(null)}>clear</span>
+              </span>
+            )}
+          </div>
+          <span>PEAK: {maxBar} @ HOUR {String(peakHour).padStart(2, '0')}</span>
+        </div>
+        <div className="histogram">
+          {buckets.map(b => (
+            <div
+              key={b.i}
+              className={`bar ${selectedHour === b.i ? 'selected' : ''} ${b.bounties > 0 ? 'has-bounty' : ''}`}
+              style={{ height: `${(b.count / maxBar) * 100}%` }}
+              title={`${String(b.i).padStart(2, '0')}:00 — ${b.count} events${b.bounties ? `, ${b.bounties} bounties` : ''}`}
+              onClick={() => setSelectedHour(selectedHour === b.i ? null : b.i)}
+            />
+          ))}
+        </div>
+        <div className="histogram-axis">
+          <span>00:00</span><span>06:00</span><span>12:00</span><span>18:00</span><span>23:59</span>
+        </div>
+      </div>
+
+      <div className="logs-section">
+        <div className="section-header">
+          <div className="section-title">
+            <Terminal size={14} />
+            <span>LOG EXPLORER</span>
+          </div>
+          <div className="section-actions">
+            <span>SHOWING {filteredLogs.length} OF {totalLogs.toLocaleString()}</span>
+            {!streaming && (
+              <div className="pager" style={{ marginLeft: 16 }}>
+                <span className="dim">Page {page} of {totalPages}</span>
+                <button disabled={page === 1} onClick={() => changePage(page - 1)} aria-label="Previous page">
+                  <ChevronLeft size={14} />
+                </button>
+                <button disabled={page >= totalPages} onClick={() => changePage(page + 1)} aria-label="Next page">
+                  <ChevronRight size={14} />
+                </button>
+              </div>
+            )}
+          </div>
+        </div>
+
+        <div className="logs-table-container" style={{ maxHeight: 520 }}>
           <table className="logs-table">
             <thead>
               <tr>
-                <th>TIMESTAMP</th>
+                <th>TIME</th>
                 <th>DECKY</th>
-                <th>SERVICE</th>
+                <th>SVC</th>
                 <th>ATTACKER</th>
                 <th>EVENT</th>
               </tr>
             </thead>
             <tbody>
-              {logs.length > 0 ? logs.map(log => {
+              {filteredLogs.length > 0 ? filteredLogs.map(log => {
                 let parsedFields: Record<string, any> = {};
                 if (log.fields) {
-                  try {
-                    parsedFields = JSON.parse(log.fields);
-                  } catch (e) {}
+                  try { parsedFields = JSON.parse(log.fields); } catch { /* noop */ }
                 }
-
                 let msgHead: string | null = null;
                 let msgTail: string | null = null;
                 if (Object.keys(parsedFields).length === 0) {
@@ -310,75 +307,62 @@ const LiveLogs: React.FC = () => {
                 } else if (log.msg && log.msg !== '-') {
                   msgTail = log.msg;
                 }
+                const et = log.event_type && log.event_type !== '-' ? log.event_type : null;
+                const headParts = [et, msgHead].filter(Boolean) as string[];
+                const hasBadges = Object.keys(parsedFields).length > 0 || parsedFields.stored_as;
 
                 return (
                   <tr key={log.id}>
-                    <td className="dim" style={{ fontSize: '0.75rem', whiteSpace: 'nowrap' }}>{new Date(log.timestamp).toLocaleString()}</td>
-                    <td className="violet-accent">{log.decky}</td>
-                    <td className="matrix-text">{log.service}</td>
+                    <td className="t-time">{new Date(log.timestamp).toLocaleString()}</td>
+                    <td className="t-decky">{log.decky}</td>
+                    <td className="t-svc">{log.service}</td>
                     <td>{log.attacker_ip}</td>
-                    <td>
-                      <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
-                        <div style={{ fontWeight: 'bold', color: 'var(--text-color)', fontSize: '0.9rem' }}>
-                          {(() => {
-                            const et = log.event_type && log.event_type !== '-' ? log.event_type : null;
-                            const parts = [et, msgHead].filter(Boolean) as string[];
-                            return (
-                              <>
-                                {parts.join(' · ')}
-                                {msgTail && <span style={{ fontWeight: 'normal', opacity: 0.8 }}>{parts.length ? ' — ' : ''}{msgTail}</span>}
-                              </>
-                            );
-                          })()}
-                        </div>
-                        {(Object.keys(parsedFields).length > 0 || parsedFields.stored_as) && (
-                          <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
-                            {parsedFields.stored_as && (
-                              <button
-                                onClick={() => setArtifact({
-                                  decky: log.decky,
-                                  storedAs: String(parsedFields.stored_as),
-                                  fields: parsedFields,
-                                })}
-                                title="Inspect captured artifact"
-                                style={{
-                                  display: 'flex', alignItems: 'center', gap: '6px',
-                                  fontSize: '0.7rem',
-                                  backgroundColor: 'rgba(255, 170, 0, 0.1)',
-                                  padding: '2px 8px',
-                                  borderRadius: '4px',
-                                  border: '1px solid rgba(255, 170, 0, 0.5)',
-                                  color: '#ffaa00',
-                                  cursor: 'pointer',
-                                }}
-                              >
-                                <Paperclip size={11} /> ARTIFACT
-                              </button>
-                            )}
-                            {Object.entries(parsedFields)
-                              .filter(([k]) => k !== 'meta_json_b64')
-                              .map(([k, v]) => (
-                              <span key={k} style={{
-                                fontSize: '0.7rem',
-                                backgroundColor: 'rgba(0, 255, 65, 0.1)',
-                                padding: '2px 8px',
-                                borderRadius: '4px',
-                                border: '1px solid rgba(0, 255, 65, 0.3)',
-                                wordBreak: 'break-all'
-                              }}>
-                                <span style={{ opacity: 0.6 }}>{k}:</span> {typeof v === 'object' ? JSON.stringify(v) : v}
-                              </span>
-                            ))}
-                          </div>
+                    <td className="t-event">
+                      <div className="event-head">
+                        {headParts.join(' · ')}
+                        {msgTail && (
+                          <span className="event-tail">
+                            {headParts.length ? ' — ' : ''}{msgTail}
+                          </span>
                         )}
                       </div>
+                      {hasBadges && (
+                        <div className="badges">
+                          {parsedFields.stored_as && (
+                            <button
+                              className="artifact-btn"
+                              onClick={() => setArtifact({
+                                decky: log.decky,
+                                storedAs: String(parsedFields.stored_as),
+                                fields: parsedFields,
+                              })}
+                              title="Inspect captured artifact"
+                            >
+                              <Paperclip size={11} /> ARTIFACT
+                            </button>
+                          )}
+                          {Object.entries(parsedFields)
+                            .filter(([k]) => k !== 'meta_json_b64' && k !== 'stored_as')
+                            .map(([k, v]) => (
+                              <span key={k} className="field-badge">
+                                <span className="k">{k}:</span>
+                                {typeof v === 'object' ? JSON.stringify(v) : String(v)}
+                              </span>
+                            ))}
+                        </div>
+                      )}
                     </td>
                   </tr>
                 );
               }) : (
                 <tr>
-                  <td colSpan={5} style={{ textAlign: 'center', padding: '40px', opacity: 0.5 }}>
-                    {loading ? 'RETRIEVING DATA...' : 'NO LOGS MATCHING CRITERIA'}
+                  <td colSpan={5}>
+                    <div className="empty-state">
+                      <SearchX size={28} />
+                      <span className="type-label">
+                        {loading ? 'RETRIEVING DATA...' : 'NO LOGS MATCHING CRITERIA'}
+                      </span>
+                    </div>
                   </td>
                 </tr>
               )}
@@ -386,6 +370,7 @@ const LiveLogs: React.FC = () => {
           </table>
         </div>
       </div>
+
       {artifact && (
         <ArtifactDrawer
           decky={artifact.decky}
