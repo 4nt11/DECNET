@@ -58,7 +58,7 @@ def _get_index(path: Path) -> tuple[dict[str, list[tuple[int, int]]], int]:
             # Fast sid extract: look for `"sid":"<36 chars>"` prefix — every
             # sessrec line starts with that field (see emit_*).
             try:
-                m = re.search(rb'"sid":"([a-f0-9-]{36})"', line)
+                m = re.search(rb'"sid"\s*:\s*"([a-f0-9-]{36})"', line)
             except re.error:
                 m = None
             if m:

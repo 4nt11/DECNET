@@ -7,12 +7,12 @@
 - [~] **SSH (Cowrie)** — Custom filesystem, realistic user database, and command execution: DELETED! Will use real OpenSSH for the highest interaction possible.
 - [~] **Telnet (Cowrie)** — Realistic banner and command emulation: DELETED! Will use Busybox Telnetd for the same reasons as above.
 - [x] **RDP** — Realistic NLA authentication and screen capture (where possible).
-- [ ] **VNC** — Realistic RFB protocol handshake and authentication.
+- [x] **VNC** — Realistic RFB protocol handshake and authentication.
 - [x] **Real SSH** — High-interaction sshd with shell logging.
 
 ### Databases
 - [x] **MySQL** — Support for common SQL queries and realistic schema.
-- [ ] **Postgres** — Realistic version strings and basic query support.
+- [x] **Postgres** — Realistic version strings and basic query support.
 - [x] **MSSQL** — Realistic TDS protocol handshake.
 - [x] **MongoDB** — Support for common Mongo wire protocol commands.
 - [x] **Redis** — Support for basic GET/SET/INFO commands.
@@ -50,7 +50,7 @@
 - [ ] **Tarpit mode** — Slow down attackers by drip-feeding bytes or delaying responses.
 - [x] **Dynamic decky mutation** — Rotate exposed services or OS fingerprints over time.
 - [x] **Credential harvesting DB** — Centralized database for all username/password attempts.
-- [ ] **Session recording** — Full capture for SSH/Telnet sessions.
+- [x] **Session recording** — Full capture for SSH/Telnet sessions. -> sessrec pty relay writes asciinema v2 day-shards per decky; paged API + SessionDrawer replay in the dashboard.
 - [x] **Payload capture** — Store and hash files uploaded by attackers. -> Via inotifywait and custom C wrappers.
 
 ## Detection & Intelligence
@@ -149,9 +149,9 @@
 ## MazeNET
 
 - [x] Initial MazeNET implementation via DAG recursive graphs.
-- [ ] Usable UI.
-- [ ] Random, seed-based network topologies.
-- [ ] Manual topology creation via war map.
-- [ ] UI based topology teardowns.
+- [x] Usable UI.
+- [x] Random, seed-based network topologies.
+- [x] Manual topology creation via war map.
+- [x] UI based topology teardowns.
 - [ ] SWARM-based topology deployment.
 - [ ] UI based SWARM topology deployments.
