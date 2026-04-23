@@ -185,7 +185,7 @@ Each sub-flow below gets its own table. Status codes:
 | T | Password hash tampering in DB | T | DB integrity is OS/filesystem scope. See boundary #2 for syslog-path tampering. |
 | R | User denies having performed an action | M | Every mutation logged with actor UUID; audit trail lives in `logs` table. |
 | I | Password reflected in login response on failure | M | Single uniform 401 for user-not-found and bad-password at `api_login.py`. No user-existence oracle. |
-| I | JWT secret leaked via error message / stack trace | **?** | Verify: production error handler doesn't return tracebacks. |
+| I | JWT secret leaked via error message / stack trace | M | Generic `@app.exception_handler(Exception)` at `decnet/web/api.py` returns opaque `{detail, error_id}` on uncaught exceptions; traceback is logged server-side only. Dev-mode (`DECNET_DEVELOPER=True`) includes traceback in body for debugging. |
 | D | Bcrypt-cost DoS via long password submission | M | Pydantic `max_length=72` on all password fields in `decnet/web/db/models/auth.py` (matches bcrypt's internal truncation limit). |
 | E | `role=None` bypass (historical bug) | M | See memory `project_rbac_null_role.md`; fixed via centralized RBAC that treats `None` as unauthenticated. |
 
@@ -289,7 +289,8 @@ code" or "accepted, add to table above."
 
 - [x] ~~Per-IP / per-user rate limit on `/auth/login`.~~ Shipped — see F1/S row.
 - [x] ~~Uniform "invalid credentials" on login failure (no user-existence oracle).~~ Verified — see F1/I row.
-- [ ] Production error handler suppresses tracebacks and internal details.
+- [x] ~~Production error handler suppresses tracebacks and internal details.~~ Shipped — generic `@app.exception_handler(Exception)` in `decnet/web/api.py`; opaque `{detail, error_id}` in prod, traceback only under `DECNET_DEVELOPER=True`.
+- [ ] `detail=str(e)` / `detail=f"…{e}"` sites in `decnet/web/router/fleet/api_deploy_deckies.py:41,67,83,155` — admin-gated, arguably intentional INI-parser UX, but worth auditing: preserve deliberate messages, sanitize any bubble-up from lower layers.
 - [x] ~~Password length clamp before bcrypt.~~ Verified — Pydantic `max_length=72`.
 - [ ] Contract test asserting every protected route returns 401 unauthenticated and 403 for under-roled.
 - [ ] Field allow-list on viewer responses for attacker / user / bounty serializers.
@@ -357,3 +358,4 @@ In priority order:
 |------|--------|--------|
 | 2026-04-23 | Initial scaffold. System context + Dashboard↔API as first worked component. | ANTI |
 | 2026-04-23 | F1 Authn: 3 threats moved from **?** to **M** (rate limit shipped; uniform 401 verified; bcrypt length clamp verified). Added DA-08 accepted risk: reverse-proxy per-IP bucket collapse. | ANTI |
+| 2026-04-23 | F1/I "traceback / stack trace leakage" moved from **?** to **M** via generic Exception handler with `error_id` correlation. Added follow-up checklist entry for `detail=str(e)` sites in fleet deploy router. | ANTI |

@@ -1,5 +1,7 @@
 import asyncio
 import os
+import traceback
+import uuid
 from contextlib import asynccontextmanager
 from typing import Any, AsyncGenerator, Optional
 
@@ -297,3 +299,29 @@ async def pydantic_validation_exception_handler(request: Request, exc: Validatio
             "type": "internal_validation_error"
         },
     )
+
+
+@app.exception_handler(Exception)
+async def unhandled_exception_handler(request: Request, exc: Exception) -> ORJSONResponse:
+    """Catch-all for uncaught exceptions in route handlers and dependencies.
+
+    Prod: opaque 500 with an ``error_id``; full traceback goes ONLY to server
+    logs. Dev (``DECNET_DEVELOPER=True``): same response plus ``exception_type``
+    and ``traceback`` fields so failures are debuggable without tailing logs.
+
+    The ``error_id`` lets operators correlate a user's 500 report with the full
+    traceback in server logs (``grep <error_id> /var/log/decnet.log``).
+
+    FastAPI's own ``HTTPException`` routing still takes precedence — this
+    handler only fires on genuinely-uncaught exceptions.
+    """
+    error_id = uuid.uuid4().hex
+    log.exception(
+        "unhandled exception on %s %s [error_id=%s]",
+        request.method, request.url.path, error_id,
+    )
+    body: dict[str, Any] = {"detail": "Internal Server Error", "error_id": error_id}
+    if DECNET_DEVELOPER:
+        body["exception_type"] = type(exc).__name__
+        body["traceback"] = traceback.format_exc()
+    return ORJSONResponse(status_code=500, content=body)
