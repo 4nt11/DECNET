@@ -94,6 +94,12 @@ class UnixSocketBus(BaseBus):
         self._lock = asyncio.Lock()
         self._write_lock = asyncio.Lock()
         self._closed = False
+        # Sticky flag: the first publish-on-closed-bus call logs at
+        # WARNING so operators see that a publish was dropped; subsequent
+        # calls on the same instance log at DEBUG only to prevent a
+        # log flood when stream threads drain after close.  The bus is
+        # critical infra, so the first warning is non-negotiable.
+        self._closed_publish_warned = False
 
     # ─── Lifecycle ──────────────────────────────────────────────────────────
 
@@ -146,7 +152,21 @@ class UnixSocketBus(BaseBus):
         event_type: str = "",
     ) -> None:
         if self._closed:
-            raise RuntimeError("publish on closed bus")
+            # Degrade gracefully: the DB is the source of truth, the bus
+            # is only the notification layer.  Raising here made every
+            # caller via publish_safely flood the logs once per stream
+            # line during shutdown races.  First drop warns loudly;
+            # subsequent drops on the same instance are DEBUG-only.
+            if not self._closed_publish_warned:
+                self._closed_publish_warned = True
+                log.warning(
+                    "bus.client: publish on closed bus dropped topic=%s "
+                    "(further drops on this instance logged at DEBUG)",
+                    topic,
+                )
+            else:
+                log.debug("bus.client: publish on closed bus dropped topic=%s", topic)
+            return
         if self._writer is None:
             await self.connect()
         body = Event(topic=topic, payload=payload, type=event_type).to_dict()

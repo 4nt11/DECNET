@@ -61,6 +61,14 @@ def make_thread_safe_publisher(
         return lambda _topic, _payload, _event_type="": None
 
     def _publish(topic: str, payload: dict[str, Any], event_type: str = "") -> None:
+        # Stream threads may keep draining after the bus owner closed it
+        # (shutdown race).  Short-circuit here so we don't marshal a
+        # coroutine onto a dead loop just to have publish_safely swallow
+        # it.  bus.publish's own WARN-once guard handles the rare case
+        # where _closed flips between this check and the coroutine
+        # actually running.
+        if getattr(bus, "_closed", False):
+            return
         try:
             asyncio.run_coroutine_threadsafe(
                 publish_safely(bus, topic, payload, event_type=event_type),
