@@ -3,7 +3,7 @@ from datetime import datetime, timezone
 from typing import Any, List, Optional
 
 from pydantic import BaseModel
-from sqlalchemy import Column, Text
+from sqlalchemy import Column, Text, UniqueConstraint
 from sqlmodel import Field, SQLModel
 
 from ._base import _BIG_TEXT
@@ -140,6 +140,36 @@ class SessionProfile(SQLModel, table=True):
     session_duration_s: Optional[float] = None
     created_at: datetime = Field(
         default_factory=lambda: datetime.now(timezone.utc)
+    )
+
+
+class SmtpTarget(SQLModel, table=True):
+    """
+    Per-attacker list of victim domains observed via the SMTP honeypots.
+
+    Each row is one (attacker_uuid, domain) pair — an attacker who relays
+    mail to 500 addresses at acme.com collapses into a single row with
+    count=500. Only the *domain* is stored; local-parts (the bit before
+    `@`) are dropped at ingestion, so this table contains no PII beyond
+    the target organisation's identity.
+
+    Shape is designed for future V2 federation gossip: the
+    `smtp_target_seen(domain)` query returns aggregate counts with zero
+    cross-org attacker leakage — each operator can answer "have you seen
+    this domain being targeted?" without exposing *which* attackers did.
+    """
+    __tablename__ = "smtp_targets"
+    id: Optional[int] = Field(default=None, primary_key=True)
+    attacker_uuid: str = Field(foreign_key="attackers.uuid", index=True)
+    domain: str = Field(index=True)
+    first_seen: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
+    last_seen: datetime = Field(
+        default_factory=lambda: datetime.now(timezone.utc), index=True
+    )
+    # Aggregate counter — one rcpt_to / message_accepted recipient bumps this.
+    count: int = Field(default=1)
+    __table_args__ = (
+        UniqueConstraint("attacker_uuid", "domain", name="uq_smtp_targets_attacker_domain"),
     )
 
 

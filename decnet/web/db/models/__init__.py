@@ -30,6 +30,7 @@ from .attackers import (
     AttackerBehavior,
     AttackersResponse,
     SessionProfile,
+    SmtpTarget,
 )
 from .deploy import (
     DeployIniRequest,
@@ -137,6 +138,7 @@ __all__ = [
     "AttackerBehavior",
     "AttackersResponse",
     "SessionProfile",
+    "SmtpTarget",
     # deploy
     "DeployIniRequest",
     "MutateIntervalRequest",

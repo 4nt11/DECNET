@@ -15,6 +15,7 @@ from __future__ import annotations
 import asyncio
 import contextlib
 import json
+import re
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from typing import Any, Callable
@@ -46,6 +47,18 @@ _COMMAND_EVENT_TYPES = frozenset({
 
 # Fields that carry the executed command/query text
 _COMMAND_FIELDS = ("command", "query", "input", "line", "sql", "cmd")
+
+# SMTP events that carry a recipient email address. `rcpt_to` fires once per
+# accepted RCPT (open-relay mode), `rcpt_denied` once per denied RCPT
+# (harvester mode). `message_accepted` carries the comma-joined rcpt list
+# on the final DATA commit — covered for replay safety, though every
+# address it contains already arrived via `rcpt_to` earlier in the session.
+_SMTP_RCPT_EVENTS = frozenset({"rcpt_to", "rcpt_denied", "message_accepted"})
+
+# Pseudo-TLDs we never want to report on: the RFC 6761 special-use names
+# plus common lab-only values. Matching happens on the *last* label so
+# `foo.example.com` is filtered but `example.corp` is not.
+_BLOCKED_TLDS = frozenset({"invalid", "test", "localhost", "local", "example"})
 
 
 @dataclass
@@ -211,6 +224,17 @@ async def _update_profiles(
                 _span.record_exception(exc)
                 logger.error("attacker worker: behavior upsert failed for %s: %s", ip, exc)
 
+            # SMTP victim-domain tracking — extract domains from RCPT events
+            # and upsert one row per (attacker, domain) pair. Same
+            # soft-fail posture as the behavior rollup: errors here must
+            # not block the next attacker.
+            try:
+                for domain in _extract_smtp_domains(events):
+                    await repo.increment_smtp_target(attacker_uuid, domain)
+            except Exception as exc:
+                _span.record_exception(exc)
+                logger.error("attacker worker: smtp target upsert failed for %s: %s", ip, exc)
+
 
 def _build_record(
     ip: str,
@@ -285,3 +309,53 @@ def _extract_commands_from_events(events: list[LogEvent]) -> list[dict[str, Any]
         })
 
     return commands
+
+
+_SMTP_ADDR_RE = re.compile(r"<?([^\s<>@]+)@([A-Za-z0-9.-]+\.[A-Za-z]{2,})>?")
+
+
+def _normalize_smtp_domain(raw: str) -> str | None:
+    """Extract a lowercased domain from an envelope-address fragment.
+
+    Returns None when the input doesn't look like an email address or the
+    resulting TLD is on the blocklist. Local-parts (the bit before `@`)
+    are intentionally dropped — this table stores no user-identifying
+    data, only the targeted organisation's domain.
+    """
+    if not raw:
+        return None
+    match = _SMTP_ADDR_RE.search(raw.strip())
+    if not match:
+        return None
+    domain = match.group(2).lower().strip(".")
+    if not domain:
+        return None
+    tld = domain.rsplit(".", 1)[-1]
+    if tld in _BLOCKED_TLDS:
+        return None
+    return domain
+
+
+def _extract_smtp_domains(events: list[LogEvent]) -> set[str]:
+    """Collect the set of victim domains an attacker targeted via SMTP.
+
+    Deduped at the attacker level — repeated hits on the same domain
+    within a single batch collapse to one upsert, and the per-row count
+    is bumped by ``increment_smtp_target`` on each call. The set return
+    type is intentional: we care about *which* domains were seen, not
+    the per-batch frequency (which the DB aggregates over time).
+    """
+    domains: set[str] = set()
+    for event in events:
+        if event.service != "smtp" or event.event_type not in _SMTP_RCPT_EVENTS:
+            continue
+        if event.event_type == "message_accepted":
+            raw_list = event.fields.get("rcpt_to", "")
+            candidates = raw_list.split(",") if raw_list else []
+        else:
+            candidates = [event.fields.get("value", "")]
+        for candidate in candidates:
+            domain = _normalize_smtp_domain(candidate)
+            if domain:
+                domains.add(domain)
+    return domains

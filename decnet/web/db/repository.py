@@ -171,6 +171,35 @@ class BaseRepository(ABC):
         pass
 
     @abstractmethod
+    async def increment_smtp_target(self, attacker_uuid: str, domain: str) -> None:
+        """
+        Record that ``attacker_uuid`` targeted ``domain`` via SMTP.
+
+        Upserts the (attacker_uuid, domain) row: inserts with count=1 +
+        first_seen=now on first sight, bumps count + last_seen on every
+        subsequent hit. Callers must pre-normalize ``domain`` (lowercase,
+        local-part stripped).
+        """
+        pass
+
+    @abstractmethod
+    async def list_smtp_targets(self, attacker_uuid: str) -> list[dict[str, Any]]:
+        """Return SmtpTarget rows for an attacker, ordered by most-recent first."""
+        pass
+
+    @abstractmethod
+    async def smtp_target_seen(self, domain: str) -> dict[str, Any]:
+        """
+        Cross-attacker aggregate for a victim domain.
+
+        Returns ``{seen: bool, count: int, first_seen: datetime|None,
+        last_seen: datetime|None}``. Shaped as the federation-gossip RPC
+        that V2 will expose — each operator can answer "have any of your
+        attackers targeted this domain?" without leaking attacker identity.
+        """
+        pass
+
+    @abstractmethod
     async def get_attacker_by_uuid(self, uuid: str) -> Optional[dict[str, Any]]:
         """Retrieve a single attacker profile by UUID."""
         pass
