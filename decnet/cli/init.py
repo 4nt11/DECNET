@@ -32,10 +32,64 @@ from .utils import console, log
 
 
 _CONFIG_PLACEHOLDER = """\
-# /etc/decnet/config.ini — DECNET master-host config.
-# Placeholder; reserved for future structured settings.
-# Today, most knobs live in /opt/decnet/.env.local as env vars.
+# /etc/decnet/decnet.ini — DECNET host config.
+#
+# Every key is OPTIONAL. Absent keys fall through to env-var defaults
+# defined in decnet/env.py. Real env vars always win over this file
+# (precedence: env > INI > default), so systemd EnvironmentFile= and
+# one-off `DECNET_FOO=bar decnet ...` invocations always take effect.
+#
+# Secrets (JWT, admin password, DB password) intentionally DO NOT
+# live here. Put them in /opt/decnet/.env.local or the systemd
+# EnvironmentFile= — never in a group-readable INI.
+
 [decnet]
+# mode = master                          # or "agent"
+
+# [api]
+# host = 127.0.0.1
+# port = 8000
+
+# [web]
+# host = 127.0.0.1
+# port = 8080
+# admin-user = admin
+# cors-origins = http://localhost:8080   # comma-separated
+
+# [database]
+# type = sqlite                          # or "mysql"
+# url = mysql+asyncmy://user@host:3306/decnet   # if set, wins over host/port/name/user
+# host = localhost
+# port = 3306
+# name = decnet
+# user = decnet
+
+# [bus]
+# enabled = true
+# type = unix                            # or "fake"
+# socket = /run/decnet/bus.sock
+# group = decnet
+
+# [swarm]
+# master-host = 10.0.0.1
+# syslog-port = 6514
+# swarmctl-port = 8770
+
+# [logging]
+# system-log = /var/log/decnet/decnet.system.log
+# ingest-log = /var/log/decnet/decnet.log
+# agent-log  = /var/log/decnet/agent.log
+
+# [ingester]
+# batch-size = 100
+# batch-max-wait-ms = 250
+
+# [tracing]
+# enabled = false
+# otel-endpoint = http://localhost:4317
+
+# [agent]
+# Managed by the enroll bundle — do NOT edit by hand on an agent host.
 """
 
 
@@ -487,7 +541,13 @@ def register(app: typer.Typer) -> None:
                 lambda: (_run(["systemctl", "daemon-reload"], dry_run=dry_run), "ok")[1],
             )
             _step(
-                f"remove {etc_decnet / 'config.ini'}",
+                f"remove {etc_decnet / 'decnet.ini'}",
+                lambda: _remove_file(etc_decnet / "decnet.ini", dry_run=dry_run),
+            )
+            # Legacy name from pre-domain-sections placeholder era.
+            # Harmless if absent (the _remove_file step logs skip).
+            _step(
+                f"remove legacy {etc_decnet / 'config.ini'}",
                 lambda: _remove_file(etc_decnet / "config.ini", dry_run=dry_run),
             )
             _step(
@@ -572,8 +632,8 @@ def register(app: typer.Typer) -> None:
                     _ensure_dir(p, mode=m, owner=o, group=g, dry_run=dry_run),
             )
         _step(
-            f"write {etc_decnet / 'config.ini'}",
-            lambda: _ensure_config(etc_decnet / "config.ini", group, dry_run=dry_run),
+            f"write {etc_decnet / 'decnet.ini'}",
+            lambda: _ensure_config(etc_decnet / "decnet.ini", group, dry_run=dry_run),
         )
         _step(
             "install systemd units",

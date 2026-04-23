@@ -166,6 +166,32 @@ def test_unit_files_are_installed_then_idempotent(
     assert "unit files up to date" in r2.output
 
 
+def test_init_writes_decnet_ini_not_config_ini(
+    monkeypatch: Any, tmp_path: Path, subprocess_calls: List[List[str]],
+    no_missing_tools: None, missing_user_and_group: None,
+) -> None:
+    """Placeholder target is /etc/decnet/decnet.ini (new name) — matches
+    what decnet.config_ini.load_ini_config() actually reads. Guards
+    against regressing to the old `config.ini` name."""
+    _seed_deploy(monkeypatch, tmp_path)
+    prefix = tmp_path / "root"
+    r = runner.invoke(app, ["init", "--no-start", "--prefix", str(prefix)])
+    assert r.exit_code == 0, r.output
+
+    ini = prefix / "etc/decnet/decnet.ini"
+    legacy = prefix / "etc/decnet/config.ini"
+    assert ini.is_file(), "decnet.ini should be written"
+    assert not legacy.exists(), "legacy config.ini must not be written"
+
+    body = ini.read_text()
+    # Admin-facing sections are documented as commented examples so
+    # the placeholder teaches the file shape.
+    for header in ("[decnet]", "[api]", "[web]", "[database]",
+                   "[bus]", "[swarm]", "[logging]", "[ingester]",
+                   "[tracing]", "[agent]"):
+        assert header in body, f"placeholder missing {header} example"
+
+
 def test_install_dir_renders_into_service_units(
     monkeypatch: Any, tmp_path: Path, subprocess_calls: List[List[str]],
     no_missing_tools: None, missing_user_and_group: None,
@@ -328,6 +354,8 @@ def _seed_installed_state(prefix: Path) -> None:
     (tmpfiles / "decnet.conf").write_text("d /run/decnet\n")
     etc_decnet = prefix / "etc/decnet"
     etc_decnet.mkdir(parents=True)
+    (etc_decnet / "decnet.ini").write_text("[decnet]\n")
+    # Also seed the legacy config.ini so we cover the legacy-cleanup path.
     (etc_decnet / "config.ini").write_text("[decnet]\n")
     (prefix / "opt/decnet").mkdir(parents=True)
     (prefix / "run/decnet").mkdir(parents=True)
