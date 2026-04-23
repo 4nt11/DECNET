@@ -90,11 +90,13 @@ def build_behavior_record(events: list[LogEvent]) -> dict[str, Any]:
             _span.set_attribute("tools", ",".join(all_tools))
 
     kex_list = rollup.get("kex_order_raw") or []
+    ssh_banners = rollup.get("ssh_client_banners") or []
     return {
         "os_guess": rollup["os_guess"],
         "hop_distance": rollup["hop_distance"],
         "tcp_fingerprint": json.dumps(rollup["tcp_fingerprint"]),
         "kex_order_raw": json.dumps(kex_list) if kex_list else None,
+        "ssh_client_banners": json.dumps(ssh_banners) if ssh_banners else None,
         "retransmit_count": rollup["retransmit_count"],
         "behavior_class": behavior,
         "beacon_interval_s": beacon_interval_s,

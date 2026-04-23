@@ -21,6 +21,8 @@ _SNIFFER_FLOW_EVENT: str = "tcp_flow_timing"
 _PROBER_TCPFP_EVENT: str = "tcpfp_fingerprint"
 # Prober-emitted HASSHServer fingerprint; carries the raw kex_algorithms string.
 _PROBER_HASSH_EVENT: str = "hassh_fingerprint"
+# Sniffer-emitted SSH client identification string (RFC 4253 §4.2).
+_SNIFFER_SSH_BANNER_EVENT: str = "ssh_client_banner"
 
 # Canonical initial TTL for each coarse OS bucket.  Used to derive hop
 # distance when only the observed TTL is available (prober path).
@@ -75,6 +77,8 @@ def sniffer_rollup(events: list[LogEvent]) -> dict[str, Any]:
     retransmits = 0
     kex_order_raw: list[str] = []
     _kex_seen: set[str] = set()
+    ssh_client_banners: list[str] = []
+    _ssh_banner_seen: set[str] = set()
 
     for e in events:
         if e.event_type == _SNIFFER_SYN_EVENT:
@@ -121,6 +125,15 @@ def sniffer_rollup(events: list[LogEvent]) -> dict[str, Any]:
             if kex and kex not in _kex_seen:
                 kex_order_raw.append(kex)
                 _kex_seen.add(kex)
+
+        elif e.event_type == _SNIFFER_SSH_BANNER_EVENT:
+            # Sniffer-observed SSH identification string from attacker.
+            # Dedup: the same attacker will reuse the same client banner
+            # across flows/reconnects; record distinct values in order seen.
+            banner = e.fields.get("ssh_version")
+            if banner and banner not in _ssh_banner_seen:
+                ssh_client_banners.append(banner)
+                _ssh_banner_seen.add(banner)
 
         elif e.event_type == _PROBER_TCPFP_EVENT:
             # Active-probe result: prober sent SYN to attacker, got SYN-ACK back.
@@ -173,4 +186,5 @@ def sniffer_rollup(events: list[LogEvent]) -> dict[str, Any]:
         "tcp_fingerprint": tcp_fp or {},
         "retransmit_count": retransmits,
         "kex_order_raw": kex_order_raw,
+        "ssh_client_banners": ssh_client_banners,
     }

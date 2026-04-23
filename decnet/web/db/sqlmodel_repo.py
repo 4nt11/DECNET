@@ -683,6 +683,16 @@ class SQLModelRepository(BaseRepository):
                 d["kex_order_raw"] = []
         elif raw_kex is None:
             d["kex_order_raw"] = []
+        # Same list-or-None pattern for ssh_client_banners.
+        raw_banners = d.get("ssh_client_banners")
+        if isinstance(raw_banners, str):
+            try:
+                parsed_banners = json.loads(raw_banners)
+                d["ssh_client_banners"] = parsed_banners if isinstance(parsed_banners, list) else [parsed_banners]
+            except (json.JSONDecodeError, TypeError):
+                d["ssh_client_banners"] = []
+        elif raw_banners is None:
+            d["ssh_client_banners"] = []
         return d
 
     @staticmethod

@@ -22,6 +22,7 @@ from decnet.sniffer.fingerprint import (
     _ja3s,
     _parse_client_hello,
     _parse_server_hello,
+    _parse_ssh_banner,
     _session_resumption_info,
     _tls_version_str,
 )
@@ -123,6 +124,33 @@ class TestTlsParsers:
 
     def test_parse_server_hello_invalid(self):
         assert _parse_server_hello(b"garbage") is None
+
+
+# ─── SSH banner parser tests ────────────────────────────────────────────────
+
+class TestSshBannerParser:
+    def test_openssh_banner_crlf(self):
+        data = b"SSH-2.0-OpenSSH_9.2p1 Debian-2\r\nkex-init..."
+        assert _parse_ssh_banner(data) == "SSH-2.0-OpenSSH_9.2p1 Debian-2"
+
+    def test_banner_lf_only(self):
+        data = b"SSH-2.0-libssh2_1.10.0\n"
+        assert _parse_ssh_banner(data) == "SSH-2.0-libssh2_1.10.0"
+
+    def test_non_ssh_payload(self):
+        assert _parse_ssh_banner(b"GET / HTTP/1.1\r\n") is None
+        assert _parse_ssh_banner(b"") is None
+        assert _parse_ssh_banner(b"\x16\x03\x01\x00") is None
+
+    def test_missing_terminator(self):
+        # No CR/LF within the 255-byte RFC window → not a complete banner yet.
+        assert _parse_ssh_banner(b"SSH-2.0-OpenSSH_9.2p1" + b" " * 300) is None
+
+    def test_banner_too_short(self):
+        assert _parse_ssh_banner(b"SSH-\r\n") is None
+
+    def test_non_ascii_rejected(self):
+        assert _parse_ssh_banner(b"SSH-2.0-\xff\xfe\r\n") is None
 
 
 # ─── Fingerprint computation tests ──────────────────────────────────────────

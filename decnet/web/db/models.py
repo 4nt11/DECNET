@@ -182,6 +182,13 @@ class AttackerBehavior(SQLModel, table=True):
         default=None,
         sa_column=Column("kex_order_raw", Text, nullable=True),
     )  # JSON list[str] — kex_algorithms comma-separated strings
+    # Sniffer-observed SSH client identification strings (RFC 4253 §4.2),
+    # deduped in observation order. Captures the attacker's SSH client
+    # software (e.g. "SSH-2.0-OpenSSH_9.2p1", "SSH-2.0-libssh2_1.10.0").
+    ssh_client_banners: Optional[str] = Field(
+        default=None,
+        sa_column=Column("ssh_client_banners", Text, nullable=True),
+    )  # JSON list[str]
     retransmit_count: int = Field(default=0)
     # Behavioral (derived by the profiler from log-event timing)
     behavior_class: Optional[str] = None          # beaconing | interactive | scanning | brute_force | slow_scan | mixed | unknown

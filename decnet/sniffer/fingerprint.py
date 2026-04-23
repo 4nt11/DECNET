@@ -61,7 +61,33 @@ _BUS_TRAFFIC_EVENTS: frozenset[str] = frozenset({
     "tls_session",
     "tcp_flow_timing",
     "tcp_syn_fingerprint",
+    "ssh_client_banner",
 })
+
+
+def _parse_ssh_banner(data: bytes) -> str | None:
+    """
+    Return the attacker's SSH identification string (RFC 4253 §4.2) if
+    *data* begins with one, else None.
+
+    A valid banner starts with ``SSH-`` and terminates at the first CR or LF
+    within the 255-byte RFC-mandated window.  The returned string is decoded
+    as ASCII and stripped of the trailing CR/LF bytes.
+    """
+    if not data.startswith(b"SSH-"):
+        return None
+    end = -1
+    # RFC 4253: identification string (incl. CR LF) must not exceed 255 bytes.
+    for i, b in enumerate(data[:255]):
+        if b in (0x0D, 0x0A):  # CR or LF
+            end = i
+            break
+    if end < 5:  # "SSH-X" minimum
+        return None
+    try:
+        return data[:end].decode("ascii", errors="strict")
+    except UnicodeDecodeError:
+        return None
 
 
 # ─── TCP option extraction for passive fingerprinting ───────────────────────
@@ -1052,6 +1078,29 @@ class SnifferEngine:
         payload = bytes(tcp.payload)
         if not payload:
             return
+
+        # SSH client banner (RFC 4253 §4.2): attacker→decky TCP/22, first
+        # application-data segment of the flow. Emit once per flow.
+        if (
+            dst_port == 22
+            and dst_ip in self._ip_to_decky
+            and direction_forward
+        ):
+            flow = self._flows.get(flow_key)
+            if flow is not None and not flow.get("ssh_banner_seen"):
+                banner = _parse_ssh_banner(payload)
+                if banner is not None:
+                    flow["ssh_banner_seen"] = True
+                    target_node = self._ip_to_decky[dst_ip]
+                    self._log(
+                        target_node,
+                        "ssh_client_banner",
+                        src_ip=src_ip,
+                        src_port=str(src_port),
+                        dst_ip=dst_ip,
+                        dst_port=str(dst_port),
+                        ssh_version=banner,
+                    )
 
         if payload[0] != _TLS_RECORD_HANDSHAKE:
             return
