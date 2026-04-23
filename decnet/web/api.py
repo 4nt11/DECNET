@@ -23,7 +23,11 @@ from decnet.web.dependencies import repo
 from decnet.collector import log_collector_worker
 from decnet.web.ingester import log_ingestion_worker
 from decnet.profiler import attacker_profile_worker
+from decnet.web.limiter import limiter
 from decnet.web.router import api_router
+from slowapi import _rate_limit_exceeded_handler
+from slowapi.errors import RateLimitExceeded
+from slowapi.middleware import SlowAPIMiddleware
 
 log = get_logger("api")
 ingestion_task: Optional[asyncio.Task[Any]] = None
@@ -168,6 +172,10 @@ app: FastAPI = FastAPI(
     redoc_url="/redoc" if DECNET_DEVELOPER else None,
     openapi_url="/openapi.json" if DECNET_DEVELOPER else None
 )
+
+app.state.limiter = limiter
+app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
+app.add_middleware(SlowAPIMiddleware)
 
 app.add_middleware(
     CORSMiddleware,

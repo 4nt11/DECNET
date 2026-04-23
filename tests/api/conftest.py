@@ -32,8 +32,18 @@ from decnet.web.api import app
 from decnet.web.dependencies import repo
 from decnet.web.db.models import User
 from decnet.web.auth import get_password_hash
+from decnet.web.limiter import limiter as _login_limiter
 from decnet.env import DECNET_ADMIN_USER, DECNET_ADMIN_PASSWORD
 import decnet.config
+
+
+@pytest.fixture(autouse=True)
+def _reset_login_rate_limiter() -> None:
+    """Rate-limit buckets are process-wide; clear before each test so
+    prior tests don't consume another test's budget."""
+    _login_limiter.reset()
+    yield
+    _login_limiter.reset()
 
 VIEWER_USERNAME = "testviewer"
 VIEWER_PASSWORD = "viewer-pass-123"
