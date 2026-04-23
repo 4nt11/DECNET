@@ -10,12 +10,12 @@ Wants=network-online.target
 Type=simple
 User=decnet
 Group=decnet
-WorkingDirectory=/opt/decnet
-EnvironmentFile=-/opt/decnet/.env.local
+WorkingDirectory={{ install_dir }}
+EnvironmentFile=-{{ install_dir }}/.env.local
 # Replace <master-host> with the master's LAN address or hostname. The agent
 # cert bundle at /etc/decnet/agent is reused — the forwarder presents the same
 # worker identity when it connects to the master's listener.
-ExecStart=/opt/decnet/venv/bin/decnet forwarder \
+ExecStart={{ install_dir }}/venv/bin/decnet forwarder \
     --log-file /var/log/decnet/decnet.log \
     --master-host ${DECNET_SWARM_MASTER_HOST} \
     --master-port 6514 \

@@ -24,6 +24,7 @@ from pathlib import Path
 from typing import Callable, List
 
 import typer
+from jinja2 import Environment, FileSystemLoader, StrictUndefined
 
 import decnet as _decnet_pkg
 from .gating import _require_master_mode
@@ -99,7 +100,7 @@ def _ensure_group(group: str, *, dry_run: bool) -> str:
         return "ok"
 
 
-def _ensure_user(user: str, group: str, *, dry_run: bool) -> str:
+def _ensure_user(user: str, group: str, install_dir: str, *, dry_run: bool) -> str:
     try:
         pwd.getpwnam(user)
         return f"skip: user {user} already exists"
@@ -108,7 +109,7 @@ def _ensure_user(user: str, group: str, *, dry_run: bool) -> str:
             [
                 "useradd", "--system",
                 "--gid", group,
-                "--home-dir", "/opt/decnet",
+                "--home-dir", install_dir,
                 "--shell", "/usr/sbin/nologin",
                 "--comment", "DECNET honeypot",
                 user,
@@ -177,19 +178,78 @@ def _copy_if_changed(
     return "ok"
 
 
-def _install_units(
-    deploy: Path, systemd_dir: Path, *, force: bool, dry_run: bool
+def _render_template(src: Path, context: dict[str, str]) -> str:
+    """Render a Jinja2 .j2 template with the given context.
+
+    StrictUndefined: a missing context variable is an error, not a
+    silent empty-string substitution — that way a typo in the template
+    fails loudly instead of shipping a broken systemd unit.
+    """
+    env = Environment(
+        loader=FileSystemLoader(str(src.parent)),
+        undefined=StrictUndefined,
+        keep_trailing_newline=True,
+        autoescape=False,  # nosec B701 — rendering systemd INI, not HTML
+    )
+    template = env.get_template(src.name)
+    return template.render(**context)
+
+
+def _write_rendered_if_changed(
+    src: Path, dst: Path, rendered: str, *, mode: int, force: bool, dry_run: bool
 ) -> str:
-    sources = sorted(deploy.glob("decnet-*.service")) + [deploy / "decnet.target"]
+    """Write *rendered* content to *dst* only if it differs from what's there.
+
+    SHA compares rendered-output ↔ on-disk bytes (NOT source-template ↔
+    on-disk) so operators who customise their install_dir get idempotent
+    re-runs instead of every ``decnet init`` rewriting files.
+    """
+    rendered_bytes = rendered.encode("utf-8")
+    if dst.exists() and not force:
+        if hashlib.sha256(dst.read_bytes()).hexdigest() == hashlib.sha256(rendered_bytes).hexdigest():
+            return f"skip: {dst} up to date"
+    if dry_run:
+        console.print(f"  [dim]would render:[/] {src} -> {dst} (mode={oct(mode)})")
+        return "ok"
+    dst.parent.mkdir(parents=True, exist_ok=True)
+    dst.write_bytes(rendered_bytes)
+    try:
+        os.chmod(dst, mode)
+        os.chown(dst, 0, 0)
+    except PermissionError:
+        pass
+    return "ok"
+
+
+def _install_units(
+    deploy: Path, systemd_dir: Path, *, install_dir: str, force: bool, dry_run: bool
+) -> str:
+    """Render decnet-*.service.j2 → systemd_dir/decnet-*.service, and copy
+    the static decnet.target (no templating needed — it has no install
+    path references)."""
+    context = {"install_dir": install_dir}
+    templates = sorted(deploy.glob("decnet-*.service.j2"))
+    static = [deploy / "decnet.target"]
+
     touched = 0
-    for src in sources:
+    for src in templates:
+        rendered = _render_template(src, context)
+        # decnet-api.service.j2 → decnet-api.service
+        dst_name = src.name[: -len(".j2")]
+        result = _write_rendered_if_changed(
+            src, systemd_dir / dst_name, rendered,
+            mode=0o644, force=force, dry_run=dry_run,
+        )
+        if not result.startswith("skip:"):
+            touched += 1
+    for src in static:
         result = _copy_if_changed(
             src, systemd_dir / src.name,
             mode=0o644, force=force, dry_run=dry_run,
         )
         if not result.startswith("skip:"):
             touched += 1
-    total = len(sources)
+    total = len(templates) + len(static)
     if touched == 0:
         return f"skip: {total} unit files up to date"
     return f"ok ({touched}/{total} installed)"
@@ -335,6 +395,14 @@ def register(app: typer.Typer) -> None:
             "decnet", "--group",
             help="Primary group of the DECNET user.",
         ),
+        install_dir: str = typer.Option(
+            "/opt/decnet", "--install-dir",
+            help="Absolute path where DECNET is installed. Default "
+                 "/opt/decnet; distros that reserve /opt can point this "
+                 "at /srv/decnet, /usr/local/decnet, etc. Gets rendered "
+                 "into every systemd unit via Jinja2 and used as the "
+                 "decnet user's home directory.",
+        ),
         prefix: str = typer.Option(
             "", "--prefix", hidden=True,
             help="Filesystem prefix for tests (e.g. tmp_path). Empty = real root.",
@@ -357,6 +425,15 @@ def register(app: typer.Typer) -> None:
             verb = "deinit" if deinit else "init"
             console.print(f"[red]decnet {verb}: must run as root (use sudo)[/]")
             raise typer.Exit(1)
+
+        if not install_dir.startswith("/"):
+            console.print(
+                f"[red]decnet init: --install-dir must be absolute, got {install_dir!r}[/]"
+            )
+            raise typer.Exit(1)
+        # Strip leading slash so pfx-joining works under --prefix test mode
+        # (Path("/").  / "/opt/decnet" == Path("/opt/decnet"), dropping pfx).
+        _install_rel = install_dir.lstrip("/")
 
         required_tools = ("systemctl",) if deinit else (
             "systemctl", "useradd", "groupadd", "systemd-tmpfiles",
@@ -424,9 +501,9 @@ def register(app: typer.Typer) -> None:
                 ),
             )
             _step(
-                f"remove {pfx / 'opt/decnet'}",
+                f"remove {pfx / _install_rel}",
                 lambda: _remove_dir_if_present(
-                    pfx / "opt/decnet", dry_run=dry_run,
+                    pfx / _install_rel, dry_run=dry_run,
                 ),
             )
             if purge:
@@ -468,7 +545,7 @@ def register(app: typer.Typer) -> None:
             raise typer.Exit(1) from exc
 
         dirs = [
-            (pfx / "opt/decnet", 0o755, user, group),
+            (pfx / _install_rel, 0o755, user, group),
             (pfx / "var/lib/decnet", 0o750, user, group),
             (pfx / "var/log/decnet", 0o750, user, group),
             (etc_decnet, 0o755, "root", group),
@@ -486,7 +563,7 @@ def register(app: typer.Typer) -> None:
         )
         _step(
             f"ensure user {user!r}",
-            lambda: _ensure_user(user, group, dry_run=dry_run),
+            lambda: _ensure_user(user, group, install_dir, dry_run=dry_run),
         )
         for path, mode, d_owner, d_group in dirs:
             _step(
@@ -501,7 +578,8 @@ def register(app: typer.Typer) -> None:
         _step(
             "install systemd units",
             lambda: _install_units(
-                deploy, systemd_dir, force=force, dry_run=dry_run,
+                deploy, systemd_dir,
+                install_dir=install_dir, force=force, dry_run=dry_run,
             ),
         )
         _step(

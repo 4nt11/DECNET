@@ -11,9 +11,9 @@ User=decnet
 Group=decnet
 # docker.sock is group-readable by 'docker'; the agent needs it for compose.
 SupplementaryGroups=docker
-WorkingDirectory=/opt/decnet
-EnvironmentFile=-/opt/decnet/.env.local
-ExecStart=/opt/decnet/venv/bin/decnet agent --host 0.0.0.0 --port 8765 --agent-dir /etc/decnet/agent
+WorkingDirectory={{ install_dir }}
+EnvironmentFile=-{{ install_dir }}/.env.local
+ExecStart={{ install_dir }}/venv/bin/decnet agent --host 0.0.0.0 --port 8765 --agent-dir /etc/decnet/agent
 
 # MACVLAN/IPVLAN management + scapy raw sockets. Granted via ambient caps so
 # the process starts unprivileged and keeps only these two bits.
@@ -30,8 +30,8 @@ ProtectKernelModules=yes
 ProtectControlGroups=yes
 RestrictSUIDSGID=yes
 LockPersonality=yes
-# /opt/decnet holds release slots + state; the agent reads them and writes its PID.
-ReadWritePaths=/opt/decnet /var/log/decnet
+# {{ install_dir }} holds release slots + state; the agent reads them and writes its PID.
+ReadWritePaths={{ install_dir }} /var/log/decnet
 
 Restart=on-failure
 RestartSec=5

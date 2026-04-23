@@ -60,12 +60,22 @@ def missing_user_and_group(monkeypatch: Any) -> None:
 
 
 def _seed_deploy(monkeypatch: Any, tmp_path: Path) -> Path:
-    """Point `_deploy_root()` at a faked deploy tree under tmp_path."""
+    """Point `_deploy_root()` at a faked deploy tree under tmp_path.
+
+    Services are Jinja2 templates keyed on ``{{ install_dir }}`` —
+    matching production layout since the refactor that made install
+    path configurable.
+    """
     deploy = tmp_path / "deploy"
     (deploy / "polkit").mkdir(parents=True)
     (deploy / "tmpfiles.d").mkdir()
-    (deploy / "decnet-bus.service").write_text("# bus unit\n")
-    (deploy / "decnet-api.service").write_text("# api unit\n")
+    (deploy / "decnet-bus.service.j2").write_text(
+        "[Service]\nExecStart={{ install_dir }}/venv/bin/decnet bus\n"
+    )
+    (deploy / "decnet-api.service.j2").write_text(
+        "[Service]\nWorkingDirectory={{ install_dir }}\n"
+        "ExecStart={{ install_dir }}/venv/bin/decnet api\n"
+    )
     (deploy / "decnet.target").write_text("# target\n")
     (deploy / "polkit" / "50-decnet-workers.rules").write_text("// rule\n")
     (deploy / "tmpfiles.d" / "decnet.conf").write_text("d /run/decnet\n")
@@ -151,6 +161,105 @@ def test_unit_files_are_installed_then_idempotent(
     subprocess_calls.clear()
     r2 = runner.invoke(
         app, ["init", "--no-start", "--prefix", str(prefix)],
+    )
+    assert r2.exit_code == 0, r2.output
+    assert "unit files up to date" in r2.output
+
+
+def test_install_dir_renders_into_service_units(
+    monkeypatch: Any, tmp_path: Path, subprocess_calls: List[List[str]],
+    no_missing_tools: None, missing_user_and_group: None,
+) -> None:
+    """`--install-dir /srv/decnet` must land in the rendered service
+    files. Regression guard for the Jinja2 templating refactor."""
+    _seed_deploy(monkeypatch, tmp_path)
+    prefix = tmp_path / "root"
+    r = runner.invoke(
+        app,
+        [
+            "init", "--no-start",
+            "--prefix", str(prefix),
+            "--install-dir", "/srv/decnet",
+        ],
+    )
+    assert r.exit_code == 0, r.output
+
+    api_unit = prefix / "etc/systemd/system" / "decnet-api.service"
+    bus_unit = prefix / "etc/systemd/system" / "decnet-bus.service"
+    assert api_unit.is_file()
+    api_text = api_unit.read_text()
+    assert "/srv/decnet" in api_text
+    assert "/opt/decnet" not in api_text
+    assert "{{" not in api_text, "unrendered Jinja tag leaked through"
+    assert "/srv/decnet" in bus_unit.read_text()
+
+    # useradd --home-dir must match the install_dir override too.
+    useradds = [c for c in subprocess_calls if c and c[0] == "useradd"]
+    assert useradds, "expected useradd call"
+    assert "/srv/decnet" in useradds[0]
+    assert "/opt/decnet" not in useradds[0]
+
+    # And /srv/decnet on disk should be the dir we created.
+    assert (prefix / "srv/decnet").is_dir()
+    assert not (prefix / "opt/decnet").exists()
+
+
+def test_install_dir_defaults_to_opt(
+    monkeypatch: Any, tmp_path: Path, subprocess_calls: List[List[str]],
+    no_missing_tools: None, present_user_and_group: None,
+) -> None:
+    """Default --install-dir is /opt/decnet — existing installs remain
+    byte-identical with no explicit flag."""
+    _seed_deploy(monkeypatch, tmp_path)
+    prefix = tmp_path / "root"
+    r = runner.invoke(app, ["init", "--no-start", "--prefix", str(prefix)])
+    assert r.exit_code == 0, r.output
+    api_unit = prefix / "etc/systemd/system" / "decnet-api.service"
+    assert "/opt/decnet" in api_unit.read_text()
+
+
+def test_install_dir_rejects_relative_path(
+    monkeypatch: Any, tmp_path: Path,
+    no_missing_tools: None, missing_user_and_group: None,
+) -> None:
+    """Relative install_dir would break every absolute path in a
+    rendered service. Reject at the CLI boundary with a clear message."""
+    _seed_deploy(monkeypatch, tmp_path)
+    r = runner.invoke(
+        app,
+        [
+            "init", "--no-start",
+            "--prefix", str(tmp_path / "root"),
+            "--install-dir", "relative/path",
+        ],
+    )
+    assert r.exit_code == 1
+    assert "must be absolute" in r.output
+
+
+def test_install_dir_custom_idempotent_second_run(
+    monkeypatch: Any, tmp_path: Path, subprocess_calls: List[List[str]],
+    no_missing_tools: None, present_user_and_group: None,
+) -> None:
+    """Rendering the same templates twice with the same context must
+    produce byte-identical output — second run SKIPs, no churn."""
+    _seed_deploy(monkeypatch, tmp_path)
+    prefix = tmp_path / "root"
+    runner.invoke(
+        app,
+        [
+            "init", "--no-start",
+            "--prefix", str(prefix),
+            "--install-dir", "/srv/decnet",
+        ],
+    )
+    r2 = runner.invoke(
+        app,
+        [
+            "init", "--no-start",
+            "--prefix", str(prefix),
+            "--install-dir", "/srv/decnet",
+        ],
     )
     assert r2.exit_code == 0, r2.output
     assert "unit files up to date" in r2.output

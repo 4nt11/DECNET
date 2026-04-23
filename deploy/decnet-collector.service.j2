@@ -1,6 +1,6 @@
 [Unit]
-Description=DECNET Mutator (runtime fleet mutation watch loop)
-Documentation=https://git.resacachile.cl/anti/DECNET/wiki/Workers#mutator
+Description=DECNET Collector (Docker log ingestion)
+Documentation=https://git.resacachile.cl/anti/DECNET/wiki/Workers#collector
 After=network-online.target docker.service decnet-bus.service
 Wants=network-online.target decnet-bus.service
 Requires=docker.service
@@ -9,12 +9,13 @@ Requires=docker.service
 Type=simple
 User=decnet
 Group=decnet
-# Mutator recomposes decky services via docker compose.
+# docker.sock is group-readable by 'docker'; the collector tails container logs.
 SupplementaryGroups=docker
-WorkingDirectory=/opt/decnet
-EnvironmentFile=-/opt/decnet/.env.local
-ExecStart=/opt/decnet/venv/bin/decnet mutate --watch
+WorkingDirectory={{ install_dir }}
+EnvironmentFile=-{{ install_dir }}/.env.local
+ExecStart={{ install_dir }}/venv/bin/decnet collect
 
+# No privileged network operations.
 CapabilityBoundingSet=
 AmbientCapabilities=
 
@@ -28,7 +29,7 @@ ProtectKernelModules=yes
 ProtectControlGroups=yes
 RestrictSUIDSGID=yes
 LockPersonality=yes
-ReadWritePaths=/opt/decnet /var/log/decnet
+ReadWritePaths={{ install_dir }} /var/log/decnet
 
 Restart=on-failure
 RestartSec=5

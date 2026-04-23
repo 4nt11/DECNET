@@ -8,11 +8,11 @@ Wants=network-online.target
 Type=simple
 User=decnet
 Group=decnet
-WorkingDirectory=/opt/decnet
-EnvironmentFile=-/opt/decnet/.env.local
+WorkingDirectory={{ install_dir }}
+EnvironmentFile=-{{ install_dir }}/.env.local
 # Binds 0.0.0.0:6514 so workers across the LAN can connect. 6514 is not a
 # privileged port (≥1024), so no CAP_NET_BIND_SERVICE is required.
-ExecStart=/opt/decnet/venv/bin/decnet listener \
+ExecStart={{ install_dir }}/venv/bin/decnet listener \
     --host 0.0.0.0 --port 6514 \
     --ca-dir /etc/decnet/ca \
     --log-path /var/log/decnet/master.log \
