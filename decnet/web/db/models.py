@@ -175,6 +175,13 @@ class AttackerBehavior(SQLModel, table=True):
         default="{}",
         sa_column=Column("tcp_fingerprint", Text, nullable=False, default="{}"),
     )  # JSON: window, wscale, mss, options_sig
+    # Raw SSH KEX algorithm preference strings observed across HASSH probes
+    # (one entry per hassh_fingerprint event). Keeping the raw ordered list
+    # enables post-hoc KEX-order fingerprinting beyond the HASSH hash.
+    kex_order_raw: Optional[str] = Field(
+        default=None,
+        sa_column=Column("kex_order_raw", Text, nullable=True),
+    )  # JSON list[str] — kex_algorithms comma-separated strings
     retransmit_count: int = Field(default=0)
     # Behavioral (derived by the profiler from log-event timing)
     behavior_class: Optional[str] = None          # beaconing | interactive | scanning | brute_force | slow_scan | mixed | unknown

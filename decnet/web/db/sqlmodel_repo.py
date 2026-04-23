@@ -673,6 +673,16 @@ class SQLModelRepository(BaseRepository):
                 d["tool_guesses"] = []
         elif raw is None:
             d["tool_guesses"] = []
+        # Same list-or-None pattern for kex_order_raw.
+        raw_kex = d.get("kex_order_raw")
+        if isinstance(raw_kex, str):
+            try:
+                parsed_kex = json.loads(raw_kex)
+                d["kex_order_raw"] = parsed_kex if isinstance(parsed_kex, list) else [parsed_kex]
+            except (json.JSONDecodeError, TypeError):
+                d["kex_order_raw"] = []
+        elif raw_kex is None:
+            d["kex_order_raw"] = []
         return d
 
     @staticmethod

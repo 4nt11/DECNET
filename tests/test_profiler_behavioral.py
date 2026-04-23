@@ -462,6 +462,30 @@ class TestSnifferRollup:
         assert fp["has_timestamps"] is True
         assert fp["options_sig"] == "M,N,W,N,N,T,S,E"
 
+    def test_hassh_kex_order_raw_collected(self):
+        # Prober hassh_fingerprint events contribute their raw kex_algorithms
+        # list (one entry per distinct string, deduplicated).
+        kex_a = "curve25519-sha256,ecdh-sha2-nistp256,diffie-hellman-group14-sha1"
+        kex_b = "curve25519-sha256@libssh.org,diffie-hellman-group-exchange-sha256"
+        events = [
+            _mk(0, event_type="hassh_fingerprint",
+                fields={"kex_algorithms": kex_a, "hassh_server_hash": "x"}),
+            _mk(5, event_type="hassh_fingerprint",
+                fields={"kex_algorithms": kex_a, "hassh_server_hash": "x"}),  # dup
+            _mk(10, event_type="hassh_fingerprint",
+                fields={"kex_algorithms": kex_b, "hassh_server_hash": "y"}),
+        ]
+        r = sniffer_rollup(events)
+        assert r["kex_order_raw"] == [kex_a, kex_b]
+
+    def test_kex_order_raw_empty_when_no_hassh(self):
+        events = [
+            _mk(0, event_type="tcp_syn_fingerprint",
+                fields={"os_guess": "linux", "hop_distance": "3"}),
+        ]
+        r = sniffer_rollup(events)
+        assert r["kex_order_raw"] == []
+
 
 # ─── build_behavior_record (composite) ──────────────────────────────────────
 
@@ -526,6 +550,20 @@ class TestBuildBehaviorRecord:
         events = [_mk(i * 300.0) for i in range(5)]  # 5-min intervals, no signature match
         r = build_behavior_record(events)
         assert json.loads(r["tool_guesses"]) == []
+
+    def test_kex_order_raw_persisted_as_json(self):
+        kex = "curve25519-sha256,ecdh-sha2-nistp256"
+        events = [
+            _mk(0, event_type="hassh_fingerprint",
+                fields={"kex_algorithms": kex, "hassh_server_hash": "abc"}),
+        ]
+        r = build_behavior_record(events)
+        assert isinstance(r["kex_order_raw"], str)
+        assert json.loads(r["kex_order_raw"]) == [kex]
+
+    def test_kex_order_raw_null_when_no_hassh(self):
+        r = build_behavior_record(_regular_beacon(count=5, interval_s=60.0))
+        assert r["kex_order_raw"] is None
 
     def test_nmap_promoted_from_tcp_fingerprint(self):
         # p0f identifies nmap from TCP handshake → must appear in tool_guesses

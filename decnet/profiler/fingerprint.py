@@ -19,6 +19,8 @@ _SNIFFER_SYN_EVENT: str  = "tcp_syn_fingerprint"
 _SNIFFER_FLOW_EVENT: str = "tcp_flow_timing"
 # Prober-emitted active-probe result (SYN-ACK fingerprint of attacker machine).
 _PROBER_TCPFP_EVENT: str = "tcpfp_fingerprint"
+# Prober-emitted HASSHServer fingerprint; carries the raw kex_algorithms string.
+_PROBER_HASSH_EVENT: str = "hassh_fingerprint"
 
 # Canonical initial TTL for each coarse OS bucket.  Used to derive hop
 # distance when only the observed TTL is available (prober path).
@@ -71,6 +73,8 @@ def sniffer_rollup(events: list[LogEvent]) -> dict[str, Any]:
     hops: list[int] = []
     tcp_fp: dict[str, Any] | None = None
     retransmits = 0
+    kex_order_raw: list[str] = []
+    _kex_seen: set[str] = set()
 
     for e in events:
         if e.event_type == _SNIFFER_SYN_EVENT:
@@ -108,6 +112,15 @@ def sniffer_rollup(events: list[LogEvent]) -> dict[str, Any]:
                 retransmits += int(e.fields.get("retransmits", "0"))
             except (TypeError, ValueError):
                 pass
+
+        elif e.event_type == _PROBER_HASSH_EVENT:
+            # Prober HASSHServer probe: preserve the raw kex_algorithms list
+            # for post-hoc ordering analysis. Dedup because a single attacker
+            # SSH service will emit the same list per port/probe cycle.
+            kex = e.fields.get("kex_algorithms")
+            if kex and kex not in _kex_seen:
+                kex_order_raw.append(kex)
+                _kex_seen.add(kex)
 
         elif e.event_type == _PROBER_TCPFP_EVENT:
             # Active-probe result: prober sent SYN to attacker, got SYN-ACK back.
@@ -159,4 +172,5 @@ def sniffer_rollup(events: list[LogEvent]) -> dict[str, Any]:
         "hop_distance": hop_distance,
         "tcp_fingerprint": tcp_fp or {},
         "retransmit_count": retransmits,
+        "kex_order_raw": kex_order_raw,
     }
