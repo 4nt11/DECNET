@@ -207,6 +207,56 @@ class AttackerBehavior(SQLModel, table=True):
         default_factory=lambda: datetime.now(timezone.utc), index=True
     )
 
+
+class SessionProfile(SQLModel, table=True):
+    """
+    Per-session keystroke-dynamics fingerprint.
+
+    One row per recorded interactive session. Pre-v1 the ingestion job
+    that populates these columns is not yet built (tracked as gap #2 in
+    SIGNAL_CAPTURE_AUDIT.md); the table ships empty so that:
+      * downstream correlation/federation work can target a stable schema, and
+      * `schema_version` is committed to storage from day one — federation
+        gossip in v2 requires cross-operator compatibility, and retrofitting
+        a version column after rows exist is painful.
+
+    All feature columns are nullable so the empty write path (one row per
+    closed session) is valid without the behavioral analyzer online yet.
+    """
+    __tablename__ = "session_profile"
+    sid: str = Field(primary_key=True)                  # session UUID
+    log_id: Optional[int] = Field(
+        default=None, foreign_key="logs.id", index=True
+    )
+    schema_version: int = Field(default=1)
+    # Inter-key interval timing moments (seconds).
+    kd_iki_mean: Optional[float] = None
+    kd_iki_stdev: Optional[float] = None
+    kd_iki_p50: Optional[float] = None
+    kd_iki_p95: Optional[float] = None
+    kd_enter_latency_p50: Optional[float] = None
+    kd_enter_latency_p95: Optional[float] = None
+    # Cadence ratios.
+    kd_burst_ratio: Optional[float] = None
+    kd_think_ratio: Optional[float] = None
+    # Control-character rates (events per keystroke).
+    kd_ctrl_backspace: Optional[float] = None
+    kd_ctrl_wkill: Optional[float] = None
+    kd_ctrl_ukill: Optional[float] = None
+    kd_ctrl_abort: Optional[float] = None
+    kd_ctrl_eof: Optional[float] = None
+    kd_arrow_rate: Optional[float] = None
+    kd_tab_rate: Optional[float] = None
+    # 8-byte SimHash over keystroke digraphs — Hamming-comparable across sessions.
+    kd_digraph_simhash: Optional[bytes] = Field(default=None, index=True)
+    # Derived totals.
+    total_keystrokes: Optional[int] = None
+    session_duration_s: Optional[float] = None
+    created_at: datetime = Field(
+        default_factory=lambda: datetime.now(timezone.utc)
+    )
+
+
 # --- MazeNET tables ---
 # Nested deception topologies: an arbitrary-depth DAG of LANs connected by
 # multi-homed "bridge" deckies.  Purpose-built; disjoint from DeckyShard which

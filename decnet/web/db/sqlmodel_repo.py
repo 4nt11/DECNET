@@ -34,6 +34,7 @@ from decnet.web.db.models import (
     State,
     Attacker,
     AttackerBehavior,
+    SessionProfile,
     SwarmHost,
     DeckyShard,
     Topology,
@@ -694,6 +695,44 @@ class SQLModelRepository(BaseRepository):
         elif raw_banners is None:
             d["ssh_client_banners"] = []
         return d
+
+    async def upsert_session_profile(
+        self,
+        sid: str,
+        data: dict[str, Any],
+    ) -> None:
+        """
+        Write (or update) the session_profile row for *sid*.
+
+        Pre-v1, the typical call is the empty-write path at session close:
+        `upsert_session_profile(sid, {"log_id": <id>})` — all keystroke
+        feature columns stay NULL until the V2 ingestion job populates them.
+        """
+        async with self._session() as session:
+            result = await session.execute(
+                select(SessionProfile).where(SessionProfile.sid == sid)
+            )
+            existing = result.scalar_one_or_none()
+            if existing:
+                for k, v in data.items():
+                    setattr(existing, k, v)
+                session.add(existing)
+            else:
+                session.add(SessionProfile(sid=sid, **data))
+            await session.commit()
+
+    async def get_session_profile(
+        self,
+        sid: str,
+    ) -> Optional[dict[str, Any]]:
+        async with self._session() as session:
+            result = await session.execute(
+                select(SessionProfile).where(SessionProfile.sid == sid)
+            )
+            row = result.scalar_one_or_none()
+            if not row:
+                return None
+            return row.model_dump(mode="json")
 
     @staticmethod
     def _deserialize_attacker(d: dict[str, Any]) -> dict[str, Any]:
