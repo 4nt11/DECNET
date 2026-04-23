@@ -898,6 +898,30 @@ class SQLModelRepository(BaseRepository):
             )
             return [r.model_dump(mode="json") for r in rows.scalars().all()]
 
+    async def get_attacker_stored_mail(self, uuid: str) -> list[dict[str, Any]]:
+        """Return `message_stored` logs for an attacker, newest first.
+
+        Mirrors :meth:`get_attacker_artifacts` — the SMTP template emits one
+        `message_stored` row per accepted DATA body, with headers + sha256 +
+        attachment manifest already decoded into ``fields`` by the ingester.
+        Capped at 200 rows to match the artifact/transcript query shape.
+        """
+        async with self._session() as session:
+            ip_res = await session.execute(
+                select(Attacker.ip).where(Attacker.uuid == uuid)
+            )
+            ip = ip_res.scalar_one_or_none()
+            if not ip:
+                return []
+            rows = await session.execute(
+                select(Log)
+                .where(Log.attacker_ip == ip)
+                .where(Log.event_type == "message_stored")
+                .order_by(desc(Log.timestamp))
+                .limit(200)
+            )
+            return [r.model_dump(mode="json") for r in rows.scalars().all()]
+
     async def get_session_log(self, sid: str) -> Optional[dict[str, Any]]:
         """Look up the `session_recorded` Log row that owns a given sid.
 

@@ -188,6 +188,11 @@ class BaseRepository(ABC):
         pass
 
     @abstractmethod
+    async def get_attacker_stored_mail(self, uuid: str) -> list[Any]:
+        """Return `message_stored` log rows for an attacker, newest first."""
+        pass
+
+    @abstractmethod
     async def smtp_target_seen(self, domain: str) -> dict[str, Any]:
         """
         Cross-attacker aggregate for a victim domain.

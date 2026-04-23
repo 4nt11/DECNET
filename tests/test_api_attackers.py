@@ -393,6 +393,111 @@ class TestGetAttackerTranscripts:
         assert exc_info.value.status_code == 404
 
 
+# ─── GET /attackers/{uuid}/smtp-targets ──────────────────────────────────────
+
+class TestGetAttackerSmtpTargets:
+    @pytest.mark.asyncio
+    async def test_returns_smtp_targets(self):
+        from decnet.web.router.attackers.api_get_attacker_smtp_targets import (
+            get_attacker_smtp_targets,
+        )
+
+        sample = _sample_attacker()
+        rows = [
+            {
+                "id": 1, "attacker_uuid": "att-uuid-1",
+                "domain": "corp1.com", "count": 5,
+                "first_seen": "2026-04-18T02:22:56+00:00",
+                "last_seen": "2026-04-19T10:15:03+00:00",
+            },
+        ]
+        with patch("decnet.web.router.attackers.api_get_attacker_smtp_targets.repo") as mock_repo:
+            mock_repo.get_attacker_by_uuid = AsyncMock(return_value=sample)
+            mock_repo.list_smtp_targets = AsyncMock(return_value=rows)
+
+            result = await get_attacker_smtp_targets(
+                uuid="att-uuid-1",
+                user={"uuid": "test-user", "role": "viewer"},
+            )
+
+        assert result["total"] == 1
+        assert result["data"][0]["domain"] == "corp1.com"
+        mock_repo.list_smtp_targets.assert_awaited_once_with("att-uuid-1")
+
+    @pytest.mark.asyncio
+    async def test_404_on_unknown_uuid(self):
+        from decnet.web.router.attackers.api_get_attacker_smtp_targets import (
+            get_attacker_smtp_targets,
+        )
+
+        with patch("decnet.web.router.attackers.api_get_attacker_smtp_targets.repo") as mock_repo:
+            mock_repo.get_attacker_by_uuid = AsyncMock(return_value=None)
+
+            with pytest.raises(HTTPException) as exc_info:
+                await get_attacker_smtp_targets(
+                    uuid="nonexistent",
+                    user={"uuid": "test-user", "role": "viewer"},
+                )
+
+        assert exc_info.value.status_code == 404
+
+
+# ─── GET /attackers/{uuid}/mail ──────────────────────────────────────────────
+
+class TestGetAttackerMail:
+    @pytest.mark.asyncio
+    async def test_returns_stored_mail(self):
+        from decnet.web.router.attackers.api_get_attacker_mail import get_attacker_mail
+
+        sample = _sample_attacker()
+        rows = [
+            {
+                "id": 1,
+                "timestamp": "2026-04-18T02:22:56+00:00",
+                "decky": "decky-01", "service": "smtp",
+                "event_type": "message_stored",
+                "attacker_ip": "1.2.3.4",
+                "raw_line": "", "msg": "",
+                "fields": json.dumps({
+                    "stored_as": "2026-04-18T02:22:56Z_abc123def456_ABC123.eml",
+                    "sha256": "deadbeef" * 8,
+                    "size": "1024",
+                    "subject": "URGENT invoice",
+                    "from_hdr": "spam@evil.com",
+                    "rcpt_to": "<a@corp.com>",
+                    "attachment_count": "1",
+                }),
+            },
+        ]
+        with patch("decnet.web.router.attackers.api_get_attacker_mail.repo") as mock_repo:
+            mock_repo.get_attacker_by_uuid = AsyncMock(return_value=sample)
+            mock_repo.get_attacker_stored_mail = AsyncMock(return_value=rows)
+
+            result = await get_attacker_mail(
+                uuid="att-uuid-1",
+                admin={"uuid": "test-admin", "role": "admin"},
+            )
+
+        assert result["total"] == 1
+        assert result["data"][0]["event_type"] == "message_stored"
+        mock_repo.get_attacker_stored_mail.assert_awaited_once_with("att-uuid-1")
+
+    @pytest.mark.asyncio
+    async def test_404_on_unknown_uuid(self):
+        from decnet.web.router.attackers.api_get_attacker_mail import get_attacker_mail
+
+        with patch("decnet.web.router.attackers.api_get_attacker_mail.repo") as mock_repo:
+            mock_repo.get_attacker_by_uuid = AsyncMock(return_value=None)
+
+            with pytest.raises(HTTPException) as exc_info:
+                await get_attacker_mail(
+                    uuid="nonexistent",
+                    admin={"uuid": "test-admin", "role": "admin"},
+                )
+
+        assert exc_info.value.status_code == 404
+
+
 # ─── Auth enforcement ────────────────────────────────────────────────────────
 
 class TestAttackersAuth:

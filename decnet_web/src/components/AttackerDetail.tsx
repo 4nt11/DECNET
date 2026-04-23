@@ -1,8 +1,9 @@
 import React, { useEffect, useState } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
-import { Activity, ArrowLeft, ChevronDown, ChevronLeft, ChevronRight, ChevronUp, Crosshair, Fingerprint, Shield, Clock, Wifi, Lock, FileKey, Radio, Timer, Paperclip, Terminal, Package, FileText } from 'lucide-react';
+import { Activity, ArrowLeft, ChevronDown, ChevronLeft, ChevronRight, ChevronUp, Crosshair, Fingerprint, Shield, Clock, Wifi, Lock, FileKey, Radio, Timer, Paperclip, Terminal, Package, FileText, Mail, AtSign } from 'lucide-react';
 import api from '../utils/api';
 import ArtifactDrawer from './ArtifactDrawer';
+import MailDrawer from './MailDrawer';
 import SessionDrawer from './SessionDrawer';
 import EmptyState from './EmptyState/EmptyState';
 import './Dashboard.css';
@@ -710,6 +711,8 @@ const AttackerDetail: React.FC = () => {
     fingerprints: true,
     artifacts: true,
     sessions: true,
+    smtpTargets: true,
+    mail: true,
   });
 
   // Captured file-drop artifacts (ssh inotify farm) for this attacker.
@@ -733,6 +736,28 @@ const AttackerDetail: React.FC = () => {
   };
   const [sessions, setSessions] = useState<SessionLog[]>([]);
   const [session, setSession] = useState<{ decky: string; sid: string; fields: Record<string, any> } | null>(null);
+
+  // SMTP victim-domain rollup (viewer-safe: domains only, no local parts).
+  type SmtpTargetRow = {
+    domain: string;
+    count: number;
+    first_seen: string;
+    last_seen: string;
+  };
+  const [smtpTargets, setSmtpTargets] = useState<SmtpTargetRow[]>([]);
+
+  // Stored SMTP messages (admin-gated: full attacker-controlled bodies).
+  type MailLog = {
+    id: number;
+    timestamp: string;
+    decky: string;
+    service: string;
+    fields: string;
+  };
+  const [mail, setMail] = useState<MailLog[]>([]);
+  const [mailForbidden, setMailForbidden] = useState(false);
+  const [mailItem, setMailItem] = useState<{ decky: string; storedAs: string; fields: Record<string, any> } | null>(null);
+
   const toggle = (key: string) => setOpenSections((prev) => ({ ...prev, [key]: !prev[key] }));
 
   // Commands pagination state
@@ -797,6 +822,34 @@ const AttackerDetail: React.FC = () => {
       }
     };
     fetchArtifacts();
+  }, [id]);
+
+  useEffect(() => {
+    if (!id) return;
+    const fetchSmtpTargets = async () => {
+      try {
+        const res = await api.get(`/attackers/${id}/smtp-targets`);
+        setSmtpTargets(res.data.data ?? []);
+      } catch {
+        setSmtpTargets([]);
+      }
+    };
+    fetchSmtpTargets();
+  }, [id]);
+
+  useEffect(() => {
+    if (!id) return;
+    const fetchMail = async () => {
+      try {
+        const res = await api.get(`/attackers/${id}/mail`);
+        setMail(res.data.data ?? []);
+        setMailForbidden(false);
+      } catch (err: any) {
+        setMail([]);
+        setMailForbidden(err?.response?.status === 403);
+      }
+    };
+    fetchMail();
   }, [id]);
 
   useEffect(() => {
@@ -1197,6 +1250,141 @@ const AttackerDetail: React.FC = () => {
           storedAs={artifact.storedAs}
           fields={artifact.fields}
           onClose={() => setArtifact(null)}
+        />
+      )}
+
+      {/* SMTP Victim Domains (viewer-safe rollup) */}
+      <Section
+        title={<>SMTP VICTIM DOMAINS ({smtpTargets.length})</>}
+        open={openSections.smtpTargets}
+        onToggle={() => toggle('smtpTargets')}
+      >
+        {smtpTargets.length > 0 ? (
+          <div className="logs-table-container">
+            <table className="logs-table">
+              <thead>
+                <tr>
+                  <th>DOMAIN</th>
+                  <th>COUNT</th>
+                  <th>FIRST SEEN</th>
+                  <th>LAST SEEN</th>
+                </tr>
+              </thead>
+              <tbody>
+                {smtpTargets.map((row) => (
+                  <tr key={row.domain}>
+                    <td className="matrix-text" style={{ fontFamily: 'monospace', wordBreak: 'break-all' }}>
+                      {row.domain}
+                    </td>
+                    <td className="matrix-text" style={{ fontFamily: 'monospace' }}>
+                      {row.count}
+                    </td>
+                    <td className="dim" style={{ fontSize: '0.75rem', whiteSpace: 'nowrap' }}>
+                      {new Date(row.first_seen).toLocaleString()}
+                    </td>
+                    <td className="dim" style={{ fontSize: '0.75rem', whiteSpace: 'nowrap' }}>
+                      {new Date(row.last_seen).toLocaleString()}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        ) : (
+          <EmptyState
+            icon={AtSign}
+            title="NO SMTP VICTIMS OBSERVED"
+            size="compact"
+          />
+        )}
+      </Section>
+
+      {/* Stored Mail (admin only — bodies are attacker-controlled) */}
+      <Section
+        title={<>STORED MAIL ({mail.length})</>}
+        open={openSections.mail}
+        onToggle={() => toggle('mail')}
+      >
+        {mailForbidden ? (
+          <EmptyState
+            icon={Mail}
+            title="ADMIN ROLE REQUIRED"
+            size="compact"
+          />
+        ) : mail.length > 0 ? (
+          <div className="logs-table-container">
+            <table className="logs-table">
+              <thead>
+                <tr>
+                  <th>TIMESTAMP</th>
+                  <th>DECKY</th>
+                  <th>SUBJECT</th>
+                  <th>FROM</th>
+                  <th>SIZE</th>
+                  <th></th>
+                </tr>
+              </thead>
+              <tbody>
+                {mail.map((row) => {
+                  let fields: Record<string, any> = {};
+                  try { fields = JSON.parse(row.fields || '{}'); } catch {}
+                  const storedAs = fields.stored_as ? String(fields.stored_as) : null;
+                  return (
+                    <tr key={row.id}>
+                      <td className="dim" style={{ fontSize: '0.75rem', whiteSpace: 'nowrap' }}>
+                        {new Date(row.timestamp).toLocaleString()}
+                      </td>
+                      <td className="violet-accent">{row.decky}</td>
+                      <td className="matrix-text" style={{ fontFamily: 'monospace', wordBreak: 'break-all' }}>
+                        {fields.subject || '—'}
+                      </td>
+                      <td className="matrix-text" style={{ fontFamily: 'monospace', wordBreak: 'break-all' }}>
+                        {fields.from_addr || fields.mail_from || '—'}
+                      </td>
+                      <td className="matrix-text" style={{ fontFamily: 'monospace' }}>
+                        {fields.size ? `${fields.size} B` : '—'}
+                      </td>
+                      <td>
+                        {storedAs && (
+                          <button
+                            onClick={() => setMailItem({ decky: row.decky, storedAs, fields })}
+                            title="Inspect stored message"
+                            style={{
+                              display: 'flex', alignItems: 'center', gap: '6px',
+                              fontSize: '0.7rem',
+                              backgroundColor: 'rgba(255, 170, 0, 0.1)',
+                              padding: '2px 8px',
+                              borderRadius: '4px',
+                              border: '1px solid rgba(255, 170, 0, 0.5)',
+                              color: '#ffaa00',
+                              cursor: 'pointer',
+                            }}
+                          >
+                            <Mail size={11} /> OPEN
+                          </button>
+                        )}
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
+        ) : (
+          <EmptyState
+            icon={Mail}
+            title="NO MAIL STORED"
+            size="compact"
+          />
+        )}
+      </Section>
+
+      {mailItem && (
+        <MailDrawer
+          decky={mailItem.decky}
+          storedAs={mailItem.storedAs}
+          fields={mailItem.fields}
+          onClose={() => setMailItem(null)}
         />
       )}
 
