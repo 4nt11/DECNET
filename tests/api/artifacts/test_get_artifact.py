@@ -125,3 +125,32 @@ async def test_content_disposition_is_attachment(client: httpx.AsyncClient, auth
     assert res.status_code == 200
     cd = res.headers.get("content-disposition", "")
     assert "attachment" in cd.lower()
+
+
+async def test_smtp_service_serves_from_smtp_subdir(
+    client: httpx.AsyncClient, auth_token: str, tmp_path, monkeypatch,
+):
+    """?service=smtp routes to {root}/{decky}/smtp/ instead of .../ssh/."""
+    root = tmp_path / "artifacts-smtp"
+    (root / _DECKY / "smtp").mkdir(parents=True)
+    eml = "2026-04-18T02:22:56Z_abc123def456_msg.eml"
+    (root / _DECKY / "smtp" / eml).write_bytes(b"From: a\r\n\r\nhi")
+    from decnet.web.router.artifacts import api_get_artifact
+    monkeypatch.setattr(api_get_artifact, "ARTIFACTS_ROOT", root)
+    res = await client.get(
+        f"/api/v1/artifacts/{_DECKY}/{eml}?service=smtp",
+        headers={"Authorization": f"Bearer {auth_token}"},
+    )
+    assert res.status_code == 200
+    assert res.content == b"From: a\r\n\r\nhi"
+
+
+async def test_unknown_service_rejected(
+    client: httpx.AsyncClient, auth_token: str, artifacts_root,
+):
+    res = await client.get(
+        f"/api/v1/artifacts/{_DECKY}/{_VALID_STORED_AS}?service=rdp",
+        headers={"Authorization": f"Bearer {auth_token}"},
+    )
+    # Regex matches (lowercase alpha) but _ALLOWED_SERVICES rejects → 400.
+    assert res.status_code == 400

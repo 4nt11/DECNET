@@ -26,3 +26,17 @@ def test_smtp_relay_dockerfile_context():
     ctx = svc.dockerfile_context()
     assert ctx.name == "smtp"
     assert ctx.is_dir()
+
+
+def test_smtp_relay_quarantine_bind_mount():
+    """Full-message capture: each decky gets its own host quarantine dir
+    bind-mounted into the container, and the in-container path is exposed
+    via SMTP_QUARANTINE_DIR so the server can write .eml files."""
+    svc = SMTPRelayService()
+    fragment = svc.compose_fragment("test-decky")
+    volumes = fragment["volumes"]
+    assert len(volumes) == 1
+    host, container, mode = volumes[0].split(":")
+    assert host.endswith("/test-decky/smtp")
+    assert container == fragment["environment"]["SMTP_QUARANTINE_DIR"]
+    assert mode == "rw"
