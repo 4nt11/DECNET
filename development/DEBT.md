@@ -345,6 +345,28 @@ Workaround: `sudo chown -R anti:anti /var/lib/decnet/artifacts`. Every new decky
 
 **Status:** Open. Current workaround is `sudo chown -R <user>:<group> /var/lib/decnet/artifacts` after every new deploy; soft-fail in the transcripts endpoint keeps the API alive in the interim.
 
+### DEBT-037 — Webhook delivery guarantees beyond MVP
+**Files:** `decnet/webhook/` (**new**), `decnet/web/db/models/webhooks.py` (**new**), `decnet/web/router/webhooks/` (**new**).
+
+The webhook worker (Wazuh / Shuffle / TheHive / n8n integration path) ships MVP-first: subscription CRUD + a `decnet webhook` worker that subscribes to the internal bus, forwards matching events as HTTP POSTs with HMAC-SHA256 signatures (`X-DECNET-Signature: sha256=<hex>`), and retries 3× with exponential backoff. Simple-mode UI exposes an enum of event families (`AttackerDetail` / `DeckyStatus` / `SystemStatus`); Advanced mode exposes raw bus-topic patterns. Payload bodies are the existing Pydantic response models — no new schema.
+
+What MVP deliberately defers:
+
+1. **Circuit breaker.** After N consecutive 5xx / timeout / connection refused errors, auto-disable the subscription and require admin re-enable. Without this, a half-working SOAR endpoint can pin the webhook worker's connection pool and starve healthy destinations. Fast follow-up — the state (consecutive_failures, last_failure_at) is small and fits on the subscription row.
+2. **Dead-letter table.** Events that exhaust retries are dropped with a log line, not persisted. Operators can't replay a missed event after they fix their Shuffle flow. Minimum viable: `webhook_dead_letters(subscription_id, topic, payload_json, final_error, dropped_at)` with a TTL sweep, and `POST /webhooks/{id}/replay?since=...` to re-queue.
+3. **Delivery audit log.** No persisted record of "what went where and when." Useful for compliance and for debugging "why didn't TheHive see that alert." Same table shape as dead-letter but success-path entries with retention knob.
+4. **Batch delivery / coalescing.** Every event fires one HTTP POST. High-volume topics (`system.log` on a busy master) will happily saturate the egress. Post-MVP, add a bounded batch window (e.g. up to 50 events or 500 ms) and POST an envelope `{events: [...]}`.
+5. **Per-subscription rate limiting.** An admin who subscribes to `>` gets every event DECNET ever emits. A token-bucket cap (requests/sec to a given destination) protects both the webhook worker and the destination from operator self-inflicted DoS.
+6. **Template overrides.** Shuffle accepts the DECNET shape; TheHive wants an observable-style envelope; Wazuh wants a flat `decoder + field` shape. MVP ships one shape. Post-MVP: per-subscription Jinja-ish payload template, or a small set of named adapters (`"shape": "thehive" | "wazuh" | "raw"`).
+7. **Secret rotation.** HMAC secret is stored plaintext in the DB and rotated by UPDATE. Post-MVP: encrypt at rest (using the existing JWT secret as KEK), dual-secret window during rotation so in-flight verifications don't fail.
+
+**Non-negotiable even at MVP:**
+- HMAC signing (already scoped in MVP — listed here only to clarify it's NOT on the deferred list).
+- `DECNET_BUS_ENABLED=false` must leave the webhook worker functional in a degraded "disabled" mode that surfaces its state via the Workers panel, matching DEBT-031's pattern.
+- Retry backoff MUST jitter; synchronized retries across a fleet of DECNET masters would be its own DoS.
+
+**Status:** Not yet started. Opens alongside the webhook MVP commit — the MVP PR will reference this entry and the follow-up work will close items 1–7 in priority order (circuit breaker first, batch delivery last).
+
 ### DEBT-032 — Prober can't detect fingerprint rotation without mutation
 **Files:** `decnet/prober/worker.py` (~lines 235, 286, 334, 392), `decnet/web/db/models.py` (new `decky_service_fingerprints` table).
 
@@ -423,6 +445,7 @@ The prober already computes JARM (`worker.py:286`), HASSH (`worker.py:334`), and
 | DEBT-033 | 🟡 Medium | Storage / Session recording | open |
 | DEBT-035 | 🟡 Medium | Artifacts / Filesystem perms | open |
 | DEBT-036 | 🟡 Medium | Correlation / Keystroke dynamics | open |
+| DEBT-037 | 🟡 Medium | Integration / Webhooks | open (tracks MVP follow-ups) |
 
-**Remaining open:** DEBT-011 (Alembic), DEBT-023 (image pinning), DEBT-026 (modular mailboxes), DEBT-027 (Dynamic bait store), DEBT-028 (deploy endpoint tests), DEBT-032 (fingerprint rotation detection), DEBT-033 (transcript shard rotation), DEBT-035 (artifacts uid/gid alignment), DEBT-036 (session-profile ingester).
+**Remaining open:** DEBT-011 (Alembic), DEBT-023 (image pinning), DEBT-026 (modular mailboxes), DEBT-027 (Dynamic bait store), DEBT-028 (deploy endpoint tests), DEBT-032 (fingerprint rotation detection), DEBT-033 (transcript shard rotation), DEBT-035 (artifacts uid/gid alignment), DEBT-036 (session-profile ingester), DEBT-037 (webhook delivery hardening).
 **Estimated remaining effort:** ~24 hours. DEBT-030 Phase B (optimistic staged-buffer editor) is a follow-up, not debt.
