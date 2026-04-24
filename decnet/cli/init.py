@@ -607,6 +607,7 @@ def register(app: typer.Typer) -> None:
         dirs = [
             (pfx / _install_rel, 0o755, user, group),
             (pfx / "var/lib/decnet", 0o750, user, group),
+            (pfx / "var/lib/decnet/geoip", 0o755, user, group),
             (pfx / "var/log/decnet", 0o750, user, group),
             (etc_decnet, 0o755, "root", group),
             (pfx / "run/decnet", 0o755, "root", group),

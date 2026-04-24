@@ -39,6 +39,10 @@ class Attacker(SQLModel, table=True):
     commands: str = Field(
         default="[]", sa_column=Column("commands", _BIG_TEXT, nullable=False, default="[]")
     )  # JSON list[dict] — commands per service/decky
+    # GeoIP enrichment (populated by the profiler from decnet.geoip.enrich_ip).
+    # Nullable because private / loopback / IPv6 sources never resolve.
+    country_code: Optional[str] = Field(default=None, max_length=2, index=True)
+    country_source: Optional[str] = Field(default=None, max_length=16)
     updated_at: datetime = Field(
         default_factory=lambda: datetime.now(timezone.utc), index=True
     )

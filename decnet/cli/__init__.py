@@ -25,6 +25,7 @@ from . import (
     db,
     deploy,
     forwarder,
+    geoip,
     init,
     inventory,
     lifecycle,
@@ -53,7 +54,7 @@ for _mod in (
     swarm,
     deploy, lifecycle, workers, inventory,
     web, profiler, sniffer, db,
-    topology, bus, init,
+    topology, bus, geoip, init,
 ):
     _mod.register(app)
 

@@ -29,6 +29,7 @@ from decnet.bus.publish import (
 )
 from decnet.correlation.engine import CorrelationEngine
 from decnet.correlation.parser import LogEvent
+from decnet.geoip import enrich_ip
 from decnet.logging import get_logger
 from decnet.profiler.behavioral import build_behavior_record
 from decnet.telemetry import traced as _traced, get_tracer as _get_tracer
@@ -251,6 +252,7 @@ def _build_record(
     )
     fingerprints = [b for b in bounties if b.get("bounty_type") == "fingerprint"]
     credential_count = sum(1 for b in bounties if b.get("bounty_type") == "credential")
+    country_code, country_source = enrich_ip(ip)
 
     return {
         "ip": ip,
@@ -267,6 +269,8 @@ def _build_record(
         "credential_count": credential_count,
         "fingerprints": json.dumps(fingerprints),
         "commands": json.dumps(commands),
+        "country_code": country_code,
+        "country_source": country_source,
         "updated_at": datetime.now(timezone.utc),
     }
 

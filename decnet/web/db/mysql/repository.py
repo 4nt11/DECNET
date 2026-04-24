@@ -35,16 +35,32 @@ class MySQLRepository(SQLModelRepository):
     async def _migrate_attackers_table(self) -> None:
         """Drop the legacy (pre-UUID) ``attackers`` table if it exists without a ``uuid`` column.
 
-        MySQL exposes column metadata via ``information_schema.COLUMNS``.
-        ``DATABASE()`` scopes the lookup to the currently connected schema.
+        Also adds the GeoIP columns (``country_code``, ``country_source``)
+        to existing tables that predate them. MySQL exposes column
+        metadata via ``information_schema.COLUMNS``; ``DATABASE()`` scopes
+        the lookup to the currently connected schema.
         """
         async with self.engine.begin() as conn:
             rows = (await conn.execute(text(
                 "SELECT COLUMN_NAME FROM information_schema.COLUMNS "
                 "WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'attackers'"
             ))).fetchall()
-            if rows and not any(r[0] == "uuid" for r in rows):
+            if not rows:
+                return  # table absent; create_all() handles it.
+            if not any(r[0] == "uuid" for r in rows):
                 await conn.execute(text("DROP TABLE attackers"))
+                return
+            existing_cols = {r[0] for r in rows}
+            if "country_code" not in existing_cols:
+                await conn.execute(text(
+                    "ALTER TABLE attackers "
+                    "ADD COLUMN country_code VARCHAR(2) NULL, "
+                    "ADD INDEX ix_attackers_country_code (country_code)"
+                ))
+            if "country_source" not in existing_cols:
+                await conn.execute(text(
+                    "ALTER TABLE attackers ADD COLUMN country_source VARCHAR(16) NULL"
+                ))
 
     async def _migrate_column_types(self) -> None:
         """Upgrade TEXT → MEDIUMTEXT for columns that accumulate large JSON blobs.

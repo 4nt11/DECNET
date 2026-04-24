@@ -26,11 +26,33 @@ class SQLiteRepository(SQLModelRepository):
         )
 
     async def _migrate_attackers_table(self) -> None:
-        """Drop the old attackers table if it lacks the uuid column (pre-UUID schema)."""
+        """Drop the old attackers table if it lacks the uuid column (pre-UUID schema).
+
+        Also adds the GeoIP columns (``country_code``, ``country_source``)
+        to existing tables that predate them. SQLite's
+        ``ALTER TABLE ADD COLUMN`` is idempotent only if we gate on
+        ``PRAGMA table_info`` first — re-adding raises.
+        """
         async with self.engine.begin() as conn:
             rows = (await conn.execute(text("PRAGMA table_info(attackers)"))).fetchall()
             if rows and not any(r[1] == "uuid" for r in rows):
                 await conn.execute(text("DROP TABLE attackers"))
+                return  # create_all() rebuilds fresh — no need to patch columns.
+            if not rows:
+                return  # table absent; create_all() handles it.
+            existing_cols = {r[1] for r in rows}
+            if "country_code" not in existing_cols:
+                await conn.execute(text(
+                    "ALTER TABLE attackers ADD COLUMN country_code VARCHAR(2)"
+                ))
+                await conn.execute(text(
+                    "CREATE INDEX IF NOT EXISTS ix_attackers_country_code "
+                    "ON attackers (country_code)"
+                ))
+            if "country_source" not in existing_cols:
+                await conn.execute(text(
+                    "ALTER TABLE attackers ADD COLUMN country_source VARCHAR(16)"
+                ))
 
     def _json_field_equals(self, key: str):
         # SQLite stores JSON as text; json_extract is the canonical accessor.
