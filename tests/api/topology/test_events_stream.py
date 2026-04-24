@@ -92,7 +92,7 @@ async def test_events_emits_snapshot_and_live_event(auth_token, _fake_app_bus):
     response = await _ev.api_topology_events(
         topology_id=tid,
         request=_FakeRequest(),  # type: ignore[arg-type]
-        _user={"role": "admin"},
+        user={"role": "admin", "uuid": "00000000-0000-0000-0000-000000000000"},
     )
     gen = response.body_iterator
 

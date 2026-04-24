@@ -45,6 +45,16 @@ def _reset_login_rate_limiter() -> None:
     yield
     _login_limiter.reset()
 
+
+@pytest.fixture(autouse=True)
+def _reset_sse_limits() -> None:
+    """SSE connection counters are module-level dicts; reset between
+    tests so leftover slots don't leak across cases."""
+    from decnet.web import sse_limits
+    sse_limits._reset_for_tests()
+    yield
+    sse_limits._reset_for_tests()
+
 VIEWER_USERNAME = "testviewer"
 VIEWER_PASSWORD = "viewer-pass-123"
 

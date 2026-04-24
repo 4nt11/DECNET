@@ -26,6 +26,7 @@ from decnet.bus.app import get_app_bus
 from decnet.logging import get_logger
 from decnet.telemetry import traced as _traced
 from decnet.web.dependencies import repo, require_stream_viewer
+from decnet.web.sse_limits import sse_connection_slot
 
 from ._guards import get_topology_or_404
 
@@ -53,14 +54,20 @@ def _format_sse(event_name: str, data: dict) -> str:
         401: {"description": "Could not validate credentials"},
         403: {"description": "Insufficient permissions"},
         404: {"description": "Topology not found"},
+        429: {"description": "Per-user SSE connection cap reached"},
     },
 )
 @_traced("api.topology.events")
 async def api_topology_events(
     topology_id: str,
     request: Request,
-    _user: dict = Depends(require_stream_viewer),
+    user: dict = Depends(require_stream_viewer),
 ) -> StreamingResponse:
+    # Event types emitted: snapshot, status, mutation.{enqueued,
+    # applying,applied,failed}. All wrap bus events whose payload is
+    # also reachable via viewer-gated REST (GET /topologies/{id},
+    # GET /topologies/{id}/mutations). Adding a new event family here
+    # requires a threat-model review for F6/I (role leakage).
     topo = await get_topology_or_404(topology_id)
     snapshot_status = topo["status"]
     in_flight: list[dict] = []
@@ -68,64 +75,65 @@ async def api_topology_events(
         in_flight.extend(await repo.list_topology_mutations(topology_id, state=state))
 
     async def generator() -> AsyncGenerator[str, None]:
-        # Flush headers immediately so the browser's EventSource sees a
-        # live connection before the first real event arrives.
-        yield ": keepalive\n\n"
+        async with sse_connection_slot(user["uuid"]):
+            # Flush headers immediately so the browser's EventSource sees a
+            # live connection before the first real event arrives.
+            yield ": keepalive\n\n"
 
-        # One-shot snapshot — pair the current topology status with any
-        # mutations the mutator is still holding, so the client buffer
-        # can render an accurate "already in flight" state.
-        yield _format_sse("snapshot", {
-            "topology_id": topology_id,
-            "status": snapshot_status,
-            "in_flight": in_flight,
-        })
+            # One-shot snapshot — pair the current topology status with any
+            # mutations the mutator is still holding, so the client buffer
+            # can render an accurate "already in flight" state.
+            yield _format_sse("snapshot", {
+                "topology_id": topology_id,
+                "status": snapshot_status,
+                "in_flight": in_flight,
+            })
 
-        bus = await get_app_bus()
-        if bus is None:
-            # Bus disabled (NullBus) or unreachable.  The snapshot is
-            # still useful; we idle on keepalives so the client stays
-            # connected and will re-poll on its own timers.
-            while not await request.is_disconnected():
-                try:
-                    await asyncio.sleep(_KEEPALIVE_SECS)
-                except asyncio.CancelledError:
-                    break
-                yield ": keepalive\n\n"
-            return
-
-        sub = bus.subscribe(f"{_topics.TOPOLOGY}.{topology_id}.>")
-        try:
-            async with sub:
-                sub_iter = sub.__aiter__()
-                while True:
-                    if await request.is_disconnected():
-                        break
-                    next_task = asyncio.ensure_future(sub_iter.__anext__())
+            bus = await get_app_bus()
+            if bus is None:
+                # Bus disabled (NullBus) or unreachable.  The snapshot is
+                # still useful; we idle on keepalives so the client stays
+                # connected and will re-poll on its own timers.
+                while not await request.is_disconnected():
                     try:
-                        event = await asyncio.wait_for(next_task, timeout=_KEEPALIVE_SECS)
-                    except asyncio.TimeoutError:
-                        next_task.cancel()
-                        yield ": keepalive\n\n"
-                        continue
-                    except StopAsyncIteration:
+                        await asyncio.sleep(_KEEPALIVE_SECS)
+                    except asyncio.CancelledError:
                         break
-                    # Map the bus event onto an SSE ``event:`` name that
-                    # the frontend can switch on without parsing topics.
-                    yield _format_sse(
-                        _sse_name_for(event.topic),
-                        {
-                            "topic": event.topic,
-                            "type": event.type,
-                            "ts": event.ts,
-                            "payload": event.payload,
-                        },
-                    )
-        except asyncio.CancelledError:
-            pass
-        except Exception:
-            log.exception("topology events stream crashed topology_id=%s", topology_id)
-            yield _format_sse("error", {"message": "Stream interrupted"})
+                    yield ": keepalive\n\n"
+                return
+
+            sub = bus.subscribe(f"{_topics.TOPOLOGY}.{topology_id}.>")
+            try:
+                async with sub:
+                    sub_iter = sub.__aiter__()
+                    while True:
+                        if await request.is_disconnected():
+                            break
+                        next_task = asyncio.ensure_future(sub_iter.__anext__())
+                        try:
+                            event = await asyncio.wait_for(next_task, timeout=_KEEPALIVE_SECS)
+                        except asyncio.TimeoutError:
+                            next_task.cancel()
+                            yield ": keepalive\n\n"
+                            continue
+                        except StopAsyncIteration:
+                            break
+                        # Map the bus event onto an SSE ``event:`` name that
+                        # the frontend can switch on without parsing topics.
+                        yield _format_sse(
+                            _sse_name_for(event.topic),
+                            {
+                                "topic": event.topic,
+                                "type": event.type,
+                                "ts": event.ts,
+                                "payload": event.payload,
+                            },
+                        )
+            except asyncio.CancelledError:
+                pass
+            except Exception:
+                log.exception("topology events stream crashed topology_id=%s", topology_id)
+                yield _format_sse("error", {"message": "Stream interrupted"})
 
     return StreamingResponse(
         generator(),
