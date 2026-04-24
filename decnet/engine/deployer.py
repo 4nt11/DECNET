@@ -162,6 +162,21 @@ def _count_leaked_buildkit_mounts() -> int:
         return 0
 
 
+def _format_subprocess_error(exc: BaseException) -> str:
+    """Stringify CalledProcessError so stderr actually shows up.
+
+    The default str(CalledProcessError) is just 'Command ... returned
+    non-zero exit status N', which drops the stderr we carefully stuff
+    our buildx recovery hint into. Status reasons and deploy-failure
+    log lines were losing the payload — surface it here instead.
+    """
+    if isinstance(exc, subprocess.CalledProcessError):
+        stderr = (exc.stderr or "").strip()
+        if stderr:
+            return f"{exc}: {stderr}"
+    return str(exc)
+
+
 def _buildx_recovery_hint(extra: str = "") -> str:
     head = (
         "Buildx is wedged — Docker's build driver has leaked bind "
@@ -505,7 +520,8 @@ async def _deploy_on_agent(repo, topology_id: str, hydrated: dict) -> None:
             topology_id, host.get("name"), exc,
         )
         await transition_status(
-            repo, topology_id, TopologyStatus.FAILED, reason=str(exc)
+            repo, topology_id, TopologyStatus.FAILED,
+            reason=_format_subprocess_error(exc),
         )
         raise
 
@@ -691,7 +707,8 @@ async def deploy_topology(repo, topology_id: str, *, dry_run: bool = False) -> N
             except OSError:  # pragma: no cover
                 pass
         await transition_status(
-            repo, topology_id, TopologyStatus.FAILED, reason=str(exc)
+            repo, topology_id, TopologyStatus.FAILED,
+            reason=_format_subprocess_error(exc),
         )
         raise
 

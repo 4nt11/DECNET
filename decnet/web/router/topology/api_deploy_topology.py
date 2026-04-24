@@ -34,7 +34,11 @@ async def _run_deploy(topology_id: str) -> None:
     except asyncio.CancelledError:  # pragma: no cover — shutdown
         raise
     except Exception as exc:  # noqa: BLE001
-        log.error("background deploy of %s failed: %s", topology_id, exc)
+        from decnet.engine.deployer import _format_subprocess_error
+        log.error(
+            "background deploy of %s failed: %s",
+            topology_id, _format_subprocess_error(exc),
+        )
 
 
 @router.post(
