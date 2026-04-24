@@ -837,7 +837,7 @@ const Section: React.FC<{
 // ─── Leaked-IPs row (truncated view + rotation-detection badge) ────────────
 
 const ROTATION_THRESHOLD = 20;
-const INLINE_LIMIT = 5;
+const INLINE_LIMIT = 1;
 
 interface LeakedIPsRowProps {
   leaks: NonNullable<AttackerData['ip_leaks']>;
