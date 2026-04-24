@@ -82,19 +82,33 @@ def _configure_logging(dev: bool) -> None:
     _in_pytest = any(k.startswith("PYTEST") for k in os.environ)
     if not _in_pytest:
         _log_path = os.environ.get("DECNET_SYSTEM_LOGS", "decnet.system.log")
-        file_handler = InodeAwareRotatingFileHandler(
-            _log_path,
-            mode="a",
-            maxBytes=10 * 1024 * 1024,  # 10 MB
-            backupCount=5,
-            encoding="utf-8",
-        )
-        file_handler.setFormatter(fmt)
-        root.addHandler(file_handler)
-        # Drop root ownership when invoked via sudo so non-root follow-up
-        # commands (e.g. `decnet api` after `sudo decnet deploy`) can append.
-        from decnet.privdrop import chown_to_invoking_user
-        chown_to_invoking_user(_log_path)
+        # Never let file-handler attach failure kill the process. The
+        # stream handler above is already installed, so losing the file
+        # handler just means 'tail syslog / journalctl instead' — the
+        # daemon itself must keep running. This path trips most
+        # commonly under systemd with ProtectSystem=full + ProtectHome=
+        # read-only when an operator hasn't passed a writable
+        # DECNET_SYSTEM_LOGS yet.
+        try:
+            file_handler = InodeAwareRotatingFileHandler(
+                _log_path,
+                mode="a",
+                maxBytes=10 * 1024 * 1024,  # 10 MB
+                backupCount=5,
+                encoding="utf-8",
+            )
+            file_handler.setFormatter(fmt)
+            root.addHandler(file_handler)
+            # Drop root ownership when invoked via sudo so non-root follow-up
+            # commands (e.g. `decnet api` after `sudo decnet deploy`) can append.
+            from decnet.privdrop import chown_to_invoking_user
+            chown_to_invoking_user(_log_path)
+        except OSError as exc:
+            logging.getLogger(__name__).warning(
+                "could not open %s (%s); continuing with stderr-only logging. "
+                "Set DECNET_SYSTEM_LOGS to a writable path to silence this.",
+                _log_path, exc,
+            )
 
 
 _dev = os.environ.get("DECNET_DEVELOPER", "").lower() == "true"
