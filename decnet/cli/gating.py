@@ -29,7 +29,7 @@ MASTER_ONLY_COMMANDS: frozenset[str] = frozenset({
     "api", "swarmctl", "deploy", "redeploy", "teardown",
     "mutate", "listener", "profiler",
     "services", "distros", "correlate", "archetypes", "web",
-    "db-reset", "init",
+    "db-reset", "init", "webhook",
 })
 MASTER_ONLY_GROUPS: frozenset[str] = frozenset({"swarm", "topology", "geoip"})
 

@@ -37,6 +37,7 @@ from . import (
     topology,
     updater,
     web,
+    webhook,
     workers,
 )
 from .gating import _gate_commands_by_mode
@@ -54,7 +55,7 @@ for _mod in (
     swarm,
     deploy, lifecycle, workers, inventory,
     web, profiler, sniffer, db,
-    topology, bus, geoip, init,
+    topology, bus, geoip, init, webhook,
 ):
     _mod.register(app)
 
