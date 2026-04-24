@@ -12,14 +12,17 @@ WorkingDirectory={{ install_dir }}
 EnvironmentFile=-{{ install_dir }}/.env.local
 # /run/decnet is created automatically with the RuntimeDirectory= directive
 # below (mode 0755, owned by User/Group) and cleaned up on stop. The bus
-# socket is placed inside it with 0660 perms so only the decnet group can
-# connect.
+# socket is placed inside it with 0660 perms so only the configured
+# DECNET group (--group) can connect. That group is rendered here so
+# `decnet init --group anti` results in a socket every worker running
+# as anti can actually connect() to — otherwise every worker falls
+# back to bus=None and the Workers panel sees no heartbeats.
 RuntimeDirectory=decnet
 RuntimeDirectoryMode=0755
 Environment=DECNET_SYSTEM_LOGS=/var/log/decnet/decnet.bus.log
 ExecStart={{ venv_dir }}/bin/decnet bus \
     --socket /run/decnet/bus.sock \
-    --group decnet
+    --group {{ group }}
 StandardOutput=append:/var/log/decnet/decnet.bus.log
 StandardError=append:/var/log/decnet/decnet.bus.log
 
