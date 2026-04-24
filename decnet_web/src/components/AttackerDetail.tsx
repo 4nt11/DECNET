@@ -353,11 +353,8 @@ const FpHttpQuirks: React.FC<{ p: any }> = ({ p }) => {
         {p.casing_category && (
           <Tag>CASE · {String(p.casing_category).toUpperCase()}</Tag>
         )}
-        {typeof p.header_count === 'number' && (
-          <Tag>{p.header_count} HEADERS</Tag>
-        )}
-        {p.duplicates && (
-          <Tag color="var(--warn, #e0a040)">DUPLICATES</Tag>
+        {typeof p.stable_count === 'number' && (
+          <Tag>{p.stable_count} STABLE HEADERS</Tag>
         )}
       </div>
       {order.length > 0 && (
@@ -371,11 +368,6 @@ const FpHttpQuirks: React.FC<{ p: any }> = ({ p }) => {
             ))}
           </div>
         </details>
-      )}
-      {(p.method || p.path) && (
-        <div className="dim" style={{ fontSize: '0.7rem', fontFamily: 'monospace', marginTop: '2px' }}>
-          {p.method} {p.path}
-        </div>
       )}
     </div>
   );
@@ -1101,9 +1093,7 @@ const AttackerDetail: React.FC = () => {
                   (l) => l.payload?.real_ip_claim === ip,
                 );
                 const tooltip = latest
-                  ? `${latest.payload.source_header ?? '?'} on ${
-                      latest.payload.method ?? '?'
-                    } ${latest.payload.path ?? '/'}`
+                  ? `Leaked via ${latest.payload.source_header ?? '?'}; source ${latest.payload.source_ip ?? '?'}`
                   : '';
                 return (
                   <span

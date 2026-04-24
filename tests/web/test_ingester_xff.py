@@ -39,7 +39,10 @@ def test_xff_leftmost_differs_from_source_emits_leak():
     assert result["source_ip"] == "203.0.113.42"
     assert result["real_ip_claim"] == "198.51.100.7"
     assert result["source_header"] == "X-Forwarded-For"
-    assert result["path"] == "/wp-admin/"
+    # Identity-only payload — method/path intentionally omitted so the
+    # bounty dedup collapses repeat hits from the same attacker.
+    assert "method" not in result
+    assert "path" not in result
 
 
 def test_xff_matches_source_no_leak():

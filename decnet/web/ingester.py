@@ -232,6 +232,11 @@ async def _extract_bounty(repo: BaseRepository, log_data: dict[str, Any]) -> Non
         _headers = {}
     _ua = _headers.get("User-Agent") or _headers.get("user-agent")
     if _ua:
+        # Payload must be identity-only (no per-request method/path) —
+        # add_bounty dedups on (attacker_ip, bounty_type, full payload
+        # JSON), so including path here would create one row per URL
+        # the scanner hits. Per-request context belongs in the logs
+        # table, not the bounty table.
         await repo.add_bounty({
             "decky": log_data.get("decky"),
             "service": log_data.get("service"),
@@ -240,8 +245,6 @@ async def _extract_bounty(repo: BaseRepository, log_data: dict[str, Any]) -> Non
             "payload": {
                 "fingerprint_type": "http_useragent",
                 "value": _ua,
-                "method": _fields.get("method"),
-                "path": _fields.get("path"),
             }
         })
 
@@ -600,14 +603,15 @@ def _detect_ip_leak(
         if raw is not None:
             seen[h] = raw
 
+    # Identity-only payload — add_bounty dedups on the full payload
+    # string, so per-request method/path would create one row per URL
+    # the attacker hits with the same leaked IP. The bounty represents
+    # the LEAK itself, not each individual request.
     return {
         "source_ip": source_ip,
         "real_ip_claim": claimed,
         "source_header": header_name,
         "headers_seen": seen,
-        "decky": log_data.get("decky"),
-        "path": log_data.get("fields", {}).get("path"),
-        "method": log_data.get("fields", {}).get("method"),
     }
 
 
@@ -732,22 +736,19 @@ def _http_quirks_fingerprint(
     else:
         dominant = "mixed"
 
-    # Duplicate detection: in the dict we got, duplicates would have
-    # collapsed to one key. But we can still flag if the template
-    # someday passes a list — future-proofing, no-op today.
-    duplicates = [n for n in {x for x in names_full if names_full.count(x) > 1}]
-
+    # Identity-only payload — every field must be stable for two
+    # requests from the same client stack. add_bounty dedups on the
+    # full payload JSON, so a per-request-varying key (path, method,
+    # header_count when Cookie presence varies) would spawn one row
+    # per request. The hashes ARE the identity; per-request context
+    # lives in the logs table.
     return {
         "fingerprint_type": "http_quirks",
         "order_hash": order_hash,
         "order": names_stable,
         "casing_hash": casing_hash,
         "casing_category": dominant,
-        "header_count": len(names_full),
         "stable_count": len(names_stable),
         "tool_guess": _guess_tool_from_order(lowered),
-        "duplicates": duplicates or None,
-        "method": log_data.get("fields", {}).get("method"),
-        "path": log_data.get("fields", {}).get("path"),
     }
 

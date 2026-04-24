@@ -80,7 +80,9 @@ def test_different_casing_different_hash():
 
 def test_volatile_headers_excluded_from_hash():
     """Content-Length, Cookie, XFF etc. are per-request; the identity
-    hash shouldn't depend on them."""
+    hash must not depend on them, otherwise two requests from the same
+    stack — one with Cookie, one without — would dedup-miss at the
+    bounty layer and spam the AttackerDetail page."""
     row_a = _log_row({
         "Host": "x", "User-Agent": "a", "Content-Length": "100",
     })
@@ -90,13 +92,11 @@ def test_volatile_headers_excluded_from_hash():
     })
     fa = _http_quirks_fingerprint(row_a, row_a["fields"]["headers"])
     fb = _http_quirks_fingerprint(row_b, row_b["fields"]["headers"])
-    assert fa["order_hash"] == fb["order_hash"]
-    # Count reflects ALL headers (the volatile ones WERE there).
-    assert fa["header_count"] == 3
-    assert fb["header_count"] == 4
-    # Stable count excludes the volatile ones.
+    # Whole payload must be identical — add_bounty dedups on the full
+    # serialized payload, so ANY per-request-varying field would spawn
+    # new rows. This assertion is the contract.
+    assert fa == fb
     assert fa["stable_count"] == 2
-    assert fb["stable_count"] == 2
 
 
 # ─── tool guesses ──────────────────────────────────────────────────────────
@@ -148,11 +148,10 @@ def test_empty_headers_skipped():
 
 def test_only_volatile_headers_still_emits():
     """If every header is in the volatile set we still want a fingerprint,
-    just with empty order — header count alone is still a signal."""
+    just with empty order — "zero stable headers" is itself a signal."""
     row = _log_row({"Content-Length": "10", "Cookie": "a=b"})
     f = _http_quirks_fingerprint(row, row["fields"]["headers"])
     assert f is not None
-    assert f["header_count"] == 2
     assert f["stable_count"] == 0
     assert f["order"] == []
 
@@ -196,6 +195,27 @@ async def test_extract_bounty_non_http_skips_quirks():
     for call in repo.add_bounty.call_args_list:
         payload = call.args[0].get("payload") or {}
         assert payload.get("fingerprint_type") != "http_quirks"
+
+
+def test_payload_stable_across_paths_and_methods():
+    """Two requests from the same stack hitting different paths/methods
+    must produce byte-identical payloads so (ip, type, payload) dedup
+    collapses them into one bounty row. If this test breaks, check
+    whether a per-request field snuck back into _http_quirks_fingerprint."""
+    headers = {"Host": "target", "User-Agent": "curl/8.0", "Accept": "*/*"}
+    row_get = {
+        "decky": "http-01", "service": "http", "attacker_ip": "1.2.3.4",
+        "event_type": "request",
+        "fields": {"method": "GET", "path": "/admin", "headers": headers},
+    }
+    row_post = {
+        "decky": "http-01", "service": "http", "attacker_ip": "1.2.3.4",
+        "event_type": "request",
+        "fields": {"method": "POST", "path": "/wp-login.php", "headers": headers},
+    }
+    fa = _http_quirks_fingerprint(row_get, headers)
+    fb = _http_quirks_fingerprint(row_post, headers)
+    assert fa == fb, "payload must not depend on request method/path"
 
 
 # ─── hash stability across restarts ─────────────────────────────────────────

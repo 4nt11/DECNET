@@ -268,8 +268,9 @@ class TestGetAttackerDetail:
                     "source_ip": "203.0.113.42",
                     "real_ip_claim": "198.51.100.7",
                     "source_header": "X-Forwarded-For",
-                    "path": "/wp-admin/",
-                    "method": "GET",
+                    "headers_seen": {
+                        "X-Forwarded-For": "198.51.100.7",
+                    },
                 },
             },
         ]
