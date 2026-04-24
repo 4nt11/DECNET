@@ -141,10 +141,43 @@ class SessionProfile(SQLModel, table=True):
     # Fixed-width BINARY(8) rather than BLOB: MySQL can't index BLOB/TEXT
     # columns without a prefix length, and SimHashes are always exactly 8
     # bytes so a variable-length type gains nothing here.
+    #
+    # PII discipline: the simhash is computed over keystroke CHARACTERS
+    # (digraph bigrams), never over the raw content of the input stream —
+    # attacker passwords typed over SSH must never land in this column.
     kd_digraph_simhash: Optional[bytes] = Field(
         default=None,
         sa_column=Column("kd_digraph_simhash", BINARY(8), nullable=True, index=True),
     )
+    # Top-N most-common digraphs with their mean IAT, as JSON.
+    # Complements kd_digraph_simhash: the simhash answers "same typist?",
+    # this answers "same typist IN THE SAME MENTAL STATE?" (tired vs rested
+    # vs distracted shifts bigram-specific IATs measurably). Shape:
+    #   [["th", 47, 0.082], ["in", 31, 0.091], ...]  (bigram, count, mean_iat_s)
+    # Same PII discipline as kd_digraph_simhash: bigram CHARACTERS only,
+    # no content. Bounded by the ingester to N≤32 to cap row width.
+    kd_top_bigrams: Optional[str] = Field(
+        default=None, sa_column=Column("kd_top_bigrams", Text, nullable=True),
+    )
+    # IAT of the first keystroke following an idle gap > 1s (or the
+    # session-start gap before the first keystroke ever). Separates
+    # "initiating a command" from "executing a remembered one" — real
+    # humans have measurable start-of-action latency, bots don't. Median
+    # across all such initiations in the session, seconds.
+    kd_start_of_action_latency: Optional[float] = None
+    # Three-bucket pause-length histogram, counts (not ratios — raw counts
+    # preserve the total-keystrokes denominator in the column itself):
+    #   burst     : IAT < 0.2s   (muscle-memory digraphs)
+    #   think     : 0.2s ≤ IAT < 1.5s  (semantic boundary, context switch)
+    #   distracted: IAT ≥ 1.5s   (went to look something up, got paged,
+    #                             actively reading another window)
+    # More discriminating than the flat burst_ratio/think_ratio pair:
+    # C2 operators concentrate in the burst bucket with a thin tail;
+    # opportunistic humans have a fat think bucket plus a long distracted
+    # tail. Nulls indicate "ingester hasn't run yet", not "zero events".
+    kd_pause_hist_burst: Optional[int] = None
+    kd_pause_hist_think: Optional[int] = None
+    kd_pause_hist_distracted: Optional[int] = None
     # Derived totals.
     total_keystrokes: Optional[int] = None
     session_duration_s: Optional[float] = None

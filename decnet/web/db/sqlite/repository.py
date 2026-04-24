@@ -54,6 +54,31 @@ class SQLiteRepository(SQLModelRepository):
                     "ALTER TABLE attackers ADD COLUMN country_source VARCHAR(16)"
                 ))
 
+    async def _migrate_session_profile_table(self) -> None:
+        """Add DEBT-036 keystroke-dynamics columns (start-of-action latency,
+        three-bucket pause histogram, top-bigrams JSON) to existing tables.
+
+        SQLite's ``ALTER TABLE ADD COLUMN`` fails if the column already
+        exists, so gate on ``PRAGMA table_info`` to stay idempotent.
+        """
+        async with self.engine.begin() as conn:
+            rows = (await conn.execute(text("PRAGMA table_info(session_profile)"))).fetchall()
+            if not rows:
+                return  # table absent; create_all() handles it.
+            existing_cols = {r[1] for r in rows}
+            additions = [
+                ("kd_top_bigrams", "TEXT"),
+                ("kd_start_of_action_latency", "REAL"),
+                ("kd_pause_hist_burst", "INTEGER"),
+                ("kd_pause_hist_think", "INTEGER"),
+                ("kd_pause_hist_distracted", "INTEGER"),
+            ]
+            for col_name, col_type in additions:
+                if col_name not in existing_cols:
+                    await conn.execute(text(
+                        f"ALTER TABLE session_profile ADD COLUMN {col_name} {col_type}"
+                    ))
+
     def _json_field_equals(self, key: str):
         # SQLite stores JSON as text; json_extract is the canonical accessor.
         return text(f"json_extract(fields, '$.{key}') = :val")
