@@ -339,6 +339,85 @@ regardless of component:
 | Component | ID | Summary |
 |-----------|----|---------|
 | Dashboard↔API | DA-01..DA-09 | See component section. |
+| DECNET↔Webhook destination | WH-01..WH-02 | See component section. |
+
+---
+
+## Component 2 — DECNET ↔ External webhook destination
+
+**Status:** modeled alongside the webhook MVP (2026-04-24).
+**Scope:** outbound HTTP POSTs from the `decnet webhook` worker to an
+operator-configured URL (typically Shuffle / TheHive / Wazuh / n8n).
+In scope: the data crossing the master→receiver boundary, the signing
+& secret storage, and the failure behavior of the egress path. Out of
+scope: the receiver's own security posture, anything downstream of
+the receiver (Shuffle→Slack, TheHive→Cortex, …).
+
+### DFD
+
+```
+  Master host
+  ┌─────────────────────────────────────┐
+  │ ┌────────────────────┐              │
+  │ │ WebhookSubscription│   (DB row)   │
+  │ │  url, secret,      │              │
+  │ │  topic_patterns    │              │
+  │ └─────────┬──────────┘              │
+  │           │ read                    │
+  │ ┌─────────▼────────┐   bus events   │
+  │ │ decnet webhook   │◄──── bus ◄─── other workers (attacker.*, decky.*, system.*)
+  │ │ worker           │                │
+  │ └─────────┬────────┘                │
+  │           │ HMAC-signed POST        │
+  └───────────│─────────────────────────┘
+              │
+  ══ TRUST BOUNDARY ═══════════════════════════════════
+              │
+              ▼
+          External receiver (Shuffle / TheHive / Wazuh / n8n / ...)
+```
+
+### STRIDE enumeration
+
+| Cat | Threat | Status | Notes |
+|-----|--------|--------|-------|
+| S | Receiver accepts a forged event impersonating DECNET | M | Every POST carries `X-DECNET-Signature: sha256=<hex>` computed with HMAC-SHA256 over the canonical body (orjson with sorted keys); per-subscription secret. Receiver recomputes + compares. See `decnet/webhook/client.py::sign`. |
+| S | Attacker controls a webhook URL the admin added and forges callbacks back to DECNET | X | DECNET does not accept inbound webhook POSTs; only egress. Receiver→DECNET is not a surface in this component. |
+| T | Payload tampering in transit | T / M | TLS termination is the operator's responsibility (same stance as Dashboard↔API). If the URL is `http://` on a hostile network, the HMAC still detects tampering — a recomputed signature would fail on any altered byte. Operators MUST use `https://`; the router does not enforce this pre-v1 (see WH-01). |
+| T | Secret leak lets attackers forge events in-band | A | Secret rotation is a manual PATCH. In-flight window where a rotated secret is observed by both old + new verifiers is the operator's coordination problem. Encrypt-at-rest on the DB column is deferred — see DEBT-037 §7. |
+| R | DECNET denies having sent an event | M | `last_success_at` + `last_failure_at` stamps on the row; structured log per delivery with `event_id`. No persisted per-event audit log pre-v1 — see DEBT-037 §3. |
+| I | Secret leaks via API GET/LIST response | M | `WebhookResponse` deliberately omits the `secret` field. `WebhookCreateResponse` carries the secret exactly once on create for copy-out. PATCH-to-rotate, no read-back. |
+| I | Webhook URL + secret leak via DB dump | A | Plaintext at-rest on SQLite/MySQL. Same trust assumption as the JWT secret (which is env-sourced, not DB-stored). See WH-01 and DEBT-037 §7. |
+| I | Attacker-controlled event content reaches receiver | T | Event payloads pass through DECNET untransformed — the receiver must sanitize before rendering (e.g. XSS if Shuffle pipes to a browser-facing Slack block without escaping). Out of scope for the DECNET side. Document in operator docs. |
+| D | Slow / unreachable receiver ties up egress | M / A | Bounded concurrency (`Semaphore(10)`), per-delivery timeout (10s), and bounded retry (3 attempts, `[1,2,4]` × jitter) keep one slow destination from starving others. Half-dead receivers still waste retry budget — see WH-02. Circuit breaker deferred to DEBT-037 §1. |
+| D | Huge payload floods receiver | A | Payload shape is whatever the bus event carries; no per-destination batching / coalescing. On high-volume topics this is a known concern — see DEBT-037 §4 for post-MVP batch delivery. |
+| E | Viewer role manipulates webhook config | M | All CRUD routes under `/api/v1/webhooks` are `Depends(require_admin)`. Verified by `tests/api/test_rbac_contract.py` (every admin-classified route asserts viewer → 403). |
+| E | Admin adds a URL pointing at an internal-only DECNET service (SSRF-style) | A | Admin role is trusted; protecting admin from self-inflicted SSRF is out of scope under the current trust model. Revisit if we ever delegate subscription CRUD to a less-trusted role. |
+
+### Accepted risks (DECNET↔Webhook)
+
+| ID | Threat | Why accepted | Revisit when |
+|----|--------|--------------|--------------|
+| WH-01 | Webhook secret + URL stored plaintext in the DB | Matches the existing pre-v1 posture (JWT secret is env-sourced; there's no operator expectation that DB-at-rest is encrypted). Encrypting one column in isolation invents a KEK lifecycle we don't have. | Comprehensive DB-at-rest encryption lands, OR regulated-industry customer engagement. Tracked in DEBT-037 §7. |
+| WH-02 | Half-dead receiver wastes the full retry budget (1+2+4 ≈ 7s with jitter) per delivery before the worker gives up | Admin role is trusted; this is operator-observable via `consecutive_failures` on the subscription row. A sticky-failure receiver disabled itself via operator action is fine pre-v1. | Circuit breaker lands (DEBT-037 §1) — auto-disable after N consecutive failures, require admin re-enable. |
+
+### Needs-verification checklist (DECNET↔Webhook)
+
+- [x] HMAC-SHA256 signing over canonical (orjson sorted-keys) body — verified by `tests/webhook/test_client.py::test_deliver_receiver_can_verify_signature`.
+- [x] Secret never leaks via GET/LIST response — `tests/api/webhooks/test_crud.py::test_list_strips_secret` + `::test_get_single_strips_secret`.
+- [x] Admin-only CRUD — inherited invariant from `test_rbac_contract.py`; new webhook routes auto-classified as admin.
+- [x] 4xx no-retry, 5xx/429/network retry — `tests/webhook/test_client.py::test_deliver_no_retry_on_4xx` + retry tests.
+- [x] Bounded concurrency + timeout per delivery — `Semaphore(10)` + 10s httpx timeout in `worker.py`.
+- [ ] Secret-field omission on the OpenAPI schema (not just the response body). Verify that `/openapi.json` shows `WebhookResponse` without `secret` so SDK consumers don't accidentally deserialize into a shape that expects it.
+- [ ] Reject `http://` URLs at admin time (WH-01 adjunct). A viewer can't create subscriptions, but even an admin typo into a plaintext URL bypasses the HMAC-alone-detects-tampering assumption. Consider a router-level check warning on non-`https` + a `DECNET_WEBHOOK_ALLOW_INSECURE` opt-out for dev boxes.
+
+### Out of scope (this component)
+
+- The receiver's auth, storage, or downstream routing.
+- Post-MVP hardening (circuit breaker, dead-letter, batch, templates, at-rest encryption) — all tracked in DEBT-037.
+- Frontend UI for subscription CRUD — a separate commit series.
+
+---
 
 ## Components not yet modeled
 
@@ -365,3 +444,4 @@ In priority order:
 | 2026-04-24 | F4/T (ORM sort injection), F4/D (unbounded `limit`), F4/D (deep `offset`) all moved from **?** to **M**. Limit caps were already universal; sort is pattern-validated on the only surface that exposes it; added `le=2147483647` to the two offset params that were unbounded (`api_list_topologies.py`, `api_get_transcript.py`). | ANTI |
 | 2026-04-24 | F5/I moved from **?** to **M** via `response_model=...` on every dict-returning mutation (`MessageResponse` + purpose-built models). F4/D "expensive `LIKE`" moved from **?** to **A** under new accepted risk DA-09 — admin-only surface, operator-scope rate limiting, `limit` cap. FTS5 kept as a performance TODO, not a security blocker. | ANTI |
 | 2026-04-24 | F6/I and F6/D both moved from **?** to **M**. F6/I: documented the viewer-safe-by-construction invariant for both SSE streams (every emitted event type wraps data already viewer-readable via REST). F6/D: added `decnet/web/sse_limits.py::sse_connection_slot` — per-user counter + async lock + 429 on overflow, wired into both SSE generators. `DECNET_SSE_MAX_PER_USER` env knob, default 5. | ANTI |
+| 2026-04-24 | Component 2 added — DECNET↔External webhook destination. Covers the new `decnet webhook` worker + `/api/v1/webhooks` admin CRUD. HMAC-SHA256 signing, 4xx no-retry + 5xx/429 retry with jittered backoff, admin-only CRUD, secret never leaks post-create. Two accepted risks registered (WH-01 secret at rest, WH-02 half-dead-receiver retry waste) paired with DEBT-037 pointers. | ANTI |

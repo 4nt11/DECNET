@@ -55,7 +55,7 @@
 
 ## Detection & Intelligence
 
-- [ ] **Real-time alerting** — Webhook/Slack/Telegram notifications for first-hits.
+- [x] **Real-time alerting via webhooks** — Admin-configurable outbound webhooks (SIEM/SOAR integration: Wazuh/Shuffle/TheHive/n8n) with HMAC-SHA256 signing, topic-pattern filtering, and bounded retry. Slack/Telegram-specific senders remain as per-destination work (they accept generic webhook payloads already).
 - [ ] **Threat intel enrichment** — Auto-lookup IPs against AbuseIPDB, Shodan, and GreyNoise.
 - [ ] **Attack campaign clustering** — Group sessions by signatures and timing patterns.
 - [ ] **GeoIP mapping** — Visualize attacker origin and ASN data on a map.
