@@ -148,7 +148,14 @@ const SessionDrawer: React.FC<SessionDrawerProps> = ({ decky, sid, fields, onClo
       const p = AsciinemaPlayer.create(
         { data: cast },
         playerContainer.current,
-        { fit: 'width', terminalFontSize: '12px' },
+        {
+          fit: 'width',
+          terminalFontSize: '12px',
+          // Force parse up front. Without this the recording is only
+          // parsed on the user's click-to-play, and any parse failure
+          // there is invisible to our lifecycle instrumentation above.
+          preload: true,
+        },
       );
       playerInstance.current = p;
       // The player's init() is async; any failure there bypasses the
