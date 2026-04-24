@@ -136,6 +136,14 @@ const SessionDrawer: React.FC<SessionDrawerProps> = ({ decky, sid, fields, onClo
       playerInstance.current = null;
     }
     const cast = buildCastBlob(header, playable);
+    // One-time diagnostic: when the player silently refuses to play, the
+    // cast text itself is usually the culprit. Log the first chunk so
+    // "yes, the header renders correctly" is a one-F12 check.
+    console.debug(
+      'asciinema cast (first 400 chars):',
+      cast.slice(0, 400),
+      `| events=${playable.length} | cols=${header.width} rows=${header.height}`,
+    );
     try {
       playerInstance.current = AsciinemaPlayer.create(
         { data: cast },
@@ -143,8 +151,6 @@ const SessionDrawer: React.FC<SessionDrawerProps> = ({ decky, sid, fields, onClo
         { fit: 'width', terminalFontSize: '12px' },
       );
     } catch (err) {
-      // Surface to console so we have a fingerprint next time a cast
-      // parses as "valid" but refuses to play.
       console.error('asciinema-player failed to mount', err);
     }
     return () => {
