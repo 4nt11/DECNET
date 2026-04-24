@@ -1,4 +1,5 @@
-import { useEffect, RefObject } from 'react';
+import { useEffect } from 'react';
+import type { RefObject } from 'react';
 
 /**
  * Focus the given input when the global `decnet:focus-search` event fires

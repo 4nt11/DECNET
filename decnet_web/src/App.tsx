@@ -5,6 +5,7 @@ import Layout from './components/Layout';
 import Dashboard from './components/Dashboard';
 import DeckyFleet from './components/DeckyFleet';
 import LiveLogs from './components/LiveLogs';
+import Webhooks from './components/Webhooks';
 import Attackers from './components/Attackers';
 import AttackerDetail from './components/AttackerDetail';
 import Config from './components/Config';
@@ -80,6 +81,7 @@ const AuthedShell: React.FC<AuthedShellProps> = ({ onLogout, onSearch, searchQue
           <Route path="/topologies" element={<Navigate to="/mazenet" replace />} />
           <Route path="/mazenet" element={<MazeNETRoute />} />
           <Route path="/live-logs" element={<LiveLogs />} />
+          <Route path="/webhooks" element={<Webhooks />} />
           <Route path="/bounty" element={<Bounty />} />
           <Route path="/attackers" element={<Attackers />} />
           <Route path="/attackers/:id" element={<AttackerDetail />} />

@@ -2,7 +2,7 @@ import React, { useEffect, useMemo, useRef, useState } from 'react';
 import {
   LayoutDashboard, Server, Network, Terminal, Archive, Crosshair,
   PlusCircle, Pause, RefreshCw, Download, HardDrive, Package, Settings,
-  SearchX, Keyboard,
+  SearchX, Keyboard, Webhook,
 } from 'lucide-react';
 import EmptyState from '../EmptyState/EmptyState';
 import './CommandPalette.css';
@@ -22,7 +22,8 @@ const ITEMS: CmdItem[] = [
   { section: 'GO TO', label: 'Dashboard',    icon: LayoutDashboard, kbd: 'G D', kind: 'nav', payload: '/' },
   { section: 'GO TO', label: 'Decoy Fleet',  icon: Server,          kbd: 'G F', kind: 'nav', payload: '/fleet' },
   { section: 'GO TO', label: 'MazeNET',      icon: Network,         kbd: 'G M', kind: 'nav', payload: '/mazenet' },
-  { section: 'GO TO', label: 'Logs',         icon: Terminal,        kbd: 'G L', kind: 'nav', payload: '/live-logs' },
+  { section: 'GO TO', label: 'Live Logs',    icon: Terminal,        kbd: 'G L', kind: 'nav', payload: '/live-logs' },
+  { section: 'GO TO', label: 'Webhooks',     icon: Webhook,         kbd: 'G W', kind: 'nav', payload: '/webhooks' },
   { section: 'GO TO', label: 'Bounty Vault', icon: Archive,         kbd: 'G B', kind: 'nav', payload: '/bounty' },
   { section: 'GO TO', label: 'Attackers',    icon: Crosshair,       kbd: 'G A', kind: 'nav', payload: '/attackers' },
   { section: 'GO TO', label: 'SWARM Hosts',     icon: HardDrive, kbd: 'G S', kind: 'nav', payload: '/swarm/hosts' },

@@ -3,7 +3,7 @@ import { NavLink, useLocation } from 'react-router-dom';
 import {
   Menu, X, Search, Activity, LayoutDashboard, Terminal, Settings, LogOut,
   Server, Archive, Package, Network, ChevronDown, ChevronRight, HardDrive,
-  ShieldAlert,
+  ShieldAlert, Bell, Webhook,
 } from 'lucide-react';
 import './Layout.css';
 
@@ -25,7 +25,8 @@ const ROUTE_LABELS: Record<string, string> = {
   '/': 'DASHBOARD',
   '/fleet': 'FLEET',
   '/mazenet': 'MAZENET',
-  '/live-logs': 'LOGS',
+  '/live-logs': 'LIVE LOGS',
+  '/webhooks': 'WEBHOOKS',
   '/bounty': 'BOUNTY',
   '/attackers': 'ATTACKERS',
   '/config': 'CONFIG',
@@ -104,13 +105,23 @@ const Layout: React.FC<LayoutProps> = ({
           <NavItem to="/" icon={<LayoutDashboard size={20} />} label="Dashboard" open={sidebarOpen} />
           <NavItem to="/fleet" icon={<Server size={20} />} label="Decoy Fleet" open={sidebarOpen} />
           <NavItem to="/mazenet" icon={<Network size={20} />} label="MazeNET" open={sidebarOpen} />
-          <NavItem
-            to="/live-logs"
-            icon={<Terminal size={20} />}
-            label="Logs"
-            open={sidebarOpen}
-            badge={alertCount}
-          />
+          <NavGroup label="ALERTS" icon={<Bell size={20} />} open={sidebarOpen}>
+            <NavItem
+              to="/live-logs"
+              icon={<Terminal size={18} />}
+              label="Live Logs"
+              open={sidebarOpen}
+              indent
+              badge={alertCount}
+            />
+            <NavItem
+              to="/webhooks"
+              icon={<Webhook size={18} />}
+              label="Webhooks"
+              open={sidebarOpen}
+              indent
+            />
+          </NavGroup>
           <NavItem to="/bounty" icon={<Archive size={20} />} label="Bounty" open={sidebarOpen} />
           <NavItem to="/attackers" icon={<Activity size={20} />} label="Attackers" open={sidebarOpen} />
           <NavGroup label="SWARM" icon={<Network size={20} />} open={sidebarOpen}>
