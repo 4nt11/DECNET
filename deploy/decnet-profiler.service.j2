@@ -10,7 +10,10 @@ User={{ user }}
 Group={{ group }}
 WorkingDirectory={{ install_dir }}
 EnvironmentFile=-{{ install_dir }}/.env.local
+Environment=DECNET_SYSTEM_LOGS=/var/log/decnet/decnet.profiler.log
 ExecStart={{ venv_dir }}/bin/decnet profiler
+StandardOutput=append:/var/log/decnet/decnet.profiler.log
+StandardError=append:/var/log/decnet/decnet.profiler.log
 
 CapabilityBoundingSet=
 AmbientCapabilities=

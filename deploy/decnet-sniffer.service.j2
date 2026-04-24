@@ -10,7 +10,10 @@ User={{ user }}
 Group={{ group }}
 WorkingDirectory={{ install_dir }}
 EnvironmentFile=-{{ install_dir }}/.env.local
+Environment=DECNET_SYSTEM_LOGS=/var/log/decnet/decnet.sniffer.log
 ExecStart={{ venv_dir }}/bin/decnet sniffer
+StandardOutput=append:/var/log/decnet/decnet.sniffer.log
+StandardError=append:/var/log/decnet/decnet.sniffer.log
 
 # scapy needs raw packet access on the MACVLAN host interface.
 CapabilityBoundingSet=CAP_NET_RAW

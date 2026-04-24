@@ -13,7 +13,10 @@ Group={{ group }}
 SupplementaryGroups=docker
 WorkingDirectory={{ install_dir }}
 EnvironmentFile=-{{ install_dir }}/.env.local
+Environment=DECNET_SYSTEM_LOGS=/var/log/decnet/decnet.collector.log
 ExecStart={{ venv_dir }}/bin/decnet collect
+StandardOutput=append:/var/log/decnet/decnet.collector.log
+StandardError=append:/var/log/decnet/decnet.collector.log
 
 # No privileged network operations.
 CapabilityBoundingSet=

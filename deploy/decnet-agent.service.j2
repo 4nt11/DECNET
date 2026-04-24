@@ -13,7 +13,10 @@ Group={{ group }}
 SupplementaryGroups=docker
 WorkingDirectory={{ install_dir }}
 EnvironmentFile=-{{ install_dir }}/.env.local
+Environment=DECNET_SYSTEM_LOGS=/var/log/decnet/decnet.agent.log
 ExecStart={{ venv_dir }}/bin/decnet agent --host 0.0.0.0 --port 8765 --agent-dir /etc/decnet/agent
+StandardOutput=append:/var/log/decnet/decnet.agent.log
+StandardError=append:/var/log/decnet/decnet.agent.log
 
 # MACVLAN/IPVLAN management + scapy raw sockets. Granted via ambient caps so
 # the process starts unprivileged and keeps only these two bits.

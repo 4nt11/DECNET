@@ -13,7 +13,10 @@ Group={{ group }}
 SupplementaryGroups=docker
 WorkingDirectory={{ install_dir }}
 EnvironmentFile=-{{ install_dir }}/.env.local
+Environment=DECNET_SYSTEM_LOGS=/var/log/decnet/decnet.api.log
 ExecStart={{ venv_dir }}/bin/decnet api
+StandardOutput=append:/var/log/decnet/decnet.api.log
+StandardError=append:/var/log/decnet/decnet.api.log
 
 # MACVLAN/IPVLAN setup runs from the API lifespan when the embedded sniffer is on.
 CapabilityBoundingSet=CAP_NET_ADMIN CAP_NET_RAW

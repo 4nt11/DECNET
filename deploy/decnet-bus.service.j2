@@ -16,7 +16,10 @@ EnvironmentFile=-{{ install_dir }}/.env.local
 # connect.
 RuntimeDirectory=decnet
 RuntimeDirectoryMode=0755
+Environment=DECNET_SYSTEM_LOGS=/var/log/decnet/decnet.bus.log
 ExecStart={{ venv_dir }}/bin/decnet bus \
+StandardOutput=append:/var/log/decnet/decnet.bus.log
+StandardError=append:/var/log/decnet/decnet.bus.log
     --socket /run/decnet/bus.sock \
     --group decnet
 

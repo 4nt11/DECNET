@@ -12,7 +12,10 @@ WorkingDirectory={{ install_dir }}
 EnvironmentFile=-{{ install_dir }}/.env.local
 # Default bind is loopback — the controller is a master-local orchestrator
 # reached by the CLI and the web dashboard, not by workers.
+Environment=DECNET_SYSTEM_LOGS=/var/log/decnet/decnet.swarmctl.log
 ExecStart={{ venv_dir }}/bin/decnet swarmctl --host 127.0.0.1 --port 8770
+StandardOutput=append:/var/log/decnet/decnet.swarmctl.log
+StandardError=append:/var/log/decnet/decnet.swarmctl.log
 
 # No special capabilities — the controller issues mTLS certs and talks to
 # workers over TCP on unprivileged ports.

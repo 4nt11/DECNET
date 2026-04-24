@@ -10,7 +10,10 @@ User={{ user }}
 Group={{ group }}
 WorkingDirectory={{ install_dir }}
 EnvironmentFile=-{{ install_dir }}/.env.local
+Environment=DECNET_SYSTEM_LOGS=/var/log/decnet/decnet.prober.log
 ExecStart={{ venv_dir }}/bin/decnet probe
+StandardOutput=append:/var/log/decnet/decnet.prober.log
+StandardError=append:/var/log/decnet/decnet.prober.log
 
 # TCP connect probes only — no raw sockets required.
 CapabilityBoundingSet=
