@@ -6,8 +6,8 @@ Wants=network-online.target
 
 [Service]
 Type=simple
-User=decnet
-Group=decnet
+User={{ user }}
+Group={{ group }}
 WorkingDirectory={{ install_dir }}
 EnvironmentFile=-{{ install_dir }}/.env.local
 # Binds 0.0.0.0:6514 so workers across the LAN can connect. 6514 is not a

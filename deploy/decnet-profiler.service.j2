@@ -6,8 +6,8 @@ Wants=network-online.target decnet-bus.service
 
 [Service]
 Type=simple
-User=decnet
-Group=decnet
+User={{ user }}
+Group={{ group }}
 WorkingDirectory={{ install_dir }}
 EnvironmentFile=-{{ install_dir }}/.env.local
 ExecStart={{ venv_dir }}/bin/decnet profiler

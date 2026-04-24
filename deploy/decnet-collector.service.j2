@@ -7,8 +7,8 @@ Requires=docker.service
 
 [Service]
 Type=simple
-User=decnet
-Group=decnet
+User={{ user }}
+Group={{ group }}
 # docker.sock is group-readable by 'docker'; the collector tails container logs.
 SupplementaryGroups=docker
 WorkingDirectory={{ install_dir }}

@@ -337,13 +337,20 @@ def _install_units(
     *,
     install_dir: str,
     venv_dir: str,
+    user: str,
+    group: str,
     force: bool,
     dry_run: bool,
 ) -> str:
     """Render decnet-*.service.j2 → systemd_dir/decnet-*.service, and copy
     the static decnet.target (no templating needed — it has no install
     path references)."""
-    context = {"install_dir": install_dir, "venv_dir": venv_dir}
+    context = {
+        "install_dir": install_dir,
+        "venv_dir": venv_dir,
+        "user": user,
+        "group": group,
+    }
     templates = sorted(deploy.glob("decnet-*.service.j2"))
     static = [deploy / "decnet.target"]
 
@@ -726,6 +733,7 @@ def register(app: typer.Typer) -> None:
             lambda: _install_units(
                 deploy, systemd_dir,
                 install_dir=install_dir, venv_dir=resolved_venv,
+                user=user, group=group,
                 force=force, dry_run=dry_run,
             ),
         )

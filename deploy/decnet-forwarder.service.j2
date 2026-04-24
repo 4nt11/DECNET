@@ -8,8 +8,8 @@ Wants=network-online.target
 
 [Service]
 Type=simple
-User=decnet
-Group=decnet
+User={{ user }}
+Group={{ group }}
 WorkingDirectory={{ install_dir }}
 EnvironmentFile=-{{ install_dir }}/.env.local
 # Replace <master-host> with the master's LAN address or hostname. The agent
