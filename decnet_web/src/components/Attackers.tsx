@@ -23,6 +23,8 @@ interface AttackerEntry {
   credential_count: number;
   fingerprints: any[];
   commands: any[];
+  country_code: string | null;
+  country_source: string | null;
   updated_at: string;
 }
 
@@ -187,7 +189,17 @@ const Attackers: React.FC = () => {
                   onClick={() => navigate(`/attackers/${a.uuid}`)}
                 >
                   <div className="ak-top">
-                    <span className="ak-ip">{a.ip}</span>
+                    <span className="ak-ip">
+                      {a.ip}
+                      {a.country_code && (
+                        <span
+                          className="ak-cc"
+                          title={`Origin: ${a.country_code}${a.country_source ? ` (${a.country_source})` : ''}`}
+                        >
+                          {a.country_code}
+                        </span>
+                      )}
+                    </span>
                     <span className={`activity-chip ${activity}`}>
                       <span className="dot" />
                       {activity.toUpperCase()}

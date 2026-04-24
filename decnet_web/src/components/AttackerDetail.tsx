@@ -59,6 +59,8 @@ interface AttackerData {
   credential_count: number;
   fingerprints: any[];
   commands: { service: string; decky: string; command: string; timestamp: string }[];
+  country_code: string | null;
+  country_source: string | null;
   updated_at: string;
   behavior: AttackerBehavior | null;
 }
@@ -903,6 +905,16 @@ const AttackerDetail: React.FC = () => {
         <h1 className="matrix-text" style={{ fontSize: '1.8rem', letterSpacing: '2px' }}>
           {attacker.ip}
         </h1>
+        {attacker.country_code && (
+          <Tag color="var(--text-color)">
+            <span
+              title={attacker.country_source ? `source: ${attacker.country_source}` : undefined}
+              style={{ letterSpacing: '2px' }}
+            >
+              {attacker.country_code}
+            </span>
+          </Tag>
+        )}
         {attacker.is_traversal && (
           <span className="traversal-badge" style={{ fontSize: '0.8rem' }}>TRAVERSAL</span>
         )}
@@ -934,7 +946,7 @@ const AttackerDetail: React.FC = () => {
 
       {/* Timestamps */}
       <Section title="TIMELINE" open={openSections.timeline} onToggle={() => toggle('timeline')}>
-        <div style={{ padding: '16px', display: 'flex', gap: '32px', fontSize: '0.85rem' }}>
+        <div style={{ padding: '16px', display: 'flex', flexWrap: 'wrap', gap: '32px', fontSize: '0.85rem' }}>
           <div>
             <span className="dim">FIRST SEEN: </span>
             <span className="matrix-text">{new Date(attacker.first_seen).toLocaleString()}</span>
@@ -946,6 +958,21 @@ const AttackerDetail: React.FC = () => {
           <div>
             <span className="dim">UPDATED: </span>
             <span className="dim">{new Date(attacker.updated_at).toLocaleString()}</span>
+          </div>
+          <div>
+            <span className="dim">ORIGIN: </span>
+            {attacker.country_code ? (
+              <span className="matrix-text">
+                {attacker.country_code}
+                {attacker.country_source && (
+                  <span className="dim" style={{ marginLeft: 6, fontSize: '0.75rem' }}>
+                    ({attacker.country_source})
+                  </span>
+                )}
+              </span>
+            ) : (
+              <span className="dim">unknown</span>
+            )}
           </div>
         </div>
       </Section>

@@ -72,6 +72,18 @@
   color: var(--matrix);
   font-variant-numeric: tabular-nums;
   letter-spacing: 1px;
+  display: inline-flex;
+  align-items: baseline;
+  gap: 8px;
+}
+.attackers-root .ak-card .ak-cc {
+  font-size: 0.62rem;
+  letter-spacing: 2px;
+  padding: 1px 6px;
+  border: 1px solid var(--border);
+  color: var(--matrix);
+  opacity: 0.75;
+  font-weight: 600;
 }
 
 .attackers-root .ak-meta {
