@@ -136,61 +136,14 @@ const SessionDrawer: React.FC<SessionDrawerProps> = ({ decky, sid, fields, onClo
       playerInstance.current = null;
     }
     const cast = buildCastBlob(header, playable);
-    // One-time diagnostic: when the player silently refuses to play, the
-    // cast text itself is usually the culprit. Log the first chunk so
-    // "yes, the header renders correctly" is a one-F12 check.
-    console.debug(
-      'asciinema cast (first 400 chars):',
-      cast.slice(0, 400),
-      `| events=${playable.length} | cols=${header.width} rows=${header.height}`,
-    );
     try {
-      const p = AsciinemaPlayer.create(
+      playerInstance.current = AsciinemaPlayer.create(
         { data: cast },
         playerContainer.current,
-        {
-          fit: 'width',
-          terminalFontSize: '12px',
-          // Force parse up front. Without this the recording is only
-          // parsed on the user's click-to-play, and any parse failure
-          // there is invisible to our lifecycle instrumentation above.
-          preload: true,
-        },
+        { fit: 'width', terminalFontSize: '12px' },
       );
-      playerInstance.current = p;
-      // The player's init() is async; any failure there bypasses the
-      // sync try/catch above and lands as an unhandled rejection.
-      // Hook every lifecycle event so we can see which state it
-      // actually ends up in ("loading" / "ended" / "errored" / etc).
-      // metadata is the one that carries the parsed duration, fires
-      // AFTER _initializeDriver (which does the actual cast parse).
-      // playing / idle tell us whether the timer ever advanced.
-      const events_to_hook = [
-        'ready', 'metadata', 'play', 'playing', 'pause', 'idle',
-        'ended', 'error', 'errored', 'loading', 'reset', 'seeked',
-      ];
-      for (const evt of events_to_hook) {
-        try {
-          p.addEventListener?.(evt, (...args: unknown[]) =>
-            console.debug(`asciinema-player event: ${evt}`, ...args),
-          );
-        } catch { /* addEventListener may not support this event name */ }
-      }
-      // getDuration() resolves once the recording is parsed. If it
-      // resolves to 0 or NaN we know the parser produced an empty
-      // events stream despite the cast looking well-formed.
-      p.getDuration?.().then(
-        (d: number) => console.debug('asciinema-player duration:', d),
-        (err: unknown) => console.error('asciinema-player getDuration failed:', err),
-      );
-      // DEBUG: expose the live instance on window so the operator can
-      // poke it from DevTools — window.__ap.play() bypasses the UI
-      // click-handler chain entirely and tells us whether playback
-      // would advance if the button click actually reached core.play.
-      (window as unknown as { __ap: unknown }).__ap = p;
-      console.debug('asciinema-player instance → window.__ap');
     } catch (err) {
-      console.error('asciinema-player failed to mount (sync):', err);
+      console.error('asciinema-player failed to mount', err);
     }
     return () => {
       if (playerInstance.current) {
@@ -207,7 +160,13 @@ const SessionDrawer: React.FC<SessionDrawerProps> = ({ decky, sid, fields, onClo
 
   return (
     <div
-      onClick={onClose}
+      // Close only on actual backdrop clicks. The previous design put
+      // onClick={onClose} here + onClick={stopPropagation} on the
+      // panel — but React's stopPropagation also aborts the NATIVE
+      // event, which broke asciinema-player's click-to-play because
+      // the player attaches its click handler via document-level
+      // delegation (the event never reached it).
+      onClick={(e) => { if (e.target === e.currentTarget) onClose(); }}
       style={{
         position: 'fixed', inset: 0,
         backgroundColor: 'rgba(0,0,0,0.6)',
@@ -219,7 +178,6 @@ const SessionDrawer: React.FC<SessionDrawerProps> = ({ decky, sid, fields, onClo
         ref={panelRef}
         role="dialog"
         aria-modal="true"
-        onClick={(e) => e.stopPropagation()}
         style={{
           width: 'min(920px, 100%)', height: '100%',
           backgroundColor: 'var(--bg-color, #0d1117)',
