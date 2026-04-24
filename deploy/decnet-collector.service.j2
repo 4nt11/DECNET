@@ -13,7 +13,7 @@ Group=decnet
 SupplementaryGroups=docker
 WorkingDirectory={{ install_dir }}
 EnvironmentFile=-{{ install_dir }}/.env.local
-ExecStart={{ install_dir }}/venv/bin/decnet collect
+ExecStart={{ venv_dir }}/bin/decnet collect
 
 # No privileged network operations.
 CapabilityBoundingSet=

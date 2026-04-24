@@ -10,7 +10,7 @@ User=decnet
 Group=decnet
 WorkingDirectory={{ install_dir }}
 EnvironmentFile=-{{ install_dir }}/.env.local
-ExecStart={{ install_dir }}/venv/bin/decnet web
+ExecStart={{ venv_dir }}/bin/decnet web
 
 # Uncomment if you bind the dashboard to a privileged port (80/443):
 # CapabilityBoundingSet=CAP_NET_BIND_SERVICE

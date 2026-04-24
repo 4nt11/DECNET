@@ -10,7 +10,7 @@ User=decnet
 Group=decnet
 WorkingDirectory={{ install_dir }}
 EnvironmentFile=-{{ install_dir }}/.env.local
-ExecStart={{ install_dir }}/venv/bin/decnet probe
+ExecStart={{ venv_dir }}/bin/decnet probe
 
 # TCP connect probes only — no raw sockets required.
 CapabilityBoundingSet=

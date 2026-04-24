@@ -21,7 +21,7 @@ import shutil
 import subprocess  # nosec B404
 import sys
 from pathlib import Path
-from typing import Callable, List
+from typing import Callable, List, Optional
 
 import typer
 from jinja2 import Environment, FileSystemLoader, StrictUndefined
@@ -275,13 +275,75 @@ def _write_rendered_if_changed(
     return "ok"
 
 
+def _resolve_venv_dir(install_dir: str, explicit: str | None) -> str:
+    """Pick the virtualenv systemd units should ExecStart out of.
+
+    Priority:
+      1. ``--venv-dir`` flag (explicit; absolute path required).
+      2. ``VIRTUAL_ENV`` env var, but only when it lives under
+         ``install_dir`` (refuse to bake /home/user/.venv into a system
+         service — that directory is user-owned and may vanish).
+      3. ``{install_dir}/venv``  — what ``enroll_bootstrap.sh`` creates
+         on fresh agents; the production default.
+      4. First hit from a short list of dev-box conventions under
+         ``install_dir``:  ``.venv``, ``.311``, ``.312``, ``.313``.
+
+    Raises RuntimeError with an operator-friendly message if none of
+    those resolve to a directory containing ``bin/decnet``. Failing loud
+    at init time beats systemd spamming journalctl with
+    'Failed at step EXEC spawning .../venv/bin/decnet: No such file or
+    directory' on every auto-restart.
+    """
+    install_path = Path(install_dir)
+
+    candidates: list[Path] = []
+    if explicit:
+        if not explicit.startswith("/"):
+            raise RuntimeError(
+                f"--venv-dir must be an absolute path, got {explicit!r}"
+            )
+        candidates.append(Path(explicit))
+    else:
+        virtual_env = os.environ.get("VIRTUAL_ENV")
+        if virtual_env:
+            ve_path = Path(virtual_env)
+            try:
+                ve_path.relative_to(install_path)
+                candidates.append(ve_path)
+            except ValueError:
+                # VIRTUAL_ENV lives outside install_dir — don't bake a
+                # user-home venv into a root-owned systemd unit.
+                pass
+        candidates.append(install_path / "venv")
+        for name in (".venv", ".311", ".312", ".313"):
+            candidates.append(install_path / name)
+
+    for cand in candidates:
+        if (cand / "bin" / "decnet").is_file():
+            return str(cand)
+
+    searched = ", ".join(str(c) for c in candidates)
+    raise RuntimeError(
+        "Could not find a DECNET venv. Create one first (e.g. "
+        f"`python -m venv {install_path}/venv && "
+        f"{install_path}/venv/bin/pip install -e {install_path}[dev]`) "
+        "or pass --venv-dir. Searched: " + searched
+    )
+
+
 def _install_units(
-    deploy: Path, systemd_dir: Path, *, install_dir: str, force: bool, dry_run: bool
+    deploy: Path,
+    systemd_dir: Path,
+    *,
+    install_dir: str,
+    venv_dir: str,
+    force: bool,
+    dry_run: bool,
 ) -> str:
     """Render decnet-*.service.j2 → systemd_dir/decnet-*.service, and copy
     the static decnet.target (no templating needed — it has no install
     path references)."""
-    context = {"install_dir": install_dir}
+    context = {"install_dir": install_dir, "venv_dir": venv_dir}
     templates = sorted(deploy.glob("decnet-*.service.j2"))
     static = [deploy / "decnet.target"]
 
@@ -457,6 +519,14 @@ def register(app: typer.Typer) -> None:
                  "into every systemd unit via Jinja2 and used as the "
                  "decnet user's home directory.",
         ),
+        venv_dir: Optional[str] = typer.Option(
+            None, "--venv-dir",
+            help="Absolute path to the Python venv systemd should "
+                 "ExecStart from. If omitted, auto-detected in order: "
+                 "$VIRTUAL_ENV (if under --install-dir), "
+                 "{install-dir}/venv, then {install-dir}/{.venv,.311,"
+                 ".312,.313}. Init aborts if none exists.",
+        ),
         prefix: str = typer.Option(
             "", "--prefix", hidden=True,
             help="Filesystem prefix for tests (e.g. tmp_path). Empty = real root.",
@@ -604,6 +674,21 @@ def register(app: typer.Typer) -> None:
             console.print(f"[red]decnet init: {exc}[/]")
             raise typer.Exit(1) from exc
 
+        # Resolve venv BEFORE any file writes — fails loud if the
+        # operator hasn't created one yet, instead of shipping broken
+        # systemd units that journalctl spams forever. Skipped under
+        # --prefix (test mode) because the test harness doesn't build a
+        # real venv and the rendered string is asserted on directly.
+        if prefix:
+            resolved_venv = venv_dir or f"{install_dir}/venv"
+        else:
+            try:
+                resolved_venv = _resolve_venv_dir(install_dir, venv_dir)
+            except RuntimeError as exc:
+                console.print(f"[red]decnet init: {exc}[/]")
+                raise typer.Exit(1) from exc
+            console.print(f"[dim]using venv: {resolved_venv}[/]")
+
         dirs = [
             (pfx / _install_rel, 0o755, user, group),
             (pfx / "var/lib/decnet", 0o750, user, group),
@@ -640,7 +725,8 @@ def register(app: typer.Typer) -> None:
             "install systemd units",
             lambda: _install_units(
                 deploy, systemd_dir,
-                install_dir=install_dir, force=force, dry_run=dry_run,
+                install_dir=install_dir, venv_dir=resolved_venv,
+                force=force, dry_run=dry_run,
             ),
         )
         _step(

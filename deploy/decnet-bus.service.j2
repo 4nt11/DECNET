@@ -16,7 +16,7 @@ EnvironmentFile=-{{ install_dir }}/.env.local
 # connect.
 RuntimeDirectory=decnet
 RuntimeDirectoryMode=0755
-ExecStart={{ install_dir }}/venv/bin/decnet bus \
+ExecStart={{ venv_dir }}/bin/decnet bus \
     --socket /run/decnet/bus.sock \
     --group decnet
 

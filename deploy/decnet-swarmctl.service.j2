@@ -12,7 +12,7 @@ WorkingDirectory={{ install_dir }}
 EnvironmentFile=-{{ install_dir }}/.env.local
 # Default bind is loopback — the controller is a master-local orchestrator
 # reached by the CLI and the web dashboard, not by workers.
-ExecStart={{ install_dir }}/venv/bin/decnet swarmctl --host 127.0.0.1 --port 8770
+ExecStart={{ venv_dir }}/bin/decnet swarmctl --host 127.0.0.1 --port 8770
 
 # No special capabilities — the controller issues mTLS certs and talks to
 # workers over TCP on unprivileged ports.
