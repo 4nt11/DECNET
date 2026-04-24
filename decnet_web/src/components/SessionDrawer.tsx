@@ -117,22 +117,37 @@ const SessionDrawer: React.FC<SessionDrawerProps> = ({ decky, sid, fields, onClo
 
   // Re-mount the player whenever the event window grows. asciinema-player
   // doesn't expose a public feed() API in v3, so we rebuild from the full
-  // in-memory blob each time — cheap for v1-scale sessions (≤ 10 MB cap).
+  // in-memory cast each time — cheap for v1-scale sessions (≤ 10 MB cap).
+  //
+  // Pass the cast as {data: ...} directly rather than a Blob URL. The
+  // URL path silently fails when the browser's fetch for the blob races
+  // the createObjectURL revoke, or when the mime-type guess trips the
+  // player's loader — either way the user gets a play button that does
+  // nothing on click. Inline data skips the whole fetch detour.
   useEffect(() => {
-    if (!header || !playerContainer.current || events.length === 0) return;
+    if (!header || !playerContainer.current) return;
+    // Asciicast v2 ch values: "o" (output), "i" (input), "r" (resize).
+    // Drop anything else so a stray malformed line can't derail parsing.
+    const playable = events.filter(([, ch]) => ch === 'o' || ch === 'i' || ch === 'r');
+    if (playable.length === 0) return;
+
     if (playerInstance.current) {
       try { playerInstance.current.dispose(); } catch { /* ignore */ }
       playerInstance.current = null;
     }
-    const cast = buildCastBlob(header, events);
-    const blob = new Blob([cast], { type: 'application/x-asciicast' });
-    const url = URL.createObjectURL(blob);
-    playerInstance.current = AsciinemaPlayer.create(url, playerContainer.current, {
-      fit: 'width',
-      terminalFontSize: '12px',
-    });
+    const cast = buildCastBlob(header, playable);
+    try {
+      playerInstance.current = AsciinemaPlayer.create(
+        { data: cast },
+        playerContainer.current,
+        { fit: 'width', terminalFontSize: '12px' },
+      );
+    } catch (err) {
+      // Surface to console so we have a fingerprint next time a cast
+      // parses as "valid" but refuses to play.
+      console.error('asciinema-player failed to mount', err);
+    }
     return () => {
-      URL.revokeObjectURL(url);
       if (playerInstance.current) {
         try { playerInstance.current.dispose(); } catch { /* ignore */ }
         playerInstance.current = null;
