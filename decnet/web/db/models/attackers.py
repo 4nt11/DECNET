@@ -3,7 +3,7 @@ from datetime import datetime, timezone
 from typing import Any, List, Optional
 
 from pydantic import BaseModel
-from sqlalchemy import Column, Text, UniqueConstraint
+from sqlalchemy import BINARY, Column, Text, UniqueConstraint
 from sqlmodel import Field, SQLModel
 
 from ._base import _BIG_TEXT
@@ -138,7 +138,13 @@ class SessionProfile(SQLModel, table=True):
     kd_arrow_rate: Optional[float] = None
     kd_tab_rate: Optional[float] = None
     # 8-byte SimHash over keystroke digraphs — Hamming-comparable across sessions.
-    kd_digraph_simhash: Optional[bytes] = Field(default=None, index=True)
+    # Fixed-width BINARY(8) rather than BLOB: MySQL can't index BLOB/TEXT
+    # columns without a prefix length, and SimHashes are always exactly 8
+    # bytes so a variable-length type gains nothing here.
+    kd_digraph_simhash: Optional[bytes] = Field(
+        default=None,
+        sa_column=Column("kd_digraph_simhash", BINARY(8), nullable=True, index=True),
+    )
     # Derived totals.
     total_keystrokes: Optional[int] = None
     session_duration_s: Optional[float] = None
