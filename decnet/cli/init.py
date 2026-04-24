@@ -379,13 +379,23 @@ def _install_units(
 
 
 def _install_polkit(
-    deploy: Path, rules_dir: Path, *, force: bool, dry_run: bool
+    deploy: Path, rules_dir: Path, *, group: str, force: bool, dry_run: bool
 ) -> str:
-    src = deploy / "polkit" / "50-decnet-workers.rules"
+    """Render the group-scoped polkit rule to /etc/polkit-1/rules.d/.
+
+    The rule has to reference the same POSIX group passed via --group —
+    otherwise the API (running as that user) can't
+    systemctl start/stop decnet-*.service without an interactive auth
+    prompt that never gets answered in a daemon context.
+    """
+    src = deploy / "polkit" / "50-decnet-workers.rules.j2"
     if not src.is_file():
-        raise RuntimeError(f"missing polkit rule at {src}")
-    return _copy_if_changed(
-        src, rules_dir / src.name,
+        raise RuntimeError(f"missing polkit rule template at {src}")
+    rendered = _render_template(src, {"group": group})
+    # 50-decnet-workers.rules.j2 → 50-decnet-workers.rules
+    dst_name = src.name[: -len(".j2")]
+    return _write_rendered_if_changed(
+        src, rules_dir / dst_name, rendered,
         mode=0o644, force=force, dry_run=dry_run,
     )
 
@@ -755,7 +765,8 @@ def register(app: typer.Typer) -> None:
         _step(
             "install polkit rule",
             lambda: _install_polkit(
-                deploy, polkit_dir, force=force, dry_run=dry_run,
+                deploy, polkit_dir, group=group,
+                force=force, dry_run=dry_run,
             ),
         )
         _step(

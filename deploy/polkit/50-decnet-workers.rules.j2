@@ -1,9 +1,13 @@
-// Allow members of the 'decnet' group to manage DECNET systemd units
+// Allow members of the '{{ group }}' group to manage DECNET systemd units
 // (start / stop / restart / reload) without a password prompt.
 //
 // Scope is locked to units matching `decnet-<name>.service` or the
 // `decnet.target` grouping unit. Any other unit is unaffected by this
 // rule and still goes through the default polkit policy.
+//
+// The group name is rendered at `decnet init` time from --group; the
+// default is `decnet`, but dev boxes that pass --group $USER get a
+// rule that matches the operator's own login group.
 //
 // Install: /etc/polkit-1/rules.d/50-decnet-workers.rules
 
@@ -12,7 +16,7 @@ polkit.addRule(function(action, subject) {
         var unit = action.lookup("unit");
         if (unit &&
             /^decnet-[a-z]+\.service$|^decnet\.target$/.test(unit) &&
-            subject.isInGroup("decnet")) {
+            subject.isInGroup("{{ group }}")) {
             return polkit.Result.YES;
         }
     }

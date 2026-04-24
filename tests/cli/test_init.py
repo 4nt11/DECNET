@@ -77,7 +77,9 @@ def _seed_deploy(monkeypatch: Any, tmp_path: Path) -> Path:
         "ExecStart={{ install_dir }}/venv/bin/decnet api\n"
     )
     (deploy / "decnet.target").write_text("# target\n")
-    (deploy / "polkit" / "50-decnet-workers.rules").write_text("// rule\n")
+    (deploy / "polkit" / "50-decnet-workers.rules.j2").write_text(
+        '// rule for {{ group }}\n'
+    )
     (deploy / "tmpfiles.d" / "decnet.conf").write_text("d /run/decnet\n")
     monkeypatch.setattr(_init, "_deploy_root", lambda: deploy)
     return deploy
