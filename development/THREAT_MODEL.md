@@ -339,7 +339,7 @@ regardless of component:
 | Component | ID | Summary |
 |-----------|----|---------|
 | Dashboard↔API | DA-01..DA-09 | See component section. |
-| DECNET↔Webhook destination | WH-01..WH-02 | See component section. |
+| DECNET↔Webhook destination | WH-01..WH-03 | See component section. |
 
 ---
 
@@ -400,6 +400,7 @@ the receiver (Shuffle→Slack, TheHive→Cortex, …).
 |----|--------|--------------|--------------|
 | WH-01 | Webhook secret + URL stored plaintext in the DB | Matches the existing pre-v1 posture (JWT secret is env-sourced; there's no operator expectation that DB-at-rest is encrypted). Encrypting one column in isolation invents a KEK lifecycle we don't have. | Comprehensive DB-at-rest encryption lands, OR regulated-industry customer engagement. Tracked in DEBT-037 §7. |
 | WH-02 | Half-dead receiver wastes the full retry budget (1+2+4 ≈ 7s with jitter) per delivery before the worker gives up | Admin role is trusted; this is operator-observable via `consecutive_failures` on the subscription row. A sticky-failure receiver disabled itself via operator action is fine pre-v1. | Circuit breaker lands (DEBT-037 §1) — auto-disable after N consecutive failures, require admin re-enable. |
+| WH-03 | Admin configures an `http://` webhook URL; event body (incl. payload fields) travels plaintext on the wire | Operator-trust posture (same rationale as DA-06: protecting admin from self is out of scope). HMAC signature still detects tampering regardless of transport — only *read* confidentiality is lost. The API surfaces a non-blocking warning in `WebhookResponse.warnings` so the operator is informed on every GET/CREATE, and test/dev environments without TLS remain usable. | Multi-admin delegation lands, OR a regulated-industry customer engagement, OR an operator ticket asks for a `DECNET_WEBHOOK_REQUIRE_HTTPS=true` enforcement knob. |
 
 ### Needs-verification checklist (DECNET↔Webhook)
 
@@ -409,7 +410,7 @@ the receiver (Shuffle→Slack, TheHive→Cortex, …).
 - [x] 4xx no-retry, 5xx/429/network retry — `tests/webhook/test_client.py::test_deliver_no_retry_on_4xx` + retry tests.
 - [x] Bounded concurrency + timeout per delivery — `Semaphore(10)` + 10s httpx timeout in `worker.py`.
 - [ ] Secret-field omission on the OpenAPI schema (not just the response body). Verify that `/openapi.json` shows `WebhookResponse` without `secret` so SDK consumers don't accidentally deserialize into a shape that expects it.
-- [ ] Reject `http://` URLs at admin time (WH-01 adjunct). A viewer can't create subscriptions, but even an admin typo into a plaintext URL bypasses the HMAC-alone-detects-tampering assumption. Consider a router-level check warning on non-`https` + a `DECNET_WEBHOOK_ALLOW_INSECURE` opt-out for dev boxes.
+- [x] ~~Reject `http://` URLs at admin time.~~ Resolved as **WH-03 accepted risk** — operator-trust posture, we warn rather than reject. `WebhookResponse.warnings` surfaces an `insecure_url` advisory on every GET/CREATE when the URL starts with `http://`. Tested at `tests/api/webhooks/test_crud.py::test_http_url_warns_but_accepts`.
 
 ### Out of scope (this component)
 
@@ -445,3 +446,4 @@ In priority order:
 | 2026-04-24 | F5/I moved from **?** to **M** via `response_model=...` on every dict-returning mutation (`MessageResponse` + purpose-built models). F4/D "expensive `LIKE`" moved from **?** to **A** under new accepted risk DA-09 — admin-only surface, operator-scope rate limiting, `limit` cap. FTS5 kept as a performance TODO, not a security blocker. | ANTI |
 | 2026-04-24 | F6/I and F6/D both moved from **?** to **M**. F6/I: documented the viewer-safe-by-construction invariant for both SSE streams (every emitted event type wraps data already viewer-readable via REST). F6/D: added `decnet/web/sse_limits.py::sse_connection_slot` — per-user counter + async lock + 429 on overflow, wired into both SSE generators. `DECNET_SSE_MAX_PER_USER` env knob, default 5. | ANTI |
 | 2026-04-24 | Component 2 added — DECNET↔External webhook destination. Covers the new `decnet webhook` worker + `/api/v1/webhooks` admin CRUD. HMAC-SHA256 signing, 4xx no-retry + 5xx/429 retry with jittered backoff, admin-only CRUD, secret never leaks post-create. Two accepted risks registered (WH-01 secret at rest, WH-02 half-dead-receiver retry waste) paired with DEBT-037 pointers. | ANTI |
+| 2026-04-24 | WH-03 accepted risk added — `http://` webhook URLs are allowed (operator-trust posture) but surface an `insecure_url` advisory in `WebhookResponse.warnings`. Checklist item "reject http://" resolved as "warn, not reject" per explicit operator decision. | ANTI |

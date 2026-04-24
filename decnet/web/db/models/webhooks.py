@@ -83,7 +83,13 @@ class WebhookUpdateRequest(BaseModel):
 
 
 class WebhookResponse(BaseModel):
-    """Public shape — deliberately omits `secret`."""
+    """Public shape — deliberately omits `secret`.
+
+    The `warnings` field carries non-blocking advisories about the
+    subscription's configuration — e.g. an `http://` URL is fine but
+    surfaces a warning so the operator knows the event body is
+    plaintext on the wire. Empty list when nothing is worth flagging.
+    """
 
     uuid: str
     name: str
@@ -96,6 +102,7 @@ class WebhookResponse(BaseModel):
     last_error: Optional[str] = None
     created_at: datetime
     updated_at: datetime
+    warnings: List[str] = PydanticField(default_factory=list)
 
 
 class WebhookCreateResponse(WebhookResponse):
@@ -110,11 +117,31 @@ class WebhookTestResponse(BaseModel):
     error: Optional[str] = None
 
 
+def _compute_warnings(url: str) -> List[str]:
+    """Non-blocking advisories about a subscription's configuration.
+
+    The HMAC signature detects tampering regardless of transport, but an
+    on-path attacker can still *read* the event body over plaintext HTTP.
+    We surface the warning and let the admin decide — matches DECNET's
+    operator-trust posture (see THREAT_MODEL WH-03).
+    """
+    out: List[str] = []
+    lower = (url or "").lower()
+    if lower.startswith("http://"):
+        out.append(
+            "insecure_url: URL uses http://. Event bodies (including "
+            "payload fields) traverse the wire in plaintext; HMAC still "
+            "detects tampering but anyone on-path can read the event. "
+            "Use https:// in production."
+        )
+    return out
+
+
 def _row_to_response_dict(row: dict[str, Any]) -> dict[str, Any]:
     """Normalize a DB row into the WebhookResponse dict shape.
 
-    Used by the CRUD router to decode `topic_patterns` JSON and drop the
-    `secret` column before returning to the client.
+    Used by the CRUD router to decode `topic_patterns` JSON, drop the
+    `secret` column, and compute any configuration warnings.
     """
     out = dict(row)
     raw = out.pop("topic_patterns", "[]")
@@ -123,4 +150,5 @@ def _row_to_response_dict(row: dict[str, Any]) -> dict[str, Any]:
     except (ValueError, TypeError):
         out["topic_patterns"] = []
     out.pop("secret", None)
+    out["warnings"] = _compute_warnings(out.get("url", ""))
     return out

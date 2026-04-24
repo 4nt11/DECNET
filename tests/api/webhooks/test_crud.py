@@ -174,6 +174,43 @@ async def test_delete_returns_message(
 
 
 @pytest.mark.asyncio
+async def test_http_url_warns_but_accepts(
+    client: httpx.AsyncClient, auth_token: str
+):
+    """Plain http:// is allowed (operator-trust posture per WH-03) but
+    surfaces a non-blocking advisory in the response's warnings list."""
+    res = await client.post(
+        PATH,
+        json={
+            "name": "wh-http",
+            "url": "http://insecure.local/inbound",
+            "topic_patterns": ["system.>"],
+        },
+        headers={"Authorization": f"Bearer {auth_token}"},
+    )
+    assert res.status_code == 201, res.text
+    body = res.json()
+    assert any("insecure_url" in w for w in body["warnings"])
+
+
+@pytest.mark.asyncio
+async def test_https_url_has_no_warning(
+    client: httpx.AsyncClient, auth_token: str
+):
+    res = await client.post(
+        PATH,
+        json={
+            "name": "wh-https",
+            "url": "https://secure.example/inbound",
+            "topic_patterns": ["system.>"],
+        },
+        headers={"Authorization": f"Bearer {auth_token}"},
+    )
+    assert res.status_code == 201
+    assert res.json()["warnings"] == []
+
+
+@pytest.mark.asyncio
 async def test_viewer_forbidden(client: httpx.AsyncClient, viewer_token: str):
     res = await client.get(
         PATH, headers={"Authorization": f"Bearer {viewer_token}"}
