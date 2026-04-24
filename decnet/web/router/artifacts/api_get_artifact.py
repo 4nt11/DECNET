@@ -88,4 +88,8 @@ async def get_artifact(
         path=str(path),
         media_type="application/octet-stream",
         filename=stored_as,
+        headers={
+            "Content-Disposition": f'attachment; filename="{stored_as}"',
+            "X-Content-Type-Options": "nosniff",
+        },
     )

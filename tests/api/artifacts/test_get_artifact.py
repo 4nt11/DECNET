@@ -125,6 +125,8 @@ async def test_content_disposition_is_attachment(client: httpx.AsyncClient, auth
     assert res.status_code == 200
     cd = res.headers.get("content-disposition", "")
     assert "attachment" in cd.lower()
+    assert _VALID_STORED_AS in cd
+    assert res.headers.get("x-content-type-options") == "nosniff"
 
 
 async def test_smtp_service_serves_from_smtp_subdir(

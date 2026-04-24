@@ -260,10 +260,10 @@ Each sub-flow below gets its own table. Status codes:
 | Cat | Threat | Status | Notes |
 |-----|--------|--------|-------|
 | S | (inherited) | — | |
-| T | Path-traversal via `{decky}` or `{stored_as}` to read arbitrary files | M | Pattern-validated at FastAPI layer (`{service}` is `^[a-z]{1,16}$`; artifact names are UUID-shaped). Verify: resolved path is contained under the artifacts root. |
+| T | Path-traversal via `{decky}` or `{stored_as}` to read arbitrary files | M | Pattern-validated at FastAPI layer (`{service}` is `^[a-z]{1,16}$`; artifact names are UUID-shaped) AND containment-checked in `_resolve_artifact_path` at `decnet/web/router/artifacts/api_get_artifact.py:48-64` (both root and candidate are `.resolve()`d, then `root in candidate.parents` is asserted — defence-in-depth against symlinks). |
 | R | Admin denies having downloaded | M | Download endpoint emits an access log entry. |
 | I | Viewer accesses attacker-controlled bytes | M | Admin-gated (`require_admin`). Rationale: artifacts are phishing kits / malware droppers / attacker-controlled content — see `api_get_attacker_mail.py` docstring. |
-| I | MIME sniffing / content-type confusion executes attacker payload in browser | **?** | Verify: response sets `Content-Disposition: attachment` and `X-Content-Type-Options: nosniff`. |
+| I | MIME sniffing / content-type confusion executes attacker payload in browser | M | `FileResponse` at `decnet/web/router/artifacts/api_get_artifact.py:87` sets both `Content-Disposition: attachment; filename="..."` and `X-Content-Type-Options: nosniff` explicitly (not relying on Starlette's default, which only emits `attachment` for non-ASCII filenames). |
 | D | Gigabyte-sized artifact download ties up workers | M | SMTP body cap is 10 MB (EHLO SIZE enforcement); SSH artifact sizes bounded by disk quota. |
 | E | Downloaded artifact escapes the browser sandbox | T | Browser security boundary is transferred to the browser vendor and operator's endpoint protection. |
 
@@ -290,7 +290,7 @@ code" or "accepted, add to table above."
 - [x] ~~Per-IP / per-user rate limit on `/auth/login`.~~ Shipped — see F1/S row.
 - [x] ~~Uniform "invalid credentials" on login failure (no user-existence oracle).~~ Verified — see F1/I row.
 - [x] ~~Production error handler suppresses tracebacks and internal details.~~ Shipped — generic `@app.exception_handler(Exception)` in `decnet/web/api.py`; opaque `{detail, error_id}` in prod, traceback only under `DECNET_DEVELOPER=True`.
-- [ ] `detail=str(e)` / `detail=f"…{e}"` sites in `decnet/web/router/fleet/api_deploy_deckies.py:41,67,83,155` — admin-gated, arguably intentional INI-parser UX, but worth auditing: preserve deliberate messages, sanitize any bubble-up from lower layers.
+- [x] ~~`detail=str(e)` / `detail=f"…{e}"` sites in `decnet/web/router/fleet/api_deploy_deckies.py:41,67,83,155`.~~ Audited 2026-04-24: L41 + L83 are deliberate `ValueError` messages from `load_ini_from_string` / `build_deckies_from_ini` (user-authored INI validator feedback, not internal state); L67/73 wraps `detect_subnet`'s `RuntimeError` with a remediation hint (`"Add a [general] section with interface=, net=, and gw="`); L155 aggregates structured `DispatchResult.detail` fields from swarm workers, not raw exceptions. All four sites are admin-gated. No sanitization needed.
 - [x] ~~Password length clamp before bcrypt.~~ Verified — Pydantic `max_length=72`.
 - [ ] Contract test asserting every protected route returns 401 unauthenticated and 403 for under-roled.
 - [ ] Field allow-list on viewer responses for attacker / user / bounty serializers.
@@ -303,8 +303,8 @@ code" or "accepted, add to table above."
 - [ ] Contract test asserting every mutation route returns 403 for viewer.
 - [ ] SSE handler applies per-connection role filter before forwarding events.
 - [ ] Per-user concurrent SSE connection cap.
-- [ ] Artifact download sets `Content-Disposition: attachment` + `X-Content-Type-Options: nosniff`.
-- [ ] Artifact path resolution asserts the resolved path is under the artifacts root (canonicalize + prefix check).
+- [x] ~~Artifact download sets `Content-Disposition: attachment` + `X-Content-Type-Options: nosniff`.~~ Shipped — explicit headers on `FileResponse` in `api_get_artifact.py`; asserted in `tests/api/artifacts/test_get_artifact.py::test_content_disposition_is_attachment`.
+- [x] ~~Artifact path resolution asserts the resolved path is under the artifacts root (canonicalize + prefix check).~~ Verified — `_resolve_artifact_path` at `api_get_artifact.py:48-64` resolves both sides and asserts `root in candidate.parents`.
 
 ### Out of scope (this component)
 
@@ -359,3 +359,4 @@ In priority order:
 | 2026-04-23 | Initial scaffold. System context + Dashboard↔API as first worked component. | ANTI |
 | 2026-04-23 | F1 Authn: 3 threats moved from **?** to **M** (rate limit shipped; uniform 401 verified; bcrypt length clamp verified). Added DA-08 accepted risk: reverse-proxy per-IP bucket collapse. | ANTI |
 | 2026-04-23 | F1/I "traceback / stack trace leakage" moved from **?** to **M** via generic Exception handler with `error_id` correlation. Added follow-up checklist entry for `detail=str(e)` sites in fleet deploy router. | ANTI |
+| 2026-04-24 | F7: "MIME sniffing" moved from **?** to **M** (explicit `Content-Disposition`/`nosniff` headers + test). F7: "path-traversal" row reworded to point at the existing `_resolve_artifact_path` containment check. Fleet-deploy `detail=str(e)` audit resolved — all four sites documented as deliberate, admin-gated, no sanitization needed. | ANTI |
