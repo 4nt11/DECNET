@@ -145,13 +145,32 @@ const SessionDrawer: React.FC<SessionDrawerProps> = ({ decky, sid, fields, onClo
       `| events=${playable.length} | cols=${header.width} rows=${header.height}`,
     );
     try {
-      playerInstance.current = AsciinemaPlayer.create(
+      const p = AsciinemaPlayer.create(
         { data: cast },
         playerContainer.current,
         { fit: 'width', terminalFontSize: '12px' },
       );
+      playerInstance.current = p;
+      // The player's init() is async; any failure there bypasses the
+      // sync try/catch above and lands as an unhandled rejection.
+      // Hook every lifecycle event so we can see which state it
+      // actually ends up in ("loading" / "ended" / "errored" / etc).
+      for (const evt of ['ready', 'play', 'pause', 'ended', 'error', 'errored', 'loading']) {
+        try {
+          p.addEventListener?.(evt, (...args: unknown[]) =>
+            console.debug(`asciinema-player event: ${evt}`, ...args),
+          );
+        } catch { /* addEventListener may not support this event name */ }
+      }
+      // getDuration() resolves once the recording is parsed. If it
+      // resolves to 0 or NaN we know the parser produced an empty
+      // events stream despite the cast looking well-formed.
+      p.getDuration?.().then(
+        (d: number) => console.debug('asciinema-player duration:', d),
+        (err: unknown) => console.error('asciinema-player getDuration failed:', err),
+      );
     } catch (err) {
-      console.error('asciinema-player failed to mount', err);
+      console.error('asciinema-player failed to mount (sync):', err);
     }
     return () => {
       if (playerInstance.current) {
