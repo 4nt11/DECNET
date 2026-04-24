@@ -1,7 +1,7 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import {
   Plus, Trash2, Pencil, Zap, AlertTriangle, Copy, X, Save,
-  Check,
+  Check, Webhook as WebhookIcon,
 } from 'lucide-react';
 import api from '../utils/api';
 import { useToast } from './Toasts/useToast';
@@ -52,6 +52,18 @@ const BLANK_FORM: FormState = {
   enabled: true,
 };
 
+function extractErrorDetail(err: unknown, fallback: string): string {
+  const e = err as {
+    response?: { status?: number; data?: { detail?: string } };
+    message?: string;
+  };
+  if (e?.response?.data?.detail) return e.response.data.detail;
+  if (e?.response?.status === 403) return 'Insufficient permissions (admin only)';
+  if (e?.response?.status === 401) return 'Session expired — please log in again';
+  if (e?.message) return e.message;
+  return fallback;
+}
+
 /** Derive which simple-event checkboxes should show as ticked for a given
  *  persisted pattern list. Only ticks when the intersection is exact —
  *  mixed custom + preset leaves everything unticked and the textarea is
@@ -99,14 +111,19 @@ const Webhooks: React.FC = () => {
     [webhooks],
   );
 
+  const enabledCount = useMemo(() => webhooks.filter((w) => w.enabled).length, [webhooks]);
+  const failCount = useMemo(
+    () => webhooks.filter((w) => w.consecutive_failures > 0).length,
+    [webhooks],
+  );
+
   const fetchWebhooks = async () => {
     try {
       const res = await api.get('/webhooks/');
       setWebhooks(res.data);
       setError(null);
     } catch (err) {
-      const msg = (err as { response?: { data?: { detail?: string } } })?.response?.data?.detail || 'Failed to load webhooks';
-      setError(msg);
+      setError(extractErrorDetail(err, 'Failed to load webhooks'));
     } finally {
       setLoading(false);
     }
@@ -132,8 +149,6 @@ const Webhooks: React.FC = () => {
     setCreating(false);
     setEditingId(w.uuid);
     const ticked = deriveSimpleEvents(w.topic_patterns);
-    // If ticking covers everything, leave textarea empty so the presets drive.
-    // Otherwise surface the raw patterns for editing.
     const remaining = ticked.length
       ? w.topic_patterns.filter((p) =>
           !ticked.some((s) => SIMPLE_PRESETS[s].includes(p)))
@@ -198,7 +213,7 @@ const Webhooks: React.FC = () => {
       closeForm();
       await fetchWebhooks();
     } catch (err) {
-      const msg = (err as { response?: { data?: { detail?: string } } })?.response?.data?.detail || 'Save failed';
+      const msg = extractErrorDetail(err, 'Save failed');
       push({ text: `SAVE FAILED · ${msg.toUpperCase()}`, tone: 'violet', icon: 'alert-triangle' });
     } finally {
       setSaving(false);
@@ -216,7 +231,7 @@ const Webhooks: React.FC = () => {
       }
       fetchWebhooks();
     } catch (err) {
-      const msg = (err as { response?: { data?: { detail?: string } } })?.response?.data?.detail || 'Test failed';
+      const msg = extractErrorDetail(err, 'Test failed');
       push({ text: `TEST FAILED · ${msg.toUpperCase()}`, tone: 'violet', icon: 'alert-triangle' });
     }
   };
@@ -232,7 +247,7 @@ const Webhooks: React.FC = () => {
       });
       fetchWebhooks();
     } catch (err) {
-      const msg = (err as { response?: { data?: { detail?: string } } })?.response?.data?.detail || 'Delete failed';
+      const msg = extractErrorDetail(err, 'Delete failed');
       push({ text: `DELETE FAILED · ${msg.toUpperCase()}`, tone: 'violet', icon: 'alert-triangle' });
     }
   };
@@ -268,170 +283,193 @@ const Webhooks: React.FC = () => {
     else setSelected(new Set(webhooks.map((w) => w.uuid)));
   };
 
-  if (loading) {
-    return <div className="logs-section"><div className="loader">LOADING WEBHOOKS...</div></div>;
-  }
-
   return (
-    <div className="logs-section webhooks-page">
-      <div className="webhooks-header">
-        <h2>Webhooks · External Alerting</h2>
-        <div className="webhooks-header-actions">
+    <div className="webhooks-root">
+      <div className="page-header">
+        <div className="page-title-group">
+          <h1>WEBHOOKS</h1>
+          <span className="page-sub">
+            {webhooks.length} CONFIGURED · {enabledCount} ENABLED
+            {failCount > 0 && ` · ${failCount} FAILING`}
+            {insecureCount > 0 && ` · ${insecureCount} INSECURE`}
+          </span>
+        </div>
+        <div className="actions">
           {selected.size > 0 && (
             deleteArmed ? (
               <>
                 <button className="btn alert" onClick={handleDeleteSelected}>
-                  <Check size={14} /> CONFIRM DELETE {selected.size}
+                  <Check size={12} /> CONFIRM DELETE {selected.size}
                 </button>
                 <button className="btn ghost" onClick={() => setDeleteArmed(false)}>
-                  <X size={14} /> CANCEL
+                  <X size={12} /> CANCEL
                 </button>
               </>
             ) : (
               <button className="btn warn" onClick={() => setDeleteArmed(true)}>
-                <Trash2 size={14} /> DELETE SELECTED ({selected.size})
+                <Trash2 size={12} /> DELETE SELECTED ({selected.size})
               </button>
             )
           )}
-          <button className="btn violet" onClick={openCreate} disabled={creating || editingId !== null}>
-            <Plus size={14} /> CREATE WEBHOOK
+          <button
+            className="btn violet"
+            onClick={openCreate}
+            disabled={creating || editingId !== null}
+          >
+            <Plus size={12} /> CREATE WEBHOOK
           </button>
         </div>
       </div>
 
-      {error && <div className="config-error">{error}</div>}
+      {error && <div className="config-error webhooks-error">{error}</div>}
 
-      {insecureCount > 0 && (
+      {insecureCount > 0 && !error && (
         <div className="webhooks-warning-banner">
-          <AlertTriangle size={16} />
-          {insecureCount === 1
-            ? '1 webhook uses an http:// URL — event bodies travel plaintext on the wire. HMAC still detects tampering.'
-            : `${insecureCount} webhooks use http:// URLs — event bodies travel plaintext on the wire. HMAC still detects tampering.`}
+          <AlertTriangle size={14} />
+          <span>
+            {insecureCount === 1
+              ? '1 WEBHOOK USING HTTP:// — EVENT BODIES TRAVEL PLAINTEXT. HMAC STILL DETECTS TAMPERING.'
+              : `${insecureCount} WEBHOOKS USING HTTP:// — EVENT BODIES TRAVEL PLAINTEXT. HMAC STILL DETECTS TAMPERING.`}
+          </span>
         </div>
       )}
 
-      {webhooks.length === 0 && !creating ? (
-        <div className="webhooks-empty">
-          NO WEBHOOKS CONFIGURED — CLICK CREATE WEBHOOK TO ADD ONE.
+      <div className="logs-section">
+        <div className="section-header">
+          <div className="section-title">
+            <WebhookIcon size={14} />
+            <span>SUBSCRIPTIONS</span>
+          </div>
+          <div className="section-actions">
+            <span>SHOWING {webhooks.length}</span>
+          </div>
         </div>
-      ) : (
-        <div className="webhooks-table-wrap">
-          <table className="webhooks-table users-table">
-            <thead>
-              <tr>
-                <th className="col-check">
-                  <input
-                    type="checkbox"
-                    checked={webhooks.length > 0 && selected.size === webhooks.length}
-                    onChange={toggleSelectAll}
-                  />
-                </th>
-                <th>NAME</th>
-                <th>URL</th>
-                <th>PATTERNS</th>
-                <th>STATUS</th>
-                <th>LAST FIRED</th>
-                <th className="col-actions">ACTIONS</th>
-              </tr>
-            </thead>
-            <tbody>
-              {creating && (
-                <FormRow
-                  title="NEW WEBHOOK"
-                  form={form}
-                  setForm={setForm}
-                  onSave={handleSave}
-                  onCancel={closeForm}
-                  saving={saving}
-                  isEdit={false}
-                  onToggleSimple={toggleSimpleEvent}
-                />
-              )}
-              {webhooks.map((w) => (
-                editingId === w.uuid ? (
+
+        {loading ? (
+          <div className="webhooks-empty">LOADING WEBHOOKS…</div>
+        ) : webhooks.length === 0 && !creating ? (
+          <div className="webhooks-empty">
+            NO WEBHOOKS CONFIGURED — CLICK CREATE WEBHOOK TO ADD ONE.
+          </div>
+        ) : (
+          <div className="webhooks-table-wrap">
+            <table className="webhooks-table users-table">
+              <thead>
+                <tr>
+                  <th className="col-check">
+                    <input
+                      type="checkbox"
+                      checked={webhooks.length > 0 && selected.size === webhooks.length}
+                      onChange={toggleSelectAll}
+                    />
+                  </th>
+                  <th>NAME</th>
+                  <th>URL</th>
+                  <th>PATTERNS</th>
+                  <th>STATUS</th>
+                  <th>LAST FIRED</th>
+                  <th className="col-actions">ACTIONS</th>
+                </tr>
+              </thead>
+              <tbody>
+                {creating && (
                   <FormRow
-                    key={w.uuid}
-                    title={`EDIT · ${w.name.toUpperCase()}`}
+                    title="NEW WEBHOOK"
                     form={form}
                     setForm={setForm}
                     onSave={handleSave}
                     onCancel={closeForm}
                     saving={saving}
-                    isEdit
+                    isEdit={false}
                     onToggleSimple={toggleSimpleEvent}
                   />
-                ) : (
-                  <tr key={w.uuid}>
-                    <td className="col-check">
-                      <input
-                        type="checkbox"
-                        checked={selected.has(w.uuid)}
-                        onChange={() => toggleSelect(w.uuid)}
-                      />
-                    </td>
-                    <td>{w.name}</td>
-                    <td className="wh-url-cell" title={w.url}>
-                      {w.url}
-                    </td>
-                    <td>
-                      {w.topic_patterns.slice(0, 2).map((p) => (
-                        <span key={p} className="wh-chip">{p}</span>
-                      ))}
-                      {w.topic_patterns.length > 2 && (
-                        <span className="wh-chip" title={w.topic_patterns.slice(2).join(', ')}>
-                          +{w.topic_patterns.length - 2}
+                )}
+                {webhooks.map((w) => (
+                  editingId === w.uuid ? (
+                    <FormRow
+                      key={w.uuid}
+                      title={`EDIT · ${w.name.toUpperCase()}`}
+                      form={form}
+                      setForm={setForm}
+                      onSave={handleSave}
+                      onCancel={closeForm}
+                      saving={saving}
+                      isEdit
+                      onToggleSimple={toggleSimpleEvent}
+                    />
+                  ) : (
+                    <tr key={w.uuid}>
+                      <td className="col-check">
+                        <input
+                          type="checkbox"
+                          checked={selected.has(w.uuid)}
+                          onChange={() => toggleSelect(w.uuid)}
+                        />
+                      </td>
+                      <td>{w.name}</td>
+                      <td className="wh-url-cell" title={w.url}>
+                        {w.url}
+                      </td>
+                      <td>
+                        {w.topic_patterns.slice(0, 2).map((p) => (
+                          <span key={p} className="wh-chip">{p}</span>
+                        ))}
+                        {w.topic_patterns.length > 2 && (
+                          <span className="wh-chip" title={w.topic_patterns.slice(2).join(', ')}>
+                            +{w.topic_patterns.length - 2}
+                          </span>
+                        )}
+                      </td>
+                      <td>
+                        <span className={`wh-chip ${w.enabled ? '' : 'status-disabled'}`}>
+                          {w.enabled ? 'ENABLED' : 'DISABLED'}
                         </span>
-                      )}
-                    </td>
-                    <td>
-                      <span className={`wh-chip ${w.enabled ? '' : 'status-disabled'}`}>
-                        {w.enabled ? 'ENABLED' : 'DISABLED'}
-                      </span>
-                      {w.consecutive_failures > 0 && (
-                        <span className="wh-chip status-fail" title={w.last_error || ''}>
-                          FAIL · {w.consecutive_failures}
-                        </span>
-                      )}
-                      {w.warnings.some((m) => m.startsWith('insecure_url')) && (
-                        <span className="wh-chip status-warn" title="URL uses http://">
-                          HTTP
-                        </span>
-                      )}
-                    </td>
-                    <td>{formatDate(w.last_success_at)}</td>
-                    <td>
-                      <div className="wh-actions">
-                        <button
-                          className="action-btn"
-                          onClick={() => handleTestOne(w.uuid, w.name)}
-                          title="Send synthetic test event"
-                        >
-                          <Zap size={12} />
-                        </button>
-                        <button
-                          className="action-btn"
-                          onClick={() => openEdit(w)}
-                          title="Edit"
-                          disabled={creating || editingId !== null}
-                        >
-                          <Pencil size={12} />
-                        </button>
-                        <button
-                          className="action-btn danger"
-                          onClick={() => handleDeleteOne(w.uuid, w.name)}
-                          title="Delete"
-                        >
-                          <Trash2 size={12} />
-                        </button>
-                      </div>
-                    </td>
-                  </tr>
-                )
-              ))}
-            </tbody>
-          </table>
-        </div>
-      )}
+                        {w.consecutive_failures > 0 && (
+                          <span className="wh-chip status-fail" title={w.last_error || ''}>
+                            FAIL · {w.consecutive_failures}
+                          </span>
+                        )}
+                        {w.warnings.some((m) => m.startsWith('insecure_url')) && (
+                          <span className="wh-chip status-warn" title="URL uses http://">
+                            HTTP
+                          </span>
+                        )}
+                      </td>
+                      <td>{formatDate(w.last_success_at)}</td>
+                      <td>
+                        <div className="wh-actions">
+                          <button
+                            className="action-btn"
+                            onClick={() => handleTestOne(w.uuid, w.name)}
+                            title="Send synthetic test event"
+                          >
+                            <Zap size={12} />
+                          </button>
+                          <button
+                            className="action-btn"
+                            onClick={() => openEdit(w)}
+                            title="Edit"
+                            disabled={creating || editingId !== null}
+                          >
+                            <Pencil size={12} />
+                          </button>
+                          <button
+                            className="action-btn danger"
+                            onClick={() => handleDeleteOne(w.uuid, w.name)}
+                            title="Delete"
+                          >
+                            <Trash2 size={12} />
+                          </button>
+                        </div>
+                      </td>
+                    </tr>
+                  )
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
+      </div>
 
       {newSecret && (
         <SecretModal
@@ -461,9 +499,7 @@ const FormRow: React.FC<FormRowProps> = ({
   <tr className="wh-form-row">
     <td colSpan={7}>
       <form className="wh-form-grid" onSubmit={onSave}>
-        <label style={{ gridColumn: '1 / -1', fontSize: '0.7rem', color: 'var(--violet)', letterSpacing: '1.5px' }}>
-          {title}
-        </label>
+        <label className="wh-form-title">{title}</label>
 
         <label>NAME</label>
         <input
@@ -484,7 +520,9 @@ const FormRow: React.FC<FormRowProps> = ({
           required
         />
 
-        <label>SECRET {isEdit && <span style={{ opacity: 0.5 }}>(blank = keep existing)</span>}</label>
+        <label>
+          SECRET {isEdit && <span className="wh-form-hint">(blank = keep existing)</span>}
+        </label>
         <input
           type="password"
           value={form.secret}
@@ -508,7 +546,11 @@ const FormRow: React.FC<FormRowProps> = ({
           ))}
         </div>
 
-        <label>ADVANCED PATTERNS<br /><span style={{ opacity: 0.5, fontWeight: 'normal' }}>(one per line, NATS-style)</span></label>
+        <label>
+          ADVANCED PATTERNS
+          <br />
+          <span className="wh-form-hint">(one per line, NATS-style)</span>
+        </label>
         <textarea
           value={form.topic_patterns}
           onChange={(e) => setForm((f) => ({ ...f, topic_patterns: e.target.value }))}
@@ -529,10 +571,10 @@ const FormRow: React.FC<FormRowProps> = ({
 
         <div className="wh-form-buttons">
           <button type="button" className="btn ghost" onClick={onCancel} disabled={saving}>
-            <X size={14} /> CANCEL
+            <X size={12} /> CANCEL
           </button>
           <button type="submit" className="btn violet" disabled={saving}>
-            <Save size={14} /> {saving ? 'SAVING…' : isEdit ? 'SAVE CHANGES' : 'CREATE'}
+            <Save size={12} /> {saving ? 'SAVING…' : isEdit ? 'SAVE CHANGES' : 'CREATE'}
           </button>
         </div>
       </form>
@@ -565,16 +607,16 @@ const SecretModal: React.FC<SecretModalProps> = ({ name, secret, onClose }) => {
       <div className="wh-secret-modal">
         <h3>WEBHOOK SECRET · {name.toUpperCase()}</h3>
         <div className="wh-secret-warn">
-          <AlertTriangle size={14} style={{ verticalAlign: 'middle', marginRight: 6 }} />
-          Copy this now — it will not be shown again. The HMAC on every delivery is signed with this value.
+          <AlertTriangle size={14} />
+          <span>COPY THIS NOW — IT WILL NOT BE SHOWN AGAIN. THE HMAC ON EVERY DELIVERY IS SIGNED WITH THIS VALUE.</span>
         </div>
         <div className="wh-secret-value">{secret}</div>
         <div className="wh-secret-actions">
           <button className="btn ghost" onClick={copy}>
-            <Copy size={14} /> {copied ? 'COPIED' : 'COPY'}
+            <Copy size={12} /> {copied ? 'COPIED' : 'COPY'}
           </button>
           <button className="btn violet" onClick={onClose}>
-            <Check size={14} /> DONE
+            <Check size={12} /> DONE
           </button>
         </div>
       </div>
