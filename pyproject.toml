@@ -6,7 +6,17 @@ build-backend = "setuptools.build_meta"
 name = "decnet"
 version = "0.2.0"
 description = "Deception network: deploy honeypot deckies that appear as real LAN hosts"
+license = "GPL-3.0-or-later"
+license-files = ["LICENSE"]
 requires-python = ">=3.11"
+classifiers = [
+    "License :: OSI Approved :: GNU General Public License v3 or later (GPLv3+)",
+    "Programming Language :: Python :: 3.11",
+    "Operating System :: POSIX :: Linux",
+    "Topic :: Security",
+    "Topic :: System :: Networking :: Monitoring",
+    "Development Status :: 4 - Beta",
+]
 dependencies = [
     "typer[all]>=0.12",
     "pydantic>=2.0",
