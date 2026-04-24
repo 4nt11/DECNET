@@ -14,6 +14,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from decnet.env import (
     DECNET_CORS_ORIGINS,
     DECNET_DEVELOPER,
+    DECNET_EMBED_COLLECTOR,
     DECNET_EMBED_PROFILER,
     DECNET_EMBED_SNIFFER,
     DECNET_INGEST_LOG_FILE,
@@ -87,13 +88,25 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
             ingestion_task = asyncio.create_task(log_ingestion_worker(repo))
             log.debug("API startup ingest worker started")
 
-        # Start Docker log collector (writes to log file; ingester reads from it)
+        # Start Docker log collector (writes to log file; ingester reads from it).
+        # Gated on DECNET_EMBED_COLLECTOR: when `decnet-collector.service` (or
+        # any other standalone collector) is running, embedding a second tailer
+        # here writes every container line twice — the ingester then inserts
+        # the same event into the DB twice, which surfaces as duplicate rows
+        # on the dashboard.
         _log_file = os.environ.get("DECNET_INGEST_LOG_FILE", DECNET_INGEST_LOG_FILE)
-        if _log_file and (collector_task is None or collector_task.done()):
-            collector_task = asyncio.create_task(log_collector_worker(_log_file))
-            log.debug("API startup collector worker started log_file=%s", _log_file)
-        elif not _log_file:
-            log.warning("DECNET_INGEST_LOG_FILE not set — Docker log collection disabled.")
+        if DECNET_EMBED_COLLECTOR:
+            if _log_file and (collector_task is None or collector_task.done()):
+                collector_task = asyncio.create_task(log_collector_worker(_log_file))
+                log.info(
+                    "API startup: embedded collector started "
+                    "(DECNET_EMBED_COLLECTOR=true) log_file=%s",
+                    _log_file,
+                )
+            elif not _log_file:
+                log.warning("DECNET_INGEST_LOG_FILE not set — embedded collector disabled.")
+        else:
+            log.debug("API startup: collector not embedded — expecting standalone daemon")
 
         # Start attacker profile rebuild worker only when explicitly requested.
         # Default is OFF because `decnet deploy` always starts a standalone

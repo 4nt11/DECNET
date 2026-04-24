@@ -70,6 +70,15 @@ DECNET_EMBED_PROFILER: bool = os.environ.get("DECNET_EMBED_PROFILER", "").lower(
 # workers sniffing the same interface — duplicated events and wasted CPU.
 DECNET_EMBED_SNIFFER: bool = os.environ.get("DECNET_EMBED_SNIFFER", "").lower() == "true"
 
+# Set to "true" to embed the Docker log collector inside the API process.
+# Leave unset (default) when `decnet-collector.service` (or a standalone
+# `decnet collect --daemon`) is running — embedding both yields two
+# tailers appending every container log line to the ingest file, which
+# the ingester then inserts into the DB twice. Single-process dev
+# setups without systemd units can flip this on to get the old all-in
+# -one behaviour.
+DECNET_EMBED_COLLECTOR: bool = os.environ.get("DECNET_EMBED_COLLECTOR", "").lower() == "true"
+
 # Set to "true" to mount the Pyinstrument ASGI middleware on the FastAPI app.
 # Produces per-request HTML flamegraphs under ./profiles/. Off by default so
 # production and normal dev runs pay zero profiling overhead.
