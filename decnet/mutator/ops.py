@@ -118,7 +118,7 @@ async def apply_add_lan(
 
     if subnet is None:
         reserved = await reserved_subnets(repo)
-        alloc = SubnetAllocator(base_prefix="172.20", reserved=reserved)
+        alloc = SubnetAllocator(base_prefix="172.16.0.0/12", reserved=reserved)
         subnet = alloc.next_free()
 
     await repo.add_lan(

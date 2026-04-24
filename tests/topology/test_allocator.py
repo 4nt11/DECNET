@@ -86,6 +86,49 @@ def test_subnet_allocator_exhaustion_raises():
         s.next_free()
 
 
+def test_subnet_allocator_accepts_cidr_base():
+    """Full-CIDR base form is equivalent to the legacy two-octet form."""
+    s = SubnetAllocator("172.20.0.0/16")
+    assert s.next_free() == "172.20.0.0/24"
+    assert s.next_free() == "172.20.1.0/24"
+
+
+def test_subnet_allocator_slash12_yields_more_than_256_slots():
+    """The whole point of widening: a /12 base must outlast a single /16."""
+    s = SubnetAllocator("172.16.0.0/12")
+    # Burn the first 256 /24s.  With a /16 base this is exhaustion; with
+    # /12 we should roll into 172.17.x.x without raising.
+    for _ in range(256):
+        s.next_free()
+    nxt = s.next_free()
+    assert nxt.startswith("172.17.")
+    assert nxt.endswith(".0/24")
+
+
+def test_subnet_allocator_slash12_total_capacity_is_4096():
+    s = SubnetAllocator("172.16.0.0/12")
+    count = 0
+    try:
+        while True:
+            s.next_free()
+            count += 1
+    except AllocatorExhausted:
+        pass
+    assert count == 4096
+
+
+def test_subnet_allocator_rejects_narrower_than_slash24():
+    with pytest.raises(ValueError, match="narrower than /24"):
+        SubnetAllocator("192.168.1.0/25")
+
+
+def test_subnet_allocator_exhausted_message_uses_parent_cidr():
+    s = SubnetAllocator("172.20.0.0/24")  # exactly one slot
+    s.next_free()
+    with pytest.raises(AllocatorExhausted, match="172.20.0.0/24"):
+        s.next_free()
+
+
 # --------------------------------------------------------------------- reserved_subnets
 
 

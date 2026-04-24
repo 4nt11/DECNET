@@ -85,7 +85,10 @@ async def api_list_archetypes(
 )
 @_traced("api.topology.catalog.next_subnet")
 async def api_next_subnet(
-    base: str = Query(default="172.20", pattern=r"^\d{1,3}\.\d{1,3}$"),
+    base: str = Query(
+        default="172.16.0.0/12",
+        pattern=r"^\d{1,3}\.\d{1,3}(\.\d{1,3}\.\d{1,3}/\d{1,2})?$",
+    ),
     _viewer: dict = Depends(require_viewer),
 ) -> NextSubnetResponse:
     reserved = await reserved_subnets(repo)

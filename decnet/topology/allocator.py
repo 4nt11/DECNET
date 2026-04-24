@@ -69,31 +69,47 @@ class IPAllocator:
 
 
 class SubnetAllocator:
-    """Hands out ``/24`` subnets under a base prefix (e.g. ``172.20``)."""
+    """Hands out ``/24`` subnets inside a parent network.
 
-    _MAX_INDEX = 256  # 172.20.0/24 .. 172.20.255/24
+    Accepted ``base_prefix`` forms:
+
+    * Full CIDR:  ``"172.16.0.0/12"`` → 4096 ``/24`` slots
+    * Legacy two-octet shorthand: ``"172.20"`` → auto-lifted to
+      ``"172.20.0.0/16"`` (256 slots), for backward compat with
+      configs written before mass-scale topologies were a thing.
+
+    The parent must be at most ``/24`` wide (i.e. its prefix length
+    must be ≤ 24); a ``/24`` base yields exactly one slot, anything
+    larger yields more.
+    """
 
     def __init__(
         self,
         base_prefix: str,
         reserved: Iterable[str] = (),
     ) -> None:
-        self._base = base_prefix.rstrip(".")
+        parent = _parse_base(base_prefix)
+        if parent.prefixlen > 24:
+            raise ValueError(
+                f"subnet base {parent.with_prefixlen} is narrower than /24; "
+                "cannot carve /24 children out of it"
+            )
+        self._parent = parent
+        # A generator over all /24 subnets of the parent. ipaddress
+        # yields them in order, so the allocator preserves the legacy
+        # "sequential-third-octet" behaviour for /16 bases. For /12
+        # bases you get second.third-octet sweep.
+        self._iter = parent.subnets(new_prefix=24) if parent.prefixlen < 24 else iter([parent])
         self._reserved: set[str] = {s for s in reserved}
-        self._cursor = 0
-
-    def _candidate(self, idx: int) -> str:
-        return f"{self._base}.{idx}.0/24"
 
     def next_free(self) -> str:
-        while self._cursor < self._MAX_INDEX:
-            subnet = self._candidate(self._cursor)
-            self._cursor += 1
+        for net in self._iter:
+            subnet = net.with_prefixlen
             if subnet not in self._reserved:
                 self._reserved.add(subnet)
                 return subnet
         raise AllocatorExhausted(
-            f"no free /24s left under {self._base}.0.0/16"
+            f"no free /24s left under {self._parent.with_prefixlen}"
         )
 
     def reserve(self, subnet: str) -> None:
@@ -101,6 +117,21 @@ class SubnetAllocator:
 
     def is_free(self, subnet: str) -> bool:
         return subnet not in self._reserved
+
+
+def _parse_base(base_prefix: str) -> IPv4Network:
+    """Accept either ``'a.b.c.d/n'`` or legacy ``'a.b'`` shorthand."""
+    stripped = base_prefix.strip().rstrip(".")
+    if "/" in stripped:
+        return IPv4Network(stripped, strict=False)
+    octets = stripped.split(".")
+    if len(octets) == 2:
+        return IPv4Network(f"{stripped}.0.0/16", strict=False)
+    if len(octets) == 4:
+        return IPv4Network(f"{stripped}/24", strict=False)
+    raise ValueError(
+        f"unrecognised subnet base {base_prefix!r}; expected 'x.y' or CIDR"
+    )
 
 
 # Topology statuses whose LANs still claim subnets.  torn_down is the

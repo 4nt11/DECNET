@@ -30,8 +30,16 @@ class TopologyConfig(BaseModel):
     # from its LAN to a non-parent, non-child LAN.  0.0 yields a tree.
     cross_edge_probability: float = Field(default=0.0, ge=0.0, le=1.0)
 
-    # IP allocation base.  LANs get sequential /24s starting here.
-    subnet_base_prefix: str = Field(default="172.20", pattern=r"^\d{1,3}\.\d{1,3}$")
+    # IP allocation base.  LANs get sequential /24s carved out of this
+    # network.  Accepts either a full CIDR (e.g. ``172.16.0.0/12`` for
+    # 4096 slots) or the legacy two-octet shorthand ``172.20`` which
+    # auto-lifts to ``172.20.0.0/16`` (256 slots).  Default is a /12
+    # so mass-scale topologies (depth/branching trees with >256 LANs)
+    # don't exhaust the pool on first generation.
+    subnet_base_prefix: str = Field(
+        default="172.16.0.0/12",
+        pattern=r"^\d{1,3}\.\d{1,3}(\.\d{1,3}\.\d{1,3}/\d{1,2})?$",
+    )
 
     # Service selection — reuses decnet.fleet.build_deckies' randomizer.
     randomize_services: bool = Field(default=True)
