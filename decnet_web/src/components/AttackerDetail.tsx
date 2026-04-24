@@ -92,6 +92,7 @@ const fpTypeLabel: Record<string, string> = {
   tls_resumption: 'SESSION RESUMPTION',
   tls_certificate: 'CERTIFICATE',
   http_useragent: 'HTTP USER-AGENT',
+  http_quirks: 'HTTP HEADER QUIRKS',
   vnc_client_version: 'VNC CLIENT',
   jarm: 'JARM',
   hassh_server: 'HASSH SERVER',
@@ -104,6 +105,7 @@ const fpTypeIcon: Record<string, React.ReactNode> = {
   tls_resumption: <Wifi size={14} />,
   tls_certificate: <FileKey size={14} />,
   http_useragent: <Shield size={14} />,
+  http_quirks: <Fingerprint size={14} />,
   vnc_client_version: <Lock size={14} />,
   jarm: <Crosshair size={14} />,
   hassh_server: <Lock size={14} />,
@@ -338,6 +340,47 @@ const FpGeneric: React.FC<{ p: any }> = ({ p }) => (
   </div>
 );
 
+const FpHttpQuirks: React.FC<{ p: any }> = ({ p }) => {
+  const order: string[] = Array.isArray(p.order) ? p.order : [];
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+      <HashRow label="ORDER HASH" value={p.order_hash} />
+      <HashRow label="CASING HASH" value={p.casing_hash} />
+      <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
+        {p.tool_guess && (
+          <Tag color="var(--violet)">{String(p.tool_guess).toUpperCase()}</Tag>
+        )}
+        {p.casing_category && (
+          <Tag>CASE · {String(p.casing_category).toUpperCase()}</Tag>
+        )}
+        {typeof p.header_count === 'number' && (
+          <Tag>{p.header_count} HEADERS</Tag>
+        )}
+        {p.duplicates && (
+          <Tag color="var(--warn, #e0a040)">DUPLICATES</Tag>
+        )}
+      </div>
+      {order.length > 0 && (
+        <details>
+          <summary className="dim" style={{ fontSize: '0.7rem', cursor: 'pointer', letterSpacing: '1px' }}>
+            HEADER ORDER
+          </summary>
+          <div style={{ display: 'flex', gap: '4px', flexWrap: 'wrap', marginTop: '4px' }}>
+            {order.map((h, i) => (
+              <Tag key={`${h}-${i}`}>{h}</Tag>
+            ))}
+          </div>
+        </details>
+      )}
+      {(p.method || p.path) && (
+        <div className="dim" style={{ fontSize: '0.7rem', fontFamily: 'monospace', marginTop: '2px' }}>
+          {p.method} {p.path}
+        </div>
+      )}
+    </div>
+  );
+};
+
 const FingerprintGroup: React.FC<{ fpType: string; items: any[] }> = ({ fpType, items }) => {
   const label = fpTypeLabel[fpType] || fpType.toUpperCase().replace(/_/g, ' ');
   const icon = fpTypeIcon[fpType] || <Fingerprint size={14} />;
@@ -365,6 +408,7 @@ const FingerprintGroup: React.FC<{ fpType: string; items: any[] }> = ({ fpType, 
             case 'jarm': return <FpJarm key={i} p={p} />;
             case 'hassh_server': return <FpHassh key={i} p={p} />;
             case 'tcpfp': return <FpTcpStack key={i} p={p} />;
+            case 'http_quirks': return <FpHttpQuirks key={i} p={p} />;
             default: return <FpGeneric key={i} p={p} />;
           }
         })}
@@ -1245,7 +1289,7 @@ const AttackerDetail: React.FC = () => {
 
         // Active probes first, then passive, then unknown
         const activeTypes = ['jarm', 'hassh_server', 'tcpfp'];
-        const passiveTypes = ['ja3', 'ja4l', 'tls_resumption', 'tls_certificate', 'http_useragent', 'vnc_client_version'];
+        const passiveTypes = ['ja3', 'ja4l', 'tls_resumption', 'tls_certificate', 'http_useragent', 'http_quirks', 'vnc_client_version'];
         const knownTypes = [...activeTypes, ...passiveTypes];
         const unknownTypes = Object.keys(groups).filter((t) => !knownTypes.includes(t));
 

@@ -261,6 +261,23 @@ async def _extract_bounty(repo: BaseRepository, log_data: dict[str, Any]) -> Non
             "payload": _leak,
         })
 
+    # 2c. HTTP header quirks — order + casing fingerprint per request.
+    # Real HTTP clients have distinctive header orderings and casing
+    # patterns (curl vs python-requests vs Go-http-client vs nmap vs
+    # browsers all differ). Attackers routinely spoof User-Agent but
+    # forget to match the stack's native header order. Bounty dedup
+    # collapses repeat fingerprints from the same attacker, so this
+    # fires once per distinct hash per source.
+    _quirks = _http_quirks_fingerprint(log_data, _headers)
+    if _quirks is not None:
+        await repo.add_bounty({
+            "decky": log_data.get("decky"),
+            "service": log_data.get("service"),
+            "attacker_ip": log_data.get("attacker_ip"),
+            "bounty_type": "fingerprint",
+            "payload": _quirks,
+        })
+
     # 3. VNC client version fingerprint
     _vnc_ver = _fields.get("client_version")
     if _vnc_ver and log_data.get("event_type") == "version":
@@ -591,5 +608,146 @@ def _detect_ip_leak(
         "decky": log_data.get("decky"),
         "path": log_data.get("fields", {}).get("path"),
         "method": log_data.get("fields", {}).get("method"),
+    }
+
+
+# ─── HTTP header quirks fingerprint ─────────────────────────────────────────
+
+# Headers that vary with per-request content (payload-body size, cookies
+# set by prior responses) and therefore aren't useful identity. Stripped
+# before hashing so a tool's order fingerprint is stable across different
+# targets/sessions.
+_VOLATILE_HEADERS = frozenset({
+    "content-length",
+    "cookie",
+    "authorization",
+    "x-forwarded-for",   # carries attacker-dependent values
+    "forwarded",
+    "x-real-ip",
+    "true-client-ip",
+    "cf-connecting-ip",
+    "x-request-id",
+    "x-correlation-id",
+    "x-amzn-trace-id",
+})
+
+
+# Distinctive order signatures for common tools. The match is on the
+# lowercased-name list MINUS the volatile set. A prefix match wins —
+# many tools tack on "User-Agent / Accept-Encoding / Accept" in the
+# same order regardless of method.
+_TOOL_SIGNATURES: tuple[tuple[str, tuple[str, ...]], ...] = (
+    # curl sends: Host, User-Agent, Accept, <body-headers>.
+    ("curl", ("host", "user-agent", "accept")),
+    # python-requests: User-Agent, Accept-Encoding, Accept, Connection, Host.
+    ("python-requests", ("host", "user-agent", "accept-encoding", "accept", "connection")),
+    # Go-http-client: Host, User-Agent, Accept-Encoding.
+    ("go-http-client", ("host", "user-agent", "accept-encoding")),
+    # nmap http-enum / http-* scripts: short, Host+User-Agent ordering.
+    ("nmap-nse", ("host", "user-agent")),
+    # Nikto / Nuclei send distinctive Accept-Language preferences — treat
+    # User-Agent check as the secondary signal elsewhere; order alone is
+    # ambiguous here.
+)
+
+
+def _casing_category(name: str) -> str:
+    """Classify a header-name casing pattern.
+
+    Real HTTP clients and stacks pick one convention and stick to it:
+    browsers send `Title-Case`; python-requests sends `Title-Case`;
+    Go's stdlib canonicalises to `Title-Case`; curl sends literal
+    `Title-Case`; nmap/masscan often send `lowercase`; custom scanners
+    sometimes send `UPPERCASE`.
+    """
+    if not name:
+        return "empty"
+    if name == name.upper():
+        return "upper"
+    if name == name.lower():
+        return "lower"
+    # "Title-Case" test: each dash-separated token starts with an
+    # uppercase; trailing chars (if any) must be lowercase. Single-
+    # letter tokens like the `X` in `X-Forwarded-For` qualify when
+    # uppercase — "".islower() is False in Python so the naive form
+    # of this test misfires.
+    parts = [p for p in name.split("-") if p]
+    if parts and all(
+        p[:1].isupper() and (len(p) == 1 or p[1:].islower())
+        for p in parts
+    ):
+        return "title"
+    return "mixed"
+
+
+def _short_hash(value: str) -> str:
+    """16-hex-char SHA-256 prefix — stable identity, short display."""
+    import hashlib
+    return hashlib.sha256(value.encode("utf-8")).hexdigest()[:16]
+
+
+def _guess_tool_from_order(lowered: list[str]) -> Optional[str]:
+    """Return the first matching tool signature, or None."""
+    for name, sig in _TOOL_SIGNATURES:
+        if len(lowered) >= len(sig) and tuple(lowered[: len(sig)]) == sig:
+            return name
+    return None
+
+
+def _http_quirks_fingerprint(
+    log_data: dict[str, Any], headers: dict[str, Any],
+) -> Optional[dict[str, Any]]:
+    """Build an HTTP request-header quirks fingerprint.
+
+    Captures the header-order hash, casing pattern, count, and a
+    best-effort tool guess. Returns ``None`` for non-HTTP services or
+    when no usable headers are present.  Bounty dedup will collapse
+    repeat fingerprints from the same attacker.
+    """
+    if log_data.get("service") != "http":
+        return None
+    if not isinstance(headers, dict) or not headers:
+        return None
+
+    # Preserve insertion order (Python 3.7+ dict guarantee, and JSON
+    # round-trip also preserves it). Drop volatile headers for the
+    # identity hash but keep them in the display order list.
+    names_full: list[str] = [k for k in headers.keys() if isinstance(k, str)]
+    if not names_full:
+        return None
+
+    names_stable = [n for n in names_full if n.lower() not in _VOLATILE_HEADERS]
+    lowered = [n.lower() for n in names_stable]
+
+    order_hash = _short_hash("\n".join(lowered))
+    casing_per_header = [_casing_category(n) for n in names_stable]
+    casing_hash = _short_hash("\n".join(casing_per_header))
+
+    # A single "dominant" casing category — useful for at-a-glance display.
+    categories = set(casing_per_header)
+    if not categories:
+        dominant = "empty"
+    elif len(categories) == 1:
+        dominant = next(iter(categories))
+    else:
+        dominant = "mixed"
+
+    # Duplicate detection: in the dict we got, duplicates would have
+    # collapsed to one key. But we can still flag if the template
+    # someday passes a list — future-proofing, no-op today.
+    duplicates = [n for n in {x for x in names_full if names_full.count(x) > 1}]
+
+    return {
+        "fingerprint_type": "http_quirks",
+        "order_hash": order_hash,
+        "order": names_stable,
+        "casing_hash": casing_hash,
+        "casing_category": dominant,
+        "header_count": len(names_full),
+        "stable_count": len(names_stable),
+        "tool_guess": _guess_tool_from_order(lowered),
+        "duplicates": duplicates or None,
+        "method": log_data.get("fields", {}).get("method"),
+        "path": log_data.get("fields", {}).get("path"),
     }
 
