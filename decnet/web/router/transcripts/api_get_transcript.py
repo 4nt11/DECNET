@@ -144,7 +144,7 @@ def _find_shard_with_sid(decky: str, service: str, sid: str) -> Path | None:
 async def get_transcript(
     decky: str,
     sid: str,
-    offset: int = Query(0, ge=0),
+    offset: int = Query(0, ge=0, le=2147483647),
     limit: int = Query(500, ge=1, le=5000),
     admin: dict = Depends(require_admin),
 ) -> dict[str, Any]:

@@ -219,14 +219,14 @@ Each sub-flow below gets its own table. Status codes:
 |-----|--------|--------|-------|
 | S | (inherited from authn/authz) | — | |
 | T | SQL injection via filter params | M | SQLModel uses parameterized queries exclusively; no string-concatenation SQL in repo. Verify on each new query endpoint. |
-| T | ORM expression injection (e.g. sort-by-arbitrary-column) | **?** | Verify: sort/filter keys are allow-listed, not passed through raw. |
+| T | ORM expression injection (e.g. sort-by-arbitrary-column) | M | Only one client-supplied sort key exists across the API: `sort_by` on `/attackers` (`api_get_attackers.py:59`), which is `Query(..., pattern="^(recent\|active\|traversals)$")`. The repo dispatch in `sqlmodel_repo.py:829-832` uses a dict lookup, not raw `order_by(getattr(...))`. No other route accepts a client-supplied column name. |
 | R | Query log does not record who queried what | A | Pre-v1: query audit log out of scope. Revisit if customer demands query-level audit. |
 | I | Filter-bypass exfiltration: viewer filters return admin-visible rows | **?** | Verify: repo methods take the caller's role and scope results, OR routes pre-filter, OR data is viewer-safe by schema. Currently assumed "viewer-safe by schema" — worth asserting in a test. |
 | I | Timing side channel reveals existence of filtered-out rows | A | Micro-timing attacks on SQLite not a realistic threat for this workload. Accepted. |
 | I | Error message (422 / 500) leaks column names or SQL fragments | M | FastAPI 422 is schema-shaped; 500 handler must not return tracebacks in prod. Verify handler config. |
 | I | Schema enumeration via schemathesis-style fuzzing | A | Schemathesis contract tests document 400/422 shape; an attacker learning the schema gains nothing beyond the public OpenAPI spec. See `feedback_schemathesis_400.md`. |
-| D | Unbounded result set via missing `limit` | **?** | Verify: every query endpoint has a hard server-side cap independent of the `limit` param. |
-| D | Deep-pagination scan via large `offset` | **?** | Verify: `offset` is capped, OR pagination is cursor-based, OR the table has an index that makes deep offsets cheap. |
+| D | Unbounded result set via missing `limit` | M | Every query endpoint declares `limit: int = Query(..., le=N)` at the FastAPI layer — `/logs`, `/attackers`, `/bounties`, `/attacker-commands`, `/topologies/{id}` (`le=1000`), `/topologies` (`le=500`), `/transcripts` (`le=5000`). Cap enforced at pydantic validation, before the handler runs. |
+| D | Deep-pagination scan via large `offset` | M | Every `offset` param is `Query(0, ge=0, le=2147483647)` (INT32 max). At that scale SQLite returns empty immediately once rows exhaust; the point is to keep callers within a range the indexer can skip cheaply. `api_get_transcript.py:147` and `api_list_topologies.py:29` brought in line 2026-04-24. |
 | D | Expensive `LIKE '%foo%'` on non-indexed column | **?** | Verify: free-text `q` params hit an FTS5 virtual table or indexed column, not `LIKE`-scan of a large table. |
 | D | Repeated expensive queries from single user | A | Per-user rate limiting is out of scope pre-v1. Operator-deployment mitigation: reverse-proxy rate limit. |
 | E | Filter params allow reading across tenants (future multi-tenant) | X | Multi-tenant is not in the v1 model; revisit when tenants exist. |
@@ -294,10 +294,10 @@ code" or "accepted, add to table above."
 - [x] ~~Password length clamp before bcrypt.~~ Verified — Pydantic `max_length=72`.
 - [x] ~~Contract test asserting every protected route returns 401 unauthenticated and 403 for under-roled.~~ 401 half: `tests/api/test_schemathesis.py::test_auth_enforcement` (schemathesis + `ignored_auth`). 403 half: `tests/api/test_rbac_contract.py` (server-side dependency introspection + viewer JWT per route). Role hints deliberately kept out of the OpenAPI spec — classification stays server-side.
 - [ ] Field allow-list on viewer responses for attacker / user / bounty serializers.
-- [ ] Sort/filter query keys are allow-listed, not passed through raw.
+- [x] ~~Sort/filter query keys are allow-listed, not passed through raw.~~ Only one client-supplied sort key in the API (`sort_by` on `/attackers`), pattern-validated at `api_get_attackers.py:59`; repo dispatch is dict-lookup. No other route accepts a column name.
 - [ ] Role-scoped repo methods OR per-route pre-filter for viewer queries (pick one, document it).
-- [ ] Every query endpoint has a server-side hard cap independent of `limit`.
-- [ ] `offset` is capped OR pagination is cursor-based OR deep-offset is cheap.
+- [x] ~~Every query endpoint has a server-side hard cap independent of `limit`.~~ All 7 query endpoints declare `Query(..., le=N)` at the FastAPI layer; enforced pre-handler.
+- [x] ~~`offset` is capped OR pagination is cursor-based OR deep-offset is cheap.~~ Every `offset` now uses `le=2147483647` (`api_list_topologies.py:29` and `api_get_transcript.py:147` brought in line 2026-04-24; others already capped).
 - [ ] Free-text `q` parameters hit an indexed/FTS5 column, never a full-table `LIKE` scan.
 - [ ] Per-route response_model shape audit on mutations.
 - [x] ~~Contract test asserting every mutation route returns 403 for viewer.~~ Covered by `test_rbac_contract.py` (same test also covers read routes — classification is by dependency, not HTTP verb).
@@ -361,3 +361,4 @@ In priority order:
 | 2026-04-23 | F1/I "traceback / stack trace leakage" moved from **?** to **M** via generic Exception handler with `error_id` correlation. Added follow-up checklist entry for `detail=str(e)` sites in fleet deploy router. | ANTI |
 | 2026-04-24 | F7: "MIME sniffing" moved from **?** to **M** (explicit `Content-Disposition`/`nosniff` headers + test). F7: "path-traversal" row reworded to point at the existing `_resolve_artifact_path` containment check. Fleet-deploy `detail=str(e)` audit resolved — all four sites documented as deliberate, admin-gated, no sanitization needed. | ANTI |
 | 2026-04-24 | F2/I + F5/E moved from **?** to **M** via new `tests/api/test_rbac_contract.py` — classifies every APIRoute by FastAPI-dependency introspection and asserts viewer JWT → 403 on admin routes, non-401/403 on viewer routes. Role hints deliberately omitted from OpenAPI spec. SSE routes skipped (F6 scope). | ANTI |
+| 2026-04-24 | F4/T (ORM sort injection), F4/D (unbounded `limit`), F4/D (deep `offset`) all moved from **?** to **M**. Limit caps were already universal; sort is pattern-validated on the only surface that exposes it; added `le=2147483647` to the two offset params that were unbounded (`api_list_topologies.py`, `api_get_transcript.py`). | ANTI |

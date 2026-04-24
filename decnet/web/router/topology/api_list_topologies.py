@@ -26,7 +26,7 @@ router = APIRouter()
 async def api_list_topologies(
     status: Optional[str] = Query(default=None, description="Filter by topology status"),
     limit: int = Query(default=50, ge=1, le=500),
-    offset: int = Query(default=0, ge=0),
+    offset: int = Query(default=0, ge=0, le=2147483647),
     _viewer: dict = Depends(require_viewer),
 ) -> TopologyListResponse:
     total = await repo.count_topologies(status=status)
