@@ -33,6 +33,7 @@ from .swarm_updates import swarm_updates_router
 from .swarm_mgmt import swarm_mgmt_router
 from .system import system_router
 from .topology import topology_router
+from .webhooks import webhooks_router
 
 api_router = APIRouter(
     # Every route under /api/v1 is auth-guarded (either by an explicit
@@ -105,3 +106,6 @@ api_router.include_router(system_router)
 
 # MazeNET Topologies (nested topology CRUD + mutation queue)
 api_router.include_router(topology_router)
+
+# External webhook subscriptions (SIEM/SOAR egress)
+api_router.include_router(webhooks_router)

@@ -431,3 +431,40 @@ class BaseRepository(ABC):
 
     async def list_live_topology_ids(self) -> list[str]:
         return []
+
+    # --------------------------------------------------------- webhooks
+    # Webhook subscriptions — external SIEM / SOAR egress configuration.
+    # Default NotImplementedError keeps non-default backends honest; the
+    # SQLModel-backed SQLite and MySQL repos override everything below.
+
+    async def create_webhook_subscription(self, data: dict[str, Any]) -> None:
+        raise NotImplementedError
+
+    async def get_webhook_subscription(self, uuid: str) -> Optional[dict[str, Any]]:
+        raise NotImplementedError
+
+    async def get_webhook_subscription_by_name(
+        self, name: str
+    ) -> Optional[dict[str, Any]]:
+        raise NotImplementedError
+
+    async def list_webhook_subscriptions(
+        self, enabled_only: bool = False
+    ) -> list[dict[str, Any]]:
+        raise NotImplementedError
+
+    async def update_webhook_subscription(
+        self, uuid: str, patch: dict[str, Any]
+    ) -> bool:
+        raise NotImplementedError
+
+    async def delete_webhook_subscription(self, uuid: str) -> bool:
+        raise NotImplementedError
+
+    async def record_webhook_success(self, uuid: str, ts: Any) -> None:
+        raise NotImplementedError
+
+    async def record_webhook_failure(
+        self, uuid: str, ts: Any, error: str
+    ) -> None:
+        raise NotImplementedError

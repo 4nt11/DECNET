@@ -93,6 +93,12 @@ SYSTEM_CONTROL = "control"
 WORKER_CONTROL_STOP = "stop"
 WORKER_CONTROL_START = "start"
 
+# Webhook subscription-set changed — published by the CRUD router after any
+# create / update / delete on WebhookSubscription so the webhook worker can
+# reload its in-memory subscription list and re-subscribe to the new union
+# of patterns. Payload is currently empty; consumers only need the signal.
+WEBHOOK_SUBSCRIPTIONS_CHANGED = "system.webhook.subscriptions_changed"
+
 
 # ─── Builders ────────────────────────────────────────────────────────────────
 

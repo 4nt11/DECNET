@@ -112,6 +112,15 @@ from .updater import (
     RollbackRequest,
     RollbackResponse,
 )
+from .webhooks import (
+    SimpleEvent,
+    WebhookCreateRequest,
+    WebhookCreateResponse,
+    WebhookResponse,
+    WebhookSubscription,
+    WebhookTestResponse,
+    WebhookUpdateRequest,
+)
 from .workers import (
     StartAllResponse,
     StartFailure,
@@ -218,6 +227,14 @@ __all__ = [
     "PushUpdateResult",
     "RollbackRequest",
     "RollbackResponse",
+    # webhooks
+    "SimpleEvent",
+    "WebhookCreateRequest",
+    "WebhookCreateResponse",
+    "WebhookResponse",
+    "WebhookSubscription",
+    "WebhookTestResponse",
+    "WebhookUpdateRequest",
     # workers
     "StartAllResponse",
     "StartFailure",
