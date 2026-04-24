@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 from fastapi import APIRouter, Depends, HTTPException, status
+from sqlalchemy.exc import IntegrityError
 
 from decnet.telemetry import traced as _traced
 from decnet.topology.allocator import reserved_subnets
@@ -24,7 +25,7 @@ router = APIRouter()
         400: {"description": "Malformed or invalid generation parameters"},
         401: {"description": "Missing or invalid credentials"},
         403: {"description": "Insufficient permissions"},
-        409: {"description": "Generator could not allocate subnets (exhausted pool)"},
+        409: {"description": "Duplicate topology name, or generator could not allocate subnets (exhausted pool)"},
     },
 )
 @_traced("api.topology.create")
@@ -58,6 +59,19 @@ async def api_create_topology(
     except (ValueError, TypeError) as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
 
-    topology_id = await persist(repo, plan, target_host_uuid=body.target_host_uuid)
+    try:
+        topology_id = await persist(repo, plan, target_host_uuid=body.target_host_uuid)
+    except IntegrityError as exc:
+        # Unique constraint on topologies.name is the only integrity
+        # error the create path can realistically hit — inspecting the
+        # constraint name keeps us from silently mapping unrelated
+        # integrity failures to 409.
+        msg = str(exc.orig) if exc.orig is not None else str(exc)
+        if "ix_topologies_name" in msg or "topologies.name" in msg:
+            raise HTTPException(
+                status_code=409,
+                detail=f"A topology named {body.name!r} already exists.",
+            ) from exc
+        raise
     row = await repo.get_topology(topology_id)
     return TopologySummary(**row)

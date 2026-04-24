@@ -81,6 +81,27 @@ async def test_create_requires_auth(client):
 
 
 @pytest.mark.anyio
+async def test_create_duplicate_name_is_409(client, auth_token):
+    """Re-using an existing topology name must return a clean 409, not
+    bubble the raw MySQL IntegrityError up to a 500."""
+    payload = _generate_payload()
+    first = await client.post(
+        f"{_V1}/",
+        json=payload,
+        headers={"Authorization": f"Bearer {auth_token}"},
+    )
+    assert first.status_code == 201, first.text
+
+    second = await client.post(
+        f"{_V1}/",
+        json=payload,
+        headers={"Authorization": f"Bearer {auth_token}"},
+    )
+    assert second.status_code == 409, second.text
+    assert payload["name"] in second.json()["detail"]
+
+
+@pytest.mark.anyio
 async def test_create_bad_body(client, auth_token):
     r = await client.post(
         f"{_V1}/",
