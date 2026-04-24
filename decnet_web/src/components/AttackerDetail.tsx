@@ -68,6 +68,20 @@ interface AttackerData {
     interacted: string[];
     scanned: string[];
   };
+  ip_leaks?: Array<{
+    timestamp: string;
+    decky?: string;
+    service?: string;
+    bounty_type: string;
+    payload: {
+      source_ip?: string;
+      real_ip_claim?: string;
+      source_header?: string;
+      headers_seen?: Record<string, string>;
+      path?: string;
+      method?: string;
+    };
+  }>;
 }
 
 // ─── Fingerprint rendering ───────────────────────────────────────────────────
@@ -1027,6 +1041,42 @@ const AttackerDetail: React.FC = () => {
               <span className="dim">—</span>
             )}
           </div>
+          {attacker.ip_leaks && attacker.ip_leaks.length > 0 && (
+            <div>
+              <span className="dim" style={{ color: 'var(--warn, #e0a040)' }}>
+                LEAKED IPs:{' '}
+              </span>
+              {Array.from(
+                new Set(
+                  (attacker.ip_leaks || [])
+                    .map((l) => l.payload?.real_ip_claim)
+                    .filter((v): v is string => !!v),
+                ),
+              ).map((ip, i, arr) => {
+                const latest = (attacker.ip_leaks || []).find(
+                  (l) => l.payload?.real_ip_claim === ip,
+                );
+                const tooltip = latest
+                  ? `${latest.payload.source_header ?? '?'} on ${
+                      latest.payload.method ?? '?'
+                    } ${latest.payload.path ?? '/'}`
+                  : '';
+                return (
+                  <span
+                    key={ip}
+                    style={{
+                      color: 'var(--warn, #e0a040)',
+                      fontFamily: 'monospace',
+                    }}
+                    title={tooltip}
+                  >
+                    {ip}
+                    {i < arr.length - 1 ? ', ' : ''}
+                  </span>
+                );
+              })}
+            </div>
+          )}
         </div>
       </Section>
 

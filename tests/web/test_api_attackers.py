@@ -184,6 +184,7 @@ class TestGetAttackerDetail:
             mock_repo.get_attacker_by_uuid = AsyncMock(return_value=sample)
             mock_repo.get_attacker_behavior = AsyncMock(return_value=None)
             mock_repo.get_attacker_service_activity = AsyncMock(return_value=[])
+            mock_repo.get_attacker_ip_leaks = AsyncMock(return_value=[])
 
             result = await get_attacker_detail(uuid="att-uuid-1", user={"uuid": "test-user", "role": "viewer"})
 
@@ -213,6 +214,7 @@ class TestGetAttackerDetail:
             mock_repo.get_attacker_by_uuid = AsyncMock(return_value=sample)
             mock_repo.get_attacker_behavior = AsyncMock(return_value=None)
             mock_repo.get_attacker_service_activity = AsyncMock(return_value=[])
+            mock_repo.get_attacker_ip_leaks = AsyncMock(return_value=[])
 
             result = await get_attacker_detail(uuid="att-uuid-1", user={"uuid": "test-user", "role": "viewer"})
 
@@ -238,6 +240,7 @@ class TestGetAttackerDetail:
             mock_repo.get_attacker_by_uuid = AsyncMock(return_value=sample)
             mock_repo.get_attacker_behavior = AsyncMock(return_value=None)
             mock_repo.get_attacker_service_activity = AsyncMock(return_value=pairs)
+            mock_repo.get_attacker_ip_leaks = AsyncMock(return_value=[])
 
             result = await get_attacker_detail(
                 uuid="att-uuid-1",
@@ -248,6 +251,41 @@ class TestGetAttackerDetail:
             "interacted": ["ftp", "ssh"],
             "scanned": ["http"],
         }
+
+    @pytest.mark.asyncio
+    async def test_ip_leaks_included_in_response(self):
+        """Attacker detail surfaces ip_leak bounty rows for the UI."""
+        from decnet.web.router.attackers.api_get_attacker_detail import get_attacker_detail
+
+        sample = _sample_attacker()
+        leaks = [
+            {
+                "timestamp": "2026-04-24T12:00:00+00:00",
+                "decky": "http-01",
+                "service": "http",
+                "bounty_type": "ip_leak",
+                "payload": {
+                    "source_ip": "203.0.113.42",
+                    "real_ip_claim": "198.51.100.7",
+                    "source_header": "X-Forwarded-For",
+                    "path": "/wp-admin/",
+                    "method": "GET",
+                },
+            },
+        ]
+        with patch("decnet.web.router.attackers.api_get_attacker_detail.repo") as mock_repo:
+            mock_repo.get_attacker_by_uuid = AsyncMock(return_value=sample)
+            mock_repo.get_attacker_behavior = AsyncMock(return_value=None)
+            mock_repo.get_attacker_service_activity = AsyncMock(return_value=[])
+            mock_repo.get_attacker_ip_leaks = AsyncMock(return_value=leaks)
+
+            result = await get_attacker_detail(
+                uuid="att-uuid-1",
+                user={"uuid": "test-user", "role": "viewer"},
+            )
+
+        assert result["ip_leaks"] == leaks
+        assert result["ip_leaks"][0]["payload"]["real_ip_claim"] == "198.51.100.7"
 
 
 # ─── GET /attackers/{uuid}/commands ──────────────────────────────────────────

@@ -257,6 +257,15 @@ class BaseRepository(ABC):
         query."""
         raise NotImplementedError
 
+    async def get_attacker_ip_leaks(
+        self, attacker_uuid: str
+    ) -> list[dict[str, Any]]:
+        """Return ``bounty_type='ip_leak'`` rows for the attacker, newest
+        first. Each row's payload carries the TCP source IP, the header
+        that leaked, and the claimed real IP — see the XFF-mismatch
+        extractor in ``decnet.web.ingester`` for the shape."""
+        raise NotImplementedError
+
     @abstractmethod
     async def get_session_log(self, sid: str) -> Optional[dict[str, Any]]:
         """Look up the `session_recorded` Log row for a given session UUID."""

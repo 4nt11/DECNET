@@ -907,6 +907,39 @@ class SQLModelRepository(BaseRepository):
             )
             return [(svc, evt) for svc, evt in rows.all()]
 
+    async def get_attacker_ip_leaks(
+        self, attacker_uuid: str
+    ) -> list[dict[str, Any]]:
+        """Return ``bounty_type='ip_leak'`` rows for this attacker, newest
+        first.  Shape matches the XFF-mismatch payload emitted by the
+        ingester: keys include ``real_ip_claim``, ``source_header``,
+        ``headers_seen``, ``path``, ``method``."""
+        async with self._session() as session:
+            ip_res = await session.execute(
+                select(Attacker.ip).where(Attacker.uuid == attacker_uuid)
+            )
+            ip = ip_res.scalar_one_or_none()
+            if not ip:
+                return []
+            rows = await session.execute(
+                select(Bounty)
+                .where(Bounty.attacker_ip == ip)
+                .where(Bounty.bounty_type == "ip_leak")
+                .order_by(desc(Bounty.timestamp))
+            )
+            out: list[dict[str, Any]] = []
+            for row in rows.scalars().all():
+                rec = row.model_dump(mode="json")
+                # Bounty.payload is stored JSON-encoded; pre-decode for UX.
+                raw = rec.get("payload")
+                if isinstance(raw, str):
+                    try:
+                        rec["payload"] = json.loads(raw)
+                    except (ValueError, TypeError):
+                        rec["payload"] = {}
+                out.append(rec)
+            return out
+
     async def get_attacker_artifacts(self, uuid: str) -> list[dict[str, Any]]:
         """Return `file_captured` logs for the attacker identified by UUID.
 

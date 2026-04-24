@@ -34,4 +34,8 @@ async def get_attacker_detail(
     # immediately without a profiler re-tick.
     pairs = await repo.get_attacker_service_activity(uuid)
     attacker["service_activity"] = bucket_services(pairs)
+    # Attribution leaks — XFF / Forwarded / X-Real-IP mismatches captured
+    # by the HTTP bounty extractor. Empty list when no HTTP interaction
+    # or no mismatch.
+    attacker["ip_leaks"] = await repo.get_attacker_ip_leaks(uuid)
     return attacker

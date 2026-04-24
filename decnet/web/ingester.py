@@ -1,9 +1,11 @@
 import asyncio
 import contextlib
+import ipaddress
 import os
 import json
+import re
 import time
-from typing import Any
+from typing import Any, Optional
 from pathlib import Path
 
 from decnet.bus import topics as _topics
@@ -243,6 +245,22 @@ async def _extract_bounty(repo: BaseRepository, log_data: dict[str, Any]) -> Non
             }
         })
 
+    # 2b. IP leak — the attacker's real IP accidentally forwarded in a
+    # proxy-family header (X-Forwarded-For / Forwarded / X-Real-IP /
+    # CDN variants). Left-most value differing from the TCP source is
+    # a high-confidence attribution signal. DECNET_TRUSTED_PROXIES
+    # opts specific source IPs out (legitimate reverse proxy in front
+    # of DECNET).
+    _leak = _detect_ip_leak(log_data, _headers)
+    if _leak is not None:
+        await repo.add_bounty({
+            "decky": log_data.get("decky"),
+            "service": log_data.get("service"),
+            "attacker_ip": log_data.get("attacker_ip"),
+            "bounty_type": "ip_leak",
+            "payload": _leak,
+        })
+
     # 3. VNC client version fingerprint
     _vnc_ver = _fields.get("client_version")
     if _vnc_ver and log_data.get("event_type") == "version":
@@ -393,3 +411,185 @@ async def _extract_bounty(repo: BaseRepository, log_data: dict[str, Any]) -> Non
                 "options_order": _fields.get("options_order"),
             },
         })
+
+
+# ─── IP-leak detection (XFF / Forwarded / X-Real-IP / CDN variants) ──────────
+
+# Proxy-family headers we inspect, in priority order. Forwarded (RFC 7239)
+# is the "proper" way; X-Forwarded-For is de-facto; X-Real-IP and CDN
+# variants are common nginx / CloudFlare conventions.
+_PROXY_HEADERS = (
+    "Forwarded",
+    "X-Forwarded-For",
+    "X-Real-IP",
+    "True-Client-IP",
+    "CF-Connecting-IP",
+)
+
+# RFC 7239 `Forwarded: for=1.2.3.4` / `for="[2001:db8::1]:4711"`. The
+# capture grabs the raw for= value up to the next pair/element
+# delimiter (; or ,) or end-of-string; _parse_forwarded strips quotes
+# / IPv6 brackets / port afterwards.
+_FORWARDED_KV_RE = re.compile(
+    r'for\s*=\s*"?([^",;]+?)"?(?=[;,]|$)',
+    re.IGNORECASE,
+)
+
+
+def _get_trusted_proxies() -> list[ipaddress._BaseNetwork]:
+    """Parse DECNET_TRUSTED_PROXIES once per process into network objects.
+
+    Empty / unset → empty list (no opt-outs). Malformed entries are logged
+    at WARNING and silently dropped — a typo in the env shouldn't brick
+    the ingester.
+    """
+    raw = os.environ.get("DECNET_TRUSTED_PROXIES", "")
+    out: list[ipaddress._BaseNetwork] = []
+    for token in raw.split(","):
+        token = token.strip()
+        if not token:
+            continue
+        try:
+            # Accept both bare IPs ("1.2.3.4") and CIDRs ("10.0.0.0/8").
+            if "/" in token:
+                out.append(ipaddress.ip_network(token, strict=False))
+            else:
+                out.append(ipaddress.ip_network(f"{token}/32", strict=False))
+        except (ValueError, TypeError) as exc:
+            logger.warning("DECNET_TRUSTED_PROXIES: ignoring %r: %s", token, exc)
+    return out
+
+
+def _is_trusted_source(source_ip: str) -> bool:
+    try:
+        addr = ipaddress.ip_address(source_ip)
+    except (ValueError, TypeError):
+        return False
+    for net in _get_trusted_proxies():
+        try:
+            if addr in net:
+                return True
+        except (ValueError, TypeError):
+            continue
+    return False
+
+
+def _lookup_header(headers: dict[str, Any], name: str) -> Optional[str]:
+    """Case-insensitive header fetch; HTTP template logs headers as-received."""
+    lowered = name.lower()
+    for k, v in headers.items():
+        if isinstance(k, str) and k.lower() == lowered:
+            if isinstance(v, str) and v.strip():
+                return v.strip()
+    return None
+
+
+def _parse_forwarded(value: str) -> Optional[str]:
+    """Return the first `for=` IP from an RFC 7239 Forwarded header.
+
+    Handles the quoted IPv6-bracket-port form (`for="[2001:db8::1]:4711"`)
+    plus the bare IPv4 (`for=1.2.3.4`) and IPv4:port (`for=1.2.3.4:80`)
+    variants. Returns None on any parse failure.
+    """
+    match = _FORWARDED_KV_RE.search(value)
+    if not match:
+        return None
+    token = match.group(1).strip()
+    if not token:
+        return None
+    # Strip IPv6 brackets (+ optional :port after them).
+    if token.startswith("["):
+        end = token.find("]")
+        if end > 0:
+            token = token[1:end]
+    elif token.count(":") == 1:
+        # IPv4:port. IPv6 bare literals have ≥2 colons so we leave those.
+        token = token.split(":")[0]
+    try:
+        ipaddress.ip_address(token)
+    except (ValueError, TypeError):
+        return None
+    return token
+
+
+def _parse_xff_chain(value: str) -> Optional[str]:
+    """Return the left-most parseable IP from an X-Forwarded-For chain."""
+    for token in value.split(","):
+        token = token.strip().strip('"').lstrip("[").rstrip("]")
+        if not token:
+            continue
+        try:
+            ipaddress.ip_address(token)
+        except (ValueError, TypeError):
+            continue
+        return token
+    return None
+
+
+def _extract_claimed_ip(headers: dict[str, Any]) -> tuple[Optional[str], Optional[str]]:
+    """Walk the proxy-header priority list; return (claimed_ip, header_name)."""
+    for header in _PROXY_HEADERS:
+        raw = _lookup_header(headers, header)
+        if raw is None:
+            continue
+        if header == "Forwarded":
+            claimed = _parse_forwarded(raw)
+        elif header == "X-Forwarded-For":
+            claimed = _parse_xff_chain(raw)
+        else:
+            # Single-IP headers — may still carry port or IPv6 brackets.
+            token = raw.strip().strip('"').lstrip("[").rstrip("]")
+            try:
+                ipaddress.ip_address(token)
+                claimed = token
+            except (ValueError, TypeError):
+                claimed = None
+        if claimed is not None:
+            return claimed, header
+    return None, None
+
+
+def _detect_ip_leak(
+    log_data: dict[str, Any], headers: dict[str, Any],
+) -> Optional[dict[str, Any]]:
+    """Return a bounty payload iff an attribution-leak mismatch is present.
+
+    See :data:`_PROXY_HEADERS` for the set of headers checked. A leak is
+    claimed when:
+      - the TCP source IP is NOT in ``DECNET_TRUSTED_PROXIES``,
+      - a proxy-family header is present with a parseable IP, and
+      - that IP differs from the TCP source.
+    Otherwise returns ``None``.
+    """
+    if log_data.get("service") != "http":
+        return None
+    if not isinstance(headers, dict) or not headers:
+        return None
+    source_ip = log_data.get("attacker_ip")
+    if not isinstance(source_ip, str) or not source_ip:
+        return None
+    if _is_trusted_source(source_ip):
+        return None
+
+    claimed, header_name = _extract_claimed_ip(headers)
+    if claimed is None or claimed == source_ip:
+        return None
+
+    # Keep only the proxy-family values in the echoed-back metadata so
+    # the bounty payload stays compact.
+    seen = {}
+    for h in _PROXY_HEADERS:
+        raw = _lookup_header(headers, h)
+        if raw is not None:
+            seen[h] = raw
+
+    return {
+        "source_ip": source_ip,
+        "real_ip_claim": claimed,
+        "source_header": header_name,
+        "headers_seen": seen,
+        "decky": log_data.get("decky"),
+        "path": log_data.get("fields", {}).get("path"),
+        "method": log_data.get("fields", {}).get("method"),
+    }
+
