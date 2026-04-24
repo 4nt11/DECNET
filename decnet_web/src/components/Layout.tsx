@@ -5,6 +5,7 @@ import {
   Server, Archive, Package, Network, ChevronDown, ChevronRight, HardDrive,
   ShieldAlert, Bell, Webhook,
 } from 'lucide-react';
+import { prefetchRoute } from '../routePrefetch';
 import './Layout.css';
 
 type ThreatLevel = 'nominal' | 'elevated' | 'critical';
@@ -212,6 +213,8 @@ const NavItem: React.FC<NavItemProps> = ({ to, icon, label, open, indent, badge 
     to={to}
     className={({ isActive }) => `nav-item ${isActive ? 'active' : ''} ${indent ? 'nav-subitem' : ''}`}
     end={to === '/'}
+    onMouseEnter={() => prefetchRoute(to)}
+    onFocus={() => prefetchRoute(to)}
   >
     {icon}
     {open && <span className="nav-label">{label}</span>}

@@ -1,24 +1,49 @@
-import { useState, useEffect } from 'react';
+import { lazy, Suspense, useState, useEffect } from 'react';
 import { BrowserRouter as Router, Routes, Route, Navigate, useNavigate } from 'react-router-dom';
 import Login from './components/Login';
 import Layout from './components/Layout';
 import Dashboard from './components/Dashboard';
-import DeckyFleet from './components/DeckyFleet';
-import LiveLogs from './components/LiveLogs';
-import Webhooks from './components/Webhooks';
-import Attackers from './components/Attackers';
-import AttackerDetail from './components/AttackerDetail';
-import Config from './components/Config';
-import Bounty from './components/Bounty';
-import RemoteUpdates from './components/RemoteUpdates';
-import SwarmHosts from './components/SwarmHosts';
-import MazeNET from './components/MazeNET/MazeNET';
-import TopologyList from './components/TopologyList/TopologyList';
 import CommandPalette from './components/CommandPalette/CommandPalette';
 import ShortcutsHelp from './components/ShortcutsHelp/ShortcutsHelp';
 import { ToastProvider } from './components/Toasts/ToastProvider';
 import { useToast } from './components/Toasts/useToast';
 import { useGlobalHotkeys } from './hooks/useGlobalHotkeys';
+
+// Page components are code-split per route. Each lands as its own
+// chunk and only downloads when the user navigates to that path —
+// initial page-load stays slim. Dashboard stays eager because it's
+// the landing page: lazy-loading it would Suspense-flicker on every
+// login for zero gain.
+const DeckyFleet     = lazy(() => import('./components/DeckyFleet'));
+const LiveLogs       = lazy(() => import('./components/LiveLogs'));
+const Webhooks       = lazy(() => import('./components/Webhooks'));
+const Attackers      = lazy(() => import('./components/Attackers'));
+const AttackerDetail = lazy(() => import('./components/AttackerDetail'));
+const Config         = lazy(() => import('./components/Config'));
+const Bounty         = lazy(() => import('./components/Bounty'));
+const RemoteUpdates  = lazy(() => import('./components/RemoteUpdates'));
+const SwarmHosts     = lazy(() => import('./components/SwarmHosts'));
+const MazeNET        = lazy(() => import('./components/MazeNET/MazeNET'));
+const TopologyList   = lazy(() => import('./components/TopologyList/TopologyList'));
+
+/* Minimal fallback rendered while a lazy-loaded route chunk is in
+ * flight. Matches the house "dim mono" voice — no spinner library,
+ * no new CSS. Visible for a few frames on first navigation to a
+ * route; cached thereafter. */
+const RouteFallback: React.FC = () => (
+  <div
+    style={{
+      padding: '48px',
+      textAlign: 'center',
+      opacity: 0.5,
+      fontSize: '0.82rem',
+      letterSpacing: '1.5px',
+      fontFamily: 'var(--font-mono)',
+    }}
+  >
+    LOADING…
+  </div>
+);
 
 /* Unified MazeNET entrypoint: no ?topology → topology selector,
  * ?topology=<id> → editor bound to that topology. */
@@ -75,22 +100,24 @@ const AuthedShell: React.FC<AuthedShellProps> = ({ onLogout, onSearch, searchQue
   return (
     <>
       <Layout onLogout={onLogout} onSearch={onSearch} onOpenCmd={() => setCmdOpen(true)}>
-        <Routes>
-          <Route path="/" element={<Dashboard searchQuery={searchQuery} />} />
-          <Route path="/fleet" element={<DeckyFleet searchQuery={searchQuery} />} />
-          <Route path="/topologies" element={<Navigate to="/mazenet" replace />} />
-          <Route path="/mazenet" element={<MazeNETRoute />} />
-          <Route path="/live-logs" element={<LiveLogs />} />
-          <Route path="/webhooks" element={<Webhooks />} />
-          <Route path="/bounty" element={<Bounty />} />
-          <Route path="/attackers" element={<Attackers />} />
-          <Route path="/attackers/:id" element={<AttackerDetail />} />
-          <Route path="/config" element={<Config />} />
-          <Route path="/swarm-updates" element={<RemoteUpdates />} />
-          <Route path="/swarm/hosts" element={<SwarmHosts />} />
-          <Route path="/swarm/enroll" element={<Navigate to="/swarm/hosts" replace />} />
-          <Route path="*" element={<Navigate to="/" replace />} />
-        </Routes>
+        <Suspense fallback={<RouteFallback />}>
+          <Routes>
+            <Route path="/" element={<Dashboard searchQuery={searchQuery} />} />
+            <Route path="/fleet" element={<DeckyFleet searchQuery={searchQuery} />} />
+            <Route path="/topologies" element={<Navigate to="/mazenet" replace />} />
+            <Route path="/mazenet" element={<MazeNETRoute />} />
+            <Route path="/live-logs" element={<LiveLogs />} />
+            <Route path="/webhooks" element={<Webhooks />} />
+            <Route path="/bounty" element={<Bounty />} />
+            <Route path="/attackers" element={<Attackers />} />
+            <Route path="/attackers/:id" element={<AttackerDetail />} />
+            <Route path="/config" element={<Config />} />
+            <Route path="/swarm-updates" element={<RemoteUpdates />} />
+            <Route path="/swarm/hosts" element={<SwarmHosts />} />
+            <Route path="/swarm/enroll" element={<Navigate to="/swarm/hosts" replace />} />
+            <Route path="*" element={<Navigate to="/" replace />} />
+          </Routes>
+        </Suspense>
       </Layout>
       <CommandPalette
         open={cmdOpen}
