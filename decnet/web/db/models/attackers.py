@@ -9,6 +9,26 @@ from sqlmodel import Field, SQLModel
 from ._base import _BIG_TEXT
 
 
+# ─── Keystroke-dynamics tuning constants ──────────────────────────────────────
+#
+# These are the semantic thresholds the session-profile ingester (DEBT-036)
+# uses to bucket IATs and decide what "started a new action" means. Keeping
+# them here (not inline in the ingester) so that:
+#   * the schema docstrings below can reference exact boundaries instead of
+#     copy-pasted magic numbers, and
+#   * a future calibration pass against real honeypot session data only has
+#     to touch one place.
+# All values in seconds.
+
+KD_PAUSE_BURST_MAX_S: float = 0.2   # IAT < this = muscle-memory digraph
+KD_PAUSE_THINK_MAX_S: float = 1.5   # IAT < this = semantic / context-switch pause
+                                    # everything ≥ this lands in the distracted bucket
+KD_START_OF_ACTION_IDLE_S: float = 2.0  # idle gap that counts as "new action"
+                                        # raised from 1s — 1s still catches a lot of
+                                        # mid-command hesitation, 2s is closer to
+                                        # empirical "meaningfully new action"
+
+
 class Attacker(SQLModel, table=True):
     __tablename__ = "attackers"
     uuid: str = Field(primary_key=True)
@@ -119,6 +139,24 @@ class SessionProfile(SQLModel, table=True):
         default=None, foreign_key="logs.id", index=True
     )
     schema_version: int = Field(default=1)
+    # ──────────────────────────────────────────────────────────────────────
+    # Keystroke-dynamics feature columns (kd_*).
+    #
+    # Intended use:   session clustering and tooling attribution
+    #                 ("is this the same typist?" / "is this a known C2
+    #                 framework's paste cadence?").
+    # Explicitly NOT for: attribution to named individuals, access or
+    #                 admission decisions, any ML-driven identity lookup,
+    #                 or biometric-login-style user identification. Those
+    #                 framings push into legal/ethics territory we don't
+    #                 want this project walking into by accident.
+    # PII discipline: every kd_* column aggregates CHARACTERS and TIMING
+    #                 only — never raw input-stream content. Attacker
+    #                 passwords typed over SSH must not land here.
+    # Nulls semantic: a null means "ingester hasn't run on this session
+    #                 yet", not "zero events". Consumers should treat
+    #                 null as absent, not as a computed zero.
+    # ──────────────────────────────────────────────────────────────────────
     # Inter-key interval timing moments (seconds).
     kd_iki_mean: Optional[float] = None
     kd_iki_stdev: Optional[float] = None
@@ -154,30 +192,57 @@ class SessionProfile(SQLModel, table=True):
     # this answers "same typist IN THE SAME MENTAL STATE?" (tired vs rested
     # vs distracted shifts bigram-specific IATs measurably). Shape:
     #   [["th", 47, 0.082], ["in", 31, 0.091], ...]  (bigram, count, mean_iat_s)
-    # Same PII discipline as kd_digraph_simhash: bigram CHARACTERS only,
-    # no content. Bounded by the ingester to N≤32 to cap row width.
+    # Bounded by the ingester to N≤32 to cap row width.
+    #
+    # TODO(DEBT-036 upgrade path): JSON-in-TEXT is fine for v1's
+    # "surface the typist's top digraphs on the attacker page" use
+    # case, but every similarity query (e.g. "find sessions where the
+    # 'th' digraph mean IAT is within 20 ms of this one") has to pull
+    # the string, parse JSON, compare — O(sessions) with a constant
+    # overhead per row. If that query shape becomes hot, promote to a
+    # dedicated `session_bigram_stats(sid, bigram, count, mean_iat_s)`
+    # table with a (bigram, mean_iat_s) index, or a JSONB column on
+    # Postgres with a GIN index. Either is straightforward, neither
+    # changes the write-side ingester materially.
     kd_top_bigrams: Optional[str] = Field(
         default=None, sa_column=Column("kd_top_bigrams", Text, nullable=True),
     )
-    # IAT of the first keystroke following an idle gap > 1s (or the
-    # session-start gap before the first keystroke ever). Separates
-    # "initiating a command" from "executing a remembered one" — real
-    # humans have measurable start-of-action latency, bots don't. Median
-    # across all such initiations in the session, seconds.
+    # IAT of the first keystroke following an idle gap >
+    # KD_START_OF_ACTION_IDLE_S (or the session-start gap before the
+    # very first keystroke). Separates "initiating a command" from
+    # "executing a remembered one" — real humans have measurable
+    # start-of-action latency, bots don't. Median across all such
+    # initiations in the session, seconds.
+    #
+    # Prompt-agnostic on purpose: PS1 / multi-line prompts / sudo
+    # password prompts make prompt-anchored detection fragile. The
+    # idle-gap approach conflates post-prompt action-start with
+    # mid-session think-and-resume — acceptable for a single median
+    # field; if we later want to split them, feed the concurrent
+    # output-stream prompt-pattern into the ingester and fall back to
+    # time-only detection when it misses.
     kd_start_of_action_latency: Optional[float] = None
-    # Three-bucket pause-length histogram, counts (not ratios — raw counts
-    # preserve the total-keystrokes denominator in the column itself):
-    #   burst     : IAT < 0.2s   (muscle-memory digraphs)
-    #   think     : 0.2s ≤ IAT < 1.5s  (semantic boundary, context switch)
-    #   distracted: IAT ≥ 1.5s   (went to look something up, got paged,
-    #                             actively reading another window)
-    # More discriminating than the flat burst_ratio/think_ratio pair:
+    # Three-bucket pause-length histogram, counts (not ratios — raw
+    # counts preserve the total-keystrokes denominator in the column
+    # itself). Bucket edges are the KD_PAUSE_* module constants:
+    #   burst     : IAT < KD_PAUSE_BURST_MAX_S  (muscle-memory digraphs)
+    #   think     : KD_PAUSE_BURST_MAX_S ≤ IAT < KD_PAUSE_THINK_MAX_S
+    #               (semantic boundary, context switch)
+    #   distracted: IAT ≥ KD_PAUSE_THINK_MAX_S  (went to look something
+    #               up, got paged, reading another window)
+    # More discriminating than the flat burst_ratio / think_ratio pair:
     # C2 operators concentrate in the burst bucket with a thin tail;
-    # opportunistic humans have a fat think bucket plus a long distracted
-    # tail. Nulls indicate "ingester hasn't run yet", not "zero events".
+    # opportunistic humans have a fat think bucket and a long
+    # distracted tail.
     kd_pause_hist_burst: Optional[int] = None
     kd_pause_hist_think: Optional[int] = None
     kd_pause_hist_distracted: Optional[int] = None
+    # Longest IAT in the session, seconds. The distracted-bucket count
+    # alone can't tell "one 3-second pause" from "three 60-second
+    # pauses" — both contribute 1-3 to the distracted bucket but
+    # represent different behaviours (brief think vs actual
+    # disengagement). max_pause_gap carries that signal in one scalar.
+    kd_max_pause_gap: Optional[float] = None
     # Derived totals.
     total_keystrokes: Optional[int] = None
     session_duration_s: Optional[float] = None
