@@ -40,7 +40,13 @@ logger = get_logger("attacker_worker")
 _BATCH_SIZE = 500
 _STATE_KEY = "attacker_worker_cursor"
 
-# Event types that indicate active command/query execution (not just connection/scan)
+# Event types that indicate active command/query execution — the
+# shell-family subset of INTERACTION_EVENT_TYPES in
+# decnet/correlation/event_kinds.py. Kept here because this set is a
+# stricter filter (commands that carry text to extract, vs. interactions
+# like RCPT TO or file upload that don't). A test in
+# tests/profiler/ asserts it's a subset of the canonical interaction
+# set so they can't drift.
 _COMMAND_EVENT_TYPES = frozenset({
     "command", "exec", "query", "input", "shell_input",
     "execute", "run", "sql_query", "redis_command",

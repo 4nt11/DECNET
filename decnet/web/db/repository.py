@@ -247,6 +247,16 @@ class BaseRepository(ABC):
         """Return `session_recorded` log rows for this attacker, newest first."""
         pass
 
+    async def get_attacker_service_activity(
+        self, attacker_uuid: str
+    ) -> list[tuple[str, str]]:
+        """Return the distinct ``(service, event_type)`` pairs observed
+        for one attacker, for bucketing into scanned vs. interacted
+        services.  Default is NotImplementedError so non-SQLModel backends
+        must opt in; SQLModelRepository overrides with a cheap DISTINCT
+        query."""
+        raise NotImplementedError
+
     @abstractmethod
     async def get_session_log(self, sid: str) -> Optional[dict[str, Any]]:
         """Look up the `session_recorded` Log row for a given session UUID."""

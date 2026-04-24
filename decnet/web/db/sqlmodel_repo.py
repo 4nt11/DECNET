@@ -881,6 +881,32 @@ class SQLModelRepository(BaseRepository):
             page = commands[offset: offset + limit]
             return {"total": total, "data": page}
 
+    async def get_attacker_service_activity(
+        self, attacker_uuid: str
+    ) -> list[tuple[str, str]]:
+        """Return distinct ``(service, event_type)`` pairs for an attacker.
+
+        Resolves IP then ``SELECT DISTINCT service, event_type FROM logs
+        WHERE attacker_ip = :ip`` — the result set is bounded by the
+        cardinality of services × event_types (tens, not thousands), so
+        this stays cheap even for attackers with long event streams.
+        Caller applies `event_kinds.bucket_services` to split into
+        scanned vs. interacted.
+        """
+        async with self._session() as session:
+            ip_res = await session.execute(
+                select(Attacker.ip).where(Attacker.uuid == attacker_uuid)
+            )
+            ip = ip_res.scalar_one_or_none()
+            if not ip:
+                return []
+            rows = await session.execute(
+                select(Log.service, Log.event_type)
+                .where(Log.attacker_ip == ip)
+                .distinct()
+            )
+            return [(svc, evt) for svc, evt in rows.all()]
+
     async def get_attacker_artifacts(self, uuid: str) -> list[dict[str, Any]]:
         """Return `file_captured` logs for the attacker identified by UUID.
 

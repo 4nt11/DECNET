@@ -183,6 +183,7 @@ class TestGetAttackerDetail:
         with patch("decnet.web.router.attackers.api_get_attacker_detail.repo") as mock_repo:
             mock_repo.get_attacker_by_uuid = AsyncMock(return_value=sample)
             mock_repo.get_attacker_behavior = AsyncMock(return_value=None)
+            mock_repo.get_attacker_service_activity = AsyncMock(return_value=[])
 
             result = await get_attacker_detail(uuid="att-uuid-1", user={"uuid": "test-user", "role": "viewer"})
 
@@ -211,6 +212,7 @@ class TestGetAttackerDetail:
         with patch("decnet.web.router.attackers.api_get_attacker_detail.repo") as mock_repo:
             mock_repo.get_attacker_by_uuid = AsyncMock(return_value=sample)
             mock_repo.get_attacker_behavior = AsyncMock(return_value=None)
+            mock_repo.get_attacker_service_activity = AsyncMock(return_value=[])
 
             result = await get_attacker_detail(uuid="att-uuid-1", user={"uuid": "test-user", "role": "viewer"})
 
@@ -218,6 +220,34 @@ class TestGetAttackerDetail:
         assert isinstance(result["deckies"], list)
         assert isinstance(result["fingerprints"], list)
         assert isinstance(result["commands"], list)
+
+    @pytest.mark.asyncio
+    async def test_service_activity_splits_scanned_vs_interacted(self):
+        """Attacker detail response buckets services by event-type signal."""
+        from decnet.web.router.attackers.api_get_attacker_detail import get_attacker_detail
+
+        sample = _sample_attacker()
+        pairs = [
+            ("ssh", "connection"),
+            ("ssh", "shell_input"),   # promotes ssh to interacted
+            ("http", "get_request"),  # scan only
+            ("ftp", "retr"),          # interacted
+            ("bus", "startup"),       # noise — dropped
+        ]
+        with patch("decnet.web.router.attackers.api_get_attacker_detail.repo") as mock_repo:
+            mock_repo.get_attacker_by_uuid = AsyncMock(return_value=sample)
+            mock_repo.get_attacker_behavior = AsyncMock(return_value=None)
+            mock_repo.get_attacker_service_activity = AsyncMock(return_value=pairs)
+
+            result = await get_attacker_detail(
+                uuid="att-uuid-1",
+                user={"uuid": "test-user", "role": "viewer"},
+            )
+
+        assert result["service_activity"] == {
+            "interacted": ["ftp", "ssh"],
+            "scanned": ["http"],
+        }
 
 
 # ─── GET /attackers/{uuid}/commands ──────────────────────────────────────────
