@@ -38,6 +38,13 @@ LIVE_URL = "mysql+asyncmy://root:root@127.0.0.1:3307/decnet"
 
 pytestmark = [
     pytest.mark.live,
+    # Pin every test in this module to the module-scoped event loop. The
+    # module-scoped ``mysql_test_db_url`` fixture (and transitively the
+    # asyncmy connection pool it seeds) is bound to that loop; running the
+    # tests on their own per-function loops trips pytest-asyncio's
+    # "Future attached to a different loop" guard the instant the repo
+    # reuses a pooled connection.
+    pytest.mark.asyncio(loop_scope="module"),
     pytest.mark.skipif(
         not (LIVE_URL and LIVE_URL.startswith("mysql")),
         reason="Set DECNET_DB_URL=mysql+aiomysql://... to run MySQL live tests",
