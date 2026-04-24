@@ -1,6 +1,6 @@
 # DECNET — Technical Debt Register
 
-> Last updated: 2026-04-24 — DEBT-035 opened (artifact uid/gid alignment).
+> Last updated: 2026-04-24 — DEBT-036 opened (session-profile ingester).
 > Severity: 🔴 Critical · 🟠 High · 🟡 Medium · 🟢 Low
 
 ---
@@ -273,6 +273,48 @@ The Workers panel (Config → Workers) landed with bus-based STOP but every STAR
 
 **Status:** Open. Depends on the Workers panel (shipped) and `deploy/decnet-bus.service` pattern being extended to the other workers.
 
+### DEBT-036 — Session-profile ingester (keystroke-dynamics extraction from transcript shards)
+**Files:** `decnet/web/ingester.py` (or new sibling under `decnet/session_profiler/`), `decnet/web/db/models/attackers.py:SessionProfile` (table already exists, ships empty), `decnet/templates/_shared/sessrec/sessrec.c` (emitter side — already done), `decnet/web/router/attackers/api_get_attacker_detail.py` (consumer — already joins SessionProfile when present).
+
+The `SessionProfile` SQLModel table has been committed to storage since session recording v1 landed (see `decnet/web/db/models/attackers.py:97-143`). Every column — `kd_iki_mean`, `kd_iki_stdev`, `kd_iki_p50`, `kd_iki_p95`, `kd_enter_latency_p50/p95`, `kd_burst_ratio`, `kd_think_ratio`, `kd_ctrl_backspace/wkill/ukill/abort/eof`, `kd_arrow_rate`, `kd_tab_rate`, `kd_digraph_simhash`, `total_keystrokes`, `session_duration_s` — is nullable by design because the **ingester that populates them does not exist yet** (documented as gap #2 in `SIGNAL_CAPTURE_AUDIT.md`). Every session that gets recorded lands an empty row (or, today, no row at all) while the `[t, "i", d]` event stream in the shard carries every signal those columns exist to capture.
+
+**Motivating case.** Given the last 14 keystrokes of one real session (the `wget scanme.nmap.orgh` sequence from shard `2026-04-24`), a manual pass over the "i" events trivially recovers:
+- Coefficient of variation ≈ **0.74** — solidly in the human band (scripts <0.1, jittered tools 0.3-0.6, humans 0.7-1.5+).
+- A **467 ms pause** before the URL argument — classic semantic-boundary "thinking pause" between the command verb and its argument. Bots don't emit these; they fire the whole pre-composed line at uniform cadence.
+- Tight **intra-word bigrams** — `ge` 79 ms, `t<space>` 83 ms — muscle-memory transitions.
+- Slow **start-of-action latency** — `w` → `g` at 225 ms, characteristic of "initiating a command" vs "executing" a remembered one.
+
+All four signals fall out of the schema for free. CoV from `kd_iki_mean` + `kd_iki_stdev`. Semantic pauses from `kd_think_ratio`. Bigram timing from `kd_digraph_simhash`. The fourth (start-of-action latency) doesn't have a column yet — see "Schema extensions" below.
+
+**Design:**
+
+1. **Trigger.** Subscribe on the bus to `attacker.session.ended` *or* (pragmatic fallback until DEBT-031's deferred session-boundary topic lands) poll `Log` rows with `event_type = "session_recorded"` that lack a `SessionProfile(sid=sid)` companion row. The poll path is what ships first; wire the bus later without changing the ingester body.
+2. **Read side.** For each (decky, service, sid), resolve the shard via the fallback-scan path already shipped in `323077b` (`api_get_transcript._find_shard_with_sid`). Extract only `[t, "i", d]` events — the per-session index built by `_get_index` already buckets events by sid, so this is O(keystrokes-in-sid), not O(shard).
+3. **Feature extraction.** One bounded pass over the input events:
+   - IATs: pairwise `events[i].t - events[i-1].t`, clipped at e.g. 10 s so genuine "went to get coffee" gaps don't destroy the stdev.
+   - Control-key rates: count backspace / ^U / ^W / ^C / ^D / arrow / tab against `total_keystrokes`, ratios not raw counts.
+   - Enter latencies: IAT of each `\r` relative to the previous non-`\r` input.
+   - Burst / think ratios: fraction of IATs below 200 ms / above 1 s.
+   - SimHash: 8-byte Hamming-comparable digest over the top-N digraphs, weighted by occurrence.
+4. **Write side.** One `session_profile` upsert per sid. Idempotent on re-run (same sid → same row).
+5. **Schema extensions** (motivated by the manual analysis above — not blocking v1 but worth adding in the same commit if the ingester gets scheduled):
+   - `kd_start_of_action_latency_ms` — IAT of the first keystroke after each prompt redraw (or approximated by "first keystroke after an idle gap >1 s"). User's point 5.
+   - `kd_pause_hist_burst / _think / _distracted` — three-bucket pause-length histogram (<200 ms / 200-1500 ms / >1500 ms), more discriminating than a flat burst-vs-think ratio. User's middle suggestion.
+   - `kd_top_bigrams` JSON blob — top-N (bigram, count, mean_iat_ms) tuples. Complement to `kd_digraph_simhash` that answers "same typist in same mental state", not just "same typist". User's first suggestion.
+
+**Non-negotiables:**
+- Bounded by the existing 10 MB per-session shard cap; no new disk-free precheck needed.
+- No PII beyond what the shard already stores. Raw keystroke `d` values (which include the attacker's passwords in the input stream) MUST NOT land in `SessionProfile` columns — only timing and frequency aggregates. Bigram SimHash uses *characters*, not *content* — but document this explicitly in the column docstring so a future contributor doesn't "improve" it into something that leaks.
+- Idempotent: re-running the ingester on a sid that already has a `SessionProfile` row overwrites deterministically (same shard, same `[t,"i",d]` events → same features).
+- `FakeBus` / poll-only must keep this functional when `DECNET_BUS_ENABLED=false` — mirrors the DEBT-031 rollout pattern.
+
+**Acceptance:**
+- Shipping a decky, running a real SSH session, disconnecting → within one ingester tick a `SessionProfile` row exists with non-null `kd_iki_mean`, `kd_iki_stdev`, `kd_burst_ratio`, `kd_think_ratio`, `total_keystrokes`, `session_duration_s`.
+- The motivating-case wget session produces CoV ≈ 0.74 ± 0.05 when the ingester processes it — sanity check against the manual analysis.
+- The AttackerDetail page surfaces at least `kd_iki_mean` + `kd_burst_ratio` somewhere in the keystroke-dynamics section, unblocking the "is this the same typist" hover story.
+
+**Status:** Open. Depends on the shard-scan fallback (shipped in `323077b`) and `SessionProfile` schema (shipped with session recording v1). The bus-trigger path depends on DEBT-031's deferred `attacker.session.started/ended` topics, but poll-driven ingestion works today and can ship first.
+
 ### DEBT-035 — Artifacts written as the container uid, not the API's
 **Files:** `decnet/services/ssh.py`, `decnet/services/telnet.py`, `decnet/templates/{ssh,telnet}/{Dockerfile,entrypoint.sh}`, `decnet/composer.py` (wherever bind mounts for `/var/lib/decnet/artifacts/**` are generated), `decnet/web/router/transcripts/api_get_transcript.py` (consumer).
 
@@ -380,6 +422,7 @@ The prober already computes JARM (`worker.py:286`), HASSH (`worker.py:334`), and
 | DEBT-032 | 🟡 Medium | Correlation / Prober | open |
 | DEBT-033 | 🟡 Medium | Storage / Session recording | open |
 | DEBT-035 | 🟡 Medium | Artifacts / Filesystem perms | open |
+| DEBT-036 | 🟡 Medium | Correlation / Keystroke dynamics | open |
 
-**Remaining open:** DEBT-011 (Alembic), DEBT-023 (image pinning), DEBT-026 (modular mailboxes), DEBT-027 (Dynamic bait store), DEBT-028 (deploy endpoint tests), DEBT-032 (fingerprint rotation detection), DEBT-033 (transcript shard rotation), DEBT-035 (artifacts uid/gid alignment).
-**Estimated remaining effort:** ~20 hours. DEBT-030 Phase B (optimistic staged-buffer editor) is a follow-up, not debt.
+**Remaining open:** DEBT-011 (Alembic), DEBT-023 (image pinning), DEBT-026 (modular mailboxes), DEBT-027 (Dynamic bait store), DEBT-028 (deploy endpoint tests), DEBT-032 (fingerprint rotation detection), DEBT-033 (transcript shard rotation), DEBT-035 (artifacts uid/gid alignment), DEBT-036 (session-profile ingester).
+**Estimated remaining effort:** ~24 hours. DEBT-030 Phase B (optimistic staged-buffer editor) is a follow-up, not debt.
