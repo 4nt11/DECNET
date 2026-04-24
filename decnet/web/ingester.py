@@ -230,13 +230,19 @@ async def _extract_bounty(repo: BaseRepository, log_data: dict[str, Any]) -> Non
             _headers = {}
     else:
         _headers = {}
-    _ua = _headers.get("User-Agent") or _headers.get("user-agent")
-    if _ua:
-        # Payload must be identity-only (no per-request method/path) —
-        # add_bounty dedups on (attacker_ip, bounty_type, full payload
-        # JSON), so including path here would create one row per URL
-        # the scanner hits. Per-request context belongs in the logs
-        # table, not the bounty table.
+    # Read both casings without `or` short-circuiting: an explicit
+    # empty User-Agent is itself a signal and must not collapse to the
+    # lowercase fallback.
+    _ua = _headers.get("User-Agent")
+    if _ua is None:
+        _ua = _headers.get("user-agent")
+    if _ua is not None:
+        # Classify: browser / cli / library / scanner / bot / nonstandard
+        # / empty. `nonstandard` is the interesting one — UAs like
+        # "FUCKYOU/1.0" land there and deserve an analyst's attention.
+        # Classification is deterministic given the UA string, so the
+        # payload stays dedup-stable across repeat requests.
+        _ua_category, _ua_tool, _ua_signals = _classify_ua(_ua)
         await repo.add_bounty({
             "decky": log_data.get("decky"),
             "service": log_data.get("service"),
@@ -245,6 +251,9 @@ async def _extract_bounty(repo: BaseRepository, log_data: dict[str, Any]) -> Non
             "payload": {
                 "fingerprint_type": "http_useragent",
                 "value": _ua,
+                "category": _ua_category,
+                "tool": _ua_tool,
+                "signals": _ua_signals or None,
             }
         })
 
@@ -840,4 +849,145 @@ def _http_quirks_fingerprint(
         "stable_count": len(names_stable),
         "tool_guess": _guess_tool_from_order(lowered),
     }
+
+
+# ─── User-Agent classifier ──────────────────────────────────────────────────
+#
+# Bucket UAs into one of {browser, cli, library, scanner, bot, nonstandard,
+# empty}, and surface optional `tool` name + `signals` list (suspicious_short
+# / suspicious_long / nonprintable / injection_like). The main analytic
+# value is `nonstandard` — UAs that don't match any known pattern are
+# either custom tooling, adversarial labels ("FUCKYOU/1.0"), or
+# misconfigured scanners that deserve an analyst's eye.
+
+_UA_BROWSER_RE = re.compile(r"^Mozilla/\d")
+# Substring match without word boundaries so "bingbot", "Googlebot",
+# "Baiduspider" etc. register. Downside: matches "robot" or "spidery"
+# in pathological payloads — acceptable at this classifier's precision.
+_UA_BOT_RE = re.compile(r"(bot|crawler|spider|slurp|monitor)", re.IGNORECASE)
+
+# Order matters inside each bucket — first match wins, so list the more
+# specific pattern first (e.g. python-requests before Python/).
+_UA_CLI_RES: tuple[tuple[re.Pattern[str], str], ...] = (
+    (re.compile(r"^curl/", re.IGNORECASE), "curl"),
+    (re.compile(r"^Wget/", re.IGNORECASE), "wget"),
+    (re.compile(r"^HTTPie/", re.IGNORECASE), "httpie"),
+    (re.compile(r"^xh/", re.IGNORECASE), "xh"),
+    (re.compile(r"^fetch/", re.IGNORECASE), "fetch"),
+)
+
+_UA_LIBRARY_RES: tuple[tuple[re.Pattern[str], str], ...] = (
+    (re.compile(r"^python-requests/", re.IGNORECASE), "python-requests"),
+    (re.compile(r"^aiohttp/", re.IGNORECASE), "aiohttp"),
+    (re.compile(r"^httpx/", re.IGNORECASE), "httpx"),
+    (re.compile(r"^urllib/", re.IGNORECASE), "urllib"),
+    (re.compile(r"^Python-urllib/", re.IGNORECASE), "urllib"),
+    (re.compile(r"^Python/\d", re.IGNORECASE), "python-stdlib"),
+    (re.compile(r"^Go-http-client/", re.IGNORECASE), "go-stdlib"),
+    (re.compile(r"^go-resty/", re.IGNORECASE), "go-resty"),
+    (re.compile(r"^Java/\d", re.IGNORECASE), "java-stdlib"),
+    (re.compile(r"^okhttp/", re.IGNORECASE), "okhttp"),
+    (re.compile(r"^Apache-HttpClient/", re.IGNORECASE), "apache-httpclient"),
+    (re.compile(r"^Jersey/", re.IGNORECASE), "jersey"),
+    (re.compile(r"^axios/", re.IGNORECASE), "axios"),
+    (re.compile(r"^node-fetch/", re.IGNORECASE), "node-fetch"),
+    (re.compile(r"^got\s?\(|^got/", re.IGNORECASE), "got"),
+    (re.compile(r"^undici", re.IGNORECASE), "undici"),
+    (re.compile(r"^PHP/\d", re.IGNORECASE), "php-stdlib"),
+    (re.compile(r"GuzzleHttp/", re.IGNORECASE), "guzzle"),
+    (re.compile(r"^Ruby\b", re.IGNORECASE), "ruby-stdlib"),
+    (re.compile(r"^Faraday\b", re.IGNORECASE), "faraday"),
+    (re.compile(r"^HTTParty", re.IGNORECASE), "httparty"),
+    (re.compile(r"^\.NET/|System\.Net\.Http|RestSharp/", re.IGNORECASE), "dotnet"),
+    (re.compile(r"^PostmanRuntime/", re.IGNORECASE), "postman"),
+    (re.compile(r"^Insomnia/", re.IGNORECASE), "insomnia"),
+)
+
+_UA_SCANNER_RES: tuple[tuple[re.Pattern[str], str], ...] = (
+    (re.compile(r"\bnmap\b", re.IGNORECASE), "nmap"),
+    (re.compile(r"\bmasscan\b", re.IGNORECASE), "masscan"),
+    (re.compile(r"\bzgrab\b", re.IGNORECASE), "zgrab"),
+    (re.compile(r"\bzmap\b", re.IGNORECASE), "zmap"),
+    (re.compile(r"\bNuclei\b", re.IGNORECASE), "nuclei"),
+    (re.compile(r"\bsqlmap\b", re.IGNORECASE), "sqlmap"),
+    (re.compile(r"\bgobuster\b", re.IGNORECASE), "gobuster"),
+    (re.compile(r"\bdirb\b", re.IGNORECASE), "dirb"),
+    (re.compile(r"\bdirbuster\b", re.IGNORECASE), "dirbuster"),
+    (re.compile(r"\bnikto\b", re.IGNORECASE), "nikto"),
+    (re.compile(r"\bferoxbuster\b", re.IGNORECASE), "feroxbuster"),
+    (re.compile(r"\bwfuzz\b", re.IGNORECASE), "wfuzz"),
+    (re.compile(r"\bffuf\b", re.IGNORECASE), "ffuf"),
+    (re.compile(r"\bwpscan\b", re.IGNORECASE), "wpscan"),
+    (re.compile(r"\bkatana\b", re.IGNORECASE), "katana"),
+    (re.compile(r"\bBurp\b", re.IGNORECASE), "burp"),
+    (re.compile(r"\bAcunetix\b", re.IGNORECASE), "acunetix"),
+    (re.compile(r"\bNessus\b", re.IGNORECASE), "nessus"),
+    (re.compile(r"\bOpenVAS\b", re.IGNORECASE), "openvas"),
+    (re.compile(r"\bArachni\b", re.IGNORECASE), "arachni"),
+    (re.compile(r"\bWhatWeb\b", re.IGNORECASE), "whatweb"),
+    (re.compile(r"\bWappalyzer\b", re.IGNORECASE), "wappalyzer"),
+    (re.compile(r"\bSploitScan\b", re.IGNORECASE), "sploitscan"),
+)
+
+# Substring markers that strongly suggest a payload attempt embedded in
+# the UA itself. Attackers sometimes park SQLi / path traversal / XSS
+# test strings in User-Agent hoping a middleware or log-ingestion tool
+# mishandles it.
+_UA_INJECTION_MARKERS: tuple[str, ...] = (
+    "<script",
+    "';",
+    "' or '",
+    "' or 1",
+    "1=1",
+    "' --",
+    "/../",
+    "/etc/passwd",
+    "${jndi:",   # Log4Shell
+    "{{",         # SSTI
+)
+
+
+def _classify_ua(ua: str) -> tuple[str, Optional[str], list[str]]:
+    """Return ``(category, tool, signals)``.
+
+    category ∈ {empty, browser, cli, library, scanner, bot, nonstandard}.
+    tool is the matched tool name when ``category`` ∈ {cli, library,
+    scanner}, else None. signals is a list of auxiliary flags —
+    suspicious_short, suspicious_long, nonprintable, injection_like —
+    always present on top of the category, since a scanner UA with an
+    injection marker is a distinct signal from a scanner UA alone.
+    """
+    signals: list[str] = []
+    if ua is None or ua == "":
+        return "empty", None, signals
+
+    # Detectors that apply regardless of category.
+    if len(ua) < 8:
+        signals.append("suspicious_short")
+    if len(ua) > 512:
+        signals.append("suspicious_long")
+    if any(ord(c) < 32 and c != "\t" for c in ua):
+        signals.append("nonprintable")
+    lowered = ua.lower()
+    if any(marker in lowered for marker in _UA_INJECTION_MARKERS):
+        signals.append("injection_like")
+
+    # Priority: scanner > cli > library > bot > browser > nonstandard.
+    # Bots before browser because well-behaved crawlers ship UAs like
+    # "Mozilla/5.0 (compatible; Googlebot/2.1)" — the Mozilla prefix
+    # would win under browser-first ordering and misclassify them.
+    for regex, name in _UA_SCANNER_RES:
+        if regex.search(ua):
+            return "scanner", name, signals
+    for regex, name in _UA_CLI_RES:
+        if regex.search(ua):
+            return "cli", name, signals
+    for regex, name in _UA_LIBRARY_RES:
+        if regex.search(ua):
+            return "library", name, signals
+    if _UA_BOT_RE.search(ua):
+        return "bot", None, signals
+    if _UA_BROWSER_RE.match(ua):
+        return "browser", None, signals
+    return "nonstandard", None, signals
 

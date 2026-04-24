@@ -342,6 +342,58 @@ const FpGeneric: React.FC<{ p: any }> = ({ p }) => (
   </div>
 );
 
+const UA_CATEGORY_COLOR: Record<string, string> = {
+  scanner: 'var(--alert, #ff4d4d)',
+  nonstandard: 'var(--warn, #e0a040)',
+  empty: 'var(--warn, #e0a040)',
+  bot: 'var(--violet)',
+  cli: 'var(--matrix)',
+  library: 'var(--matrix)',
+  browser: 'var(--accent-color)',
+};
+
+const UA_SIGNAL_COLOR: Record<string, string> = {
+  injection_like: 'var(--alert, #ff4d4d)',
+  nonprintable: 'var(--alert, #ff4d4d)',
+  suspicious_long: 'var(--warn, #e0a040)',
+  suspicious_short: 'var(--warn, #e0a040)',
+};
+
+const FpUserAgent: React.FC<{ p: any }> = ({ p }) => {
+  const category = typeof p.category === 'string' ? p.category : 'unknown';
+  const color = UA_CATEGORY_COLOR[category] || 'var(--text-color)';
+  const signals: string[] = Array.isArray(p.signals) ? p.signals : [];
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+      {p.value !== undefined && p.value !== '' ? (
+        <span
+          className="matrix-text"
+          style={{
+            fontFamily: 'monospace',
+            fontSize: '0.85rem',
+            wordBreak: 'break-all',
+          }}
+        >
+          {p.value}
+        </span>
+      ) : (
+        <span className="dim" style={{ fontStyle: 'italic' }}>
+          (empty User-Agent)
+        </span>
+      )}
+      <div style={{ display: 'flex', gap: '6px', flexWrap: 'wrap' }}>
+        <Tag color={color}>{category.toUpperCase()}</Tag>
+        {p.tool && <Tag>{String(p.tool).toUpperCase()}</Tag>}
+        {signals.map((s) => (
+          <Tag key={s} color={UA_SIGNAL_COLOR[s] || 'var(--warn, #e0a040)'}>
+            {s.toUpperCase().replace(/_/g, ' ')}
+          </Tag>
+        ))}
+      </div>
+    </div>
+  );
+};
+
 const FpSpoofedSource: React.FC<{ p: any }> = ({ p }) => (
   <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
     <div>
@@ -434,6 +486,7 @@ const FingerprintGroup: React.FC<{ fpType: string; items: any[] }> = ({ fpType, 
             case 'hassh_server': return <FpHassh key={i} p={p} />;
             case 'tcpfp': return <FpTcpStack key={i} p={p} />;
             case 'http_quirks': return <FpHttpQuirks key={i} p={p} />;
+            case 'http_useragent': return <FpUserAgent key={i} p={p} />;
             case 'spoofed_source': return <FpSpoofedSource key={i} p={p} />;
             default: return <FpGeneric key={i} p={p} />;
           }
