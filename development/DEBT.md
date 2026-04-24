@@ -1,6 +1,6 @@
 # DECNET — Technical Debt Register
 
-> Last updated: 2026-04-22 — DEBT-034 opened (worker supervisor).
+> Last updated: 2026-04-24 — DEBT-035 opened (artifact uid/gid alignment).
 > Severity: 🔴 Critical · 🟠 High · 🟡 Medium · 🟢 Low
 
 ---
@@ -273,6 +273,36 @@ The Workers panel (Config → Workers) landed with bus-based STOP but every STAR
 
 **Status:** Open. Depends on the Workers panel (shipped) and `deploy/decnet-bus.service` pattern being extended to the other workers.
 
+### DEBT-035 — Artifacts written as the container uid, not the API's
+**Files:** `decnet/services/ssh.py`, `decnet/services/telnet.py`, `decnet/templates/{ssh,telnet}/{Dockerfile,entrypoint.sh}`, `decnet/composer.py` (wherever bind mounts for `/var/lib/decnet/artifacts/**` are generated), `decnet/web/router/transcripts/api_get_transcript.py` (consumer).
+
+Every decoy container that produces artifacts (session recordings, captured uploads, credential dumps) writes into a host bind-mount under `/var/lib/decnet/artifacts/{decky}/{service}/...`. The writer is whatever uid is running inside the container — typically `root` (uid 0 inside the container, which maps to the host's `root` or the container's own unprivileged `decnet` uid depending on the template's `USER` directive). The API, on the other hand, runs under whatever `--user` was passed to `decnet init` — `anti` on dev boxes, `decnet` in production.
+
+On mismatch, the API process hits `PermissionError` the moment it tries to `stat()` the artifacts dir. The transcripts endpoint now soft-fails this into a 404 (shipped in `323077b`), which keeps the API up but still leaves the operator unable to view any session that was recorded before the mismatch was fixed by hand.
+
+**Evidence (dev box, 2026-04-24):**
+```
+PermissionError: [Errno 13] Permission denied:
+  '/var/lib/decnet/artifacts/omega-decky/ssh/transcripts'
+```
+Workaround: `sudo chown -R anti:anti /var/lib/decnet/artifacts`. Every new decky re-creates the dir as whatever uid the container uses, so the workaround has to be re-run — which doesn't scale.
+
+**Design options (pick one, not all):**
+
+1. **Container runs as the host API's uid.** `compose_fragment()` for every artifact-producing service injects `user: "{host_uid}:{host_gid}"` into the compose snippet, sourcing the uid/gid from whatever `DECNET_API_UID` / `DECNET_API_GID` the master detected at init time (or `id -u` / `id -g` of the current process at compose time). This is the cleanest but has the most blast radius — bind mounts need to be pre-chowned to that uid before the container starts, and some templates have `entrypoint.sh` steps that assume root (e.g. `setcap`, `chmod` of system files during service setup).
+
+2. **Setgid bit on the artifacts tree + shared group.** `mkdir -p /var/lib/decnet/artifacts && chmod 2775 /var/lib/decnet/artifacts && chgrp decnet /var/lib/decnet/artifacts`. Every new file inherits the `decnet` group; the API (member of `decnet`) can read regardless of which uid wrote. Still requires each container to `chmod g+r` its output — sessrec/emitter code would need a small change to `umask(0002)` or explicit `fchmod` calls. Less invasive but fragile: any writer that forgets the umask silently regresses.
+
+3. **Sidecar post-processor.** A long-running daemon under the API's uid `inotify`-watches `/var/lib/decnet/artifacts/**`, re-chowns new files on creation. Works without touching any template, but adds a new process and a race window between "file created" and "file readable by API". Not a great shape for an already-worker-heavy architecture.
+
+**Recommendation:** option 1, with the init command handling the setup (mkdir the artifacts tree with mode 0775, group = `--group`, then propagate the uid/gid into the compose generator). Option 2 as a fallback where option 1 can't land (e.g. templates that genuinely need root inside the container, like the conpot ICS template).
+
+**Acceptance:**
+- A fresh `decnet init --user anti --group anti` → deploy a decky → exercise a recorded session → the API (running as `anti`) can read `/var/lib/decnet/artifacts/.../transcripts/sessions-*.jsonl` **without any manual chown**.
+- The soft-fail path shipped in `323077b` stays as defence-in-depth — the API must never 500 on a permission mismatch, but it also shouldn't *need* to soft-fail on a healthy install.
+
+**Status:** Open. Current workaround is `sudo chown -R <user>:<group> /var/lib/decnet/artifacts` after every new deploy; soft-fail in the transcripts endpoint keeps the API alive in the interim.
+
 ### DEBT-032 — Prober can't detect fingerprint rotation without mutation
 **Files:** `decnet/prober/worker.py` (~lines 235, 286, 334, 392), `decnet/web/db/models.py` (new `decky_service_fingerprints` table).
 
@@ -349,6 +379,7 @@ The prober already computes JARM (`worker.py:286`), HASSH (`worker.py:334`), and
 | ~~DEBT-031~~ | ✅ | Workers / Bus integration | resolved |
 | DEBT-032 | 🟡 Medium | Correlation / Prober | open |
 | DEBT-033 | 🟡 Medium | Storage / Session recording | open |
+| DEBT-035 | 🟡 Medium | Artifacts / Filesystem perms | open |
 
-**Remaining open:** DEBT-011 (Alembic), DEBT-023 (image pinning), DEBT-026 (modular mailboxes), DEBT-027 (Dynamic bait store), DEBT-028 (deploy endpoint tests), DEBT-032 (fingerprint rotation detection), DEBT-033 (transcript shard rotation).
-**Estimated remaining effort:** ~18 hours. DEBT-030 Phase B (optimistic staged-buffer editor) is a follow-up, not debt.
+**Remaining open:** DEBT-011 (Alembic), DEBT-023 (image pinning), DEBT-026 (modular mailboxes), DEBT-027 (Dynamic bait store), DEBT-028 (deploy endpoint tests), DEBT-032 (fingerprint rotation detection), DEBT-033 (transcript shard rotation), DEBT-035 (artifacts uid/gid alignment).
+**Estimated remaining effort:** ~20 hours. DEBT-030 Phase B (optimistic staged-buffer editor) is a follow-up, not debt.
