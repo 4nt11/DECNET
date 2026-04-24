@@ -29,6 +29,7 @@ interface WebhookRow {
   last_success_at: string | null;
   last_failure_at: string | null;
   last_error: string | null;
+  auto_disabled_at: string | null;
   created_at: string;
   updated_at: string;
   warnings: string[];
@@ -114,6 +115,10 @@ const Webhooks: React.FC = () => {
   const enabledCount = useMemo(() => webhooks.filter((w) => w.enabled).length, [webhooks]);
   const failCount = useMemo(
     () => webhooks.filter((w) => w.consecutive_failures > 0).length,
+    [webhooks],
+  );
+  const trippedCount = useMemo(
+    () => webhooks.filter((w) => w.auto_disabled_at).length,
     [webhooks],
   );
 
@@ -290,6 +295,7 @@ const Webhooks: React.FC = () => {
           <h1>WEBHOOKS</h1>
           <span className="page-sub">
             {webhooks.length} CONFIGURED · {enabledCount} ENABLED
+            {trippedCount > 0 && ` · ${trippedCount} TRIPPED`}
             {failCount > 0 && ` · ${failCount} FAILING`}
             {insecureCount > 0 && ` · ${insecureCount} INSECURE`}
           </span>
@@ -424,6 +430,14 @@ const Webhooks: React.FC = () => {
                         <span className={`wh-chip ${w.enabled ? '' : 'status-disabled'}`}>
                           {w.enabled ? 'ENABLED' : 'DISABLED'}
                         </span>
+                        {w.auto_disabled_at && (
+                          <span
+                            className="wh-chip status-fail"
+                            title={`Circuit tripped at ${formatDate(w.auto_disabled_at)}. Re-enable via Edit to reset.`}
+                          >
+                            TRIPPED · {formatDate(w.auto_disabled_at)}
+                          </span>
+                        )}
                         {w.consecutive_failures > 0 && (
                           <span className="wh-chip status-fail" title={w.last_error || ''}>
                             FAIL · {w.consecutive_failures}

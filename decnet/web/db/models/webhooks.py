@@ -41,6 +41,13 @@ class WebhookSubscription(SQLModel, table=True):
     last_success_at: Optional[datetime] = None
     last_failure_at: Optional[datetime] = None
     last_error: Optional[str] = None
+    # Set when the circuit breaker auto-disables the subscription after
+    # too many consecutive failures. NULL means "not tripped" — the
+    # subscription is either active (enabled=True) or admin-paused
+    # (enabled=False, auto_disabled_at=NULL). A non-NULL stamp with
+    # enabled=False means the worker tripped it; the operator clears
+    # the flag by re-enabling via PATCH.
+    auto_disabled_at: Optional[datetime] = None
     created_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
     updated_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
 
@@ -100,6 +107,7 @@ class WebhookResponse(BaseModel):
     last_success_at: Optional[datetime] = None
     last_failure_at: Optional[datetime] = None
     last_error: Optional[str] = None
+    auto_disabled_at: Optional[datetime] = None
     created_at: datetime
     updated_at: datetime
     warnings: List[str] = PydanticField(default_factory=list)

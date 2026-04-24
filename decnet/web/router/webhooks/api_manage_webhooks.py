@@ -173,6 +173,15 @@ async def api_update_webhook(
 
     if req.enabled is not None:
         patch["enabled"] = req.enabled
+        # Re-enabling after a circuit trip clears the trip stamp and
+        # zeros the failure count — the operator has acknowledged and
+        # is ready to resume delivery. Admin-paused → re-enabled also
+        # hits this path harmlessly (auto_disabled_at is already NULL
+        # and consecutive_failures is already 0).
+        if req.enabled is True and not current.get("enabled"):
+            patch["auto_disabled_at"] = None
+            patch["consecutive_failures"] = 0
+            patch["last_error"] = None
 
     if req.simple_events is not None or req.topic_patterns is not None:
         # Re-merge using whatever the caller supplied; a caller that wants

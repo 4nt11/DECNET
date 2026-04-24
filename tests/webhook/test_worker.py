@@ -48,15 +48,29 @@ class _FakeRepo:
         self.subs = subs
         self.success_calls: list[str] = []
         self.failure_calls: list[tuple[str, str]] = []
+        self.trip_calls: list[str] = []
+        self._failure_counts: dict[str, int] = {}
 
     async def list_webhook_subscriptions(self, enabled_only: bool = False) -> list[dict[str, Any]]:
         return [s for s in self.subs if s["enabled"]] if enabled_only else list(self.subs)
 
     async def record_webhook_success(self, uuid: str, ts: datetime) -> None:
         self.success_calls.append(uuid)
+        self._failure_counts[uuid] = 0
 
-    async def record_webhook_failure(self, uuid: str, ts: datetime, error: str) -> None:
+    async def record_webhook_failure(self, uuid: str, ts: datetime, error: str) -> int:
         self.failure_calls.append((uuid, error))
+        self._failure_counts[uuid] = self._failure_counts.get(uuid, 0) + 1
+        return self._failure_counts[uuid]
+
+    async def trip_webhook_circuit(self, uuid: str, ts: datetime) -> None:
+        self.trip_calls.append(uuid)
+        # Mirror the real DB effect: flip enabled=False so next reload
+        # skips this sub.
+        for s in self.subs:
+            if s["uuid"] == uuid:
+                s["enabled"] = False
+                s["auto_disabled_at"] = ts
 
 
 def test_patterns_for_decodes_json():
@@ -231,6 +245,51 @@ async def test_worker_reloads_on_subscriptions_changed_signal(fake_bus):
             except asyncio.CancelledError:
                 pass
 
+
     # The new sub (u2) should have received the system.log event.
     assert len(captured) == 1
     assert "system.log" in captured[0].headers.get("X-DECNET-Event-Topic", "")
+
+
+@pytest.mark.asyncio
+async def test_worker_trips_circuit_after_threshold(fake_bus, monkeypatch):
+    """After N consecutive failures the worker auto-disables the sub."""
+    sub = _sub("u1", "w1", ["attacker.>"])
+    repo = _FakeRepo([sub])
+
+    # Tight threshold + zero-delay retry so the test finishes fast.
+    monkeypatch.setattr("decnet.webhook.worker._CIRCUIT_THRESHOLD", 2)
+    monkeypatch.setattr(
+        "decnet.webhook.client._DEFAULT_RETRY_SCHEDULE", (0.0, 0.0, 0.0)
+    )
+
+    async def handler(request: httpx.Request) -> httpx.Response:
+        return httpx.Response(503)
+
+    async with httpx.AsyncClient(transport=httpx.MockTransport(handler)) as client:
+        with patch("decnet.webhook.worker.get_bus", return_value=fake_bus):
+            task = asyncio.create_task(
+                webhook_worker(repo, reload_interval=0.5, http_client=client)
+            )
+            await asyncio.sleep(0.2)
+            # Publish two events — each fails N retries, each increments
+            # consecutive_failures by 1. Second trip should fire.
+            await fake_bus.publish("attacker.observed", {}, event_type="x")
+            await fake_bus.publish("attacker.observed", {}, event_type="x")
+            for _ in range(120):
+                if repo.trip_calls:
+                    break
+                await asyncio.sleep(0.05)
+
+            task.cancel()
+            try:
+                await task
+            except asyncio.CancelledError:
+                pass
+
+    assert repo.trip_calls, "expected circuit to trip after threshold"
+    assert repo.trip_calls[0] == "u1"
+    # The sub was flipped to enabled=False by trip_webhook_circuit.
+    assert sub["enabled"] is False
+    assert sub["auto_disabled_at"] is not None
+

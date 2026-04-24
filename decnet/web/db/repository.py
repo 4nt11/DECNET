@@ -466,5 +466,12 @@ class BaseRepository(ABC):
 
     async def record_webhook_failure(
         self, uuid: str, ts: Any, error: str
-    ) -> None:
+    ) -> int:
+        """Record a failed delivery; return the new ``consecutive_failures``
+        count so the caller can decide whether to trip the circuit."""
+        raise NotImplementedError
+
+    async def trip_webhook_circuit(self, uuid: str, ts: Any) -> None:
+        """Auto-disable a subscription after repeated failures. Sets
+        ``enabled=False`` and stamps ``auto_disabled_at``."""
         raise NotImplementedError

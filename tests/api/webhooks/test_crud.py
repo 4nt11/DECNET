@@ -211,6 +211,58 @@ async def test_https_url_has_no_warning(
 
 
 @pytest.mark.asyncio
+async def test_reenabling_clears_circuit_trip(
+    client: httpx.AsyncClient, auth_token: str
+):
+    """Re-enabling via PATCH clears auto_disabled_at + consecutive_failures.
+
+    Simulates the full circuit-breaker lifecycle: create → tripped (via
+    direct DB write, since we can't easily force N worker failures in an
+    API-only test) → re-enable via PATCH → verify state cleared.
+    """
+    from datetime import datetime, timezone
+    from decnet.web.dependencies import repo
+
+    create = await client.post(
+        PATH,
+        json={
+            "name": "wh-trip",
+            "url": "https://example.com/x",
+            "topic_patterns": ["system.>"],
+        },
+        headers={"Authorization": f"Bearer {auth_token}"},
+    )
+    assert create.status_code == 201
+    uuid = create.json()["uuid"]
+
+    # Simulate the circuit tripping — direct repo call.
+    now = datetime.now(timezone.utc)
+    await repo.record_webhook_failure(uuid, now, "503 service unavailable")
+    await repo.record_webhook_failure(uuid, now, "503 service unavailable")
+    await repo.trip_webhook_circuit(uuid, now)
+
+    pre = await client.get(
+        f"{PATH}{uuid}", headers={"Authorization": f"Bearer {auth_token}"}
+    )
+    assert pre.json()["enabled"] is False
+    assert pre.json()["auto_disabled_at"] is not None
+    assert pre.json()["consecutive_failures"] >= 1
+
+    # Re-enable via PATCH — should clear trip + counter + last_error.
+    res = await client.patch(
+        f"{PATH}{uuid}",
+        json={"enabled": True},
+        headers={"Authorization": f"Bearer {auth_token}"},
+    )
+    assert res.status_code == 200
+    body = res.json()
+    assert body["enabled"] is True
+    assert body["auto_disabled_at"] is None
+    assert body["consecutive_failures"] == 0
+    assert body["last_error"] is None
+
+
+@pytest.mark.asyncio
 async def test_viewer_forbidden(client: httpx.AsyncClient, viewer_token: str):
     res = await client.get(
         PATH, headers={"Authorization": f"Bearer {viewer_token}"}

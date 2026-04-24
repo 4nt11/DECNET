@@ -1829,25 +1829,40 @@ class SQLModelRepository(BaseRepository):
 
     async def record_webhook_failure(
         self, uuid: str, ts: datetime, error: str
-    ) -> None:
+    ) -> int:
         async with self._session() as session:
             # Read current failure count, bump, write. Small race window on
             # concurrent deliveries to the same subscription is acceptable —
-            # the counter informs the circuit-breaker heuristic (DEBT-037),
-            # not a correctness invariant.
+            # the counter informs the circuit-breaker heuristic, not a
+            # correctness invariant.
             result = await session.execute(
                 select(WebhookSubscription.consecutive_failures).where(
                     WebhookSubscription.uuid == uuid
                 )
             )
             current = result.scalar_one_or_none() or 0
+            new_count = current + 1
             await session.execute(
                 update(WebhookSubscription)
                 .where(WebhookSubscription.uuid == uuid)
                 .values(
-                    consecutive_failures=current + 1,
+                    consecutive_failures=new_count,
                     last_failure_at=ts,
                     last_error=error[:512] if error else None,
+                    updated_at=ts,
+                )
+            )
+            await session.commit()
+            return new_count
+
+    async def trip_webhook_circuit(self, uuid: str, ts: datetime) -> None:
+        async with self._session() as session:
+            await session.execute(
+                update(WebhookSubscription)
+                .where(WebhookSubscription.uuid == uuid)
+                .values(
+                    enabled=False,
+                    auto_disabled_at=ts,
                     updated_at=ts,
                 )
             )

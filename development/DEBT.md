@@ -352,7 +352,7 @@ The webhook worker (Wazuh / Shuffle / TheHive / n8n integration path) ships MVP-
 
 What MVP deliberately defers:
 
-1. **Circuit breaker.** After N consecutive 5xx / timeout / connection refused errors, auto-disable the subscription and require admin re-enable. Without this, a half-working SOAR endpoint can pin the webhook worker's connection pool and starve healthy destinations. Fast follow-up — the state (consecutive_failures, last_failure_at) is small and fits on the subscription row.
+1. ~~**Circuit breaker.**~~ ✅ **Shipped 2026-04-24.** After `DECNET_WEBHOOK_CIRCUIT_THRESHOLD` (default 5) consecutive failures the worker calls `trip_webhook_circuit(uuid, ts)` — flips `enabled=False`, stamps `auto_disabled_at`, fires a reload. Operator clears the trip by re-enabling via PATCH, which zeros the counter and clears the stamp. UI surfaces `TRIPPED · <ts>` chip on the row; page header shows a `N TRIPPED` count.
 2. **Dead-letter table.** Events that exhaust retries are dropped with a log line, not persisted. Operators can't replay a missed event after they fix their Shuffle flow. Minimum viable: `webhook_dead_letters(subscription_id, topic, payload_json, final_error, dropped_at)` with a TTL sweep, and `POST /webhooks/{id}/replay?since=...` to re-queue.
 3. **Delivery audit log.** No persisted record of "what went where and when." Useful for compliance and for debugging "why didn't TheHive see that alert." Same table shape as dead-letter but success-path entries with retention knob.
 4. **Batch delivery / coalescing.** Every event fires one HTTP POST. High-volume topics (`system.log` on a busy master) will happily saturate the egress. Post-MVP, add a bounded batch window (e.g. up to 50 events or 500 ms) and POST an envelope `{events: [...]}`.
