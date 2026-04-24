@@ -93,6 +93,7 @@ const fpTypeLabel: Record<string, string> = {
   tls_certificate: 'CERTIFICATE',
   http_useragent: 'HTTP USER-AGENT',
   http_quirks: 'HTTP HEADER QUIRKS',
+  spoofed_source: 'SPOOFED SOURCE IP',
   vnc_client_version: 'VNC CLIENT',
   jarm: 'JARM',
   hassh_server: 'HASSH SERVER',
@@ -106,6 +107,7 @@ const fpTypeIcon: Record<string, React.ReactNode> = {
   tls_certificate: <FileKey size={14} />,
   http_useragent: <Shield size={14} />,
   http_quirks: <Fingerprint size={14} />,
+  spoofed_source: <Crosshair size={14} />,
   vnc_client_version: <Lock size={14} />,
   jarm: <Crosshair size={14} />,
   hassh_server: <Lock size={14} />,
@@ -340,6 +342,37 @@ const FpGeneric: React.FC<{ p: any }> = ({ p }) => (
   </div>
 );
 
+const FpSpoofedSource: React.FC<{ p: any }> = ({ p }) => (
+  <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+    <div>
+      <span className="dim" style={{ fontSize: '0.7rem' }}>CLAIMED: </span>
+      <span style={{
+        color: 'var(--warn, #e0a040)',
+        fontFamily: 'monospace',
+        fontSize: '0.85rem',
+      }}>
+        {p.claimed_ip || '—'}
+      </span>
+      <span className="dim" style={{ fontSize: '0.7rem', marginLeft: 8 }}>
+        via {p.source_header}
+      </span>
+    </div>
+    <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
+      {p.claim_category && (
+        <Tag color="var(--warn, #e0a040)">
+          {String(p.claim_category).toUpperCase()}
+        </Tag>
+      )}
+      <Tag>WAF-BYPASS ATTEMPT</Tag>
+    </div>
+    {p.source_ip && (
+      <div className="dim" style={{ fontSize: '0.7rem', fontFamily: 'monospace' }}>
+        real source · {p.source_ip}
+      </div>
+    )}
+  </div>
+);
+
 const FpHttpQuirks: React.FC<{ p: any }> = ({ p }) => {
   const order: string[] = Array.isArray(p.order) ? p.order : [];
   return (
@@ -401,6 +434,7 @@ const FingerprintGroup: React.FC<{ fpType: string; items: any[] }> = ({ fpType, 
             case 'hassh_server': return <FpHassh key={i} p={p} />;
             case 'tcpfp': return <FpTcpStack key={i} p={p} />;
             case 'http_quirks': return <FpHttpQuirks key={i} p={p} />;
+            case 'spoofed_source': return <FpSpoofedSource key={i} p={p} />;
             default: return <FpGeneric key={i} p={p} />;
           }
         })}
@@ -1279,7 +1313,7 @@ const AttackerDetail: React.FC = () => {
 
         // Active probes first, then passive, then unknown
         const activeTypes = ['jarm', 'hassh_server', 'tcpfp'];
-        const passiveTypes = ['ja3', 'ja4l', 'tls_resumption', 'tls_certificate', 'http_useragent', 'http_quirks', 'vnc_client_version'];
+        const passiveTypes = ['ja3', 'ja4l', 'tls_resumption', 'tls_certificate', 'http_useragent', 'http_quirks', 'spoofed_source', 'vnc_client_version'];
         const knownTypes = [...activeTypes, ...passiveTypes];
         const unknownTypes = Object.keys(groups).filter((t) => !knownTypes.includes(t));
 
