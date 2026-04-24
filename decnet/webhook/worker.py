@@ -43,6 +43,11 @@ _EGRESS_CONCURRENCY = 10
 # DECNET_WEBHOOK_CIRCUIT_THRESHOLD. Operator clears the trip by
 # toggling `enabled` back on via PATCH.
 _CIRCUIT_THRESHOLD = max(1, int(os.environ.get("DECNET_WEBHOOK_CIRCUIT_THRESHOLD", "5")))
+# How long to wait between bus (re)connect attempts when the bus is
+# unreachable. Keeps the worker self-healing against a bus that starts
+# after the webhook worker does (systemd race) or crashes+restarts
+# mid-operation. Override via DECNET_WEBHOOK_BUS_RECONNECT_SECS.
+_BUS_RECONNECT_SECS = max(5.0, float(os.environ.get("DECNET_WEBHOOK_BUS_RECONNECT_SECS", "60")))
 
 
 def _patterns_for(sub: dict[str, Any]) -> list[str]:
@@ -70,41 +75,82 @@ async def webhook_worker(
     *,
     reload_interval: float = _RELOAD_FALLBACK_SECS,
     http_client: httpx.AsyncClient | None = None,
+    bus_reconnect_secs: float = _BUS_RECONNECT_SECS,
 ) -> None:
     """Main entry — connect bus, spawn per-subscription delivery tasks,
-    reload on signal."""
+    reload on signal. Retries bus connection in a loop so the worker
+    self-heals if the bus starts after the worker or restarts mid-run.
+    """
     logger.info("webhook worker started")
 
-    bus = None
-    try:
-        bus = get_bus(client_name="webhook")
-        await bus.connect()
-    except Exception as exc:  # noqa: BLE001 — bus is optional (DEBT-031)
-        logger.warning("webhook: bus unavailable, running in idle mode: %s", exc)
-        bus = None
-
     shutdown = asyncio.Event()
-    reload_flag = asyncio.Event()
-
-    heartbeat_task = (
-        asyncio.create_task(run_health_heartbeat(bus, "webhook"))
-        if bus is not None else None
-    )
-    control_task = (
-        asyncio.create_task(run_control_listener(bus, "webhook", shutdown))
-        if bus is not None else None
-    )
-    reload_task = (
-        asyncio.create_task(_reload_listener(bus, reload_flag, shutdown))
-        if bus is not None else None
-    )
-
     owns_http = http_client is None
     if owns_http:
         http_client = httpx.AsyncClient(timeout=10.0)
 
+    try:
+        while not shutdown.is_set():
+            # Try to connect to the bus. If it's down, wait out the
+            # reconnect interval and try again. Shutdown interrupts the
+            # wait so systemd stop doesn't hang for a minute.
+            bus = None
+            try:
+                bus = get_bus(client_name="webhook")
+                await bus.connect()
+            except Exception as exc:  # noqa: BLE001
+                logger.warning(
+                    "webhook: bus unavailable, retrying in %.0fs: %s",
+                    bus_reconnect_secs, exc,
+                )
+                with contextlib.suppress(asyncio.TimeoutError):
+                    await asyncio.wait_for(
+                        shutdown.wait(), timeout=bus_reconnect_secs
+                    )
+                continue
+
+            # Bus is live — run one dispatch epoch until it fails or we
+            # shut down. On any crash the outer loop reconnects and
+            # retries from scratch; no state carries across epochs so a
+            # half-dead bus can't leave us with stale subscriptions.
+            logger.info("webhook: bus connected")
+            try:
+                await _run_with_bus(
+                    bus, repo, http_client,
+                    shutdown, reload_interval,
+                )
+            except asyncio.CancelledError:
+                shutdown.set()
+                raise
+            except Exception as exc:  # noqa: BLE001
+                logger.warning(
+                    "webhook: dispatch crashed, will reconnect: %s", exc
+                )
+            finally:
+                with contextlib.suppress(Exception):
+                    await bus.close()
+    finally:
+        if owns_http and http_client is not None:
+            await http_client.aclose()
+
+
+async def _run_with_bus(
+    bus,
+    repo: BaseRepository,
+    http_client: httpx.AsyncClient,
+    shutdown: asyncio.Event,
+    reload_interval: float,
+) -> None:
+    """Run one bus-up epoch: start heartbeat+control+reload listeners,
+    dispatch events until shutdown or error, clean up."""
+    reload_flag = asyncio.Event()
     semaphore = asyncio.Semaphore(_EGRESS_CONCURRENCY)
     consumer_tasks: list[asyncio.Task] = []
+
+    heartbeat_task = asyncio.create_task(run_health_heartbeat(bus, "webhook"))
+    control_task = asyncio.create_task(
+        run_control_listener(bus, "webhook", shutdown)
+    )
+    reload_task = asyncio.create_task(_reload_listener(bus, reload_flag, shutdown))
 
     try:
         while not shutdown.is_set():
@@ -113,41 +159,28 @@ async def webhook_worker(
             consumer_tasks.clear()
 
             subs = await repo.list_webhook_subscriptions(enabled_only=True)
-
-            if bus is not None:
-                for sub in subs:
-                    for pattern in _patterns_for(sub):
-                        consumer_tasks.append(asyncio.create_task(
-                            _consume(
-                                bus, pattern, sub, repo, http_client, semaphore, reload_flag,
-                            )
-                        ))
+            for sub in subs:
+                for pattern in _patterns_for(sub):
+                    consumer_tasks.append(asyncio.create_task(
+                        _consume(
+                            bus, pattern, sub, repo, http_client, semaphore, reload_flag,
+                        )
+                    ))
 
             # Wait for reload OR timer fallback. Shutdown propagates via
-            # CancelledError when the outer task is cancelled — no explicit
-            # race required because `await` points are cancellation-safe.
+            # CancelledError when the outer task is cancelled.
             with contextlib.suppress(asyncio.TimeoutError):
                 await asyncio.wait_for(
                     reload_flag.wait(), timeout=reload_interval
                 )
             reload_flag.clear()
-    except asyncio.CancelledError:
-        shutdown.set()
-        raise
     finally:
         await _cancel_all(consumer_tasks)
         for t in (heartbeat_task, control_task, reload_task):
-            if t is not None:
-                t.cancel()
+            t.cancel()
         for t in (heartbeat_task, control_task, reload_task):
-            if t is not None:
-                with contextlib.suppress(asyncio.CancelledError, Exception):
-                    await t
-        if bus is not None:
-            with contextlib.suppress(Exception):
-                await bus.close()
-        if owns_http and http_client is not None:
-            await http_client.aclose()
+            with contextlib.suppress(asyncio.CancelledError, Exception):
+                await t
 
 
 async def _cancel_all(tasks: list[asyncio.Task]) -> None:
