@@ -72,11 +72,15 @@ def _get_index(path: Path) -> tuple[dict[str, list[tuple[int, int]]], int]:
     return index, st.st_size
 
 
-def _resolve_shard(decky: str, service: str, shard_name: str) -> Path:
+def _validate_names(decky: str, service: str) -> None:
     if not _DECKY_RE.fullmatch(decky):
         raise HTTPException(status_code=400, detail="invalid decky name")
     if not _SERVICE_RE.fullmatch(service):
         raise HTTPException(status_code=400, detail="invalid service")
+
+
+def _resolve_shard(decky: str, service: str, shard_name: str) -> Path:
+    _validate_names(decky, service)
     if not _SHARD_BASENAME_RE.fullmatch(shard_name):
         raise HTTPException(status_code=400, detail="invalid shard name")
     root = ARTIFACTS_ROOT.resolve()
@@ -84,6 +88,46 @@ def _resolve_shard(decky: str, service: str, shard_name: str) -> Path:
     if root not in candidate.parents and candidate != root:
         raise HTTPException(status_code=400, detail="path escapes artifacts root")
     return candidate
+
+
+def _find_shard_with_sid(decky: str, service: str, sid: str) -> Path | None:
+    """Scan every ``sessions-YYYY-MM-DD.jsonl`` under the decky's transcripts
+    dir until one claims this sid.
+
+    Fallback for rows where ``fields.shard_path`` is missing (current
+    sessrec.c does not emit it) or for sessions that span UTC midnight
+    (events land in two shards; the emitted SD could only name one).
+    Newest shards first — most transcript lookups are for recent
+    sessions. Result is cached by ``_get_index`` keyed on
+    (path, mtime), so repeated calls are ~free.
+    """
+    _validate_names(decky, service)
+    root = ARTIFACTS_ROOT.resolve()
+    transcripts_dir = (root / decky / service / "transcripts").resolve()
+    if root not in transcripts_dir.parents:
+        return None
+    # Absent dir, or dir the API process can't stat/read — treat as
+    # "no transcript", not as a 500 traceback. Most commonly the decky
+    # container wrote this tree as a container-side uid that the API
+    # (running under --user / --group) can't cross.
+    try:
+        if not transcripts_dir.is_dir():
+            return None
+        entries = list(transcripts_dir.iterdir())
+    except (OSError, PermissionError):
+        return None
+    shards = sorted(
+        (p for p in entries if _SHARD_BASENAME_RE.fullmatch(p.name)),
+        reverse=True,  # newest day first
+    )
+    for shard in shards:
+        try:
+            index, _size = _get_index(shard)
+        except (OSError, PermissionError):
+            continue
+        if sid in index:
+            return shard
+    return None
 
 
 @router.get(
@@ -126,8 +170,18 @@ async def get_transcript(
     if log_decky and log_decky != decky:
         raise HTTPException(status_code=404, detail="session not found")
 
-    path = _resolve_shard(decky, service or "", shard_name or "")
-    if not path.is_file():
+    # Fast path: the Log row carries a fields.shard_path we can validate
+    # and hit directly. Falls back to scanning all shards when the SD
+    # didn't include one (current sessrec.c doesn't emit shard_path) or
+    # when the named shard isn't on disk anymore.
+    path: Path | None = None
+    if _SHARD_BASENAME_RE.fullmatch(shard_name or ""):
+        candidate = _resolve_shard(decky, service or "", shard_name)
+        if candidate.is_file():
+            path = candidate
+    if path is None:
+        path = _find_shard_with_sid(decky, service or "", sid)
+    if path is None:
         raise HTTPException(status_code=404, detail="transcript not found")
 
     index, _size = _get_index(path)
