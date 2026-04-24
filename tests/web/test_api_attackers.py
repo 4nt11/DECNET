@@ -185,6 +185,7 @@ class TestGetAttackerDetail:
             mock_repo.get_attacker_behavior = AsyncMock(return_value=None)
             mock_repo.get_attacker_service_activity = AsyncMock(return_value=[])
             mock_repo.get_attacker_ip_leaks = AsyncMock(return_value=[])
+            mock_repo.count_attacker_ip_leaks = AsyncMock(return_value=0)
 
             result = await get_attacker_detail(uuid="att-uuid-1", user={"uuid": "test-user", "role": "viewer"})
 
@@ -215,6 +216,7 @@ class TestGetAttackerDetail:
             mock_repo.get_attacker_behavior = AsyncMock(return_value=None)
             mock_repo.get_attacker_service_activity = AsyncMock(return_value=[])
             mock_repo.get_attacker_ip_leaks = AsyncMock(return_value=[])
+            mock_repo.count_attacker_ip_leaks = AsyncMock(return_value=0)
 
             result = await get_attacker_detail(uuid="att-uuid-1", user={"uuid": "test-user", "role": "viewer"})
 
@@ -241,6 +243,7 @@ class TestGetAttackerDetail:
             mock_repo.get_attacker_behavior = AsyncMock(return_value=None)
             mock_repo.get_attacker_service_activity = AsyncMock(return_value=pairs)
             mock_repo.get_attacker_ip_leaks = AsyncMock(return_value=[])
+            mock_repo.count_attacker_ip_leaks = AsyncMock(return_value=0)
 
             result = await get_attacker_detail(
                 uuid="att-uuid-1",
@@ -279,6 +282,7 @@ class TestGetAttackerDetail:
             mock_repo.get_attacker_behavior = AsyncMock(return_value=None)
             mock_repo.get_attacker_service_activity = AsyncMock(return_value=[])
             mock_repo.get_attacker_ip_leaks = AsyncMock(return_value=leaks)
+            mock_repo.count_attacker_ip_leaks = AsyncMock(return_value=1)
 
             result = await get_attacker_detail(
                 uuid="att-uuid-1",
@@ -287,6 +291,46 @@ class TestGetAttackerDetail:
 
         assert result["ip_leaks"] == leaks
         assert result["ip_leaks"][0]["payload"]["real_ip_claim"] == "198.51.100.7"
+        assert result["ip_leaks_total"] == 1
+
+    @pytest.mark.asyncio
+    async def test_ip_leaks_total_reported_separately_from_list(self):
+        """Rotation attack: DB has 100 ip_leak rows, endpoint caps the
+        returned list at 10 but reports the full count so the UI can
+        render a ROTATION DETECTED badge."""
+        from decnet.web.router.attackers.api_get_attacker_detail import get_attacker_detail
+
+        sample = _sample_attacker()
+        # Caller already limited; we just assert the shape of the response.
+        first_ten = [
+            {
+                "timestamp": "2026-04-24T12:00:00+00:00",
+                "decky": "http-01",
+                "service": "http",
+                "bounty_type": "ip_leak",
+                "payload": {
+                    "source_ip": "203.0.113.42",
+                    "real_ip_claim": f"198.51.100.{i}",
+                    "source_header": "X-Forwarded-For",
+                    "headers_seen": {},
+                },
+            }
+            for i in range(1, 11)
+        ]
+        with patch("decnet.web.router.attackers.api_get_attacker_detail.repo") as mock_repo:
+            mock_repo.get_attacker_by_uuid = AsyncMock(return_value=sample)
+            mock_repo.get_attacker_behavior = AsyncMock(return_value=None)
+            mock_repo.get_attacker_service_activity = AsyncMock(return_value=[])
+            mock_repo.get_attacker_ip_leaks = AsyncMock(return_value=first_ten)
+            mock_repo.count_attacker_ip_leaks = AsyncMock(return_value=100)
+
+            result = await get_attacker_detail(
+                uuid="att-uuid-1",
+                user={"uuid": "test-user", "role": "viewer"},
+            )
+
+        assert len(result["ip_leaks"]) == 10
+        assert result["ip_leaks_total"] == 100
 
 
 # ─── GET /attackers/{uuid}/commands ──────────────────────────────────────────

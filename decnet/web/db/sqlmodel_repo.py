@@ -908,12 +908,14 @@ class SQLModelRepository(BaseRepository):
             return [(svc, evt) for svc, evt in rows.all()]
 
     async def get_attacker_ip_leaks(
-        self, attacker_uuid: str
+        self, attacker_uuid: str, *, limit: int = 10,
     ) -> list[dict[str, Any]]:
         """Return ``bounty_type='ip_leak'`` rows for this attacker, newest
-        first.  Shape matches the XFF-mismatch payload emitted by the
-        ingester: keys include ``real_ip_claim``, ``source_header``,
-        ``headers_seen``, ``path``, ``method``."""
+        first, capped at ``limit``. Shape matches the XFF-mismatch
+        payload emitted by the ingester: keys include ``real_ip_claim``,
+        ``source_header``, ``headers_seen``. Use
+        :meth:`count_attacker_ip_leaks` to get the unbounded total for
+        rotation detection."""
         async with self._session() as session:
             ip_res = await session.execute(
                 select(Attacker.ip).where(Attacker.uuid == attacker_uuid)
@@ -926,6 +928,7 @@ class SQLModelRepository(BaseRepository):
                 .where(Bounty.attacker_ip == ip)
                 .where(Bounty.bounty_type == "ip_leak")
                 .order_by(desc(Bounty.timestamp))
+                .limit(limit)
             )
             out: list[dict[str, Any]] = []
             for row in rows.scalars().all():
@@ -939,6 +942,22 @@ class SQLModelRepository(BaseRepository):
                         rec["payload"] = {}
                 out.append(rec)
             return out
+
+    async def count_attacker_ip_leaks(self, attacker_uuid: str) -> int:
+        """Cheap COUNT(*) for XFF-rotation detection."""
+        async with self._session() as session:
+            ip_res = await session.execute(
+                select(Attacker.ip).where(Attacker.uuid == attacker_uuid)
+            )
+            ip = ip_res.scalar_one_or_none()
+            if not ip:
+                return 0
+            count_res = await session.execute(
+                select(func.count(Bounty.id))
+                .where(Bounty.attacker_ip == ip)
+                .where(Bounty.bounty_type == "ip_leak")
+            )
+            return int(count_res.scalar() or 0)
 
     async def get_attacker_artifacts(self, uuid: str) -> list[dict[str, Any]]:
         """Return `file_captured` logs for the attacker identified by UUID.

@@ -258,12 +258,20 @@ class BaseRepository(ABC):
         raise NotImplementedError
 
     async def get_attacker_ip_leaks(
-        self, attacker_uuid: str
+        self, attacker_uuid: str, *, limit: int = 10,
     ) -> list[dict[str, Any]]:
-        """Return ``bounty_type='ip_leak'`` rows for the attacker, newest
-        first. Each row's payload carries the TCP source IP, the header
-        that leaked, and the claimed real IP — see the XFF-mismatch
-        extractor in ``decnet.web.ingester`` for the shape."""
+        """Return up to ``limit`` ``bounty_type='ip_leak'`` rows for the
+        attacker, newest first. Each row's payload carries the TCP
+        source IP, the header that leaked, and the claimed real IP —
+        see the XFF-mismatch extractor in ``decnet.web.ingester`` for
+        the shape. Caller pairs with :meth:`count_attacker_ip_leaks`
+        to detect XFF-rotation (100+ claimed IPs from one source)."""
+        raise NotImplementedError
+
+    async def count_attacker_ip_leaks(self, attacker_uuid: str) -> int:
+        """Total number of ``ip_leak`` bounties recorded for this
+        attacker. Used to detect XFF-rotation signal where the attacker
+        cycles through many claimed IPs (WAF-bypass-list probing)."""
         raise NotImplementedError
 
     @abstractmethod
