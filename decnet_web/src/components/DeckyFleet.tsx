@@ -2,7 +2,7 @@ import React, { useEffect, useMemo, useRef, useState } from 'react';
 import {
   Cpu, Database, Globe, Monitor, Network, PlusCircle, PowerOff,
   RefreshCw, Server, Shield, Terminal,
-} from 'lucide-react';
+} from '../icons';
 import api from '../utils/api';
 import { ARCHETYPES as FALLBACK_ARCHETYPES, DEFAULT_SERVICES } from './MazeNET/data';
 import { useToast } from './Toasts/useToast';

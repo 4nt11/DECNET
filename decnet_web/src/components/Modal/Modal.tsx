@@ -1,5 +1,5 @@
 import React, { useEffect, useRef } from 'react';
-import { X, type LucideIcon } from 'lucide-react';
+import { X, type LucideIcon } from '../../icons';
 import { useEscapeKey } from '../../hooks/useEscapeKey';
 import { useFocusTrap } from '../../hooks/useFocusTrap';
 import './Modal.css';

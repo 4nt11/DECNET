@@ -2,7 +2,7 @@ import React from 'react';
 import {
   Server, Monitor, Shield, Database, Cpu, Globe, Users, HardDrive, Eye,
   type LucideIcon,
-} from 'lucide-react';
+} from '../../icons';
 import type { MazeNode } from './types';
 import { DEFAULT_SERVICES } from './data';
 

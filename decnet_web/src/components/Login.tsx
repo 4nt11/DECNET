@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import api from '../utils/api';
 import './Login.css';
-import { Activity } from 'lucide-react';
+import { Activity } from '../icons';
 
 interface LoginProps {
   onLogin: (token: string) => void;

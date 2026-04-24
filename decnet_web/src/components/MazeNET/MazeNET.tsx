@@ -4,7 +4,7 @@ import {
   PanelRightOpen, PanelRightClose, PanelLeftOpen, PanelLeftClose,
   Maximize2, Minimize2, RotateCcw, UploadCloud, ArrowLeft,
   Plus, Trash2, Zap, Copy, Eye, ShieldAlert, GitMerge, Server,
-} from 'lucide-react';
+} from '../../icons';
 import './MazeNET.css';
 import axios from '../../utils/api';
 import Palette from './Palette';

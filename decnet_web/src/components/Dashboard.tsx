@@ -1,7 +1,7 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import './Dashboard.css';
-import { Shield, Users, Activity, Clock, Paperclip, Crosshair, Flame, Archive, ShieldOff, Server } from 'lucide-react';
+import { Shield, Users, Activity, Clock, Paperclip, Crosshair, Flame, Archive, ShieldOff, Server } from '../icons';
 import { parseEventBody } from '../utils/parseEventBody';
 import ArtifactDrawer from './ArtifactDrawer';
 import EmptyState from './EmptyState/EmptyState';

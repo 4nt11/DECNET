@@ -1,7 +1,7 @@
 import React from 'react';
 import { GitMerge, ShieldAlert, Server, Monitor, Shield, Database, Cpu, Globe,
          Terminal, Lock, Folder, HardDrive, Users, KeyRound,
-         Radio, Zap, Wifi, Circle, Mail, Phone, Activity, Box } from 'lucide-react';
+         Radio, Zap, Wifi, Circle, Mail, Phone, Activity, Box } from '../../icons';
 import type { ServiceDef, Archetype, ServiceGroup } from './data';
 import { SERVICE_GROUP_ORDER } from './data';
 import type { PaletteDrag } from './useMazeInteraction';

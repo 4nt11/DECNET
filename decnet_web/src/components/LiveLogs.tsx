@@ -4,7 +4,7 @@ import { useSearchParams } from 'react-router-dom';
 import {
   Terminal, Search, BarChart3, ChevronLeft, ChevronRight,
   Play, Pause, Paperclip, Download, Radio, X as XIcon,
-} from 'lucide-react';
+} from '../icons';
 import api from '../utils/api';
 import { parseEventBody } from '../utils/parseEventBody';
 import ArtifactDrawer from './ArtifactDrawer';

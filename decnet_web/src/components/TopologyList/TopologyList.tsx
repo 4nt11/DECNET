@@ -1,6 +1,6 @@
 import React, { useCallback, useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Network, Plus, Power, Trash2, UploadCloud, RefreshCw, Skull } from 'lucide-react';
+import { Network, Plus, Power, Trash2, UploadCloud, RefreshCw, Skull } from '../../icons';
 import api from '../../utils/api';
 import { clearLayout } from '../MazeNET/useMazeLayoutStore';
 import CreateTopologyWizard from './CreateTopologyWizard';

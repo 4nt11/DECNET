@@ -2,7 +2,7 @@ import React from 'react';
 import {
   CheckCircle, RefreshCw, Download, Upload, Pause, Play, AlertTriangle,
   Info, Terminal, Activity, ShieldAlert,
-} from 'lucide-react';
+} from '../../icons';
 import type { Toast } from './toast-context';
 import './Toasts.css';
 

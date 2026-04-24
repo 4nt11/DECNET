@@ -4,7 +4,7 @@ import {
   Menu, X, Search, Activity, LayoutDashboard, Terminal, Settings, LogOut,
   Server, Archive, Package, Network, ChevronDown, ChevronRight, HardDrive,
   ShieldAlert, Bell, Webhook,
-} from 'lucide-react';
+} from '../icons';
 import { prefetchRoute } from '../routePrefetch';
 import './Layout.css';
 

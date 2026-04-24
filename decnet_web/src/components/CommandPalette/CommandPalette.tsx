@@ -3,7 +3,7 @@ import {
   LayoutDashboard, Server, Network, Terminal, Archive, Crosshair,
   PlusCircle, Pause, RefreshCw, Download, HardDrive, Package, Settings,
   SearchX, Keyboard, Webhook,
-} from 'lucide-react';
+} from '../../icons';
 import EmptyState from '../EmptyState/EmptyState';
 import './CommandPalette.css';
 

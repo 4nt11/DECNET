@@ -1,5 +1,5 @@
 import React from 'react';
-import { X, Key, Package, Copy, Send, Ban } from 'lucide-react';
+import { X, Key, Package, Copy, Send, Ban } from '../icons';
 import { useToast } from './Toasts/useToast';
 
 interface BountyEntry {

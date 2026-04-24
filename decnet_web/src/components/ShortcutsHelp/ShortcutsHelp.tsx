@@ -1,5 +1,5 @@
 import React from 'react';
-import { Keyboard } from 'lucide-react';
+import { Keyboard } from '../../icons';
 import Modal from '../Modal/Modal';
 import './ShortcutsHelp.css';
 

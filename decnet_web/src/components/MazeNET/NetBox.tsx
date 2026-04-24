@@ -1,5 +1,5 @@
 import React from 'react';
-import { Globe, GitMerge, ShieldAlert } from 'lucide-react';
+import { Globe, GitMerge, ShieldAlert } from '../../icons';
 import type { Net } from './types';
 import type { ResizeHandle } from './useMazeInteraction';
 

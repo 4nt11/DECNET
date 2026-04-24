@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import api from '../utils/api';
-import { Settings, Users, Sliders, Trash2, UserPlus, Key, Save, Shield, AlertTriangle, Palette, Activity, Square, RefreshCw, Play } from 'lucide-react';
+import { Settings, Users, Sliders, Trash2, UserPlus, Key, Save, Shield, AlertTriangle, Palette, Activity, Square, RefreshCw, Play } from '../icons';
 import { useToast } from './Toasts/useToast';
 import './Dashboard.css';
 import './Config.css';

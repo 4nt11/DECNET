@@ -1,5 +1,5 @@
 import React from 'react';
-import type { LucideIcon } from 'lucide-react';
+import type { LucideIcon } from '../../icons';
 import './EmptyState.css';
 
 interface CTA {

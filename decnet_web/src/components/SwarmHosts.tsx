@@ -8,7 +8,7 @@ import './DeckyFleet.css';
 import {
   AlertTriangle, Check, Copy, HardDrive, PowerOff, RefreshCw, RotateCcw,
   Server, Trash2, UserPlus, Wifi, WifiOff,
-} from 'lucide-react';
+} from '../icons';
 
 interface SwarmHost {
   uuid: string;

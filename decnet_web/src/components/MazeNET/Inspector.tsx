@@ -2,7 +2,7 @@ import React, { useMemo } from 'react';
 import {
   ArrowLeft, ArrowRight, Crosshair, Globe, GitMerge, MousePointer2, Plus,
   Server, Trash2, X, Shield,
-} from 'lucide-react';
+} from '../../icons';
 import type { Net, MazeNode, Edge } from './types';
 import { DEFAULT_SERVICES } from './data';
 

@@ -5,7 +5,7 @@ import './Dashboard.css';
 import {
   Upload, RefreshCw, RotateCcw, Package, AlertTriangle, CheckCircle,
   Wifi, WifiOff, Server,
-} from 'lucide-react';
+} from '../icons';
 
 interface HostRelease {
   host_uuid: string;

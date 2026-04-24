@@ -1,6 +1,6 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { useSearchParams, useNavigate } from 'react-router-dom';
-import { Search, ChevronLeft, ChevronRight, Users } from 'lucide-react';
+import { Search, ChevronLeft, ChevronRight, Users } from '../icons';
 import api from '../utils/api';
 import EmptyState from './EmptyState/EmptyState';
 import { useFocusSearch } from '../hooks/useFocusSearch';

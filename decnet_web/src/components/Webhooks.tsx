@@ -2,7 +2,7 @@ import React, { useEffect, useMemo, useState } from 'react';
 import {
   Plus, Trash2, Pencil, Zap, AlertTriangle, Copy, X, Save,
   Check, Webhook as WebhookIcon,
-} from 'lucide-react';
+} from '../icons';
 import api from '../utils/api';
 import { useToast } from './Toasts/useToast';
 import './Dashboard.css';

@@ -1,5 +1,5 @@
 import React, { useEffect, useRef, useState } from 'react';
-import { X, Download, AlertTriangle, Paperclip } from 'lucide-react';
+import { X, Download, AlertTriangle, Paperclip } from '../icons';
 import api from '../utils/api';
 import { useEscapeKey } from '../hooks/useEscapeKey';
 import { useFocusTrap } from '../hooks/useFocusTrap';

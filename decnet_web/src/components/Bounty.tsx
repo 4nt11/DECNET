@@ -3,7 +3,7 @@ import { useSearchParams, useNavigate } from 'react-router-dom';
 import {
   Archive, Search, ChevronLeft, ChevronRight, Filter, Key, Package, ChevronRight as ChevR,
   Target,
-} from 'lucide-react';
+} from '../icons';
 import api from '../utils/api';
 import BountyInspector from './BountyInspector';
 import EmptyState from './EmptyState/EmptyState';

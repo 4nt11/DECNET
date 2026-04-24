@@ -1,5 +1,5 @@
 import React, { forwardRef, useMemo } from 'react';
-import { RotateCcw, LayoutGrid, ZoomIn, ZoomOut } from 'lucide-react';
+import { RotateCcw, LayoutGrid, ZoomIn, ZoomOut } from '../../icons';
 import NetBox from './NetBox';
 import NodeCard from './NodeCard';
 import type { Net, MazeNode, Edge } from './types';
