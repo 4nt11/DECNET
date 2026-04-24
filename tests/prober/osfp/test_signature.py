@@ -63,6 +63,21 @@ def test_score_df_wildcard_on_signature_matches_either() -> None:
     assert sig.score(_obs(df=False)) is not None
 
 
+def test_score_df_none_on_observation_is_soft_skip() -> None:
+    """When the observation lacks df (sniffer doesn't emit it today),
+    a signature with a specific df constraint must still match rather
+    than hard-reject. Rationale in the score() docstring."""
+    sig = _parse_line("5840:64:1:60:M1460,S,T,N,W7:.:Linux:df-required")
+    assert sig.score(_obs(df=None)) is not None
+
+
+def test_score_total_len_none_on_observation_is_soft_skip() -> None:
+    """Same soft-field semantics for total_len — the profiler adapter
+    passes None when the sniffer / prober didn't capture it."""
+    sig = _parse_line("5840:64:1:60:M1460,S,T,N,W7:.:Linux:len-specific")
+    assert sig.score(_obs(total_len=None)) is not None
+
+
 def test_score_options_order_mismatch_returns_none() -> None:
     sig = _parse_line("5840:64:1:60:M1460,S,T,N,W7:.:Linux:ordered")
     # Same tokens, different order — must NOT match.

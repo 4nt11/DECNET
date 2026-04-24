@@ -151,29 +151,38 @@ class Signature:
 
     def score(self, obs: dict[str, Any]) -> Optional[float]:
         """Return a confidence in [0, 1] on match, or None if any field
-        rejects the observation."""
+        rejects the observation.
+
+        Soft-field semantics: ``df`` and ``total_len`` are treated as
+        "skip check when observation is missing" — the sniffer doesn't
+        currently emit either, and a literal-constraint sig shouldn't
+        reject a match solely because the observation is upstream-
+        incomplete. Hard fields (``window``, ``ttl``, ``options_sig``,
+        ``quirks``) still hard-reject on absent or mismatched input —
+        those are the real discriminators."""
         mss = obs.get("mss")
-        # Window
+        # Window (hard)
         if not self.wss.matches(obs.get("window"), mss):
             return None
         # TTL — initial-TTL bucket must match exactly. The profiler is
         # expected to have rounded the observed TTL up to the nearest
-        # bucket already via decnet.sniffer.p0f.initial_ttl.
+        # bucket already via decnet.sniffer.p0f.initial_ttl. (hard)
         obs_ttl = obs.get("ttl")
         if obs_ttl is None or obs_ttl != self.ttl:
             return None
-        # DF (None on the sig side = wildcard)
+        # DF (soft — skip when unknown)
         if self.df is not None:
             obs_df = obs.get("df")
-            if obs_df is None or bool(obs_df) != self.df:
+            if obs_df is not None and bool(obs_df) != self.df:
                 return None
-        # Total length
-        if not self.total_len.matches(obs.get("total_len")):
+        # Total length (soft — skip when unknown)
+        obs_total = obs.get("total_len")
+        if obs_total is not None and not self.total_len.matches(obs_total):
             return None
-        # Options
+        # Options (hard)
         if not _options_match(self.options, obs.get("options_sig")):
             return None
-        # Quirks — must match as a set.
+        # Quirks — must match as a set. (hard)
         obs_quirks = obs.get("quirks") or frozenset()
         if not isinstance(obs_quirks, frozenset):
             obs_quirks = frozenset(obs_quirks)

@@ -7,12 +7,17 @@ active prober `tcpfp_fingerprint` events; derives a per-attacker summary
 
 from __future__ import annotations
 
+import logging
 import statistics
 from collections import Counter
-from typing import Any
+from typing import Any, Optional
 
 from decnet.correlation.parser import LogEvent
+from decnet.prober.osfp import OsMatch, get_all_providers
+from decnet.sniffer.p0f import initial_ttl as _initial_ttl_bucket
 from decnet.telemetry import traced as _traced
+
+_log = logging.getLogger("decnet.profiler.fingerprint")
 
 # Sniffer-emitted packet events that feed into fingerprint rollup.
 _SNIFFER_SYN_EVENT: str  = "tcp_syn_fingerprint"
@@ -59,6 +64,70 @@ def _int_or_none(v: Any) -> int | None:
         return None
 
 
+def _match_via_osfp_providers(
+    tcp_fp: dict[str, Any] | None,
+    modal_ttl: str | None,
+    context: str,
+) -> Optional[OsMatch]:
+    """Feed the current tcp_fp snapshot through every enabled OS-fingerprint
+    provider and return the best match, or None.
+
+    Must never raise — factory / provider failures collapse to None so a
+    corrupt .fp file or misconfigured DECNET_OSFP_PROVIDERS env var can't
+    wedge the profile rebuild for an entire attacker. Worst case: the
+    caller falls back to the modal-label / TTL-bucket path that existed
+    before this wiring.
+    """
+    if not tcp_fp:
+        return None
+    # Convert the observed TTL (which may be N hops below the initial TTL
+    # the remote OS uses) to the canonical initial-TTL bucket the p0f v2
+    # DB expects (32 / 64 / 128 / 255).
+    try:
+        ttl_int = int(modal_ttl) if modal_ttl is not None else None
+    except (TypeError, ValueError):
+        ttl_int = None
+    initial_ttl_bucket = _initial_ttl_bucket(ttl_int) if ttl_int is not None else None
+
+    obs: dict[str, Any] = {
+        "window":      tcp_fp.get("window"),
+        "wscale":      tcp_fp.get("wscale"),
+        "mss":         tcp_fp.get("mss"),
+        "options_sig": tcp_fp.get("options_sig"),
+        "ttl":         initial_ttl_bucket,
+        # DF and total_len are not captured today — passed as None so
+        # Signature.score treats them as soft fields (skip check when
+        # missing). Promote to hard fields once the sniffer/prober
+        # emit them on tcp_syn_fingerprint / tcpfp_fingerprint.
+        "df":          None,
+        "total_len":   None,
+        # Sniffer doesn't yet emit a quirks SD field, so the matcher
+        # sees an empty set — which matches signatures with no quirks
+        # (the common case) but not signatures with specific quirks.
+        # That's correct behaviour, not a bug.
+        "quirks":      frozenset(),
+        "context":     context,
+    }
+
+    best: Optional[OsMatch] = None
+    try:
+        providers = get_all_providers()
+    except Exception as exc:  # noqa: BLE001 — must not propagate
+        _log.warning("osfp: provider init failed, skipping match: %s", exc)
+        return None
+    for provider in providers:
+        try:
+            match = provider.match(obs)
+        except Exception as exc:  # noqa: BLE001 — must not propagate
+            _log.warning("osfp: provider %s raised during match: %s", provider.name, exc)
+            continue
+        if match is None:
+            continue
+        if best is None or match.confidence > best.confidence:
+            best = match
+    return best
+
+
 @_traced("profiler.sniffer_rollup")
 def sniffer_rollup(events: list[LogEvent]) -> dict[str, Any]:
     """
@@ -74,6 +143,9 @@ def sniffer_rollup(events: list[LogEvent]) -> dict[str, Any]:
     ttl_values: list[str] = []
     hops: list[int] = []
     tcp_fp: dict[str, Any] | None = None
+    # Tracks which event set tcp_fp last — picks the provider "context"
+    # (syn vs synack) when we feed the p0f-v2 matcher below.
+    tcp_fp_context: str = "syn"
     retransmits = 0
     kex_order_raw: list[str] = []
     _kex_seen: set[str] = set()
@@ -110,6 +182,7 @@ def sniffer_rollup(events: list[LogEvent]) -> dict[str, Any]:
                 "has_sack": e.fields.get("has_sack") == "true",
                 "has_timestamps": e.fields.get("has_timestamps") == "true",
             }
+            tcp_fp_context = "syn"
 
         elif e.event_type == _SNIFFER_FLOW_EVENT:
             try:
@@ -164,16 +237,30 @@ def sniffer_rollup(events: list[LogEvent]) -> dict[str, Any]:
                 "has_sack":       e.fields.get("sack_ok") == "1",
                 "has_timestamps": e.fields.get("timestamp") == "1",
             }
+            tcp_fp_context = "synack"  # prober sent SYN, captured attacker's SYN-ACK
 
-    # Mode for the OS bucket — most frequently observed label.
+    # OS-guess resolution chain:
+    #   1. p0f-v2 (or whichever providers DECNET_OSFP_PROVIDERS enables)
+    #      matched against the latest tcp_fp snapshot — the 375-sig
+    #      vendored DB is far more discriminating than what follows.
+    #   2. Modal sniffer-emitted label from the old ~10-sig hand-rolled
+    #      table in decnet/sniffer/p0f.py. Kept as fallback because the
+    #      vendored v2 DB predates post-2006 kernels.
+    #   3. TTL bucket (linux / windows / embedded). Coarse but never
+    #      lies when at least one TCP packet was seen.
     os_guess: str | None = None
-    if os_guesses:
+    modal_ttl = Counter(ttl_values).most_common(1)[0][0] if ttl_values else None
+
+    osfp_match = _match_via_osfp_providers(tcp_fp, modal_ttl, tcp_fp_context)
+    if osfp_match is not None:
+        # Render "Linux" + "2.6.x kernel" as "Linux 2.6.x kernel" — a single
+        # string fits the existing os_guess column contract. Flavor can be
+        # empty for generic signatures, in which case we just emit the OS.
+        os_guess = osfp_match.os if not osfp_match.flavor else f"{osfp_match.os} {osfp_match.flavor}"
+    elif os_guesses:
         os_guess = Counter(os_guesses).most_common(1)[0][0]
-    else:
-        # TTL-based fallback: use the most common observed TTL value.
-        if ttl_values:
-            modal_ttl = Counter(ttl_values).most_common(1)[0][0]
-            os_guess = _os_from_ttl(modal_ttl)
+    elif modal_ttl is not None:
+        os_guess = _os_from_ttl(modal_ttl)
 
     # Median hop distance (robust to the occasional weird TTL).
     hop_distance: int | None = None

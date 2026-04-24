@@ -510,6 +510,50 @@ class TestSnifferRollup:
         r = sniffer_rollup(events)
         assert r["ssh_client_banners"] == []
 
+    # ─── p0f v2 provider wiring (DEBT — unblocks SLOW SCAN attackers) ─────
+
+    def test_p0f_v2_provider_beats_ttl_fallback(self):
+        """When the sniffer emits os_guess='unknown' (hand-rolled table
+        didn't match) but the TCP quirks DO match a vendored p0f v2
+        signature, the new priority chain must promote the richer
+        v2 match above the coarse TTL bucket.
+
+        Target: Linux 2.6 sig with window=5840, ttl=64, options
+        M1460,S,T,N,W7 — 262-sig p0f.fp has this explicitly."""
+        events = [
+            _mk(0, event_type="tcp_syn_fingerprint",
+                fields={
+                    "os_guess": "unknown",  # hand-rolled had no match
+                    "ttl": "64",
+                    "window": "5840",
+                    "mss": "1460",
+                    "wscale": "7",
+                    "options_sig": "M1460,S,T,N,W7",
+                }),
+        ]
+        r = sniffer_rollup(events)
+        # Old chain would collapse to the "linux" TTL bucket. New chain
+        # must surface the Linux 2.6-specific match from p0f v2.
+        assert r["os_guess"] is not None
+        assert r["os_guess"].startswith("Linux")
+        assert r["os_guess"] != "linux", (
+            "resolved to the coarse TTL-bucket fallback; p0f-v2 match "
+            f"should have taken priority. Got: {r['os_guess']!r}"
+        )
+
+    def test_p0f_v2_match_falls_back_when_no_tcp_fp(self):
+        """If the event has no window / mss / options_sig (e.g. a
+        non-fingerprint event or a malformed sniffer row), p0f-v2 must
+        return None and the chain must still resolve to the modal
+        label / TTL fallback the old code used."""
+        events = [
+            _mk(0, event_type="tcp_syn_fingerprint",
+                fields={"os_guess": "linux", "ttl": "64"}),
+        ]
+        r = sniffer_rollup(events)
+        # Modal os_guess path: the label "linux" still wins.
+        assert r["os_guess"] == "linux"
+
 
 # ─── build_behavior_record (composite) ──────────────────────────────────────
 
