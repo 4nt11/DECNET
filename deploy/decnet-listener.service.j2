@@ -14,12 +14,12 @@ EnvironmentFile=-{{ install_dir }}/.env.local
 # privileged port (≥1024), so no CAP_NET_BIND_SERVICE is required.
 Environment=DECNET_SYSTEM_LOGS=/var/log/decnet/decnet.listener.log
 ExecStart={{ venv_dir }}/bin/decnet listener \
-StandardOutput=append:/var/log/decnet/decnet.listener.log
-StandardError=append:/var/log/decnet/decnet.listener.log
     --host 0.0.0.0 --port 6514 \
     --ca-dir /etc/decnet/ca \
     --log-path /var/log/decnet/master.log \
     --json-path /var/log/decnet/master.json
+StandardOutput=append:/var/log/decnet/decnet.listener.log
+StandardError=append:/var/log/decnet/decnet.listener.log
 
 # Pure TLS server; no privileged network operations.
 CapabilityBoundingSet=

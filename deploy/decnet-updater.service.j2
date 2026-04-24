@@ -14,12 +14,12 @@ WorkingDirectory={{ install_dir }}
 EnvironmentFile=-{{ install_dir }}/.env.local
 Environment=DECNET_SYSTEM_LOGS=/var/log/decnet/decnet.updater.log
 ExecStart={{ venv_dir }}/bin/decnet updater \
-StandardOutput=append:/var/log/decnet/decnet.updater.log
-StandardError=append:/var/log/decnet/decnet.updater.log
     --host 0.0.0.0 --port 8766 \
     --updater-dir /etc/decnet/updater \
     --install-dir {{ install_dir }} \
     --agent-dir /etc/decnet/agent
+StandardOutput=append:/var/log/decnet/decnet.updater.log
+StandardError=append:/var/log/decnet/decnet.updater.log
 
 # The updater SIGTERMs the agent and spawns a new one. Same User=decnet means
 # signalling is allowed without CAP_KILL. It does not need NET_ADMIN/NET_RAW
