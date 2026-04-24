@@ -196,7 +196,7 @@ Each sub-flow below gets its own table. Status codes:
 | S | Forged role claim in JWT | M | Role read from DB by UUID on each authz, not trusted from token. (Verify — see `project_rbac_null_role.md`.) |
 | T | Client-side role flag tampering | M | Server-side gating required; client-side hide-only is UI polish. See `feedback_serverside_ui.md`. |
 | R | Admin denies granting a role | M | `update_user_role` calls logged. |
-| I | Route missing `require_*` accidentally exposes admin data to viewer | **?** | Verify: schemathesis / contract tests assert 401/403 on every protected route. Recommend a test that enumerates all routes and asserts gating. |
+| I | Route missing `require_*` accidentally exposes admin data to viewer | M | 401 half covered by `tests/api/test_schemathesis.py::test_auth_enforcement` (schemathesis + `ignored_auth` check on every operation). 403 half covered by `tests/api/test_rbac_contract.py`, which introspects every `APIRoute.dependant` at collection time, classifies each as admin/viewer/open via identity-match against the `require_admin`/`require_viewer` singletons, and asserts a viewer JWT receives 403 on admin routes and non-401/403 on viewer routes. SSE routes are skipped (covered separately under F6). |
 | D | n/a (authz is a check, not a bottleneck) | — | |
 | E | Viewer crafts path traversal in URL to hit admin route | M | FastAPI path matching is exact; no dynamic include. |
 | E | Master-only CLI command reachable in agent mode | M | `MASTER_ONLY_COMMANDS` gating at CLI registration + `_require_master_mode()` guard in handler. |
@@ -242,7 +242,7 @@ Each sub-flow below gets its own table. Status codes:
 | I | Mutation response returns internal state not meant for client | **?** | Verify per-route response_model shape. |
 | D | Malformed body triggers expensive validation / oversized payload | M | FastAPI enforces content-length at ASGI layer; Pydantic short-circuits on type mismatch. |
 | D | Destructive mutation storm (e.g. delete-all-users) | A | Admin role is trusted; protecting admins from themselves is out of scope. |
-| E | Mutation bypasses role check via missing `require_admin` | **?** | Verify via schemathesis: every mutation route returns 403 for viewer. |
+| E | Mutation bypasses role check via missing `require_admin` | M | `tests/api/test_rbac_contract.py::test_admin_route_rejects_viewer` parametrizes every route classified admin by FastAPI-dependency introspection (identity-match on the `require_admin` closure) and asserts viewer JWT → 403. A missing `require_admin` would reclassify the route away from "admin" and break the viewer route's non-403 assertion, so the check is bidirectional. |
 
 #### F6 — Streaming / SSE
 
@@ -292,7 +292,7 @@ code" or "accepted, add to table above."
 - [x] ~~Production error handler suppresses tracebacks and internal details.~~ Shipped — generic `@app.exception_handler(Exception)` in `decnet/web/api.py`; opaque `{detail, error_id}` in prod, traceback only under `DECNET_DEVELOPER=True`.
 - [x] ~~`detail=str(e)` / `detail=f"…{e}"` sites in `decnet/web/router/fleet/api_deploy_deckies.py:41,67,83,155`.~~ Audited 2026-04-24: L41 + L83 are deliberate `ValueError` messages from `load_ini_from_string` / `build_deckies_from_ini` (user-authored INI validator feedback, not internal state); L67/73 wraps `detect_subnet`'s `RuntimeError` with a remediation hint (`"Add a [general] section with interface=, net=, and gw="`); L155 aggregates structured `DispatchResult.detail` fields from swarm workers, not raw exceptions. All four sites are admin-gated. No sanitization needed.
 - [x] ~~Password length clamp before bcrypt.~~ Verified — Pydantic `max_length=72`.
-- [ ] Contract test asserting every protected route returns 401 unauthenticated and 403 for under-roled.
+- [x] ~~Contract test asserting every protected route returns 401 unauthenticated and 403 for under-roled.~~ 401 half: `tests/api/test_schemathesis.py::test_auth_enforcement` (schemathesis + `ignored_auth`). 403 half: `tests/api/test_rbac_contract.py` (server-side dependency introspection + viewer JWT per route). Role hints deliberately kept out of the OpenAPI spec — classification stays server-side.
 - [ ] Field allow-list on viewer responses for attacker / user / bounty serializers.
 - [ ] Sort/filter query keys are allow-listed, not passed through raw.
 - [ ] Role-scoped repo methods OR per-route pre-filter for viewer queries (pick one, document it).
@@ -300,7 +300,7 @@ code" or "accepted, add to table above."
 - [ ] `offset` is capped OR pagination is cursor-based OR deep-offset is cheap.
 - [ ] Free-text `q` parameters hit an indexed/FTS5 column, never a full-table `LIKE` scan.
 - [ ] Per-route response_model shape audit on mutations.
-- [ ] Contract test asserting every mutation route returns 403 for viewer.
+- [x] ~~Contract test asserting every mutation route returns 403 for viewer.~~ Covered by `test_rbac_contract.py` (same test also covers read routes — classification is by dependency, not HTTP verb).
 - [ ] SSE handler applies per-connection role filter before forwarding events.
 - [ ] Per-user concurrent SSE connection cap.
 - [x] ~~Artifact download sets `Content-Disposition: attachment` + `X-Content-Type-Options: nosniff`.~~ Shipped — explicit headers on `FileResponse` in `api_get_artifact.py`; asserted in `tests/api/artifacts/test_get_artifact.py::test_content_disposition_is_attachment`.
@@ -360,3 +360,4 @@ In priority order:
 | 2026-04-23 | F1 Authn: 3 threats moved from **?** to **M** (rate limit shipped; uniform 401 verified; bcrypt length clamp verified). Added DA-08 accepted risk: reverse-proxy per-IP bucket collapse. | ANTI |
 | 2026-04-23 | F1/I "traceback / stack trace leakage" moved from **?** to **M** via generic Exception handler with `error_id` correlation. Added follow-up checklist entry for `detail=str(e)` sites in fleet deploy router. | ANTI |
 | 2026-04-24 | F7: "MIME sniffing" moved from **?** to **M** (explicit `Content-Disposition`/`nosniff` headers + test). F7: "path-traversal" row reworded to point at the existing `_resolve_artifact_path` containment check. Fleet-deploy `detail=str(e)` audit resolved — all four sites documented as deliberate, admin-gated, no sanitization needed. | ANTI |
+| 2026-04-24 | F2/I + F5/E moved from **?** to **M** via new `tests/api/test_rbac_contract.py` — classifies every APIRoute by FastAPI-dependency introspection and asserts viewer JWT → 403 on admin routes, non-401/403 on viewer routes. Role hints deliberately omitted from OpenAPI spec. SSE routes skipped (F6 scope). | ANTI |
