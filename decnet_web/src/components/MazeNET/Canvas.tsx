@@ -68,6 +68,15 @@ const Canvas = forwardRef<HTMLDivElement, Props>(function Canvas(
   const selectNet = useCallback((id: string) => setSelection({ type: 'net', id }), [setSelection]);
   const selectNode = useCallback((id: string) => setSelection({ type: 'node', id }), [setSelection]);
 
+  // Flowing-dash edge animation is the single most expensive thing
+  // on the canvas — each animated <path> invalidates its bounding
+  // box every frame, and inter-LAN paths are long so the invalidated
+  // rects overlap most of the viewport. Past ~60 edges the compositor
+  // spends every frame repainting. Drop the animation class above
+  // the threshold; edges stay fully visible, just static.
+  const ANIMATE_EDGE_LIMIT = 60;
+  const animateEdges = edges.length <= ANIMATE_EDGE_LIMIT;
+
   const activeNetIds = useMemo(() => {
     const nodeNet = new Map(nodes.map((n) => [n.id, n.netId]));
     const ids = new Set<string>();
@@ -158,7 +167,7 @@ const Canvas = forwardRef<HTMLDivElement, Props>(function Canvas(
               <g key={e.id} style={{ pointerEvents: 'auto' }}
                  onClick={(ev) => { ev.stopPropagation(); setSelection({ type: 'edge', id: e.id }); }}
                  onContextMenu={onEdgeContextMenu?.(e.id)}>
-                <path d={d} className={`maze-edge ${klass} maze-edge-dash`} markerEnd={`url(#${marker})`}
+                <path d={d} className={`maze-edge ${klass} ${animateEdges ? 'maze-edge-dash' : ''}`} markerEnd={`url(#${marker})`}
                       style={{ strokeWidth: isSel ? 2.5 : 1.5 }} />
                 <path d={d} stroke="transparent" strokeWidth="12" fill="none" style={{ cursor: 'pointer' }} />
                 {e.label && (
@@ -252,6 +261,11 @@ const Canvas = forwardRef<HTMLDivElement, Props>(function Canvas(
         <span className="status-seg">PAN: {Math.round(pan.x)},{Math.round(pan.y)}</span>
         <span className="status-seg">ZOOM: {Math.round(zoom * 100)}%</span>
         <span className="status-seg">AS-OF {lastEventAt ? fmtTime(lastEventAt) : '--:--:--'}</span>
+        {!animateEdges && (
+          <span className="status-seg" title={`Flow animation auto-disabled above ${ANIMATE_EDGE_LIMIT} edges (${edges.length} active) to keep the canvas responsive.`}>
+            MOTION: OFF
+          </span>
+        )}
       </div>
 
       <div className="maze-legend">
