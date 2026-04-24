@@ -61,6 +61,7 @@ interface AttackerData {
   commands: { service: string; decky: string; command: string; timestamp: string }[];
   country_code: string | null;
   country_source: string | null;
+  ptr_record: string | null;
   updated_at: string;
   behavior: AttackerBehavior | null;
   service_activity?: {
@@ -1010,6 +1011,20 @@ const AttackerDetail: React.FC = () => {
               </span>
             ) : (
               <span className="dim">unknown</span>
+            )}
+          </div>
+          <div>
+            <span className="dim">REVERSE DNS: </span>
+            {attacker.ptr_record ? (
+              <span
+                className="matrix-text"
+                style={{ fontFamily: 'monospace' }}
+                title="One-shot PTR record resolved at first sighting."
+              >
+                {attacker.ptr_record}
+              </span>
+            ) : (
+              <span className="dim">—</span>
             )}
           </div>
         </div>

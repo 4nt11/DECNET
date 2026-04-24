@@ -30,6 +30,7 @@ from decnet.bus.publish import (
 from decnet.correlation.engine import CorrelationEngine
 from decnet.correlation.parser import LogEvent
 from decnet.geoip import enrich_ip
+from decnet.geoip.ptr import resolve_ptr_record
 from decnet.logging import get_logger
 from decnet.profiler.behavioral import build_behavior_record
 from decnet.telemetry import traced as _traced, get_tracer as _get_tracer
@@ -76,6 +77,10 @@ class _WorkerState:
     # Optional bus hook — fires ``("scored", payload)`` per profile upsert.
     # None when the bus is disabled or unreachable.
     publish_attacker: Callable[[str, dict[str, Any]], None] | None = None
+    # Set of IPs we've already tried to PTR-resolve in this worker's
+    # lifetime. Bounds retry to once per worker boot so a persistently
+    # NXDOMAIN-returning IP doesn't burn 2s of tick time on every cycle.
+    ptr_attempted: set[str] = field(default_factory=set)
 
 
 async def attacker_profile_worker(repo: BaseRepository, *, interval: int = 30) -> None:
@@ -178,6 +183,28 @@ async def _incremental_update(repo: BaseRepository, state: _WorkerState) -> None
         logger.info("attacker worker: updated %d profiles (incremental)", len(affected_ips))
 
 
+_PTR_CONCURRENCY = 10
+
+
+async def _resolve_ptrs_for(ips: list[str]) -> dict[str, Any]:
+    """Resolve PTR for each *ip* concurrently, bounded.
+
+    Returns ``{ip: ptr_or_None}`` for every input. Uses an asyncio
+    semaphore to cap parallel lookups — cold-start could see hundreds
+    of fresh IPs and we don't want to hammer the OS resolver.
+    """
+    if not ips:
+        return {}
+    sem = asyncio.Semaphore(_PTR_CONCURRENCY)
+
+    async def _one(ip: str) -> tuple[str, Any]:
+        async with sem:
+            return ip, await resolve_ptr_record(ip)
+
+    results = await asyncio.gather(*(_one(ip) for ip in ips))
+    return dict(results)
+
+
 @_traced("profiler.update_profiles")
 async def _update_profiles(
     repo: BaseRepository,
@@ -186,6 +213,14 @@ async def _update_profiles(
 ) -> None:
     traversal_map = {t.attacker_ip: t for t in state.engine.traversals(min_deckies=2)}
     bounties_map = await repo.get_bounties_for_ips(ips)
+
+    # PTR resolution: one shot per IP per worker lifetime. OS resolver
+    # caches, so re-runs on worker restart hit cache instantly for IPs
+    # resolved recently; only never-seen addresses pay the 2s ceiling.
+    fresh = [ip for ip in ips if ip not in state.ptr_attempted]
+    for ip in fresh:
+        state.ptr_attempted.add(ip)
+    ptrs = await _resolve_ptrs_for(fresh)
 
     _tracer = _get_tracer("profiler")
     for ip in ips:
@@ -201,7 +236,15 @@ async def _update_profiles(
             bounties = bounties_map.get(ip, [])
             commands = _extract_commands_from_events(events)
 
-            record = _build_record(ip, events, traversal, bounties, commands)
+            if ip in ptrs:
+                record = _build_record(
+                    ip, events, traversal, bounties, commands,
+                    ptr_record=ptrs[ip],
+                )
+            else:
+                # Not in ptrs → already attempted in a prior cycle → skip
+                # kwarg so upsert preserves whatever's stored.
+                record = _build_record(ip, events, traversal, bounties, commands)
             attacker_uuid = await repo.upsert_attacker(record)
 
             _span.set_attribute("is_traversal", traversal is not None)
@@ -243,12 +286,17 @@ async def _update_profiles(
                 logger.error("attacker worker: smtp target upsert failed for %s: %s", ip, exc)
 
 
+_UNSET = object()  # sentinel — distinguishes "not passed" from "None"
+
+
 def _build_record(
     ip: str,
     events: list[LogEvent],
     traversal: Any,
     bounties: list[dict[str, Any]],
     commands: list[dict[str, Any]],
+    *,
+    ptr_record: Any = _UNSET,
 ) -> dict[str, Any]:
     services = sorted({e.service for e in events})
     deckies = (
@@ -260,7 +308,7 @@ def _build_record(
     credential_count = sum(1 for b in bounties if b.get("bounty_type") == "credential")
     country_code, country_source = enrich_ip(ip)
 
-    return {
+    record: dict[str, Any] = {
         "ip": ip,
         "first_seen": min(e.timestamp for e in events),
         "last_seen": max(e.timestamp for e in events),
@@ -279,6 +327,13 @@ def _build_record(
         "country_source": country_source,
         "updated_at": datetime.now(timezone.utc),
     }
+    # ptr_record is omitted from the dict entirely when the caller didn't
+    # supply one — lets the upsert's attribute-merge preserve any value
+    # already stored on the row without us having to think about "None
+    # means preserve vs. overwrite".
+    if ptr_record is not _UNSET:
+        record["ptr_record"] = ptr_record
+    return record
 
 
 def _first_contact_deckies(events: list[LogEvent]) -> list[str]:

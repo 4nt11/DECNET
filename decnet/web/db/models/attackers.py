@@ -63,6 +63,11 @@ class Attacker(SQLModel, table=True):
     # Nullable because private / loopback / IPv6 sources never resolve.
     country_code: Optional[str] = Field(default=None, max_length=2, index=True)
     country_source: Optional[str] = Field(default=None, max_length=16)
+    # Reverse-DNS (PTR) name, one-shot resolved by the profiler at first
+    # sighting. Nullable — many attackers run infra with no rDNS, and
+    # private/loopback addresses never resolve.  256 chars matches
+    # RFC 1035 max hostname length.
+    ptr_record: Optional[str] = Field(default=None, max_length=256)
     updated_at: datetime = Field(
         default_factory=lambda: datetime.now(timezone.utc), index=True
     )

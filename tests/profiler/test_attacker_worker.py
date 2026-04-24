@@ -314,6 +314,33 @@ class TestBuildRecord:
         assert isinstance(record["updated_at"], datetime)
         assert record["updated_at"].tzinfo is not None
 
+    def test_ptr_record_absent_when_not_passed(self):
+        """Omitting the kwarg means the key isn't in the record dict.
+
+        This lets upsert_attacker's attribute-merge loop preserve any
+        PTR already stored on the row — we never null by accident.
+        """
+        events = self._events()
+        record = _build_record("1.1.1.1", events, None, [], [])
+        assert "ptr_record" not in record
+
+    def test_ptr_record_included_when_resolved(self):
+        events = self._events()
+        record = _build_record(
+            "1.1.1.1", events, None, [], [],
+            ptr_record="dns.google",
+        )
+        assert record["ptr_record"] == "dns.google"
+
+    def test_ptr_record_included_when_explicit_none(self):
+        """Explicit None is a fresh-attempt-failed signal, still written."""
+        events = self._events()
+        record = _build_record(
+            "1.1.1.1", events, None, [], [],
+            ptr_record=None,
+        )
+        assert record["ptr_record"] is None
+
 
 # ─── cold start via _incremental_update (uninitialized state) ────────────────
 

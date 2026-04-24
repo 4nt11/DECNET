@@ -27,6 +27,10 @@ os.environ["DECNET_DB_TYPE"] = "sqlite"
 # enrichment globally. The geoip-specific tests re-enable it via
 # monkeypatch + a temp DECNET_GEOIP_ROOT.
 os.environ["DECNET_GEOIP_ENABLED"] = "false"
+# Same posture for PTR resolution — tests that cover the resolver
+# re-enable it explicitly via monkeypatch; everyone else gets the
+# short-circuit (returns None without touching socket.gethostbyaddr).
+os.environ["DECNET_PTR_ENABLED"] = "false"
 
 import pytest
 from typing import Any
