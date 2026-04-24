@@ -148,7 +148,10 @@ class TestLifespan:
         mock_repo.initialize = _failing_init
 
         with patch("decnet.web.api.repo", mock_repo):
-            with patch("decnet.web.api.asyncio.sleep", new_callable=AsyncMock):
+            # Patch only the local _retry_sleep binding — patching
+            # `asyncio.sleep` globally would starve the heartbeat loop's
+            # own sleep and leak the task past the test's lifetime.
+            with patch("decnet.web.api._retry_sleep", new_callable=AsyncMock):
                 with patch("decnet.web.api.log_ingestion_worker", return_value=asyncio.sleep(0)):
                     with patch("decnet.web.api.log_collector_worker", return_value=asyncio.sleep(0)):
                         with patch("decnet.web.api.attacker_profile_worker", return_value=asyncio.sleep(0)):

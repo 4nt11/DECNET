@@ -1,4 +1,8 @@
 import asyncio
+# Local binding for the DB-retry sleep so tests can patch it without
+# affecting `asyncio.sleep` globally (which would otherwise starve the
+# heartbeat / worker loops that share the interpreter's asyncio module).
+from asyncio import sleep as _retry_sleep
 import os
 import traceback
 import uuid
@@ -75,7 +79,7 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
             log.warning("DB init attempt %d/5 failed: %s", attempt, exc)
             if attempt == 5:
                 log.error("DB failed to initialize after 5 attempts — startup may be degraded")
-            await asyncio.sleep(0.5)
+            await _retry_sleep(0.5)
 
     # Conditionally enable OpenTelemetry tracing
     from decnet.telemetry import setup_tracing
