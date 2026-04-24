@@ -18,7 +18,6 @@ the embedded payload. Two URLs, one paste.
 from __future__ import annotations
 
 import asyncio
-import fnmatch
 import io
 import os
 import pathlib
@@ -44,46 +43,36 @@ BUNDLE_TTL = timedelta(minutes=5)
 BUNDLE_DIR = pathlib.Path(os.environ.get("DECNET_ENROLL_BUNDLE_DIR", "/tmp/decnet-enroll"))  # nosec B108 - short-lived 0600 bundle cache, env-overridable
 SWEEP_INTERVAL_SECS = 30
 
-# Paths excluded from the bundled tarball. Matches the intent of
-# decnet.swarm.tar_tree.DEFAULT_EXCLUDES but narrower — we never want
-# tests, dev scaffolding, the master's DB, or the frontend source tree
-# shipped to an agent.
-_EXCLUDES: tuple[str, ...] = (
-    ".venv", ".venv/*", "**/.venv/*",
-    "__pycache__", "**/__pycache__", "**/__pycache__/*",
-    ".git", ".git/*",
-    ".pytest_cache", ".pytest_cache/*",
-    ".mypy_cache", ".mypy_cache/*",
-    "*.egg-info", "*.egg-info/*",
-    # setuptools build/ staging dir — created by `pip install` and leaks a
-    # nested decnet_web/node_modules/ copy into the bundle otherwise.
-    "build", "build/*", "build/**",
-    "*.pyc", "*.pyo",
-    "*.db", "*.db-wal", "*.db-shm", "decnet.db*",
-    "*.log",
-    "tests", "tests/*",
-    "development", "development/*",
-    "wiki-checkout", "wiki-checkout/*",
-    # Frontend is master-only; agents never serve UI.
-    "decnet_web", "decnet_web/*", "decnet_web/**",
-    # Master FastAPI app and everything under decnet/web/ — no agent-side
-    # code imports it. The agent/updater/forwarder/collector/prober/sniffer
-    # entrypoints are all under decnet/agent, decnet/updater, decnet/swarm,
-    # decnet/collector, decnet/prober, decnet/sniffer.
-    "decnet/web", "decnet/web/*", "decnet/web/**",
-    # Mutator + Profiler are master-only (mutator schedules respawns across
-    # the swarm; profiler rebuilds attacker profiles against the master DB).
-    "decnet/mutator", "decnet/mutator/*", "decnet/mutator/**",
-    "decnet/profiler", "decnet/profiler/*", "decnet/profiler/**",
-    "decnet-state.json",
-    "master.log", "master.json",
-    "decnet.tar",
-    # Dev-host env/config leaks — these bake the master's absolute paths into
-    # the agent and point log handlers at directories that don't exist on the
-    # worker VM.
-    ".env", ".env.*", "**/.env", "**/.env.*",
-    "decnet.ini", "**/decnet.ini",
-)
+# Include list — explicit set of paths that ship to the agent. An
+# include list fails closed: anything new on the master (stray .env, dev
+# venvs, data dumps, editor scratch dirs) cannot leak into the bundle
+# just because we forgot to exclude it.
+#
+# What the agent actually needs:
+#   * pyproject.toml at the repo root, so ``pip install`` works against
+#     the bundle during enroll_bootstrap.sh.
+#   * the ``decnet/`` package, MINUS the master-only subtrees called out
+#     by _EXCLUDED_DECNET_SUBTREES — those never import on an agent host.
+# Everything else the bootstrap needs (the INI, certs, systemd units) is
+# synthesized in-memory by ``_build_tarball`` below — it never hits the
+# filesystem walk.
+
+# Top-level files shipped verbatim. Relative to the repo root.
+_INCLUDED_ROOT_FILES: tuple[str, ...] = ("pyproject.toml",)
+
+# Top-level directories walked into the bundle. Relative to the repo root.
+_INCLUDED_DIRS: tuple[str, ...] = ("decnet",)
+
+# Subtrees of an included directory that must NOT ship. Paths are
+# relative to the repo root, forward-slash separated.
+#   * ``decnet/web``      — FastAPI master app, unused by agents.
+#   * ``decnet/mutator``  — schedules respawns swarm-wide; master-only.
+#   * ``decnet/profiler`` — rebuilds profiles against the master DB.
+_EXCLUDED_DECNET_SUBTREES: frozenset[str] = frozenset({
+    "decnet/web",
+    "decnet/mutator",
+    "decnet/profiler",
+})
 
 
 # ---------------------------------------------------------------------------
@@ -176,15 +165,49 @@ def _repo_root() -> pathlib.Path:
     return pathlib.Path(__file__).resolve().parents[4]
 
 
-def _is_excluded(rel: str) -> bool:
-    parts = pathlib.PurePosixPath(rel).parts
-    for pat in _EXCLUDES:
-        if fnmatch.fnmatch(rel, pat):
-            return True
-        for i in range(1, len(parts) + 1):
-            if fnmatch.fnmatch("/".join(parts[:i]), pat):
-                return True
-    return False
+def _iter_included(root: pathlib.Path) -> "list[tuple[pathlib.Path, str]]":
+    """Return ``(full_path, arcname)`` pairs for every file the agent needs.
+
+    Walk is pruned in-place: ``__pycache__`` and the master-only subtrees
+    in :data:`_EXCLUDED_DECNET_SUBTREES` are skipped at the directory
+    level so we never descend into them (critical on dev boxes where
+    ``decnet/web/`` pulls in a fat frontend tree via package-data).
+    """
+    found: list[tuple[pathlib.Path, str]] = []
+
+    # Top-level files.
+    for rel in _INCLUDED_ROOT_FILES:
+        p = root / rel
+        if p.is_file():
+            found.append((p, rel))
+
+    # Top-level dirs, pruned.
+    for top in _INCLUDED_DIRS:
+        start = root / top
+        if not start.is_dir():
+            continue
+        for dirpath, dirnames, filenames in os.walk(start, topdown=True, followlinks=False):
+            dir_path = pathlib.Path(dirpath)
+            rel_dir = dir_path.relative_to(root).as_posix()
+
+            # Prune excluded subtrees + cache dirs BEFORE descending.
+            dirnames[:] = [
+                d for d in dirnames
+                if d != "__pycache__"
+                and f"{rel_dir}/{d}" not in _EXCLUDED_DECNET_SUBTREES
+            ]
+
+            for fn in filenames:
+                if fn.endswith((".pyc", ".pyo")):
+                    continue
+                full = dir_path / fn
+                if full.is_symlink():
+                    continue
+                found.append((full, f"{rel_dir}/{fn}"))
+
+    # Deterministic tarball ordering.
+    found.sort(key=lambda t: t[1])
+    return found
 
 
 def _render_decnet_ini(
@@ -231,7 +254,9 @@ def _build_tarball(
     use_ipvlan: bool = False,
 ) -> bytes:
     """Gzipped tarball with:
-      - full repo source (minus excludes)
+      - agent-required source (see :data:`_INCLUDED_DIRS` /
+        :data:`_INCLUDED_ROOT_FILES`; master-only decnet/ subtrees
+        pruned)
       - etc/decnet/decnet.ini (pre-baked for mode=agent)
       - home/.decnet/agent/{ca.crt,worker.crt,worker.key}
       - home/.decnet/updater/{ca.crt,updater.crt,updater.key}  (if updater_issued)
@@ -240,13 +265,8 @@ def _build_tarball(
     root = _repo_root()
     buf = io.BytesIO()
     with tarfile.open(fileobj=buf, mode="w:gz") as tar:
-        for path in sorted(root.rglob("*")):
-            rel = path.relative_to(root).as_posix()
-            if _is_excluded(rel):
-                continue
-            if path.is_symlink() or path.is_dir():
-                continue
-            tar.add(path, arcname=rel, recursive=False)
+        for path, arcname in _iter_included(root):
+            tar.add(path, arcname=arcname, recursive=False)
 
         _add_bytes(
             tar,
