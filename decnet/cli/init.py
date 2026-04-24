@@ -501,14 +501,18 @@ def register(app: typer.Typer) -> None:
         deinit: bool = typer.Option(
             False, "--deinit",
             help="Undo a previous init: stop + disable decnet.target, remove "
-                 "unit files, polkit rule, tmpfiles.d entry, /etc/decnet, and "
-                 "the decnet user/group. Preserves /var/lib/decnet and "
-                 "/var/log/decnet — pass --purge to remove those too.",
+                 "unit files, polkit rule, tmpfiles.d entry, /etc/decnet. "
+                 "Preserves /var/lib/decnet, /var/log/decnet, and the "
+                 "service user/group — pass --purge to remove those too.",
         ),
         purge: bool = typer.Option(
             False, "--purge",
-            help="With --deinit, also wipe /var/lib/decnet and "
-                 "/var/log/decnet. Destructive — operator data is gone.",
+            help="With --deinit, also wipe /var/lib/decnet, "
+                 "/var/log/decnet, AND the service user/group. "
+                 "Destructive — operator data is gone, and if --user "
+                 "points at your own login account, that account goes "
+                 "with it. Only use when the user/group was created by "
+                 "`decnet init` in the first place.",
         ),
         user: str = typer.Option(
             "decnet", "--user",
@@ -664,14 +668,25 @@ def register(app: typer.Typer) -> None:
                     f"{pfx / 'var/log/decnet'} (operator data); "
                     "re-run with --purge to remove.[/]"
                 )
-            _step(
-                f"remove user {user!r}",
-                lambda: _remove_user(user, dry_run=dry_run),
-            )
-            _step(
-                f"remove group {group!r}",
-                lambda: _remove_group(group, dry_run=dry_run),
-            )
+            # User / group removal is also gated on --purge. In dev the
+            # operator may have passed their own login user via
+            # `--user $USER` to avoid ownership churn; an unconditional
+            # `userdel anti` during deinit would nuke their account.
+            if purge:
+                _step(
+                    f"remove user {user!r}",
+                    lambda: _remove_user(user, dry_run=dry_run),
+                )
+                _step(
+                    f"remove group {group!r}",
+                    lambda: _remove_group(group, dry_run=dry_run),
+                )
+            else:
+                console.print(
+                    f"[dim]preserved user {user!r} and group {group!r}; "
+                    "re-run with --purge to remove (only do this if "
+                    "they were created by `decnet init`).[/]"
+                )
             console.print("[bold green]DECNET deinit complete.[/]")
             return
 

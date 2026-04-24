@@ -387,11 +387,13 @@ def test_deinit_removes_units_polkit_tmpfiles_and_preserves_data(
     assert (prefix / "var/lib/decnet").exists()
     assert (prefix / "var/log/decnet/events.jsonl").read_text() == "{}\n"
 
-    # systemctl disable + daemon-reload + userdel + groupdel were invoked.
+    # systemctl disable + daemon-reload invoked.
     assert ["systemctl", "disable", "--now", "decnet.target"] in subprocess_calls
     assert ["systemctl", "daemon-reload"] in subprocess_calls
-    assert ["userdel", "decnet"] in subprocess_calls
-    assert ["groupdel", "decnet"] in subprocess_calls
+    # User / group are PRESERVED without --purge — an operator who
+    # passed --user $USER during dev must not lose their login account.
+    assert ["userdel", "decnet"] not in subprocess_calls
+    assert ["groupdel", "decnet"] not in subprocess_calls
 
 
 def test_deinit_purge_wipes_data_dirs(
@@ -406,6 +408,9 @@ def test_deinit_purge_wipes_data_dirs(
     assert result.exit_code == 0, result.output
     assert not (prefix / "var/lib/decnet").exists()
     assert not (prefix / "var/log/decnet").exists()
+    # --purge also removes the service user/group.
+    assert ["userdel", "decnet"] in subprocess_calls
+    assert ["groupdel", "decnet"] in subprocess_calls
 
 
 def test_deinit_is_idempotent_on_clean_host(
