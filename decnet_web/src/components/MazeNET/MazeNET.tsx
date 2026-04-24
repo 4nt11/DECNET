@@ -231,13 +231,56 @@ const MazeNET: React.FC = () => {
     }
   }, [editor, flashErr, nets, nodes, topologyId]);
 
-  /* Port→port edges stay UI-only (backend edges are decky↔LAN). */
-  const onAddEdge = useCallback((fromId: string, toId: string) => {
-    const id = `viz-${fromId}-${toId}-${Date.now()}`;
-    setEdges((prev) => prev.some((e) => (e.from === fromId && e.to === toId) || (e.from === toId && e.to === fromId))
-      ? prev
-      : [...prev, { id, from: fromId, to: toId, traffic: 'active' as const }]);
-  }, []);
+  /* Port→port edges:
+   *   - Same-LAN: visual-only (no bridge to create).
+   *   - Cross-LAN: promote the source decky to multi-home into the
+   *     target LAN via attachEdge. The resulting viz edge carries a
+   *     backendEdgeId so removeEdge can detach it later. Observed
+   *     entities (attacker-pool) are read-only and never bridge. */
+  const onAddEdge = useCallback(async (fromId: string, toId: string) => {
+    const fromNode = nodes.find((n) => n.id === fromId);
+    const toNode = nodes.find((n) => n.id === toId);
+    if (!fromNode || !toNode) return;
+    if (fromNode.kind === 'observed' || toNode.kind === 'observed') return;
+
+    const dup = edges.some((e) =>
+      (e.from === fromId && e.to === toId) || (e.from === toId && e.to === fromId),
+    );
+    if (dup) return;
+
+    const sameLan = fromNode.netId === toNode.netId;
+    if (sameLan || !topologyId) {
+      const id = `viz-${fromId}-${toId}-${Date.now()}`;
+      setEdges((prev) => [...prev, { id, from: fromId, to: toId, traffic: 'active' as const }]);
+      return;
+    }
+
+    const targetNet = nets.find((n) => n.id === toNode.netId);
+    if (!targetNet) return;
+    const fromName = fromNode.kind === 'decky' ? fromNode.name : '';
+
+    try {
+      const res = await editor.attachEdge(
+        topologyId,
+        { decky_uuid: fromId, lan_id: toNode.netId, is_bridge: true },
+        fromName,
+        targetNet.label,
+      );
+      const backendEdgeId = res.kind === 'applied' ? res.data.id : `enqueued:${res.mutationId}`;
+      const id = `viz-${fromId}-${toId}-${Date.now()}`;
+      setEdges((prev) => [
+        ...prev,
+        { id, from: fromId, to: toId, traffic: 'active' as const, backendEdgeId },
+      ]);
+      pushToast({
+        text: `BRIDGED ${fromName.toUpperCase()} → ${targetNet.label.toUpperCase()}`,
+        tone: 'violet',
+        icon: 'terminal',
+      });
+    } catch (err) {
+      flashErr(err, 'bridge failed');
+    }
+  }, [edges, editor, flashErr, nets, nodes, pushToast, topologyId]);
 
   const interaction = useMazeInteraction({
     nets, nodes, setNets, setNodes, canvasRef,
@@ -284,10 +327,33 @@ const MazeNET: React.FC = () => {
     }
   };
 
-  const removeEdge = (id: string) => {
-    /* Viz-only edges: backend has no edge to delete here. */
-    setEdges((p) => p.filter((e) => e.id !== id));
-    setSelection(null);
+  const removeEdge = async (id: string) => {
+    const edge = edges.find((e) => e.id === id);
+    if (!edge) return;
+
+    /* Viz-only edges (same-LAN, pre-bridge era, or attach still in
+     * flight without a backing id) just drop from local state. */
+    if (!edge.backendEdgeId || !topologyId) {
+      setEdges((p) => p.filter((e) => e.id !== id));
+      setSelection(null);
+      return;
+    }
+
+    /* Cross-LAN bridge: detach the membership edge before removing
+     * the viz edge. Look the names up from the endpoints so the live
+     * mutation path has what it needs. */
+    const fromNode = nodes.find((n) => n.id === edge.from);
+    const toNode = nodes.find((n) => n.id === edge.to);
+    const targetNet = toNode ? nets.find((n) => n.id === toNode.netId) : undefined;
+    const fromName = fromNode?.kind === 'decky' ? fromNode.name : '';
+    const lanName = targetNet?.label ?? '';
+    try {
+      await editor.detachEdge(topologyId, edge.backendEdgeId, fromName, lanName);
+      setEdges((p) => p.filter((e) => e.id !== id));
+      setSelection(null);
+    } catch (err) {
+      flashErr(err, 'unbridge failed');
+    }
   };
 
   const duplicateNode = async (id: string) => {

@@ -45,5 +45,9 @@ export interface Edge {
   to: string;
   traffic: 'hot' | 'active' | 'idle';
   label?: string;
+  /** Backend membership-edge id when this visual edge mirrors a
+   *  cross-LAN bridge attachment. Same-LAN edges stay visual-only
+   *  and leave this undefined. Set at attach, consumed at detach. */
+  backendEdgeId?: string;
 }
 
