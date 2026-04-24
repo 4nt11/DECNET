@@ -72,6 +72,12 @@ def stress_server():
         "DECNET_DEVELOPER_TRACING": "false",
         "DECNET_DB_TYPE": "sqlite",
         "DECNET_MODE": "master",
+        # Locust hammers /auth/login from a single host as a single
+        # user — the production 10/5min per-IP + per-user limits would
+        # kill ramp-up past the 11th virtual user. Stress tests are
+        # measuring throughput, not rate-limiting; disable in this
+        # subprocess only.
+        "DECNET_LIMITER_ENABLED": "false",
     })
     proc = subprocess.Popen(
         [

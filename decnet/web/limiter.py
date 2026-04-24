@@ -20,11 +20,25 @@ we introduce a verified-proxy config.
 from __future__ import annotations
 
 import json
+import os
 from typing import Any, Awaitable, Callable
 
 from fastapi import Request
 from slowapi import Limiter
 from slowapi.util import get_remote_address
+
+
+def _limiter_enabled() -> bool:
+    """``DECNET_LIMITER_ENABLED=false`` disables the limiter process-wide.
+
+    Intended for stress / load testing, where a single Locust host
+    represents thousands of virtual users but shares one source IP and
+    one admin username — the real-world limits (10/5min per IP, per
+    user) would otherwise cap every run at 10 successful logins. The
+    default is ``true``; nobody should ever ship a release with this
+    off.
+    """
+    return os.environ.get("DECNET_LIMITER_ENABLED", "true").lower() != "false"
 
 
 # Single process-wide limiter. Importing modules pull this instance to
@@ -36,6 +50,7 @@ from slowapi.util import get_remote_address
 limiter: Limiter = Limiter(
     key_func=get_remote_address,
     storage_uri="memory://",
+    enabled=_limiter_enabled(),
 )
 
 
