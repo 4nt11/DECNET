@@ -125,7 +125,7 @@
 - [ ] **Latency triangulation** — JA4L RTT estimates for rough geolocation
 
 ### Service-Level Behavioral Profiling
-- [ ] **Commands executed** — Full command log per session (SSH, Telnet, FTP, Redis, DB services)
+- [x] **Commands executed** — Full command log per session (SSH, Telnet, FTP, Redis, DB services)
 - [ ] **Services actively interacted with** — Distinguish port scans from live exploitation attempts
 - [ ] **Tooling attribution** — Byte-sequence signatures from known C2 frameworks in handshakes
 - [ ] **Credential reuse patterns** — Same username/password tried across multiple deckies/services
