@@ -162,7 +162,14 @@ const SessionDrawer: React.FC<SessionDrawerProps> = ({ decky, sid, fields, onClo
       // sync try/catch above and lands as an unhandled rejection.
       // Hook every lifecycle event so we can see which state it
       // actually ends up in ("loading" / "ended" / "errored" / etc).
-      for (const evt of ['ready', 'play', 'pause', 'ended', 'error', 'errored', 'loading']) {
+      // metadata is the one that carries the parsed duration, fires
+      // AFTER _initializeDriver (which does the actual cast parse).
+      // playing / idle tell us whether the timer ever advanced.
+      const events_to_hook = [
+        'ready', 'metadata', 'play', 'playing', 'pause', 'idle',
+        'ended', 'error', 'errored', 'loading', 'reset', 'seeked',
+      ];
+      for (const evt of events_to_hook) {
         try {
           p.addEventListener?.(evt, (...args: unknown[]) =>
             console.debug(`asciinema-player event: ${evt}`, ...args),
