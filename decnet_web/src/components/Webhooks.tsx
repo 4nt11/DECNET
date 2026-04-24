@@ -439,11 +439,12 @@ const Webhooks: React.FC = () => {
                       <td>
                         <div className="wh-actions">
                           <button
-                            className="action-btn"
+                            className="action-btn fire"
                             onClick={() => handleTestOne(w.uuid, w.name)}
-                            title="Send synthetic test event"
+                            title="Fire a synthetic test event to this webhook (POST /webhooks/{uuid}/test)"
                           >
                             <Zap size={12} />
+                            FIRE
                           </button>
                           <button
                             className="action-btn"
