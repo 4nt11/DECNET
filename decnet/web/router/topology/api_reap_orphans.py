@@ -18,6 +18,7 @@ from fastapi import APIRouter, Depends
 
 from decnet.engine.reaper import reap_orphan_topology_resources
 from decnet.telemetry import traced as _traced
+from decnet.web.db.models import ReapReportResponse
 from decnet.web.dependencies import repo, require_admin
 
 router = APIRouter()
@@ -26,6 +27,7 @@ router = APIRouter()
 @router.post(
     "/reap-orphans",
     tags=["MazeNET Topologies"],
+    response_model=ReapReportResponse,
     responses={
         401: {"description": "Missing or invalid credentials"},
         403: {"description": "Insufficient permissions"},

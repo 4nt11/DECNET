@@ -227,7 +227,7 @@ Each sub-flow below gets its own table. Status codes:
 | I | Schema enumeration via schemathesis-style fuzzing | A | Schemathesis contract tests document 400/422 shape; an attacker learning the schema gains nothing beyond the public OpenAPI spec. See `feedback_schemathesis_400.md`. |
 | D | Unbounded result set via missing `limit` | M | Every query endpoint declares `limit: int = Query(..., le=N)` at the FastAPI layer — `/logs`, `/attackers`, `/bounties`, `/attacker-commands`, `/topologies/{id}` (`le=1000`), `/topologies` (`le=500`), `/transcripts` (`le=5000`). Cap enforced at pydantic validation, before the handler runs. |
 | D | Deep-pagination scan via large `offset` | M | Every `offset` param is `Query(0, ge=0, le=2147483647)` (INT32 max). At that scale SQLite returns empty immediately once rows exhaust; the point is to keep callers within a range the indexer can skip cheaply. `api_get_transcript.py:147` and `api_list_topologies.py:29` brought in line 2026-04-24. |
-| D | Expensive `LIKE '%foo%'` on non-indexed column | **?** | Verify: free-text `q` params hit an FTS5 virtual table or indexed column, not `LIKE`-scan of a large table. |
+| D | Expensive `LIKE '%foo%'` on non-indexed column | A | See DA-09. `/logs?search=` LIKE-scans four columns on the unbounded logs table; `/attackers?search=` LIKE-scans `attacker.ip`. Both routes are admin-gated. Cost-to-caller is bounded by `limit ≤ 1000` and by operator-level reverse-proxy rate limiting (see DA-04). Performance upgrade to FTS5 is tracked separately; within the current admin-trust model the cost is acceptable. |
 | D | Repeated expensive queries from single user | A | Per-user rate limiting is out of scope pre-v1. Operator-deployment mitigation: reverse-proxy rate limit. |
 | E | Filter params allow reading across tenants (future multi-tenant) | X | Multi-tenant is not in the v1 model; revisit when tenants exist. |
 
@@ -239,7 +239,7 @@ Each sub-flow below gets its own table. Status codes:
 | T | Replay of a captured mutation request | A | No nonce/idempotency-key pre-v1. Accepted: admin role already has full mutation power; replay gains nothing a fresh request couldn't. Revisit if multi-admin audit becomes a requirement. |
 | T | Concurrent-write race corrupting state | **?** | Verify: SQLModel session scoping + DB-level constraints cover the likely races (user creation, topology CRUD). |
 | R | Admin denies having mutated | M | Actor UUID + timestamp logged on every mutation. |
-| I | Mutation response returns internal state not meant for client | **?** | Verify per-route response_model shape. |
+| I | Mutation response returns internal state not meant for client | M | Every mutation route that returns a dict-shaped body now pins `response_model=...` at the decorator: `MessageResponse` for `{"message": ...}` envelopes, purpose-built models (`DeployResponse`, `PurgeResponse`, `ReapReportResponse`, `UserResponse`) for richer shapes. FastAPI strips undocumented extra fields at serialization time, so a handler that accidentally returned a full user row (including `password_hash`) would only ship declared fields. `Response`/`ORJSONResponse` routes bypass response_model intentionally and are audited individually. |
 | D | Malformed body triggers expensive validation / oversized payload | M | FastAPI enforces content-length at ASGI layer; Pydantic short-circuits on type mismatch. |
 | D | Destructive mutation storm (e.g. delete-all-users) | A | Admin role is trusted; protecting admins from themselves is out of scope. |
 | E | Mutation bypasses role check via missing `require_admin` | M | `tests/api/test_rbac_contract.py::test_admin_route_rejects_viewer` parametrizes every route classified admin by FastAPI-dependency introspection (identity-match on the `require_admin` closure) and asserts viewer JWT → 403. A missing `require_admin` would reclassify the route away from "admin" and break the viewer route's non-403 assertion, so the check is bidirectional. |
@@ -281,6 +281,7 @@ Consolidated for easy reference:
 | DA-06 | Destructive admin mutations not protected against the admin | Trusted-admin assumption; protecting root from root is out of scope | Multi-admin RBAC with mutual-approval workflows |
 | DA-07 | SSE token in query string | No alternative in the SSE spec; operator must control access-log handling | Move to WebSocket with in-band auth |
 | DA-08 | Reverse-proxy deployments collapse per-IP rate-limit bucket to one shared bucket | `X-Forwarded-For` is spoofable by any client; trusting it defeats the rate limit. Operators behind a proxy get coarser granularity but no spoofing lane. | Verified-proxy config lands (allow-list of proxy IPs whose `X-Forwarded-For` we trust) |
+| DA-09 | Admin-initiated `LIKE '%q%'` scan on `/logs` or `/attackers` ties up a worker for the duration of the scan on a large dataset | Both routes are admin-gated; the admin role already carries DA-06 (protecting admins from themselves is out of scope). `limit ≤ 1000` caps the result page size, and per-user rate-limiting is operator-scope per DA-04. FTS5 is a performance upgrade, not a security change, under the current trust model. | Logs table growth causes operator-observable latency on the LIKE path, OR trust model changes (multi-tenant / SaaS / untrusted-admin delegation) |
 
 ### Needs-verification checklist (Dashboard ↔ API)
 
@@ -298,8 +299,8 @@ code" or "accepted, add to table above."
 - [ ] Role-scoped repo methods OR per-route pre-filter for viewer queries (pick one, document it).
 - [x] ~~Every query endpoint has a server-side hard cap independent of `limit`.~~ All 7 query endpoints declare `Query(..., le=N)` at the FastAPI layer; enforced pre-handler.
 - [x] ~~`offset` is capped OR pagination is cursor-based OR deep-offset is cheap.~~ Every `offset` now uses `le=2147483647` (`api_list_topologies.py:29` and `api_get_transcript.py:147` brought in line 2026-04-24; others already capped).
-- [ ] Free-text `q` parameters hit an indexed/FTS5 column, never a full-table `LIKE` scan.
-- [ ] Per-route response_model shape audit on mutations.
+- [x] ~~Free-text `q` parameters hit an indexed/FTS5 column, never a full-table `LIKE` scan.~~ Moved to accepted risk **DA-09** — admin-only surface, `limit` capped, operator rate-limit applies. Revisit if logs-table LIKE latency becomes operator-observable OR if the trust model changes (multi-tenant / SaaS).
+- [x] ~~Per-route response_model shape audit on mutations.~~ Every dict-returning mutation now declares `response_model=...`. `MessageResponse` covers the 8 `{"message": ...}` envelopes; `DeployResponse`/`PurgeResponse`/`ReapReportResponse`/`UserResponse` cover the richer shapes. 204-No-Content routes and manual `Response`/`ORJSONResponse` routes are explicitly scoped out (no body to validate).
 - [x] ~~Contract test asserting every mutation route returns 403 for viewer.~~ Covered by `test_rbac_contract.py` (same test also covers read routes — classification is by dependency, not HTTP verb).
 - [ ] SSE handler applies per-connection role filter before forwarding events.
 - [ ] Per-user concurrent SSE connection cap.
@@ -337,7 +338,7 @@ regardless of component:
 
 | Component | ID | Summary |
 |-----------|----|---------|
-| Dashboard↔API | DA-01..DA-07 | See component section. |
+| Dashboard↔API | DA-01..DA-09 | See component section. |
 
 ## Components not yet modeled
 
@@ -362,3 +363,4 @@ In priority order:
 | 2026-04-24 | F7: "MIME sniffing" moved from **?** to **M** (explicit `Content-Disposition`/`nosniff` headers + test). F7: "path-traversal" row reworded to point at the existing `_resolve_artifact_path` containment check. Fleet-deploy `detail=str(e)` audit resolved — all four sites documented as deliberate, admin-gated, no sanitization needed. | ANTI |
 | 2026-04-24 | F2/I + F5/E moved from **?** to **M** via new `tests/api/test_rbac_contract.py` — classifies every APIRoute by FastAPI-dependency introspection and asserts viewer JWT → 403 on admin routes, non-401/403 on viewer routes. Role hints deliberately omitted from OpenAPI spec. SSE routes skipped (F6 scope). | ANTI |
 | 2026-04-24 | F4/T (ORM sort injection), F4/D (unbounded `limit`), F4/D (deep `offset`) all moved from **?** to **M**. Limit caps were already universal; sort is pattern-validated on the only surface that exposes it; added `le=2147483647` to the two offset params that were unbounded (`api_list_topologies.py`, `api_get_transcript.py`). | ANTI |
+| 2026-04-24 | F5/I moved from **?** to **M** via `response_model=...` on every dict-returning mutation (`MessageResponse` + purpose-built models). F4/D "expensive `LIKE`" moved from **?** to **A** under new accepted risk DA-09 — admin-only surface, operator-scope rate limiting, `limit` cap. FTS5 kept as a performance TODO, not a security blocker. | ANTI |

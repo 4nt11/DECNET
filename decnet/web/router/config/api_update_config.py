@@ -2,7 +2,7 @@ from fastapi import APIRouter, Depends
 
 from decnet.telemetry import traced as _traced
 from decnet.web.dependencies import require_admin, repo
-from decnet.web.db.models import DeploymentLimitRequest, GlobalMutationIntervalRequest
+from decnet.web.db.models import DeploymentLimitRequest, GlobalMutationIntervalRequest, MessageResponse
 
 router = APIRouter()
 
@@ -10,6 +10,7 @@ router = APIRouter()
 @router.put(
     "/config/deployment-limit",
     tags=["Configuration"],
+    response_model=MessageResponse,
     responses={
         400: {"description": "Bad Request (e.g. malformed JSON)"},
         401: {"description": "Could not validate credentials"},
@@ -29,6 +30,7 @@ async def api_update_deployment_limit(
 @router.put(
     "/config/global-mutation-interval",
     tags=["Configuration"],
+    response_model=MessageResponse,
     responses={
         400: {"description": "Bad Request (e.g. malformed JSON)"},
         401: {"description": "Could not validate credentials"},

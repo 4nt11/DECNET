@@ -17,3 +17,13 @@ class DeployIniRequest(BaseModel):
     # This field now enforces strict INI structure during Pydantic initialization.
     # The OpenAPI schema correctly shows it as a required string.
     ini_content: IniContent = PydanticField(..., description="A valid INI formatted string")
+
+
+class DeployResponse(BaseModel):
+    message: str
+    mode: str
+
+
+class PurgeResponse(BaseModel):
+    message: str
+    deleted: dict[str, int]

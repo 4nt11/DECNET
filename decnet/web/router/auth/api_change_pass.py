@@ -5,7 +5,7 @@ from fastapi import APIRouter, Depends, HTTPException, status
 from decnet.telemetry import traced as _traced
 from decnet.web.auth import ahash_password, averify_password
 from decnet.web.dependencies import get_current_user_unchecked, invalidate_user_cache, repo
-from decnet.web.db.models import ChangePasswordRequest
+from decnet.web.db.models import ChangePasswordRequest, MessageResponse
 
 router = APIRouter()
 
@@ -13,6 +13,7 @@ router = APIRouter()
 @router.post(
     "/auth/change-password",
     tags=["Authentication"],
+    response_model=MessageResponse,
     responses={
         400: {"description": "Bad Request (e.g. malformed JSON)"},
         401: {"description": "Could not validate credentials"},

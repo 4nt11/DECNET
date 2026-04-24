@@ -2,6 +2,7 @@ from fastapi import APIRouter, Depends, HTTPException
 
 from decnet.env import DECNET_DEVELOPER
 from decnet.telemetry import traced as _traced
+from decnet.web.db.models import PurgeResponse
 from decnet.web.dependencies import require_admin, repo
 
 router = APIRouter()
@@ -10,6 +11,7 @@ router = APIRouter()
 @router.delete(
     "/config/reinit",
     tags=["Configuration"],
+    response_model=PurgeResponse,
     responses={
         401: {"description": "Could not validate credentials"},
         403: {"description": "Admin access required or developer mode not enabled"},

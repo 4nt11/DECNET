@@ -3,6 +3,7 @@ from fastapi import APIRouter, Depends, HTTPException, Path
 
 from decnet.telemetry import traced as _traced
 from decnet.mutator import mutate_decky
+from decnet.web.db.models import MessageResponse
 from decnet.web.dependencies import require_admin, repo
 
 router = APIRouter()
@@ -11,6 +12,7 @@ router = APIRouter()
 @router.post(
     "/deckies/{decky_name}/mutate",
     tags=["Fleet Management"],
+    response_model=MessageResponse,
     responses={
         401: {"description": "Could not validate credentials"},
         403: {"description": "Insufficient permissions"},

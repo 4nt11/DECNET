@@ -8,8 +8,9 @@ from decnet.web.dependencies import require_admin, invalidate_user_cache, repo
 from decnet.web.router.config.api_get_config import invalidate_list_users_cache
 from decnet.web.db.models import (
     CreateUserRequest,
-    UpdateUserRoleRequest,
+    MessageResponse,
     ResetUserPasswordRequest,
+    UpdateUserRoleRequest,
     UserResponse,
 )
 
@@ -19,6 +20,7 @@ router = APIRouter()
 @router.post(
     "/config/users",
     tags=["Configuration"],
+    response_model=UserResponse,
     responses={
         400: {"description": "Bad Request (e.g. malformed JSON)"},
         401: {"description": "Could not validate credentials"},
@@ -56,6 +58,7 @@ async def api_create_user(
 @router.delete(
     "/config/users/{user_uuid}",
     tags=["Configuration"],
+    response_model=MessageResponse,
     responses={
         401: {"description": "Could not validate credentials"},
         403: {"description": "Admin access required / cannot delete self"},
@@ -81,6 +84,7 @@ async def api_delete_user(
 @router.put(
     "/config/users/{user_uuid}/role",
     tags=["Configuration"],
+    response_model=MessageResponse,
     responses={
         400: {"description": "Bad Request (e.g. malformed JSON)"},
         401: {"description": "Could not validate credentials"},
@@ -111,6 +115,7 @@ async def api_update_user_role(
 @router.put(
     "/config/users/{user_uuid}/reset-password",
     tags=["Configuration"],
+    response_model=MessageResponse,
     responses={
         400: {"description": "Bad Request (e.g. malformed JSON)"},
         401: {"description": "Could not validate credentials"},

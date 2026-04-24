@@ -420,3 +420,11 @@ class DeployAcceptedResponse(BaseModel):
     topology_id: str
     status: str
     dry_run: bool = False
+
+
+class ReapReportResponse(BaseModel):
+    live_prefixes: list[str]
+    orphan_prefixes: list[str]
+    containers_removed: list[str]
+    networks_removed: list[str]
+    errors: list[str]
