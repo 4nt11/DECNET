@@ -132,6 +132,52 @@ _PERMANENT_ERRORS = (
     "repository does not exist",
 )
 
+# Signatures of a wedged buildx: the daemon has leaked bind mounts and
+# can no longer update its activity file, which surfaces as "read-only
+# file system" even though nothing is actually read-only. Retrying the
+# compose build just accumulates more leaked mounts — we bail early
+# with a clear recovery recipe.
+_BUILDX_WEDGE_PATTERNS = (
+    "failed to update builder last activity time",
+    ".docker/buildx/activity/",
+)
+
+# Count above which we consider buildx's bind-mount table pathological.
+# A healthy daemon has 0; a couple is transient during a build. Past
+# 10 you're seeing accumulation from a previous failed run.
+_BUILDKIT_MOUNT_THRESHOLD = 10
+
+
+def _count_leaked_buildkit_mounts() -> int:
+    """How many orphaned buildkit bind-mounts is the daemon holding?
+
+    Best-effort: reads /proc/self/mounts and greps for the known
+    buildkit tmp pattern. Returns 0 if the file can't be read so we
+    never block a deploy over our own diagnostic.
+    """
+    try:
+        with open("/proc/self/mounts", "r", encoding="utf-8") as fh:
+            return sum(1 for line in fh if "/var/lib/docker/tmp/buildkit-mount" in line)
+    except OSError:
+        return 0
+
+
+def _buildx_recovery_hint(extra: str = "") -> str:
+    head = (
+        "Buildx is wedged — Docker's build driver has leaked bind "
+        "mounts from a previous failed run and can no longer write "
+        "its activity file. This surfaces as a spurious "
+        "'read-only file system' error."
+    )
+    fix = (
+        "Recovery:\n"
+        "  1. docker buildx prune -af\n"
+        "  2. sudo systemctl restart docker\n"
+        "  3. Retry the deploy.\n"
+        "See wiki: Troubleshooting → 'Buildx leaked mounts'."
+    )
+    return f"{head}\n\n{fix}{(' ' + extra) if extra else ''}"
+
 
 @_traced("engine.compose_with_retry")
 def _compose_with_retry(
@@ -150,6 +196,21 @@ def _compose_with_retry(
     # "project name must not be empty".
     cmd = ["docker", "compose", "-p", "decnet", "-f", str(compose_file), *args]
     merged = {**os.environ, **(env or {})}
+
+    # Preflight: if buildx already looks wedged before the first attempt,
+    # refuse to start — retrying just leaks more mounts. Only applies to
+    # build-bearing invocations ("up --build", "build"); "down" etc. are
+    # unaffected by buildx state.
+    is_build_cmd = any(a in args for a in ("--build", "build"))
+    if is_build_cmd:
+        leaked = _count_leaked_buildkit_mounts()
+        if leaked >= _BUILDKIT_MOUNT_THRESHOLD:
+            hint = _buildx_recovery_hint(f"(Detected {leaked} leaked buildkit mounts.)")
+            log.error("preflight: buildx wedge detected (%d mounts) — refusing to deploy", leaked)
+            raise subprocess.CalledProcessError(
+                returncode=1, cmd=cmd, output="", stderr=hint,
+            )
+
     for attempt in range(1, retries + 1):
         result = subprocess.run(cmd, capture_output=True, text=True, env=merged)  # nosec B603
         if result.returncode == 0:
@@ -163,6 +224,15 @@ def _compose_with_retry(
         if any(pat in stderr_lower for pat in _PERMANENT_ERRORS):
             console.print(f"[red]Permanent Docker error — not retrying:[/]\n{result.stderr.strip()}")
             raise last_exc
+        if any(pat in stderr_lower for pat in _BUILDX_WEDGE_PATTERNS):
+            leaked = _count_leaked_buildkit_mounts()
+            hint = _buildx_recovery_hint(f"(Detected {leaked} leaked buildkit mounts.)")
+            console.print(f"[red]{hint}[/]")
+            log.error("buildx wedge detected mid-build (%d mounts) — not retrying", leaked)
+            raise subprocess.CalledProcessError(
+                returncode=result.returncode, cmd=cmd,
+                output=result.stdout, stderr=hint,
+            )
         if attempt < retries:
             console.print(
                 f"[yellow]docker compose {' '.join(args)} failed "

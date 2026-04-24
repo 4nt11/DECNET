@@ -59,6 +59,17 @@ class TestCompose:
 
 # ── _compose_with_retry ───────────────────────────────────────────────────────
 
+@pytest.fixture(autouse=True)
+def _no_leaked_buildkit_mounts(monkeypatch):
+    """Stub out the wedge-detector so dev-host state doesn't bleed into
+    the mocked-subprocess tests below. Tests that exercise the preflight
+    itself patch this function explicitly."""
+    monkeypatch.setattr(
+        "decnet.engine.deployer._count_leaked_buildkit_mounts",
+        lambda: 0,
+    )
+
+
 class TestComposeWithRetry:
     @patch("decnet.engine.deployer.subprocess.run")
     def test_success_first_try(self, mock_run):
@@ -105,6 +116,46 @@ class TestComposeWithRetry:
         _compose_with_retry("build")
         captured = capsys.readouterr()
         assert "done" in captured.out
+
+    @patch("decnet.engine.deployer.subprocess.run")
+    def test_buildx_preflight_blocks_when_wedged(self, mock_run, monkeypatch):
+        """Pre-flight: refuse to run a build command when buildx already
+        shows pathological mount leakage — retrying would only leak more."""
+        from decnet.engine import deployer
+        monkeypatch.setattr(deployer, "_count_leaked_buildkit_mounts", lambda: 42)
+        with pytest.raises(subprocess.CalledProcessError) as ei:
+            deployer._compose_with_retry("up", "--build", "-d")
+        mock_run.assert_not_called()
+        assert "Buildx is wedged" in ei.value.stderr
+        assert "docker buildx prune" in ei.value.stderr
+
+    @patch("decnet.engine.deployer.subprocess.run")
+    def test_buildx_preflight_skipped_for_non_build_cmds(self, mock_run, monkeypatch):
+        """down/stop/etc. don't go through buildx — the preflight must
+        not block them even if mounts are leaked."""
+        from decnet.engine import deployer
+        monkeypatch.setattr(deployer, "_count_leaked_buildkit_mounts", lambda: 999)
+        mock_run.return_value = MagicMock(returncode=0, stdout="", stderr="")
+        deployer._compose_with_retry("down")  # must not raise
+        mock_run.assert_called_once()
+
+    @patch("decnet.engine.deployer.time.sleep")
+    @patch("decnet.engine.deployer.subprocess.run")
+    def test_buildx_wedge_mid_build_short_circuits_retries(self, mock_run, mock_sleep):
+        """If a build fails with the wedge signature, skip remaining
+        retries and surface the recovery hint in stderr."""
+        from decnet.engine.deployer import _compose_with_retry
+        fail = MagicMock(
+            returncode=1, stdout="",
+            stderr="failed to update builder last activity time: "
+                   "open /home/x/.docker/buildx/activity/.tmp-default: read-only file system",
+        )
+        mock_run.return_value = fail
+        with pytest.raises(subprocess.CalledProcessError) as ei:
+            _compose_with_retry("up", "--build", retries=5)
+        assert mock_run.call_count == 1  # no retry
+        mock_sleep.assert_not_called()
+        assert "Buildx is wedged" in ei.value.stderr
 
 
 # ── _sync_logging_helper ─────────────────────────────────────────────────────
