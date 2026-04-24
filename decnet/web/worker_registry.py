@@ -38,6 +38,7 @@ KNOWN_WORKERS: tuple[str, ...] = (
     "sniffer",
     "prober",
     "mutator",
+    "webhook",    # external SIEM/SOAR egress — bus consumer → HMAC HTTP POSTs
     "agent",
     "forwarder",
     "updater",

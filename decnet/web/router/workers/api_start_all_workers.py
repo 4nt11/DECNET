@@ -25,6 +25,7 @@ _PREFERRED_ORDER: tuple[str, ...] = (
     "sniffer",
     "prober",
     "mutator",
+    "webhook",
 )
 
 
