@@ -54,6 +54,37 @@ export function useMazeInteraction({ nets, nodes, setNets, setNodes, canvasRef, 
   useEffect(() => { edgeDrawRef.current = edgeDraw; }, [edgeDraw]);
   useEffect(() => { paletteDragRef.current = paletteDrag; }, [paletteDrag]);
 
+  /* DOM refs for the pan/zoom layer and grid pattern. Pan mousemoves
+   * write transforms here directly via rAF, bypassing React until
+   * mouseup. This is what keeps a 30-LAN topology from melting the
+   * browser — React re-rendering hundreds of SVG paths and div cards
+   * on every mousemove is the dominant cost, and panning doesn't
+   * mutate any data, only the viewport. */
+  const panLayerRef = useRef<HTMLDivElement | null>(null);
+  const gridPatternRef = useRef<SVGPatternElement | null>(null);
+  const rafHandle = useRef<number | null>(null);
+
+  const writeTransform = useCallback(() => {
+    if (rafHandle.current !== null) return;
+    rafHandle.current = requestAnimationFrame(() => {
+      rafHandle.current = null;
+      const p = panRef.current;
+      const z = zoomRef.current;
+      const layer = panLayerRef.current;
+      if (layer) {
+        layer.style.transform = `translate(${p.x}px, ${p.y}px) scale(${z})`;
+      }
+      const grid = gridPatternRef.current;
+      if (grid) {
+        grid.setAttribute('x', String(p.x));
+        grid.setAttribute('y', String(p.y));
+        const size = String(40 * z);
+        grid.setAttribute('width', size);
+        grid.setAttribute('height', size);
+      }
+    });
+  }, []);
+
   const startPaletteDrag = useCallback((d: Omit<PaletteDrag, 'clientX' | 'clientY'>, e: React.MouseEvent) => {
     setPaletteDrag({ ...d, clientX: e.clientX, clientY: e.clientY });
   }, []);
@@ -167,7 +198,15 @@ export function useMazeInteraction({ nets, nodes, setNets, setNodes, canvasRef, 
       if (!d) return;
 
       if (d.type === 'pan') {
-        setPan({ x: d.panX + (e.clientX - d.startX), y: d.panY + (e.clientY - d.startY) });
+        // Mutate panRef directly and schedule a DOM write. setPan is
+        // deferred to mouseup so we avoid a full React re-render per
+        // mousemove. Other reads of panRef (toWorld, context menu, etc.)
+        // see the live value immediately.
+        panRef.current = {
+          x: d.panX + (e.clientX - d.startX),
+          y: d.panY + (e.clientY - d.startY),
+        };
+        writeTransform();
         return;
       }
 
@@ -290,6 +329,13 @@ export function useMazeInteraction({ nets, nodes, setNets, setNodes, canvasRef, 
         /* Intra-net moves and net/resize drags are cosmetic — never persisted. */
       }
 
+      if (d.type === 'pan') {
+        // Commit the drag-accumulated pan (written only to panRef during
+        // the drag) back to React state so anything reading via props
+        // (status bar, auto-layout, persistence) sees the final value.
+        setPan(panRef.current);
+      }
+
       setDropTargetId(null);
       setDrag(null);
     };
@@ -302,7 +348,13 @@ export function useMazeInteraction({ nets, nodes, setNets, setNodes, canvasRef, 
     };
   }, [setNets, setNodes, dropTargetId, onPaletteDrop, onReparent, onAddEdge, canvasRef]);
 
-  const resetPan = useCallback(() => { setPan({ x: 0, y: 0 }); setZoom(1); }, []);
+  const resetPan = useCallback(() => {
+    panRef.current = { x: 0, y: 0 };
+    zoomRef.current = 1;
+    setPan({ x: 0, y: 0 });
+    setZoom(1);
+    writeTransform();
+  }, [writeTransform]);
 
   /* Wheel zoom anchored at cursor — attached as a native non-passive
    * listener so preventDefault() actually stops the page from scrolling
@@ -322,12 +374,16 @@ export function useMazeInteraction({ nets, nodes, setNets, setNodes, canvasRef, 
       const my = e.clientY - o.y;
       const wx = (mx - p.x) / z;
       const wy = (my - p.y) / z;
+      const np = { x: mx - wx * nz, y: my - wy * nz };
+      panRef.current = np;
+      zoomRef.current = nz;
       setZoom(nz);
-      setPan({ x: mx - wx * nz, y: my - wy * nz });
+      setPan(np);
+      writeTransform();
     };
     el.addEventListener('wheel', onWheel, { passive: false });
     return () => el.removeEventListener('wheel', onWheel);
-  }, [canvasRef]);
+  }, [canvasRef, writeTransform]);
 
   const zoomBy = useCallback((mult: number) => {
     const z = zoomRef.current;
@@ -339,9 +395,13 @@ export function useMazeInteraction({ nets, nodes, setNets, setNodes, canvasRef, 
     const p = panRef.current;
     const wx = (cx - p.x) / z;
     const wy = (cy - p.y) / z;
+    const np = { x: cx - wx * nz, y: cy - wy * nz };
+    panRef.current = np;
+    zoomRef.current = nz;
     setZoom(nz);
-    setPan({ x: cx - wx * nz, y: cy - wy * nz });
-  }, [canvasRef]);
+    setPan(np);
+    writeTransform();
+  }, [canvasRef, writeTransform]);
 
   return {
     pan,
@@ -358,5 +418,7 @@ export function useMazeInteraction({ nets, nodes, setNets, setNodes, canvasRef, 
     onPortMouseDown,
     resetPan,
     zoomBy,
+    panLayerRef,
+    gridPatternRef,
   };
 }

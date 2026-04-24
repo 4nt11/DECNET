@@ -1,4 +1,4 @@
-import React, { forwardRef, useMemo } from 'react';
+import React, { forwardRef, useCallback, useMemo } from 'react';
 import { RotateCcw, LayoutGrid, ZoomIn, ZoomOut } from '../../icons';
 import NetBox from './NetBox';
 import NodeCard from './NodeCard';
@@ -34,6 +34,8 @@ interface Props {
   sseConnected?: boolean;
   lastEventAt?: Date | null;
   onSelectService?: (nodeId: string, slug: string) => void;
+  panLayerRef?: React.RefObject<HTMLDivElement | null>;
+  gridPatternRef?: React.RefObject<SVGPatternElement | null>;
 }
 
 const fmtTime = (d: Date) =>
@@ -46,15 +48,25 @@ const Canvas = forwardRef<HTMLDivElement, Props>(function Canvas(
   { nets, nodes, edges, deployed, selection, setSelection, pan, zoom, dropTargetId, dragging, edgeDraw,
     onCanvasMouseDown, onNodeMouseDown, onNetMouseDown, onNetResizeMouseDown, onPortMouseDown,
     onNodeContextMenu, onNetContextMenu, onEdgeContextMenu, onCanvasContextMenu,
-    onResetView, onAutoLayout, onZoomIn, onZoomOut, sseConnected, lastEventAt, onSelectService },
+    onResetView, onAutoLayout, onZoomIn, onZoomOut, sseConnected, lastEventAt, onSelectService,
+    panLayerRef, gridPatternRef },
   ref,
 ) {
   const netById = useMemo(() => new Map(nets.map((n) => [n.id, n])), [nets]);
+  // Pre-indexed node lookup so edge rendering is O(E) instead of
+  // O(E·N) from the prior `nodes.find(...)` inside the edge loop.
+  const nodeById = useMemo(() => new Map(nodes.map((n) => [n.id, n])), [nodes]);
 
   const absPos = (node: MazeNode) => {
     const net = netById.get(node.netId);
     return { x: (net?.x ?? 0) + node.x, y: (net?.y ?? 0) + node.y };
   };
+
+  // Stable per-kind selection callbacks so React.memo on children
+  // (NetBox/NodeCard) can actually short-circuit re-renders instead
+  // of seeing a fresh closure on every Canvas render.
+  const selectNet = useCallback((id: string) => setSelection({ type: 'net', id }), [setSelection]);
+  const selectNode = useCallback((id: string) => setSelection({ type: 'node', id }), [setSelection]);
 
   const activeNetIds = useMemo(() => {
     const nodeNet = new Map(nodes.map((n) => [n.id, n.netId]));
@@ -90,6 +102,7 @@ const Canvas = forwardRef<HTMLDivElement, Props>(function Canvas(
         <svg xmlns="http://www.w3.org/2000/svg">
           <defs>
             <pattern
+              ref={gridPatternRef ?? null}
               id="maze-grid-pat"
               x={pan.x}
               y={pan.y}
@@ -110,6 +123,7 @@ const Canvas = forwardRef<HTMLDivElement, Props>(function Canvas(
       </div>
 
       <div
+        ref={panLayerRef ?? null}
         className="maze-pan-layer"
         style={{
           transform: `translate(${pan.x}px, ${pan.y}px) scale(${zoom})`,
@@ -129,8 +143,8 @@ const Canvas = forwardRef<HTMLDivElement, Props>(function Canvas(
             </marker>
           </defs>
           {edges.map((e) => {
-            const from = nodes.find((n) => n.id === e.from);
-            const to   = nodes.find((n) => n.id === e.to);
+            const from = nodeById.get(e.from);
+            const to   = nodeById.get(e.to);
             if (!from || !to) return null;
             const a = absPos(from); const b = absPos(to);
             const x1 = a.x + NODE_W, y1 = a.y + NODE_HEAD_H;
@@ -175,7 +189,7 @@ const Canvas = forwardRef<HTMLDivElement, Props>(function Canvas(
                 dropTarget={dropTargetId === net.id}
                 inactive={inactive}
                 deployed={deployed}
-                onSelect={(id) => setSelection({ type: 'net', id })}
+                onSelect={selectNet}
                 onHeaderMouseDown={onNetMouseDown}
                 onResizeMouseDown={onNetResizeMouseDown}
                 onContextMenu={onNetContextMenu?.(net.id)}
@@ -194,7 +208,7 @@ const Canvas = forwardRef<HTMLDivElement, Props>(function Canvas(
                 deployed={deployed}
                 dragging={dragging && n.id === selNodeId}
                 selectedServiceSlug={n.id === selServiceNodeId ? selServiceSlug : null}
-                onSelect={(id) => setSelection({ type: 'node', id })}
+                onSelect={selectNode}
                 onSelectService={onSelectService}
                 onMouseDown={onNodeMouseDown}
                 onPortMouseDown={onPortMouseDown}

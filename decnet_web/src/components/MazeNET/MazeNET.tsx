@@ -664,6 +664,8 @@ const MazeNET: React.FC = () => {
           sseConnected={streamLive}
           lastEventAt={lastEventAt}
           onSelectService={(nodeId, slug) => setSelection({ type: 'service', id: slug, nodeId })}
+          panLayerRef={interaction.panLayerRef}
+          gridPatternRef={interaction.gridPatternRef}
         />
         {ctxMenu && (
           <ContextMenu x={ctxMenu.x} y={ctxMenu.y} items={ctxMenu.items} onClose={() => setCtxMenu(null)} />

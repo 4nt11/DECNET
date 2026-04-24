@@ -79,4 +79,4 @@ const NetBox: React.FC<Props> = ({
   );
 };
 
-export default NetBox;
+export default React.memo(NetBox);

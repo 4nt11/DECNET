@@ -100,4 +100,4 @@ const NodeCard: React.FC<Props> = ({ node, absX, absY, selected, dragging, deplo
   );
 };
 
-export default NodeCard;
+export default React.memo(NodeCard);
