@@ -55,15 +55,65 @@ def register(app: typer.Typer) -> None:
 
     @app.command()
     def status() -> None:
-        """Show running deckies and their status."""
+        """Show running deckies and the state of every ``decnet-*`` unit.
+
+        Prefers systemd (``systemctl list-units 'decnet-*.service'``) so
+        agents, masters and mixed hosts all get one consistent view of
+        what's installed, loaded, and active. Falls back to the psutil
+        cmdline registry on boxes without systemd (dev laptops, CI
+        containers, non-systemd init) so `decnet status` is still useful
+        there.
+        """
         log.info("status command invoked")
         from decnet.engine import status as _status
         _status()
 
+        units = _utils._systemd_units()
+        if units is not None:
+            _render_systemd_units(units)
+        else:
+            _render_psutil_fallback()
+
+    def _render_systemd_units(units: list[dict]) -> None:
+        svc_table = Table(title="DECNET Services (systemd)", show_lines=True)
+        svc_table.add_column("Unit", style="bold cyan")
+        svc_table.add_column("Load")
+        svc_table.add_column("Active")
+        svc_table.add_column("Sub")
+        svc_table.add_column("Description", style="dim")
+
+        if not units:
+            console.print(
+                "[yellow]No decnet-* systemd units loaded. "
+                "Run `sudo decnet init` to install them.[/]"
+            )
+            return
+
+        def _active_style(active: str) -> str:
+            if active == "active":
+                return "[green]active[/]"
+            if active == "failed":
+                return "[red]failed[/]"
+            return f"[yellow]{active}[/]"
+
+        for u in sorted(units, key=lambda x: x.get("unit", "")):
+            svc_table.add_row(
+                u.get("unit", ""),
+                u.get("load", ""),
+                _active_style(u.get("active", "")),
+                u.get("sub", ""),
+                u.get("description", ""),
+            )
+        console.print(svc_table)
+
+    def _render_psutil_fallback() -> None:
         registry = _utils._service_registry(str(DECNET_INGEST_LOG_FILE))
         if _agent_mode_active():
             registry = [r for r in registry if r[0] not in {"Mutator", "Profiler", "API"}]
-        svc_table = Table(title="DECNET Services", show_lines=True)
+        svc_table = Table(
+            title="DECNET Services (psutil fallback — systemd unavailable)",
+            show_lines=True,
+        )
         svc_table.add_column("Service", style="bold cyan")
         svc_table.add_column("Status")
         svc_table.add_column("PID", style="dim")
