@@ -10,7 +10,7 @@ from pathlib import Path
 import pytest
 
 
-REPO = pathlib.Path(__file__).resolve().parent.parent
+REPO = pathlib.Path(__file__).resolve().parent.parent.parent
 #DECNET_BIN = REPO / ".venv" / "bin" / "decnet"
 DECNET_BIN = Path(sys.executable).parent / "decnet"
 

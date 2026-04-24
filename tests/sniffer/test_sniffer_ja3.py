@@ -18,7 +18,7 @@ import pytest
 
 # ─── Import sniffer module with mocked syslog_bridge ─────────────────────────
 
-_SNIFFER_DIR = str(Path(__file__).parent.parent / "decnet" / "templates" / "sniffer")
+_SNIFFER_DIR = str(Path(__file__).parent.parent.parent / "decnet" / "templates" / "sniffer")
 
 def _load_sniffer():
     """Load decnet/templates/sniffer/server.py with syslog_bridge stubbed out."""

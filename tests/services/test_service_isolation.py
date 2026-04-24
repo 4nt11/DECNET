@@ -202,15 +202,19 @@ class TestAttackerWorkerIsolation:
         mock_repo.set_state = AsyncMock()
 
         iterations = 0
+        real_wait_for = asyncio.wait_for
 
-        async def _controlled_sleep(seconds):
+        async def _controlled_wait_for(awaitable, timeout):
             nonlocal iterations
             iterations += 1
             if iterations >= 3:
+                if asyncio.iscoroutine(awaitable):
+                    awaitable.close()
                 raise asyncio.CancelledError()
+            return await real_wait_for(awaitable, timeout)
 
-        with patch("decnet.profiler.worker.asyncio.sleep", side_effect=_controlled_sleep):
-            task = asyncio.create_task(attacker_profile_worker(mock_repo))
+        with patch("decnet.profiler.worker.asyncio.wait_for", side_effect=_controlled_wait_for):
+            task = asyncio.create_task(attacker_profile_worker(mock_repo, interval=0))
             with pytest.raises(asyncio.CancelledError):
                 await task
         # Worker should have retried at least twice before we cancelled
@@ -454,15 +458,19 @@ class TestCascadeIsolation:
         mock_repo.get_logs_after_id = AsyncMock(return_value=[])
 
         iterations = 0
+        real_wait_for = asyncio.wait_for
 
-        async def _controlled_sleep(seconds):
+        async def _controlled_wait_for(awaitable, timeout):
             nonlocal iterations
             iterations += 1
             if iterations >= 3:
+                if asyncio.iscoroutine(awaitable):
+                    awaitable.close()
                 raise asyncio.CancelledError()
+            return await real_wait_for(awaitable, timeout)
 
-        with patch("decnet.profiler.worker.asyncio.sleep", side_effect=_controlled_sleep):
-            task = asyncio.create_task(attacker_profile_worker(mock_repo))
+        with patch("decnet.profiler.worker.asyncio.wait_for", side_effect=_controlled_wait_for):
+            task = asyncio.create_task(attacker_profile_worker(mock_repo, interval=0))
             with pytest.raises(asyncio.CancelledError):
                 await task
         # Attacker should have run independently
