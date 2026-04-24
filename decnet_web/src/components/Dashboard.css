@@ -71,6 +71,22 @@
   background: rgba(255, 65, 65, 0.1);
 }
 
+/* Key-value chips in the live-feed event column. Values are unbounded
+   (attacker-supplied command strings, URLs, base64 payloads), so these
+   must wrap inside the chip rather than inherit the default nowrap —
+   otherwise a single `cmd: echo <2KB>` blows out the table width. */
+.chip.chip-kv {
+  white-space: normal;
+  word-break: break-word;
+  overflow-wrap: anywhere;
+  max-width: 100%;
+  align-items: flex-start;
+  line-height: 1.35;
+}
+.chip.chip-kv > .dim {
+  flex-shrink: 0;
+}
+
 /* Breach banner */
 .breach-banner {
   background: rgba(255, 65, 65, 0.1);

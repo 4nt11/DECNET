@@ -359,8 +359,8 @@ const Dashboard: React.FC<DashboardProps> = ({ searchQuery }) => {
                       <td className="violet-accent">{log.decky}</td>
                       <td><span className="chip dim-chip">{log.service}</span></td>
                       <td className="matrix-text">{log.attacker_ip}</td>
-                      <td>
-                        <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+                      <td style={{ minWidth: 0, maxWidth: 0, width: '100%' }}>
+                        <div style={{ display: 'flex', flexDirection: 'column', gap: 4, minWidth: 0 }}>
                           <div style={{ fontWeight: 700, fontSize: '0.78rem', color: 'var(--text-color)' }}>
                             {(() => {
                               const et = log.event_type && log.event_type !== '-' ? log.event_type : null;
@@ -378,7 +378,7 @@ const Dashboard: React.FC<DashboardProps> = ({ searchQuery }) => {
                             })()}
                           </div>
                           {Object.keys(parsedFields).length > 0 && (
-                            <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
+                            <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', minWidth: 0 }}>
                               {parsedFields.stored_as != null && (
                                 <button
                                   onClick={() => setArtifact({
@@ -404,12 +404,20 @@ const Dashboard: React.FC<DashboardProps> = ({ searchQuery }) => {
                               )}
                               {Object.entries(parsedFields)
                                 .filter(([k]) => k !== 'meta_json_b64' && k !== 'stored_as')
-                                .map(([k, v]) => (
-                                  <span key={k} className="chip matrix" style={{ fontSize: '0.62rem' }}>
-                                    <span className="dim" style={{ marginRight: 3 }}>{k}:</span>
-                                    {typeof v === 'object' ? JSON.stringify(v) : String(v)}
-                                  </span>
-                                ))}
+                                .map(([k, v]) => {
+                                  const rendered = typeof v === 'object' ? JSON.stringify(v) : String(v);
+                                  return (
+                                    <span
+                                      key={k}
+                                      className="chip matrix chip-kv"
+                                      style={{ fontSize: '0.62rem' }}
+                                      title={`${k}: ${rendered}`}
+                                    >
+                                      <span className="dim" style={{ marginRight: 3 }}>{k}:</span>
+                                      {rendered}
+                                    </span>
+                                  );
+                                })}
                             </div>
                           )}
                         </div>
