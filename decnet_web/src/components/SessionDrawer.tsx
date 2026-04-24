@@ -183,6 +183,12 @@ const SessionDrawer: React.FC<SessionDrawerProps> = ({ decky, sid, fields, onClo
         (d: number) => console.debug('asciinema-player duration:', d),
         (err: unknown) => console.error('asciinema-player getDuration failed:', err),
       );
+      // DEBUG: expose the live instance on window so the operator can
+      // poke it from DevTools — window.__ap.play() bypasses the UI
+      // click-handler chain entirely and tells us whether playback
+      // would advance if the button click actually reached core.play.
+      (window as unknown as { __ap: unknown }).__ap = p;
+      console.debug('asciinema-player instance → window.__ap');
     } catch (err) {
       console.error('asciinema-player failed to mount (sync):', err);
     }
