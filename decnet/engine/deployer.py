@@ -55,6 +55,8 @@ _CANONICAL_SESSREC_DIR = Path(__file__).parent.parent / "templates" / "_shared" 
 _SESSREC_SERVICES = {"ssh", "telnet"}
 _CANONICAL_AUTH_HELPER_DIR = Path(__file__).parent.parent / "templates" / "_shared" / "auth-helper"
 _AUTH_HELPER_SERVICES = {"ssh", "telnet"}
+_CANONICAL_NTLMSSP = Path(__file__).parent.parent / "templates" / "_shared" / "ntlmssp.py"
+_NTLMSSP_SERVICES = {"smb", "rdp"}
 
 
 def _sync_logging_helper(config: DecnetConfig) -> None:
@@ -106,6 +108,32 @@ def _sync_auth_helper_sources(config: DecnetConfig) -> None:
                 dest = dest_dir / src.name
                 if not dest.exists() or dest.read_bytes() != src.read_bytes():
                     shutil.copy2(src, dest)
+
+
+def _sync_ntlmssp_sources(config: DecnetConfig) -> None:
+    """Copy _shared/ntlmssp.py into SMB/RDP build contexts.
+
+    Both templates parse NTLMSSP Type 3 messages (SMB Session Setup,
+    RDP NLA CredSSP); the canonical parser lives at
+    ``templates/_shared/ntlmssp.py`` and is mirrored into each active
+    build context here, mirroring the auth-helper / sessrec patterns.
+    """
+    from decnet.services.registry import get_service
+    seen: set[Path] = set()
+    for decky in config.deckies:
+        for svc_name in decky.services:
+            if svc_name not in _NTLMSSP_SERVICES:
+                continue
+            svc = get_service(svc_name)
+            if svc is None:
+                continue
+            ctx = svc.dockerfile_context()
+            if ctx is None or ctx in seen:
+                continue
+            seen.add(ctx)
+            dest = ctx / _CANONICAL_NTLMSSP.name
+            if not dest.exists() or dest.read_bytes() != _CANONICAL_NTLMSSP.read_bytes():
+                shutil.copy2(_CANONICAL_NTLMSSP, dest)
 
 
 def _sync_sessrec_sources(config: DecnetConfig) -> None:
@@ -437,6 +465,7 @@ def deploy(config: DecnetConfig, dry_run: bool = False, no_cache: bool = False, 
     _sync_logging_helper(config)
     _sync_sessrec_sources(config)
     _sync_auth_helper_sources(config)
+    _sync_ntlmssp_sources(config)
 
     compose_path = write_compose(config, COMPOSE_FILE)
     console.print(f"[bold cyan]Compose file written[/] → {compose_path}")
