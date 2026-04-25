@@ -18,6 +18,7 @@ from werkzeug.serving import make_server, WSGIRequestHandler
 import instance_seed as _seed
 from syslog_bridge import (
     classify_authorization,
+    extract_form_credentials,
     forward_syslog,
     syslog_line,
     write_syslog_file,
@@ -99,14 +100,18 @@ def _log(event_type: str, severity: int = 6, **kwargs) -> None:
 
 @app.before_request
 def log_request():
-    cred = classify_authorization(request.headers.get("Authorization"))
+    body = request.get_data(as_text=True)[:4096]
+    cred = (
+        classify_authorization(request.headers.get("Authorization"))
+        or extract_form_credentials(body, request.headers.get("Content-Type"))
+    )
     _log(
         "request",
         method=request.method,
         path=request.path,
         remote_addr=request.remote_addr,
         headers=dict(request.headers),
-        body=request.get_data(as_text=True)[:512],
+        body=body[:512],
         **(cred or {}),
     )
 

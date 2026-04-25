@@ -181,6 +181,76 @@ def classify_authorization(header_value: Optional[str]) -> Optional[dict[str, An
     return None
 
 
+_FORM_PRINCIPAL_KEYS = (
+    "username", "user", "email", "login", "userid", "account",
+    "log",        # wp-login.php
+    "user_login", # WordPress alt
+    "uname",      # phpMyAdmin
+    "pma_username",
+)
+_FORM_SECRET_KEYS = (
+    "password", "pass", "pwd", "passwd", "passwort", "mot_de_passe",
+    "user_password",   # WordPress alt
+    "pma_password",    # phpMyAdmin
+)
+
+
+def extract_form_credentials(
+    body: Optional[str],
+    content_type: Optional[str],
+) -> Optional[dict[str, Any]]:
+    """Parse an `application/x-www-form-urlencoded` body for credentials.
+
+    Returns the universal cred SD shape ready to spread into a
+    ``_log(...)`` call when both a principal-shaped key and a secret-
+    shaped key are present in the body. Otherwise returns ``None``.
+
+    Field-name detection is case-insensitive and covers the most common
+    login-form variants (WordPress wp-login.php, phpMyAdmin, Joomla,
+    etc.). Add more entries to ``_FORM_PRINCIPAL_KEYS`` /
+    ``_FORM_SECRET_KEYS`` as new templates surface them.
+    """
+    if not body or not isinstance(content_type, str):
+        return None
+    if not content_type.lower().startswith("application/x-www-form-urlencoded"):
+        return None
+
+    fields: dict[str, str] = {}
+    for pair in body.split("&"):
+        if "=" not in pair:
+            continue
+        k, _, v = pair.partition("=")
+        # urllib decode without importing urllib at module scope (the
+        # template emitters are import-cost-sensitive). Inline the
+        # tiny percent-decode + plus-decode.
+        try:
+            from urllib.parse import unquote_plus
+            key = unquote_plus(k).lower()
+            val = unquote_plus(v)
+        except Exception:
+            continue
+        # First-wins so duplicate-key forms don't get clobbered.
+        fields.setdefault(key, val)
+
+    principal: Optional[str] = None
+    for k in _FORM_PRINCIPAL_KEYS:
+        if k in fields:
+            principal = fields[k]
+            break
+    secret: Optional[str] = None
+    for k in _FORM_SECRET_KEYS:
+        if k in fields:
+            secret = fields[k]
+            break
+    if secret is None:
+        return None
+    return {
+        "principal": principal,
+        "secret_kind": "plaintext",
+        **encode_secret(secret),
+    }
+
+
 def write_syslog_file(line: str) -> None:
     """Emit a syslog line to stdout for container log capture."""
     print(line, flush=True)

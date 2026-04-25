@@ -104,6 +104,67 @@ def test_classify_authorization_unknown_scheme(syslog_bridge):
     assert syslog_bridge.classify_authorization("AWS4-HMAC-SHA256 Credential=…") is None
 
 
+def test_extract_form_credentials_wordpress(syslog_bridge):
+    """wp-login.php uses `log` for username and `pwd` for password."""
+    body = "log=admin&pwd=hunter2&wp-submit=Log+In"
+    cred = syslog_bridge.extract_form_credentials(
+        body, "application/x-www-form-urlencoded"
+    )
+    assert cred["principal"] == "admin"
+    assert cred["secret_kind"] == "plaintext"
+    assert cred["secret_printable"] == "hunter2"
+
+
+def test_extract_form_credentials_standard(syslog_bridge):
+    body = "username=admin&password=hunter2"
+    cred = syslog_bridge.extract_form_credentials(
+        body, "application/x-www-form-urlencoded"
+    )
+    assert cred["principal"] == "admin"
+    assert cred["secret_kind"] == "plaintext"
+    assert cred["secret_printable"] == "hunter2"
+
+
+def test_extract_form_credentials_secret_without_principal(syslog_bridge):
+    """Secret-only forms (rare but seen — password reset confirms,
+    auto-fill abuse) still capture as a credential. principal=None
+    means we couldn't pin down the user, but the secret hash is still
+    cross-correlatable for reuse analytics."""
+    body = "password=hunter2&csrf=abc"
+    cred = syslog_bridge.extract_form_credentials(
+        body, "application/x-www-form-urlencoded"
+    )
+    assert cred is not None
+    assert cred["principal"] is None
+    assert cred["secret_printable"] == "hunter2"
+
+
+def test_extract_form_credentials_alternate_keys(syslog_bridge):
+    cred = syslog_bridge.extract_form_credentials(
+        "user=alice&pwd=h%40ck", "application/x-www-form-urlencoded"
+    )
+    assert cred["principal"] == "alice"
+    assert cred["secret_printable"] == "h@ck"  # %40 decoded
+
+
+def test_extract_form_credentials_wrong_content_type(syslog_bridge):
+    """Don't try to parse JSON / multipart / etc bodies."""
+    assert syslog_bridge.extract_form_credentials(
+        "username=admin&password=x", "application/json"
+    ) is None
+    assert syslog_bridge.extract_form_credentials(
+        "username=admin&password=x", None
+    ) is None
+
+
+def test_extract_form_credentials_no_secret(syslog_bridge):
+    """Username only → no cred row (need both principal + secret)."""
+    cred = syslog_bridge.extract_form_credentials(
+        "username=admin&csrf_token=xyz", "application/x-www-form-urlencoded"
+    )
+    assert cred is None
+
+
 def test_classify_authorization_malformed(syslog_bridge):
     assert syslog_bridge.classify_authorization(None) is None
     assert syslog_bridge.classify_authorization("") is None

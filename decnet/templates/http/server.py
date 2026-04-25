@@ -16,6 +16,7 @@ from werkzeug.serving import make_server, WSGIRequestHandler
 import instance_seed as _seed
 from syslog_bridge import (
     classify_authorization,
+    extract_form_credentials,
     forward_syslog,
     syslog_line,
     write_syslog_file,
@@ -98,18 +99,25 @@ def _log(event_type: str, severity: int = 6, **kwargs) -> None:
 
 @app.before_request
 def log_request():
-    # Classify Authorization → universal credential SD shape. Lands in
-    # the Credential table on Basic / Bearer / Digest; opaque schemes
-    # (NTLM, AWS4-HMAC-…) fall through and ride only in the headers
-    # dump. None when no Authorization header present.
-    cred = classify_authorization(request.headers.get("Authorization"))
+    # Cred extraction precedence:
+    #   1. Authorization header (Basic / Bearer / Digest)
+    #   2. POST form body (application/x-www-form-urlencoded with
+    #      common login field names: username/user/email/login/...)
+    # Header wins when present — the form body might be a follow-up
+    # password change or a reset, while the Authorization is the
+    # current session credential.
+    body = request.get_data(as_text=True)[:4096]
+    cred = (
+        classify_authorization(request.headers.get("Authorization"))
+        or extract_form_credentials(body, request.headers.get("Content-Type"))
+    )
     _log(
         "request",
         method=request.method,
         path=request.path,
         remote_addr=request.remote_addr,
         headers=json.dumps(dict(request.headers)),
-        body=request.get_data(as_text=True)[:512],
+        body=body[:512],
         **(cred or {}),
     )
 
