@@ -207,18 +207,6 @@ _PRINCIPAL_MAX = 256
 _SECRET_B64_MAX = 2048
 
 
-def _printable_filter(s: str) -> str:
-    """Replace bytes outside [0x20, 0x7f) with '?', matching auth-helper.c.
-
-    Operates on the str's UTF-8 encoded bytes so we don't accidentally
-    let a `\\u202e` Unicode override slip through display layers.
-    """
-    out: list[int] = []
-    for b in s.encode("utf-8", errors="replace"):
-        out.append(b if 0x20 <= b < 0x7f else ord("?"))
-    return bytes(out).decode("ascii")
-
-
 def _truncate_with_warn(s: Optional[str], cap: int, label: str) -> Optional[str]:
     if s is None:
         return None
@@ -274,51 +262,6 @@ async def _ingest_credential_native(
     })
 
 
-async def _ingest_credential_legacy(
-    repo: BaseRepository,
-    log_data: dict[str, Any],
-    fields: dict[str, Any],
-) -> None:
-    """Legacy-shape credential: SD-block has username + password.
-
-    Synthesizes secret_b64 (from utf8-encoded password bytes), the
-    sha256 hash (over those same bytes — lossless before any printable
-    sanitization), and a printable-filtered secret_printable. FTP /
-    POP3 / IMAP / SMTP go through this branch until DEBT-039 lands.
-    """
-    user = fields.get("username")
-    pw = fields.get("password")
-    if not isinstance(pw, str):
-        return
-
-    raw = pw.encode("utf-8", errors="replace")
-    sha256_hex = hashlib.sha256(raw).hexdigest()
-    b64 = base64.b64encode(raw).decode("ascii")
-    printable = _printable_filter(pw)
-
-    # Synthesize the universal keys into a copy of fields so the JSON
-    # blob carries the standardized shape too — lets downstream readers
-    # treat every credential row identically regardless of emitter.
-    synthesized_fields = dict(fields)
-    synthesized_fields.setdefault("principal", user)
-    synthesized_fields.setdefault("secret_printable", printable)
-    synthesized_fields.setdefault("secret_b64", b64)
-
-    await repo.upsert_credential({
-        "attacker_ip": log_data.get("attacker_ip"),
-        "decky_name": log_data.get("decky"),
-        "service": log_data.get("service"),
-        "principal": _truncate_with_warn(user, _PRINCIPAL_MAX, "principal"),
-        "secret_sha256": sha256_hex,
-        "secret_b64": _truncate_with_warn(b64, _SECRET_B64_MAX, "secret_b64"),
-        "secret_printable": _truncate_with_warn(
-            printable, _SECRET_PRINTABLE_MAX, "secret_printable"
-        ),
-        "outcome": fields.get("outcome"),
-        "fields": synthesized_fields,
-    })
-
-
 @_traced("ingester.extract_bounty")
 async def _extract_bounty(repo: BaseRepository, log_data: dict[str, Any]) -> None:
     """Detect and extract valuable artifacts (bounties) from log entries."""
@@ -326,21 +269,14 @@ async def _extract_bounty(repo: BaseRepository, log_data: dict[str, Any]) -> Non
     if not isinstance(_fields, dict):
         return
 
-    # 1. Credentials — fork on emitter shape.
-    #
-    # New shape (SSH/Telnet auth-helper, future emitters): SD-block
-    # carries `secret_b64` directly. Universal across services.
-    #
-    # Legacy shape (FTP/POP3/IMAP/SMTP today): SD-block has `username`
-    # + `password`. Adapter synthesizes `secret_b64` + `secret_sha256`
-    # on the fly so those services land in the same Credential table
-    # without requiring a per-template emitter rewrite. Tracked as
-    # DEBT-039 — eventually those services emit the new shape natively
-    # and this branch dies.
+    # 1. Credentials — every cred-emitting service writes the universal
+    # SD shape (`secret_b64` present). The legacy `username`+`password`
+    # adapter that bridged FTP/POP3/IMAP/SMTP through DEBT-039 was
+    # removed once those services migrated; emitters now feed the
+    # native branch directly. Redis (no principal) and LDAP (principal=
+    # dn) also land here — they were previously dropped silently.
     if "secret_b64" in _fields:
         await _ingest_credential_native(repo, log_data, _fields)
-    elif _fields.get("username") and _fields.get("password"):
-        await _ingest_credential_legacy(repo, log_data, _fields)
 
     # 2. HTTP User-Agent fingerprint
     _h_raw = _fields.get("headers")
