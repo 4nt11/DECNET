@@ -59,6 +59,13 @@ class LAN(SQLModel, table=True):
     docker_network_id: Optional[str] = Field(default=None)
     subnet: str
     is_dmz: bool = Field(default=False)
+    # Per-LAN swarm host pin. ``None`` means "fall back to
+    # ``Topology.target_host_uuid``; if that is also None, deploy on the
+    # master." A LAN is one Docker bridge — bridges don't span hosts —
+    # so a non-null value forces every decky in this LAN onto that host.
+    host_uuid: Optional[str] = Field(
+        default=None, foreign_key="swarm_hosts.uuid", index=True
+    )
     # Canvas layout coordinates (set by the web editor).  Nullable so
     # generator-emitted LANs don't need auto-layout at generation time.
     x: Optional[float] = Field(default=None)
@@ -225,6 +232,7 @@ class LANRow(BaseModel):
     subnet: str
     is_dmz: bool = False
     docker_network_id: Optional[str] = None
+    host_uuid: Optional[str] = None
     x: Optional[float] = None
     y: Optional[float] = None
 
@@ -280,6 +288,7 @@ class LANCreateRequest(BaseModel):
     name: str = PydanticField(..., min_length=1, max_length=64)
     subnet: Optional[str] = None
     is_dmz: bool = False
+    host_uuid: Optional[str] = None
     x: Optional[float] = None
     y: Optional[float] = None
     expected_version: Optional[int] = None
@@ -289,6 +298,7 @@ class LANUpdateRequest(BaseModel):
     name: Optional[str] = None
     subnet: Optional[str] = None
     is_dmz: Optional[bool] = None
+    host_uuid: Optional[str] = None
     x: Optional[float] = None
     y: Optional[float] = None
     expected_version: Optional[int] = None
