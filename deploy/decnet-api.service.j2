@@ -14,6 +14,13 @@ SupplementaryGroups=docker
 WorkingDirectory={{ install_dir }}
 EnvironmentFile=-{{ install_dir }}/.env.local
 Environment=DECNET_SYSTEM_LOGS=/var/log/decnet/decnet.api.log
+# ProtectHome=read-only (below) makes the user's $HOME read-only inside
+# the unit's namespace, which breaks `docker compose build` because the
+# CLI writes ~/.docker/buildx/activity/. Redirect the docker CLI's
+# config root into install_dir (already in ReadWritePaths) so the
+# hardening stays on without crippling the build path.
+Environment=DOCKER_CONFIG={{ install_dir }}/.docker
+Environment=BUILDX_CONFIG={{ install_dir }}/.docker/buildx
 ExecStart={{ venv_dir }}/bin/decnet api
 StandardOutput=append:/var/log/decnet/decnet.api.log
 StandardError=append:/var/log/decnet/decnet.api.log

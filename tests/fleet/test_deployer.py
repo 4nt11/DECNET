@@ -164,6 +164,26 @@ class TestComposeWithRetry:
         assert "Original error" in ei.value.stderr
 
     @patch("decnet.engine.deployer.subprocess.run")
+    def test_buildx_wedge_protecthome_branch(self, mock_run, monkeypatch):
+        """When stderr names a path under /home and no mounts are
+        leaked, the cause is systemd's ProtectHome — recipe should
+        point at DOCKER_CONFIG redirection, not driver rebuild."""
+        from decnet.engine import deployer
+        monkeypatch.setattr(deployer, "_count_leaked_buildkit_mounts", lambda: 0)
+        mock_run.return_value = MagicMock(
+            returncode=1, stdout="",
+            stderr=("failed to update builder last activity time: open "
+                    "/home/anti/.docker/buildx/activity/.tmp-x: read-only file system"),
+        )
+        with pytest.raises(subprocess.CalledProcessError) as ei:
+            deployer._compose_with_retry("up", "--build")
+        assert "ProtectHome=read-only" in ei.value.stderr
+        assert "DOCKER_CONFIG" in ei.value.stderr
+        assert "BUILDX_CONFIG" in ei.value.stderr
+        # Driver-rebuild recipe must NOT be the suggested fix here.
+        assert "buildx create --name decnet-builder" not in ei.value.stderr
+
+    @patch("decnet.engine.deployer.subprocess.run")
     def test_buildx_wedge_zero_mounts_uses_driver_rebuild_recipe(self, mock_run, monkeypatch):
         """Wedge signature with 0 leaked mounts means the buildx driver
         itself is corrupt — recipe should suggest rebuilding it, not
@@ -172,7 +192,9 @@ class TestComposeWithRetry:
         monkeypatch.setattr(deployer, "_count_leaked_buildkit_mounts", lambda: 0)
         mock_run.return_value = MagicMock(
             returncode=1, stdout="",
-            stderr="failed to update builder last activity time: read-only file system",
+            # No /home/ path — driver-rebuild branch, not ProtectHome.
+            stderr="failed to update builder last activity time: open "
+                   "/var/lib/decnet/.docker/buildx/activity/.tmp-x: read-only file system",
         )
         with pytest.raises(subprocess.CalledProcessError) as ei:
             deployer._compose_with_retry("up", "--build")

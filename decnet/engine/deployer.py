@@ -177,7 +177,13 @@ def _format_subprocess_error(exc: BaseException) -> str:
 def _buildx_recovery_hint(*, leaked_mounts: int, original_stderr: str = "") -> str:
     """Compose a recovery recipe tailored to which side of the wedge fired.
 
-    Two failure modes share the 'read-only file system' symptom:
+    Three failure modes share the 'read-only file system' symptom:
+
+    * **Sandboxed home** (path under ``/home/.../.docker``): the
+      service unit has ``ProtectHome=read-only`` and docker CLI is
+      trying to write its activity file in the user's HOME. Fix is
+      to redirect ``DOCKER_CONFIG`` / ``BUILDX_CONFIG`` to a path
+      inside ``ReadWritePaths``.
 
     * **Leaked mounts** (count > 0): buildkit accumulated bind mounts
       in /var/lib/docker/tmp from a prior failed build. Fix is to drop
@@ -193,6 +199,32 @@ def _buildx_recovery_hint(*, leaked_mounts: int, original_stderr: str = "") -> s
         "Buildx is wedged — Docker's build driver can no longer write "
         "its activity file (spurious 'read-only file system' error)."
     )
+
+    # If the offending path is under /home/, leaked mounts are a red
+    # herring — the unit's namespace is what's blocking the write.
+    is_protecthome_case = (
+        leaked_mounts == 0
+        and "/home/" in original_stderr
+        and ".docker/buildx" in original_stderr
+    )
+    if is_protecthome_case:
+        fix = (
+            "Path is under /home but no mounts are leaked — the API "
+            "unit is running with ProtectHome=read-only and docker CLI "
+            "can't write its activity file inside the user's HOME.\n"
+            "Recovery (in the systemd unit):\n"
+            "  Environment=DOCKER_CONFIG=<install_dir>/.docker\n"
+            "  Environment=BUILDX_CONFIG=<install_dir>/.docker/buildx\n"
+            "Then: sudo systemctl daemon-reload && sudo systemctl restart decnet-api\n"
+            "(Already wired into deploy/decnet-api.service.j2 — re-run\n"
+            "`decnet init` to refresh the installed unit, then restart.)"
+        )
+        tail = "See wiki: Troubleshooting → 'Buildx leaked mounts'."
+        parts = [head, fix, tail]
+        if original_stderr:
+            parts.append(f"Original error:\n{original_stderr.strip()}")
+        return "\n\n".join(parts)
+
     if leaked_mounts > 0:
         fix = (
             f"Detected {leaked_mounts} leaked buildkit bind-mounts — "
