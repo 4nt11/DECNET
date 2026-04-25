@@ -1,6 +1,6 @@
 # DECNET — Technical Debt Register
 
-> Last updated: 2026-04-24 — DEBT-036 opened (session-profile ingester).
+> Last updated: 2026-04-25 — DEBT-038 opened (SSH PAM cred-capture limitations).
 > Severity: 🔴 Critical · 🟠 High · 🟡 Medium · 🟢 Low
 
 ---
@@ -367,6 +367,23 @@ What MVP deliberately defers:
 
 **Status:** Not yet started. Opens alongside the webhook MVP commit — the MVP PR will reference this entry and the follow-up work will close items 1–7 in priority order (circuit breaker first, batch delivery last).
 
+### DEBT-038 — SSH PAM cred-capture: known limitations
+**Files:** `decnet/templates/ssh/auth-helper.c`, `decnet/templates/ssh/Dockerfile`.
+
+The SSH cred-capture path that closes the "real OpenSSH doesn't log attempted passwords" gap (commit `d064125`) ships in the smallest, most-realistic mechanism available — a static `pam_exec.so` shim binary. That choice trades a handful of known limitations against the alternatives (custom C PAM module, eBPF, OpenSSH patch, all heavier and more fingerprintable). Documenting them here so the trade-offs are explicit and the migration paths are obvious if any of these actually bite.
+
+1. **Helper binary visible on disk.** `/usr/sbin/auth-helper` exists at runtime; a rooted attacker with shell can `find` it. Mitigations in place: boring system-binary name, stripped, statically linked (`file` reports a generic ELF, no module/library hints). Future hardening if needed: stealth-pack via the existing `_build_stealth.py` mechanism (XOR+gzip+base64 in `/entrypoint.sh`, write to disk at container start) — same pattern `syslog_bridge.py` and `emit_capture.py` already use. Skipped in v1 because the binary still has to exist on disk for `pam_exec` to invoke it; stealth packing only adds extraction complexity without reducing the exposed surface.
+
+2. **PAM line fingerprinty.** `/etc/pam.d/sshd` shows `auth optional pam_exec.so expose_authtok stdout /usr/sbin/auth-helper`. Real ops use this exact pattern (Duo, Okta, custom MFA), so the line itself is not honeypot-screaming — but a sophisticated adversary reading PAM stacks against a known-good baseline will notice an unusual binary path. No clean mitigation short of the full custom-`.so` migration in (3).
+
+3. **Fork-per-attempt DoS.** Every auth attempt forks `auth-helper`. Bounded above by sshd's `MaxStartups` and `LoginGraceTime` defaults; not exploitable in practice but real at extreme attempt rates (multi-thousand-per-second hydra runs against a single decky). Migration if it bites: a custom `pam_decnet_capture.so` writing via direct syscall without the fork. The PAM line stays identical (`auth optional pam_decnet_capture.so` with the same `expose_authtok`); only the binary type changes. Same wire format on the way out — no collector or dashboard work.
+
+4. **Pubkey attempts not captured.** Pubkey auth runs through a separate PAM path; password-only is v1 by intent. Capturing pubkey attempt fingerprints (key-type, comment, fingerprint hash) needs a parallel hook into sshd's pubkey path, not pam_exec. Valuable signal but lower reuse density than passwords — defer until v2 or until cred-reuse analytics surface a need.
+
+5. **Telnet has the same gap.** `templates/telnet/` uses `/bin/login` PAM, which (like real OpenSSH) does not log attempted passwords. The `auth-helper` binary is generic — same line in `/etc/pam.d/login` extends capture to telnet at the cost of one Dockerfile change. Tracked here, not as a separate DEBT, so it lands as a follow-up to this one rather than its own ticket. **Verification step required before doing the work**: confirm telnet currently *doesn't* capture passwords — earlier conversation conflated the auth syslog lines (which carry user but not password) with cred capture.
+
+**Status:** Open — document-only ticket tracking the architectural trade-offs of the v1 implementation. None of these are blocking; they're the things to know if the helper ever needs upgrading.
+
 ### DEBT-032 — Prober can't detect fingerprint rotation without mutation
 **Files:** `decnet/prober/worker.py` (~lines 235, 286, 334, 392), `decnet/web/db/models.py` (new `decky_service_fingerprints` table).
 
@@ -446,6 +463,7 @@ The prober already computes JARM (`worker.py:286`), HASSH (`worker.py:334`), and
 | DEBT-035 | 🟡 Medium | Artifacts / Filesystem perms | open |
 | DEBT-036 | 🟡 Medium | Correlation / Keystroke dynamics | open |
 | DEBT-037 | 🟡 Medium | Integration / Webhooks | open (tracks MVP follow-ups) |
+| DEBT-038 | 🟡 Medium | Honeypot / SSH cred capture | open (document-only) |
 
-**Remaining open:** DEBT-011 (Alembic), DEBT-023 (image pinning), DEBT-026 (modular mailboxes), DEBT-027 (Dynamic bait store), DEBT-028 (deploy endpoint tests), DEBT-032 (fingerprint rotation detection), DEBT-033 (transcript shard rotation), DEBT-035 (artifacts uid/gid alignment), DEBT-036 (session-profile ingester), DEBT-037 (webhook delivery hardening).
+**Remaining open:** DEBT-011 (Alembic), DEBT-023 (image pinning), DEBT-026 (modular mailboxes), DEBT-027 (Dynamic bait store), DEBT-028 (deploy endpoint tests), DEBT-032 (fingerprint rotation detection), DEBT-033 (transcript shard rotation), DEBT-035 (artifacts uid/gid alignment), DEBT-036 (session-profile ingester), DEBT-037 (webhook delivery hardening), DEBT-038 (SSH PAM cred-capture limitations — document-only).
 **Estimated remaining effort:** ~24 hours. DEBT-030 Phase B (optimistic staged-buffer editor) is a follow-up, not debt.
