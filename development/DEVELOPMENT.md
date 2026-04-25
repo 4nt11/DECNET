@@ -153,5 +153,5 @@
 - [x] Random, seed-based network topologies.
 - [x] Manual topology creation via war map.
 - [x] UI based topology teardowns.
-- [ ] SWARM-based topology deployment.
-- [ ] UI based SWARM topology deployments.
+- [x] SWARM-based topology deployment.
+- [x] UI based SWARM topology deployments.
