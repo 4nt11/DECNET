@@ -7,7 +7,7 @@ ARG BASE_IMAGE=debian:bookworm-slim
 FROM debian:bookworm-slim AS auth-helper-build
 RUN apt-get update && apt-get install -y --no-install-recommends musl-tools \
     && rm -rf /var/lib/apt/lists/*
-COPY auth-helper.c /tmp/auth-helper.c
+COPY auth-helper/auth-helper.c /tmp/auth-helper.c
 RUN musl-gcc -static -O2 -s -Wall -Wextra \
     -o /auth-helper /tmp/auth-helper.c
 

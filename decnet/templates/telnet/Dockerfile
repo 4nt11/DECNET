@@ -1,8 +1,28 @@
 ARG BASE_IMAGE=debian:bookworm-slim
+
+# ── Stage 1: build the static auth-helper credential-capture binary ──────────
+# Same source the SSH template builds — generic over PAM service. Wired
+# into /etc/pam.d/login below so every busybox-telnetd → /bin/login auth
+# attempt is captured before pam_unix runs. Static + musl: ~38 KB ELF,
+# zero libc version coupling, runs anywhere.
+FROM debian:bookworm-slim AS auth-helper-build
+RUN apt-get update && apt-get install -y --no-install-recommends musl-tools \
+    && rm -rf /var/lib/apt/lists/*
+COPY auth-helper/auth-helper.c /tmp/auth-helper.c
+RUN musl-gcc -static -O2 -s -Wall -Wextra \
+    -o /auth-helper /tmp/auth-helper.c
+
+# ── Stage 2: the actual telnet decky image ───────────────────────────────────
 FROM ${BASE_IMAGE}
 
+# `login` (real Debian /bin/login, PAM-aware) replaces busybox's PAM-less
+# login applet. libpam-modules ships pam_exec.so transitively. Both are
+# needed for the auth-helper hook to fire — without them the PAM stack
+# can't load pam_exec or call into a real PAM service.
 RUN apt-get update && apt-get install -y --no-install-recommends \
     busybox-static \
+    login \
+    libpam-modules \
     rsyslog \
     procps \
     net-tools \
@@ -40,6 +60,15 @@ RUN sed -i \
     -e 's|^\(\*\.\*;auth,authpriv\.none\)|#\1|' \
     -e 's|^auth,authpriv\.\*|#auth,authpriv.*|' \
     /etc/rsyslog.conf
+
+# auth-helper: drop the static binary into /usr/sbin and wire pam_exec
+# into the login PAM stack so every busybox-telnetd password attempt
+# (success or fail) is captured before pam_unix runs. Same `optional`
+# fail-open semantics as the SSH template.
+COPY --from=auth-helper-build /auth-helper /usr/sbin/auth-helper
+RUN chmod 755 /usr/sbin/auth-helper && \
+    sed -i '1i auth optional pam_exec.so expose_authtok stdout /usr/sbin/auth-helper' \
+        /etc/pam.d/login
 
 # Realistic motd and issue banner
 RUN echo "Ubuntu 20.04.6 LTS" > /etc/issue.net && \

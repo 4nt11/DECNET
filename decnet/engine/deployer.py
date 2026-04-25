@@ -53,6 +53,8 @@ _CANONICAL_LOGGING = Path(__file__).parent.parent / "templates" / "syslog_bridge
 _CANONICAL_INSTANCE_SEED = Path(__file__).parent.parent / "templates" / "instance_seed.py"
 _CANONICAL_SESSREC_DIR = Path(__file__).parent.parent / "templates" / "_shared" / "sessrec"
 _SESSREC_SERVICES = {"ssh", "telnet"}
+_CANONICAL_AUTH_HELPER_DIR = Path(__file__).parent.parent / "templates" / "_shared" / "auth-helper"
+_AUTH_HELPER_SERVICES = {"ssh", "telnet"}
 
 
 def _sync_logging_helper(config: DecnetConfig) -> None:
@@ -71,6 +73,37 @@ def _sync_logging_helper(config: DecnetConfig) -> None:
             seen.add(ctx)
             for src in shared_files:
                 dest = ctx / src.name
+                if not dest.exists() or dest.read_bytes() != src.read_bytes():
+                    shutil.copy2(src, dest)
+
+
+def _sync_auth_helper_sources(config: DecnetConfig) -> None:
+    """Copy auth-helper.c into SSH/Telnet build contexts as auth-helper/.
+
+    The static cred-capture binary (compiled in a multi-stage Dockerfile
+    layer via musl-gcc) is service-agnostic — same source compiles for
+    both sshd's PAM stack (/etc/pam.d/sshd) and busybox-telnetd's
+    /bin/login PAM stack (/etc/pam.d/login). Mirrors the sessrec sync
+    pattern below.
+    """
+    from decnet.services.registry import get_service
+    sources = [_CANONICAL_AUTH_HELPER_DIR / "auth-helper.c"]
+    seen: set[Path] = set()
+    for decky in config.deckies:
+        for svc_name in decky.services:
+            if svc_name not in _AUTH_HELPER_SERVICES:
+                continue
+            svc = get_service(svc_name)
+            if svc is None:
+                continue
+            ctx = svc.dockerfile_context()
+            if ctx is None or ctx in seen:
+                continue
+            seen.add(ctx)
+            dest_dir = ctx / "auth-helper"
+            dest_dir.mkdir(exist_ok=True)
+            for src in sources:
+                dest = dest_dir / src.name
                 if not dest.exists() or dest.read_bytes() != src.read_bytes():
                     shutil.copy2(src, dest)
 
@@ -403,6 +436,7 @@ def deploy(config: DecnetConfig, dry_run: bool = False, no_cache: bool = False, 
 
     _sync_logging_helper(config)
     _sync_sessrec_sources(config)
+    _sync_auth_helper_sources(config)
 
     compose_path = write_compose(config, COMPOSE_FILE)
     console.print(f"[bold cyan]Compose file written[/] → {compose_path}")
