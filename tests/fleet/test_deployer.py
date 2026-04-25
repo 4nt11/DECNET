@@ -127,7 +127,10 @@ class TestComposeWithRetry:
             deployer._compose_with_retry("up", "--build", "-d")
         mock_run.assert_not_called()
         assert "Buildx is wedged" in ei.value.stderr
-        assert "docker buildx prune" in ei.value.stderr
+        # leaked>0 recipe centres on unmount + daemon stop, since
+        # prune+restart alone doesn't evict already-held mounts.
+        assert "umount -l" in ei.value.stderr
+        assert "Detected 42 leaked" in ei.value.stderr
 
     @patch("decnet.engine.deployer.subprocess.run")
     def test_buildx_preflight_skipped_for_non_build_cmds(self, mock_run, monkeypatch):
@@ -156,6 +159,44 @@ class TestComposeWithRetry:
         assert mock_run.call_count == 1  # no retry
         mock_sleep.assert_not_called()
         assert "Buildx is wedged" in ei.value.stderr
+        # Original stderr is preserved alongside the hint so the user
+        # can see what compose actually said.
+        assert "Original error" in ei.value.stderr
+
+    @patch("decnet.engine.deployer.subprocess.run")
+    def test_buildx_wedge_zero_mounts_uses_driver_rebuild_recipe(self, mock_run, monkeypatch):
+        """Wedge signature with 0 leaked mounts means the buildx driver
+        itself is corrupt — recipe should suggest rebuilding it, not
+        unmounting nothing."""
+        from decnet.engine import deployer
+        monkeypatch.setattr(deployer, "_count_leaked_buildkit_mounts", lambda: 0)
+        mock_run.return_value = MagicMock(
+            returncode=1, stdout="",
+            stderr="failed to update builder last activity time: read-only file system",
+        )
+        with pytest.raises(subprocess.CalledProcessError) as ei:
+            deployer._compose_with_retry("up", "--build")
+        assert "buildx create --use" in ei.value.stderr
+        assert "umount" not in ei.value.stderr
+        assert "No leaked mounts (count=0)" in ei.value.stderr
+
+    @patch("decnet.engine.deployer.time.sleep")
+    @patch("decnet.engine.deployer.subprocess.run")
+    def test_unrelated_erofs_does_not_match_wedge(self, mock_run, mock_sleep):
+        """Stderr containing 'read-only file system' alone (no buildx
+        activity-time phrase) must NOT be classified as a wedge — that
+        was the false-positive that misled the user."""
+        from decnet.engine.deployer import _compose_with_retry
+        fail = MagicMock(
+            returncode=1, stdout="",
+            stderr="open /etc/foo/bar: read-only file system",  # not buildx
+        )
+        mock_run.return_value = fail
+        with pytest.raises(subprocess.CalledProcessError) as ei:
+            _compose_with_retry("up", "--build", retries=2)
+        assert "Buildx is wedged" not in (ei.value.stderr or "")
+        # Treated as a normal transient error → retried until exhausted.
+        assert mock_run.call_count == 2
 
 
 # ── _sync_logging_helper ─────────────────────────────────────────────────────

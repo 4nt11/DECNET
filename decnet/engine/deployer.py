@@ -132,15 +132,12 @@ _PERMANENT_ERRORS = (
     "repository does not exist",
 )
 
-# Signatures of a wedged buildx: the daemon has leaked bind mounts and
-# can no longer update its activity file, which surfaces as "read-only
-# file system" even though nothing is actually read-only. Retrying the
-# compose build just accumulates more leaked mounts — we bail early
-# with a clear recovery recipe.
-_BUILDX_WEDGE_PATTERNS = (
-    "failed to update builder last activity time",
-    ".docker/buildx/activity/",
-)
+# Signature of a wedged buildx. The phrase is what buildx itself emits
+# when its activity-file write fails. Pairing it with "read-only file
+# system" avoids false-positives on stderr that merely mentions the
+# activity dir path for unrelated reasons.
+_BUILDX_WEDGE_SIGNATURE = "failed to update builder last activity time"
+_BUILDX_EROFS_SIGNATURE = "read-only file system"
 
 # Count above which we consider buildx's bind-mount table pathological.
 # A healthy daemon has 0; a couple is transient during a build. Past
@@ -177,21 +174,52 @@ def _format_subprocess_error(exc: BaseException) -> str:
     return str(exc)
 
 
-def _buildx_recovery_hint(extra: str = "") -> str:
+def _buildx_recovery_hint(*, leaked_mounts: int, original_stderr: str = "") -> str:
+    """Compose a recovery recipe tailored to which side of the wedge fired.
+
+    Two failure modes share the 'read-only file system' symptom:
+
+    * **Leaked mounts** (count > 0): buildkit accumulated bind mounts
+      in /var/lib/docker/tmp from a prior failed build. Fix is to drop
+      the mounts by stopping Docker, unmounting them explicitly, and
+      starting clean — ``prune -af && systemctl restart`` alone does
+      not evict already-held mounts.
+
+    * **Driver corruption** (count == 0): the buildx driver's own
+      state is inconsistent (activity dir permissions, stale instance
+      pointer, etc.). Fix is to rebuild the default builder.
+    """
     head = (
-        "Buildx is wedged — Docker's build driver has leaked bind "
-        "mounts from a previous failed run and can no longer write "
-        "its activity file. This surfaces as a spurious "
-        "'read-only file system' error."
+        "Buildx is wedged — Docker's build driver can no longer write "
+        "its activity file (spurious 'read-only file system' error)."
     )
-    fix = (
-        "Recovery:\n"
-        "  1. docker buildx prune -af\n"
-        "  2. sudo systemctl restart docker\n"
-        "  3. Retry the deploy.\n"
-        "See wiki: Troubleshooting → 'Buildx leaked mounts'."
-    )
-    return f"{head}\n\n{fix}{(' ' + extra) if extra else ''}"
+    if leaked_mounts > 0:
+        fix = (
+            f"Detected {leaked_mounts} leaked buildkit bind-mounts — "
+            "prune+restart alone won't evict them.\n"
+            "Recovery:\n"
+            "  1. sudo systemctl stop docker.socket docker.service\n"
+            "  2. sudo pkill -9 -f buildkitd; sudo pkill -9 -f containerd-shim\n"
+            "  3. for m in $(mount | awk '$3 ~ /buildkit-mount/ {print $3}'); do sudo umount -l \"$m\"; done\n"
+            "  4. rm -rf ~/.docker/buildx/activity\n"
+            "  5. sudo systemctl start docker\n"
+            "  6. docker buildx create --use --name default && docker buildx inspect --bootstrap"
+        )
+    else:
+        fix = (
+            "No leaked mounts (count=0) — the buildx driver state "
+            "itself is inconsistent.\n"
+            "Recovery:\n"
+            "  1. docker buildx rm default 2>/dev/null\n"
+            "  2. rm -rf ~/.docker/buildx/activity ~/.docker/buildx/instances/default\n"
+            "  3. docker buildx create --use --name default\n"
+            "  4. docker buildx inspect --bootstrap"
+        )
+    tail = "See wiki: Troubleshooting → 'Buildx leaked mounts'."
+    parts = [head, fix, tail]
+    if original_stderr:
+        parts.append(f"Original error:\n{original_stderr.strip()}")
+    return "\n\n".join(parts)
 
 
 @_traced("engine.compose_with_retry")
@@ -220,7 +248,7 @@ def _compose_with_retry(
     if is_build_cmd:
         leaked = _count_leaked_buildkit_mounts()
         if leaked >= _BUILDKIT_MOUNT_THRESHOLD:
-            hint = _buildx_recovery_hint(f"(Detected {leaked} leaked buildkit mounts.)")
+            hint = _buildx_recovery_hint(leaked_mounts=leaked)
             log.error("preflight: buildx wedge detected (%d mounts) — refusing to deploy", leaked)
             raise subprocess.CalledProcessError(
                 returncode=1, cmd=cmd, output="", stderr=hint,
@@ -239,9 +267,18 @@ def _compose_with_retry(
         if any(pat in stderr_lower for pat in _PERMANENT_ERRORS):
             console.print(f"[red]Permanent Docker error — not retrying:[/]\n{result.stderr.strip()}")
             raise last_exc
-        if any(pat in stderr_lower for pat in _BUILDX_WEDGE_PATTERNS):
+        # Wedge match needs BOTH the buildx-specific phrase AND the
+        # EROFS marker — otherwise unrelated stderr that mentions the
+        # activity dir false-positives.
+        if (
+            _BUILDX_WEDGE_SIGNATURE in stderr_lower
+            and _BUILDX_EROFS_SIGNATURE in stderr_lower
+        ):
             leaked = _count_leaked_buildkit_mounts()
-            hint = _buildx_recovery_hint(f"(Detected {leaked} leaked buildkit mounts.)")
+            hint = _buildx_recovery_hint(
+                leaked_mounts=leaked,
+                original_stderr=result.stderr or "",
+            )
             console.print(f"[red]{hint}[/]")
             log.error("buildx wedge detected mid-build (%d mounts) — not retrying", leaked)
             raise subprocess.CalledProcessError(
