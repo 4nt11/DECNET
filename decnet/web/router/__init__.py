@@ -5,6 +5,7 @@ from .auth.api_change_pass import router as change_pass_router
 from .logs.api_get_logs import router as logs_router
 from .logs.api_get_histogram import router as histogram_router
 from .bounty.api_get_bounties import router as bounty_router
+from .credentials.api_get_credentials import router as credentials_router
 from .stats.api_get_stats import router as stats_router
 from .fleet.api_get_deckies import router as get_deckies_router
 from .fleet.api_mutate_decky import router as mutate_decky_router
@@ -58,6 +59,9 @@ api_router.include_router(histogram_router)
 
 # Bounty Vault
 api_router.include_router(bounty_router)
+
+# Credentials (deduped attacker auth attempts)
+api_router.include_router(credentials_router)
 
 # Fleet Management
 api_router.include_router(get_deckies_router)
