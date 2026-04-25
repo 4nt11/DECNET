@@ -326,6 +326,104 @@ async def test_sip_digest_native_shape():
 
 
 @pytest.mark.asyncio
+async def test_mysql_native_password_hash():
+    """MySQL handshake auth-response: 20-byte sha1 chain hash. Plaintext
+    irrecoverable; lands as secret_kind=mysql_native_password."""
+    from decnet.web.ingester import _extract_bounty
+    repo = MagicMock(); repo.upsert_credential = AsyncMock()
+    raw = bytes(range(20))  # arbitrary 20-byte "hash"
+    log_data = {
+        "decky": "decky-01",
+        "service": "mysql",
+        "attacker_ip": "10.0.0.5",
+        "fields": {
+            "username": "root",
+            "principal": "root",
+            "secret_kind": "mysql_native_password",
+            "secret_printable": raw.hex(),
+            "secret_b64": base64.b64encode(raw).decode("ascii"),
+        },
+    }
+    await _extract_bounty(repo, log_data)
+    cred = repo.upsert_credential.call_args[0][0]
+    assert cred["service"] == "mysql"
+    assert cred["secret_kind"] == "mysql_native_password"
+    assert cred["principal"] == "root"
+    assert cred["secret_sha256"] == hashlib.sha256(raw).hexdigest()
+
+
+@pytest.mark.asyncio
+async def test_mssql_login7_plaintext():
+    """MSSQL Login7 password is XOR/nibble-obfuscated but plaintext-
+    recoverable. Lands as secret_kind=plaintext after deobfuscation."""
+    from decnet.web.ingester import _extract_bounty
+    repo = MagicMock(); repo.upsert_credential = AsyncMock()
+    log_data = {
+        "decky": "decky-01",
+        "service": "mssql",
+        "attacker_ip": "10.0.0.5",
+        "fields": {
+            "username": "sa",
+            "principal": "sa",
+            "secret_kind": "plaintext",
+            "secret_printable": "hunter2",
+            "secret_b64": base64.b64encode(b"hunter2").decode("ascii"),
+        },
+    }
+    await _extract_bounty(repo, log_data)
+    cred = repo.upsert_credential.call_args[0][0]
+    assert cred["service"] == "mssql"
+    assert cred["principal"] == "sa"
+    assert cred["secret_printable"] == "hunter2"
+
+
+def test_mssql_deobfuscate_roundtrip():
+    """Direct unit test of the MSSQL Login7 deobfuscation against a
+    handcrafted obfuscated buffer. Exercises the algorithm itself."""
+    import importlib.util
+    import sys
+    from pathlib import Path
+    from types import ModuleType
+    from unittest.mock import MagicMock
+    # Stand up a fake syslog_bridge so the template imports cleanly,
+    # then load the mssql module and test the static helper.
+    fake = ModuleType("syslog_bridge")
+    fake.syslog_line = MagicMock(return_value="")
+    fake.write_syslog_file = MagicMock()
+    fake.forward_syslog = MagicMock()
+    fake.SEVERITY_INFO = 6
+    fake.SEVERITY_WARNING = 4
+    fake.encode_secret = MagicMock(return_value={"secret_printable": "", "secret_b64": ""})
+    fake.classify_authorization = MagicMock(return_value=None)
+    sys.modules["syslog_bridge"] = fake
+    # Load the real instance_seed so the mssql module's top-level
+    # _seed.pick(...) tuple-unpack works. MagicMock returns sentinels
+    # that don't satisfy iterable unpacking.
+    repo_root = Path(__file__).resolve().parents[2]
+    if "instance_seed" not in sys.modules:
+        seed_spec = importlib.util.spec_from_file_location(
+            "instance_seed", repo_root / "decnet" / "templates" / "instance_seed.py"
+        )
+        seed_mod = importlib.util.module_from_spec(seed_spec)
+        seed_spec.loader.exec_module(seed_mod)
+        sys.modules["instance_seed"] = seed_mod
+    spec = importlib.util.spec_from_file_location(
+        "_mssql_under_test", repo_root / "decnet" / "templates" / "mssql" / "server.py"
+    )
+    mod = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(mod)
+
+    # Build the obfuscated form of "abc": each byte → swap nibbles, XOR 0xa5.
+    plain = "abc".encode("utf-16-le")  # 6 bytes
+    obfuscated = bytes(
+        (((b & 0x0f) << 4) | ((b & 0xf0) >> 4)) ^ 0xa5
+        for b in plain
+    )
+    decoded = mod.MSSQLProtocol._deobfuscate_login7_password(obfuscated)
+    assert decoded == "abc"
+
+
+@pytest.mark.asyncio
 async def test_lossless_b64_survives_nonprintable_password():
     """Even when secret_printable is sanitized, secret_b64 still decodes
     to the original bytes — the cross-service reuse hash matches across

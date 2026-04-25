@@ -7,6 +7,7 @@ attempts as JSON.
 """
 
 import asyncio
+import base64
 import itertools
 import os
 import struct
@@ -109,17 +110,38 @@ class MySQLProtocol(asyncio.Protocol):
     def _handle_packet(self, payload: bytes):
         if not payload:
             return
-        # Login packet: capability flags (4), max_packet (4), charset (1), reserved (23), username (NUL-terminated)
+        # Login packet: capability flags (4), max_packet (4), charset (1),
+        # reserved (23), username (NUL-terminated), auth-response.
+        # mysql_native_password puts a 1-byte length followed by exactly
+        # 20 bytes: SHA1(password) XOR SHA1(salt + SHA1(SHA1(password))) —
+        # plaintext is unrecoverable but the 20 bytes ARE a credential the
+        # attacker knew, so they land as secret_kind="mysql_native_password".
         username = "<unknown>"
+        auth_response = b""
         if len(payload) > 32:
             try:
                 username_start = 32
                 nul = payload.index(b"\x00", username_start)
                 username = payload[username_start:nul].decode(errors="replace")
+                # auth-response length byte + bytes
+                if len(payload) > nul + 1:
+                    resp_len = payload[nul + 1]
+                    if resp_len and len(payload) >= nul + 2 + resp_len:
+                        auth_response = payload[nul + 2:nul + 2 + resp_len]
             except (ValueError, IndexError):
                 username = "<parse_error>"
+
+            extra: dict = {}
+            if auth_response:
+                _b64 = base64.b64encode(auth_response).decode("ascii")
+                extra = {
+                    "principal": username,
+                    "secret_kind": "mysql_native_password",
+                    "secret_printable": auth_response.hex(),
+                    "secret_b64": _b64,
+                }
             _log("auth", src=self._peer[0], username=username,
-                 connection_id=self._conn_id)
+                 connection_id=self._conn_id, **extra)
         # Real mysqld includes client IP in the error text.
         src_ip = self._peer[0] if self._peer else "?"
         msg = f"Access denied for user '{username}'@'{src_ip}' (using password: YES)"

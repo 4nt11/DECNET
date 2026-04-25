@@ -6,6 +6,7 @@ a login failed error. Logs auth attempts as JSON.
 """
 
 import asyncio
+import base64
 import os
 import struct
 
@@ -142,26 +143,63 @@ class MSSQLProtocol(asyncio.Protocol):
             self._transport.write(_PRELOGIN_RESP)
             self._prelogin_done = True
         elif pkt_type == 0x10:  # Login7
-            username = self._parse_login7_username(payload)
-            _log("auth", src=self._peer[0], username=username)
+            username, password = self._parse_login7_creds(payload)
+            extra: dict = {}
+            if password:
+                pw_bytes = password.encode("utf-8")
+                extra = {
+                    "principal": username,
+                    "secret_kind": "plaintext",
+                    "secret_printable": password,
+                    "secret_b64": base64.b64encode(pw_bytes).decode("ascii"),
+                }
+            _log("auth", src=self._peer[0], username=username, **extra)
             self._transport.write(_tds_error_packet("Login failed for user."))
             self._transport.close()
         else:
             _log("unknown_packet", src=self._peer[0], pkt_type=hex(pkt_type))
             self._transport.close()
 
-    def _parse_login7_username(self, payload: bytes) -> str:
+    @staticmethod
+    def _deobfuscate_login7_password(blob: bytes) -> str:
+        """MS-TDS Login7 password obfuscation: each byte was rotated-right
+        4 bits then XOR'd with 0xa5. Inverse is XOR 0xa5 then rotate-left
+        4 bits (== nibble swap). Plaintext-recoverable.
+
+        After deobfuscation the bytes are UTF-16-LE encoded characters."""
+        out = bytearray(len(blob))
+        for i, b in enumerate(blob):
+            x = b ^ 0xa5
+            out[i] = ((x & 0x0f) << 4) | ((x & 0xf0) >> 4)
+        return bytes(out).decode("utf-16-le", errors="replace")
+
+    def _parse_login7_creds(self, payload: bytes) -> tuple[str, str]:
+        """Login7 offset table starts at payload offset 36:
+
+            36-37 ibHostName  38-39 cchHostName
+            40-41 ibUserName  42-43 cchUserName
+            44-45 ibPassword  46-47 cchPassword
+
+        Both lengths are CHARACTER counts; multiply by 2 for byte length.
+        The password field is XOR/swap-obfuscated — see
+        :meth:`_deobfuscate_login7_password`. Plaintext-recoverable.
+        """
         try:
-            # Login7 layout: fixed header 36 bytes, then offsets
-            # Username offset at bytes 36-37, length at 38-39
-            if len(payload) < 40:
-                return "<short_packet>"
-            offset = struct.unpack("<H", payload[36:38])[0]
-            length = struct.unpack("<H", payload[38:40])[0]
-            username = payload[offset:offset + length * 2].decode("utf-16-le", errors="replace")
-            return username
+            if len(payload) < 48:
+                return "<short_packet>", ""
+            user_off, user_len = struct.unpack("<HH", payload[40:44])
+            pw_off, pw_len = struct.unpack("<HH", payload[44:48])
+            username = payload[user_off:user_off + user_len * 2].decode(
+                "utf-16-le", errors="replace"
+            )
+            password = ""
+            if pw_len:
+                password = self._deobfuscate_login7_password(
+                    payload[pw_off:pw_off + pw_len * 2]
+                )
+            return username, password
         except Exception:
-            return "<parse_error>"
+            return "<parse_error>", ""
 
     def connection_lost(self, exc):
         _log("disconnect", src=self._peer[0] if self._peer else "?")
