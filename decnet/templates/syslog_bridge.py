@@ -12,6 +12,7 @@ RFC 5424 structure:
 Facility: local0 (16). SD element ID uses PEN 55555.
 """
 
+import base64
 from datetime import datetime, timezone
 from typing import Any
 
@@ -77,6 +78,32 @@ def syslog_line(
     sd      = _sd_element(fields)
     message = f" {msg}" if msg else ""
     return f"{pri}1 {ts} {host} {appname} {_NILVALUE} {msgid} {sd}{message}"
+
+
+def encode_secret(secret: str) -> dict[str, str]:
+    """Standardized credential-secret encoding for the universal SD-block shape.
+
+    Returns ``{'secret_printable': ..., 'secret_b64': ...}`` ready to spread
+    into a :func:`syslog_line` / ``_log`` call::
+
+        _log("auth_attempt", principal=user, **encode_secret(password))
+
+    ``secret_printable`` mirrors auth-helper.c's sd_escape: bytes outside
+    ``[0x20, 0x7f)`` collapse to ``'?'`` so the field is always parser-safe
+    RFC 5424 ASCII. ``secret_b64`` preserves the *original* utf-8 bytes —
+    NUL/0xff/control/non-utf8 sequences all survive losslessly, useful as
+    a fingerprinting signal even when the printable form sanitizes them.
+
+    The decnet web ingester's native-shape branch keys off ``secret_b64``
+    being present, so any service emitter calling this helper lands its
+    cred attempt directly in the :class:`Credential` table.
+    """
+    raw = secret.encode("utf-8", errors="replace")
+    printable = "".join(chr(b) if 0x20 <= b < 0x7f else "?" for b in raw)
+    return {
+        "secret_printable": printable,
+        "secret_b64": base64.b64encode(raw).decode("ascii"),
+    }
 
 
 def write_syslog_file(line: str) -> None:
