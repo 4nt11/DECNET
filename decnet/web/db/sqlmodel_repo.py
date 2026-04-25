@@ -1711,15 +1711,21 @@ class SQLModelRepository(BaseRepository):
             # oldest pending row; the outer UPDATE re-checks state so a
             # second racer that also saw that id finds state='applying'
             # and matches zero rows.
+            # MySQL forbids referencing the UPDATE target inside a
+            # subquery (ERROR 1093). Wrapping the inner SELECT in a
+            # derived table forces materialisation and sidesteps the
+            # rule. SQLite accepts both forms, so this stays portable.
             sql = text(
                 """
                 UPDATE topology_mutations
                 SET state = 'applying'
                 WHERE id = (
-                    SELECT id FROM topology_mutations
-                    WHERE topology_id = :t AND state = 'pending'
-                    ORDER BY requested_at ASC
-                    LIMIT 1
+                    SELECT id FROM (
+                        SELECT id FROM topology_mutations
+                        WHERE topology_id = :t AND state = 'pending'
+                        ORDER BY requested_at ASC
+                        LIMIT 1
+                    ) AS _next
                 )
                 AND state = 'pending'
                 """
