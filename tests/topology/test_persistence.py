@@ -5,7 +5,9 @@ from decnet.topology.config import TopologyConfig
 from decnet.topology.generator import generate
 from decnet.topology.persistence import (
     hydrate,
+    partition_lans_by_host,
     persist,
+    resolve_lan_host,
     transition_status,
 )
 from decnet.topology.status import TopologyStatus, TopologyStatusError
@@ -89,3 +91,53 @@ async def test_config_snapshot_preserves_seed(repo):
     topo = await repo.get_topology(tid)
     assert topo["config_snapshot"]["seed"] == 12345
     assert topo["config_snapshot"]["depth"] == 2
+
+
+# --- per-LAN host resolution ---
+
+
+def test_resolve_lan_host_prefers_lan_pin():
+    topology = {"target_host_uuid": "topo-host"}
+    lan = {"host_uuid": "lan-host"}
+    assert resolve_lan_host(lan, topology) == "lan-host"
+
+
+def test_resolve_lan_host_falls_back_to_topology_target():
+    topology = {"target_host_uuid": "topo-host"}
+    lan = {"host_uuid": None}
+    assert resolve_lan_host(lan, topology) == "topo-host"
+
+
+def test_resolve_lan_host_returns_none_for_master():
+    assert resolve_lan_host({"host_uuid": None}, {"target_host_uuid": None}) is None
+    assert resolve_lan_host({}, {}) is None
+
+
+def test_partition_lans_by_host_groups_correctly():
+    hydrated = {
+        "topology": {"target_host_uuid": None},
+        "lans": [
+            {"id": "1", "host_uuid": None},
+            {"id": "2", "host_uuid": "A"},
+            {"id": "3", "host_uuid": "A"},
+            {"id": "4", "host_uuid": "B"},
+        ],
+    }
+    out = partition_lans_by_host(hydrated)
+    assert set(out.keys()) == {None, "A", "B"}
+    assert [lan["id"] for lan in out["A"]] == ["2", "3"]
+    assert [lan["id"] for lan in out["B"]] == ["4"]
+    assert [lan["id"] for lan in out[None]] == ["1"]
+
+
+def test_partition_lans_uses_topology_default_when_lan_unset():
+    hydrated = {
+        "topology": {"target_host_uuid": "default-host"},
+        "lans": [
+            {"id": "1", "host_uuid": None},
+            {"id": "2", "host_uuid": "explicit"},
+        ],
+    }
+    out = partition_lans_by_host(hydrated)
+    assert set(out.keys()) == {"default-host", "explicit"}
+    assert [lan["id"] for lan in out["default-host"]] == ["1"]

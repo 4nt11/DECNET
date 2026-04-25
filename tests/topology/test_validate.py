@@ -145,6 +145,55 @@ async def test_service_config_undeclared(repo):
     assert "SERVICE_CFG_UNDECLARED" in [i.code for i in validate(h)]
 
 
+# --------------------------------------------------------------------- per-LAN host
+
+@pytest.mark.anyio
+async def test_bridge_decky_same_host_passes_when_colocated(repo):
+    """A bridge decky whose LANs share a host must not flag."""
+    plan = generate(
+        _cfg(
+            depth=2,
+            branching_factor=1,
+            deckies_per_lan_min=1,
+            deckies_per_lan_max=1,
+            cross_edge_probability=0.0,
+        )
+    )
+    h, _ = await _hydrate_plan(repo, plan)
+    for lan in h["lans"]:
+        lan["host_uuid"] = "host-A"
+    assert "BRIDGE_HOST_SPLIT" not in [i.code for i in validate(h)]
+
+
+@pytest.mark.anyio
+async def test_bridge_decky_split_across_hosts_fails(repo):
+    plan = generate(
+        _cfg(
+            depth=2,
+            branching_factor=1,
+            deckies_per_lan_min=1,
+            deckies_per_lan_max=1,
+            cross_edge_probability=0.0,
+        )
+    )
+    h, _ = await _hydrate_plan(repo, plan)
+    # Find a bridge decky (one connected to ≥2 LANs).
+    decky_lans: dict[str, list[str]] = {}
+    for e in h["edges"]:
+        decky_lans.setdefault(e["decky_uuid"], []).append(e["lan_id"])
+    bridge_lan_ids = next(
+        (lids for lids in decky_lans.values() if len(lids) >= 2), None
+    )
+    assert bridge_lan_ids, "test setup expected ≥1 bridge decky"
+    # Pin its two LANs to different hosts.
+    lans_by_id = {lan["id"]: lan for lan in h["lans"]}
+    lans_by_id[bridge_lan_ids[0]]["host_uuid"] = "host-A"
+    lans_by_id[bridge_lan_ids[1]]["host_uuid"] = "host-B"
+
+    codes = [i.code for i in validate(h) if i.severity == "error"]
+    assert "BRIDGE_HOST_SPLIT" in codes
+
+
 # --------------------------------------------------------------------- deployer hook
 
 
