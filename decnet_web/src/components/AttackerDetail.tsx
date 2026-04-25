@@ -61,6 +61,9 @@ interface AttackerData {
   commands: { service: string; decky: string; command: string; timestamp: string }[];
   country_code: string | null;
   country_source: string | null;
+  asn: number | null;
+  as_name: string | null;
+  asn_source: string | null;
   ptr_record: string | null;
   updated_at: string;
   behavior: AttackerBehavior | null;
@@ -1255,6 +1258,26 @@ const AttackerDetail: React.FC = () => {
                 {attacker.country_source && (
                   <span className="dim" style={{ marginLeft: 6, fontSize: '0.75rem' }}>
                     ({attacker.country_source})
+                  </span>
+                )}
+              </span>
+            ) : (
+              <span className="dim">unknown</span>
+            )}
+          </div>
+          <div>
+            <span className="dim">AS: </span>
+            {attacker.asn != null ? (
+              <span className="matrix-text">
+                AS{attacker.asn}
+                {attacker.as_name && (
+                  <span className="dim" style={{ marginLeft: 6, fontSize: '0.75rem' }}>
+                    {attacker.as_name}
+                  </span>
+                )}
+                {attacker.asn_source && (
+                  <span className="dim" style={{ marginLeft: 6, fontSize: '0.75rem' }}>
+                    ({attacker.asn_source})
                   </span>
                 )}
               </span>

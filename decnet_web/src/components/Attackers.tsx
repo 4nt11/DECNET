@@ -25,6 +25,9 @@ interface AttackerEntry {
   commands: any[];
   country_code: string | null;
   country_source: string | null;
+  asn: number | null;
+  as_name: string | null;
+  asn_source: string | null;
   updated_at: string;
 }
 
@@ -209,6 +212,14 @@ const Attackers: React.FC = () => {
                   <div className="ak-meta">
                     <span>First: {new Date(a.first_seen).toLocaleDateString()}</span>
                     <span>Last: {timeAgo(a.last_seen)}</span>
+                    {a.asn != null && (
+                      <span
+                        className="ak-asn"
+                        title={a.as_name ? `${a.as_name}${a.asn_source ? ` (${a.asn_source})` : ''}` : undefined}
+                      >
+                        AS{a.asn}
+                      </span>
+                    )}
                     {a.is_traversal && <span className="chip violet" style={{ fontSize: '0.6rem' }}>TRAVERSAL</span>}
                   </div>
 

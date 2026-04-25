@@ -92,6 +92,16 @@
   font-size: 0.72rem;
   opacity: 0.7;
 }
+.attackers-root .ak-card .ak-asn {
+  font-size: 0.62rem;
+  letter-spacing: 1px;
+  padding: 1px 6px;
+  border: 1px solid var(--border);
+  color: var(--matrix);
+  opacity: 0.75;
+  font-weight: 600;
+  cursor: help;
+}
 
 .attackers-root .ak-stats {
   display: flex;
