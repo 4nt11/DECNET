@@ -176,7 +176,7 @@ class TestComposeWithRetry:
         )
         with pytest.raises(subprocess.CalledProcessError) as ei:
             deployer._compose_with_retry("up", "--build")
-        assert "buildx create --use" in ei.value.stderr
+        assert "buildx create --name decnet-builder" in ei.value.stderr
         assert "umount" not in ei.value.stderr
         assert "No leaked mounts (count=0)" in ei.value.stderr
 

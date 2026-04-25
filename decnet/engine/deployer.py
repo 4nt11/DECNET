@@ -203,17 +203,17 @@ def _buildx_recovery_hint(*, leaked_mounts: int, original_stderr: str = "") -> s
             "  3. for m in $(mount | awk '$3 ~ /buildkit-mount/ {print $3}'); do sudo umount -l \"$m\"; done\n"
             "  4. rm -rf ~/.docker/buildx/activity\n"
             "  5. sudo systemctl start docker\n"
-            "  6. docker buildx create --use --name default && docker buildx inspect --bootstrap"
+            "  6. docker buildx use default   # bundled builder is reserved-named; switch to it"
         )
     else:
         fix = (
             "No leaked mounts (count=0) — the buildx driver state "
             "itself is inconsistent.\n"
             "Recovery:\n"
-            "  1. docker buildx rm default 2>/dev/null\n"
-            "  2. rm -rf ~/.docker/buildx/activity ~/.docker/buildx/instances/default\n"
-            "  3. docker buildx create --use --name default\n"
-            "  4. docker buildx inspect --bootstrap"
+            "  1. rm -rf ~/.docker/buildx/activity ~/.docker/buildx/instances/*\n"
+            "  2. docker buildx create --name decnet-builder --use --bootstrap\n"
+            "     (the name 'default' is reserved by Docker — pick anything else)\n"
+            "  3. docker buildx inspect"
         )
     tail = "See wiki: Troubleshooting → 'Buildx leaked mounts'."
     parts = [head, fix, tail]
