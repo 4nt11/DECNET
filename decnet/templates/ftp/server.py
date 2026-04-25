@@ -14,7 +14,12 @@ from twisted.python.filepath import FilePath
 from twisted.python import log as twisted_log
 
 import instance_seed as _seed
-from syslog_bridge import syslog_line, write_syslog_file, forward_syslog
+from syslog_bridge import (
+    encode_secret,
+    forward_syslog,
+    syslog_line,
+    write_syslog_file,
+)
 
 NODE_NAME = os.environ.get("NODE_NAME", "ftpserver")
 SERVICE_NAME   = "ftp"
@@ -100,7 +105,8 @@ class ServerFTP(FTP):
         return super().ftp_USER(username)
 
     def ftp_PASS(self, password):
-        _log("auth_attempt", username=getattr(self, "_server_user", "?"), password=password)
+        _u = getattr(self, "_server_user", "?")
+        _log("auth_attempt", username=_u, principal=_u, **encode_secret(password))
         # Decide whether this attempt succeeds. Unseeded randomness so
         # scanners can't predict which creds will "work".
         import random as _rand

@@ -11,7 +11,13 @@ Credentials via IMAP_USERS env var (shared with IMAP service).
 
 import asyncio
 import os
-from syslog_bridge import SEVERITY_WARNING, syslog_line, write_syslog_file, forward_syslog
+from syslog_bridge import (
+    SEVERITY_WARNING,
+    encode_secret,
+    forward_syslog,
+    syslog_line,
+    write_syslog_file,
+)
 
 NODE_NAME    = os.environ.get("NODE_NAME", "mailserver")
 SERVICE_NAME  = "pop3"
@@ -259,14 +265,15 @@ class POP3Protocol(asyncio.Protocol):
             return
         username = self._current_user
         password = args.strip()
+        _enc = encode_secret(password)
         if VALID_USERS.get(username) == password:
             self._state = "TRANSACTION"
-            _log("auth", src=self._peer[0], username=username, password=password,
-                 status="success")
+            _log("auth", src=self._peer[0], username=username, principal=username,
+                 outcome="success", **_enc)
             self._transport.write(b"+OK Logged in.\r\n")
         else:
-            _log("auth", src=self._peer[0], username=username, password=password,
-                 status="failed", severity=SEVERITY_WARNING)
+            _log("auth", src=self._peer[0], username=username, principal=username,
+                 outcome="failure", severity=SEVERITY_WARNING, **_enc)
             self._current_user = None
             self._transport.write(b"-ERR Authentication failed.\r\n")
 

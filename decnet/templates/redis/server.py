@@ -9,7 +9,12 @@ import asyncio
 import os
 
 import instance_seed as _seed
-from syslog_bridge import syslog_line, write_syslog_file, forward_syslog
+from syslog_bridge import (
+    encode_secret,
+    forward_syslog,
+    syslog_line,
+    write_syslog_file,
+)
 
 NODE_NAME    = os.environ.get("NODE_NAME", "cache-server")
 SERVICE_NAME   = "redis"
@@ -231,8 +236,14 @@ class RedisProtocol(asyncio.Protocol):
         _log("command", src=self._peer[0], cmd=verb, args=args[:8])
 
         if verb == "AUTH":
+            # Redis 6+ accepts two-arg AUTH (`AUTH <user> <pw>`) for ACL
+            # auth; legacy single-arg AUTH is just the password. Capture
+            # the username when present so attackers brute-forcing ACLs
+            # leave the same trail SSH/FTP do.
             password = args[-1] if args else ""
-            _log("auth", src=self._peer[0], password=password)
+            _user = args[0] if len(args) >= 2 else None
+            _log("auth", src=self._peer[0],
+                 principal=_user, **encode_secret(password))
             if not _REQUIREPASS:
                 self._write(
                     _err("Client sent AUTH, but no password is set. "

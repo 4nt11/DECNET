@@ -12,7 +12,13 @@ Banner advertises Dovecot so nmap fingerprints correctly.
 
 import asyncio
 import os
-from syslog_bridge import SEVERITY_WARNING, syslog_line, write_syslog_file, forward_syslog
+from syslog_bridge import (
+    SEVERITY_WARNING,
+    encode_secret,
+    forward_syslog,
+    syslog_line,
+    write_syslog_file,
+)
 
 NODE_NAME   = os.environ.get("NODE_NAME", "mailserver")
 SERVICE_NAME = "imap"
@@ -431,14 +437,15 @@ class IMAPProtocol(asyncio.Protocol):
         parts    = args.split(None, 1)
         username = parts[0].strip('"') if parts else ""
         password = parts[1].strip('"') if len(parts) > 1 else ""
+        _enc = encode_secret(password)
         if VALID_USERS.get(username) == password:
             self._state = "AUTHENTICATED"
-            _log("auth", src=self._peer[0], username=username, password=password,
-                 status="success")
+            _log("auth", src=self._peer[0], username=username, principal=username,
+                 outcome="success", **_enc)
             self._w(f"{tag} OK [CAPABILITY IMAP4rev1] Logged in\r\n")
         else:
-            _log("auth", src=self._peer[0], username=username, password=password,
-                 status="failed", severity=SEVERITY_WARNING)
+            _log("auth", src=self._peer[0], username=username, principal=username,
+                 outcome="failure", severity=SEVERITY_WARNING, **_enc)
             self._w(f"{tag} NO [AUTHENTICATIONFAILED] Authentication failed.\r\n")
 
     def _cmd_list(self, tag: str, cmd: str) -> None:

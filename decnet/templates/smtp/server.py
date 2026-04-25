@@ -32,7 +32,13 @@ from email.header import decode_header, make_header
 from email.message import Message
 
 import instance_seed as _seed
-from syslog_bridge import SEVERITY_WARNING, syslog_line, write_syslog_file, forward_syslog
+from syslog_bridge import (
+    SEVERITY_WARNING,
+    encode_secret,
+    forward_syslog,
+    syslog_line,
+    write_syslog_file,
+)
 
 NODE_NAME   = os.environ.get("NODE_NAME", "mailserver")
 SERVICE_NAME = "smtp"
@@ -355,7 +361,14 @@ class SMTPProtocol(asyncio.Protocol):
         elif cmd == "MAIL":
             addr = args.split(":", 1)[1].strip() if ":" in args else args
             self._mail_from = addr
-            _log("mail_from", src=self._peer[0], value=addr)
+            # Strip <…> wrappers around the address; everything after the
+            # last @ is the domain. Empty when the attacker sent <> or a
+            # malformed envelope; keeping value= for back-compat with any
+            # log query that still reads it.
+            _bare = addr.strip("<>").strip()
+            _domain = _bare.rsplit("@", 1)[-1] if "@" in _bare else ""
+            _log("mail_from", src=self._peer[0], value=addr,
+                 mail_from=_bare, domain=_domain)
             self._transport.write(b"250 2.1.0 Ok\r\n")
 
         elif cmd == "RCPT":
@@ -456,8 +469,8 @@ class SMTPProtocol(asyncio.Protocol):
 
     def _finish_auth(self, username: str, password: str) -> None:
         _log("auth_attempt", src=self._peer[0],
-             username=username, password=password,
-             severity=SEVERITY_WARNING)
+             username=username, principal=username,
+             severity=SEVERITY_WARNING, **encode_secret(password))
         if not OPEN_RELAY:
             self._transport.write(b"535 5.7.8 Error: authentication failed\r\n")
             return

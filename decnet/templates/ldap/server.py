@@ -10,7 +10,12 @@ import os
 import re
 
 import instance_seed as _seed
-from syslog_bridge import syslog_line, write_syslog_file, forward_syslog
+from syslog_bridge import (
+    encode_secret,
+    forward_syslog,
+    syslog_line,
+    write_syslog_file,
+)
 
 NODE_NAME = os.environ.get("NODE_NAME", "ldapserver")
 SERVICE_NAME   = "ldap"
@@ -173,7 +178,8 @@ class LDAPProtocol(asyncio.Protocol):
         except Exception:
             message_id = 1
         dn, password = _parse_bind_request(msg)
-        _log("bind", src=self._peer[0], dn=dn, password=password)
+        _log("bind", src=self._peer[0], dn=dn, principal=dn,
+             **encode_secret(password))
         _seed.jitter_sync(10, 60)
         if dn and not _is_valid_dn(dn):
             # OpenLDAP returns invalidDNSyntax (34) for malformed DNs, with
