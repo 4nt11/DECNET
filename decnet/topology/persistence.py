@@ -213,47 +213,6 @@ def _backfill_decky_configs(
         decky["decky_config"] = cfg
 
 
-def resolve_lan_host(
-    lan: dict[str, Any], topology: dict[str, Any]
-) -> str | None:
-    """Effective swarm host for a LAN.
-
-    A LAN is one Docker bridge — bridges don't span hosts — so this is
-    the single source of truth callers (deployer, mutator, validator)
-    consult before issuing per-host work.
-
-    Resolution order::
-
-        lan.host_uuid → topology.target_host_uuid → None  (= master-local)
-    """
-    h = lan.get("host_uuid") if lan else None
-    if h:
-        return h
-    return (topology or {}).get("target_host_uuid")
-
-
-def partition_lans_by_host(
-    hydrated: dict[str, Any],
-) -> dict[str | None, list[dict[str, Any]]]:
-    """Group LANs by their effective host.
-
-    Keys are host UUIDs; ``None`` means master-local. Order of LANs
-    within each bucket follows the input order.
-    """
-    out: dict[str | None, list[dict[str, Any]]] = {}
-    topology = hydrated.get("topology") or {}
-    for lan in hydrated.get("lans", []):
-        out.setdefault(resolve_lan_host(lan, topology), []).append(lan)
-    return out
-
-
 # Re-export the status constants so callers can ``from decnet.topology.persistence
 # import TopologyStatus`` without chasing modules.
-__all__ = [
-    "persist",
-    "transition_status",
-    "hydrate",
-    "resolve_lan_host",
-    "partition_lans_by_host",
-    "TopologyStatus",
-]
+__all__ = ["persist", "transition_status", "hydrate", "TopologyStatus"]

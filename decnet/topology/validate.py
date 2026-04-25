@@ -329,57 +329,6 @@ def check_no_host_port_collision(h: dict[str, Any]) -> list[ValidationIssue]:
     return issues
 
 
-def check_bridge_decky_same_host(
-    h: dict[str, Any],
-) -> list[ValidationIssue]:
-    """A multi-homed (bridge) decky is one container — its LANs must
-    therefore resolve to the same swarm host.
-
-    Without this, the deployer would have to either silently pick a
-    host for the bridge container (orphaning IPs on the other host's
-    LAN) or implement a cross-host overlay. The co-locate decision
-    rules out the overlay, so we reject the topology up front.
-    """
-    from decnet.topology.persistence import resolve_lan_host
-
-    topology = h.get("topology") or {}
-    lans_by_id = {lan["id"]: lan for lan in h.get("lans", [])}
-    deckies_by_uuid = {d["uuid"]: d for d in h.get("deckies", [])}
-    decky_lans: dict[str, list[str]] = {}
-    for edge in h.get("edges", []):
-        decky_lans.setdefault(edge["decky_uuid"], []).append(edge["lan_id"])
-
-    issues: list[ValidationIssue] = []
-    for decky_uuid, lan_ids in decky_lans.items():
-        if len(lan_ids) < 2:
-            continue
-        hosts = {
-            resolve_lan_host(lans_by_id[lid], topology)
-            for lid in lan_ids
-            if lid in lans_by_id
-        }
-        if len(hosts) > 1:
-            decky = deckies_by_uuid.get(decky_uuid, {})
-            issues.append(
-                ValidationIssue(
-                    "error",
-                    "BRIDGE_HOST_SPLIT",
-                    f"bridge decky {decky.get('name', decky_uuid)!r} is "
-                    "attached to LANs assigned to different swarm hosts; "
-                    "a single container cannot span hosts",
-                    target={
-                        "decky": decky.get("name"),
-                        "lans": [
-                            lans_by_id[lid].get("name")
-                            for lid in lan_ids
-                            if lid in lans_by_id
-                        ],
-                    },
-                )
-            )
-    return issues
-
-
 # Pure-data rules.  Host-state rules (like PORT_COLLISION) are
 # *not* listed here — they're called separately by the live deployer
 # so that unit tests exercising validate() stay hermetic.
@@ -392,7 +341,6 @@ _RULES: list[Callable[[dict[str, Any]], list[ValidationIssue]]] = [
     check_no_subnet_overlap,
     check_services_known,
     check_service_config_shape,
-    check_bridge_decky_same_host,
 ]
 
 
