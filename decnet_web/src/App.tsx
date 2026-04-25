@@ -21,6 +21,7 @@ const Attackers      = lazy(() => import('./components/Attackers'));
 const AttackerDetail = lazy(() => import('./components/AttackerDetail'));
 const Config         = lazy(() => import('./components/Config'));
 const Bounty         = lazy(() => import('./components/Bounty'));
+const Credentials    = lazy(() => import('./components/Credentials'));
 const RemoteUpdates  = lazy(() => import('./components/RemoteUpdates'));
 const SwarmHosts     = lazy(() => import('./components/SwarmHosts'));
 const MazeNET        = lazy(() => import('./components/MazeNET/MazeNET'));
@@ -109,6 +110,7 @@ const AuthedShell: React.FC<AuthedShellProps> = ({ onLogout, onSearch, searchQue
             <Route path="/live-logs" element={<LiveLogs />} />
             <Route path="/webhooks" element={<Webhooks />} />
             <Route path="/bounty" element={<Bounty />} />
+            <Route path="/credentials" element={<Credentials />} />
             <Route path="/attackers" element={<Attackers />} />
             <Route path="/attackers/:id" element={<AttackerDetail />} />
             <Route path="/config" element={<Config />} />

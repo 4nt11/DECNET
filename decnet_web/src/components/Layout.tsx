@@ -3,7 +3,7 @@ import { NavLink, useLocation } from 'react-router-dom';
 import {
   Menu, X, Search, Activity, LayoutDashboard, Terminal, Settings, LogOut,
   Server, Archive, Package, Network, ChevronDown, ChevronRight, HardDrive,
-  ShieldAlert, Bell, Webhook,
+  ShieldAlert, Bell, Webhook, Lock,
 } from '../icons';
 import { prefetchRoute } from '../routePrefetch';
 import './Layout.css';
@@ -29,6 +29,7 @@ const ROUTE_LABELS: Record<string, string> = {
   '/live-logs': 'LIVE LOGS',
   '/webhooks': 'WEBHOOKS',
   '/bounty': 'BOUNTY',
+  '/credentials': 'CREDENTIALS',
   '/attackers': 'ATTACKERS',
   '/config': 'CONFIG',
   '/swarm-updates': 'REMOTE UPDATES',
@@ -124,6 +125,7 @@ const Layout: React.FC<LayoutProps> = ({
             />
           </NavGroup>
           <NavItem to="/bounty" icon={<Archive size={20} />} label="Bounty" open={sidebarOpen} />
+          <NavItem to="/credentials" icon={<Lock size={20} />} label="Credentials" open={sidebarOpen} />
           <NavItem to="/attackers" icon={<Activity size={20} />} label="Attackers" open={sidebarOpen} />
           <NavGroup label="SWARM" icon={<Network size={20} />} open={sidebarOpen}>
             <NavItem to="/swarm/hosts" icon={<HardDrive size={18} />} label="SWARM Hosts" open={sidebarOpen} indent />
