@@ -16,7 +16,12 @@ from flask import Flask, request, send_from_directory
 from werkzeug.serving import make_server, WSGIRequestHandler
 
 import instance_seed as _seed
-from syslog_bridge import syslog_line, write_syslog_file, forward_syslog
+from syslog_bridge import (
+    classify_authorization,
+    forward_syslog,
+    syslog_line,
+    write_syslog_file,
+)
 
 logging.getLogger("werkzeug").setLevel(logging.ERROR)
 
@@ -94,6 +99,7 @@ def _log(event_type: str, severity: int = 6, **kwargs) -> None:
 
 @app.before_request
 def log_request():
+    cred = classify_authorization(request.headers.get("Authorization"))
     _log(
         "request",
         method=request.method,
@@ -101,6 +107,7 @@ def log_request():
         remote_addr=request.remote_addr,
         headers=dict(request.headers),
         body=request.get_data(as_text=True)[:512],
+        **(cred or {}),
     )
 
 

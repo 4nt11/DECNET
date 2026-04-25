@@ -11,7 +11,12 @@ import os
 from http.server import BaseHTTPRequestHandler, HTTPServer
 
 import instance_seed as _seed
-from syslog_bridge import syslog_line, write_syslog_file, forward_syslog
+from syslog_bridge import (
+    classify_authorization,
+    forward_syslog,
+    syslog_line,
+    write_syslog_file,
+)
 
 NODE_NAME = os.environ.get("NODE_NAME", "esserver")
 SERVICE_NAME   = "elasticsearch"
@@ -102,18 +107,23 @@ class ESHandler(BaseHTTPRequestHandler):
         length = int(self.headers.get("Content-Length", 0))
         return self.rfile.read(length).decode(errors="replace") if length else ""
 
+    def _cred_fields(self) -> dict:
+        """Universal cred shape from this request's Authorization header,
+        or empty dict when absent / unrecognized."""
+        return classify_authorization(self.headers.get("Authorization")) or {}
+
     def do_GET(self):
         src = self.client_address[0]
         path = self.path.split("?")[0]
 
         if path in ("/", ""):
-            _log("root_probe", src=src, method="GET", path=self.path)
+            _log("root_probe", src=src, method="GET", path=self.path, **self._cred_fields())
             self._send_json(200, _ROOT_RESPONSE)
         elif path.startswith("/_cat/"):
-            _log("cat_api", src=src, method="GET", path=self.path)
+            _log("cat_api", src=src, method="GET", path=self.path, **self._cred_fields())
             self._send_json(200, [])
         elif path.startswith("/_cluster/"):
-            _log("cluster_recon", src=src, method="GET", path=self.path)
+            _log("cluster_recon", src=src, method="GET", path=self.path, **self._cred_fields())
             self._send_json(200, {
                 "cluster_name": _CLUSTER_NAME,
                 "cluster_uuid": _CLUSTER_UUID,
@@ -129,7 +139,7 @@ class ESHandler(BaseHTTPRequestHandler):
                 "active_shards_percent_as_number": 100.0,
             })
         elif path.startswith("/_nodes"):
-            _log("nodes_recon", src=src, method="GET", path=self.path)
+            _log("nodes_recon", src=src, method="GET", path=self.path, **self._cred_fields())
             self._send_json(200, {
                 "_nodes": {"total": _CLUSTER_NODES, "successful": _CLUSTER_NODES, "failed": 0},
                 "cluster_name": _CLUSTER_NAME,
@@ -137,10 +147,10 @@ class ESHandler(BaseHTTPRequestHandler):
                                        "build_hash": _ES_BUILD_HASH}},
             })
         elif path.startswith("/_security/") or path.startswith("/_xpack/"):
-            _log("security_probe", src=src, method="GET", path=self.path)
+            _log("security_probe", src=src, method="GET", path=self.path, **self._cred_fields())
             self._send_json(200, {"enabled": True, "available": True})
         else:
-            _log("request", src=src, method="GET", path=self.path)
+            _log("request", src=src, method="GET", path=self.path, **self._cred_fields())
             self._send_json(404, {"error": {"root_cause": [{"type": "index_not_found_exception",
                                                              "reason": "no such index"}]}})
 
@@ -149,7 +159,8 @@ class ESHandler(BaseHTTPRequestHandler):
         body = self._read_body()
         path = self.path.split("?")[0]
         _log("post_request", src=src, method="POST", path=self.path,
-             body_preview=body[:300], user_agent=self.headers.get("User-Agent", ""))
+             body_preview=body[:300], user_agent=self.headers.get("User-Agent", ""),
+             **self._cred_fields())
         if "_search" in path or "_bulk" in path:
             self._send_json(200, {"took": 1, "timed_out": False, "hits": {"total": {"value": 0}, "hits": []}})
         else:
@@ -158,17 +169,20 @@ class ESHandler(BaseHTTPRequestHandler):
     def do_PUT(self):
         src = self.client_address[0]
         body = self._read_body()
-        _log("put_request", src=src, method="PUT", path=self.path, body_preview=body[:300])
+        _log("put_request", src=src, method="PUT", path=self.path,
+             body_preview=body[:300], **self._cred_fields())
         self._send_json(200, {"acknowledged": True})
 
     def do_DELETE(self):
         src = self.client_address[0]
-        _log("delete_request", src=src, method="DELETE", path=self.path)
+        _log("delete_request", src=src, method="DELETE", path=self.path,
+             **self._cred_fields())
         self._send_json(200, {"acknowledged": True})
 
     def do_HEAD(self):
         src = self.client_address[0]
-        _log("head_request", src=src, method="HEAD", path=self.path)
+        _log("head_request", src=src, method="HEAD", path=self.path,
+             **self._cred_fields())
         self._send_json(200, {})
 
     def log_message(self, fmt, *args):

@@ -316,6 +316,11 @@ async def _extract_bounty(repo: BaseRepository, log_data: dict[str, Any]) -> Non
                 "category": _ua_category,
                 "tool": _ua_tool,
                 "signals": _ua_signals or None,
+                # Request context — which endpoint did the tool hit?
+                # Useful in the dashboard so analysts see "Nikto hit
+                # /admin" rather than just "Nikto seen on this decky".
+                "method": _fields.get("method"),
+                "path": _fields.get("path"),
             }
         })
 

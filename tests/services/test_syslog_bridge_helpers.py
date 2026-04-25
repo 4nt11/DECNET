@@ -65,6 +65,53 @@ def test_encode_secret_preserves_rfc5424_specials(syslog_bridge):
     assert base64.b64decode(out["secret_b64"]) == secret.encode("utf-8")
 
 
+def test_classify_authorization_basic(syslog_bridge):
+    """HTTP Basic — base64(user:pw) decodes to plaintext credential."""
+    cred = syslog_bridge.classify_authorization("Basic YWRtaW46aHVudGVyMg==")
+    assert cred is not None
+    assert cred["principal"] == "admin"
+    assert cred["secret_kind"] == "plaintext"
+    assert base64.b64decode(cred["secret_b64"]) == b"hunter2"
+    assert cred["secret_printable"] == "hunter2"
+
+
+def test_classify_authorization_bearer(syslog_bridge):
+    cred = syslog_bridge.classify_authorization("Bearer eyJhbGciOiJIUzI1NiJ9.foo.bar")
+    assert cred["principal"] is None
+    assert cred["secret_kind"] == "http_bearer"
+    assert base64.b64decode(cred["secret_b64"]) == b"eyJhbGciOiJIUzI1NiJ9.foo.bar"
+
+
+def test_classify_authorization_token_alias(syslog_bridge):
+    """`Token <opaque>` = same shape as Bearer (Kubernetes service accounts)."""
+    cred = syslog_bridge.classify_authorization("Token sa-jwt-token-abc")
+    assert cred["secret_kind"] == "http_bearer"
+
+
+def test_classify_authorization_digest(syslog_bridge):
+    """RFC 7616 Digest — extract username + response hash."""
+    header = ('Digest username="alice", realm="example.com", '
+              'nonce="abc123", uri="/", response="d41d8cd98f00b204e9800998ecf8427e"')
+    cred = syslog_bridge.classify_authorization(header)
+    assert cred["principal"] == "alice"
+    assert cred["secret_kind"] == "http_digest_md5"
+    assert cred["secret_printable"] == "d41d8cd98f00b204e9800998ecf8427e"
+
+
+def test_classify_authorization_unknown_scheme(syslog_bridge):
+    """NTLM, AWS4-HMAC-…, Negotiate — all return None for now."""
+    assert syslog_bridge.classify_authorization("NTLM TlRMTVNTUAA=") is None
+    assert syslog_bridge.classify_authorization("AWS4-HMAC-SHA256 Credential=…") is None
+
+
+def test_classify_authorization_malformed(syslog_bridge):
+    assert syslog_bridge.classify_authorization(None) is None
+    assert syslog_bridge.classify_authorization("") is None
+    assert syslog_bridge.classify_authorization("Basic !!not-base64!!") is None
+    assert syslog_bridge.classify_authorization("Basic dXNlcg==") is None  # no colon
+    assert syslog_bridge.classify_authorization("Digest no-response-here") is None
+
+
 def test_encode_secret_unicode_replaced(syslog_bridge):
     """Non-ASCII unicode encodes via utf-8, then printable strips the
     multi-byte sequence to '?' chars (one per raw byte)."""

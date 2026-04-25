@@ -9,7 +9,12 @@ Logs all requests as JSON.
 import asyncio
 import os
 import struct
-from syslog_bridge import syslog_line, write_syslog_file, forward_syslog
+from syslog_bridge import (
+    encode_secret,
+    forward_syslog,
+    syslog_line,
+    write_syslog_file,
+)
 
 NODE_NAME = os.environ.get("NODE_NAME", "switch")
 SERVICE_NAME   = "snmp"
@@ -229,8 +234,15 @@ class SNMPProtocol(asyncio.DatagramProtocol):
     def datagram_received(self, data, addr):
         try:
             version, community, request_id, oids = _parse_snmp(data)
+            # SNMP v1/v2c community is the only auth mechanism on the wire
+            # — every packet carries the shared secret in plaintext. Land
+            # it as a Credential row keyed `snmp_community` so reuse-
+            # analytics treats community-string spray as the same shape
+            # of attack signal as cleartext password spray.
             _log("get_request", src=addr[0], src_port=addr[1],
-                 version=version, community=community, oids=oids)
+                 version=version, community=community, oids=oids,
+                 principal=None, secret_kind="snmp_community",
+                 **encode_secret(community))
             response = _build_response(version, community, request_id, oids)
             self._transport.sendto(response, addr)
         except Exception as e:

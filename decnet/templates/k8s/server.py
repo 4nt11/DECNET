@@ -10,7 +10,12 @@ import json
 import os
 
 from flask import Flask, request
-from syslog_bridge import syslog_line, write_syslog_file, forward_syslog
+from syslog_bridge import (
+    classify_authorization,
+    forward_syslog,
+    syslog_line,
+    write_syslog_file,
+)
 
 NODE_NAME = os.environ.get("NODE_NAME", "k8s-master")
 SERVICE_NAME   = "k8s"
@@ -75,13 +80,16 @@ def _log(event_type: str, severity: int = 6, **kwargs) -> None:
 
 @app.before_request
 def log_request():
+    auth_header = request.headers.get("Authorization", "")
+    cred = classify_authorization(auth_header)
     _log(
         "request",
         method=request.method,
         path=request.path,
         remote_addr=request.remote_addr,
-        auth=request.headers.get("Authorization", ""),
+        auth=auth_header,
         body=request.get_data(as_text=True)[:512],
+        **(cred or {}),
     )
 
 

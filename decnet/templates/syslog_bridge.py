@@ -13,8 +13,9 @@ Facility: local0 (16). SD element ID uses PEN 55555.
 """
 
 import base64
+import re
 from datetime import datetime, timezone
-from typing import Any
+from typing import Any, Optional
 
 # ─── Constants ────────────────────────────────────────────────────────────────
 
@@ -104,6 +105,80 @@ def encode_secret(secret: str) -> dict[str, str]:
         "secret_printable": printable,
         "secret_b64": base64.b64encode(raw).decode("ascii"),
     }
+
+
+_DIGEST_PARAM_RE = re.compile(r'(\w+)\s*=\s*"([^"]*)"|(\w+)\s*=\s*([^,\s]+)')
+
+
+def classify_authorization(header_value: Optional[str]) -> Optional[dict[str, Any]]:
+    """Parse an HTTP Authorization header value into Credential SD fields.
+
+    Returns a dict with the universal cred shape ready to spread into a
+    ``_log(...)`` call::
+
+        auth = request.headers.get("Authorization")
+        cred = classify_authorization(auth)
+        if cred:
+            _log("auth_attempt", **cred)
+
+    Recognised schemes:
+      * Basic — base64(user:pw); decoded → ``principal=user`` +
+        ``secret_kind="plaintext"`` + ``encode_secret(pw)``.
+      * Bearer / Token — opaque token; ``principal=None`` +
+        ``secret_kind="http_bearer"`` + ``encode_secret(token)``.
+      * Digest — ``principal=username`` from header +
+        ``secret_kind="http_digest_md5"`` + ``encode_secret(response)``.
+
+    Returns ``None`` for anything unrecognized (AWS4-HMAC-SHA256, NTLM,
+    Negotiate, …) — callers can still log the raw header value in the
+    ambient SD-block; we just don't know how to extract a hashable
+    secret from it.
+    """
+    if not header_value or not isinstance(header_value, str):
+        return None
+    parts = header_value.strip().split(None, 1)
+    if len(parts) < 2:
+        return None
+    scheme, rest = parts[0].lower(), parts[1].strip()
+
+    if scheme == "basic":
+        try:
+            decoded = base64.b64decode(rest, validate=True).decode("utf-8", errors="replace")
+        except (ValueError, base64.binascii.Error):
+            return None
+        if ":" not in decoded:
+            return None
+        user, _, pw = decoded.partition(":")
+        return {
+            "principal": user,
+            "secret_kind": "plaintext",
+            **encode_secret(pw),
+        }
+
+    if scheme in ("bearer", "token"):
+        return {
+            "principal": None,
+            "secret_kind": "http_bearer",
+            **encode_secret(rest),
+        }
+
+    if scheme == "digest":
+        params: dict[str, str] = {}
+        for m in _DIGEST_PARAM_RE.finditer(rest):
+            k = m.group(1) or m.group(3)
+            v = m.group(2) if m.group(2) is not None else m.group(4)
+            if k:
+                params[k.lower()] = v
+        response = params.get("response")
+        if not response:
+            return None
+        return {
+            "principal": params.get("username"),
+            "secret_kind": "http_digest_md5",
+            **encode_secret(response),
+        }
+
+    return None
 
 
 def write_syslog_file(line: str) -> None:

@@ -223,6 +223,109 @@ async def test_vnc_hash_credential():
 
 
 @pytest.mark.asyncio
+async def test_snmp_community_native_shape():
+    """SNMP v1/v2c community string lands as secret_kind=snmp_community,
+    principal=None (no per-user identity in v1/v2c)."""
+    from decnet.web.ingester import _extract_bounty
+    repo = MagicMock(); repo.upsert_credential = AsyncMock()
+    raw = b"public"
+    log_data = {
+        "decky": "decky-01",
+        "service": "snmp",
+        "attacker_ip": "10.0.0.5",
+        "fields": {
+            "version": 1,
+            "community": "public",
+            "secret_kind": "snmp_community",
+            "secret_printable": "public",
+            "secret_b64": base64.b64encode(raw).decode("ascii"),
+        },
+    }
+    await _extract_bounty(repo, log_data)
+    cred = repo.upsert_credential.call_args[0][0]
+    assert cred["service"] == "snmp"
+    assert cred["secret_kind"] == "snmp_community"
+    assert cred["principal"] is None
+    assert cred["secret_sha256"] == hashlib.sha256(raw).hexdigest()
+
+
+@pytest.mark.asyncio
+async def test_http_basic_native_shape():
+    """HTTP Basic via classify_authorization → principal+plaintext."""
+    from decnet.web.ingester import _extract_bounty
+    repo = MagicMock(); repo.upsert_credential = AsyncMock()
+    log_data = {
+        "decky": "decky-01",
+        "service": "http",
+        "attacker_ip": "10.0.0.5",
+        "fields": {
+            "method": "GET",
+            "path": "/admin",
+            "principal": "admin",
+            "secret_kind": "plaintext",
+            "secret_printable": "hunter2",
+            "secret_b64": base64.b64encode(b"hunter2").decode("ascii"),
+        },
+    }
+    await _extract_bounty(repo, log_data)
+    cred = repo.upsert_credential.call_args[0][0]
+    assert cred["service"] == "http"
+    assert cred["principal"] == "admin"
+    assert cred["secret_kind"] == "plaintext"
+
+
+@pytest.mark.asyncio
+async def test_http_bearer_native_shape():
+    """HTTP Bearer — principal=None, secret_kind=http_bearer, opaque."""
+    from decnet.web.ingester import _extract_bounty
+    repo = MagicMock(); repo.upsert_credential = AsyncMock()
+    token = b"eyJhbGciOiJIUzI1NiJ9.foo.bar"
+    log_data = {
+        "decky": "decky-01",
+        "service": "k8s",
+        "attacker_ip": "10.0.0.5",
+        "fields": {
+            "method": "GET",
+            "path": "/api/v1/secrets",
+            "principal": None,
+            "secret_kind": "http_bearer",
+            "secret_printable": token.decode(),
+            "secret_b64": base64.b64encode(token).decode("ascii"),
+        },
+    }
+    await _extract_bounty(repo, log_data)
+    cred = repo.upsert_credential.call_args[0][0]
+    assert cred["secret_kind"] == "http_bearer"
+    assert cred["principal"] is None
+    assert cred["secret_sha256"] == hashlib.sha256(token).hexdigest()
+
+
+@pytest.mark.asyncio
+async def test_sip_digest_native_shape():
+    """SIP Digest via classify_authorization → response hash captured."""
+    from decnet.web.ingester import _extract_bounty
+    repo = MagicMock(); repo.upsert_credential = AsyncMock()
+    response_hash = "d41d8cd98f00b204e9800998ecf8427e"
+    log_data = {
+        "decky": "decky-01",
+        "service": "sip",
+        "attacker_ip": "10.0.0.5",
+        "fields": {
+            "method": "REGISTER",
+            "principal": "alice",
+            "secret_kind": "http_digest_md5",
+            "secret_printable": response_hash,
+            "secret_b64": base64.b64encode(response_hash.encode()).decode("ascii"),
+        },
+    }
+    await _extract_bounty(repo, log_data)
+    cred = repo.upsert_credential.call_args[0][0]
+    assert cred["service"] == "sip"
+    assert cred["secret_kind"] == "http_digest_md5"
+    assert cred["principal"] == "alice"
+
+
+@pytest.mark.asyncio
 async def test_lossless_b64_survives_nonprintable_password():
     """Even when secret_printable is sanitized, secret_b64 still decodes
     to the original bytes — the cross-service reuse hash matches across

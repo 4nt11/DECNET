@@ -25,6 +25,14 @@ def make_fake_syslog_bridge() -> ModuleType:
     mod.forward_syslog = MagicMock()
     mod.SEVERITY_WARNING = 4
     mod.SEVERITY_INFO = 6
+    # encode_secret returns the universal cred SD shape; tests don't
+    # care about the exact bytes, just that the key set is correct.
+    mod.encode_secret = MagicMock(
+        return_value={"secret_printable": "", "secret_b64": ""}
+    )
+    # classify_authorization returns None for unknown / absent auth so
+    # services that call **(cred or {}) get a no-op spread.
+    mod.classify_authorization = MagicMock(return_value=None)
     return mod
 
 

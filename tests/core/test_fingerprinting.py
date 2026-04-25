@@ -15,6 +15,23 @@ def _make_repo():
 # HTTP User-Agent
 # ---------------------------------------------------------------------------
 
+def _find_ua_bounty(repo) -> dict:
+    """Find the http_useragent fingerprint among all add_bounty calls.
+
+    A single HTTP request can produce multiple `bounty_type="fingerprint"`
+    bounties (UA, http_quirks, ip_leak, …). Tests for one specific kind
+    must filter rather than assert call count, so adding new fingerprint
+    families later doesn't retroactively break old tests."""
+    for c in repo.add_bounty.await_args_list:
+        payload = c[0][0].get("payload") or {}
+        if payload.get("fingerprint_type") == "http_useragent":
+            return c[0][0]
+    raise AssertionError(
+        "no http_useragent bounty found; calls=%r"
+        % [c[0][0].get("payload") for c in repo.add_bounty.await_args_list]
+    )
+
+
 @pytest.mark.asyncio
 async def test_http_useragent_extracted():
     repo = _make_repo()
@@ -30,13 +47,12 @@ async def test_http_useragent_extracted():
         },
     }
     await _extract_bounty(repo, log_data)
-    repo.add_bounty.assert_awaited_once()
-    call_kwargs = repo.add_bounty.call_args[0][0]
-    assert call_kwargs["bounty_type"] == "fingerprint"
-    assert call_kwargs["payload"]["fingerprint_type"] == "http_useragent"
-    assert call_kwargs["payload"]["value"] == "Nikto/2.1.6"
-    assert call_kwargs["payload"]["path"] == "/admin"
-    assert call_kwargs["payload"]["method"] == "GET"
+    bounty = _find_ua_bounty(repo)
+    assert bounty["bounty_type"] == "fingerprint"
+    assert bounty["payload"]["fingerprint_type"] == "http_useragent"
+    assert bounty["payload"]["value"] == "Nikto/2.1.6"
+    assert bounty["payload"]["path"] == "/admin"
+    assert bounty["payload"]["method"] == "GET"
 
 
 @pytest.mark.asyncio
@@ -52,12 +68,14 @@ async def test_http_useragent_lowercase_key():
         },
     }
     await _extract_bounty(repo, log_data)
-    call_kwargs = repo.add_bounty.call_args[0][0]
-    assert call_kwargs["payload"]["value"] == "sqlmap/1.7"
+    bounty = _find_ua_bounty(repo)
+    assert bounty["payload"]["value"] == "sqlmap/1.7"
 
 
 @pytest.mark.asyncio
 async def test_http_no_useragent_no_fingerprint_bounty():
+    """No User-Agent header → no http_useragent bounty (other fingerprint
+    families like http_quirks may still fire on the same request)."""
     repo = _make_repo()
     log_data = {
         "decky": "decky-01",
@@ -69,7 +87,11 @@ async def test_http_no_useragent_no_fingerprint_bounty():
         },
     }
     await _extract_bounty(repo, log_data)
-    repo.add_bounty.assert_not_awaited()
+    ua_calls = [
+        c for c in repo.add_bounty.await_args_list
+        if (c[0][0].get("payload") or {}).get("fingerprint_type") == "http_useragent"
+    ]
+    assert ua_calls == []
 
 
 @pytest.mark.asyncio
@@ -142,39 +164,59 @@ async def test_vnc_version_event_no_client_version_field():
 
 @pytest.mark.asyncio
 async def test_credential_still_extracted_alongside_fingerprint():
+    """Native-shape credential lands via upsert_credential, not add_bounty.
+
+    The legacy username+password adapter was deleted in DEBT-039; the
+    universal shape (secret_b64 + principal) goes straight to the
+    Credential table. Fingerprint bounties continue to ride add_bounty."""
+    import base64
     repo = _make_repo()
+    repo.upsert_credential = AsyncMock()
     log_data = {
         "decky": "decky-03",
         "service": "ftp",
         "attacker_ip": "10.0.0.8",
         "event_type": "auth_attempt",
-        "fields": {"username": "admin", "password": "1234"},
+        "fields": {
+            "username": "admin",
+            "principal": "admin",
+            "secret_kind": "plaintext",
+            "secret_printable": "1234",
+            "secret_b64": base64.b64encode(b"1234").decode(),
+        },
     }
     await _extract_bounty(repo, log_data)
-    repo.add_bounty.assert_awaited_once()
-    call_kwargs = repo.add_bounty.call_args[0][0]
-    assert call_kwargs["bounty_type"] == "credential"
+    repo.upsert_credential.assert_awaited_once()
+    cred = repo.upsert_credential.call_args[0][0]
+    assert cred["service"] == "ftp"
+    assert cred["principal"] == "admin"
 
 
 @pytest.mark.asyncio
 async def test_http_credential_and_fingerprint_both_extracted():
-    """An HTTP login attempt can yield both a credential and a UA fingerprint."""
+    """An HTTP login attempt yields both a Credential row and a UA
+    fingerprint bounty — distinct write paths."""
+    import base64
     repo = _make_repo()
+    repo.upsert_credential = AsyncMock()
     log_data = {
         "decky": "decky-03",
         "service": "http",
         "attacker_ip": "10.0.0.9",
         "event_type": "request",
         "fields": {
-            "username": "root",
-            "password": "toor",
+            "principal": "root",
+            "secret_kind": "plaintext",
+            "secret_printable": "toor",
+            "secret_b64": base64.b64encode(b"toor").decode(),
             "headers": {"User-Agent": "curl/7.88.1"},
         },
     }
     await _extract_bounty(repo, log_data)
-    assert repo.add_bounty.await_count == 2
-    types = {c[0][0]["bounty_type"] for c in repo.add_bounty.call_args_list}
-    assert types == {"credential", "fingerprint"}
+    repo.upsert_credential.assert_awaited_once()
+    # add_bounty fired for the UA fingerprint; http_quirks may also fire.
+    bounty_types = {c[0][0]["bounty_type"] for c in repo.add_bounty.call_args_list}
+    assert "fingerprint" in bounty_types
 
 
 # ---------------------------------------------------------------------------
