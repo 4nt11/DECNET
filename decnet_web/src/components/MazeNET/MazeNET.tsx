@@ -138,7 +138,7 @@ const MazeNET: React.FC = () => {
             setNets((p) => [...p, {
               id: tempId, name, label: name.toUpperCase(),
               cidr: subnet ?? '', kind: isDmz ? 'dmz' : 'subnet',
-              x, y, w, h,
+              x, y, w, h, pending: true,
             }]);
             return;
           }

@@ -199,6 +199,21 @@ body.maze-fullscreen .maze-shell {
   opacity: 0.42; filter: grayscale(0.7); border-style: dotted;
 }
 .maze-net-box.inactive .maze-net-box-head { color: rgba(255, 255, 255, 0.5); }
+/* Optimistic placeholder for an enqueued LAN-add. Amber tint matches
+ * the REAP button voice — clearly "in-flight, not committed" without
+ * collapsing into the dimmed-out 'inactive' style which means the
+ * opposite (no traffic on a deployed LAN). */
+.maze-net-box.pending {
+  border-color: var(--warn, #e0a040);
+  background: rgba(224, 160, 64, 0.04);
+  border-style: dashed;
+  filter: none; opacity: 1;
+}
+.maze-net-box.pending .maze-net-box-head {
+  color: var(--warn, #e0a040);
+  border-bottom-color: rgba(224, 160, 64, 0.45);
+}
+.maze-net-box.pending .cidr { color: rgba(224, 160, 64, 0.7); }
 .maze-net-box-head {
   position: absolute; top: 0; left: 0; right: 0;
   padding: 6px 12px; border-bottom: 1px dashed var(--border);

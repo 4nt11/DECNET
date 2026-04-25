@@ -27,6 +27,7 @@ const NetBox: React.FC<Props> = ({
     dropTarget ? 'drop-target' : '',
     inactive ? 'inactive' : '',
     deployed ? 'deployed' : '',
+    net.pending ? 'pending' : '',
   ].filter(Boolean).join(' ');
 
   const Icon = net.kind === 'internet' ? Globe : net.kind === 'dmz' ? ShieldAlert : GitMerge;
@@ -53,10 +54,18 @@ const NetBox: React.FC<Props> = ({
         <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
           <Icon size={10} />
           <span>{net.label}</span>
-          {inactive && (
+          {inactive && !net.pending && (
             <span className="chip-mini"
                   style={{ marginLeft: 4, borderColor: 'var(--border)', color: 'rgba(255,255,255,0.45)' }}>
               INACTIVE
+            </span>
+          )}
+          {net.pending && (
+            <span className="chip-mini"
+                  style={{ marginLeft: 4,
+                           borderColor: 'var(--warn, #e0a040)',
+                           color: 'var(--warn, #e0a040)' }}>
+              PENDING
             </span>
           )}
         </div>

@@ -15,6 +15,11 @@ export interface Net {
   y: number;
   w: number;
   h: number;
+  /** Optimistic placeholder for an enqueued mutation on a live
+   *  topology. Replaced on next refetch when the mutator emits the
+   *  applied event. Rendered with an amber tint so the user can tell
+   *  it's a queued add, not a regular non-deployed LAN. */
+  pending?: boolean;
 }
 
 export type NodeKind = 'decky' | 'observed';
