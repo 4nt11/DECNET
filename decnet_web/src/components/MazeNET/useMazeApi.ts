@@ -78,6 +78,7 @@ export function adaptTopology(detail: TopologyDetail): HydratedTopology {
   const ordered = [...dmzs, ...subnets];
   const nets: Net[] = ordered.map((lan, i) => ({
     id: lan.id,
+    name: lan.name,
     label: lan.name.toUpperCase(),
     cidr: lan.subnet,
     kind: lan.is_dmz ? 'dmz' : 'subnet',

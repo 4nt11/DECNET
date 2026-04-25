@@ -2,7 +2,13 @@ export type NetKind = 'internet' | 'subnet' | 'dmz';
 
 export interface Net {
   id: string;
+  /** Display string (uppercased for the canvas chrome). */
   label: string;
+  /** Canonical LAN name as stored on the backend — lowercase. Use
+   *  this (not ``label``) for any API call that identifies a LAN by
+   *  name (mutator attach/detach, delete, etc.); the mutator looks
+   *  up case-sensitively and will 404 on the uppercased form. */
+  name: string;
   cidr: string;
   kind: NetKind;
   x: number;

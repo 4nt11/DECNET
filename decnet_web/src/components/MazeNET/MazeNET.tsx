@@ -115,9 +115,10 @@ const MazeNET: React.FC = () => {
           flashErr(null, 'topology already has a DMZ');
           return;
         }
-        // Append to the 3-col grid matching adaptTopology so new drops
-        // never land on top of existing LANs. The raw drop point is
-        // ignored — cleaner than trying to resolve collisions after.
+        // Append to the 3-col grid matching adaptTopology. Counting
+        // existing nets PLUS any pending placeholders (live-topology
+        // enqueued mutations that haven't echoed through SSE yet)
+        // keeps successive drops from stacking on the same cell.
         const w = 300, h = 240;
         const GAP = 40, COLS = 3;
         const i = nets.filter((n) => n.kind !== 'internet').length;
@@ -127,10 +128,23 @@ const MazeNET: React.FC = () => {
         try {
           const subnet = await api.getNextSubnet().catch(() => undefined);
           const lanRes = await editor.createLan(topologyId, { name, is_dmz: isDmz, x, y, ...(subnet ? { subnet } : {}) });
-          if (lanRes.kind !== 'applied') return;
+          if (lanRes.kind !== 'applied') {
+            // Live topology: mutator will materialise the LAN. Drop
+            // a placeholder net so the grid index advances and the
+            // user gets an immediate visual ack. Real LAN arriving
+            // via SSE replaces the placeholder by id when its
+            // canonical id lands; until then, the temp id is unique.
+            const tempId = `pending-lan-${name}`;
+            setNets((p) => [...p, {
+              id: tempId, name, label: name.toUpperCase(),
+              cidr: subnet ?? '', kind: isDmz ? 'dmz' : 'subnet',
+              x, y, w, h,
+            }]);
+            return;
+          }
           const lan = lanRes.data;
           const net: Net = {
-            id: lan.id, label: lan.name.toUpperCase(), cidr: lan.subnet,
+            id: lan.id, name: lan.name, label: lan.name.toUpperCase(), cidr: lan.subnet,
             kind: isDmz ? 'dmz' : 'subnet', x, y, w, h,
           };
           setNets((p) => [...p, net]);
@@ -174,7 +188,7 @@ const MazeNET: React.FC = () => {
             topologyId,
             { name, services: dServices, x: nx, y: ny,
               decky_config: { archetype: archSlug } },
-            overNetId, net.label,
+            overNetId, net.name,
           );
           if (dRes.kind !== 'applied') return;
           const decky = dRes.data;
@@ -223,9 +237,9 @@ const MazeNET: React.FC = () => {
       const toNet = nets.find((n) => n.id === toNetId);
       const nodeName = node?.kind === 'decky' ? node.name : '';
       if (existingEdge) {
-        await editor.detachEdge(topologyId, existingEdge.id, nodeName, fromNet?.label ?? '');
+        await editor.detachEdge(topologyId, existingEdge.id, nodeName, fromNet?.name ?? '');
       }
-      await editor.attachEdge(topologyId, { decky_uuid: nodeId, lan_id: toNetId }, nodeName, toNet?.label ?? '');
+      await editor.attachEdge(topologyId, { decky_uuid: nodeId, lan_id: toNetId }, nodeName, toNet?.name ?? '');
     } catch (err) {
       flashErr(err, 'reparent failed');
     }
@@ -264,7 +278,7 @@ const MazeNET: React.FC = () => {
         topologyId,
         { decky_uuid: fromId, lan_id: toNode.netId, is_bridge: true },
         fromName,
-        targetNet.label,
+        targetNet.name,
       );
       const backendEdgeId = res.kind === 'applied' ? res.data.id : `enqueued:${res.mutationId}`;
       const id = `viz-${fromId}-${toId}-${Date.now()}`;
@@ -299,7 +313,7 @@ const MazeNET: React.FC = () => {
         const mName = m.kind === 'decky' ? m.name : '';
         await editor.deleteDecky(topologyId, m.id, mName);
       }
-      await editor.deleteLan(topologyId, id, net.label);
+      await editor.deleteLan(topologyId, id, net.name);
       setNets((p) => p.filter((n) => n.id !== id));
       setNodes((p) => p.filter((n) => n.netId !== id));
       setEdges((p) => p.filter((e) => {
@@ -346,7 +360,7 @@ const MazeNET: React.FC = () => {
     const toNode = nodes.find((n) => n.id === edge.to);
     const targetNet = toNode ? nets.find((n) => n.id === toNode.netId) : undefined;
     const fromName = fromNode?.kind === 'decky' ? fromNode.name : '';
-    const lanName = targetNet?.label ?? '';
+    const lanName = targetNet?.name ?? '';
     try {
       await editor.detachEdge(topologyId, edge.backendEdgeId, fromName, lanName);
       setEdges((p) => p.filter((e) => e.id !== id));
@@ -366,7 +380,7 @@ const MazeNET: React.FC = () => {
         topologyId,
         { name, services: [...n.services], x: n.x + 24, y: n.y + 24,
           decky_config: { archetype: n.archetype } },
-        n.netId, parentNet?.label ?? '',
+        n.netId, parentNet?.name ?? '',
       );
       if (dRes.kind !== 'applied') return;
       const decky = dRes.data;
@@ -474,7 +488,7 @@ const MazeNET: React.FC = () => {
             topologyId,
             { name, services: [...a.services], x: 20, y: 40,
               decky_config: { archetype: a.slug } },
-            id, net.label,
+            id, net.name,
           );
           if (dRes.kind !== 'applied') return;
           const decky = dRes.data;
