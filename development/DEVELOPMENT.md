@@ -58,7 +58,7 @@
 - [x] **Real-time alerting via webhooks** — Admin-configurable outbound webhooks (SIEM/SOAR integration: Wazuh/Shuffle/TheHive/n8n) with HMAC-SHA256 signing, topic-pattern filtering, and bounded retry. Slack/Telegram-specific senders remain as per-destination work (they accept generic webhook payloads already).
 - [ ] **Threat intel enrichment** — Auto-lookup IPs against AbuseIPDB, Shodan, and GreyNoise.
 - [ ] **Attack campaign clustering** — Group sessions by signatures and timing patterns.
-- [ ] **GeoIP mapping** — Visualize attacker origin and ASN data on a map.
+- [x] **GeoIP mapping** — Visualize attacker origin and ASN data on a map.
 - [ ] **TTPs tagging** — Map observed behaviors to MITRE ATT&CK techniques.
 
 ## Dashboard & Visibility
@@ -119,9 +119,9 @@
 - [ ] **mDNS/LLMNR leakage** — Attacker hostname/device info from misconfigured systems
 
 ### Geolocation & Infrastructure
-- [ ] **ASN lookup** — Source IP autonomous system number and org name
+- [x] **ASN lookup** — Source IP autonomous system number and org name
 - [ ] **BGP prefix / RPKI validity** — Route origin legitimacy
-- [ ] **PTR records** — rDNS for attacker IPs (catches infra with forgotten reverse DNS)
+- [x] **PTR records** — rDNS for attacker IPs (catches infra with forgotten reverse DNS)
 - [ ] **Latency triangulation** — JA4L RTT estimates for rough geolocation
 
 ### Service-Level Behavioral Profiling
