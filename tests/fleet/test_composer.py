@@ -242,3 +242,28 @@ def test_multiple_deckies_different_build_bases():
     assert base_img_01 == "debian:bookworm-slim"
     assert base_img_02 == "ubuntu:22.04"
     assert base_img_01 != base_img_02
+
+
+# ---------------------------------------------------------------------------
+# Fleet ownership labels — collector keys off these to recognize freshly-
+# deployed containers without consulting decnet-state.json (the previous
+# state-file lookup race silently dropped containers whose Docker start
+# event arrived before the state write completed).
+# ---------------------------------------------------------------------------
+
+def test_service_container_carries_fleet_labels():
+    config = _make_config(["http"], distro="debian")
+    compose = generate_compose(config)
+    labels = compose["services"]["decky-01-http"]["labels"]
+    assert labels["decnet.fleet.service"] == "true"
+    assert labels["decnet.fleet.decky"] == "decky-01"
+    assert labels["decnet.fleet.service_name"] == "http"
+
+
+def test_base_container_does_not_carry_service_label():
+    """Base containers run sleep — they don't emit logs and must NOT be
+    streamed by the collector, so the service marker stays off them."""
+    config = _make_config(["http"], distro="debian")
+    compose = generate_compose(config)
+    base = compose["services"]["decky-01"]
+    assert "decnet.fleet.service" not in (base.get("labels") or {})

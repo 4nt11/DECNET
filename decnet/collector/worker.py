@@ -224,45 +224,68 @@ def _load_service_container_names() -> set[str]:
 
 
 _TOPOLOGY_SERVICE_LABEL = "decnet.topology.service"
+_FLEET_SERVICE_LABEL = "decnet.fleet.service"
 
 
-def _has_topology_service_label(labels: Optional[dict]) -> bool:
-    """MazeNET topology containers are tagged at compose-time (see
-    ``decnet/topology/compose.py``) so the collector can discover them
-    without consulting ``decnet-state.json`` — that state file only
-    knows about legacy fleet deckies."""
+def _has_decnet_service_label(labels: Optional[dict]) -> bool:
+    """Recognize both fleet (``decnet.fleet.service``, set by
+    ``decnet/composer.py``) and MazeNET topology (``decnet.topology.service``,
+    set by ``decnet/topology/compose.py``) containers.
+
+    Label-based detection is the canonical path: it's stateless and avoids
+    the race between ``docker compose up`` and the ``decnet-state.json``
+    write that previously caused freshly-deployed fleet containers to be
+    silently dropped by the docker-events watcher.
+    """
     if not labels:
         return False
-    return labels.get(_TOPOLOGY_SERVICE_LABEL) == "true"
+    return (
+        labels.get(_TOPOLOGY_SERVICE_LABEL) == "true"
+        or labels.get(_FLEET_SERVICE_LABEL) == "true"
+    )
 
 
 def is_service_container(container) -> bool:
-    """Return True if this Docker container is a known DECNET service container."""
+    """Return True if this Docker container is a known DECNET service container.
+
+    Label-based detection is preferred (works for both fleet and MazeNET
+    topology containers without touching decnet-state.json). The
+    state-file name match remains as a fallback so containers built from
+    older composes — which predate the ``decnet.fleet.service`` label —
+    are still picked up.
+    """
     if isinstance(container, str):
         return container.lstrip("/") in _load_service_container_names()
-    name = container.name.lstrip("/")
-    if name in _load_service_container_names():
-        return True
-    # MazeNET topology containers aren't in decnet-state.json — discover
-    # them via compose-time labels instead.  Tolerant to stub objects
-    # that don't expose .attrs/.labels (unit tests).
     labels: Optional[dict] = None
     attrs = getattr(container, "attrs", None)
     if isinstance(attrs, dict):
         labels = (attrs.get("Config") or {}).get("Labels")
     if labels is None:
         labels = getattr(container, "labels", None)
-    return _has_topology_service_label(labels)
+    if _has_decnet_service_label(labels):
+        return True
+    # Fallback: legacy containers without labels still match by name.
+    name = container.name.lstrip("/")
+    return name in _load_service_container_names()
 
 
 def is_service_event(attrs: dict) -> bool:
-    """Return True if a Docker start event is for a known DECNET service container."""
-    name = attrs.get("name", "").lstrip("/")
-    if name in _load_service_container_names():
+    """Return True if a Docker start event is for a known DECNET service container.
+
+    Docker start-event attrs flatten every container label alongside the
+    ``name``/``image`` keys — no separate ``labels`` sub-dict — so label
+    detection happens directly on ``attrs``.
+
+    Prefer the label path because it's race-free with respect to the
+    ``decnet-state.json`` write that ``decnet deploy`` performs around
+    ``docker compose up``: a freshly-started container's start event can
+    arrive before the state file has been updated, and the legacy
+    name-based fallback would then drop the event.
+    """
+    if _has_decnet_service_label(attrs):
         return True
-    # Docker start-event attrs contains every container label flat alongside
-    # 'name' / 'image' — no separate 'labels' sub-dict.
-    return attrs.get(_TOPOLOGY_SERVICE_LABEL) == "true"
+    name = attrs.get("name", "").lstrip("/")
+    return name in _load_service_container_names()
 
 
 # ─── Blocking stream worker (runs in a thread) ────────────────────────────────

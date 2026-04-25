@@ -303,6 +303,54 @@ class TestTopologyLabelDiscovery:
             assert is_service_container(c) is True
 
 
+class TestFleetLabelDiscovery:
+    """Fleet (legacy) containers stamped with ``decnet.fleet.service=true``
+    by ``decnet/composer.py`` must be picked up by the events watcher even
+    when ``decnet-state.json`` hasn't been refreshed yet — that's the race
+    that previously caused freshly-deployed containers to be silently
+    ignored."""
+
+    def _labelled(self, name: str, labels: dict):
+        return SimpleNamespace(
+            name=name,
+            attrs={"Config": {"Labels": labels}},
+            labels=labels,
+        )
+
+    def test_fleet_labelled_container_matches_without_state(self):
+        with patch("decnet.collector.worker._load_service_container_names", return_value=set()):
+            c = self._labelled(
+                "omega-decky-ssh",
+                {"decnet.fleet.service": "true", "decnet.fleet.decky": "omega-decky"},
+            )
+            assert is_service_container(c) is True
+
+    def test_fleet_labelled_event_matches_without_state(self):
+        with patch("decnet.collector.worker._load_service_container_names", return_value=set()):
+            attrs = {
+                "name": "omega-decky-ssh",
+                "decnet.fleet.service": "true",
+                "decnet.fleet.decky": "omega-decky",
+            }
+            assert is_service_event(attrs) is True
+
+    def test_unlabelled_event_falls_back_to_state(self):
+        """Containers built before this label landed still match by name."""
+        with patch("decnet.collector.worker._load_service_container_names", return_value=_KNOWN_NAMES):
+            assert is_service_event({"name": "omega-decky-http"}) is True
+
+    def test_unrelated_label_does_not_match(self):
+        with patch("decnet.collector.worker._load_service_container_names", return_value=set()):
+            c = self._labelled(
+                "redis",
+                {"com.docker.compose.project": "redis", "decnet.fleet.service": "false"},
+            )
+            assert is_service_container(c) is False
+            assert is_service_event(
+                {"name": "redis", "decnet.fleet.service": "false"}
+            ) is False
+
+
 class TestLoadServiceContainerNames:
     def test_with_valid_state(self, tmp_path, monkeypatch):
         import decnet.config
