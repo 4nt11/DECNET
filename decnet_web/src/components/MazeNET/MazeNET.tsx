@@ -7,6 +7,7 @@ import {
 } from '../../icons';
 import './MazeNET.css';
 import axios from '../../utils/api';
+import { useSwarmHosts } from '../../hooks/useSwarmHosts';
 import Palette from './Palette';
 import Canvas from './Canvas';
 import Inspector from './Inspector';
@@ -39,12 +40,15 @@ const MazeNET: React.FC = () => {
   const [params] = useSearchParams();
   const topologyId = params.get('topology') ?? '';
 
+  const { byUuid: hostsByUuid } = useSwarmHosts();
   const [nets,  setNets]  = useState<Net[]>([]);
   const [nodes, setNodes] = useState<MazeNode[]>([]);
   const [edges, setEdges] = useState<Edge[]>([]);
   const [topoStatus, setTopoStatus] = useState<string>('pending');
   const [topoName, setTopoName] = useState<string>('');
   const [topoVersion, setTopoVersion] = useState<number>(0);
+  const [topoTargetHost, setTopoTargetHost] = useState<string | null>(null);
+  const [topoMode, setTopoMode] = useState<string>('unihost');
   const [selection, setSelection] = useState<Selection>(null);
   const [inspectorOpen, setInspectorOpen] = useState(true);
   const [paletteOpen, setPaletteOpen] = useState(true);
@@ -580,6 +584,8 @@ const MazeNET: React.FC = () => {
       setTopoStatus(h.topology.status);
       setTopoName(h.topology.name);
       setTopoVersion(h.topology.version);
+      setTopoMode(h.topology.mode ?? 'unihost');
+      setTopoTargetHost(h.topology.target_host_uuid ?? null);
       setLoadErr(null);
     } catch (err) {
       setLoadErr((err as Error)?.message ?? 'topology load failed');
@@ -658,6 +664,16 @@ const MazeNET: React.FC = () => {
           <h1>MAZENET · {topoName || topologyId}</h1>
           <div className="maze-page-sub">
             NETWORK OF NETWORKS · {topoStatus.toUpperCase()} · v{topoVersion} ·{' '}
+            HOST:{' '}
+            {topoMode === 'agent' && topoTargetHost ? (
+              <span title={topoTargetHost}>
+                <Server size={11} style={{ marginRight: 3, verticalAlign: '-1px' }} />
+                {hostsByUuid.get(topoTargetHost)?.name ?? topoTargetHost.slice(0, 8)}
+              </span>
+            ) : (
+              <span>MASTER</span>
+            )}
+            {' · '}
             {nets.length} NETS · {nodes.length} NODES · {edges.length} PATHS ·{' '}
             {runningDeckies}/{deckyNodes.length} DECKIES RUNNING
             {streamEnabled && (

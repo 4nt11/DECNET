@@ -1,7 +1,8 @@
 import React, { useCallback, useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Network, Plus, Power, Trash2, UploadCloud, RefreshCw, Skull } from '../../icons';
+import { Network, Plus, Power, Trash2, UploadCloud, RefreshCw, Skull, Server, Cpu } from '../../icons';
 import api from '../../utils/api';
+import { useSwarmHosts } from '../../hooks/useSwarmHosts';
 import { clearLayout } from '../MazeNET/useMazeLayoutStore';
 import CreateTopologyWizard from './CreateTopologyWizard';
 import EmptyState from '../EmptyState/EmptyState';
@@ -42,6 +43,7 @@ const statusClass = (s: string): string => {
 
 const TopologyList: React.FC = () => {
   const navigate = useNavigate();
+  const { byUuid: hostsByUuid } = useSwarmHosts();
   const [rows, setRows] = useState<TopologySummary[]>([]);
   const [loading, setLoading] = useState(true);
   const [err, setErr] = useState<string | null>(null);
@@ -205,7 +207,17 @@ const TopologyList: React.FC = () => {
               <span className={`tlist-pill ${statusClass(r.status)}`}>{r.status}</span>
             </div>
             <div className="tlist-card-meta">
-              <span>mode: {r.mode}</span>
+              {r.mode === 'agent' && r.target_host_uuid ? (
+                <span title={r.target_host_uuid}>
+                  <Server size={11} style={{ marginRight: 4, verticalAlign: '-1px' }} />
+                  {hostsByUuid.get(r.target_host_uuid)?.name ?? `host:${r.target_host_uuid.slice(0, 8)}`}
+                </span>
+              ) : (
+                <span>
+                  <Cpu size={11} style={{ marginRight: 4, verticalAlign: '-1px' }} />
+                  master
+                </span>
+              )}
               <span>v{r.version}</span>
               <span>{new Date(r.created_at).toLocaleString()}</span>
             </div>

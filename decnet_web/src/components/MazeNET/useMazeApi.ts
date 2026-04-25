@@ -40,6 +40,7 @@ export interface TopologySummary {
   id: string;
   name: string;
   mode: string;
+  target_host_uuid: string | null;
   status: string;
   version: number;
 }
