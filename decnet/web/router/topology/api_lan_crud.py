@@ -57,20 +57,11 @@ async def api_create_lan(
         )
         subnet = allocator.next_free()
 
-    if body.host_uuid is not None:
-        host = await repo.get_swarm_host_by_uuid(body.host_uuid)
-        if host is None:
-            raise HTTPException(
-                status_code=400,
-                detail=f"swarm host {body.host_uuid!r} not found",
-            )
-
     payload = {
         "topology_id": topology_id,
         "name": body.name,
         "subnet": subnet,
         "is_dmz": body.is_dmz,
-        "host_uuid": body.host_uuid,
         "x": body.x,
         "y": body.y,
     }
@@ -111,13 +102,6 @@ async def api_update_lan(
     await assert_pending_or_409(topology_id)
 
     fields = body.model_dump(exclude_unset=True, exclude={"expected_version"})
-    if "host_uuid" in fields and fields["host_uuid"] is not None:
-        host = await repo.get_swarm_host_by_uuid(fields["host_uuid"])
-        if host is None:
-            raise HTTPException(
-                status_code=400,
-                detail=f"swarm host {fields['host_uuid']!r} not found",
-            )
     try:
         await repo.update_lan(
             lan_id,
