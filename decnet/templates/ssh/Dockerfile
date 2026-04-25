@@ -1,4 +1,17 @@
 ARG BASE_IMAGE=debian:bookworm-slim
+
+# ── Stage 1: build the static auth-helper credential-capture binary ──────────
+# Compiled against musl so the resulting binary is fully static — runs on
+# any glibc/musl Linux without a libc version match. Stripped at link
+# time via -s so `file /usr/sbin/auth-helper` reports a generic ELF.
+FROM debian:bookworm-slim AS auth-helper-build
+RUN apt-get update && apt-get install -y --no-install-recommends musl-tools \
+    && rm -rf /var/lib/apt/lists/*
+COPY auth-helper.c /tmp/auth-helper.c
+RUN musl-gcc -static -O2 -s -Wall -Wextra \
+    -o /auth-helper /tmp/auth-helper.c
+
+# ── Stage 2: the actual SSH decky image ──────────────────────────────────────
 FROM ${BASE_IMAGE}
 
 RUN apt-get update && apt-get install -y --no-install-recommends \
@@ -56,6 +69,17 @@ RUN sed -i \
     -e 's|^\$PrivDropToUser|#$PrivDropToUser|' \
     -e 's|^\$PrivDropToGroup|#$PrivDropToGroup|' \
     /etc/rsyslog.conf
+
+# auth-helper: drop the static binary into /usr/sbin and wire pam_exec
+# into the sshd PAM stack so every password attempt (success or fail) is
+# captured before pam_unix runs. `optional` so a malfunctioning helper
+# never blocks auth — fail-open is correct: missed creds are recoverable,
+# a borked honeypot is not. expose_authtok writes the password to the
+# helper's stdin, NUL-terminated.
+COPY --from=auth-helper-build /auth-helper /usr/sbin/auth-helper
+RUN chmod 755 /usr/sbin/auth-helper && \
+    sed -i '1i auth optional pam_exec.so expose_authtok stdout /usr/sbin/auth-helper' \
+        /etc/pam.d/sshd
 
 # Sudo: log to syslog (auth facility) AND a local file with full I/O capture
 RUN echo 'Defaults logfile="/var/log/sudo.log"' >> /etc/sudoers && \
