@@ -1,6 +1,6 @@
 # DECNET — Technical Debt Register
 
-> Last updated: 2026-04-25 — Credential model gained `secret_kind` discriminator; Postgres MD5 + VNC DES challenge creds now land in the table; MQTT regression from the legacy-adapter removal patched.
+> Last updated: 2026-04-25 — Cred coverage rolled out across 9 more services (HTTP family + DB hash creds + form bodies + MongoDB SCRAM); RDP/SMB/NLA capture deferred to DEBT-040.
 > Severity: 🔴 Critical · 🟠 High · 🟡 Medium · 🟢 Low
 
 ---
@@ -392,6 +392,21 @@ Closed by commits `aebb9f8` (encode_secret() helper), `abb4dd9` (six-service mig
 
 ---
 
+### DEBT-040 — RDP, SMB, RDP-NLA cred capture (protocol framers)
+**Files:** `decnet/templates/rdp/server.py`, `decnet/templates/smb/server.py`, `decnet/templates/_shared/ntlmssp.py` (already shipped).
+
+Three protocol-heavy templates still capture only connection bytes; their wire format carries credentials we currently throw away:
+
+1. **SMB** — `SimpleSMBServer` (Impacket) handles auth opaquely. NTLMSSP Type 3 messages carrying the NTLMv1/v2 hash flow through without ever surfacing in the `Credential` table. To fix: replace SimpleSMBServer with a hand-rolled asyncio SMB2 framer that (a) responds to Negotiate Protocol with a stock dialect, (b) responds to the first Session Setup with a stock NTLMSSP Type 2 challenge, (c) parses the second Session Setup's NTLMSSP Type 3 via the already-shipped `_shared/ntlmssp.py:parse_type3()`, (d) returns STATUS_LOGON_FAILURE so the attacker can't actually authenticate. Rough budget: 200 LoC for the SMB2/SPNEGO framer, parser is already there. Lands creds as `secret_kind="ntlmssp_v2"`.
+
+2. **RDP basic auth** — `templates/rdp/server.py` accepts an X.224 connection but immediately drops the connection on data. To capture TS_LOGON_INFO (the legacy plaintext-recoverable auth that pre-NLA mstsc and old Hydra/MSF modules use), the template needs TPKT → X.224 Data PDU → MCS Send Data Request → Client Info PDU framing. Plaintext-recoverable, lands as `secret_kind="plaintext"`. Rough budget: 150 LoC. Limited operator value — most modern attackers default to NLA — but ships with Phase 4 of the original cred-coverage plan.
+
+3. **RDP NLA / CredSSP** — the realistic-attacker path. RDP NLA wraps CredSSP, which wraps a TLS handshake, which carries SPNEGO/NTLM blobs. To capture: respond to the Connection Request advertising `PROTOCOL_HYBRID`, upgrade the socket to TLS using a self-signed cert (existing `https/` infra reusable), parse the inner CredSSP TSRequest ASN.1 DER, extract the negoTokens (NTLMSSP Type 1/2/3), reuse `_shared/ntlmssp.py:parse_type3()` for the Type 3 hash. Rough budget: 250 LoC, biggest of the three.
+
+**Already shipped as Phase 5/7 prep:** `decnet/templates/_shared/ntlmssp.py` (Type 3 parser with 7 unit tests). Both SMB and RDP-NLA work consume it directly.
+
+**Status:** Open — substantial protocol implementations each. Land independently as separate commits when scheduling allows. Cred-reuse analytics already work without these (the existing 12 services cover the bulk of attacker traffic); these three just round out fleet coverage.
+
 ### DEBT-032 — Prober can't detect fingerprint rotation without mutation
 **Files:** `decnet/prober/worker.py` (~lines 235, 286, 334, 392), `decnet/web/db/models.py` (new `decky_service_fingerprints` table).
 
@@ -473,6 +488,7 @@ The prober already computes JARM (`worker.py:286`), HASSH (`worker.py:334`), and
 | DEBT-037 | 🟡 Medium | Integration / Webhooks | open (tracks MVP follow-ups) |
 | DEBT-038 | 🟡 Medium | Honeypot / SSH cred capture | open (document-only) |
 | ~~DEBT-039~~ | ✅ | Honeypot / Cred emitters | resolved |
+| DEBT-040 | 🟡 Medium | Honeypot / RDP+SMB cred framers | open |
 
-**Remaining open:** DEBT-011 (Alembic), DEBT-023 (image pinning), DEBT-026 (modular mailboxes), DEBT-027 (Dynamic bait store), DEBT-028 (deploy endpoint tests), DEBT-032 (fingerprint rotation detection), DEBT-033 (transcript shard rotation), DEBT-035 (artifacts uid/gid alignment), DEBT-036 (session-profile ingester), DEBT-037 (webhook delivery hardening), DEBT-038 (SSH PAM cred-capture limitations — document-only).
+**Remaining open:** DEBT-011 (Alembic), DEBT-023 (image pinning), DEBT-026 (modular mailboxes), DEBT-027 (Dynamic bait store), DEBT-028 (deploy endpoint tests), DEBT-032 (fingerprint rotation detection), DEBT-033 (transcript shard rotation), DEBT-035 (artifacts uid/gid alignment), DEBT-036 (session-profile ingester), DEBT-037 (webhook delivery hardening), DEBT-038 (SSH PAM cred-capture limitations — document-only), DEBT-040 (RDP / SMB / NLA cred framers).
 **Estimated remaining effort:** ~24 hours. DEBT-030 Phase B (optimistic staged-buffer editor) is a follow-up, not debt.
