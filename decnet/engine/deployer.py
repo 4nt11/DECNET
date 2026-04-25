@@ -8,6 +8,7 @@ import subprocess  # nosec B404
 import time
 from pathlib import Path
 
+import anyio
 import docker
 from rich.console import Console
 from rich.table import Table
@@ -744,7 +745,14 @@ async def deploy_topology(repo, topology_id: str, *, dry_run: bool = False) -> N
         console.print(
             f"[bold cyan]Topology compose file written[/] → {compose_path}"
         )
-        _compose_with_retry("up", "--build", "-d", compose_file=compose_path)
+        # Offload to a worker thread so the API event loop stays
+        # responsive during the build — otherwise every other request
+        # (mutator events, SSE, status polls) waits behind compose.
+        await anyio.to_thread.run_sync(
+            lambda: _compose_with_retry(
+                "up", "--build", "-d", compose_file=compose_path,
+            ),
+        )
         compose_started = True
     except Exception as exc:
         log.error("topology %s deploy failed: %s", topology_id, exc)
@@ -808,7 +816,11 @@ async def teardown_topology(repo, topology_id: str) -> None:
 
     if compose_path.exists():
         try:
-            _compose("down", "--remove-orphans", compose_file=compose_path)
+            await anyio.to_thread.run_sync(
+                lambda: _compose(
+                    "down", "--remove-orphans", compose_file=compose_path,
+                ),
+            )
         except subprocess.CalledProcessError as exc:
             log.warning(
                 "topology %s compose down failed (continuing): %s",
