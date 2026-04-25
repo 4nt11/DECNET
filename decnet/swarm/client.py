@@ -16,7 +16,10 @@ The ``host`` is a SwarmHost dict returned by the repository.
 """
 from __future__ import annotations
 
+import asyncio
+import hashlib
 import pathlib
+import socket
 import ssl
 from dataclasses import dataclass
 from typing import Any, Optional
@@ -28,6 +31,24 @@ from decnet.logging import get_logger
 from decnet.swarm import pki
 
 log = get_logger("swarm.client")
+
+
+class FingerprintMismatchError(RuntimeError):
+    """Raised when the worker presents a cert whose SHA-256 fingerprint
+    does not match ``SwarmHost.client_cert_fingerprint``.
+
+    Existence of this error class is the contract that lets the deployer
+    distinguish "wrong worker on the wire" (security event, fail loud)
+    from generic transport errors (retryable, mark slice failed)."""
+
+    def __init__(self, host: str, expected: str, actual: str) -> None:
+        super().__init__(
+            f"agent {host}: cert fingerprint mismatch "
+            f"(expected={expected[:16]}…, got={actual[:16]}…)"
+        )
+        self.host = host
+        self.expected = expected
+        self.actual = actual
 
 # How long a single HTTP operation can take.  Deploy is the long pole —
 # docker compose up pulls images, builds contexts, etc.  Tune via env in a
@@ -99,6 +120,8 @@ class AgentClient:
             self._port = int(host.get("agent_port") or 8765)
             self._host_uuid = host.get("uuid")
             self._host_name = host.get("name")
+            fp = host.get("client_cert_fingerprint")
+            self._expected_fingerprint = fp.lower() if isinstance(fp, str) else None
         else:
             if address is None or agent_port is None:
                 raise ValueError(
@@ -108,6 +131,7 @@ class AgentClient:
             self._port = int(agent_port)
             self._host_uuid = None
             self._host_name = None
+            self._expected_fingerprint = None
 
         self._identity = identity or ensure_master_identity()
         self._verify_hostname = verify_hostname
@@ -135,8 +159,52 @@ class AgentClient:
             timeout=timeout,
         )
 
+    def _fetch_peer_fingerprint(self) -> str:
+        ctx = ssl.SSLContext(ssl.PROTOCOL_TLS_CLIENT)
+        ctx.load_cert_chain(
+            str(self._identity.cert_path), str(self._identity.key_path)
+        )
+        ctx.load_verify_locations(cafile=str(self._identity.ca_cert_path))
+        ctx.verify_mode = ssl.CERT_REQUIRED
+        ctx.check_hostname = self._verify_hostname
+        sock = socket.create_connection((self._address, self._port), timeout=10.0)
+        try:
+            server_hostname = self._address if self._verify_hostname else None
+            with ctx.wrap_socket(sock, server_hostname=server_hostname) as ssock:
+                der = ssock.getpeercert(binary_form=True)
+        finally:
+            try:
+                sock.close()
+            except OSError:
+                pass
+        if not der:
+            raise FingerprintMismatchError(
+                f"{self._address}:{self._port}", self._expected_fingerprint or "", ""
+            )
+        return hashlib.sha256(der).hexdigest().lower()
+
+    async def _verify_pin(self) -> None:
+        if not self._expected_fingerprint:
+            # No pin known for this host (legacy enrollments / explicit address ctor).
+            # Fall through to CA-only validation. Enrollment writes the fingerprint,
+            # so any production host added via `swarm enroll` will have one.
+            return
+        actual = await asyncio.to_thread(self._fetch_peer_fingerprint)
+        if actual != self._expected_fingerprint:
+            raise FingerprintMismatchError(
+                f"{self._address}:{self._port}",
+                self._expected_fingerprint,
+                actual,
+            )
+
     async def __aenter__(self) -> "AgentClient":
         self._client = self._build_client(_TIMEOUT_CONTROL)
+        try:
+            await self._verify_pin()
+        except BaseException:
+            await self._client.aclose()
+            self._client = None
+            raise
         return self
 
     async def __aexit__(self, *exc: Any) -> None:
