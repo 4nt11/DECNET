@@ -22,11 +22,21 @@ from .conftest import load_real_instance_seed, make_fake_syslog_bridge
 # ── Module loader ─────────────────────────────────────────────────────────────
 
 
+def _load_real_ntlmssp():
+    spec = importlib.util.spec_from_file_location(
+        "ntlmssp", "decnet/templates/_shared/ntlmssp.py"
+    )
+    mod = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(mod)
+    return mod
+
+
 def _load_rdp():
-    for key in ("rdp_server", "syslog_bridge", "instance_seed"):
+    for key in ("rdp_server", "syslog_bridge", "instance_seed", "ntlmssp"):
         sys.modules.pop(key, None)
     sys.modules["syslog_bridge"] = make_fake_syslog_bridge()
     sys.modules["instance_seed"] = load_real_instance_seed()
+    sys.modules["ntlmssp"] = _load_real_ntlmssp()
     spec = importlib.util.spec_from_file_location(
         "rdp_server", "decnet/templates/rdp/server.py"
     )

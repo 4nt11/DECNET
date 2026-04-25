@@ -6,6 +6,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     && rm -rf /var/lib/apt/lists/*
 
 COPY syslog_bridge.py /opt/syslog_bridge.py
+COPY instance_seed.py /opt/instance_seed.py
 COPY ntlmssp.py /opt/ntlmssp.py
 COPY server.py /opt/server.py
 COPY entrypoint.sh /entrypoint.sh

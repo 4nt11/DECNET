@@ -22,6 +22,7 @@ import asyncio
 import os
 import struct
 
+import instance_seed
 from ntlmssp import find_ntlmssp, parse_type3
 from syslog_bridge import syslog_line, write_syslog_file, forward_syslog
 
@@ -44,10 +45,13 @@ SMB2_SESSION_SETUP = 0x0001
 SMB2_MAGIC = b"\xfeSMB"
 NBSS_SESSION_MESSAGE = 0x00
 
-# Server's fixed 8-byte NTLM challenge (random-looking; honeypot, not crypto)
-SERVER_CHALLENGE = b"\x11\x22\x33\x44\x55\x66\x77\x88"
-# Stable server GUID — 16 zero bytes is fine for a honeypot.
-SERVER_GUID = b"\x00" * 16
+# Per-instance NTLM challenge: deterministic-per-decky-but-different-
+# across-the-fleet. Derived from NODE_NAME so two captures from the
+# same decky reuse the same challenge (lets offline attackers retry
+# wordlists), while every decky in the fleet differs (looks like a
+# real population of hosts to a scanner).
+SERVER_CHALLENGE = instance_seed.random_bytes(8, "ntlm_challenge")
+SERVER_GUID = instance_seed.random_bytes(16, "smb_server_guid")
 
 # Read caps; an attacker shouldn't be able to make us allocate
 # unbounded memory just by lying about NetBIOS frame length.
