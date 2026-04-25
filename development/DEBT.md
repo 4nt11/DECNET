@@ -1,6 +1,6 @@
 # DECNET — Technical Debt Register
 
-> Last updated: 2026-04-25 — DEBT-039 resolved (six service emitters on standardized shape, legacy ingester adapter deleted).
+> Last updated: 2026-04-25 — Credential model gained `secret_kind` discriminator; Postgres MD5 + VNC DES challenge creds now land in the table; MQTT regression from the legacy-adapter removal patched.
 > Severity: 🔴 Critical · 🟠 High · 🟡 Medium · 🟢 Low
 
 ---

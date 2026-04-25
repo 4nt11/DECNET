@@ -11,6 +11,7 @@ import os
 import struct
 
 import instance_seed as _seed
+import base64 as _base64
 from syslog_bridge import syslog_line, write_syslog_file, forward_syslog
 
 NODE_NAME = os.environ.get("NODE_NAME", "pgserver")
@@ -137,10 +138,27 @@ class PostgresProtocol(asyncio.Protocol):
         self._transport.write(auth_md5)
 
     def _handle_password(self, payload: bytes):
+        # Postgres MD5 challenge-response: the wire form is the literal
+        # ASCII string "md5" + 32 hex chars (md5(md5(pw+user)+salt)).
+        # Plaintext is unrecoverable, so we land this in the Credential
+        # table as secret_kind="postgres_md5_challenge" — secret_b64
+        # carries the raw hash bytes (after stripping the "md5" prefix
+        # and hex-decoding) for content-addressable reuse within-kind.
         pw_hash = payload.rstrip(b"\x00").decode(errors="replace")
-        _log("auth", src=self._peer[0], pw_hash=pw_hash,
-             username=getattr(self, "_username", ""),
-             database=getattr(self, "_database", ""))
+        _hex = pw_hash[3:] if pw_hash.startswith("md5") else pw_hash
+        try:
+            _raw = bytes.fromhex(_hex)
+        except ValueError:
+            _raw = _hex.encode("utf-8", errors="replace")
+        _b64 = _base64.b64encode(_raw).decode("ascii")
+        _user = getattr(self, "_username", "")
+        _log("auth", src=self._peer[0],
+             username=_user, principal=_user,
+             database=getattr(self, "_database", ""),
+             pw_hash=pw_hash,
+             secret_kind="postgres_md5_challenge",
+             secret_printable=pw_hash,
+             secret_b64=_b64)
         user = getattr(self, "_username", "")
         msg = f'password authentication failed for user "{user}"'
         _seed.jitter_sync(20, 90)

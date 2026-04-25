@@ -8,6 +8,7 @@ failed". Logs the raw response for offline cracking.
 
 import asyncio
 import os
+import base64 as _base64
 from syslog_bridge import syslog_line, write_syslog_file, forward_syslog
 
 NODE_NAME = os.environ.get("NODE_NAME", "desktop")
@@ -68,7 +69,16 @@ class VNCProtocol(asyncio.Protocol):
                 return
             response = self._buf[:16]
             self._buf = self._buf[16:]
-            _log("auth_response", src=self._peer[0], response=response.hex())
+            # VNC protocol: 16-byte DES-encrypted challenge. Plaintext
+            # password is irrecoverable, so we land this credential as
+            # secret_kind="vnc_des_response" — secret_b64 carries the
+            # raw 16 bytes for content-addressable within-kind reuse.
+            _hex = response.hex()
+            _log("auth_response", src=self._peer[0],
+                 response=_hex,
+                 secret_kind="vnc_des_response",
+                 secret_printable=_hex,
+                 secret_b64=_base64.b64encode(response).decode("ascii"))
             # SecurityResult: 1 = failed
             self._transport.write(b"\x00\x00\x00\x01")
             # Failure reason

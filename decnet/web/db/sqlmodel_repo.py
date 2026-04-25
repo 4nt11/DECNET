@@ -557,11 +557,13 @@ class SQLModelRepository(BaseRepository):
             payload["fields"] = json.dumps(payload["fields"], ensure_ascii=True)
 
         principal = payload.get("principal")
+        secret_kind = payload.get("secret_kind") or "plaintext"
         async with self._session() as session:
             stmt = select(Credential).where(
                 Credential.attacker_ip == payload["attacker_ip"],
                 Credential.decky_name == payload["decky_name"],
                 Credential.service == payload["service"],
+                Credential.secret_kind == secret_kind,
                 Credential.secret_sha256 == payload["secret_sha256"],
                 # NULL == NULL is False under SQL — branch the predicate.
                 (Credential.principal == principal) if principal is not None
@@ -582,6 +584,7 @@ class SQLModelRepository(BaseRepository):
                 decky_name=payload["decky_name"],
                 service=payload["service"],
                 principal=principal,
+                secret_kind=secret_kind,
                 secret_sha256=payload["secret_sha256"],
                 secret_b64=payload.get("secret_b64"),
                 secret_printable=payload.get("secret_printable"),

@@ -72,7 +72,22 @@ class Credential(SQLModel, table=True):
     decky_name: str = Field(index=True)
     service: str = Field(index=True)
     principal: Optional[str] = Field(default=None, index=True, max_length=256)
-    # Universal lossless secret representations.
+    # Discriminator for what `secret_b64` actually contains. Default
+    # ``"plaintext"`` — a recoverable password the attacker sent on the
+    # wire (SSH/Telnet/FTP/IMAP/POP3/SMTP/Redis/LDAP/MQTT). Other kinds:
+    # ``"postgres_md5_challenge"`` (md5(md5(pw+user)+salt) hex bytes
+    # the attacker sent in the Postgres password message — plaintext
+    # irrecoverable), ``"vnc_des_response"`` (16-byte DES-encrypted
+    # challenge response — same shape).
+    #
+    # Reuse semantics gracefully degrade: same secret_sha256 only
+    # correlates within a single ``secret_kind``. Cross-kind matches
+    # are meaningless because different challenges produce different
+    # bytes for the same plaintext password.
+    secret_kind: str = Field(default="plaintext", index=True, max_length=32)
+    # Universal lossless secret representations. For non-plaintext
+    # kinds, secret_b64 is base64 of the raw attacker-sent bytes (after
+    # hex-decode for protocols that ship the response as a hex string).
     secret_sha256: str = Field(index=True, max_length=64)
     secret_b64: Optional[str] = Field(default=None, max_length=2048)
     # Best-effort printable form — non-printable bytes collapsed to '?'

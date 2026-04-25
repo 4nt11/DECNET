@@ -246,12 +246,14 @@ async def _ingest_credential_native(
     sha256_hex = hashlib.sha256(raw).hexdigest()
     principal = fields.get("principal") or fields.get("username")
     secret_printable = fields.get("secret_printable")
+    secret_kind = fields.get("secret_kind") or "plaintext"
 
     await repo.upsert_credential({
         "attacker_ip": log_data.get("attacker_ip"),
         "decky_name": log_data.get("decky"),
         "service": log_data.get("service"),
         "principal": _truncate_with_warn(principal, _PRINCIPAL_MAX, "principal"),
+        "secret_kind": secret_kind,
         "secret_sha256": sha256_hex,
         "secret_b64": _truncate_with_warn(b64, _SECRET_B64_MAX, "secret_b64"),
         "secret_printable": _truncate_with_warn(

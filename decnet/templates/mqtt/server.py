@@ -14,7 +14,12 @@ import random
 import struct
 
 import instance_seed as _seed
-from syslog_bridge import syslog_line, write_syslog_file, forward_syslog
+from syslog_bridge import (
+    encode_secret,
+    forward_syslog,
+    syslog_line,
+    write_syslog_file,
+)
 
 NODE_NAME = os.environ.get("NODE_NAME", "mqtt-broker")
 SERVICE_NAME   = "mqtt"
@@ -256,7 +261,17 @@ class MQTTProtocol(asyncio.Protocol):
 
             if pkt_type == 1:  # CONNECT
                 info = _parse_connect(payload)
-                _log("auth", **info)
+                # Migrate auth event to the universal credential SD shape
+                # so the ingester's native branch picks up the row. The
+                # legacy username/password keys are intentionally NOT
+                # forwarded — encode_secret() supplies secret_printable
+                # and secret_b64 in their place.
+                _user = info.get("username", "")
+                _password = info.get("password", "")
+                _passthrough = {k: v for k, v in info.items()
+                                if k not in ("username", "password")}
+                _log("auth", username=_user, principal=_user,
+                     **encode_secret(_password), **_passthrough)
                 # Decide connection: accept-all > cred list > deny.
                 cred = (info.get("username", ""), info.get("password", ""))
                 accepted = (

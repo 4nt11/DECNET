@@ -155,6 +155,74 @@ async def test_ldap_principal_is_dn():
 
 
 @pytest.mark.asyncio
+async def test_mqtt_native_shape():
+    """MQTT CONNECT — username + password decoded from the wire,
+    emitted as principal + secret_b64. Was silently dropped between
+    Phase 3 (legacy adapter removed) and the MQTT migration commit."""
+    from decnet.web.ingester import _extract_bounty
+    repo = MagicMock(); repo.upsert_credential = AsyncMock()
+    await _extract_bounty(repo, _native_log(
+        "mqtt", principal="iotuser", password="iotpass",
+    ))
+    cred = repo.upsert_credential.call_args[0][0]
+    assert cred["service"] == "mqtt"
+    assert cred["principal"] == "iotuser"
+    assert cred["secret_sha256"] == hashlib.sha256(b"iotpass").hexdigest()
+
+
+@pytest.mark.asyncio
+async def test_postgres_hash_credential():
+    """Postgres MD5 challenge-response — plaintext irrecoverable, lands
+    as secret_kind=postgres_md5_challenge with the raw hash bytes."""
+    from decnet.web.ingester import _extract_bounty
+    repo = MagicMock(); repo.upsert_credential = AsyncMock()
+    pw_hash = "md5" + "ab" * 16  # 32 hex chars after the "md5" prefix
+    raw = bytes.fromhex("ab" * 16)
+    log_data = {
+        "decky": "decky-01",
+        "service": "postgres",
+        "attacker_ip": "10.0.0.5",
+        "fields": {
+            "username": "postgres",
+            "principal": "postgres",
+            "pw_hash": pw_hash,
+            "secret_kind": "postgres_md5_challenge",
+            "secret_printable": pw_hash,
+            "secret_b64": base64.b64encode(raw).decode("ascii"),
+        },
+    }
+    await _extract_bounty(repo, log_data)
+    cred = repo.upsert_credential.call_args[0][0]
+    assert cred["service"] == "postgres"
+    assert cred["secret_kind"] == "postgres_md5_challenge"
+    assert cred["secret_sha256"] == hashlib.sha256(raw).hexdigest()
+
+
+@pytest.mark.asyncio
+async def test_vnc_hash_credential():
+    """VNC DES-encrypted challenge response — same shape, different kind."""
+    from decnet.web.ingester import _extract_bounty
+    repo = MagicMock(); repo.upsert_credential = AsyncMock()
+    raw = bytes(range(16))
+    log_data = {
+        "decky": "decky-01",
+        "service": "vnc",
+        "attacker_ip": "10.0.0.5",
+        "fields": {
+            "response": raw.hex(),
+            "secret_kind": "vnc_des_response",
+            "secret_printable": raw.hex(),
+            "secret_b64": base64.b64encode(raw).decode("ascii"),
+        },
+    }
+    await _extract_bounty(repo, log_data)
+    cred = repo.upsert_credential.call_args[0][0]
+    assert cred["service"] == "vnc"
+    assert cred["secret_kind"] == "vnc_des_response"
+    assert cred["secret_sha256"] == hashlib.sha256(raw).hexdigest()
+
+
+@pytest.mark.asyncio
 async def test_lossless_b64_survives_nonprintable_password():
     """Even when secret_printable is sanitized, secret_b64 still decodes
     to the original bytes — the cross-service reuse hash matches across

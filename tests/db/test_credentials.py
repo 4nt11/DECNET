@@ -124,6 +124,32 @@ async def test_get_credentials_for_attacker(repo) -> None:
 
 
 @pytest.mark.anyio
+async def test_secret_kind_dedups_independently(repo) -> None:
+    """Same sha256, same principal — different secret_kind = different row.
+
+    Two rows with the same content-addressable hash but different kinds
+    represent fundamentally different credentials (e.g. a plaintext
+    password that happens to hash to the same value as a Postgres
+    md5 challenge response is statistically impossible but semantically
+    distinct anyway). Dedup must respect the kind boundary."""
+    base = {
+        "attacker_ip": "10.0.0.5",
+        "decky_name": "decky-01",
+        "service": "ssh",
+        "principal": "root",
+        "secret_sha256": _sha256("hunter2"),
+        "secret_b64": "aHVudGVyMg==",
+        "fields": {},
+    }
+    await repo.upsert_credential({**base, "secret_kind": "plaintext"})
+    await repo.upsert_credential({**base, "secret_kind": "postgres_md5_challenge"})
+    rows = await repo.get_credentials()
+    assert len(rows) == 2
+    kinds = {r["secret_kind"] for r in rows}
+    assert kinds == {"plaintext", "postgres_md5_challenge"}
+
+
+@pytest.mark.anyio
 async def test_filters(repo) -> None:
     base_secret = _sha256("a")
     await repo.upsert_credential({
