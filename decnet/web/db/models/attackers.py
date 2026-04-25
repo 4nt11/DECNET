@@ -63,6 +63,12 @@ class Attacker(SQLModel, table=True):
     # Nullable because private / loopback / IPv6 sources never resolve.
     country_code: Optional[str] = Field(default=None, max_length=2, index=True)
     country_source: Optional[str] = Field(default=None, max_length=16)
+    # ASN enrichment (populated by the profiler from decnet.asn.enrich_ip).
+    # Nullable for the same reasons as country_code, plus IPs not currently
+    # announced in the global BGP table (e.g. CGNAT, dark space).
+    asn: Optional[int] = Field(default=None, index=True)
+    as_name: Optional[str] = Field(default=None, max_length=128)
+    asn_source: Optional[str] = Field(default=None, max_length=16)
     # Reverse-DNS (PTR) name, one-shot resolved by the profiler at first
     # sighting. Nullable — many attackers run infra with no rDNS, and
     # private/loopback addresses never resolve.  256 chars matches
