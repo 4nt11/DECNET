@@ -110,6 +110,55 @@ class BaseRepository(ABC):
         """Retrieve the total count of bounties, optionally filtered."""
         pass
 
+    # ---- credentials ---------------------------------------------------
+
+    @abstractmethod
+    async def upsert_credential(self, data: dict[str, Any]) -> int:
+        """Insert or upsert a credential attempt; returns the row id.
+
+        Dedup tuple: (attacker_ip, decky_name, service, secret_sha256,
+        principal_or_None). On dedup match, ``attempt_count`` is bumped
+        and ``last_seen`` updated; the originally-seen ``first_seen``
+        and ``fields`` JSON are preserved.
+        """
+        pass
+
+    @abstractmethod
+    async def get_credentials(
+        self,
+        limit: int = 50,
+        offset: int = 0,
+        search: Optional[str] = None,
+        service: Optional[str] = None,
+        attacker_ip: Optional[str] = None,
+    ) -> list[dict[str, Any]]:
+        """Paginated credential rows, with optional filters."""
+        pass
+
+    @abstractmethod
+    async def get_total_credentials(
+        self,
+        search: Optional[str] = None,
+        service: Optional[str] = None,
+        attacker_ip: Optional[str] = None,
+    ) -> int:
+        """Total credential count under the same filters as get_credentials."""
+        pass
+
+    @abstractmethod
+    async def get_credentials_for_attacker(
+        self, attacker_ip: str
+    ) -> list[dict[str, Any]]:
+        """Every credential row from the given attacker IP."""
+        pass
+
+    @abstractmethod
+    async def get_credential_reuse(
+        self, secret_sha256: str
+    ) -> list[dict[str, Any]]:
+        """Every (attacker, decky, service, principal) row sharing this secret hash."""
+        pass
+
     @abstractmethod
     async def get_state(self, key: str) -> Optional[dict[str, Any]]:
         """Retrieve a specific state entry by key."""

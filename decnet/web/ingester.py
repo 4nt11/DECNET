@@ -1,5 +1,7 @@
 import asyncio
+import base64
 import contextlib
+import hashlib
 import ipaddress
 import os
 import json
@@ -195,6 +197,128 @@ async def _flush_batch(
     return _new_position
 
 
+# RFC 5424-ish SD-PARAM-VALUE sanitization, mirrored from auth-helper.c.
+# Bytes outside [0x20, 0x7f) collapse to '?', matching the C escape rule.
+# The hash is always computed over the *original* bytes so reuse queries
+# survive any sanitization on the printable form.
+_SECRET_B64_RE = re.compile(r"^[A-Za-z0-9+/]*={0,2}$")
+_SECRET_PRINTABLE_MAX = 512  # mirrors Credential.secret_printable max_length
+_PRINCIPAL_MAX = 256
+_SECRET_B64_MAX = 2048
+
+
+def _printable_filter(s: str) -> str:
+    """Replace bytes outside [0x20, 0x7f) with '?', matching auth-helper.c.
+
+    Operates on the str's UTF-8 encoded bytes so we don't accidentally
+    let a `\\u202e` Unicode override slip through display layers.
+    """
+    out: list[int] = []
+    for b in s.encode("utf-8", errors="replace"):
+        out.append(b if 0x20 <= b < 0x7f else ord("?"))
+    return bytes(out).decode("ascii")
+
+
+def _truncate_with_warn(s: Optional[str], cap: int, label: str) -> Optional[str]:
+    if s is None:
+        return None
+    if len(s) <= cap:
+        return s
+    logger.warning("ingester: %s truncated %d → %d chars", label, len(s), cap)
+    return s[:cap]
+
+
+async def _ingest_credential_native(
+    repo: BaseRepository,
+    log_data: dict[str, Any],
+    fields: dict[str, Any],
+) -> None:
+    """Native-shape credential: SD-block already carries secret_b64.
+
+    Validates the b64, computes sha256 over the decoded bytes, hands off
+    to the repo upsert. Drops the row on validation failure (the
+    underlying Log row still lands).
+    """
+    b64 = fields.get("secret_b64")
+    if not isinstance(b64, str) or not _SECRET_B64_RE.match(b64):
+        logger.warning(
+            "ingester: dropping credential — invalid secret_b64 from %s/%s",
+            log_data.get("decky"), log_data.get("service"),
+        )
+        return
+    try:
+        raw = base64.b64decode(b64, validate=True)
+    except (ValueError, TypeError):
+        logger.warning(
+            "ingester: dropping credential — secret_b64 decode failed from %s/%s",
+            log_data.get("decky"), log_data.get("service"),
+        )
+        return
+
+    sha256_hex = hashlib.sha256(raw).hexdigest()
+    principal = fields.get("principal") or fields.get("username")
+    secret_printable = fields.get("secret_printable")
+
+    await repo.upsert_credential({
+        "attacker_ip": log_data.get("attacker_ip"),
+        "decky_name": log_data.get("decky"),
+        "service": log_data.get("service"),
+        "principal": _truncate_with_warn(principal, _PRINCIPAL_MAX, "principal"),
+        "secret_sha256": sha256_hex,
+        "secret_b64": _truncate_with_warn(b64, _SECRET_B64_MAX, "secret_b64"),
+        "secret_printable": _truncate_with_warn(
+            secret_printable, _SECRET_PRINTABLE_MAX, "secret_printable"
+        ),
+        "outcome": fields.get("outcome"),
+        "fields": fields,  # repo handles json.dumps with ensure_ascii=True
+    })
+
+
+async def _ingest_credential_legacy(
+    repo: BaseRepository,
+    log_data: dict[str, Any],
+    fields: dict[str, Any],
+) -> None:
+    """Legacy-shape credential: SD-block has username + password.
+
+    Synthesizes secret_b64 (from utf8-encoded password bytes), the
+    sha256 hash (over those same bytes — lossless before any printable
+    sanitization), and a printable-filtered secret_printable. FTP /
+    POP3 / IMAP / SMTP go through this branch until DEBT-039 lands.
+    """
+    user = fields.get("username")
+    pw = fields.get("password")
+    if not isinstance(pw, str):
+        return
+
+    raw = pw.encode("utf-8", errors="replace")
+    sha256_hex = hashlib.sha256(raw).hexdigest()
+    b64 = base64.b64encode(raw).decode("ascii")
+    printable = _printable_filter(pw)
+
+    # Synthesize the universal keys into a copy of fields so the JSON
+    # blob carries the standardized shape too — lets downstream readers
+    # treat every credential row identically regardless of emitter.
+    synthesized_fields = dict(fields)
+    synthesized_fields.setdefault("principal", user)
+    synthesized_fields.setdefault("secret_printable", printable)
+    synthesized_fields.setdefault("secret_b64", b64)
+
+    await repo.upsert_credential({
+        "attacker_ip": log_data.get("attacker_ip"),
+        "decky_name": log_data.get("decky"),
+        "service": log_data.get("service"),
+        "principal": _truncate_with_warn(user, _PRINCIPAL_MAX, "principal"),
+        "secret_sha256": sha256_hex,
+        "secret_b64": _truncate_with_warn(b64, _SECRET_B64_MAX, "secret_b64"),
+        "secret_printable": _truncate_with_warn(
+            printable, _SECRET_PRINTABLE_MAX, "secret_printable"
+        ),
+        "outcome": fields.get("outcome"),
+        "fields": synthesized_fields,
+    })
+
+
 @_traced("ingester.extract_bounty")
 async def _extract_bounty(repo: BaseRepository, log_data: dict[str, Any]) -> None:
     """Detect and extract valuable artifacts (bounties) from log entries."""
@@ -202,21 +326,21 @@ async def _extract_bounty(repo: BaseRepository, log_data: dict[str, Any]) -> Non
     if not isinstance(_fields, dict):
         return
 
-    # 1. Credentials (User/Pass)
-    _user = _fields.get("username")
-    _pass = _fields.get("password")
-
-    if _user and _pass:
-        await repo.add_bounty({
-            "decky": log_data.get("decky"),
-            "service": log_data.get("service"),
-            "attacker_ip": log_data.get("attacker_ip"),
-            "bounty_type": "credential",
-            "payload": {
-                "username": _user,
-                "password": _pass
-            }
-        })
+    # 1. Credentials — fork on emitter shape.
+    #
+    # New shape (SSH/Telnet auth-helper, future emitters): SD-block
+    # carries `secret_b64` directly. Universal across services.
+    #
+    # Legacy shape (FTP/POP3/IMAP/SMTP today): SD-block has `username`
+    # + `password`. Adapter synthesizes `secret_b64` + `secret_sha256`
+    # on the fly so those services land in the same Credential table
+    # without requiring a per-template emitter rewrite. Tracked as
+    # DEBT-039 — eventually those services emit the new shape natively
+    # and this branch dies.
+    if "secret_b64" in _fields:
+        await _ingest_credential_native(repo, log_data, _fields)
+    elif _fields.get("username") and _fields.get("password"):
+        await _ingest_credential_legacy(repo, log_data, _fields)
 
     # 2. HTTP User-Agent fingerprint
     _h_raw = _fields.get("headers")

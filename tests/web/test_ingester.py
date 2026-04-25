@@ -17,46 +17,117 @@ import pytest
 
 class TestExtractBounty:
     @pytest.mark.asyncio
-    async def test_credential_extraction(self):
+    async def test_credential_legacy_adapter(self):
+        """FTP/POP3/IMAP/SMTP shape (username + password) → upsert_credential."""
         from decnet.web.ingester import _extract_bounty
         mock_repo = MagicMock()
-        mock_repo.add_bounty = AsyncMock()
+        mock_repo.upsert_credential = AsyncMock()
         log_data: dict = {
             "decky": "decky-01",
-            "service": "ssh",
+            "service": "ftp",
             "attacker_ip": "10.0.0.5",
             "fields": {"username": "admin", "password": "hunter2"},
         }
         await _extract_bounty(mock_repo, log_data)
-        mock_repo.add_bounty.assert_awaited_once()
-        bounty = mock_repo.add_bounty.call_args[0][0]
-        assert bounty["bounty_type"] == "credential"
-        assert bounty["payload"]["username"] == "admin"
-        assert bounty["payload"]["password"] == "hunter2"
+        mock_repo.upsert_credential.assert_awaited_once()
+        cred = mock_repo.upsert_credential.call_args[0][0]
+        assert cred["service"] == "ftp"
+        assert cred["principal"] == "admin"
+        assert cred["secret_printable"] == "hunter2"
+        # b64 + sha256 computed over the original utf-8 bytes.
+        import base64, hashlib
+        assert cred["secret_b64"] == base64.b64encode(b"hunter2").decode()
+        assert cred["secret_sha256"] == hashlib.sha256(b"hunter2").hexdigest()
+
+    @pytest.mark.asyncio
+    async def test_credential_native_shape(self):
+        """SSH/Telnet auth-helper shape (secret_b64) → upsert_credential."""
+        from decnet.web.ingester import _extract_bounty
+        import base64, hashlib
+        mock_repo = MagicMock()
+        mock_repo.upsert_credential = AsyncMock()
+        log_data: dict = {
+            "decky": "decky-01",
+            "service": "ssh",
+            "attacker_ip": "10.0.0.5",
+            "fields": {
+                "username": "root",
+                "principal": "root",
+                "secret_printable": "hunter2",
+                "secret_b64": base64.b64encode(b"hunter2").decode(),
+            },
+        }
+        await _extract_bounty(mock_repo, log_data)
+        mock_repo.upsert_credential.assert_awaited_once()
+        cred = mock_repo.upsert_credential.call_args[0][0]
+        assert cred["service"] == "ssh"
+        assert cred["principal"] == "root"
+        assert cred["secret_sha256"] == hashlib.sha256(b"hunter2").hexdigest()
+
+    @pytest.mark.asyncio
+    async def test_credential_native_invalid_b64_dropped(self):
+        """Malformed secret_b64 → row dropped with a warning, no upsert."""
+        from decnet.web.ingester import _extract_bounty
+        mock_repo = MagicMock()
+        mock_repo.upsert_credential = AsyncMock()
+        log_data: dict = {
+            "decky": "decky-01",
+            "service": "ssh",
+            "attacker_ip": "10.0.0.5",
+            "fields": {"secret_b64": "not!base64!!"},
+        }
+        await _extract_bounty(mock_repo, log_data)
+        mock_repo.upsert_credential.assert_not_awaited()
+
+    @pytest.mark.asyncio
+    async def test_credential_legacy_sanitizes_nonprintable(self):
+        """Non-printable bytes in legacy password collapse to '?' in
+        secret_printable; b64 + sha256 reflect the ORIGINAL bytes."""
+        from decnet.web.ingester import _extract_bounty
+        import base64, hashlib
+        mock_repo = MagicMock()
+        mock_repo.upsert_credential = AsyncMock()
+        # ANSI escape + NUL byte in the password.
+        bad_pw = "\x1b[31mbad\x00trail"
+        log_data: dict = {
+            "decky": "decky-01",
+            "service": "ftp",
+            "attacker_ip": "10.0.0.5",
+            "fields": {"username": "user", "password": bad_pw},
+        }
+        await _extract_bounty(mock_repo, log_data)
+        cred = mock_repo.upsert_credential.call_args[0][0]
+        # No 0x1b, no NUL — collapsed to '?'.
+        assert "\x1b" not in cred["secret_printable"]
+        assert "\x00" not in cred["secret_printable"]
+        # Original bytes survive in b64 + sha256.
+        raw = bad_pw.encode("utf-8")
+        assert base64.b64decode(cred["secret_b64"]) == raw
+        assert cred["secret_sha256"] == hashlib.sha256(raw).hexdigest()
 
     @pytest.mark.asyncio
     async def test_no_fields_skips(self):
         from decnet.web.ingester import _extract_bounty
         mock_repo = MagicMock()
-        mock_repo.add_bounty = AsyncMock()
+        mock_repo.upsert_credential = AsyncMock()
         await _extract_bounty(mock_repo, {"decky": "x"})
-        mock_repo.add_bounty.assert_not_awaited()
+        mock_repo.upsert_credential.assert_not_awaited()
 
     @pytest.mark.asyncio
     async def test_fields_not_dict_skips(self):
         from decnet.web.ingester import _extract_bounty
         mock_repo = MagicMock()
-        mock_repo.add_bounty = AsyncMock()
+        mock_repo.upsert_credential = AsyncMock()
         await _extract_bounty(mock_repo, {"fields": "not-a-dict"})
-        mock_repo.add_bounty.assert_not_awaited()
+        mock_repo.upsert_credential.assert_not_awaited()
 
     @pytest.mark.asyncio
     async def test_missing_password_skips(self):
         from decnet.web.ingester import _extract_bounty
         mock_repo = MagicMock()
-        mock_repo.add_bounty = AsyncMock()
+        mock_repo.upsert_credential = AsyncMock()
         await _extract_bounty(mock_repo, {"fields": {"username": "admin"}})
-        mock_repo.add_bounty.assert_not_awaited()
+        mock_repo.upsert_credential.assert_not_awaited()
 
     @pytest.mark.asyncio
     async def test_missing_username_skips(self):

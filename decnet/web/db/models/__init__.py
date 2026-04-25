@@ -48,6 +48,8 @@ from .health import (
 from .logs import (
     Bounty,
     BountyResponse,
+    Credential,
+    CredentialsResponse,
     Log,
     LogsResponse,
     State,
@@ -167,6 +169,8 @@ __all__ = [
     # logs
     "Bounty",
     "BountyResponse",
+    "Credential",
+    "CredentialsResponse",
     "Log",
     "LogsResponse",
     "State",

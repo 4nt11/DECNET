@@ -13,12 +13,23 @@
  *     55555, MSGID `auth_attempt` (matches FTP's existing event type so
  *     the parser + dashboard pick it up with zero changes).
  *
- * Two password fields ride in the SD-block:
- *   password      RFC 5424-escaped ASCII-printable, '?' for non-printables.
- *                 FTP-compatible; consumed by existing dashboard rendering.
- *   password_b64  base64 of the exact PAM_AUTHTOK bytes. Lossless.
- *                 Preserves NUL/0xff/control bytes that the plain field
- *                 would silently drop — useful fingerprinting signal.
+ * SD-block carries the standardized credential shape (matches
+ * decnet/web/db/models/logs.py:Credential). Universal keys consumed
+ * directly by the ingester's native-shape branch:
+ *   principal         the human-meaningful identity the attacker sent
+ *                     (username for SSH/Telnet; would be a domain for
+ *                     SMTP, a DN for LDAP, etc.)
+ *   secret_printable  RFC 5424-escaped ASCII-printable, '?' for non-
+ *                     printables. Best-effort display form; may be
+ *                     lossy on non-UTF8 bytes.
+ *   secret_b64        base64 of the exact PAM_AUTHTOK bytes. Lossless.
+ *                     Preserves NUL/0xff/control bytes that the plain
+ *                     field would silently drop — useful fingerprinting
+ *                     signal that survives display sanitization.
+ *
+ * `username` rides alongside as a service-specific identity field for
+ * SSH/Telnet (mirrors `principal`); future emitters (SMTP, LDAP, …)
+ * drop `username` in favor of their service-native identity field.
  *
  * Fail-open: every error path silently exits 0. The PAM line is `optional`
  * so a malfunctioning helper must never break sshd auth.
@@ -150,13 +161,19 @@ pw_done:;
     b64_encode(pw_raw, pw_len, pw_b64, sizeof(pw_b64));
 
     /* Priority: facility=local0(16), severity=INFO(6) → <16*8+6> = <134>.
-     * Matches the syslog_bridge.py default exactly. */
+     * Matches the syslog_bridge.py default exactly.
+     *
+     * SD-block keys match the Credential storage model: principal +
+     * secret_printable + secret_b64 are the universal keys the ingester
+     * keys off; username is emitted alongside principal so existing
+     * dashboards that read SSH/Telnet `username=` keep working until
+     * the cred-reuse UI lands. */
     char line[LINE_BUF];
     int n = snprintf(line, sizeof(line),
         "<134>1 %s %s auth-helper - auth_attempt "
-        "[relay@55555 username=\"%s\" password=\"%s\" "
-        "password_b64=\"%s\" src_ip=\"%s\"]\n",
-        tsbuf, host, user_esc, pw_esc, pw_b64, rhost_esc);
+        "[relay@55555 username=\"%s\" principal=\"%s\" "
+        "secret_printable=\"%s\" secret_b64=\"%s\" src_ip=\"%s\"]\n",
+        tsbuf, host, user_esc, user_esc, pw_esc, pw_b64, rhost_esc);
     if (n <= 0 || (size_t)n >= sizeof(line)) return 0;
 
     /* /proc/1/fd/1 is the entrypoint's stdout — the fd Docker captures

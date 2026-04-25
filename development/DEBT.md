@@ -1,6 +1,6 @@
 # DECNET — Technical Debt Register
 
-> Last updated: 2026-04-25 — DEBT-038 opened (SSH PAM cred-capture limitations).
+> Last updated: 2026-04-25 — DEBT-039 opened (legacy cred emitters), Credential storage model landed.
 > Severity: 🔴 Critical · 🟠 High · 🟡 Medium · 🟢 Low
 
 ---
@@ -382,7 +382,25 @@ The SSH cred-capture path that closes the "real OpenSSH doesn't log attempted pa
 
 5. **Telnet had the same gap — closed in commit `f1026b4`.** Telnet's busybox-telnetd → `/bin/login` PAM stack didn't log attempted passwords either; the `auth-helper` binary is service-agnostic and was extended into `/etc/pam.d/login` via the same one-line PAM hook. The canonical source moved to `decnet/templates/_shared/auth-helper/auth-helper.c` and is synced into both ssh/ and telnet/ build contexts via `_sync_auth_helper_sources()` (mirrors the existing sessrec sync). Limitations 1–4 above apply equally to the telnet hook.
 
+6. **Standardized SD shape (DEBT-039 follow-up).** The auth-helper SD-block now emits the universal `principal` + `secret_printable` + `secret_b64` keys consumed directly by the ingester's native-shape branch and stored as hoisted columns on the new `Credential` table. `username` rides alongside as a service-specific identity field for SSH/Telnet. Future emitters drop `username` in favor of their service-native identity (`domain` for SMTP, `dn` for LDAP, …).
+
 **Status:** Open — document-only ticket tracking the architectural trade-offs of the v1 implementation. None of these are blocking; they're the things to know if the helper ever needs upgrading.
+
+### DEBT-039 — Migrate FTP/POP3/IMAP/SMTP emitters to standardized credential shape
+**Files:** `decnet/templates/ftp/server.py`, `decnet/templates/pop3/server.py`, `decnet/templates/imap/server.py`, `decnet/templates/smtp/server.py`, `decnet/web/ingester.py` (legacy adapter at `_ingest_credential_legacy`).
+
+The new `Credential` storage model (commit landing alongside this entry) writes one universal shape: `principal` + `secret_sha256` + `secret_b64` + `secret_printable`. SSH and Telnet auth-helper emit those keys natively. The four legacy services — FTP, POP3, IMAP, SMTP — still emit the old `username=` + `password=` shape, and the ingester carries a one-shot adapter (`_ingest_credential_legacy`) that synthesizes the universal keys on the fly.
+
+The adapter works correctly but couples ingester logic to an emitter shape we'd rather see go away. Per-service migration:
+
+1. **FTP** (`templates/ftp/server.py:103`) — change `_log("auth_attempt", username=..., password=...)` to also emit `principal`, `secret_printable`, `secret_b64`. Remove the legacy adapter dependency for `service="ftp"` once verified.
+2. **POP3** (`templates/pop3/server.py`) — same pattern.
+3. **IMAP** (`templates/imap/server.py`) — same pattern.
+4. **SMTP** (`templates/smtp/server.py`) — opportunity to use the new `domain` field as the principal (rather than `username` for an MTA), since SMTP AUTH PLAIN/LOGIN's authentication identity is conceptually a domain user, not a system user.
+
+Once all four migrate, delete `_ingest_credential_legacy` from `decnet/web/ingester.py` and drop the legacy branch from `_extract_bounty`.
+
+**Status:** Open — the legacy adapter is a temporary bridge. No deadline; close one service at a time as their templates are touched for unrelated reasons.
 
 ### DEBT-032 — Prober can't detect fingerprint rotation without mutation
 **Files:** `decnet/prober/worker.py` (~lines 235, 286, 334, 392), `decnet/web/db/models.py` (new `decky_service_fingerprints` table).
@@ -464,6 +482,7 @@ The prober already computes JARM (`worker.py:286`), HASSH (`worker.py:334`), and
 | DEBT-036 | 🟡 Medium | Correlation / Keystroke dynamics | open |
 | DEBT-037 | 🟡 Medium | Integration / Webhooks | open (tracks MVP follow-ups) |
 | DEBT-038 | 🟡 Medium | Honeypot / SSH cred capture | open (document-only) |
+| DEBT-039 | 🟡 Medium | Honeypot / Cred emitters | open |
 
-**Remaining open:** DEBT-011 (Alembic), DEBT-023 (image pinning), DEBT-026 (modular mailboxes), DEBT-027 (Dynamic bait store), DEBT-028 (deploy endpoint tests), DEBT-032 (fingerprint rotation detection), DEBT-033 (transcript shard rotation), DEBT-035 (artifacts uid/gid alignment), DEBT-036 (session-profile ingester), DEBT-037 (webhook delivery hardening), DEBT-038 (SSH PAM cred-capture limitations — document-only).
+**Remaining open:** DEBT-011 (Alembic), DEBT-023 (image pinning), DEBT-026 (modular mailboxes), DEBT-027 (Dynamic bait store), DEBT-028 (deploy endpoint tests), DEBT-032 (fingerprint rotation detection), DEBT-033 (transcript shard rotation), DEBT-035 (artifacts uid/gid alignment), DEBT-036 (session-profile ingester), DEBT-037 (webhook delivery hardening), DEBT-038 (SSH PAM cred-capture limitations — document-only), DEBT-039 (legacy cred emitters → standardized shape).
 **Estimated remaining effort:** ~24 hours. DEBT-030 Phase B (optimistic staged-buffer editor) is a follow-up, not debt.
