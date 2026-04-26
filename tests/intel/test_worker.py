@@ -7,7 +7,7 @@ Covers — without any real provider impls — that the loop:
 * fans out across fake providers and writes the aggregate row
 * aggregate_verdict picks the strongest provider verdict
 * a provider returning ``error`` is logged but does not poison the row
-* gates IPs through ``get_unenriched_attacker_ips`` (TTL respected)
+* gates attackers through ``get_unenriched_attackers`` (TTL respected)
 """
 from __future__ import annotations
 
@@ -92,12 +92,17 @@ async def test_loop_exits_on_shutdown_signal(repo):
     await asyncio.wait_for(task, timeout=2.0)
 
 
+async def _seed_attacker(repo, ip: str) -> str:
+    """Seed an attackers row and return its UUID."""
+    now = datetime.now(timezone.utc)
+    return await repo.upsert_attacker(
+        {"ip": ip, "first_seen": now, "last_seen": now, "event_count": 1}
+    )
+
+
 @pytest.mark.anyio
 async def test_no_providers_skips_enrichment(repo):
-    now = datetime.now(timezone.utc)
-    await repo.upsert_attacker(
-        {"ip": "1.1.1.1", "first_seen": now, "last_seen": now, "event_count": 1}
-    )
+    a_uuid = await _seed_attacker(repo, "1.1.1.1")
     shutdown = asyncio.Event()
     task = asyncio.create_task(
         run_intel_loop(
@@ -110,16 +115,13 @@ async def test_no_providers_skips_enrichment(repo):
     await asyncio.sleep(0.15)
     shutdown.set()
     await asyncio.wait_for(task, timeout=2.0)
-    # No row written for 1.1.1.1.
-    assert await repo.get_attacker_intel_by_ip("1.1.1.1") is None
+    # No row written for the seeded attacker.
+    assert await repo.get_attacker_intel_by_uuid(a_uuid) is None
 
 
 @pytest.mark.anyio
 async def test_fan_out_writes_aggregate_row(repo):
-    now = datetime.now(timezone.utc)
-    await repo.upsert_attacker(
-        {"ip": "2.2.2.2", "first_seen": now, "last_seen": now, "event_count": 1}
-    )
+    a_uuid = await _seed_attacker(repo, "2.2.2.2")
 
     gn = _FakeProvider(
         "greynoise",
@@ -154,23 +156,22 @@ async def test_fan_out_writes_aggregate_row(repo):
     shutdown.set()
     await asyncio.wait_for(task, timeout=2.0)
 
-    row = await repo.get_attacker_intel_by_ip("2.2.2.2")
+    row = await repo.get_attacker_intel_by_uuid(a_uuid)
     assert row is not None
+    assert row["attacker_uuid"] == a_uuid
+    assert row["attacker_ip"] == "2.2.2.2"
     assert row["greynoise_classification"] == "benign"
     assert row["abuseipdb_score"] == 90
     # Strongest verdict wins.
     assert row["aggregate_verdict"] == "malicious"
-    # Both providers were queried.
+    # Both providers were queried by IP.
     assert gn.calls == ["2.2.2.2"]
     assert aip.calls == ["2.2.2.2"]
 
 
 @pytest.mark.anyio
 async def test_provider_error_does_not_poison_row(repo):
-    now = datetime.now(timezone.utc)
-    await repo.upsert_attacker(
-        {"ip": "3.3.3.3", "first_seen": now, "last_seen": now, "event_count": 1}
-    )
+    a_uuid = await _seed_attacker(repo, "3.3.3.3")
 
     good = _FakeProvider(
         "greynoise",
@@ -196,7 +197,7 @@ async def test_provider_error_does_not_poison_row(repo):
     shutdown.set()
     await asyncio.wait_for(task, timeout=2.0)
 
-    row = await repo.get_attacker_intel_by_ip("3.3.3.3")
+    row = await repo.get_attacker_intel_by_uuid(a_uuid)
     assert row is not None
     assert row["greynoise_classification"] == "benign"
     # Broken provider's columns stay null; row is still written.
@@ -226,10 +227,7 @@ async def test_intel_enriched_event_published_to_bus(repo, monkeypatch):
     sub = shared_bus.subscribe(attacker(ATTACKER_INTEL_ENRICHED))
     await sub.__aenter__()
 
-    now = datetime.now(timezone.utc)
-    await repo.upsert_attacker(
-        {"ip": "4.4.4.4", "first_seen": now, "last_seen": now, "event_count": 1}
-    )
+    a_uuid = await _seed_attacker(repo, "4.4.4.4")
 
     provider = _FakeProvider(
         "greynoise",
@@ -258,6 +256,7 @@ async def test_intel_enriched_event_published_to_bus(repo, monkeypatch):
         await sub.__aexit__(None, None, None)
 
     payload = event.payload
+    assert payload["attacker_uuid"] == a_uuid
     assert payload["attacker_ip"] == "4.4.4.4"
     assert payload["aggregate_verdict"] == "malicious"
     assert payload["providers"] == ["greynoise"]

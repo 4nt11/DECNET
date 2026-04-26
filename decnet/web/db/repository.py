@@ -280,23 +280,31 @@ class BaseRepository(ABC):
 
     @abstractmethod
     async def upsert_attacker_intel(self, data: dict[str, Any]) -> str:
-        """Insert or update the threat-intel row for an attacker IP.
+        """Insert or update the threat-intel row for an attacker UUID.
 
-        ``data`` MUST include ``attacker_ip`` and ``expires_at``. Returns
-        the row UUID. Used by the ``decnet enrich`` worker.
+        ``data`` MUST include ``attacker_uuid``, ``attacker_ip`` and
+        ``expires_at``. Returns the row UUID. Keyed on ``attacker_uuid``
+        (UNIQUE + FK to ``attackers.uuid``); ``attacker_ip`` is denormalised
+        — it gets overwritten on every upsert if the attacker rotates IPs.
         """
         pass
 
     @abstractmethod
-    async def get_attacker_intel_by_ip(self, ip: str) -> Optional[dict[str, Any]]:
-        """Return the threat-intel row for ``ip`` or ``None`` if missing."""
+    async def get_attacker_intel_by_uuid(self, uuid: str) -> Optional[dict[str, Any]]:
+        """Return the threat-intel row for ``uuid`` or ``None`` if missing."""
         pass
 
     @abstractmethod
-    async def get_unenriched_attacker_ips(self, limit: int = 100) -> list[str]:
-        """List attacker IPs with no intel row OR whose row is past expires_at.
+    async def get_unenriched_attackers(
+        self, limit: int = 100,
+    ) -> list[dict[str, Any]]:
+        """List ``{"uuid", "ip"}`` pairs for attackers with no intel row OR
+        whose row is past ``expires_at``.
 
         Used by the enrich worker to backfill on startup and on each wake.
+        Returns both fields so the worker can write keyed on UUID without
+        a second per-attacker DB round-trip to resolve the IP for outbound
+        provider calls.
         """
         pass
 

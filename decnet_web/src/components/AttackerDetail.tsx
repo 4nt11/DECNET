@@ -956,6 +956,7 @@ const LeakedIPsRow: React.FC<LeakedIPsRowProps> = ({ leaks, total }) => {
 // fields plus null gaps where a provider hasn't answered yet. We treat
 // every column as optional on the wire.
 type IntelRow = {
+  attacker_uuid: string;
   attacker_ip: string;
   schema_version?: number;
   aggregate_verdict?: 'malicious' | 'suspicious' | 'benign' | 'unknown' | null;
@@ -1013,7 +1014,7 @@ const ProviderRow: React.FC<{
   </div>
 );
 
-const IntelPanel: React.FC<{ ip: string }> = ({ ip }) => {
+const IntelPanel: React.FC<{ uuid: string }> = ({ uuid }) => {
   const [intel, setIntel] = useState<IntelRow | null>(null);
   const [state, setState] = useState<'loading' | 'absent' | 'ok' | 'error'>('loading');
 
@@ -1022,7 +1023,7 @@ const IntelPanel: React.FC<{ ip: string }> = ({ ip }) => {
     const load = async () => {
       setState('loading');
       try {
-        const res = await api.get(`/attackers/${encodeURIComponent(ip)}/intel`);
+        const res = await api.get(`/attackers/${encodeURIComponent(uuid)}/intel`);
         if (!cancelled) {
           setIntel(res.data);
           setState('ok');
@@ -1039,7 +1040,7 @@ const IntelPanel: React.FC<{ ip: string }> = ({ ip }) => {
     };
     load();
     return () => { cancelled = true; };
-  }, [ip]);
+  }, [uuid]);
 
   if (state === 'loading') {
     return (
@@ -1756,13 +1757,13 @@ const AttackerDetail: React.FC = () => {
         );
       })()}
 
-      {/* Threat-Intel Enrichment — keyed by attacker.ip (see DEBT-041) */}
+      {/* Threat-Intel Enrichment — UUID-keyed, fetches in parallel with the parent. */}
       <Section
         title={<><Globe size={14} style={{ verticalAlign: 'middle', marginRight: '6px' }} />THREAT INTEL</>}
         open={openSections.intel}
         onToggle={() => toggle('intel')}
       >
-        <IntelPanel ip={attacker.ip} />
+        <IntelPanel uuid={id!} />
       </Section>
 
       {/* Captured Artifacts */}

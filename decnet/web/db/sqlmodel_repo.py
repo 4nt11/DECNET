@@ -1197,10 +1197,12 @@ class SQLModelRepository(BaseRepository):
             return row.model_dump(mode="json")
 
     async def upsert_attacker_intel(self, data: dict[str, Any]) -> str:
-        ip = data["attacker_ip"]
+        attacker_uuid_value = data["attacker_uuid"]
         async with self._session() as session:
             result = await session.execute(
-                select(AttackerIntel).where(AttackerIntel.attacker_ip == ip)
+                select(AttackerIntel).where(
+                    AttackerIntel.attacker_uuid == attacker_uuid_value,
+                )
             )
             existing = result.scalar_one_or_none()
             if existing:
@@ -1214,13 +1216,13 @@ class SQLModelRepository(BaseRepository):
             await session.commit()
             return row_uuid
 
-    async def get_attacker_intel_by_ip(
+    async def get_attacker_intel_by_uuid(
         self,
-        ip: str,
+        uuid: str,
     ) -> Optional[dict[str, Any]]:
         async with self._session() as session:
             result = await session.execute(
-                select(AttackerIntel).where(AttackerIntel.attacker_ip == ip)
+                select(AttackerIntel).where(AttackerIntel.attacker_uuid == uuid)
             )
             row = result.scalar_one_or_none()
             if not row:
@@ -1240,17 +1242,23 @@ class SQLModelRepository(BaseRepository):
                         pass
             return d
 
-    async def get_unenriched_attacker_ips(self, limit: int = 100) -> list[str]:
-        """IPs in ``attackers`` with no intel row OR a stale (expired) one.
+    async def get_unenriched_attackers(
+        self, limit: int = 100,
+    ) -> list[dict[str, Any]]:
+        """``{"uuid", "ip"}`` pairs with no intel row OR a stale (expired) one.
 
         Stale = ``expires_at < now``. Ordered by ``attackers.last_seen`` desc
-        so the worker prioritises recent activity on backfill.
+        so the worker prioritises recent activity on backfill. Both columns
+        are projected so the worker can write keyed on UUID and dispatch
+        provider calls keyed on IP without a second round-trip.
         """
         now = datetime.now(timezone.utc)
         async with self._session() as session:
             stmt = (
-                select(Attacker.ip)
-                .outerjoin(AttackerIntel, AttackerIntel.attacker_ip == Attacker.ip)
+                select(Attacker.uuid, Attacker.ip)
+                .outerjoin(
+                    AttackerIntel, AttackerIntel.attacker_uuid == Attacker.uuid,
+                )
                 .where(
                     or_(
                         AttackerIntel.uuid.is_(None),
@@ -1261,7 +1269,10 @@ class SQLModelRepository(BaseRepository):
                 .limit(limit)
             )
             result = await session.execute(stmt)
-            return [row for row in result.scalars().all()]
+            return [
+                {"uuid": uuid_, "ip": ip}
+                for uuid_, ip in result.all()
+            ]
 
     async def increment_smtp_target(self, attacker_uuid: str, domain: str) -> None:
         """Upsert an (attacker_uuid, domain) pair and bump count + last_seen.

@@ -60,11 +60,17 @@ def _aggregate(verdicts: list[Optional[str]]) -> Optional[str]:
 
 
 async def _enrich_one(
+    attacker_uuid: str,
     ip: str,
     providers: list[IntelProvider],
     ttl_hours: int,
 ) -> dict[str, Any]:
-    """Fan out across providers for a single IP and assemble the row update."""
+    """Fan out across providers for a single attacker and assemble the row.
+
+    Keyed on ``attacker_uuid`` for the eventual upsert; the IP is the wire
+    value the providers see and is denormalised onto the row for SIEM /
+    audit consumers.
+    """
     results: list[IntelResult] = await asyncio.gather(
         *(p.lookup(ip) for p in providers),
         return_exceptions=False,  # providers contractually never raise
@@ -72,6 +78,7 @@ async def _enrich_one(
 
     now = datetime.now(timezone.utc)
     row: dict[str, Any] = {
+        "attacker_uuid": attacker_uuid,
         "attacker_ip": ip,
         "cached_at": now,
         "expires_at": now + timedelta(hours=ttl_hours),
@@ -144,7 +151,7 @@ async def run_intel_loop(
     try:
         while not shutdown.is_set():
             try:
-                pending = await repo.get_unenriched_attacker_ips(
+                pending = await repo.get_unenriched_attackers(
                     limit=backfill_batch,
                 )
             except Exception:  # noqa: BLE001
@@ -152,16 +159,21 @@ async def run_intel_loop(
                 pending = []
 
             if pending and providers:
-                for ip in pending:
+                for entry in pending:
                     if shutdown.is_set():
                         break
+                    attacker_uuid = entry["uuid"]
+                    ip = entry["ip"]
                     try:
-                        row = await _enrich_one(ip, providers, ttl_hours)
+                        row = await _enrich_one(
+                            attacker_uuid, ip, providers, ttl_hours,
+                        )
                         await repo.upsert_attacker_intel(row)
                         await publish_safely(
                             bus,
                             _topics.attacker(_topics.ATTACKER_INTEL_ENRICHED),
                             {
+                                "attacker_uuid": attacker_uuid,
                                 "attacker_ip": ip,
                                 "aggregate_verdict": row.get("aggregate_verdict"),
                                 "providers": [p.name for p in providers],
@@ -170,7 +182,8 @@ async def run_intel_loop(
                         )
                     except Exception:  # noqa: BLE001
                         log.exception(
-                            "intel worker: enrichment failed for ip=%s", ip,
+                            "intel worker: enrichment failed for uuid=%s ip=%s",
+                            attacker_uuid, ip,
                         )
 
             try:

@@ -409,7 +409,9 @@ Shared prep landed in commit 1: `_sync_ntlmssp_sources()` in `decnet/engine/depl
 - Full `TS_INFO_PACKET` (basic-RDP plaintext password) — see scope-down note in commit 2. Re-open as a follow-up DEBT if attacker telemetry actually shows traffic on `PROTOCOL_RDP` without NLA.
 - Pubkey / Kerberos auth paths — out of scope; mirrors DEBT-038's deferral on the SSH side.
 
-### DEBT-041 — Intel API + UI keyed by attacker.ip, not attacker.uuid
+### ~~DEBT-041 — Intel API + UI keyed by attacker.ip, not attacker.uuid~~ ✅ RESOLVED
+Closed by re-key commit on `dev`. `attacker_intel.attacker_uuid` is now the canonical key (UNIQUE + FK to `attackers.uuid`); `attacker_ip` stays as a denormalised value column (indexed, not unique). `GET /api/v1/attackers/{uuid}/intel` is the only public route — the IP-keyed alias was deleted, not deprecated. Bus event `attacker.intel.enriched` payload gains `attacker_uuid` alongside `attacker_ip` for SIEM consumers. `<IntelPanel uuid={...} />` swaps to UUID. The ticket text below is preserved as the original rationale.
+
 **Files:** `decnet/web/router/attackers/api_get_attacker_intel.py`, `decnet/web/db/sqlmodel_repo.py:upsert_attacker_intel`, `decnet/web/db/models/attacker_intel.py`, `decnet_web/src/components/AttackerDetail.tsx` (`<IntelPanel ip={attacker.ip} />`).
 
 The threat-intel enrichment surface (DEBT-N/A: `feat(intel)` series) keys every public surface — `GET /api/v1/attackers/{ip}/intel`, the row's `attacker_ip` UNIQUE, and the React `<IntelPanel ip=...>` — on the attacker's IP rather than the canonical `attacker.uuid` we use for every other attacker-detail route. The decision was deliberate in v1: the enricher is woken by `attacker.observed` / `attacker.scored` events whose payload is naturally IP-keyed, the row models a *one-row-per-IP* TTL cache, and standing up a parallel UUID lookup endpoint would have added a join hop with no consumer.
@@ -516,7 +518,7 @@ The prober already computes JARM (`worker.py:286`), HASSH (`worker.py:334`), and
 | DEBT-038 | 🟡 Medium | Honeypot / SSH cred capture | open (document-only) |
 | ~~DEBT-039~~ | ✅ | Honeypot / Cred emitters | resolved |
 | ~~DEBT-040~~ | ✅ | Honeypot / RDP+SMB cred framers | resolved |
-| DEBT-041 | 🟡 Medium | API / UI / Threat-intel keying | open |
+| ~~DEBT-041~~ | ✅ | API / UI / Threat-intel keying | resolved |
 
-**Remaining open:** DEBT-011 (Alembic), DEBT-023 (image pinning), DEBT-026 (modular mailboxes), DEBT-027 (Dynamic bait store), DEBT-028 (deploy endpoint tests), DEBT-032 (fingerprint rotation detection), DEBT-033 (transcript shard rotation), DEBT-035 (artifacts uid/gid alignment), DEBT-036 (session-profile ingester), DEBT-037 (webhook delivery hardening), DEBT-038 (SSH PAM cred-capture limitations — document-only), DEBT-041 (intel API/UI keyed by IP, not UUID).
+**Remaining open:** DEBT-011 (Alembic), DEBT-023 (image pinning), DEBT-026 (modular mailboxes), DEBT-027 (Dynamic bait store), DEBT-028 (deploy endpoint tests), DEBT-032 (fingerprint rotation detection), DEBT-033 (transcript shard rotation), DEBT-035 (artifacts uid/gid alignment), DEBT-036 (session-profile ingester), DEBT-037 (webhook delivery hardening), DEBT-038 (SSH PAM cred-capture limitations — document-only).
 **Estimated remaining effort:** ~21 hours. DEBT-030 Phase B (optimistic staged-buffer editor) is a follow-up, not debt.
