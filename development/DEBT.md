@@ -215,7 +215,7 @@ DEBT-029 shipped the bus; DEBT-030 proved the pattern end-to-end through the mut
 **Deferred (out of DEBT-031 scope, tracked for follow-ups):**
 - **Realism-probe `decky.{id}.state`** — the prober as it exists today fingerprints attackers, not deckies. Publishing `decky.{id}.state` on realism-flip needs a separate realism probe path we don't have yet.
 - **Correlator `session.started` / `session.ended`** — `CorrelationEngine` is a batch class with no session state. A session-boundary signal would need session tracking introduced first; constants are reserved in `decnet/bus/topics.py`.
-- **Standalone `decnet correlate` worker** — the rollout plan presumed one; today the engine runs inside the profiler worker, which is the right shape for the current data flow.
+- **Standalone graph-correlator worker** — closed. The original rollout plan presumed one; the graph engine instead lives as library code in `decnet/correlation/` and is consumed by the profiler worker (graph traversal during profiling) and the reuse correlator (credential-reuse pass). The dead `decnet correlate` CLI debug helper has been removed. Library shape is the right one — keeping it.
 - **Bus-wake subscriptions** — publishes landed; subscribe-side (e.g. prober re-probe on `decky.*.state`) was not wired to avoid coupling the wake pattern to a subscriber we don't yet have.
 
 ### DEBT-033 — Transcript day-shard rotation
