@@ -185,21 +185,27 @@ def _directed_handoff(
 
 
 def shared_infra_weight(a: IdentityFeatures, b: IdentityFeatures) -> float:
-    """Jaccard over payload-hashes ∪ C2-endpoints ∪ decky-set.
+    """Jaccard over payload-hashes ∪ C2-endpoints.
+
+    Excludes ``decky_set`` deliberately: decky overlap is a *fleet
+    scarcity* artifact (a small fleet means many distinct campaigns
+    hit the same deckies) and would fuse F1's two unrelated campaigns
+    on shared targeting. Payload hashes and C2 endpoints are
+    operational artifacts; distinct campaigns rarely share them.
 
     At identity level this gets vetoed by the fingerprint-disagreement
     rule (``ed32358``); at campaign level it's the *primary* positive
-    signal — distinct identities sharing infra is the canonical co-op
-    pattern. We treat all three sets as one combined alphabet so a
-    single shared payload + C2 + decky add together rather than
-    averaging away a strong signal in one set with weak overlap in
-    another.
+    signal — distinct identities sharing payload + C2 is the canonical
+    co-op pattern (F5 multi_operator).
 
-    Returns Jaccard across the union of the three set families,
+    The decky-overlap signal lives in :func:`cohort_weight` instead
+    where its weak-tier multiplier prevents F1-style false merges.
+
+    Returns Jaccard across the union of the two set families,
     ``0.0`` when both sides are empty.
     """
-    a_set = a.payload_hashes | a.c2_endpoints | a.decky_set
-    b_set = b.payload_hashes | b.c2_endpoints | b.decky_set
+    a_set = a.payload_hashes | a.c2_endpoints
+    b_set = b.payload_hashes | b.c2_endpoints
     if not a_set and not b_set:
         return 0.0
     union = a_set | b_set
@@ -246,12 +252,16 @@ def temporal_overlap_weight(
 
 
 def cohort_weight(a: IdentityFeatures, b: IdentityFeatures) -> float:
-    """ASN-cohort + tooling-cohort weak signal.
+    """ASN-cohort + tooling-cohort + decky-overlap weak signal.
 
-    Jaccard over the union of ASN cohort and tooling cohort. F2's
-    failure mode (one identity rotating across many ASNs) doesn't
-    apply at *campaign* level — but multiple identities cooperating
-    out of the same hosting cohort is plausible co-op evidence.
+    Jaccard over the union of ASN cohort, tooling cohort, and decky
+    set. F2's failure mode (one identity rotating across many ASNs)
+    doesn't apply at *campaign* level — but multiple identities
+    cooperating out of the same hosting cohort is plausible co-op
+    evidence. Decky overlap lives here (not in :func:`shared_infra`)
+    because decky scarcity in a small honeypot fleet would otherwise
+    fuse unrelated campaigns hitting the same SSH targets (F1
+    shared_wordlist).
 
     Weak by design: the combined-weight tier multiplier keeps this
     from crossing threshold alone.
@@ -259,10 +269,12 @@ def cohort_weight(a: IdentityFeatures, b: IdentityFeatures) -> float:
     a_set: frozenset = frozenset(
         {("asn", str(x)) for x in a.asn_cohort}
         | {("tool", x) for x in a.tooling_cohort}
+        | {("decky", x) for x in a.decky_set}
     )
     b_set: frozenset = frozenset(
         {("asn", str(x)) for x in b.asn_cohort}
         | {("tool", x) for x in b.tooling_cohort}
+        | {("decky", x) for x in b.decky_set}
     )
     if not a_set and not b_set:
         return 0.0
@@ -277,20 +289,24 @@ def cohort_weight(a: IdentityFeatures, b: IdentityFeatures) -> float:
 
 #: Tier multipliers for the campaign graph. Tuned so:
 #:
-#: * Phase-handoff alone (1.0 → 1.0) crosses threshold — a clean
+#: * Phase-handoff alone (max 1.0) crosses threshold — a clean
 #:   F5-style handoff is sufficient evidence on its own.
-#: * Shared-infra alone (max 1.0) yields 0.7 — strong but not enough
-#:   without supporting evidence (F1 burns the same wordlist /
-#:   different campaigns shouldn't fuse on infra alone).
+#: * Shared-infra alone (max 1.0) crosses threshold — payload+C2
+#:   overlap is the canonical co-op signal (F5 multi_operator's
+#:   intended pass condition; decky overlap was deliberately moved
+#:   to :func:`cohort_weight` to avoid F1's false merge on shared
+#:   targeting).
 #: * Temporal overlap alone (max 1.0) yields 0.4 — supporting weight.
-#: * Cohort alone (max 1.0) yields 0.1 — defeats F2-style failures.
+#: * Cohort alone (max 1.0) yields 0.1 — defeats F1's shared-decky
+#:   failure mode and F2's rotating-ASN one.
 #:
-#: Shared-infra + temporal overlap together (1.1) cross threshold —
-#: the canonical co-op pattern. Shared-infra + cohort (0.8) does
-#: NOT — F1's wordlist-overlap-only failure mode is preserved.
+#: F1 shared_wordlist: payload+C2 = ∅ on both sides → shared_infra =
+#: 0; ASN+decky overlap fires cohort but at 0.1 stays well below
+#: threshold. F2 vpn_hopping is folded by the identity layer first,
+#: so the campaign clusterer sees one identity → one campaign.
 CAMPAIGN_TIER_WEIGHTS: dict[str, float] = {
     "phase_handoff": 1.0,
-    "shared_infra": 0.7,
+    "shared_infra": 1.0,
     "temporal_overlap": 0.4,
     "cohort": 0.1,
 }
@@ -363,8 +379,17 @@ def from_synthetic_identity(att, identity_uuid: Optional[str] = None) -> Identit
         decky = getattr(s, "decky", None) or getattr(s, "decky_id", None)
         if decky:
             decky_set.add(decky)
-        ts_start = getattr(s, "start_ts", None)
-        ts_end = getattr(s, "end_ts", None)
+        # SyntheticSession exposes ``started_at`` (datetime) +
+        # ``duration_s``; the production-row adapter (commit 3) gets
+        # ``start_ts``/``end_ts`` directly. Support both.
+        started_at = getattr(s, "started_at", None)
+        duration_s = getattr(s, "duration_s", None)
+        if started_at is not None:
+            ts_start = started_at.timestamp()
+            ts_end = ts_start + (float(duration_s) if duration_s else 0.0)
+        else:
+            ts_start = getattr(s, "start_ts", None)
+            ts_end = getattr(s, "end_ts", None)
         if ts_start is not None and ts_end is not None:
             session_windows.append((float(ts_start), float(ts_end)))
         phase_value = s.phase.value if hasattr(s, "phase") else None
@@ -379,6 +404,8 @@ def from_synthetic_identity(att, identity_uuid: Optional[str] = None) -> Identit
             last_phase_per_decky[decky] = phase_value
             if ts_end is not None:
                 last_seen_per_decky[decky] = float(ts_end)
+            elif ts_start is not None:
+                last_seen_per_decky[decky] = float(ts_start)
 
     return IdentityFeatures(
         identity_uuid=identity_uuid or att.attacker_id,

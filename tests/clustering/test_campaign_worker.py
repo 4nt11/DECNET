@@ -247,17 +247,14 @@ async def test_tick_empty_db_returns_empty_result(repo):
 
 @pytest.mark.anyio
 async def test_tick_forms_campaign_for_shared_infra_co_op(repo):
-    # Two identities, full shared-infra (payload + c2). Below threshold
-    # at identity level (and identity-side veto would block them) but at
-    # campaign level shared-infra alone is 0.7; need temporal overlap to
-    # cross. Add overlap via session windows... but the production-row
-    # adapter doesn't yet populate session_windows. So instead use a
-    # full payload+c2 overlap which gives Jaccard=1.0 → 0.7. Below
-    # threshold. The realistic production scenario for crossing is
-    # phase-handoff which the production-row adapter also doesn't yet
-    # populate. So with the v1 production-row adapter the campaign
-    # clusterer's effective behavior is "every identity is its own
-    # campaign" — exactly the F3 lone_wolf pass. Verify that here.
+    """Two identities with shared payload + C2 fold to one campaign.
+
+    The canonical F5-style co-op pattern, exercised end-to-end through
+    the production-row adapter. ``from_identity_row`` reads
+    ``payload_simhashes`` + ``c2_endpoints`` from the AttackerIdentity
+    JSON columns, builds IdentityFeatures, and the campaign weight
+    crosses threshold on shared_infra alone.
+    """
     await _create_identity(
         repo, "i1",
         payload_simhashes=json.dumps(["h1"]),
@@ -272,13 +269,29 @@ async def test_tick_forms_campaign_for_shared_infra_co_op(repo):
     c = ConnectedComponentsCampaignClusterer()
     result = await c.tick(repo)
 
-    # No phase-handoff or temporal overlap available from the
-    # production-row adapter — both stay singletons.
-    assert len(result.campaigns_formed) == 2
-    formed_idents = {
-        i for entry in result.campaigns_formed for i in entry["identity_uuids"]
-    }
+    assert len(result.campaigns_formed) == 1
+    formed_idents = set(result.campaigns_formed[0]["identity_uuids"])
     assert formed_idents == {"i1", "i2"}
+
+
+@pytest.mark.anyio
+async def test_tick_keeps_distinct_payloads_separate(repo):
+    """No payload/C2 overlap → singleton per identity."""
+    await _create_identity(
+        repo, "i1",
+        payload_simhashes=json.dumps(["h1"]),
+        c2_endpoints=json.dumps(["c1"]),
+    )
+    await _create_identity(
+        repo, "i2",
+        payload_simhashes=json.dumps(["h2"]),
+        c2_endpoints=json.dumps(["c2"]),
+    )
+
+    c = ConnectedComponentsCampaignClusterer()
+    result = await c.tick(repo)
+
+    assert len(result.campaigns_formed) == 2
 
 
 @pytest.mark.anyio

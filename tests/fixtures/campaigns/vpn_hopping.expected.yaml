@@ -16,10 +16,10 @@
 # any bound to make CI pass requires PR-comment justification (per
 # CAMPAIGN_CLUSTERING.md §2).
 adjusted_rand_index:
-  min: 0.85
+  min: 1.0
 homogeneity:
-  min: 0.90
+  min: 1.0
 completeness:
-  min: 0.80
+  min: 1.0
 singleton_recall:
-  min: 0.95
+  min: 1.0

@@ -275,36 +275,36 @@ def test_cohort_alone_below_threshold():
     assert combined_campaign_weight(a, b) < CAMPAIGN_EDGE_THRESHOLD
 
 
-def test_shared_infra_plus_temporal_overlap_crosses_threshold():
-    """The canonical co-op pattern: shared infra during the same window."""
+def test_shared_infra_alone_crosses_threshold():
+    """Shared payload + C2 alone is enough — F5's intended pass condition."""
     a = _features(
         "a",
         payload_hashes=frozenset({"h"}),
         c2_endpoints=frozenset({"c"}),
-        decky_set=frozenset({"d1"}),
-        session_windows=((0.0, 100.0),),
     )
     b = _features(
         "b",
         payload_hashes=frozenset({"h"}),
         c2_endpoints=frozenset({"c"}),
-        decky_set=frozenset({"d1"}),
-        session_windows=((0.0, 100.0),),
     )
     assert combined_campaign_weight(a, b) >= CAMPAIGN_EDGE_THRESHOLD
 
 
-def test_shared_infra_plus_cohort_below_threshold():
-    """F1 shared_wordlist: shared signals minus operational overlap is NOT co-op."""
+def test_decky_overlap_alone_below_threshold():
+    """F1's failure mode: shared targeting on a small fleet is NOT co-op.
+
+    Two campaigns hitting the same SSH deckies share no payload/C2,
+    just the decky set. Cohort tier alone must not cross threshold.
+    """
     a = _features(
         "a",
-        payload_hashes=frozenset({"h"}),
+        decky_set=frozenset({"d1", "d2"}),
         asn_cohort=frozenset({64512}),
     )
     b = _features(
         "b",
-        payload_hashes=frozenset({"h"}),
-        asn_cohort=frozenset({64512}),
+        decky_set=frozenset({"d1", "d2"}),
+        asn_cohort=frozenset({64513}),
     )
     assert combined_campaign_weight(a, b) < CAMPAIGN_EDGE_THRESHOLD
 

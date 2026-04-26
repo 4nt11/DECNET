@@ -41,7 +41,7 @@ campaign:
     - id: ops-sprint-1
       asn: 64520
       ip_pool: sticky
-      ja3: "771,4865-4866-4867-49195-49199-49196-49200,0-23-65281-10-11-35-16-5-13-18-51-45-43-27,29-23-24,0"
+      ja3: "771,4865-4867-49195-49199-49196-49200-157,0-23-65281-10-11-35-16-5-13-18-51-45-43-27,29-24,0"
       hassh: "paused-op-dddddddd-dddddddd-dddddddd"
       hours_active_utc: [9, 10, 11, 12, 13, 14, 15, 16]
       jitter_seconds: 60
@@ -49,7 +49,7 @@ campaign:
     - id: ops-sprint-2
       asn: 64520        # same ASN — operator stays on same egress
       ip_pool: sticky
-      ja3: "771,4865-4866-4867-49195-49199-49196-49200,0-23-65281-10-11-35-16-5-13-18-51-45-43-27,29-23-24,0"
+      ja3: "771,4865-4867-49195-49199-49196-49200-157,0-23-65281-10-11-35-16-5-13-18-51-45-43-27,29-24,0"
       hassh: "paused-op-dddddddd-dddddddd-dddddddd"
       hours_active_utc: [9, 10, 11, 12, 13, 14, 15, 16]
       jitter_seconds: 60

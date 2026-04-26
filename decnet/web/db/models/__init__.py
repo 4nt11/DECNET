@@ -170,6 +170,9 @@ __all__ = [
     "AttackersResponse",
     "SessionProfile",
     "SmtpTarget",
+    # campaigns
+    "Campaign",
+    "CampaignsResponse",
     # deploy
     "DeployIniRequest",
     "DeployResponse",
