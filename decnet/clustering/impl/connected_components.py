@@ -34,20 +34,14 @@ from typing import Any, Iterable, Optional
 
 from decnet.clustering.base import Clusterer, ClusterResult
 from decnet.clustering.impl.similarity import (
+    EDGE_THRESHOLD,
     Observation,
-    high_weight_edge,
+    combined_edge_weight,
 )
 from decnet.logging import get_logger
 from decnet.web.db.repository import BaseRepository
 
 log = get_logger("clustering.connected_components")
-
-
-# Threshold above which an edge survives into the graph. The high-tier
-# functions return 1.0 on agreement, so a literal >= 1.0 cutoff means
-# "exact match required." Once medium-tier edges combine, this becomes
-# a tunable.
-_EDGE_THRESHOLD = 1.0
 
 
 def cluster_observations(
@@ -81,7 +75,7 @@ def cluster_observations(
 
     for i, a in enumerate(obs_list):
         for b in obs_list[i + 1:]:
-            if high_weight_edge(a, b) >= _EDGE_THRESHOLD:
+            if combined_edge_weight(a, b) >= EDGE_THRESHOLD:
                 union(a.observation_id, b.observation_id)
 
     # Roots: each unique find(o) is a component representative. Use

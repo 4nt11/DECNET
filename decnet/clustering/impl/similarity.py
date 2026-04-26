@@ -162,6 +162,63 @@ def very_low_weight_edge(a: Observation, b: Observation) -> float:
     return 1.0 if a.asn == b.asn else 0.0
 
 
+# ─── Combined weight ────────────────────────────────────────────────────────
+
+#: Tier multipliers applied to the per-tier edge scores when combining
+#: into a single weight. Tuned so that:
+#:
+#: * High-tier agreement alone (1.0) crosses the 1.0 threshold.
+#: * Medium-tier alone (max 1.0) yields 0.6 — below threshold.
+#: * Low-tier alone (max 1.0) yields 0.2 — defeats fixture 1's
+#:   credential-overlap-only failure mode.
+#: * Very-low alone (max 1.0) yields 0.05 — defeats fixture 2's
+#:   ASN-rotation failure mode.
+#:
+#: The ratio between tiers matters more than the absolute values: a
+#: tier should never combine its way past threshold without help from
+#: a stronger one.
+TIER_WEIGHTS = {
+    "high": 1.0,
+    "medium": 0.6,
+    "low": 0.2,
+    "very_low": 0.05,
+}
+
+#: Threshold a combined edge weight must meet to survive into the
+#: similarity graph. The connected-components impl drops anything
+#: under this before running union-find.
+EDGE_THRESHOLD = 1.0
+
+
+def combined_edge_weight(a: Observation, b: Observation) -> float:
+    """Sum of all four tier scores, weighted by :data:`TIER_WEIGHTS`.
+
+    Each per-tier function returns a score in ``[0, 1]``; the
+    weighted sum lets stronger tiers dominate without letting weaker
+    ones combine their way past threshold.
+
+    The connected-components clusterer compares this against
+    :data:`EDGE_THRESHOLD` to decide whether to draw an edge. Pure /
+    time-agnostic — fixture 7 forbids recency-decay weighting.
+
+    Commits 5–7 land each tier in the call site:
+
+    * Commit 5 (this commit): high + medium.
+    * Commit 6: + phase-handoff (a separate edge family, not a tier).
+    * Commit 7: + low + very_low.
+
+    Until commit 7 lands, the low / very_low contributions stay zero
+    by virtue of the underlying functions returning ``0.0`` whenever
+    their inputs are missing. The combination is forward-compatible.
+    """
+    return (
+        TIER_WEIGHTS["high"] * high_weight_edge(a, b)
+        + TIER_WEIGHTS["medium"] * medium_weight_edge(a, b)
+        + TIER_WEIGHTS["low"] * low_weight_edge(a, b)
+        + TIER_WEIGHTS["very_low"] * very_low_weight_edge(a, b)
+    )
+
+
 # ─── Adapter for the synthetic-corpus tests ─────────────────────────────────
 
 
@@ -206,5 +263,8 @@ __all__ = [
     "medium_weight_edge",
     "low_weight_edge",
     "very_low_weight_edge",
+    "combined_edge_weight",
     "from_synthetic",
+    "EDGE_THRESHOLD",
+    "TIER_WEIGHTS",
 ]

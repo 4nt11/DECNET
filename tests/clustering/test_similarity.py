@@ -10,7 +10,9 @@ from __future__ import annotations
 import pytest
 
 from decnet.clustering.impl.similarity import (
+    EDGE_THRESHOLD,
     Observation,
+    combined_edge_weight,
     from_synthetic,
     high_weight_edge,
     low_weight_edge,
@@ -177,6 +179,70 @@ def test_observations_carry_no_timestamps():
 
 
 # ─── from_synthetic adapter ────────────────────────────────────────────────
+
+
+# ─── combined_edge_weight tier discipline ─────────────────────────────────
+
+
+def test_combined_high_alone_crosses_threshold():
+    a = _obs(ja3="ja3-shared")
+    b = _obs(ja3="ja3-shared")
+    assert combined_edge_weight(a, b) >= EDGE_THRESHOLD
+
+
+def test_combined_medium_alone_below_threshold():
+    """Single medium-tier match must NOT cluster — medium is a
+    supporting signal, never a clustering driver on its own."""
+    a = _obs(commands_by_phase={"discovery": ("ls", "id", "uname")})
+    b = _obs(commands_by_phase={"discovery": ("ls", "id", "uname")})
+    weight = combined_edge_weight(a, b)
+    assert 0 < weight < EDGE_THRESHOLD
+
+
+def test_combined_low_alone_below_threshold():
+    """Credential-only overlap must NOT cluster — fixture 1's failure mode."""
+    a = _obs(credentials=frozenset({("root", "toor"), ("admin", "admin")}))
+    b = _obs(credentials=frozenset({("root", "toor"), ("admin", "admin")}))
+    weight = combined_edge_weight(a, b)
+    assert 0 < weight < EDGE_THRESHOLD
+
+
+def test_combined_very_low_alone_below_threshold():
+    """ASN-only overlap must NOT cluster — fixture 2's failure mode."""
+    a = _obs(asn=64500)
+    b = _obs(asn=64500)
+    weight = combined_edge_weight(a, b)
+    assert 0 < weight < EDGE_THRESHOLD
+
+
+def test_combined_all_weak_tiers_still_below_threshold():
+    """Even all three weaker tiers stacked don't reach threshold —
+    only a high-tier signal does."""
+    a = _obs(
+        asn=64500,
+        credentials=frozenset({("root", "toor")}),
+        commands_by_phase={"discovery": ("ls",)},
+    )
+    b = _obs(
+        asn=64500,
+        credentials=frozenset({("root", "toor")}),
+        commands_by_phase={"discovery": ("ls",)},
+    )
+    # 0.6*1.0 (medium) + 0.2*1.0 (low) + 0.05*1.0 (very_low) = 0.85
+    weight = combined_edge_weight(a, b)
+    assert weight < EDGE_THRESHOLD
+
+
+def test_combined_high_plus_medium_clusters():
+    a = _obs(ja3="ja3-x", commands_by_phase={"discovery": ("ls",)})
+    b = _obs(ja3="ja3-x", commands_by_phase={"discovery": ("ls",)})
+    assert combined_edge_weight(a, b) >= EDGE_THRESHOLD
+
+
+def test_combined_no_signal_returns_zero():
+    a = _obs()
+    b = _obs()
+    assert combined_edge_weight(a, b) == 0.0
 
 
 def test_from_synthetic_round_trip():

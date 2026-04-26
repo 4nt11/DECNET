@@ -287,6 +287,36 @@ def test_shared_wordlist_passes_with_production_clusterer():
     )
 
 
+def test_paused_campaign_passes_with_production_clusterer():
+    """Fixture 4: one campaign split across two operational windows by
+    a multi-day silence. Both halves share JA3 + HASSH + payload + C2;
+    the production clusterer must fold them into one identity. Time-
+    agnostic invariant: the silence window is irrelevant to clustering."""
+    from tests.clustering.fixture_harness import assert_fixture_bounds
+    from tests.factories.campaign_factory import generate, load_yaml
+
+    corpus = generate(load_yaml(FIXTURE_DIR / "paused_campaign.yaml"), seed=0)
+    assert_fixture_bounds(
+        corpus, _production_clusterer_predict,
+        FIXTURE_DIR / "paused_campaign.expected.yaml",
+    )
+
+
+def test_cluster_observations_medium_alone_does_not_fuse():
+    """Two observations sharing only command-sequence (medium-tier)
+    must stay in distinct clusters — medium is a supporting signal."""
+    a = Observation(
+        observation_id="a",
+        commands_by_phase={"discovery": ("ls", "id", "uname")},
+    )
+    b = Observation(
+        observation_id="b",
+        commands_by_phase={"discovery": ("ls", "id", "uname")},
+    )
+    labels = cluster_observations([a, b])
+    assert labels["a"] != labels["b"]
+
+
 def test_vpn_hopping_passes_at_identity_level_with_production_clusterer():
     """Fixture 2: one rotating actor with stable JA3 + HASSH across
     5 ASNs. The production clusterer must fold all 5 observations into
