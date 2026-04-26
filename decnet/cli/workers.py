@@ -191,3 +191,51 @@ def register(app: typer.Typer) -> None:
             asyncio.run(_run())
         except KeyboardInterrupt:
             console.print("\n[yellow]Reuse correlator stopped.[/]")
+
+    @app.command(name="clusterer")
+    def clusterer(
+        poll_interval_secs: float = typer.Option(
+            60.0, "--poll-interval", "-i",
+            help="Slow-tick fallback when the bus is idle or unavailable (seconds)",
+        ),
+        daemon: bool = typer.Option(
+            False, "--daemon", "-d",
+            help="Detach to background as a daemon process",
+        ),
+    ) -> None:
+        """Identity-resolution clusterer.
+
+        Bus-woken on ``attacker.observed`` and ``attacker.scored``;
+        builds a similarity graph over observations, runs
+        connected-components, writes ``attacker_identities`` rows, and
+        publishes ``identity.formed`` / ``identity.observation.linked``
+        / ``identity.merged`` / ``identity.unmerged``.
+        """
+        import asyncio
+        from decnet.cli.gating import _require_master_mode
+        from decnet.clustering.worker import run_clusterer_loop
+        from decnet.web.dependencies import repo
+
+        _require_master_mode("clusterer")
+
+        if daemon:
+            log.info("clusterer daemonizing poll=%s", poll_interval_secs)
+            _utils._daemonize()
+
+        log.info("clusterer command invoked poll=%s", poll_interval_secs)
+        console.print(
+            f"[bold cyan]Identity clusterer starting[/] "
+            f"poll={poll_interval_secs}s"
+        )
+        console.print("[dim]Press Ctrl+C to stop[/]")
+
+        async def _run() -> None:
+            await repo.initialize()
+            await run_clusterer_loop(
+                repo, poll_interval_secs=poll_interval_secs,
+            )
+
+        try:
+            asyncio.run(_run())
+        except KeyboardInterrupt:
+            console.print("\n[yellow]Identity clusterer stopped.[/]")
