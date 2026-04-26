@@ -165,6 +165,29 @@ class TestEngineCorrelate:
         assert results2 == []
 
     @pytest.mark.anyio
+    async def test_list_and_get_enrich_with_secret(self, repo) -> None:
+        """``list_credential_reuses`` and ``get_credential_reuse_by_id``
+        must surface ``secret_printable`` + ``secret_b64`` from the
+        underlying ``Credential`` rows so the dashboard drawer can show
+        the actual secret instead of just its sha256.
+        """
+        sha = _sha256("hunter2")
+        await _seed_credential(repo, secret_sha256=sha, decky_name="d1", service="ssh")
+        await _seed_credential(repo, secret_sha256=sha, decky_name="d2", service="ftp")
+
+        engine = CorrelationEngine()
+        await engine.correlate_credential_reuse(repo, min_targets=2)
+
+        _, rows = await repo.list_credential_reuses(min_target_count=2)
+        assert rows[0]["secret_printable"] == "hunter2"
+        assert rows[0]["secret_b64"] == "aHVudGVyMg=="
+
+        single = await repo.get_credential_reuse_by_id(rows[0]["id"])
+        assert single is not None
+        assert single["secret_printable"] == "hunter2"
+        assert single["secret_b64"] == "aHVudGVyMg=="
+
+    @pytest.mark.anyio
     async def test_growth_emits_changed(self, repo) -> None:
         """Adding a third target after an initial reuse run yields a
         ``changed`` row on the next correlation pass.

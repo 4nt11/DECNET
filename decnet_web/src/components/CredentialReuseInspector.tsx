@@ -19,6 +19,8 @@ export interface CredentialReuseRow {
   first_seen: string;
   last_seen: string;
   updated_at: string;
+  secret_printable: string | null;
+  secret_b64: string | null;
 }
 
 interface Props {
@@ -134,6 +136,16 @@ const CredentialReuseInspector: React.FC<Props> = ({ row, onClose }) => {
                 ))}
               </div>
             )}
+          </div>
+
+          <div>
+            <div className="type-label">{isPlain ? 'PLAINTEXT SECRET' : 'OBSERVED RESPONSE'}</div>
+            <pre className="code-block">
+              <span className="ck">printable:</span>{' '}
+              <span className="cs">{row.secret_printable ?? '—'}</span>{'\n'}
+              <span className="ck">b64:</span>{' '}
+              <span className="cs">{row.secret_b64 ?? '—'}</span>
+            </pre>
           </div>
 
           <div>

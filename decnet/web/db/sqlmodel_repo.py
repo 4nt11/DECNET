@@ -927,6 +927,7 @@ class SQLModelRepository(BaseRepository):
                     except (json.JSONDecodeError, TypeError):
                         d[key] = []
                 out.append(d)
+            await self._enrich_with_secret(session, out)
             return int(total), out
 
     async def get_credential_reuse_by_id(
@@ -944,7 +945,48 @@ class SQLModelRepository(BaseRepository):
                     d[key] = json.loads(d[key])
                 except (json.JSONDecodeError, TypeError):
                     d[key] = []
+            await self._enrich_with_secret(session, [d])
             return d
+
+    @staticmethod
+    async def _enrich_with_secret(
+        session: Any, rows: List[dict[str, Any]]
+    ) -> None:
+        """Tack ``secret_printable`` + ``secret_b64`` onto each reuse row.
+
+        ``CredentialReuse`` only stores the sha256+kind hash of the
+        secret — the actual printable/b64 representations live on the
+        underlying ``Credential`` rows. The dashboard wants to show the
+        secret in the drawer, so we lift one matching credential per
+        ``(sha256, kind, principal)`` finding. One batched query for the
+        whole page; rows with no surviving credential (shouldn't happen
+        in practice) get nulls.
+        """
+        if not rows:
+            return
+        sha_set = {r["secret_sha256"] for r in rows}
+        if not sha_set:
+            return
+        stmt = select(
+            Credential.secret_sha256,
+            Credential.secret_kind,
+            Credential.principal,
+            Credential.secret_printable,
+            Credential.secret_b64,
+        ).where(Credential.secret_sha256.in_(sha_set))
+        secret_map: dict[
+            tuple[str, str, Optional[str]],
+            tuple[Optional[str], Optional[str]],
+        ] = {}
+        for sha, kind, principal, printable, b64 in (
+            (await session.execute(stmt)).all()
+        ):
+            secret_map.setdefault((sha, kind, principal), (printable, b64))
+        for r in rows:
+            key = (r["secret_sha256"], r["secret_kind"], r.get("principal"))
+            printable, b64 = secret_map.get(key, (None, None))
+            r["secret_printable"] = printable
+            r["secret_b64"] = b64
 
     async def get_state(self, key: str) -> Optional[dict[str, Any]]:
         async with self._session() as session:
