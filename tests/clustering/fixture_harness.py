@@ -42,6 +42,23 @@ cluster on, not the quality of the result.
   other. Exists so fixtures like `paused_campaign` (fixture #4) can
   prove they fail a clusterer that treats short-window time proximity
   as a primary signal — operators pause, sleep, take weekends.
+
+* `c2_callback_clusterer` — union-find on overlapping C2 callback
+  sets. Pass-clusterer for fixture 5 (multi_operator), where two
+  operators with distinct tooling share a C2 endpoint as the
+  load-bearing campaign signal. Attackers with no C2 endpoints
+  become their own singleton.
+
+* `shift_clusterer` — deliberately-bad reference that buckets
+  attackers by majority session-start hour into night/day/swing.
+  Exists so fixture 5 can prove they fail a clusterer that treats
+  shift schedule as a primary signal — operators on different
+  schedules can still share a campaign.
+
+* `composite_signals_clusterer` — union-find that combines
+  ``(ja3, hassh)`` match OR shared C2 callback into the same
+  cluster. Approximates the planned similarity graph well enough
+  to score the combined-corpus fixture (fixture 6, noise_floor).
 """
 from __future__ import annotations
 
@@ -121,6 +138,150 @@ def fingerprint_clusterer(corpus: GeneratedCorpus) -> dict[str, str]:
 def asn_clusterer(corpus: GeneratedCorpus) -> dict[str, str]:
     """Group by source ASN. Deliberately-bad — see fixture 2."""
     return {a.attacker_id: f"asn-{a.asn}" for a in corpus.attackers}
+
+
+def _union_find(ids: list[str]) -> tuple[
+    dict[str, str], Callable[[str], str], Callable[[str, str], None]
+]:
+    """Return (parent, find, union) for a fresh union-find over ``ids``."""
+    parent: dict[str, str] = {aid: aid for aid in ids}
+
+    def find(x: str) -> str:
+        while parent[x] != x:
+            parent[x] = parent[parent[x]]
+            x = parent[x]
+        return x
+
+    def union(x: str, y: str) -> None:
+        rx, ry = find(x), find(y)
+        if rx != ry:
+            parent[rx] = ry
+
+    return parent, find, union
+
+
+def c2_callback_clusterer(corpus: GeneratedCorpus) -> dict[str, str]:
+    """Union attackers whose session-collected C2 callback sets overlap.
+
+    Attackers with no C2 callbacks become their own singleton (an
+    un-fingerprinted opportunistic scanner has no link to anyone).
+    """
+    callbacks: dict[str, set[str]] = {}
+    for att in corpus.attackers:
+        callbacks[att.attacker_id] = {
+            s.c2_callback for s in att.sessions if s.c2_callback
+        }
+
+    ids = list(callbacks.keys())
+    _parent, find, union = _union_find(ids)
+
+    for i, a in enumerate(ids):
+        sa = callbacks[a]
+        if not sa:
+            continue
+        for b in ids[i + 1 :]:
+            sb = callbacks[b]
+            if not sb:
+                continue
+            if sa & sb:
+                union(a, b)
+
+    pred: dict[str, str] = {}
+    for aid in ids:
+        if not callbacks[aid]:
+            pred[aid] = f"c2-none-{aid}"
+        else:
+            pred[aid] = f"c2-{find(aid)}"
+    return pred
+
+
+def shift_clusterer(corpus: GeneratedCorpus) -> dict[str, str]:
+    """Bucket attackers by majority session-start hour into night /
+    day / swing. Deliberately-bad — see fixture 5.
+
+    Buckets:
+      * night  — hours [22, 23, 0, 1, 2, 3, 4, 5]
+      * day    — hours [6, 7, 8, 9, 10, 11, 12, 13]
+      * swing  — hours [14, 15, 16, 17, 18, 19, 20, 21]
+
+    Attackers with no sessions become their own singleton.
+    """
+    night = {22, 23, 0, 1, 2, 3, 4, 5}
+    day = {6, 7, 8, 9, 10, 11, 12, 13}
+
+    def bucket(hour: int) -> str:
+        if hour in night:
+            return "night"
+        if hour in day:
+            return "day"
+        return "swing"
+
+    pred: dict[str, str] = {}
+    for att in corpus.attackers:
+        if not att.sessions:
+            pred[att.attacker_id] = f"shift-none-{att.attacker_id}"
+            continue
+        counts: dict[str, int] = {}
+        for s in att.sessions:
+            b = bucket(s.started_at.hour)
+            counts[b] = counts.get(b, 0) + 1
+        majority = max(counts, key=lambda k: counts[k])
+        pred[att.attacker_id] = f"shift-{majority}"
+    return pred
+
+
+def composite_signals_clusterer(corpus: GeneratedCorpus) -> dict[str, str]:
+    """Union-find combining ``(ja3, hassh)`` match OR overlapping C2
+    callback sets. Approximates the stable-signals + C2-overlap arms
+    of the planned similarity graph; used as the pass-clusterer for
+    fixture 6 where multiple campaigns + noise are scored together.
+
+    Attackers with NO signals (no fingerprint, no C2) stay singleton.
+    """
+    callbacks: dict[str, set[str]] = {}
+    fingerprint: dict[str, tuple[str | None, str | None] | None] = {}
+    for att in corpus.attackers:
+        callbacks[att.attacker_id] = {
+            s.c2_callback for s in att.sessions if s.c2_callback
+        }
+        if att.ja3 is None and att.hassh is None:
+            fingerprint[att.attacker_id] = None
+        else:
+            fingerprint[att.attacker_id] = (att.ja3, att.hassh)
+
+    ids = list(callbacks.keys())
+    _parent, find, union = _union_find(ids)
+
+    # Fingerprint edges.
+    by_fp: dict[tuple[str | None, str | None], list[str]] = {}
+    for aid, fp in fingerprint.items():
+        if fp is None:
+            continue
+        by_fp.setdefault(fp, []).append(aid)
+    for group in by_fp.values():
+        anchor = group[0]
+        for other in group[1:]:
+            union(anchor, other)
+
+    # C2 overlap edges.
+    for i, a in enumerate(ids):
+        sa = callbacks[a]
+        if not sa:
+            continue
+        for b in ids[i + 1 :]:
+            sb = callbacks[b]
+            if not sb:
+                continue
+            if sa & sb:
+                union(a, b)
+
+    pred: dict[str, str] = {}
+    for aid in ids:
+        if fingerprint[aid] is None and not callbacks[aid]:
+            pred[aid] = f"composite-singleton-{aid}"
+        else:
+            pred[aid] = f"composite-{find(aid)}"
+    return pred
 
 
 def time_window_clusterer(
