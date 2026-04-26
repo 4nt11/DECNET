@@ -234,11 +234,9 @@ badge linking to `/identities/<uuid>`. No change otherwise.
    re-attributed; previous identity remains as a soft-merged
    reference"). The `merged_into_uuid` chain is the audit trail.
 
-2. **API URL stability.** Identity UUIDs that get soft-merged via
-   `merged_into_uuid` should still resolve at
-   `/api/v1/identities/{uuid}` — return 301 to the winner, or return
-   the loser row with a `merged_into` link. Decide before the
-   clusterer ships.
+2. ~~**API URL stability.**~~ Resolved in commit `dc3d08d`: the
+   read-only API follows `merged_into_uuid` and surfaces the canonical
+   winner. Loser UUIDs resolve to the winner row.
 
 3. **Schema-version lock-in for federation.** `schema_version=1` is
    what we ship. Any fingerprint added to the identity row post-v1
@@ -263,19 +261,19 @@ badge linking to `/identities/<uuid>`. No change otherwise.
 
 ## Open Questions
 
-1. **Revocability of identity merges.** When the clusterer merges
-   identities A and B into A (via `merged_into_uuid`), can a future
-   evidence update split them back apart? Leaning yes — clear
-   `B.merged_into_uuid`, re-link B's original observations. But that
-   leaks history (any subscriber that cached "B is gone" now sees B
-   alive again). May need an explicit `identity.unmerged` topic.
-   Decide before the clusterer ships.
+1. ~~**Revocability of identity merges.**~~ **Resolved 2026-04-26:**
+   merges are revocable. `identity.unmerged` topic ships in
+   `decnet/bus/topics.py` alongside the existing three so subscribers
+   on `identity.>` get it from day one. Clusterer clears
+   `merged_into_uuid`, re-links observations, publishes
+   `identity.unmerged` + a fresh `identity.formed` for the
+   resurrected side.
 
-2. **`AttackerDetail` UX when `identity_id` changes.** If an operator
-   has a tab open showing `attackers/X` with identity_id=A, and the
-   clusterer rewrites it to identity_id=B, the page goes stale.
-   Acceptable: stale tab, refresh on focus. Better: SSE channel
-   pushes the change. Decide alongside the clusterer.
+2. ~~**`AttackerDetail` UX when `identity_id` changes.**~~ **Resolved
+   2026-04-26:** SSE channel modeled on the topology-mutator SSE.
+   New endpoint subscribes to `identity.>`, JWT via `?token=`,
+   snapshot-on-connect + live forward. `AttackerDetail` and
+   `IdentityDetail` consume it.
 
 3. **`SessionProfile.identity_id` FK.** Does this PR sequence add it,
    or does it wait for V2 keystroke dynamics? Leaning **wait** — the
