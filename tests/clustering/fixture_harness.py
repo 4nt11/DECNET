@@ -36,6 +36,12 @@ cluster on, not the quality of the result.
   can prove they fail a clusterer that treats ASN match as a
   high-weight signal — VPN/proxy hopping shatters ASN within a single
   identity and a clusterer that leans on it tanks completeness.
+
+* `time_window_clusterer` — deliberately-bad reference that unions
+  attackers whose session time-ranges are within ``gap_days`` of each
+  other. Exists so fixtures like `paused_campaign` (fixture #4) can
+  prove they fail a clusterer that treats short-window time proximity
+  as a primary signal — operators pause, sleep, take weekends.
 """
 from __future__ import annotations
 
@@ -115,6 +121,65 @@ def fingerprint_clusterer(corpus: GeneratedCorpus) -> dict[str, str]:
 def asn_clusterer(corpus: GeneratedCorpus) -> dict[str, str]:
     """Group by source ASN. Deliberately-bad — see fixture 2."""
     return {a.attacker_id: f"asn-{a.asn}" for a in corpus.attackers}
+
+
+def time_window_clusterer(
+    corpus: GeneratedCorpus, *, gap_days: float = 1.0
+) -> dict[str, str]:
+    """Union-find over attackers, edge if their session time-ranges
+    overlap or are within ``gap_days`` of each other.
+
+    Deliberately-bad reference for fixture 4 (paused_campaign): a
+    campaign that goes silent for several days will be split into
+    "before pause" and "after pause" clusters by this clusterer,
+    breaching completeness. The real algorithm must not lean on
+    short-window time proximity as a primary signal — operators
+    pause, sleep, switch shifts, take weekends. Time bursts are a
+    weak hint, not a hard partition.
+
+    Attackers with no sessions become their own singleton cluster.
+    """
+    from datetime import timedelta
+
+    gap = timedelta(days=gap_days)
+    ids = [a.attacker_id for a in corpus.attackers]
+    ranges: dict[str, tuple] = {}
+    for att in corpus.attackers:
+        if not att.sessions:
+            continue
+        starts = [s.started_at for s in att.sessions]
+        ends = [s.started_at + timedelta(seconds=s.duration_s) for s in att.sessions]
+        ranges[att.attacker_id] = (min(starts), max(ends))
+
+    parent: dict[str, str] = {aid: aid for aid in ids}
+
+    def find(x: str) -> str:
+        while parent[x] != x:
+            parent[x] = parent[parent[x]]
+            x = parent[x]
+        return x
+
+    def union(x: str, y: str) -> None:
+        rx, ry = find(x), find(y)
+        if rx != ry:
+            parent[rx] = ry
+
+    keys = list(ranges.keys())
+    for i, a in enumerate(keys):
+        a_start, a_end = ranges[a]
+        for b in keys[i + 1 :]:
+            b_start, b_end = ranges[b]
+            # Time-distance between the two ranges (0 if they overlap).
+            if a_end < b_start:
+                separation = b_start - a_end
+            elif b_end < a_start:
+                separation = a_start - b_end
+            else:
+                separation = timedelta(0)
+            if separation <= gap:
+                union(a, b)
+
+    return {aid: find(aid) for aid in ids}
 
 
 def credential_jaccard_clusterer(

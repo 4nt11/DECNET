@@ -1,0 +1,24 @@
+# Bounds for fixture 4 (paused_campaign).
+#
+# Ground truth at campaign-level: 1 campaign of 2 observation rows
+# (one per DSL actor — modeling the operator's two operational
+# windows). A correct algorithm scores 1.0 on every metric.
+#
+# Completeness is the load-bearing metric: a clusterer that lets a
+# multi-day silent period split the campaign tanks completeness
+# (the one true class is split across two predicted clusters,
+# matching the gap). The adversarial time_window_clusterer
+# demonstrates this and the bound below rejects it.
+#
+# This fixture is CAMPAIGN-LEVEL ONLY (see the fixture YAML for
+# why). No identity-level scoring.
+#
+# Bounds are loose at v1; tighten as the algorithm matures.
+adjusted_rand_index:
+  min: 0.85
+homogeneity:
+  min: 0.90
+completeness:
+  min: 0.80
+singleton_recall:
+  min: 0.95

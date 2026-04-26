@@ -331,21 +331,30 @@ def _emit_campaign(
             decky_choices = decky_pool
 
         # Schedule sessions across the campaign window, respecting the
-        # actor's hours_active_utc and pause_windows.
+        # actor's hours_active_utc, pause_windows, and (if specified)
+        # the actor's active_days. ``active_days`` (per-actor list of
+        # day indexes) lets a fixture bind an actor to specific days
+        # without affecting siblings — used by fixture 4 to model an
+        # operator who pauses operations between sprints.
         active_hours = actor_spec.get("hours_active_utc", list(range(24)))
         jitter = int(actor_spec.get("jitter_seconds", 60))
 
+        non_paused = [
+            d for d in range(duration_days)
+            if not any(s <= d <= e for s, e in pause_windows)
+        ]
+        actor_active_days = actor_spec.get("active_days")
+        if actor_active_days is not None:
+            # Intersect with non-paused so pause_windows still wins
+            # globally if the fixture sets both (defensive).
+            day_pool = [d for d in actor_active_days if d in non_paused]
+        else:
+            day_pool = non_paused
+
         for s_idx in range(n_sessions):
-            day = rng.randint(0, max(0, duration_days - 1))
-            if any(start <= day <= end for start, end in pause_windows):
-                # Skip into post-pause day.
-                later_days = [
-                    d for d in range(duration_days)
-                    if not any(s <= d <= e for s, e in pause_windows)
-                ]
-                if not later_days:
-                    continue
-                day = rng.choice(later_days)
+            if not day_pool:
+                continue
+            day = rng.choice(day_pool)
             hour = rng.choice(active_hours)
             day_start = epoch + timedelta(days=day)
             started_at = _hour_to_offset(rng, day_start, hour, jitter)
