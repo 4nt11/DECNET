@@ -14,6 +14,9 @@ Token structure (NATS-style, dot-separated):
     attacker.scored
     attacker.session.started
     attacker.session.ended
+    identity.formed
+    identity.observation.linked
+    identity.merged
     credential.captured
     credential.reuse.detected
     system.log
@@ -33,6 +36,7 @@ from __future__ import annotations
 TOPOLOGY = "topology"
 DECKY = "decky"
 ATTACKER = "attacker"
+IDENTITY = "identity"
 SYSTEM = "system"
 CREDENTIAL = "credential"
 
@@ -82,6 +86,27 @@ ATTACKER_SESSION_ENDED = "session.ended"
 # returned a verdict).  Payload carries the aggregate verdict + per-
 # provider summary so SIEM-bound webhooks don't need to re-query the DB.
 ATTACKER_INTEL_ENRICHED = "intel.enriched"
+
+# Identity-resolution event types (second/third tokens under ``identity``).
+# Published by the (future) clusterer worker — see
+# development/IDENTITY_RESOLUTION.md.  Constants ship in this commit;
+# no publishers exist yet, but consumers (webhook worker, dashboard
+# SSE relay) can subscribe to ``identity.>`` from day one and receive
+# events the instant the clusterer comes online.
+#
+#   identity.formed              — clusterer creates a new identity from
+#                                  one or more observations
+#   identity.observation.linked  — observation attached to an existing
+#                                  identity (or reattached from another)
+#   identity.merged              — two identities collapsed; loser gets
+#                                  ``merged_into_uuid`` set, subscribers
+#                                  re-key cached references to the winner
+#
+# ``identity.campaign.assigned`` is deferred; it ships when the campaign
+# clusterer ships.  YAGNI before then.
+IDENTITY_FORMED = "formed"
+IDENTITY_OBSERVATION_LINKED = "observation.linked"
+IDENTITY_MERGED = "merged"
 
 # Credential event types (second/third tokens under ``credential``).
 # ``credential.captured`` fires once per upserted Credential row — the
@@ -184,6 +209,19 @@ def attacker(event_type: str) -> str:
     if not event_type:
         raise ValueError("attacker topic requires a non-empty event_type")
     return f"{ATTACKER}.{event_type}"
+
+
+def identity(event_type: str) -> str:
+    """Build ``identity.<event_type>``.
+
+    *event_type* is typically one of :data:`IDENTITY_FORMED`,
+    :data:`IDENTITY_OBSERVATION_LINKED`, :data:`IDENTITY_MERGED`. Dotted
+    leaves (``observation.linked``) are permitted — same rationale as
+    :func:`system`.
+    """
+    if not event_type:
+        raise ValueError("identity topic requires a non-empty event_type")
+    return f"{IDENTITY}.{event_type}"
 
 
 def system_health(worker: str) -> str:

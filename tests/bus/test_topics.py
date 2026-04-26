@@ -72,3 +72,17 @@ def test_system_control_builder() -> None:
 def test_system_control_rejects_bad_segments(bad: str) -> None:
     with pytest.raises(ValueError):
         topics.system_control(bad)
+
+
+# ─── Identity resolution topics (commit 4 of IDENTITY_RESOLUTION.md) ─────────
+
+
+def test_identity_builder() -> None:
+    assert topics.identity(topics.IDENTITY_FORMED) == "identity.formed"
+    assert topics.identity(topics.IDENTITY_OBSERVATION_LINKED) == "identity.observation.linked"
+    assert topics.identity(topics.IDENTITY_MERGED) == "identity.merged"
+
+
+def test_identity_builder_rejects_empty() -> None:
+    with pytest.raises(ValueError):
+        topics.identity("")
