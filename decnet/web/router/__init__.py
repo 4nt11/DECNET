@@ -24,6 +24,7 @@ from .attackers.api_get_attacker_intel import router as attacker_intel_router
 from .identities.api_list_identities import router as identities_list_router
 from .identities.api_get_identity_detail import router as identity_detail_router
 from .identities.api_list_identity_observations import router as identity_observations_router
+from .identities.api_events import router as identity_events_router
 from .transcripts import transcripts_router
 from .config.api_get_config import router as config_get_router
 from .config.api_update_config import router as config_update_router
@@ -94,6 +95,7 @@ api_router.include_router(attacker_intel_router)
 api_router.include_router(identities_list_router)
 api_router.include_router(identity_detail_router)
 api_router.include_router(identity_observations_router)
+api_router.include_router(identity_events_router)
 
 # Observability
 api_router.include_router(stats_router)
