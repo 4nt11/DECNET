@@ -36,6 +36,7 @@ from decnet.web.db.models import (
     State,
     Attacker,
     AttackerBehavior,
+    AttackerIntel,
     SessionProfile,
     SmtpTarget,
     SwarmHost,
@@ -1194,6 +1195,73 @@ class SQLModelRepository(BaseRepository):
             if not row:
                 return None
             return row.model_dump(mode="json")
+
+    async def upsert_attacker_intel(self, data: dict[str, Any]) -> str:
+        ip = data["attacker_ip"]
+        async with self._session() as session:
+            result = await session.execute(
+                select(AttackerIntel).where(AttackerIntel.attacker_ip == ip)
+            )
+            existing = result.scalar_one_or_none()
+            if existing:
+                for k, v in data.items():
+                    setattr(existing, k, v)
+                session.add(existing)
+                row_uuid = existing.uuid
+            else:
+                row_uuid = uuid.uuid4().hex
+                session.add(AttackerIntel(uuid=row_uuid, **data))
+            await session.commit()
+            return row_uuid
+
+    async def get_attacker_intel_by_ip(
+        self,
+        ip: str,
+    ) -> Optional[dict[str, Any]]:
+        async with self._session() as session:
+            result = await session.execute(
+                select(AttackerIntel).where(AttackerIntel.attacker_ip == ip)
+            )
+            row = result.scalar_one_or_none()
+            if not row:
+                return None
+            d = row.model_dump(mode="json")
+            for key in (
+                "greynoise_raw",
+                "abuseipdb_raw",
+                "feodo_raw",
+                "threatfox_raw",
+            ):
+                raw = d.get(key)
+                if isinstance(raw, str):
+                    try:
+                        d[key] = json.loads(raw)
+                    except (json.JSONDecodeError, TypeError):
+                        pass
+            return d
+
+    async def get_unenriched_attacker_ips(self, limit: int = 100) -> list[str]:
+        """IPs in ``attackers`` with no intel row OR a stale (expired) one.
+
+        Stale = ``expires_at < now``. Ordered by ``attackers.last_seen`` desc
+        so the worker prioritises recent activity on backfill.
+        """
+        now = datetime.now(timezone.utc)
+        async with self._session() as session:
+            stmt = (
+                select(Attacker.ip)
+                .outerjoin(AttackerIntel, AttackerIntel.attacker_ip == Attacker.ip)
+                .where(
+                    or_(
+                        AttackerIntel.uuid.is_(None),
+                        AttackerIntel.expires_at < now,
+                    )
+                )
+                .order_by(desc(Attacker.last_seen))
+                .limit(limit)
+            )
+            result = await session.execute(stmt)
+            return [row for row in result.scalars().all()]
 
     async def increment_smtp_target(self, attacker_uuid: str, domain: str) -> None:
         """Upsert an (attacker_uuid, domain) pair and bump count + last_seen.

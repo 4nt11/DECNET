@@ -543,3 +543,52 @@ push-only covers it.
   query surface.
 - Channel 2 — pull: scope-verified, exact-match, prospective-only,
   aggregate-response, rate-limited.
+
+---
+
+## Threat Intel Enrichment — Provider Backlog
+
+Long list of candidate sources for `decnet/intel/`. Open / free-tier
+prioritized; Shodan is the explicit paid exception. v1 ships three
+(GreyNoise Community, AbuseIPDB, abuse.ch); the rest are post-v1 fodder
+slotted in as demand surfaces.
+
+### Reputation / abuse reports
+- AbuseIPDB — community abuse scores, free 1k/day **[v1]**
+- CrowdSec CTI — community blocklist API, free
+- Spamhaus DROP/EDROP — hijacked netblocks, free
+- CINS Score (Sentinel IPS) — reputation feed, free
+- FireHOL IP lists — aggregated reputation (GitHub), free
+- Project Honey Pot HTTP:BL — DNSBL for HTTP attackers, free
+- Emerging Threats open — free blocklist
+
+### Scanner / noise classification
+- GreyNoise Community API — purpose-built for honeypot noise filtering, free **[v1]**
+- DShield / SANS ISC — scanned-IP feeds, free
+- Tor Project exit-node list — free, no key
+
+### Active C2 / malware attribution
+- abuse.ch Feodo Tracker — botnet C2 IPs, free, no key **[v1]**
+- abuse.ch ThreatFox — IOCs from malware analysis, free **[v1]**
+- abuse.ch URLhaus — malicious URLs, free
+- abuse.ch SSLBL — malicious TLS certs, free
+- abuse.ch MalwareBazaar — payload hashes (pairs with payload capture)
+- AlienVault OTX — pulse-based IOCs, free with key
+
+### Host scan / infrastructure
+- Shodan — paid, cheap tiers (approved exception)
+- Censys — free tier, host scan data
+- BinaryEdge — ~250/mo free
+- CIRCL passive DNS / passive SSL — free for researchers
+- VirusTotal — 4 lookups/min free
+
+### Network ownership / geo
+- Team Cymru IP-to-ASN whois — free DNS-based, no key
+- IPinfo — free tier, ASN/company
+- MaxMind GeoLite2 — already in use (GeoIP mapping)
+
+### Misc
+- Cloudflare Radar — aggregate intel, free
+- Pulsedive — IOC enrichment, free tier
+- MISP communities — federated OSINT
+

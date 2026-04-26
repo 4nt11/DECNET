@@ -35,6 +35,9 @@ from .attackers import (
     SessionProfile,
     SmtpTarget,
 )
+from .attacker_intel import (
+    AttackerIntel,
+)
 from .deploy import (
     DeployIniRequest,
     DeployResponse,
@@ -157,6 +160,7 @@ __all__ = [
     # attackers
     "Attacker",
     "AttackerBehavior",
+    "AttackerIntel",
     "AttackersResponse",
     "SessionProfile",
     "SmtpTarget",

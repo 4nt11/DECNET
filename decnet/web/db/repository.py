@@ -279,6 +279,28 @@ class BaseRepository(ABC):
         pass
 
     @abstractmethod
+    async def upsert_attacker_intel(self, data: dict[str, Any]) -> str:
+        """Insert or update the threat-intel row for an attacker IP.
+
+        ``data`` MUST include ``attacker_ip`` and ``expires_at``. Returns
+        the row UUID. Used by the ``decnet enrich`` worker.
+        """
+        pass
+
+    @abstractmethod
+    async def get_attacker_intel_by_ip(self, ip: str) -> Optional[dict[str, Any]]:
+        """Return the threat-intel row for ``ip`` or ``None`` if missing."""
+        pass
+
+    @abstractmethod
+    async def get_unenriched_attacker_ips(self, limit: int = 100) -> list[str]:
+        """List attacker IPs with no intel row OR whose row is past expires_at.
+
+        Used by the enrich worker to backfill on startup and on each wake.
+        """
+        pass
+
+    @abstractmethod
     async def increment_smtp_target(self, attacker_uuid: str, domain: str) -> None:
         """
         Record that ``attacker_uuid`` targeted ``domain`` via SMTP.
