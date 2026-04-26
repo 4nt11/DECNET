@@ -409,6 +409,31 @@ Shared prep landed in commit 1: `_sync_ntlmssp_sources()` in `decnet/engine/depl
 - Full `TS_INFO_PACKET` (basic-RDP plaintext password) — see scope-down note in commit 2. Re-open as a follow-up DEBT if attacker telemetry actually shows traffic on `PROTOCOL_RDP` without NLA.
 - Pubkey / Kerberos auth paths — out of scope; mirrors DEBT-038's deferral on the SSH side.
 
+### DEBT-041 — Intel API + UI keyed by attacker.ip, not attacker.uuid
+**Files:** `decnet/web/router/attackers/api_get_attacker_intel.py`, `decnet/web/db/sqlmodel_repo.py:upsert_attacker_intel`, `decnet/web/db/models/attacker_intel.py`, `decnet_web/src/components/AttackerDetail.tsx` (`<IntelPanel ip={attacker.ip} />`).
+
+The threat-intel enrichment surface (DEBT-N/A: `feat(intel)` series) keys every public surface — `GET /api/v1/attackers/{ip}/intel`, the row's `attacker_ip` UNIQUE, and the React `<IntelPanel ip=...>` — on the attacker's IP rather than the canonical `attacker.uuid` we use for every other attacker-detail route. The decision was deliberate in v1: the enricher is woken by `attacker.observed` / `attacker.scored` events whose payload is naturally IP-keyed, the row models a *one-row-per-IP* TTL cache, and standing up a parallel UUID lookup endpoint would have added a join hop with no consumer.
+
+**Why this is debt, not just a design choice:**
+1. **NAT / shared-egress collisions.** Two distinct attacker UUIDs that share a source IP (corporate NAT, mobile carrier CGNAT, open VPN exit) collapse to one intel row. Verdicts are technically "about the IP" so this is correct semantically, but the AttackerDetail surface implies *this attacker's intel*, which is misleading when an actor swap goes unnoticed. A UUID-keyed view would let the UI show "this row is shared with N other attacker profiles" honestly.
+2. **API consistency.** Every other route under `/api/v1/attackers/` is keyed by UUID (`/{uuid}/commands`, `/{uuid}/artifacts`, `/{uuid}/transcripts`, etc.). The IP-keyed `/{ip}/intel` is an outlier that contract-test scaffolding (Schemathesis path-param fuzzing) and OpenAPI-driven SDKs will trip over.
+3. **Federation-shape mismatch.** DEVELOPMENT_V2's federation work expects gossip-able fingerprints attached to *identity vectors* (session profiles, simhash), not IP-keyed rows. When the federation layer lands and starts asking "what intel exists for this attacker?", the answer is currently a join through the IP — fine, but the abstraction leaks.
+4. **AttackerDetail.tsx coupling.** `<IntelPanel ip={attacker.ip} />` requires the parent fetch (UUID-keyed) to land before the panel can fire its own request. Two sequential fetches where one would suffice if the panel were UUID-keyed and either (a) the row carried `attacker_uuid` as a queryable index or (b) the endpoint accepted a UUID and performed the IP join server-side.
+
+**Migration sketch (post-v1):**
+1. Add `GET /api/v1/attackers/{uuid}/intel` — server-side resolves `uuid → ip`, then `ip → AttackerIntel` row. Keep the IP-keyed route as a deprecated alias for two release cycles.
+2. Frontend switches `<IntelPanel uuid={...} />` and the parallel-fetches via `Promise.all` with the existing `useEffect`s.
+3. Decide whether the `attacker_intel` table grows a real foreign key on `attacker_uuid` (with the NAT-collision implications above made explicit in the model docstring) OR whether the row stays IP-keyed and the endpoint just performs the join — the latter is cheaper, the former gives stronger guarantees if/when we want to delete intel rows on attacker purge.
+
+**Acceptance:**
+- `/api/v1/attackers/{uuid}/intel` returns the intel row for the attacker's *current* IP, with a clear contract on what happens when an attacker has rotated IPs (see follow-up open question).
+- The IP-keyed route returns `Deprecation:` header and is removed in v1.2 or v2.0 once external integrations migrate.
+- AttackerDetail.tsx stops passing `attacker.ip` into `<IntelPanel/>`.
+
+**Open question:** for an attacker UUID whose row currently carries IP `A` but who first appeared from IP `B`, what should `/attackers/{uuid}/intel` return? Most-recent-IP (current behavior implicit through `attacker.ip`) is the v1 answer; "all intel rows ever associated with this attacker" might surface IP rotation more clearly in a v2 surface. Decide before the migration ships, document either way.
+
+**Status:** Open. No operational impact today (single-IP attackers are the dominant case), but worth closing before the federation layer lands so the wire-format and API both speak in identity terms, not IP terms.
+
 ### DEBT-032 — Prober can't detect fingerprint rotation without mutation
 **Files:** `decnet/prober/worker.py` (~lines 235, 286, 334, 392), `decnet/web/db/models.py` (new `decky_service_fingerprints` table).
 
@@ -491,6 +516,7 @@ The prober already computes JARM (`worker.py:286`), HASSH (`worker.py:334`), and
 | DEBT-038 | 🟡 Medium | Honeypot / SSH cred capture | open (document-only) |
 | ~~DEBT-039~~ | ✅ | Honeypot / Cred emitters | resolved |
 | ~~DEBT-040~~ | ✅ | Honeypot / RDP+SMB cred framers | resolved |
+| DEBT-041 | 🟡 Medium | API / UI / Threat-intel keying | open |
 
-**Remaining open:** DEBT-011 (Alembic), DEBT-023 (image pinning), DEBT-026 (modular mailboxes), DEBT-027 (Dynamic bait store), DEBT-028 (deploy endpoint tests), DEBT-032 (fingerprint rotation detection), DEBT-033 (transcript shard rotation), DEBT-035 (artifacts uid/gid alignment), DEBT-036 (session-profile ingester), DEBT-037 (webhook delivery hardening), DEBT-038 (SSH PAM cred-capture limitations — document-only).
+**Remaining open:** DEBT-011 (Alembic), DEBT-023 (image pinning), DEBT-026 (modular mailboxes), DEBT-027 (Dynamic bait store), DEBT-028 (deploy endpoint tests), DEBT-032 (fingerprint rotation detection), DEBT-033 (transcript shard rotation), DEBT-035 (artifacts uid/gid alignment), DEBT-036 (session-profile ingester), DEBT-037 (webhook delivery hardening), DEBT-038 (SSH PAM cred-capture limitations — document-only), DEBT-041 (intel API/UI keyed by IP, not UUID).
 **Estimated remaining effort:** ~21 hours. DEBT-030 Phase B (optimistic staged-buffer editor) is a follow-up, not debt.
