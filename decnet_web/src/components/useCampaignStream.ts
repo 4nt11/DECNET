@@ -1,61 +1,48 @@
 /**
- * Identity-resolution event stream — opens an SSE connection to
- * `/identities/events` and dispatches typed events to the caller.
+ * Campaign-clustering event stream — opens an SSE connection to
+ * `/campaigns/events` and dispatches typed events to the caller.
  *
- * Mirrors `useTopologyStream` (reconnect on error after 3s, callbacks
- * stashed in refs so the connection isn't torn down on every consumer
- * rerender). The stream is broadly scoped — every identity event, not
- * per-uuid — because both AttackerDetail and IdentityDetail want the
- * same firehose:
- *
- *   * AttackerDetail watches for `identity.formed` events whose payload
- *     references its observation uuid (the badge appears once the
- *     clusterer binds the row), plus `merged` / `unmerged` so the
- *     badge link updates if the row's identity gets re-pointed.
- *   * IdentityDetail watches for `observation.linked` / `merged` /
- *     `unmerged` against the identity it's rendering.
- *
- * Each consumer applies its own filter inside `onEvent`; the hook
- * itself is dumb glue.
+ * Mirror of `useIdentityStream` for the layer above. CampaignDetail
+ * subscribes to refresh its own row + linked-identity list when
+ * `campaign.identity.assigned` / `campaign.merged` / `campaign.unmerged`
+ * fires.
  */
 import { useEffect, useRef } from 'react';
 
-export type IdentityStreamEventName =
+export type CampaignStreamEventName =
   | 'snapshot'
   | 'formed'
-  | 'observation.linked'
+  | 'identity.assigned'
   | 'merged'
-  | 'unmerged'
-  | 'campaign.assigned';
+  | 'unmerged';
 
-export interface IdentityStreamEvent {
-  name: IdentityStreamEventName | string;
+export interface CampaignStreamEvent {
+  name: CampaignStreamEventName | string;
   topic?: string;
   type?: string;
   ts?: string;
   payload: Record<string, unknown>;
 }
 
-export interface UseIdentityStreamOptions {
+export interface UseCampaignStreamOptions {
   enabled: boolean;
-  onEvent: (event: IdentityStreamEvent) => void;
+  onEvent: (event: CampaignStreamEvent) => void;
   onError?: () => void;
 }
 
-const NAMED_EVENTS: IdentityStreamEventName[] = [
+const NAMED_EVENTS: CampaignStreamEventName[] = [
   'snapshot',
   'formed',
-  'observation.linked',
+  'identity.assigned',
   'merged',
   'unmerged',
-  'campaign.assigned',
 ];
 
-export function useIdentityStream({
+export function useCampaignStream({
   enabled,
   onEvent,
   onError,
-}: UseIdentityStreamOptions): void {
+}: UseCampaignStreamOptions): void {
   const esRef = useRef<EventSource | null>(null);
   const reconnectRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const onEventRef = useRef(onEvent);
@@ -70,14 +57,14 @@ export function useIdentityStream({
       if (esRef.current) esRef.current.close();
       const token = localStorage.getItem('token') ?? '';
       const baseUrl = import.meta.env.VITE_API_URL || 'http://localhost:8000/api/v1';
-      const url = `${baseUrl}/identities/events?token=${encodeURIComponent(token)}`;
+      const url = `${baseUrl}/campaigns/events?token=${encodeURIComponent(token)}`;
 
       const es = new EventSource(url);
       esRef.current = es;
 
       const dispatch = (name: string) => (event: MessageEvent) => {
         try {
-          const parsed = JSON.parse(event.data) as Partial<IdentityStreamEvent>;
+          const parsed = JSON.parse(event.data) as Partial<CampaignStreamEvent>;
           onEventRef.current({
             name,
             topic: parsed.topic,
@@ -86,7 +73,7 @@ export function useIdentityStream({
             payload: (parsed.payload ?? {}) as Record<string, unknown>,
           });
         } catch (err) {
-          console.error('useIdentityStream: parse failed', err);
+          console.error('useCampaignStream: parse failed', err);
         }
       };
 
