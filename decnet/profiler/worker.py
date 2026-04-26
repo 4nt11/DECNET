@@ -248,6 +248,17 @@ async def _update_profiles(
                 record = _build_record(ip, events, traversal, bounties, commands)
             attacker_uuid = await repo.upsert_attacker(record)
 
+            # Backfill Credential.attacker_uuid for every credential row
+            # captured before the profiler had minted this Attacker. The
+            # capture path runs before the profiler — coupling them would
+            # create a chicken-and-egg ordering bug. Soft-fail so a backfill
+            # error never blocks the next attacker.
+            try:
+                await repo.update_credential_attacker_uuid(ip, attacker_uuid)
+            except Exception as exc:
+                _span.record_exception(exc)
+                logger.error("attacker worker: credential backfill failed for %s: %s", ip, exc)
+
             _span.set_attribute("is_traversal", traversal is not None)
             _span.set_attribute("bounty_count", len(bounties))
             _span.set_attribute("command_count", len(commands))
