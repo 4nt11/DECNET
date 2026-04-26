@@ -1,0 +1,119 @@
+# Fixture 7 (slow_burn) — see development/CAMPAIGN_CLUSTERING.md §2.
+#
+# Multi-month APT campaign. The unique signal this fixture stresses
+# is OPERATIONAL TEMPO: APTs (real ones, not skiddies) take their
+# time. Recon over weeks, exploitation later, action-on-objectives
+# later still. Long stretches of true silence between phases.
+# Compresses-to-three-days adversaries this is not.
+#
+# A MazeNET-style deep nested topology (DECNET's recursive DAG mode)
+# is exactly what an APT operator burns weeks against — mapping
+# decoy networks, working out which subnet looks productive, only
+# then committing to exploitation. This fixture encodes that tempo
+# as a 90-day campaign with three operational windows:
+#
+#   week 2    (days 7-11)   Delivery, Discovery
+#   month 2   (days 35-39)  Exploitation, Persistence
+#   month 3   (days 75-79)  Lateral Movement, Collection, Exfiltration
+#
+# Modeled as three DSL actors representing the same operator's three
+# operational phases (same modeling caveat as fixtures 4 and 5: the
+# factory mints a separate truth_identity_id per DSL actor; this is
+# a CAMPAIGN-LEVEL fixture only). All three share JA3 + HASSH +
+# payload + C2 callback — the operator's toolchain stays stable
+# across the campaign.
+#
+# Pass condition: composite_signals_clusterer (fingerprint OR C2)
+# folds all three windows into one cluster regardless of when they
+# happened. Time-agnostic edge construction is what makes this work.
+#
+# Adversarial condition: recency_decay_clusterer with a 14-day
+# half-life and a 0.5 weight threshold cannot bridge the multi-week
+# silences. Edges between week-2 and month-2 (≥24 days) decay to
+# ~exp(-24/14) ≈ 0.18 < 0.5 → dropped. Edges between month-2 and
+# month-3 (≥36 days) decay to ~exp(-36/14) ≈ 0.075 → dropped. The
+# campaign fragments into three clusters; completeness collapses.
+#
+# This is the canonical production failure mode for graph-based
+# clusterers that silently expire old edges to bound memory or
+# bias toward "what's hot." Catching it in synthetic data is what
+# this fixture exists for.
+campaign:
+  id: slow-burn-001
+  duration_days: 90
+  actors:
+    - id: ops-recon
+      asn: 64540
+      ip_pool: sticky
+      ja3: "771,4865-4866-4867-49195-49199-49196-49200-156-157-47-53,0-23-65281-10-11-35-16-5-13-18-51-45-43-27-17513,29-23-24,0"
+      hassh: "slow-burn-gggggggg-gggggggg-gggggggg"
+      hours_active_utc: [3, 4, 5]
+      jitter_seconds: 60
+      active_days: [7, 8, 9, 10, 11]
+    - id: ops-exploit
+      asn: 64541
+      ip_pool: sticky
+      ja3: "771,4865-4866-4867-49195-49199-49196-49200-156-157-47-53,0-23-65281-10-11-35-16-5-13-18-51-45-43-27-17513,29-23-24,0"
+      hassh: "slow-burn-gggggggg-gggggggg-gggggggg"
+      hours_active_utc: [3, 4, 5]
+      jitter_seconds: 60
+      active_days: [35, 36, 37, 38, 39]
+    - id: ops-action
+      asn: 64542
+      ip_pool: sticky
+      ja3: "771,4865-4866-4867-49195-49199-49196-49200-156-157-47-53,0-23-65281-10-11-35-16-5-13-18-51-45-43-27-17513,29-23-24,0"
+      hassh: "slow-burn-gggggggg-gggggggg-gggggggg"
+      hours_active_utc: [3, 4, 5]
+      jitter_seconds: 60
+      active_days: [75, 76, 77, 78, 79]
+  phases:
+    # Week 2 — recon window. Delivery probes, discovery against the
+    # MazeNET surface to identify productive subnets.
+    - name: delivery
+      actor: ops-recon
+      tool_signature:
+        c2_callback: "c2.slow-burn.example"
+      target_selector: { service: any, count: 3 }
+      dwell_seconds: 1
+    - name: discovery
+      actor: ops-recon
+      tool_signature:
+        c2_callback: "c2.slow-burn.example"
+      target_selector: { service: any, count: 3 }
+      dwell_seconds: 5
+    # Month 2 — exploitation. Operator commits to one of the
+    # productive subnets identified during recon.
+    - name: exploitation
+      actor: ops-exploit
+      tool_signature:
+        payload_hash: "slow-burn-stage1-payload"
+        c2_callback: "c2.slow-burn.example"
+      target_selector: { service: ssh, count: 3 }
+      dwell_seconds: 10
+    - name: persistence
+      actor: ops-exploit
+      tool_signature:
+        c2_callback: "c2.slow-burn.example"
+      target_selector: { decky: previous_success, count: 2 }
+      dwell_seconds: 10
+    # Month 3 — actions on objectives. Lateral movement, collection,
+    # exfil — only after the operator has confidence in the foothold.
+    - name: lateral_movement
+      actor: ops-action
+      tool_signature:
+        c2_callback: "c2.slow-burn.example"
+      target_selector: { service: ssh, count: 3 }
+      dwell_seconds: 10
+    - name: collection
+      actor: ops-action
+      tool_signature:
+        payload_hash: "slow-burn-stage1-payload"
+        c2_callback: "c2.slow-burn.example"
+      target_selector: { service: ssh, count: 2 }
+      dwell_seconds: 10
+    - name: exfiltration
+      actor: ops-action
+      tool_signature:
+        c2_callback: "c2.slow-burn.example"
+      target_selector: { service: ssh, count: 2 }
+      dwell_seconds: 10

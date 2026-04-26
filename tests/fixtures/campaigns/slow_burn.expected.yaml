@@ -1,0 +1,24 @@
+# Bounds for fixture 7 (slow_burn).
+#
+# Ground truth at campaign-level: 1 campaign of 3 observation rows
+# (one per operational window — recon, exploit, action). A correct
+# algorithm scores 1.0 across every metric on this fixture.
+#
+# Completeness is the load-bearing metric: a clusterer that lets
+# multi-week silence fragment the campaign tanks completeness (the
+# one true class is split across the operational windows). The
+# adversarial recency_decay_clusterer demonstrates this and the
+# bound below rejects it.
+#
+# Campaign-level fixture only — the three DSL actors model the
+# operator's three operational windows by design.
+#
+# Bounds are loose at v1; tighten as the algorithm matures.
+adjusted_rand_index:
+  min: 0.85
+homogeneity:
+  min: 0.90
+completeness:
+  min: 0.80
+singleton_recall:
+  min: 0.95
