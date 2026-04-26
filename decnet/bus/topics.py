@@ -77,6 +77,11 @@ ATTACKER_SCORED = "scored"
 ATTACKER_FINGERPRINTED = "fingerprinted"
 ATTACKER_SESSION_STARTED = "session.started"
 ATTACKER_SESSION_ENDED = "session.ended"
+# Published by the ``decnet enrich`` worker after an enrichment pass
+# succeeds for an attacker IP (one or more 3rd-party intel providers
+# returned a verdict).  Payload carries the aggregate verdict + per-
+# provider summary so SIEM-bound webhooks don't need to re-query the DB.
+ATTACKER_INTEL_ENRICHED = "intel.enriched"
 
 # Credential event types (second/third tokens under ``credential``).
 # ``credential.captured`` fires once per upserted Credential row — the
