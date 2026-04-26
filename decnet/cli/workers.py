@@ -82,65 +82,6 @@ def register(app: typer.Typer) -> None:
 
         asyncio.run(_run())
 
-    @app.command(name="correlate")
-    def correlate(
-        log_file: Optional[str] = typer.Option(None, "--log-file", "-f", help="Path to DECNET syslog file to analyse"),
-        min_deckies: int = typer.Option(2, "--min-deckies", "-m", help="Minimum number of distinct deckies an IP must touch to be reported"),
-        output: str = typer.Option("table", "--output", "-o", help="Output format: table | json | syslog"),
-        emit_syslog: bool = typer.Option(False, "--emit-syslog", help="Also print traversal events as RFC 5424 lines (for SIEM piping)"),
-        daemon: bool = typer.Option(False, "--daemon", "-d", help="Detach to background as a daemon process"),
-    ) -> None:
-        """Analyse logs for cross-decky traversals and print the attacker movement graph."""
-        import sys
-        import json as _json
-        from pathlib import Path
-        from decnet.correlation.engine import CorrelationEngine
-
-        if daemon:
-            log.info("correlate daemonizing log_file=%s", log_file)
-            _utils._daemonize()
-
-        engine = CorrelationEngine()
-
-        if log_file:
-            path = Path(log_file)
-            if not path.exists():
-                console.print(f"[red]Log file not found: {log_file}[/]")
-                raise typer.Exit(1)
-            engine.ingest_file(path)
-        elif not sys.stdin.isatty():
-            for line in sys.stdin:
-                engine.ingest(line)
-        else:
-            console.print("[red]Provide --log-file or pipe log data via stdin.[/]")
-            raise typer.Exit(1)
-
-        traversals = engine.traversals(min_deckies)
-
-        if output == "json":
-            console.print_json(_json.dumps(engine.report_json(min_deckies), indent=2))
-        elif output == "syslog":
-            for line in engine.traversal_syslog_lines(min_deckies):
-                typer.echo(line)
-        else:
-            if not traversals:
-                console.print(
-                    f"[yellow]No traversals detected "
-                    f"(min_deckies={min_deckies}, events_indexed={engine.events_indexed}).[/]"
-                )
-            else:
-                console.print(engine.report_table(min_deckies))
-                console.print(
-                    f"[dim]Parsed {engine.lines_parsed} lines · "
-                    f"indexed {engine.events_indexed} events · "
-                    f"{len(engine.all_attackers())} unique IPs · "
-                    f"[bold]{len(traversals)}[/] traversal(s)[/]"
-                )
-
-        if emit_syslog:
-            for line in engine.traversal_syslog_lines(min_deckies):
-                typer.echo(line)
-
     @app.command(name="reuse-correlate")
     def reuse_correlate(
         min_targets: int = typer.Option(
