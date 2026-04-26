@@ -36,16 +36,23 @@ def assert_fixture_bounds(
     corpus: GeneratedCorpus,
     predict: PredictFn,
     expected_path: str | Path,
+    *,
+    truth_level: str = "campaign",
 ) -> dict[str, float]:
     """
     Run `predict` against the corpus, score against ground truth, and
     assert every metric meets the floor declared in `expected_path`.
 
+    ``truth_level`` selects the oracle: ``"campaign"`` (default) for
+    campaign-clustering fixtures, ``"identity"`` for identity-resolution
+    fixtures (where the clusterer's job is to fold N rotated-IP
+    observations into one identity), or ``"actor"`` for completeness.
+
     Returns the observed metrics dict so callers can do additional
     assertions (e.g. "homogeneity is *exactly* 1.0 for this fixture").
     """
     bounds = yaml.safe_load(Path(expected_path).read_text(encoding="utf-8"))
-    truth = corpus.truth_labels()
+    truth = corpus.truth_labels(level=truth_level)
     pred = predict(corpus)
     metrics = score(truth, pred)
 
