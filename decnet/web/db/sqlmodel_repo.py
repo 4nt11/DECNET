@@ -1468,6 +1468,52 @@ class SQLModelRepository(BaseRepository):
             result = await session.execute(statement)
             return result.scalar() or 0
 
+    # ─── Identity resolution writes (clusterer worker) ─────────────────────
+
+    async def list_attackers_for_clustering(
+        self, limit: Optional[int] = None,
+    ) -> list[dict[str, Any]]:
+        # Project the columns the clusterer's similarity graph reads.
+        # Keep it narrow so future denormalised projections (payloads
+        # joined from logs, c2 endpoints aggregated from sessions) can
+        # land here without churning every caller. ``fingerprints`` is
+        # the raw JSON list — the clusterer parses for JA3 / HASSH.
+        statement = select(
+            Attacker.uuid, Attacker.asn, Attacker.identity_id, Attacker.fingerprints,
+        ).order_by(Attacker.first_seen)
+        if limit is not None:
+            statement = statement.limit(limit)
+        async with self._session() as session:
+            result = await session.execute(statement)
+            return [
+                {
+                    "uuid": row.uuid,
+                    "asn": row.asn,
+                    "identity_id": row.identity_id,
+                    "fingerprints": row.fingerprints,
+                }
+                for row in result.all()
+            ]
+
+    async def create_attacker_identity(self, row: dict[str, Any]) -> str:
+        identity = AttackerIdentity(**row)
+        async with self._session() as session:
+            session.add(identity)
+            await session.commit()
+        return identity.uuid
+
+    async def set_attacker_identity_id(
+        self, attacker_uuid: str, identity_uuid: str,
+    ) -> None:
+        statement = (
+            update(Attacker)
+            .where(Attacker.uuid == attacker_uuid)
+            .values(identity_id=identity_uuid)
+        )
+        async with self._session() as session:
+            await session.execute(statement)
+            await session.commit()
+
     async def get_attacker_commands(
         self,
         uuid: str,

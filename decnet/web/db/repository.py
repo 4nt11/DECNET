@@ -406,6 +406,49 @@ class BaseRepository(ABC):
         """Total ``Attacker`` rows FK'd to this identity."""
         pass
 
+    # ─── Identity resolution writes (clusterer worker) ─────────────────────
+    # Populated by ``decnet clusterer``. The read-only API on top of
+    # ``attacker_identities`` shipped in commit ``dc3d08d``; this is the
+    # write side. See ``decnet.clustering.impl.connected_components``.
+
+    @abstractmethod
+    async def list_attackers_for_clustering(
+        self, limit: Optional[int] = None,
+    ) -> list[dict[str, Any]]:
+        """Project every ``Attacker`` into the clusterer's input shape.
+
+        Returns dicts with at least ``uuid``, ``asn``, ``identity_id``,
+        and ``fingerprints`` (raw JSON list). The clusterer parses the
+        fingerprints list to recover JA3 / HASSH per observation. Empty
+        list when no attackers exist.
+
+        ``limit`` is optional — passed by callers that want to bound a
+        single tick's working set; leave ``None`` to fetch all.
+        """
+        pass
+
+    @abstractmethod
+    async def create_attacker_identity(self, row: dict[str, Any]) -> str:
+        """Insert a new ``AttackerIdentity`` row and return its uuid.
+
+        ``row`` must include ``uuid``; other fields are optional and
+        default per the model. Caller is responsible for generating
+        the uuid (so it can be used in the same tick to back-link
+        observations without a second round-trip).
+        """
+        pass
+
+    @abstractmethod
+    async def set_attacker_identity_id(
+        self, attacker_uuid: str, identity_uuid: str,
+    ) -> None:
+        """Set ``attackers.identity_id`` on a single observation row.
+
+        Idempotent — re-setting the same value is a no-op. Used by
+        the clusterer when it links an observation to an identity.
+        """
+        pass
+
     @abstractmethod
     async def get_attacker_commands(
         self,
