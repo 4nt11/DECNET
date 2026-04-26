@@ -36,6 +36,7 @@ from decnet.web.db.models import (
     State,
     Attacker,
     AttackerBehavior,
+    AttackerIdentity,
     AttackerIntel,
     SessionProfile,
     SmtpTarget,
@@ -1386,6 +1387,83 @@ class SQLModelRepository(BaseRepository):
         if service:
             statement = statement.where(Attacker.services.like(f'%"{service}"%'))
 
+        async with self._session() as session:
+            result = await session.execute(statement)
+            return result.scalar() or 0
+
+    # ─── Identity resolution reads ────────────────────────────────────────
+
+    async def get_identity_by_uuid(self, uuid: str) -> Optional[dict[str, Any]]:
+        # Follow merged_into_uuid up to the winner. Loop bounded by
+        # _MAX_MERGE_HOPS so a (hypothetically) corrupted ring can't
+        # spin the worker. Clusterer is responsible for never producing
+        # a cycle; this guard is belt-and-braces.
+        _MAX_MERGE_HOPS = 8
+        async with self._session() as session:
+            current_uuid = uuid
+            for _ in range(_MAX_MERGE_HOPS):
+                result = await session.execute(
+                    select(AttackerIdentity).where(AttackerIdentity.uuid == current_uuid)
+                )
+                identity = result.scalar_one_or_none()
+                if identity is None:
+                    return None
+                if identity.merged_into_uuid is None:
+                    return identity.model_dump(mode="json")
+                current_uuid = identity.merged_into_uuid
+            # Hit the hop cap — surface what we have rather than recurse.
+            return identity.model_dump(mode="json")
+
+    async def list_identities(
+        self, limit: int = 50, offset: int = 0,
+    ) -> list[dict[str, Any]]:
+        # Exclude merged-out rows so the list view is the de-duped truth.
+        # The history is still queryable per-uuid via get_identity_by_uuid
+        # and a future "merged into" endpoint when we need it.
+        statement = (
+            select(AttackerIdentity)
+            .where(AttackerIdentity.merged_into_uuid.is_(None))
+            .order_by(desc(AttackerIdentity.updated_at))
+            .offset(offset)
+            .limit(limit)
+        )
+        async with self._session() as session:
+            result = await session.execute(statement)
+            return [i.model_dump(mode="json") for i in result.scalars().all()]
+
+    async def count_identities(self) -> int:
+        statement = (
+            select(func.count())
+            .select_from(AttackerIdentity)
+            .where(AttackerIdentity.merged_into_uuid.is_(None))
+        )
+        async with self._session() as session:
+            result = await session.execute(statement)
+            return result.scalar() or 0
+
+    async def list_observations_for_identity(
+        self, identity_uuid: str, limit: int = 50, offset: int = 0,
+    ) -> list[dict[str, Any]]:
+        statement = (
+            select(Attacker)
+            .where(Attacker.identity_id == identity_uuid)
+            .order_by(desc(Attacker.last_seen))
+            .offset(offset)
+            .limit(limit)
+        )
+        async with self._session() as session:
+            result = await session.execute(statement)
+            return [
+                self._deserialize_attacker(a.model_dump(mode="json"))
+                for a in result.scalars().all()
+            ]
+
+    async def count_observations_for_identity(self, identity_uuid: str) -> int:
+        statement = (
+            select(func.count())
+            .select_from(Attacker)
+            .where(Attacker.identity_id == identity_uuid)
+        )
         async with self._session() as session:
             result = await session.execute(statement)
             return result.scalar() or 0

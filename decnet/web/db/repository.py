@@ -364,6 +364,48 @@ class BaseRepository(ABC):
         """Retrieve the total count of attacker profile records, optionally filtered."""
         pass
 
+    # ─── Identity resolution (Observation → Identity → Campaign) ───────────
+    # The clusterer that populates these rows is a separate downstream
+    # effort. The read-only API ships first; until the clusterer runs,
+    # every method below returns empty/None against an empty table.
+    # See development/IDENTITY_RESOLUTION.md.
+
+    @abstractmethod
+    async def get_identity_by_uuid(self, uuid: str) -> Optional[dict[str, Any]]:
+        """
+        Return one ``AttackerIdentity`` row by UUID, or ``None`` if absent.
+
+        If the row has ``merged_into_uuid`` set (i.e. the clusterer
+        soft-merged it into another identity), implementations MUST
+        follow the chain and return the winner — callers should never
+        see a merged-out row as the answer to a fresh query.
+        """
+        pass
+
+    @abstractmethod
+    async def list_identities(
+        self, limit: int = 50, offset: int = 0,
+    ) -> list[dict[str, Any]]:
+        """Paginated list of identity rows, newest-updated first."""
+        pass
+
+    @abstractmethod
+    async def count_identities(self) -> int:
+        """Total identity rows. Excludes merged-out rows."""
+        pass
+
+    @abstractmethod
+    async def list_observations_for_identity(
+        self, identity_uuid: str, limit: int = 50, offset: int = 0,
+    ) -> list[dict[str, Any]]:
+        """``Attacker`` observation rows linked to the given identity, newest first."""
+        pass
+
+    @abstractmethod
+    async def count_observations_for_identity(self, identity_uuid: str) -> int:
+        """Total ``Attacker`` rows FK'd to this identity."""
+        pass
+
     @abstractmethod
     async def get_attacker_commands(
         self,

@@ -55,6 +55,17 @@ class DummyRepo(BaseRepository):
     async def get_attacker_artifacts(self, uuid): await super().get_attacker_artifacts(uuid)
     async def get_attacker_transcripts(self, uuid): await super().get_attacker_transcripts(uuid)
     async def get_session_log(self, sid): await super().get_session_log(sid)
+    # DEBT-041 / 3eb67c9 — attacker_intel re-key
+    async def find_credential_reuse_candidates(self, min_targets=2): await super().find_credential_reuse_candidates(min_targets); return []
+    async def get_attacker_intel_by_uuid(self, u): await super().get_attacker_intel_by_uuid(u)
+    async def get_unenriched_attackers(self, limit=100): await super().get_unenriched_attackers(limit)
+    async def upsert_attacker_intel(self, d): await super().upsert_attacker_intel(d); return ""
+    # Identity resolution (this PR)
+    async def get_identity_by_uuid(self, u): await super().get_identity_by_uuid(u)
+    async def list_identities(self, limit=50, offset=0): await super().list_identities(limit, offset); return []
+    async def count_identities(self): await super().count_identities(); return 0
+    async def list_observations_for_identity(self, u, limit=50, offset=0): await super().list_observations_for_identity(u, limit, offset); return []
+    async def count_observations_for_identity(self, u): await super().count_observations_for_identity(u); return 0
 
 @pytest.mark.asyncio
 async def test_base_repo_coverage():
@@ -113,6 +124,15 @@ async def test_base_repo_coverage():
     await dr.get_attacker_artifacts("a")
     await dr.get_attacker_transcripts("a")
     await dr.get_session_log("a")
+    await dr.find_credential_reuse_candidates()
+    await dr.get_attacker_intel_by_uuid("a")
+    await dr.get_unenriched_attackers()
+    await dr.upsert_attacker_intel({"attacker_uuid": "a", "attacker_ip": "1.1.1.1"})
+    await dr.get_identity_by_uuid("a")
+    await dr.list_identities()
+    await dr.count_identities()
+    await dr.list_observations_for_identity("a")
+    await dr.count_observations_for_identity("a")
 
     # Swarm methods: default NotImplementedError on BaseRepository.  Covering
     # them here keeps the coverage contract honest for the swarm CRUD surface.
