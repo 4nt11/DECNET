@@ -1,0 +1,32 @@
+# Fixture 3 (lone_wolf) — see development/CAMPAIGN_CLUSTERING.md §2.
+#
+# One opportunistic scanner, Delivery phase only, no follow-up, no shared
+# signals with anyone else. Surrounded by background noise. The clusterer
+# must keep the wolf and every noise scanner as their own singleton —
+# none should be absorbed into anyone else.
+#
+# This is the simplest of the six fixtures and exists primarily to prove
+# the end-to-end pipeline (DSL → factory → clusterer → metrics) before
+# we invest in the harder scenarios.
+corpus:
+  campaigns:
+    - campaign:
+        id: lone-wolf-001
+        actors:
+          - id: wolf-a
+            asn: 14061
+            ip_pool: sticky
+            ja3: null
+            hassh: null
+            hours_active_utc: [3, 4, 5]
+            jitter_seconds: 30
+        phases:
+          - name: delivery
+            actor: wolf-a
+            target_selector:
+              service: any
+              count: 1
+            dwell_seconds: 1
+        duration_days: 1
+  noise:
+    scanner_count: 8

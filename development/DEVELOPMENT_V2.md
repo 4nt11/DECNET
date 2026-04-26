@@ -546,6 +546,12 @@ push-only covers it.
 
 ---
 
+## Campaign Clustering — DSL Evolution
+
+The DSL currently models campaigns as linear phase sequences with clear actor assignments. Real campaigns are messier — phases overlap, actors share responsibilities, tool signatures drift over time. The fixtures don't test for overlapping phases or ambiguous actor assignments. That's probably fine for v1 — the six fixtures cover the known failure modes — but the replay tier will reveal whether you need to add fixtures for phase overlap or role ambiguity. The DSL has a natural extension path: concurrent phases, multi-actor per phase, probabilistic phase ordering. You don't need it now, but the design doesn't block it.
+
+---
+
 ## Threat Intel Enrichment — Provider Backlog
 
 Long list of candidate sources for `decnet/intel/`. Open / free-tier
