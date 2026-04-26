@@ -1,0 +1,47 @@
+[Unit]
+Description=DECNET Threat-Intel Enrichment (GreyNoise + AbuseIPDB + abuse.ch)
+Documentation=https://git.resacachile.cl/anti/DECNET/wiki/Workers#intel-enrichment
+After=network-online.target decnet-bus.service
+Wants=network-online.target decnet-bus.service
+
+[Service]
+Type=simple
+User={{ user }}
+Group={{ group }}
+WorkingDirectory={{ install_dir }}
+EnvironmentFile=-{{ install_dir }}/.env.local
+Environment=DECNET_SYSTEM_LOGS=/var/log/decnet/decnet.enrich.log
+# Subscribes to attacker.observed and attacker.scored; falls back to a 60s
+# slow-tick poll when the bus is idle or unavailable. Per attacker IP fans
+# out across the configured intel providers, writes the aggregate verdict
+# to attacker_intel, and publishes attacker.intel.enriched.
+#
+# Free-tier API keys are read from .env.local:
+#   DECNET_GREYNOISE_API_KEY=     (optional, lifts rate limit)
+#   DECNET_ABUSEIPDB_API_KEY=     (required for AbuseIPDB lookups)
+#   DECNET_THREATFOX_API_KEY=     (optional, lifts rate limit)
+ExecStart={{ venv_dir }}/bin/decnet enrich
+StandardOutput=append:/var/log/decnet/decnet.enrich.log
+StandardError=append:/var/log/decnet/decnet.enrich.log
+
+CapabilityBoundingSet=
+AmbientCapabilities=
+
+# Security Hardening
+NoNewPrivileges=yes
+ProtectSystem=full
+ProtectHome=read-only
+PrivateTmp=yes
+ProtectKernelTunables=yes
+ProtectKernelModules=yes
+ProtectControlGroups=yes
+RestrictSUIDSGID=yes
+LockPersonality=yes
+ReadWritePaths={{ install_dir }} /var/log/decnet
+
+Restart=on-failure
+RestartSec=5
+TimeoutStopSec=15
+
+[Install]
+WantedBy=multi-user.target

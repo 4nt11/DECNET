@@ -117,7 +117,7 @@ async def run_intel_loop(
     wake_tasks: list[asyncio.Task] = []
     heartbeat_task: Optional[asyncio.Task] = None
     try:
-        candidate = get_bus(client_name="intel")
+        candidate = get_bus(client_name="enrich")
         await candidate.connect()
         bus = candidate
         wake_tasks.append(asyncio.create_task(
@@ -127,10 +127,10 @@ async def run_intel_loop(
             _wake_on(bus, wake, _topics.attacker(_topics.ATTACKER_SCORED)),
         ))
         heartbeat_task = asyncio.create_task(
-            _run_health_heartbeat(bus, "intel"),
+            _run_health_heartbeat(bus, "enrich"),
         )
         wake_tasks.append(asyncio.create_task(
-            _run_control_listener_signal(bus, "intel"),
+            _run_control_listener_signal(bus, "enrich"),
         ))
     except Exception as exc:  # noqa: BLE001
         log.warning(
