@@ -1,0 +1,24 @@
+# Bounds for fixture 6 (noise_floor).
+#
+# Composite corpus: ~14 campaign-driven attackers (across 5 prior
+# fixtures' actors / rotations) + 18 truth-singleton noise rows
+# (8 inherited from lone_wolf + 10 added by this fixture).
+#
+# A correct algorithm groups every campaign correctly and leaves
+# every singleton singleton — score 1.0 across every metric.
+#
+# Singleton recall is the load-bearing metric here: noise
+# absorption is the failure mode that makes campaign attribution
+# useless in practice (a clusterer that pulls noise into real
+# campaigns dilutes attribution to nothing). The bound floor on
+# singleton_recall is what would catch that regression.
+#
+# Bounds are loose at v1; tighten as the algorithm matures.
+adjusted_rand_index:
+  min: 0.85
+homogeneity:
+  min: 0.90
+completeness:
+  min: 0.80
+singleton_recall:
+  min: 0.95
