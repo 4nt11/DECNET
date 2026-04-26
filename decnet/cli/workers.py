@@ -82,6 +82,60 @@ def register(app: typer.Typer) -> None:
 
         asyncio.run(_run())
 
+    @app.command(name="enrich")
+    def enrich(
+        poll_interval_secs: float = typer.Option(
+            60.0, "--poll-interval", "-i",
+            help="Slow-tick fallback when the bus is idle or unavailable (seconds)",
+        ),
+        ttl_hours: int = typer.Option(
+            24, "--ttl-hours",
+            help="Cache lifetime per attacker IP — re-firings inside the window short-circuit before any HTTP egress",
+        ),
+        daemon: bool = typer.Option(
+            False, "--daemon", "-d",
+            help="Detach to background as a daemon process",
+        ),
+    ) -> None:
+        """Threat-intel enrichment worker — fan out per attacker IP across
+        configured providers (GreyNoise, AbuseIPDB, abuse.ch Feodo Tracker
+        + ThreatFox), cache the verdict in ``attacker_intel``, and publish
+        ``attacker.intel.enriched`` for SIEM-bound webhook consumers.
+        """
+        import asyncio
+        from decnet.intel.worker import run_intel_loop
+        from decnet.web.dependencies import repo
+
+        if daemon:
+            log.info(
+                "enrich daemonizing poll=%s ttl_hours=%d",
+                poll_interval_secs, ttl_hours,
+            )
+            _utils._daemonize()
+
+        log.info(
+            "enrich command invoked poll=%s ttl_hours=%d",
+            poll_interval_secs, ttl_hours,
+        )
+        console.print(
+            f"[bold cyan]Intel enrichment starting[/] "
+            f"poll={poll_interval_secs}s ttl={ttl_hours}h"
+        )
+        console.print("[dim]Press Ctrl+C to stop[/]")
+
+        async def _run() -> None:
+            await repo.initialize()
+            await run_intel_loop(
+                repo,
+                poll_interval_secs=poll_interval_secs,
+                ttl_hours=ttl_hours,
+            )
+
+        try:
+            asyncio.run(_run())
+        except KeyboardInterrupt:
+            console.print("\n[yellow]Intel enrichment stopped.[/]")
+
     @app.command(name="reuse-correlate")
     def reuse_correlate(
         min_targets: int = typer.Option(

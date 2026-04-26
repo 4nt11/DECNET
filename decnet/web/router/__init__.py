@@ -20,6 +20,7 @@ from .attackers.api_get_attacker_artifacts import router as attacker_artifacts_r
 from .attackers.api_get_attacker_transcripts import router as attacker_transcripts_router
 from .attackers.api_get_attacker_smtp_targets import router as attacker_smtp_targets_router
 from .attackers.api_get_attacker_mail import router as attacker_mail_router
+from .attackers.api_get_attacker_intel import router as attacker_intel_router
 from .transcripts import transcripts_router
 from .config.api_get_config import router as config_get_router
 from .config.api_update_config import router as config_update_router
@@ -81,6 +82,7 @@ api_router.include_router(attacker_artifacts_router)
 api_router.include_router(attacker_transcripts_router)
 api_router.include_router(attacker_smtp_targets_router)
 api_router.include_router(attacker_mail_router)
+api_router.include_router(attacker_intel_router)
 
 # Observability
 api_router.include_router(stats_router)

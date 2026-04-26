@@ -203,3 +203,61 @@ async def test_provider_error_does_not_poison_row(repo):
     assert row["abuseipdb_score"] is None
     # Aggregate reflects only the providers that responded.
     assert row["aggregate_verdict"] == "benign"
+
+
+@pytest.mark.anyio
+async def test_intel_enriched_event_published_to_bus(repo, monkeypatch):
+    """End-to-end: worker dispatches providers + publishes the event."""
+    from decnet.bus.fake import FakeBus
+    from decnet.bus.topics import ATTACKER_INTEL_ENRICHED, attacker
+
+    # Re-enable bus path; swap factory for a shared FakeBus instance the
+    # test can also subscribe to.
+    monkeypatch.setenv("DECNET_BUS_ENABLED", "true")
+    monkeypatch.setenv("DECNET_BUS_TYPE", "fake")
+    shared_bus = FakeBus()
+
+    from decnet.intel import worker as worker_mod
+    monkeypatch.setattr(
+        worker_mod, "get_bus", lambda **_: shared_bus,
+    )
+
+    # Subscribe before the worker starts so we don't race the publish.
+    sub = shared_bus.subscribe(attacker(ATTACKER_INTEL_ENRICHED))
+    await sub.__aenter__()
+
+    now = datetime.now(timezone.utc)
+    await repo.upsert_attacker(
+        {"ip": "4.4.4.4", "first_seen": now, "last_seen": now, "event_count": 1}
+    )
+
+    provider = _FakeProvider(
+        "greynoise",
+        verdict="malicious",
+        column_updates={
+            "greynoise_classification": "malicious",
+            "greynoise_raw": "{}",
+            "greynoise_queried_at": datetime.now(timezone.utc),
+        },
+    )
+
+    shutdown = asyncio.Event()
+    task = asyncio.create_task(
+        run_intel_loop(
+            repo,
+            poll_interval_secs=0.05,
+            providers=[provider],
+            shutdown=shutdown,
+        )
+    )
+    try:
+        event = await asyncio.wait_for(sub.__anext__(), timeout=2.0)
+    finally:
+        shutdown.set()
+        await asyncio.wait_for(task, timeout=2.0)
+        await sub.__aexit__(None, None, None)
+
+    payload = event.payload
+    assert payload["attacker_ip"] == "4.4.4.4"
+    assert payload["aggregate_verdict"] == "malicious"
+    assert payload["providers"] == ["greynoise"]
