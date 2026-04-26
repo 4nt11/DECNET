@@ -68,6 +68,67 @@ def test_high_weight_both_null_ja3_does_not_match():
     assert high_weight_edge(a, b) == 0.0
 
 
+# ─── fingerprint-disagreement veto on payload / C2 ──────────────────────────
+
+
+def test_high_weight_veto_on_fingerprint_disagreement_with_shared_c2():
+    """Fixture 5 protection: two operators with distinct JA3 + HASSH
+    sharing a C2 endpoint must NOT score as identity match."""
+    a = _obs(ja3="ja3-A", hassh="hassh-A",
+             c2_endpoints=frozenset({"c2.shared.example"}))
+    b = _obs(ja3="ja3-B", hassh="hassh-B",
+             c2_endpoints=frozenset({"c2.shared.example"}))
+    assert high_weight_edge(a, b) == 0.0
+
+
+def test_high_weight_veto_on_fingerprint_disagreement_with_shared_payload():
+    """Same shape, payload signal — also vetoed."""
+    a = _obs(ja3="ja3-A", hassh="hassh-A",
+             payload_hashes=frozenset({"stage1"}))
+    b = _obs(ja3="ja3-B", hassh="hassh-B",
+             payload_hashes=frozenset({"stage1"}))
+    assert high_weight_edge(a, b) == 0.0
+
+
+def test_high_weight_no_veto_when_fingerprints_unknown():
+    """Two un-fingerprinted observations sharing C2 still cluster —
+    we don't veto without evidence of disagreement."""
+    a = _obs(c2_endpoints=frozenset({"c2.shared.example"}))
+    b = _obs(c2_endpoints=frozenset({"c2.shared.example"}))
+    assert high_weight_edge(a, b) == 1.0
+
+
+def test_high_weight_no_veto_when_one_side_unknown():
+    """One observation without fingerprints + one with — no
+    disagreement evidence, so shared C2 still clusters."""
+    a = _obs(ja3="ja3-A", hassh="hassh-A",
+             c2_endpoints=frozenset({"c2.shared.example"}))
+    b = _obs(c2_endpoints=frozenset({"c2.shared.example"}))
+    assert high_weight_edge(a, b) == 1.0
+
+
+def test_high_weight_partial_fingerprint_agreement_no_veto():
+    """JA3 agrees, HASSH disagrees → some agreement → no veto. The
+    veto only triggers on FULL disagreement."""
+    a = _obs(ja3="ja3-shared", hassh="hassh-A",
+             c2_endpoints=frozenset({"c2.shared.example"}))
+    b = _obs(ja3="ja3-shared", hassh="hassh-B",
+             c2_endpoints=frozenset({"c2.shared.example"}))
+    # JA3 agreement returns 1.0 immediately; veto never reached.
+    assert high_weight_edge(a, b) == 1.0
+
+
+def test_high_weight_partial_disagreement_one_slot_only_vetoes():
+    """One slot comparable + disagrees, other slot uncomparable
+    (one side null) → veto triggers (only available evidence is
+    disagreement)."""
+    a = _obs(ja3="ja3-A", hassh=None,
+             c2_endpoints=frozenset({"c2.shared.example"}))
+    b = _obs(ja3="ja3-B", hassh=None,
+             c2_endpoints=frozenset({"c2.shared.example"}))
+    assert high_weight_edge(a, b) == 0.0
+
+
 def test_high_weight_empty_sets_no_match():
     a = _obs(payload_hashes=frozenset(), c2_endpoints=frozenset())
     b = _obs(payload_hashes=frozenset(), c2_endpoints=frozenset())

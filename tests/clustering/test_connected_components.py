@@ -302,6 +302,25 @@ def test_paused_campaign_passes_with_production_clusterer():
     )
 
 
+def test_multi_operator_keeps_distinct_identities_with_production_clusterer():
+    """Fixture 5 at identity-level: two operators with distinct
+    JA3 + HASSH, sharing C2 + payload. The production clusterer's
+    fingerprint-disagreement veto must keep them as 2 identities."""
+    from tests.factories.campaign_factory import generate, load_yaml
+    from tests.clustering.metrics import score
+
+    corpus = generate(load_yaml(FIXTURE_DIR / "multi_operator.yaml"), seed=0)
+    pred = _production_clusterer_predict(corpus)
+    # Two distinct truth identities; the production clusterer must
+    # produce two distinct predicted clusters (no merge across
+    # fingerprint-disagreeing operators).
+    assert len(set(pred.values())) == 2
+    metrics = score(corpus.truth_labels(level="identity"), pred)
+    # Perfect identity-level recovery: ARI = 1.0, homogeneity = 1.0.
+    assert metrics["adjusted_rand_index"] == pytest.approx(1.0)
+    assert metrics["homogeneity"] == pytest.approx(1.0)
+
+
 def test_cluster_observations_medium_alone_does_not_fuse():
     """Two observations sharing only command-sequence (medium-tier)
     must stay in distinct clusters — medium is a supporting signal."""

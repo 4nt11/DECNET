@@ -70,6 +70,33 @@ class Observation:
 # ─── Edge functions ─────────────────────────────────────────────────────────
 
 
+def _fingerprints_fully_disagree(a: Observation, b: Observation) -> bool:
+    """True iff every comparable fingerprint slot disagrees.
+
+    "Comparable" = both sides have a non-null value for that slot.
+    Used as a soft-veto on shared C2 / payload signals: when two
+    observations have distinct stable TLS + SSH stacks, sharing a C2
+    endpoint is a *campaign*-level signal (cooperating operators,
+    distinct identities) — not an identity-level one. Fixture 5
+    (``multi_operator``) is the canonical demonstration.
+
+    Returns ``False`` when no fingerprint slot is comparable (any-null
+    cases) — without evidence of disagreement we don't veto. Also
+    ``False`` when at least one slot agrees.
+    """
+    ja3_comparable = a.ja3 is not None and b.ja3 is not None
+    hassh_comparable = a.hassh is not None and b.hassh is not None
+    if not (ja3_comparable or hassh_comparable):
+        return False
+    if ja3_comparable and a.ja3 == b.ja3:
+        return False
+    if hassh_comparable and a.hassh == b.hassh:
+        return False
+    if ja3_comparable and hassh_comparable:
+        return a.ja3 != b.ja3 and a.hassh != b.hassh
+    return True  # exactly one slot is comparable, and it disagrees
+
+
 def high_weight_edge(a: Observation, b: Observation) -> float:
     """JA3 / HASSH / payload-hash / C2-endpoint exact match.
 
@@ -79,6 +106,19 @@ def high_weight_edge(a: Observation, b: Observation) -> float:
     signals the design doc calls out as "stable signals an attacker
     can't cheaply rotate."
 
+    **Fingerprint-disagreement veto.** Payload and C2 are infra signals
+    that two cooperating operators (different identities) can share.
+    JA3 + HASSH are tooling signals that differ when the operators are
+    actually different humans with different tool stacks. So when the
+    available fingerprint slots fully disagree, we drop the
+    payload/C2 contribution to zero — preventing a campaign-level
+    co-op signal from fusing two distinct identities. Fixture 5
+    (``multi_operator``) is the canonical demonstration: shared
+    stage-1 payload + shared C2, distinct JA3/HASSH per operator —
+    must stay two identities. JA3 / HASSH agreement still returns
+    ``1.0`` directly, since by definition no veto applies when
+    something agrees.
+
     JA4 will join this tier as a sibling of JA3 once the prober emits
     it (``ATTACKER_FINGERPRINTED`` already carries a JA4 slot in
     ``AttackerIdentity``); the function shape doesn't change.
@@ -87,6 +127,9 @@ def high_weight_edge(a: Observation, b: Observation) -> float:
         return 1.0
     if a.hassh is not None and a.hassh == b.hassh:
         return 1.0
+    if _fingerprints_fully_disagree(a, b):
+        # Stable-tool disagreement vetoes shared-infra signals.
+        return 0.0
     if a.payload_hashes and b.payload_hashes and (a.payload_hashes & b.payload_hashes):
         return 1.0
     if a.c2_endpoints and b.c2_endpoints and (a.c2_endpoints & b.c2_endpoints):
