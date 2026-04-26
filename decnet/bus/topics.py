@@ -18,6 +18,11 @@ Token structure (NATS-style, dot-separated):
     identity.observation.linked
     identity.merged
     identity.unmerged
+    identity.campaign.assigned
+    campaign.formed
+    campaign.identity.assigned
+    campaign.merged
+    campaign.unmerged
     credential.captured
     credential.reuse.detected
     system.log
@@ -38,6 +43,7 @@ TOPOLOGY = "topology"
 DECKY = "decky"
 ATTACKER = "attacker"
 IDENTITY = "identity"
+CAMPAIGN = "campaign"
 SYSTEM = "system"
 CREDENTIAL = "credential"
 
@@ -117,6 +123,33 @@ IDENTITY_FORMED = "formed"
 IDENTITY_OBSERVATION_LINKED = "observation.linked"
 IDENTITY_MERGED = "merged"
 IDENTITY_UNMERGED = "unmerged"
+# Campaign-clusterer cross-family event — fires under ``identity.>`` so
+# identity-stream subscribers (e.g. the IdentityDetail SSE client) get
+# notified the moment an identity's ``campaign_id`` changes without
+# having to subscribe to the campaign topic family.  The same event
+# fires under ``campaign.identity.assigned`` for campaign-side
+# subscribers.
+IDENTITY_CAMPAIGN_ASSIGNED = "campaign.assigned"
+
+# Campaign-clusterer event types (second/third tokens under
+# ``campaign``).  Mirror of the identity family at the layer above:
+# campaigns group identities into operations, and the clusterer
+# publishes the same form / link / merge / unmerge lifecycle.
+#
+#   campaign.formed              — clusterer creates a new campaign from
+#                                  one or more identities
+#   campaign.identity.assigned   — identity attached to an existing
+#                                  campaign (or reassigned from another)
+#   campaign.merged              — two campaigns collapsed; loser gets
+#                                  ``merged_into_uuid`` set, subscribers
+#                                  re-key cached references to the winner
+#   campaign.unmerged            — revocable-merge undo: contradicting
+#                                  evidence cleared ``merged_into_uuid``
+#                                  and re-split identities
+CAMPAIGN_FORMED = "formed"
+CAMPAIGN_IDENTITY_ASSIGNED = "identity.assigned"
+CAMPAIGN_MERGED = "merged"
+CAMPAIGN_UNMERGED = "unmerged"
 
 # Credential event types (second/third tokens under ``credential``).
 # ``credential.captured`` fires once per upserted Credential row — the
@@ -219,6 +252,19 @@ def attacker(event_type: str) -> str:
     if not event_type:
         raise ValueError("attacker topic requires a non-empty event_type")
     return f"{ATTACKER}.{event_type}"
+
+
+def campaign(event_type: str) -> str:
+    """Build ``campaign.<event_type>``.
+
+    *event_type* is typically one of :data:`CAMPAIGN_FORMED`,
+    :data:`CAMPAIGN_IDENTITY_ASSIGNED`, :data:`CAMPAIGN_MERGED`, or
+    :data:`CAMPAIGN_UNMERGED`. Dotted leaves (``identity.assigned``)
+    are permitted — same rationale as :func:`system`.
+    """
+    if not event_type:
+        raise ValueError("campaign topic requires a non-empty event_type")
+    return f"{CAMPAIGN}.{event_type}"
 
 
 def identity(event_type: str) -> str:

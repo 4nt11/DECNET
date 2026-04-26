@@ -239,3 +239,59 @@ def register(app: typer.Typer) -> None:
             asyncio.run(_run())
         except KeyboardInterrupt:
             console.print("\n[yellow]Identity clusterer stopped.[/]")
+
+    @app.command(name="campaign-clusterer")
+    def campaign_clusterer(
+        poll_interval_secs: float = typer.Option(
+            60.0, "--poll-interval", "-i",
+            help="Slow-tick fallback when the bus is idle or unavailable (seconds)",
+        ),
+        daemon: bool = typer.Option(
+            False, "--daemon", "-d",
+            help="Detach to background as a daemon process",
+        ),
+    ) -> None:
+        """Campaign clusterer — groups identities into operations.
+
+        Bus-woken on ``identity.>`` (any identity-layer change is
+        potential input); reads ``AttackerIdentity`` rows, runs
+        connected-components over the campaign-level similarity graph
+        (phase-handoff / shared-infra / temporal-overlap / cohort),
+        writes ``campaigns`` rows + sets ``attacker_identities.campaign_id``,
+        and publishes ``campaign.formed`` / ``campaign.identity.assigned``
+        / ``campaign.merged`` / ``campaign.unmerged`` plus the cross-family
+        ``identity.campaign.assigned`` so identity-side subscribers see
+        the badge update.
+        """
+        import asyncio
+        from decnet.cli.gating import _require_master_mode
+        from decnet.clustering.campaign.worker import (
+            run_campaign_clusterer_loop,
+        )
+        from decnet.web.dependencies import repo
+
+        _require_master_mode("campaign-clusterer")
+
+        if daemon:
+            log.info("campaign-clusterer daemonizing poll=%s", poll_interval_secs)
+            _utils._daemonize()
+
+        log.info(
+            "campaign-clusterer command invoked poll=%s", poll_interval_secs,
+        )
+        console.print(
+            f"[bold cyan]Campaign clusterer starting[/] "
+            f"poll={poll_interval_secs}s"
+        )
+        console.print("[dim]Press Ctrl+C to stop[/]")
+
+        async def _run() -> None:
+            await repo.initialize()
+            await run_campaign_clusterer_loop(
+                repo, poll_interval_secs=poll_interval_secs,
+            )
+
+        try:
+            asyncio.run(_run())
+        except KeyboardInterrupt:
+            console.print("\n[yellow]Campaign clusterer stopped.[/]")
