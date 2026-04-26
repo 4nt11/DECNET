@@ -55,6 +55,7 @@ from .health import (
 )
 from .orchestrator import (
     OrchestratorEvent,
+    OrchestratorEventsResponse,
 )
 from .logs import (
     Bounty,
@@ -186,6 +187,7 @@ __all__ = [
     "HealthResponse",
     # orchestrator
     "OrchestratorEvent",
+    "OrchestratorEventsResponse",
     # logs
     "Bounty",
     "BountyResponse",

@@ -2816,14 +2816,59 @@ class SQLModelRepository(BaseRepository):
 
     async def list_orchestrator_events(
         self,
-        *,
         limit: int = 100,
+        offset: int = 0,
+        *,
+        kind: Optional[str] = None,
         since_ts: Optional[datetime] = None,
     ) -> list[dict[str, Any]]:
         async with self._session() as session:
             stmt = select(OrchestratorEvent)
+            if kind is not None:
+                stmt = stmt.where(OrchestratorEvent.kind == kind)
             if since_ts is not None:
                 stmt = stmt.where(OrchestratorEvent.ts >= since_ts)
-            stmt = stmt.order_by(desc(OrchestratorEvent.ts)).limit(limit)
+            stmt = (
+                stmt.order_by(desc(OrchestratorEvent.ts))
+                .offset(offset)
+                .limit(limit)
+            )
             result = await session.execute(stmt)
             return [r.model_dump(mode="json") for r in result.scalars().all()]
+
+    async def count_orchestrator_events(
+        self, *, kind: Optional[str] = None,
+    ) -> int:
+        stmt = select(func.count()).select_from(OrchestratorEvent)
+        if kind is not None:
+            stmt = stmt.where(OrchestratorEvent.kind == kind)
+        async with self._session() as session:
+            result = await session.execute(stmt)
+            return result.scalar() or 0
+
+    async def prune_orchestrator_events(self, per_dst_cap: int = 10000) -> int:
+        """Trim per-dst rows to *per_dst_cap*, oldest-first. Returns deleted count."""
+        deleted = 0
+        async with self._session() as session:
+            dst_rows = await session.execute(
+                select(OrchestratorEvent.dst_decky_uuid).distinct()
+            )
+            for (dst,) in dst_rows.all():
+                keep = await session.execute(
+                    select(OrchestratorEvent.uuid)
+                    .where(OrchestratorEvent.dst_decky_uuid == dst)
+                    .order_by(desc(OrchestratorEvent.ts))
+                    .limit(per_dst_cap)
+                )
+                keep_uuids = [u for (u,) in keep.all()]
+                if not keep_uuids:
+                    continue
+                from sqlalchemy import delete as _delete
+                stmt = _delete(OrchestratorEvent).where(
+                    OrchestratorEvent.dst_decky_uuid == dst,
+                    OrchestratorEvent.uuid.notin_(keep_uuids),
+                )
+                res = await session.execute(stmt)
+                deleted += res.rowcount or 0
+            await session.commit()
+        return deleted

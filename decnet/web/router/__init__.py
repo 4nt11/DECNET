@@ -29,6 +29,8 @@ from .campaigns.api_list_campaigns import router as campaigns_list_router
 from .campaigns.api_get_campaign_detail import router as campaign_detail_router
 from .campaigns.api_list_campaign_identities import router as campaign_identities_router
 from .campaigns.api_events import router as campaign_events_router
+from .orchestrator.api_list_events import router as orchestrator_list_router
+from .orchestrator.api_events import router as orchestrator_events_router
 from .transcripts import transcripts_router
 from .config.api_get_config import router as config_get_router
 from .config.api_update_config import router as config_update_router
@@ -104,6 +106,8 @@ api_router.include_router(campaigns_list_router)
 api_router.include_router(campaign_detail_router)
 api_router.include_router(campaign_identities_router)
 api_router.include_router(campaign_events_router)
+api_router.include_router(orchestrator_list_router)
+api_router.include_router(orchestrator_events_router)
 
 # Observability
 api_router.include_router(stats_router)

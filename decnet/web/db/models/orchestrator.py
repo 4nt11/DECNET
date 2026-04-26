@@ -5,9 +5,10 @@ cleanly separable from synthetic life-injection events at query time.
 The orchestrator worker is the sole writer.
 """
 from datetime import datetime, timezone
-from typing import Optional
+from typing import Any, List, Optional
 from uuid import uuid4
 
+from pydantic import BaseModel
 from sqlalchemy import Column, Index, Text
 from sqlmodel import Field, SQLModel
 
@@ -50,3 +51,10 @@ class OrchestratorEvent(SQLModel, table=True):
     payload: str = Field(
         sa_column=Column("payload", Text, nullable=False, default="{}")
     )
+
+
+class OrchestratorEventsResponse(BaseModel):
+    total: int
+    limit: int
+    offset: int
+    data: List[dict[str, Any]]

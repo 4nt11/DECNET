@@ -874,7 +874,31 @@ class BaseRepository(ABC):
         raise NotImplementedError
 
     async def list_orchestrator_events(
-        self, *, limit: int = 100, since_ts: Optional[Any] = None
+        self,
+        limit: int = 100,
+        offset: int = 0,
+        *,
+        kind: Optional[str] = None,
+        since_ts: Optional[Any] = None,
     ) -> list[dict[str, Any]]:
-        """Return recent orchestrator events newest-first."""
+        """Paginated orchestrator events newest-first.
+
+        ``kind`` filters to ``"traffic"`` | ``"file"`` (matches
+        :class:`OrchestratorEvent.kind`). ``since_ts`` is the snapshot
+        delta filter used by SSE replay; leave ``None`` for the list view.
+        """
+        raise NotImplementedError
+
+    async def count_orchestrator_events(
+        self, *, kind: Optional[str] = None,
+    ) -> int:
+        """Total orchestrator-event rows, optionally filtered by kind."""
+        raise NotImplementedError
+
+    async def prune_orchestrator_events(self, per_dst_cap: int = 10000) -> int:
+        """Trim per-``dst_decky_uuid`` rows to a cap. Returns deleted count.
+
+        Periodic prune target — keeps the orchestrator_events table from
+        unbounded growth without paying the cost on every write.
+        """
         raise NotImplementedError
