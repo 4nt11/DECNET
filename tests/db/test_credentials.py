@@ -101,7 +101,7 @@ async def test_cross_service_reuse_query(repo) -> None:
             "secret_printable": secret,
             "fields": {},
         })
-    reuse = await repo.get_credential_reuse(sha)
+    reuse = await repo.get_credential_attempts_for_secret(sha)
     assert {r["service"] for r in reuse} == {"ssh", "ftp", "smtp"}
 
 

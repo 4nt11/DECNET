@@ -3,7 +3,7 @@ from datetime import datetime, timezone
 from typing import Any, List, Optional
 
 from pydantic import BaseModel
-from sqlalchemy import Column, Index, Text
+from sqlalchemy import Column, Index, Text, UniqueConstraint
 from sqlmodel import Field, SQLModel
 
 from ._base import _BIG_TEXT
@@ -54,9 +54,13 @@ class Credential(SQLModel, table=True):
     LDAP. Nullable for principal-less mechanisms (Redis AUTH, bearer
     tokens). Fully service-specific keys ride in ``fields`` JSON.
 
-    Dedup contract: same (attacker_uuid, decky, service, secret_sha256,
+    Dedup contract: same (attacker_ip, decky, service, secret_sha256,
     principal_or_empty) tuple → upsert, bumps ``attempt_count`` and
     ``last_seen``. Different secret or different principal → new row.
+
+    ``attacker_uuid`` is backfilled by the profiler once an Attacker row
+    has been minted for the source IP. It is nullable on first write so
+    the credential ingest path stays decoupled from the profiler.
     """
     __tablename__ = "credentials"
     __table_args__ = (
@@ -64,11 +68,15 @@ class Credential(SQLModel, table=True):
         Index("ix_credentials_principal_service", "principal", "service"),
     )
     id: Optional[int] = Field(default=None, primary_key=True)
-    # Keyed by attacker IP (not attackers.uuid) to match Bounty's pattern
-    # and avoid the chicken-and-egg of writing a credential row before
-    # the profiler has minted the Attacker. Index covers the join path
-    # cred_reuse → Attacker.ip.
+    # Keyed by attacker IP (not attackers.uuid) on the write path to
+    # avoid the chicken-and-egg of landing a credential before the
+    # profiler has minted the Attacker. The profiler backfills
+    # ``attacker_uuid`` once it knows the IP, so cross-IP reuse queries
+    # eventually have an indexed FK to traverse.
     attacker_ip: str = Field(index=True)
+    attacker_uuid: Optional[str] = Field(
+        default=None, foreign_key="attackers.uuid", index=True
+    )
     decky_name: str = Field(index=True)
     service: str = Field(index=True)
     principal: Optional[str] = Field(default=None, index=True, max_length=256)
@@ -105,6 +113,77 @@ class Credential(SQLModel, table=True):
         default_factory=lambda: datetime.now(timezone.utc), index=True
     )
     attempt_count: int = Field(default=1)
+
+
+class CredentialReuse(SQLModel, table=True):
+    """One observed credential reuse pattern across deckies and/or services.
+
+    A row here is a *finding* produced by the correlator: the same
+    ``(secret_sha256, secret_kind, principal)`` tuple was observed
+    against ``target_count`` distinct decky×service pairs. Upserted on
+    that natural key — the row accumulates new deckies/services/IPs
+    over time as the credential is reused.
+
+    The ``confidence`` column is reserved for a future fuzzy-match pass
+    (credential variants, e.g. ``hunter2`` vs ``hunter22``); rows
+    written by the exact-secret correlator are always 1.0.
+    """
+    __tablename__ = "credential_reuse"
+    __table_args__ = (
+        UniqueConstraint(
+            "secret_sha256", "secret_kind", "principal_key",
+            name="uq_credential_reuse_secret_principal",
+        ),
+    )
+    id: str = Field(primary_key=True, max_length=36)
+    secret_sha256: str = Field(index=True, max_length=64)
+    secret_kind: str = Field(index=True, max_length=32)
+    # Optional human-readable principal (e.g. "root"). Nullable — for
+    # cross-principal reuse rows we leave this null, but we still need
+    # a unique constraint, so ``principal_key`` is the non-null
+    # canonicalised form ("" when principal is null) used in the
+    # uniqueness tuple. SQLite's NULLs-distinct-in-UNIQUE behaviour
+    # would otherwise let duplicate null-principal rows through.
+    principal: Optional[str] = Field(default=None, max_length=256)
+    principal_key: str = Field(default="", max_length=256)
+    attacker_uuids: str = Field(
+        default="[]",
+        sa_column=Column("attacker_uuids", _BIG_TEXT, nullable=False, default="[]"),
+    )  # JSON list[str]
+    attacker_ips: str = Field(
+        default="[]",
+        sa_column=Column("attacker_ips", _BIG_TEXT, nullable=False, default="[]"),
+    )  # JSON list[str]
+    deckies: str = Field(
+        default="[]",
+        sa_column=Column("deckies", _BIG_TEXT, nullable=False, default="[]"),
+    )  # JSON list[str]
+    services: str = Field(
+        default="[]",
+        sa_column=Column("services", _BIG_TEXT, nullable=False, default="[]"),
+    )  # JSON list[str]
+    # COUNT(DISTINCT decky||':'||service). The discriminative scalar
+    # for ranking and filtering — a credential seen on 12 targets is
+    # far more interesting than one seen on 2.
+    target_count: int = Field(default=0, index=True)
+    attempt_count: int = Field(default=0)
+    confidence: float = Field(default=1.0)
+    first_seen: datetime = Field(
+        default_factory=lambda: datetime.now(timezone.utc), index=True
+    )
+    last_seen: datetime = Field(
+        default_factory=lambda: datetime.now(timezone.utc), index=True
+    )
+    updated_at: datetime = Field(
+        default_factory=lambda: datetime.now(timezone.utc), index=True
+    )
+
+
+class CredentialReuseResponse(BaseModel):
+    total: int
+    limit: int
+    offset: int
+    data: List[dict[str, Any]]
 
 
 class State(SQLModel, table=True):

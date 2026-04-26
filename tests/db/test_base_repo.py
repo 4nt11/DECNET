@@ -23,7 +23,11 @@ class DummyRepo(BaseRepository):
     async def get_credentials(self, **kw): await super().get_credentials(**kw)
     async def get_total_credentials(self, **kw): await super().get_total_credentials(**kw)
     async def get_credentials_for_attacker(self, ip): await super().get_credentials_for_attacker(ip)
-    async def get_credential_reuse(self, h): await super().get_credential_reuse(h)
+    async def get_credential_attempts_for_secret(self, h): await super().get_credential_attempts_for_secret(h)
+    async def upsert_credential_reuse(self, **kw): await super().upsert_credential_reuse(**kw); return None
+    async def list_credential_reuses(self, **kw): await super().list_credential_reuses(**kw); return (0, [])
+    async def get_credential_reuse_by_id(self, i): await super().get_credential_reuse_by_id(i)
+    async def update_credential_attacker_uuid(self, ip, u): await super().update_credential_attacker_uuid(ip, u); return 0
     async def get_state(self, k): await super().get_state(k)
     async def set_state(self, k, v): await super().set_state(k, v)
     async def get_max_log_id(self): await super().get_max_log_id()
@@ -73,7 +77,15 @@ async def test_base_repo_coverage():
     await dr.get_credentials()
     await dr.get_total_credentials()
     await dr.get_credentials_for_attacker("1.2.3.4")
-    await dr.get_credential_reuse("abc")
+    await dr.get_credential_attempts_for_secret("abc")
+    await dr.upsert_credential_reuse(
+        secret_sha256="x", secret_kind="plaintext", principal=None,
+        attacker_uuid=None, attacker_ip="1.2.3.4", decky="d", service="ssh",
+        attempt_count=1, ts=None,
+    )
+    await dr.list_credential_reuses()
+    await dr.get_credential_reuse_by_id("a")
+    await dr.update_credential_attacker_uuid("1.2.3.4", "u")
     await dr.get_state("k")
     await dr.set_state("k", "v")
     await dr.get_max_log_id()

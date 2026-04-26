@@ -32,6 +32,7 @@ from decnet.web.db.models import (
     Log,
     Bounty,
     Credential,
+    CredentialReuse,
     State,
     Attacker,
     AttackerBehavior,
@@ -684,7 +685,7 @@ class SQLModelRepository(BaseRepository):
                 out.append(d)
             return out
 
-    async def get_credential_reuse(
+    async def get_credential_attempts_for_secret(
         self, secret_sha256: str
     ) -> List[dict[str, Any]]:
         """Every (attacker_ip, decky, service, principal) row sharing this
@@ -705,6 +706,197 @@ class SQLModelRepository(BaseRepository):
                     pass
                 out.append(d)
             return out
+
+    # ─── credential reuse (findings) ──────────────────────────────────────
+
+    async def update_credential_attacker_uuid(
+        self, attacker_ip: str, attacker_uuid: str
+    ) -> int:
+        """Backfill ``attacker_uuid`` on every Credential row matching the
+        given IP whose ``attacker_uuid`` is currently null. Run by the
+        profiler after it mints/updates an Attacker row.
+        """
+        async with self._session() as session:
+            result = await session.execute(
+                update(Credential)
+                .where(
+                    Credential.attacker_ip == attacker_ip,
+                    Credential.attacker_uuid.is_(None),
+                )
+                .values(attacker_uuid=attacker_uuid)
+            )
+            await session.commit()
+            return int(result.rowcount or 0)
+
+    @staticmethod
+    def _merge_unique(existing_json: str, value: Optional[str]) -> tuple[str, bool]:
+        """Append ``value`` to a JSON list[str] column if not present.
+        Returns (new_json, changed). None values and duplicates are skipped.
+        """
+        if value is None:
+            return existing_json, False
+        try:
+            current = json.loads(existing_json) if existing_json else []
+            if not isinstance(current, list):
+                current = []
+        except (json.JSONDecodeError, TypeError):
+            current = []
+        if value in current:
+            return existing_json, False
+        current.append(value)
+        return json.dumps(current, ensure_ascii=True), True
+
+    async def upsert_credential_reuse(
+        self,
+        *,
+        secret_sha256: str,
+        secret_kind: str,
+        principal: Optional[str],
+        attacker_uuid: Optional[str],
+        attacker_ip: str,
+        decky: str,
+        service: str,
+        attempt_count: int,
+        ts: Optional[datetime] = None,
+    ) -> Optional[dict[str, Any]]:
+        """Upsert a credential-reuse finding.
+
+        The row is keyed by ``(secret_sha256, secret_kind, principal_key)``
+        — ``principal_key`` is the canonicalised non-null form ("" when
+        principal is null) so the unique constraint behaves the same on
+        SQLite and MySQL.
+
+        Returns the row dict augmented with ``inserted: bool`` and
+        ``changed: bool`` so the correlator can decide whether to publish
+        a bus event.
+        """
+        principal_key = principal or ""
+        now = ts or datetime.now(timezone.utc)
+        async with self._session() as session:
+            existing = (await session.execute(
+                select(CredentialReuse).where(
+                    CredentialReuse.secret_sha256 == secret_sha256,
+                    CredentialReuse.secret_kind == secret_kind,
+                    CredentialReuse.principal_key == principal_key,
+                )
+            )).scalar_one_or_none()
+
+            if existing is None:
+                row = CredentialReuse(
+                    id=str(uuid.uuid4()),
+                    secret_sha256=secret_sha256,
+                    secret_kind=secret_kind,
+                    principal=principal,
+                    principal_key=principal_key,
+                    attacker_uuids=json.dumps(
+                        [attacker_uuid] if attacker_uuid else [], ensure_ascii=True
+                    ),
+                    attacker_ips=json.dumps([attacker_ip], ensure_ascii=True),
+                    deckies=json.dumps([decky], ensure_ascii=True),
+                    services=json.dumps([service], ensure_ascii=True),
+                    target_count=1,
+                    attempt_count=int(attempt_count),
+                    confidence=1.0,
+                    first_seen=now,
+                    last_seen=now,
+                    updated_at=now,
+                )
+                session.add(row)
+                await session.commit()
+                await session.refresh(row)
+                d = row.model_dump(mode="json")
+                d["inserted"] = True
+                d["changed"] = True
+                return d
+
+            changed = False
+            new_uuids, c1 = self._merge_unique(existing.attacker_uuids, attacker_uuid)
+            new_ips, c2 = self._merge_unique(existing.attacker_ips, attacker_ip)
+            new_deckies, c3 = self._merge_unique(existing.deckies, decky)
+            new_services, c4 = self._merge_unique(existing.services, service)
+            existing.attacker_uuids = new_uuids
+            existing.attacker_ips = new_ips
+            if c3 or c4:
+                existing.deckies = new_deckies
+                existing.services = new_services
+                # Recount target tuples from the underlying credentials
+                # table — a (decky, service) tuple only counts when both
+                # were observed together, which the JSON lists alone
+                # can't tell us.
+                stmt = (
+                    select(func.count(func.distinct(
+                        Credential.decky_name + ":" + Credential.service
+                    )))
+                    .where(
+                        Credential.secret_sha256 == secret_sha256,
+                        Credential.secret_kind == secret_kind,
+                        (Credential.principal == principal) if principal is not None
+                        else Credential.principal.is_(None),
+                    )
+                )
+                target_count = (await session.execute(stmt)).scalar() or 0
+                existing.target_count = int(target_count)
+            existing.attempt_count = (existing.attempt_count or 0) + int(attempt_count)
+            existing.last_seen = now
+            existing.updated_at = now
+            if c1 or c2 or c3 or c4:
+                changed = True
+            session.add(existing)
+            await session.commit()
+            await session.refresh(existing)
+            d = existing.model_dump(mode="json")
+            d["inserted"] = False
+            d["changed"] = changed
+            return d
+
+    async def list_credential_reuses(
+        self,
+        limit: int = 50,
+        offset: int = 0,
+        min_target_count: int = 2,
+        secret_kind: Optional[str] = None,
+    ) -> tuple[int, List[dict[str, Any]]]:
+        async with self._session() as session:
+            base = select(CredentialReuse).where(
+                CredentialReuse.target_count >= min_target_count
+            )
+            if secret_kind:
+                base = base.where(CredentialReuse.secret_kind == secret_kind)
+            total_stmt = select(func.count()).select_from(base.subquery())
+            total = (await session.execute(total_stmt)).scalar() or 0
+            list_stmt = (
+                base.order_by(desc(CredentialReuse.target_count),
+                              desc(CredentialReuse.last_seen))
+                .offset(offset).limit(limit)
+            )
+            rows = (await session.execute(list_stmt)).scalars().all()
+            out: List[dict[str, Any]] = []
+            for r in rows:
+                d = r.model_dump(mode="json")
+                for key in ("attacker_uuids", "attacker_ips", "deckies", "services"):
+                    try:
+                        d[key] = json.loads(d[key])
+                    except (json.JSONDecodeError, TypeError):
+                        d[key] = []
+                out.append(d)
+            return int(total), out
+
+    async def get_credential_reuse_by_id(
+        self, reuse_id: str
+    ) -> Optional[dict[str, Any]]:
+        async with self._session() as session:
+            row = (await session.execute(
+                select(CredentialReuse).where(CredentialReuse.id == reuse_id)
+            )).scalar_one_or_none()
+            if row is None:
+                return None
+            d = row.model_dump(mode="json")
+            for key in ("attacker_uuids", "attacker_ips", "deckies", "services"):
+                try:
+                    d[key] = json.loads(d[key])
+                except (json.JSONDecodeError, TypeError):
+                    d[key] = []
+            return d
 
     async def get_state(self, key: str) -> Optional[dict[str, Any]]:
         async with self._session() as session:

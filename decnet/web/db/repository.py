@@ -153,10 +153,57 @@ class BaseRepository(ABC):
         pass
 
     @abstractmethod
-    async def get_credential_reuse(
+    async def get_credential_attempts_for_secret(
         self, secret_sha256: str
     ) -> list[dict[str, Any]]:
         """Every (attacker, decky, service, principal) row sharing this secret hash."""
+        pass
+
+    @abstractmethod
+    async def upsert_credential_reuse(
+        self,
+        *,
+        secret_sha256: str,
+        secret_kind: str,
+        principal: Optional[str],
+        attacker_uuid: Optional[str],
+        attacker_ip: str,
+        decky: str,
+        service: str,
+        attempt_count: int,
+        ts: Optional[Any] = None,
+    ) -> Optional[dict[str, Any]]:
+        """Upsert one credential-reuse finding. Returns the row dict (with
+        ``inserted: bool`` mixed in) on insert/update, or None if the row
+        is below the reuse threshold and shouldn't be persisted yet.
+        """
+        pass
+
+    @abstractmethod
+    async def list_credential_reuses(
+        self,
+        limit: int = 50,
+        offset: int = 0,
+        min_target_count: int = 2,
+        secret_kind: Optional[str] = None,
+    ) -> tuple[int, list[dict[str, Any]]]:
+        """Paged list of credential-reuse findings ordered by target_count desc."""
+        pass
+
+    @abstractmethod
+    async def get_credential_reuse_by_id(
+        self, reuse_id: str
+    ) -> Optional[dict[str, Any]]:
+        """One credential-reuse finding by UUID, or None."""
+        pass
+
+    @abstractmethod
+    async def update_credential_attacker_uuid(
+        self, attacker_ip: str, attacker_uuid: str
+    ) -> int:
+        """Backfill ``attacker_uuid`` on every Credential row matching the IP
+        whose ``attacker_uuid`` is currently null. Returns rows updated.
+        """
         pass
 
     @abstractmethod

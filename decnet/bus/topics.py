@@ -14,6 +14,8 @@ Token structure (NATS-style, dot-separated):
     attacker.scored
     attacker.session.started
     attacker.session.ended
+    credential.captured
+    credential.reuse.detected
     system.log
     system.bus.health
     system.{worker}.health
@@ -32,6 +34,7 @@ TOPOLOGY = "topology"
 DECKY = "decky"
 ATTACKER = "attacker"
 SYSTEM = "system"
+CREDENTIAL = "credential"
 
 
 # ─── Leaf event-type constants (the last segment of each topic) ──────────────
@@ -74,6 +77,15 @@ ATTACKER_SCORED = "scored"
 ATTACKER_FINGERPRINTED = "fingerprinted"
 ATTACKER_SESSION_STARTED = "session.started"
 ATTACKER_SESSION_ENDED = "session.ended"
+
+# Credential event types (second/third tokens under ``credential``).
+# ``credential.captured`` fires once per upserted Credential row — the
+# correlator listens for it and runs the cred-reuse query in response,
+# so reuse detection latency is sub-second after a fresh capture.
+# ``credential.reuse.detected`` fires when the correlator inserts a new
+# CredentialReuse row or grows an existing one (added decky/service/IP).
+CREDENTIAL_CAPTURED = "captured"
+CREDENTIAL_REUSE_DETECTED = "reuse.detected"
 
 # System event types.
 SYSTEM_LOG = "log"
@@ -141,6 +153,19 @@ def system(event_type: str) -> str:
     if not event_type:
         raise ValueError("system topic requires a non-empty event_type")
     return f"{SYSTEM}.{event_type}"
+
+
+def credential(event_type: str) -> str:
+    """Build ``credential.<event_type>``.
+
+    *event_type* is typically one of :data:`CREDENTIAL_CAPTURED` or
+    :data:`CREDENTIAL_REUSE_DETECTED`. Dotted leaves
+    (``reuse.detected``) are permitted — same rationale as
+    :func:`system`.
+    """
+    if not event_type:
+        raise ValueError("credential topic requires a non-empty event_type")
+    return f"{CREDENTIAL}.{event_type}"
 
 
 def attacker(event_type: str) -> str:
