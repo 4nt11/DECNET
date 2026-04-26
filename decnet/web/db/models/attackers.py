@@ -122,9 +122,12 @@ class AttackerIdentity(SQLModel, table=True):
     __tablename__ = "attacker_identities"
     uuid: str = Field(primary_key=True)
     schema_version: int = Field(default=1)
-    # Set by the campaign clusterer, downstream effort. The campaigns
-    # table doesn't exist yet — no FK constraint, just a soft pointer.
-    campaign_id: Optional[str] = Field(default=None, index=True)
+    # Set by the campaign clusterer. The ``campaigns`` table now
+    # exists; this is a real FK. Nullable until the campaign clusterer
+    # has run on this identity row.
+    campaign_id: Optional[str] = Field(
+        default=None, foreign_key="campaigns.uuid", index=True
+    )
     first_seen_at: Optional[datetime] = Field(default=None, index=True)
     last_seen_at: Optional[datetime] = Field(default=None, index=True)
     created_at: datetime = Field(

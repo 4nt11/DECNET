@@ -39,6 +39,10 @@ from .attackers import (
 from .attacker_intel import (
     AttackerIntel,
 )
+from .campaigns import (
+    Campaign,
+    CampaignsResponse,
+)
 from .deploy import (
     DeployIniRequest,
     DeployResponse,

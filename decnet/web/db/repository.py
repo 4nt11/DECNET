@@ -474,6 +474,113 @@ class BaseRepository(ABC):
         """
         pass
 
+    # ─── Campaign clustering reads ────────────────────────────────────────
+    # Layer above identity resolution: campaigns group identities into
+    # operations. Populated by ``decnet campaign-clusterer``. The
+    # read-only API below ships in the same wave; until the clusterer
+    # runs, every method returns empty/None against an empty table.
+    # See development/CAMPAIGN_CLUSTERING.md.
+
+    @abstractmethod
+    async def get_campaign_by_uuid(self, uuid: str) -> Optional[dict[str, Any]]:
+        """
+        Return one ``Campaign`` row by UUID, or ``None`` if absent.
+
+        If the row has ``merged_into_uuid`` set (i.e. the clusterer
+        soft-merged it into another campaign), implementations MUST
+        follow the chain and return the winner — same contract as
+        :meth:`get_identity_by_uuid`.
+        """
+        pass
+
+    @abstractmethod
+    async def list_campaigns(
+        self, limit: int = 50, offset: int = 0,
+    ) -> list[dict[str, Any]]:
+        """Paginated list of campaign rows, newest-updated first.
+
+        Excludes merged-out rows so the list view is the de-duped truth
+        (mirrors :meth:`list_identities`).
+        """
+        pass
+
+    @abstractmethod
+    async def count_campaigns(self) -> int:
+        """Total campaign rows. Excludes merged-out rows."""
+        pass
+
+    @abstractmethod
+    async def list_identities_for_campaign(
+        self, campaign_uuid: str, limit: int = 50, offset: int = 0,
+    ) -> list[dict[str, Any]]:
+        """``AttackerIdentity`` rows linked to the given campaign, newest first."""
+        pass
+
+    @abstractmethod
+    async def count_identities_for_campaign(self, campaign_uuid: str) -> int:
+        """Total ``AttackerIdentity`` rows FK'd to this campaign."""
+        pass
+
+    # ─── Campaign clustering writes (campaign-clusterer worker) ───────────
+
+    @abstractmethod
+    async def list_identities_for_clustering(
+        self, limit: Optional[int] = None,
+    ) -> list[dict[str, Any]]:
+        """Project every ``AttackerIdentity`` into the campaign
+        clusterer's input shape.
+
+        Returns dicts with at least ``uuid``, ``campaign_id``,
+        aggregated fingerprint summaries (``ja3_hashes``,
+        ``hassh_hashes``, ``payload_simhashes``, ``c2_endpoints``),
+        ``first_seen_at`` / ``last_seen_at``, ``merged_into_uuid``.
+        Empty list when no identities exist. ``limit`` bounds a
+        single tick's working set; leave ``None`` to fetch all.
+        """
+        pass
+
+    @abstractmethod
+    async def create_campaign(self, row: dict[str, Any]) -> str:
+        """Insert a new ``Campaign`` row and return its uuid.
+
+        ``row`` must include ``uuid``; other fields are optional and
+        default per the model. Caller generates the uuid so it can be
+        used in the same tick to back-link identities.
+        """
+        pass
+
+    @abstractmethod
+    async def set_identity_campaign_id(
+        self, identity_uuid: str, campaign_uuid: Optional[str],
+    ) -> None:
+        """Set or clear ``attacker_identities.campaign_id``.
+
+        Idempotent. Pass ``None`` to unlink (e.g. when revoking a
+        prior campaign assignment).
+        """
+        pass
+
+    @abstractmethod
+    async def list_all_campaigns(self) -> list[dict[str, Any]]:
+        """Every ``Campaign`` row, including merged-out ones.
+
+        Distinct from :meth:`list_campaigns`: the clusterer's
+        revocable-merge pass needs to re-evaluate merged-out
+        campaigns, so it pulls the unfiltered set.
+        """
+        pass
+
+    @abstractmethod
+    async def update_campaign_merged_into(
+        self, campaign_uuid: str, winner_uuid: Optional[str],
+    ) -> None:
+        """Set or clear ``campaigns.merged_into_uuid``.
+
+        Pass ``winner_uuid`` to soft-merge the row into another
+        campaign; pass ``None`` to revoke a prior merge.
+        """
+        pass
+
     @abstractmethod
     async def get_attacker_commands(
         self,

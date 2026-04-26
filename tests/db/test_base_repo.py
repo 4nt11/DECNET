@@ -71,6 +71,17 @@ class DummyRepo(BaseRepository):
     async def set_attacker_identity_id(self, a, i): await super().set_attacker_identity_id(a, i)
     async def list_all_identities(self): await super().list_all_identities(); return []
     async def update_identity_merged_into(self, u, w): await super().update_identity_merged_into(u, w)
+    # Campaign clustering (this PR)
+    async def get_campaign_by_uuid(self, u): await super().get_campaign_by_uuid(u)
+    async def list_campaigns(self, limit=50, offset=0): await super().list_campaigns(limit, offset); return []
+    async def count_campaigns(self): await super().count_campaigns(); return 0
+    async def list_identities_for_campaign(self, u, limit=50, offset=0): await super().list_identities_for_campaign(u, limit, offset); return []
+    async def count_identities_for_campaign(self, u): await super().count_identities_for_campaign(u); return 0
+    async def list_identities_for_clustering(self, limit=None): await super().list_identities_for_clustering(limit); return []
+    async def create_campaign(self, row): await super().create_campaign(row); return ""
+    async def set_identity_campaign_id(self, i, c): await super().set_identity_campaign_id(i, c)
+    async def list_all_campaigns(self): await super().list_all_campaigns(); return []
+    async def update_campaign_merged_into(self, u, w): await super().update_campaign_merged_into(u, w)
 
 @pytest.mark.asyncio
 async def test_base_repo_coverage():
@@ -144,6 +155,18 @@ async def test_base_repo_coverage():
     await dr.list_all_identities()
     await dr.update_identity_merged_into("a", "b")
     await dr.update_identity_merged_into("a", None)
+    await dr.get_campaign_by_uuid("a")
+    await dr.list_campaigns()
+    await dr.count_campaigns()
+    await dr.list_identities_for_campaign("a")
+    await dr.count_identities_for_campaign("a")
+    await dr.list_identities_for_clustering()
+    await dr.create_campaign({"uuid": "c"})
+    await dr.set_identity_campaign_id("i", "c")
+    await dr.set_identity_campaign_id("i", None)
+    await dr.list_all_campaigns()
+    await dr.update_campaign_merged_into("c", "d")
+    await dr.update_campaign_merged_into("c", None)
 
     # Swarm methods: default NotImplementedError on BaseRepository.  Covering
     # them here keeps the coverage contract honest for the swarm CRUD surface.
