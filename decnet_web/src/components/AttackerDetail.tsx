@@ -6,6 +6,7 @@ import ArtifactDrawer from './ArtifactDrawer';
 import MailDrawer from './MailDrawer';
 import SessionDrawer from './SessionDrawer';
 import EmptyState from './EmptyState/EmptyState';
+import { useIdentityStream } from './useIdentityStream';
 import './Dashboard.css';
 
 interface AttackerBehavior {
@@ -1278,6 +1279,39 @@ const AttackerDetail: React.FC = () => {
     };
     fetchAttacker();
   }, [id]);
+
+  // Re-fetch this attacker row whenever an identity event references
+  // its uuid. The IDENTITY badge appears once the clusterer binds the
+  // row, and follows through merges / unmerges live.
+  useIdentityStream({
+    enabled: !!id,
+    onEvent: (ev) => {
+      if (!id) return;
+      const payload = ev.payload || {};
+      const refs = new Set<string>();
+      const addUuid = (v: unknown) => {
+        if (typeof v === 'string') refs.add(v);
+      };
+      addUuid(payload.observation_uuid);
+      const obsList = payload.observation_uuids;
+      if (Array.isArray(obsList)) obsList.forEach(addUuid);
+      // merge / unmerge events carry identity uuids, not observation
+      // uuids — but if the current attacker's identity_id matches any
+      // of them, we still want to refresh so the badge link follows.
+      addUuid(payload.identity_uuid);
+      addUuid(payload.winner_uuid);
+      addUuid(payload.loser_uuid);
+      addUuid(payload.resurrected_uuid);
+      addUuid(payload.former_winner_uuid);
+
+      const myIdentity = attacker?.identity_id;
+      if (refs.has(id) || (myIdentity && refs.has(myIdentity))) {
+        api.get(`/attackers/${id}`)
+          .then((res) => setAttacker(res.data))
+          .catch(() => {});
+      }
+    },
+  });
 
   useEffect(() => {
     if (!id) return;

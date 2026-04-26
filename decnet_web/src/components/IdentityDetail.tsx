@@ -2,6 +2,7 @@ import React, { useEffect, useState } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { ArrowLeft, Crosshair, Fingerprint, Globe, Radio } from '../icons';
 import api from '../utils/api';
+import { useIdentityStream } from './useIdentityStream';
 import './Dashboard.css';
 
 /*
@@ -104,6 +105,39 @@ const IdentityDetail: React.FC = () => {
     };
     fetchObservations();
   }, [id]);
+
+  // Live updates: when the clusterer fires an identity event that
+  // touches this identity (links a fresh observation, soft-merges,
+  // resurrects on unmerge), refetch both the row and the observations
+  // list so the page reflects current truth without a manual refresh.
+  useIdentityStream({
+    enabled: !!id,
+    onEvent: (ev) => {
+      if (!id) return;
+      const payload = ev.payload || {};
+      const refs = new Set<string>();
+      const addUuid = (v: unknown) => {
+        if (typeof v === 'string') refs.add(v);
+      };
+      addUuid(payload.identity_uuid);
+      addUuid(payload.winner_uuid);
+      addUuid(payload.loser_uuid);
+      addUuid(payload.resurrected_uuid);
+      addUuid(payload.former_winner_uuid);
+
+      if (refs.has(id)) {
+        api.get(`/identities/${id}`)
+          .then((res) => setIdentity(res.data))
+          .catch(() => {});
+        api.get(`/identities/${id}/observations?limit=50&offset=0`)
+          .then((res) => {
+            setObservations(res.data.data ?? []);
+            setObservationTotal(res.data.total ?? 0);
+          })
+          .catch(() => {});
+      }
+    },
+  });
 
   if (loading) {
     return (
