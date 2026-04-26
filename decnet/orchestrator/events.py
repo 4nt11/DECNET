@@ -39,7 +39,7 @@ def to_row(action: Action, result: ActivityResult) -> dict[str, Any]:
 def topic_for(action: Action) -> str:
     """Map an action to its bus topic."""
     if isinstance(action, TrafficAction):
-        return _topics.orchestrator(_topics.ORCHESTRATOR_ACTIVITY, action.dst_uuid)
+        return _topics.orchestrator(_topics.ORCHESTRATOR_TRAFFIC, action.dst_uuid)
     if isinstance(action, FileAction):
         return _topics.orchestrator(_topics.ORCHESTRATOR_FILE, action.dst_uuid)
     raise TypeError(f"unsupported action type: {type(action)!r}")
@@ -47,7 +47,7 @@ def topic_for(action: Action) -> str:
 
 def event_type_for(action: Action) -> str:
     if isinstance(action, TrafficAction):
-        return _topics.ORCHESTRATOR_ACTIVITY
+        return _topics.ORCHESTRATOR_TRAFFIC
     if isinstance(action, FileAction):
         return _topics.ORCHESTRATOR_FILE
     raise TypeError(f"unsupported action type: {type(action)!r}")

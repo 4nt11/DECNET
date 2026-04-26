@@ -10,7 +10,7 @@ Token structure (NATS-style, dot-separated):
     topology.{topology_id}.status
     decky.{decky_id}.state
     decky.{decky_id}.traffic
-    orchestrator.activity.{decky_id}
+    orchestrator.traffic.{decky_id}
     orchestrator.file.{decky_id}
     attacker.observed
     attacker.scored
@@ -170,7 +170,7 @@ CREDENTIAL_REUSE_DETECTED = "reuse.detected"
 # static.  Always nested with the destination decky uuid as the third
 # token, so consumers can subscribe to a single decky's life-injection
 # stream via ``orchestrator.*.<decky_uuid>``.
-ORCHESTRATOR_ACTIVITY = "activity"
+ORCHESTRATOR_TRAFFIC = "traffic"
 ORCHESTRATOR_FILE = "file"
 
 # System event types.
@@ -296,7 +296,7 @@ def identity(event_type: str) -> str:
 def orchestrator(event_type: str, decky_id: str) -> str:
     """Build ``orchestrator.<event_type>.<decky_id>``.
 
-    *event_type* should be one of :data:`ORCHESTRATOR_ACTIVITY` or
+    *event_type* should be one of :data:`ORCHESTRATOR_TRAFFIC` or
     :data:`ORCHESTRATOR_FILE`. The destination decky is always the
     third token so per-decky subscribers can use
     ``orchestrator.*.<decky_uuid>``.
