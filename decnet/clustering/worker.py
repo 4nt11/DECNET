@@ -148,9 +148,13 @@ async def _publish_result(bus: Optional[BaseBus], result: ClusterResult) -> None
             merged,
             event_type=_topics.IDENTITY_MERGED,
         )
-    # identities_unmerged ships once IDENTITY_UNMERGED is reserved
-    # (next commit). The field is already on ClusterResult so the
-    # revocable-merge work doesn't reshape the dataclass.
+    for unmerged in result.identities_unmerged:
+        await publish_safely(
+            bus,
+            _topics.identity(_topics.IDENTITY_UNMERGED),
+            unmerged,
+            event_type=_topics.IDENTITY_UNMERGED,
+        )
 
 
 async def _wake_on(bus: BaseBus, wake: asyncio.Event, pattern: str) -> None:

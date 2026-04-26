@@ -81,6 +81,7 @@ def test_identity_builder() -> None:
     assert topics.identity(topics.IDENTITY_FORMED) == "identity.formed"
     assert topics.identity(topics.IDENTITY_OBSERVATION_LINKED) == "identity.observation.linked"
     assert topics.identity(topics.IDENTITY_MERGED) == "identity.merged"
+    assert topics.identity(topics.IDENTITY_UNMERGED) == "identity.unmerged"
 
 
 def test_identity_builder_rejects_empty() -> None:

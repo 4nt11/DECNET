@@ -149,6 +149,9 @@ async def test_publishes_cluster_result_on_bus(monkeypatch, repo):
         identities_merged=[
             {"winner_uuid": "id-1", "loser_uuid": "id-2"},
         ],
+        identities_unmerged=[
+            {"resurrected_uuid": "id-2", "former_winner_uuid": "id-1"},
+        ],
     )
     clusterer = _FakeClusterer(results=[result])
 
@@ -169,6 +172,7 @@ async def test_publishes_cluster_result_on_bus(monkeypatch, repo):
     assert _topics.identity(_topics.IDENTITY_FORMED) in topics_seen
     assert _topics.identity(_topics.IDENTITY_OBSERVATION_LINKED) in topics_seen
     assert _topics.identity(_topics.IDENTITY_MERGED) in topics_seen
+    assert _topics.identity(_topics.IDENTITY_UNMERGED) in topics_seen
 
 
 @pytest.mark.anyio

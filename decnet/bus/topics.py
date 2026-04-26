@@ -17,6 +17,7 @@ Token structure (NATS-style, dot-separated):
     identity.formed
     identity.observation.linked
     identity.merged
+    identity.unmerged
     credential.captured
     credential.reuse.detected
     system.log
@@ -101,12 +102,21 @@ ATTACKER_INTEL_ENRICHED = "intel.enriched"
 #   identity.merged              — two identities collapsed; loser gets
 #                                  ``merged_into_uuid`` set, subscribers
 #                                  re-key cached references to the winner
+#   identity.unmerged            — revocable-merge undo: contradicting
+#                                  evidence cleared ``merged_into_uuid``
+#                                  and re-split observations.  The
+#                                  resurrected side's UUID is the same
+#                                  as the prior loser, so subscribers
+#                                  that cached references to the loser
+#                                  during the merged interval can
+#                                  re-attach without a new lookup.
 #
 # ``identity.campaign.assigned`` is deferred; it ships when the campaign
 # clusterer ships.  YAGNI before then.
 IDENTITY_FORMED = "formed"
 IDENTITY_OBSERVATION_LINKED = "observation.linked"
 IDENTITY_MERGED = "merged"
+IDENTITY_UNMERGED = "unmerged"
 
 # Credential event types (second/third tokens under ``credential``).
 # ``credential.captured`` fires once per upserted Credential row — the
@@ -215,9 +225,9 @@ def identity(event_type: str) -> str:
     """Build ``identity.<event_type>``.
 
     *event_type* is typically one of :data:`IDENTITY_FORMED`,
-    :data:`IDENTITY_OBSERVATION_LINKED`, :data:`IDENTITY_MERGED`. Dotted
-    leaves (``observation.linked``) are permitted — same rationale as
-    :func:`system`.
+    :data:`IDENTITY_OBSERVATION_LINKED`, :data:`IDENTITY_MERGED`, or
+    :data:`IDENTITY_UNMERGED`. Dotted leaves (``observation.linked``)
+    are permitted — same rationale as :func:`system`.
     """
     if not event_type:
         raise ValueError("identity topic requires a non-empty event_type")
