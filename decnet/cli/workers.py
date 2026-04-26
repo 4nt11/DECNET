@@ -140,3 +140,59 @@ def register(app: typer.Typer) -> None:
         if emit_syslog:
             for line in engine.traversal_syslog_lines(min_deckies):
                 typer.echo(line)
+
+    @app.command(name="reuse-correlate")
+    def reuse_correlate(
+        min_targets: int = typer.Option(
+            2, "--min-targets", "-m",
+            help="Minimum distinct (decky, service) targets a secret must hit before a CredentialReuse row is persisted",
+        ),
+        poll_interval_secs: float = typer.Option(
+            60.0, "--poll-interval", "-i",
+            help="Slow-tick fallback when the bus is idle or unavailable (seconds)",
+        ),
+        daemon: bool = typer.Option(
+            False, "--daemon", "-d",
+            help="Detach to background as a daemon process",
+        ),
+    ) -> None:
+        """Long-running credential-reuse correlator.
+
+        Watches the bus for ``credential.captured`` and ``attacker.observed``
+        events, re-runs the reuse pass on each wake, and publishes
+        ``credential.reuse.detected`` for every new or grown
+        ``CredentialReuse`` row.
+        """
+        import asyncio
+        from decnet.correlation.reuse_worker import run_reuse_loop
+        from decnet.web.dependencies import repo
+
+        if daemon:
+            log.info(
+                "reuse-correlate daemonizing min_targets=%d poll=%s",
+                min_targets, poll_interval_secs,
+            )
+            _utils._daemonize()
+
+        log.info(
+            "reuse-correlate command invoked min_targets=%d poll=%s",
+            min_targets, poll_interval_secs,
+        )
+        console.print(
+            f"[bold cyan]Reuse correlator starting[/] "
+            f"min_targets={min_targets} poll={poll_interval_secs}s"
+        )
+        console.print("[dim]Press Ctrl+C to stop[/]")
+
+        async def _run() -> None:
+            await repo.initialize()
+            await run_reuse_loop(
+                repo,
+                poll_interval_secs=poll_interval_secs,
+                min_targets=min_targets,
+            )
+
+        try:
+            asyncio.run(_run())
+        except KeyboardInterrupt:
+            console.print("\n[yellow]Reuse correlator stopped.[/]")

@@ -849,6 +849,54 @@ class SQLModelRepository(BaseRepository):
             d["changed"] = changed
             return d
 
+    async def find_credential_reuse_candidates(
+        self, min_targets: int = 2
+    ) -> List[dict[str, Any]]:
+        """Find credential groups crossing the reuse threshold.
+
+        Returns one dict per qualifying ``(secret_sha256, secret_kind,
+        principal)`` group, with the keys plus a ``credentials`` list of
+        the underlying rows so the correlator can fold each into
+        ``CredentialReuse`` via ``upsert_credential_reuse``.
+        """
+        target_expr = func.count(
+            func.distinct(Credential.decky_name + ":" + Credential.service)
+        ).label("target_count")
+        async with self._session() as session:
+            group_stmt = (
+                select(
+                    Credential.secret_sha256,
+                    Credential.secret_kind,
+                    Credential.principal,
+                    target_expr,
+                )
+                .group_by(
+                    Credential.secret_sha256,
+                    Credential.secret_kind,
+                    Credential.principal,
+                )
+                .having(target_expr >= int(min_targets))
+            )
+            groups = (await session.execute(group_stmt)).all()
+            out: List[dict[str, Any]] = []
+            for sha, kind, principal, target_count in groups:
+                cred_stmt = select(Credential).where(
+                    Credential.secret_sha256 == sha,
+                    Credential.secret_kind == kind,
+                    (Credential.principal == principal)
+                    if principal is not None
+                    else Credential.principal.is_(None),
+                )
+                rows = (await session.execute(cred_stmt)).scalars().all()
+                out.append({
+                    "secret_sha256": sha,
+                    "secret_kind": kind,
+                    "principal": principal,
+                    "target_count": int(target_count or 0),
+                    "credentials": [r.model_dump(mode="json") for r in rows],
+                })
+            return out
+
     async def list_credential_reuses(
         self,
         limit: int = 50,

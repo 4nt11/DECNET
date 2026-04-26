@@ -214,6 +214,62 @@ class CorrelationEngine:
             "traversals": [t.to_dict() for t in self.traversals(min_deckies)],
         }
 
+    # ------------------------------------------------------------------ #
+    # Credential reuse                                                     #
+    # ------------------------------------------------------------------ #
+
+    async def correlate_credential_reuse(
+        self,
+        repo: Any,
+        min_targets: int = 2,
+    ) -> list[dict[str, Any]]:
+        """Detect cross-target credential reuse and persist findings.
+
+        Groups every ``Credential`` row by ``(secret_sha256, secret_kind,
+        principal)``. Groups crossing *min_targets* distinct
+        ``(decky, service)`` pairs are folded into ``CredentialReuse`` via
+        :meth:`BaseRepository.upsert_credential_reuse` — one upsert per
+        underlying credential row, since the upsert itself dedups on the
+        unique key and recomputes aggregates from the credentials table.
+
+        Returns the upsert results that flipped ``inserted`` or
+        ``changed``, so the caller can publish ``credential.reuse.detected``
+        for each new or grown finding without re-querying.
+        """
+        results: list[dict[str, Any]] = []
+        candidates = await repo.find_credential_reuse_candidates(min_targets)
+        for group in candidates:
+            # Per-group flags: each credential in a group hits the same
+            # CredentialReuse row, so several upserts may flip
+            # ``inserted``/``changed`` along the way. Collapse to one
+            # publish per group keyed by the final state — otherwise a
+            # group of N creds emits N partial reuse.detected events
+            # with intermediate target_counts.
+            final_row: dict[str, Any] | None = None
+            saw_insert = False
+            saw_change = False
+            for cred in group["credentials"]:
+                row = await repo.upsert_credential_reuse(
+                    secret_sha256=group["secret_sha256"],
+                    secret_kind=group["secret_kind"],
+                    principal=group["principal"],
+                    attacker_uuid=cred.get("attacker_uuid"),
+                    attacker_ip=cred["attacker_ip"],
+                    decky=cred["decky_name"],
+                    service=cred["service"],
+                    attempt_count=int(cred.get("attempt_count") or 1),
+                )
+                if row is None:
+                    continue
+                final_row = row
+                saw_insert = saw_insert or bool(row.get("inserted"))
+                saw_change = saw_change or bool(row.get("changed"))
+            if final_row is not None and (saw_insert or saw_change):
+                final_row["inserted"] = saw_insert
+                final_row["changed"] = saw_change
+                results.append(final_row)
+        return results
+
     @_traced("correlation.traversal_syslog_lines")
     def traversal_syslog_lines(self, min_deckies: int = 2) -> list[str]:
         """

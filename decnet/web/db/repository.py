@@ -180,6 +180,18 @@ class BaseRepository(ABC):
         pass
 
     @abstractmethod
+    async def find_credential_reuse_candidates(
+        self, min_targets: int = 2
+    ) -> list[dict[str, Any]]:
+        """Group ``credentials`` by ``(secret_sha256, secret_kind, principal)``
+        and return groups whose distinct ``(decky_name, service)`` count is
+        at least *min_targets*. Each entry has the group key, the
+        ``target_count``, and the underlying credential rows for the
+        correlator to fold into ``CredentialReuse``.
+        """
+        pass
+
+    @abstractmethod
     async def list_credential_reuses(
         self,
         limit: int = 50,

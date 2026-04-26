@@ -71,6 +71,73 @@ async def test_publish_batch_swallows_bus_failures(monkeypatch) -> None:
 
 
 @pytest.mark.asyncio
+async def test_credential_captured_published_on_upsert(bus: FakeBus) -> None:
+    """A successful credential ingest publishes ``credential.captured`` once
+    with the secret hash, kind, attacker IP, decky, and service.
+    """
+    from unittest.mock import AsyncMock
+
+    from decnet.web.ingester import _ingest_credential_native
+
+    repo = AsyncMock()
+    repo.upsert_credential = AsyncMock(return_value=1)
+
+    sub = bus.subscribe("credential.captured")
+    async with sub:
+        await _ingest_credential_native(
+            repo,
+            log_data={
+                "attacker_ip": "10.0.0.5",
+                "decky": "decky-01",
+                "service": "ssh",
+            },
+            fields={
+                "secret_b64": "aHVudGVyMg==",
+                "secret_kind": "plaintext",
+                "principal": "root",
+                "secret_printable": "hunter2",
+            },
+            bus=bus,
+        )
+        event = await asyncio.wait_for(sub.__anext__(), timeout=2.0)
+
+    assert event.topic == "credential.captured"
+    assert event.type == "captured"
+    assert event.payload["secret_kind"] == "plaintext"
+    assert event.payload["attacker_ip"] == "10.0.0.5"
+    assert event.payload["decky"] == "decky-01"
+    assert event.payload["service"] == "ssh"
+    # Hash is sha256 of decoded "hunter2".
+    import hashlib
+    assert event.payload["secret_sha256"] == hashlib.sha256(b"hunter2").hexdigest()
+    repo.upsert_credential.assert_awaited_once()
+
+
+@pytest.mark.asyncio
+async def test_credential_captured_silent_on_validation_failure(bus: FakeBus) -> None:
+    """A dropped credential (invalid b64) must not publish anything."""
+    from unittest.mock import AsyncMock
+
+    from decnet.web.ingester import _ingest_credential_native
+
+    repo = AsyncMock()
+    repo.upsert_credential = AsyncMock()
+
+    sub = bus.subscribe("credential.captured")
+    async with sub:
+        await _ingest_credential_native(
+            repo,
+            log_data={"attacker_ip": "10.0.0.5", "decky": "d", "service": "ssh"},
+            fields={"secret_b64": "not-valid-base64!!!"},
+            bus=bus,
+        )
+        with pytest.raises(asyncio.TimeoutError):
+            await asyncio.wait_for(sub.__anext__(), timeout=0.2)
+
+    repo.upsert_credential.assert_not_awaited()
+
+
+@pytest.mark.asyncio
 async def test_ingester_degrades_cleanly_when_bus_disabled(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
