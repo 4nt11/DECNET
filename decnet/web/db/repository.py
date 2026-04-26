@@ -857,3 +857,24 @@ class BaseRepository(ABC):
         """Auto-disable a subscription after repeated failures. Sets
         ``enabled=False`` and stamps ``auto_disabled_at``."""
         raise NotImplementedError
+
+    # ---------------------------------------------------------- orchestrator
+
+    async def list_running_topology_deckies(self) -> list[dict[str, Any]]:
+        """Return every TopologyDecky row whose ``state == 'running'``.
+
+        The orchestrator picks pairs from this set to drive synthetic
+        inter-decky activity. Cross-topology by design: a multi-topology
+        host still has a single orchestrator instance.
+        """
+        raise NotImplementedError
+
+    async def record_orchestrator_event(self, data: dict[str, Any]) -> str:
+        """Insert one orchestrator-emitted event row, returning its uuid."""
+        raise NotImplementedError
+
+    async def list_orchestrator_events(
+        self, *, limit: int = 100, since_ts: Optional[Any] = None
+    ) -> list[dict[str, Any]]:
+        """Return recent orchestrator events newest-first."""
+        raise NotImplementedError

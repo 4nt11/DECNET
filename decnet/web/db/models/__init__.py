@@ -53,6 +53,9 @@ from .health import (
     ComponentHealth,
     HealthResponse,
 )
+from .orchestrator import (
+    OrchestratorEvent,
+)
 from .logs import (
     Bounty,
     BountyResponse,
@@ -181,6 +184,8 @@ __all__ = [
     # health
     "ComponentHealth",
     "HealthResponse",
+    # orchestrator
+    "OrchestratorEvent",
     # logs
     "Bounty",
     "BountyResponse",

@@ -30,6 +30,7 @@ from . import (
     inventory,
     lifecycle,
     listener,
+    orchestrator,
     profiler,
     sniffer,
     swarm,
@@ -54,7 +55,7 @@ for _mod in (
     api, swarmctl, agent, updater, listener, forwarder,
     swarm,
     deploy, lifecycle, workers, inventory,
-    web, profiler, sniffer, db,
+    web, profiler, orchestrator, sniffer, db,
     topology, bus, geoip, init, webhook,
 ):
     _mod.register(app)

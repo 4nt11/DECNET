@@ -10,6 +10,8 @@ Token structure (NATS-style, dot-separated):
     topology.{topology_id}.status
     decky.{decky_id}.state
     decky.{decky_id}.traffic
+    orchestrator.activity.{decky_id}
+    orchestrator.file.{decky_id}
     attacker.observed
     attacker.scored
     attacker.session.started
@@ -46,6 +48,7 @@ IDENTITY = "identity"
 CAMPAIGN = "campaign"
 SYSTEM = "system"
 CREDENTIAL = "credential"
+ORCHESTRATOR = "orchestrator"
 
 
 # ─── Leaf event-type constants (the last segment of each topic) ──────────────
@@ -159,6 +162,16 @@ CAMPAIGN_UNMERGED = "unmerged"
 # CredentialReuse row or grows an existing one (added decky/service/IP).
 CREDENTIAL_CAPTURED = "captured"
 CREDENTIAL_REUSE_DETECTED = "reuse.detected"
+
+# Orchestrator event types (second token under ``orchestrator``).  The
+# orchestrator worker publishes one of these per synthetic action it
+# drives against a decky — cheap inter-decky traffic and filesystem
+# mutations whose role is to keep the honeypot from looking suspiciously
+# static.  Always nested with the destination decky uuid as the third
+# token, so consumers can subscribe to a single decky's life-injection
+# stream via ``orchestrator.*.<decky_uuid>``.
+ORCHESTRATOR_ACTIVITY = "activity"
+ORCHESTRATOR_FILE = "file"
 
 # System event types.
 SYSTEM_LOG = "log"
@@ -278,6 +291,18 @@ def identity(event_type: str) -> str:
     if not event_type:
         raise ValueError("identity topic requires a non-empty event_type")
     return f"{IDENTITY}.{event_type}"
+
+
+def orchestrator(event_type: str, decky_id: str) -> str:
+    """Build ``orchestrator.<event_type>.<decky_id>``.
+
+    *event_type* should be one of :data:`ORCHESTRATOR_ACTIVITY` or
+    :data:`ORCHESTRATOR_FILE`. The destination decky is always the
+    third token so per-decky subscribers can use
+    ``orchestrator.*.<decky_uuid>``.
+    """
+    _reject_tokens(event_type, decky_id)
+    return f"{ORCHESTRATOR}.{event_type}.{decky_id}"
 
 
 def system_health(worker: str) -> str:

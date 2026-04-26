@@ -28,6 +28,7 @@ _PREFERRED_ORDER: tuple[str, ...] = (
     "reuse-correlator",
     "enrich",
     "webhook",
+    "orchestrator",
 )
 
 

@@ -49,6 +49,7 @@ from decnet.web.db.models import (
     TopologyEdge,
     TopologyStatusEvent,
     TopologyMutation,
+    OrchestratorEvent,
     WebhookSubscription,
 )
 
@@ -2787,3 +2788,42 @@ class SQLModelRepository(BaseRepository):
                 )
             )
             await session.commit()
+
+    # ---------------------------------------------------------- orchestrator
+
+    async def list_running_topology_deckies(self) -> list[dict[str, Any]]:
+        async with self._session() as session:
+            result = await session.execute(
+                select(TopologyDecky).where(TopologyDecky.state == "running")
+            )
+            return [
+                self._deserialize_json_fields(
+                    r.model_dump(mode="json"), ("services", "decky_config")
+                )
+                for r in result.scalars().all()
+            ]
+
+    async def record_orchestrator_event(self, data: dict[str, Any]) -> str:
+        payload = data.get("payload")
+        if isinstance(payload, (dict, list)):
+            data = {**data, "payload": json.dumps(payload)}
+        async with self._session() as session:
+            row = OrchestratorEvent(**data)
+            session.add(row)
+            await session.commit()
+            await session.refresh(row)
+            return row.uuid
+
+    async def list_orchestrator_events(
+        self,
+        *,
+        limit: int = 100,
+        since_ts: Optional[datetime] = None,
+    ) -> list[dict[str, Any]]:
+        async with self._session() as session:
+            stmt = select(OrchestratorEvent)
+            if since_ts is not None:
+                stmt = stmt.where(OrchestratorEvent.ts >= since_ts)
+            stmt = stmt.order_by(desc(OrchestratorEvent.ts)).limit(limit)
+            result = await session.execute(stmt)
+            return [r.model_dump(mode="json") for r in result.scalars().all()]
