@@ -18,12 +18,14 @@ handoff edges, and revocable merges. Edges MUST stay time-agnostic
 
 **v1 behavior:**
 
-The clusterer only assigns identities to observations whose
-``identity_id`` is currently NULL. Observations already linked to an
-identity are read-only this pass (they still participate in graph
-edges, so a new observation can join an existing identity, but the
-clusterer never reassigns or merges existing identities). Reassignment
-+ merging land in commit 10 alongside revocable merges.
+The clusterer assigns identities to NULL observations, merges existing
+identities when a single predicted component spans them, and revokes
+prior merges when the predicted component splits a merged-out identity
+away from its winner. Observations stay FK'd to their original identity
+row throughout — merges are soft pointers via
+``attacker_identities.merged_into_uuid``, never observation re-points.
+That keeps the audit trail intact and lets cached subscribers resolve
+merged-out UUIDs through the chain.
 """
 from __future__ import annotations
 
@@ -145,6 +147,18 @@ class ConnectedComponentsClusterer(Clusterer):
         if not rows:
             return ClusterResult()
 
+        # Build the merge chain so a row's "effective" identity follows
+        # merged_into_uuid up to the canonical winner. Pre-computing it
+        # lets us reason about post-merge identity membership in one
+        # place. ``identity_chain[u]`` is the canonical winner for
+        # identity ``u`` (or ``u`` itself if not merged out).
+        try:
+            all_identities = await repo.list_all_identities()
+        except Exception:  # noqa: BLE001
+            log.exception("clusterer: failed to read identities")
+            return ClusterResult()
+        identity_chain = _build_merge_chain(all_identities)
+
         # Project + cluster.
         observations: list[Observation] = []
         row_by_id: dict[str, dict[str, Any]] = {}
@@ -154,7 +168,7 @@ class ConnectedComponentsClusterer(Clusterer):
             row_by_id[obs.observation_id] = r
         labels = cluster_observations(observations)
 
-        # Group by predicted cluster.
+        # Group observations by predicted cluster.
         components: dict[str, list[str]] = {}
         for obs_id, cluster_id in labels.items():
             components.setdefault(cluster_id, []).append(obs_id)
@@ -162,48 +176,19 @@ class ConnectedComponentsClusterer(Clusterer):
         result = ClusterResult()
         now = datetime.now(timezone.utc)
 
+        # Pass 1 — per-component reconciliation: form, link, merge.
         for member_ids in components.values():
-            existing_identities = {
+            literal_ids = {
                 row_by_id[m]["identity_id"] for m in member_ids
                 if row_by_id[m].get("identity_id")
             }
+            effective_ids = {identity_chain.get(i, i) for i in literal_ids}
             unassigned = [
                 m for m in member_ids
                 if not row_by_id[m].get("identity_id")
             ]
 
-            if len(existing_identities) > 1:
-                # Multi-identity component — merging lands in commit 10
-                # (revocable merges). Skip for now; new observations in
-                # this component stay unassigned this pass and will get
-                # assigned once the merge logic exists.
-                log.debug(
-                    "clusterer: skipping component with %d existing identities "
-                    "(merge lands in commit 10)", len(existing_identities),
-                )
-                continue
-
-            if not unassigned:
-                # Component is entirely already-assigned; nothing to do.
-                continue
-
-            if existing_identities:
-                # Single existing identity → link the unassigned members.
-                identity_uuid = next(iter(existing_identities))
-                for obs_id in unassigned:
-                    try:
-                        await repo.set_attacker_identity_id(obs_id, identity_uuid)
-                    except Exception:  # noqa: BLE001
-                        log.exception(
-                            "clusterer: failed to link obs=%s -> identity=%s",
-                            obs_id, identity_uuid,
-                        )
-                        continue
-                    result.observations_linked.append({
-                        "identity_uuid": identity_uuid,
-                        "observation_uuid": obs_id,
-                    })
-            else:
+            if not effective_ids:
                 # Fresh component — mint a new identity.
                 identity_uuid = str(_uuid.uuid4())
                 try:
@@ -225,23 +210,135 @@ class ConnectedComponentsClusterer(Clusterer):
 
                 linked: list[str] = []
                 for obs_id in member_ids:
-                    try:
-                        await repo.set_attacker_identity_id(obs_id, identity_uuid)
-                    except Exception:  # noqa: BLE001
-                        log.exception(
-                            "clusterer: failed to link obs=%s -> identity=%s",
-                            obs_id, identity_uuid,
-                        )
-                        continue
-                    linked.append(obs_id)
-
+                    if await _link(repo, obs_id, identity_uuid):
+                        linked.append(obs_id)
                 if linked:
                     result.identities_formed.append({
                         "identity_uuid": identity_uuid,
                         "observation_uuids": linked,
                     })
+                continue
+
+            # Deterministic winner so two clusterer runs produce the
+            # same merge direction. Sorting by uuid string is stable
+            # and doesn't depend on row insertion order.
+            winner_uuid = min(effective_ids)
+            losers = effective_ids - {winner_uuid}
+
+            for loser_uuid in losers:
+                try:
+                    await repo.update_identity_merged_into(loser_uuid, winner_uuid)
+                except Exception:  # noqa: BLE001
+                    log.exception(
+                        "clusterer: failed to merge %s -> %s",
+                        loser_uuid, winner_uuid,
+                    )
+                    continue
+                identity_chain[loser_uuid] = winner_uuid
+                result.identities_merged.append({
+                    "winner_uuid": winner_uuid,
+                    "loser_uuid": loser_uuid,
+                })
+
+            # Link any unassigned observations in the component to the
+            # winner so a subsequent tick sees a single-identity
+            # component and skips this branch entirely.
+            for obs_id in unassigned:
+                if await _link(repo, obs_id, winner_uuid):
+                    result.observations_linked.append({
+                        "identity_uuid": winner_uuid,
+                        "observation_uuid": obs_id,
+                    })
+
+        # Pass 2 — revocable-merge undo. For each currently-merged-out
+        # identity, check whether its observations still cluster with
+        # the winner's. If not, the merge is contradicted by new
+        # evidence — clear merged_into_uuid and emit identity.unmerged.
+        # Observations FK'd to the resurrected loser stay where they
+        # were; the chain just stops following.
+        observations_by_literal_identity: dict[str, list[str]] = {}
+        for obs_id, r in row_by_id.items():
+            iid = r.get("identity_id")
+            if iid:
+                observations_by_literal_identity.setdefault(iid, []).append(obs_id)
+
+        for identity_row in all_identities:
+            if not identity_row.get("merged_into_uuid"):
+                continue
+            loser_uuid = identity_row["uuid"]
+            winner_uuid = identity_chain.get(loser_uuid, loser_uuid)
+            if winner_uuid == loser_uuid:
+                continue  # broken chain — paranoia
+            loser_obs = observations_by_literal_identity.get(loser_uuid, [])
+            winner_obs = observations_by_literal_identity.get(winner_uuid, [])
+            if not loser_obs or not winner_obs:
+                # No observations either side — can't disprove the merge.
+                continue
+            loser_clusters = {labels[o] for o in loser_obs}
+            winner_clusters = {labels[o] for o in winner_obs}
+            if loser_clusters & winner_clusters:
+                continue  # still co-clustered with winner — merge stands
+            try:
+                await repo.update_identity_merged_into(loser_uuid, None)
+            except Exception:  # noqa: BLE001
+                log.exception(
+                    "clusterer: failed to unmerge %s from %s",
+                    loser_uuid, winner_uuid,
+                )
+                continue
+            identity_chain[loser_uuid] = loser_uuid
+            result.identities_unmerged.append({
+                "resurrected_uuid": loser_uuid,
+                "former_winner_uuid": winner_uuid,
+            })
 
         return result
+
+
+def _build_merge_chain(
+    identities: list[dict[str, Any]],
+) -> dict[str, str]:
+    """Build a uuid → canonical-winner map from a list of identity rows.
+
+    Follows ``merged_into_uuid`` to a fixed point per identity, with a
+    hop cap to defend against accidental cycles. The returned dict
+    contains an entry for every identity uuid (mapping to itself if
+    not merged out).
+    """
+    _MAX_HOPS = 8
+    by_uuid: dict[str, dict[str, Any]] = {i["uuid"]: i for i in identities}
+    chain: dict[str, str] = {}
+    for uuid_ in by_uuid:
+        cur = uuid_
+        for _ in range(_MAX_HOPS):
+            row = by_uuid.get(cur)
+            if row is None:
+                break
+            nxt = row.get("merged_into_uuid")
+            if not nxt or nxt == cur:
+                break
+            cur = nxt
+        chain[uuid_] = cur
+    return chain
+
+
+async def _link(
+    repo: BaseRepository, observation_uuid: str, identity_uuid: str,
+) -> bool:
+    """Set ``attackers.identity_id`` and return ``True`` on success.
+
+    Wraps the repo call so the tick body stays linear and exception
+    handling is consistent across the form / link / merge branches.
+    """
+    try:
+        await repo.set_attacker_identity_id(observation_uuid, identity_uuid)
+        return True
+    except Exception:  # noqa: BLE001
+        log.exception(
+            "clusterer: failed to link obs=%s -> identity=%s",
+            observation_uuid, identity_uuid,
+        )
+        return False
 
 
 __all__ = [

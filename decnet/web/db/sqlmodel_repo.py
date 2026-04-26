@@ -1514,6 +1514,27 @@ class SQLModelRepository(BaseRepository):
             await session.execute(statement)
             await session.commit()
 
+    async def list_all_identities(self) -> list[dict[str, Any]]:
+        statement = select(AttackerIdentity).order_by(AttackerIdentity.created_at)
+        async with self._session() as session:
+            result = await session.execute(statement)
+            return [i.model_dump(mode="json") for i in result.scalars().all()]
+
+    async def update_identity_merged_into(
+        self, identity_uuid: str, winner_uuid: Optional[str],
+    ) -> None:
+        statement = (
+            update(AttackerIdentity)
+            .where(AttackerIdentity.uuid == identity_uuid)
+            .values(
+                merged_into_uuid=winner_uuid,
+                updated_at=datetime.now(timezone.utc),
+            )
+        )
+        async with self._session() as session:
+            await session.execute(statement)
+            await session.commit()
+
     async def get_attacker_commands(
         self,
         uuid: str,

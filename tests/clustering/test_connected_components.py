@@ -207,6 +207,151 @@ async def test_tick_keeps_distinct_ja3_separate(repo):
 
 
 @pytest.mark.anyio
+async def test_tick_merges_two_identities_when_component_spans_them(repo):
+    """Two pre-existing identities whose observations now cluster
+    together (e.g. a previously-missing fingerprint shows up) get
+    soft-merged: the smaller-uuid identity wins, the loser's
+    merged_into_uuid is set, observations stay FK'd to their
+    original identity row."""
+    # Tick 1: two distinct fingerprints → two distinct identities.
+    a = await _seed_attacker(repo, "1.1.1.1", ja3="ja3-A")
+    b = await _seed_attacker(repo, "2.2.2.2", ja3="ja3-B")
+
+    c = ConnectedComponentsClusterer()
+    first = await c.tick(repo)
+    assert len(first.identities_formed) == 2
+
+    # Snapshot the two identity uuids; we'll need them after the merge.
+    identities_after_first = await repo.list_all_identities()
+    assert len(identities_after_first) == 2
+    uuids = sorted(i["uuid"] for i in identities_after_first)
+    expected_winner, expected_loser = uuids[0], uuids[1]
+
+    # Tick 2: a bridging observation — fingerprints match BOTH prior
+    # rows. The bridge can't agree with both JA3s simultaneously, so
+    # use a HASSH that matches A and a payload that matches B.
+    # Simulate this with two new attackers, each linking a side.
+    # Simpler: change attacker A's stored fingerprint to also include
+    # ja3-B by re-seeding (in production this would be a fresh
+    # observation that bridges them).
+    bridge = await _seed_attacker(repo, "3.3.3.3", ja3="ja3-A", hassh="hassh-bridge")
+    # Make B's row carry the same hassh so the bridge can union them.
+    import json as _json
+    from datetime import datetime, timezone
+    now = datetime.now(timezone.utc)
+    await repo.upsert_attacker({
+        "ip": "2.2.2.2", "first_seen": now, "last_seen": now,
+        "event_count": 1,
+        "fingerprints": _json.dumps([
+            {"kind": "ja3", "hash": "ja3-B"},
+            {"kind": "hassh", "hash": "hassh-bridge"},
+        ]),
+    })
+
+    second = await c.tick(repo)
+    assert len(second.identities_merged) == 1
+    merge = second.identities_merged[0]
+    assert merge["winner_uuid"] == expected_winner
+    assert merge["loser_uuid"] == expected_loser
+
+    # The loser's row still exists with merged_into_uuid set.
+    all_after = {i["uuid"]: i for i in await repo.list_all_identities()}
+    assert all_after[expected_loser]["merged_into_uuid"] == expected_winner
+    assert all_after[expected_winner]["merged_into_uuid"] is None
+
+    # Observations stay FK'd to their original identity row — the
+    # merge is a soft pointer, NOT a re-point.
+    a_row = await repo.get_attacker_by_uuid(a)
+    b_row = await repo.get_attacker_by_uuid(b)
+    assert a_row["identity_id"] in {expected_winner, expected_loser}
+    assert b_row["identity_id"] in {expected_winner, expected_loser}
+
+
+@pytest.mark.anyio
+async def test_tick_unmerges_when_observations_diverge(repo):
+    """Pre-seed a soft-merged pair, then change the underlying
+    observations so they no longer cluster. The tick must clear
+    merged_into_uuid and emit identities_unmerged."""
+    import json as _json
+    from datetime import datetime, timezone
+    now = datetime.now(timezone.utc)
+
+    # Two attackers with same JA3 → tick merges them via shared
+    # high-tier signal (one identity formed).
+    a = await _seed_attacker(repo, "1.1.1.1", ja3="ja3-shared")
+    b = await _seed_attacker(repo, "2.2.2.2", ja3="ja3-shared")
+    c = ConnectedComponentsClusterer()
+    first = await c.tick(repo)
+    assert len(first.identities_formed) == 1
+    one_identity_uuid = first.identities_formed[0]["identity_uuid"]
+
+    # Force a soft-merge state: split observation b out into its own
+    # identity, then merge that back into the first via the repo
+    # directly. This emulates a state the clusterer would have
+    # arrived at across multiple ticks (form, then merge).
+    second_uuid = "00000000-0000-0000-0000-00000000bbbb"
+    await repo.create_attacker_identity({
+        "uuid": second_uuid,
+        "schema_version": 1,
+        "first_seen_at": now, "last_seen_at": now,
+        "created_at": now, "updated_at": now,
+        "observation_count": 1,
+    })
+    await repo.set_attacker_identity_id(b, second_uuid)
+    # Soft-merge second_uuid into one_identity_uuid (winner).
+    winner = min(one_identity_uuid, second_uuid)
+    loser = max(one_identity_uuid, second_uuid)
+    if loser == one_identity_uuid:
+        # Make the canonical mapping consistent with the test setup —
+        # we need the merge to be "loser → winner" by min-uuid rule.
+        # Swap ownership so the smaller-uuid keeps the active observations.
+        await repo.set_attacker_identity_id(a, winner)
+        await repo.set_attacker_identity_id(b, loser)
+    await repo.update_identity_merged_into(loser, winner)
+
+    # Verify the soft-merge is in place.
+    pre = {i["uuid"]: i for i in await repo.list_all_identities()}
+    assert pre[loser]["merged_into_uuid"] == winner
+
+    # Now change the underlying fingerprints so a and b no longer cluster.
+    await repo.upsert_attacker({
+        "ip": "2.2.2.2", "first_seen": now, "last_seen": now,
+        "event_count": 1,
+        "fingerprints": _json.dumps([{"kind": "ja3", "hash": "ja3-different"}]),
+    })
+
+    # Tick should detect the divergence and revoke the merge.
+    third = await c.tick(repo)
+    assert len(third.identities_unmerged) == 1
+    unmerged = third.identities_unmerged[0]
+    assert unmerged["resurrected_uuid"] == loser
+    assert unmerged["former_winner_uuid"] == winner
+
+    post = {i["uuid"]: i for i in await repo.list_all_identities()}
+    assert post[loser]["merged_into_uuid"] is None
+    assert post[winner]["merged_into_uuid"] is None
+
+
+@pytest.mark.anyio
+async def test_tick_is_idempotent_under_no_changes(repo):
+    """Running tick twice with no state changes between produces no
+    side-effects on the second run."""
+    await _seed_attacker(repo, "1.1.1.1", ja3="ja3-x")
+    await _seed_attacker(repo, "2.2.2.2", ja3="ja3-x")
+    await _seed_attacker(repo, "3.3.3.3", ja3="ja3-y")
+
+    c = ConnectedComponentsClusterer()
+    first = await c.tick(repo)
+    second = await c.tick(repo)
+    assert second.identities_formed == []
+    assert second.observations_linked == []
+    assert second.identities_merged == []
+    assert second.identities_unmerged == []
+    # Sanity: the first tick did do something.
+    assert first.identities_formed
+
+
+@pytest.mark.anyio
 async def test_tick_links_new_observation_to_existing_identity(repo):
     """First tick: 2 attackers cluster into one identity. Second tick:
     a new attacker with the same JA3 should get linked, not minted."""

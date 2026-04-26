@@ -69,6 +69,8 @@ class DummyRepo(BaseRepository):
     async def list_attackers_for_clustering(self, limit=None): await super().list_attackers_for_clustering(limit); return []
     async def create_attacker_identity(self, row): await super().create_attacker_identity(row); return ""
     async def set_attacker_identity_id(self, a, i): await super().set_attacker_identity_id(a, i)
+    async def list_all_identities(self): await super().list_all_identities(); return []
+    async def update_identity_merged_into(self, u, w): await super().update_identity_merged_into(u, w)
 
 @pytest.mark.asyncio
 async def test_base_repo_coverage():
@@ -139,6 +141,9 @@ async def test_base_repo_coverage():
     await dr.list_attackers_for_clustering()
     await dr.create_attacker_identity({"uuid": "i"})
     await dr.set_attacker_identity_id("a", "i")
+    await dr.list_all_identities()
+    await dr.update_identity_merged_into("a", "b")
+    await dr.update_identity_merged_into("a", None)
 
     # Swarm methods: default NotImplementedError on BaseRepository.  Covering
     # them here keeps the coverage contract honest for the swarm CRUD surface.

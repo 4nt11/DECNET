@@ -450,6 +450,31 @@ class BaseRepository(ABC):
         pass
 
     @abstractmethod
+    async def list_all_identities(self) -> list[dict[str, Any]]:
+        """Every ``AttackerIdentity`` row, including merged-out ones.
+
+        Distinct from :meth:`list_identities`, which filters out
+        merged-out rows for the de-duped UI list. The clusterer's
+        revocable-merge pass needs to re-evaluate merged-out
+        identities, so it pulls the unfiltered set.
+        """
+        pass
+
+    @abstractmethod
+    async def update_identity_merged_into(
+        self, identity_uuid: str, winner_uuid: Optional[str],
+    ) -> None:
+        """Set or clear ``attacker_identities.merged_into_uuid``.
+
+        Pass ``winner_uuid`` to soft-merge the row into another
+        identity; pass ``None`` to revoke a prior merge (the
+        revocable-merge undo path). Observations stay FK'd to their
+        original identity row throughout — the merge is a soft
+        pointer, not a re-point.
+        """
+        pass
+
+    @abstractmethod
     async def get_attacker_commands(
         self,
         uuid: str,
