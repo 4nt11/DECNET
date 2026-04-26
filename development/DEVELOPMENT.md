@@ -87,6 +87,8 @@
 ## Attacker Intelligence Collection
 *Goal: Build the richest possible attacker profile from passive observation across all 26 services.*
 
+- `decnet/vectorstore/` substrate is scaffolded and `sqlite-vec` is wired (factory + base + impl). No producers/consumers yet — reserved for the future statistical re-identification engine.
+
 ### TLS/SSL Fingerprinting (via sniffer container)
 - [x] **JA3/JA3S** — TLS ClientHello/ServerHello fingerprint hashes
 - [x] **JA4+ family** — JA4, JA4S, JA4H, JA4L (latency/geo estimation via RTT)
@@ -110,10 +112,10 @@
 - [x] **HTTP/2 fingerprint** — GREASE values, settings frame order, header pseudo-field ordering
 - [ ] **QUIC fingerprint** — Connection ID length, transport parameters order
 - [ ] **DNS behavior** — Query patterns, recursion flags, EDNS0 options, resolver fingerprint
-- [ ] **HTTP header ordering** — Tool-specific capitalization and ordering quirks
+- [x] **HTTP header ordering** — Tool-specific capitalization and ordering quirks
 
 ### Network Topology Leakage
-- [ ] **X-Forwarded-For mismatches** — Detect VPN/proxy slip vs. actual source IP
+- [x] **X-Forwarded-For mismatches** — Detect VPN/proxy slip vs. actual source IP
 - [ ] **ICMP error messages** — Internal IP leakage from misconfigured attacker infra
 - [ ] **IPv6 link-local leakage** — IPv6 addrs leaked even over IPv4 VPN (common opsec fail)
 - [ ] **mDNS/LLMNR leakage** — Attacker hostname/device info from misconfigured systems
@@ -128,7 +130,7 @@
 - [x] **Commands executed** — Full command log per session (SSH, Telnet, FTP, Redis, DB services)
 - [ ] **Services actively interacted with** — Distinguish port scans from live exploitation attempts
 - [ ] **Tooling attribution** — Byte-sequence signatures from known C2 frameworks in handshakes
-- [ ] **Credential reuse patterns** — Same username/password tried across multiple deckies/services
+- [x] **Credential reuse patterns** — Same username/password tried across multiple deckies/services
 - [x] **Payload signatures** — Hash and classify uploaded files, shellcode, exploit payloads
 
 ---
