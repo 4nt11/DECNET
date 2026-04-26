@@ -46,6 +46,11 @@ interface AttackerBehavior {
 interface AttackerData {
   uuid: string;
   ip: string;
+  // Resolved identity FK. NULL while the clusterer hasn't run on this
+  // observation yet, or hasn't seen enough stable signal (JA3, HASSH,
+  // payload hash, C2 callback) to claim a same-hands match. See
+  // development/IDENTITY_RESOLUTION.md.
+  identity_id?: string | null;
   first_seen: string;
   last_seen: string;
   event_count: number;
@@ -1404,6 +1409,24 @@ const AttackerDetail: React.FC = () => {
         )}
         {attacker.is_traversal && (
           <span className="traversal-badge" style={{ fontSize: '0.8rem' }}>TRAVERSAL</span>
+        )}
+        {/* Conditional Identity badge — surfaces only when the clusterer
+            has linked this observation to a resolved actor identity.
+            Zero behavior change when identity_id is null (which is
+            uniformly true until the clusterer ships). */}
+        {attacker.identity_id && (
+          <span
+            className="traversal-badge"
+            style={{
+              fontSize: '0.8rem',
+              cursor: 'pointer',
+              letterSpacing: '2px',
+            }}
+            title="Resolved identity — click to view all observations linked to this actor"
+            onClick={() => navigate(`/identities/${attacker.identity_id}`)}
+          >
+            IDENTITY · {attacker.identity_id.slice(0, 8)}
+          </span>
         )}
       </div>
 
