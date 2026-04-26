@@ -1,0 +1,21 @@
+# Bounds for fixture 1 (shared_wordlist).
+#
+# Ground truth: two distinct campaigns, one actor each → 2 truth-labels
+# of size 1. The clusterer must keep them separate. A correct algorithm
+# scores 1.0 across every metric on this fixture.
+#
+# Homogeneity is the load-bearing metric here: a clusterer that merges
+# the two campaigns based on shared credentials will tank homogeneity
+# (one predicted cluster contains members of two true campaigns).
+#
+# Bounds are loose at v1; tighten as the algorithm matures. Loosening
+# any bound to make CI pass requires PR-comment justification (per
+# CAMPAIGN_CLUSTERING.md §2).
+adjusted_rand_index:
+  min: 0.85
+homogeneity:
+  min: 0.90
+completeness:
+  min: 0.80
+singleton_recall:
+  min: 0.95
