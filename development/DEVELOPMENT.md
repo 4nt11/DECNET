@@ -56,7 +56,7 @@
 ## Detection & Intelligence
 
 - [x] **Real-time alerting via webhooks** — Admin-configurable outbound webhooks (SIEM/SOAR integration: Wazuh/Shuffle/TheHive/n8n) with HMAC-SHA256 signing, topic-pattern filtering, and bounded retry. Slack/Telegram-specific senders remain as per-destination work (they accept generic webhook payloads already).
-- [ ] **Threat intel enrichment** — Auto-lookup IPs against AbuseIPDB, Shodan, and GreyNoise.
+- [x] **Threat intel enrichment** — Auto-lookup IPs against AbuseIPDB, Shodan, and GreyNoise. -> Out-of-band `decnet enrich` worker, woken on `attacker.scored`/`attacker.observed`. v1 ships GreyNoise Community + AbuseIPDB + abuse.ch (Feodo Tracker bulk feed and ThreatFox per-IP). Shodan / Censys / OTX backlogged in DEVELOPMENT_V2.md.
 - [ ] **Attack campaign clustering** — Group sessions by signatures and timing patterns.
 - [x] **GeoIP mapping** — Visualize attacker origin and ASN data on a map.
 - [ ] **TTPs tagging** — Map observed behaviors to MITRE ATT&CK techniques.
