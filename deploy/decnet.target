@@ -13,6 +13,7 @@ Wants=decnet-bus.service \
       decnet-sniffer.service \
       decnet-prober.service \
       decnet-mutator.service \
+      decnet-reuse-correlator.service \
       decnet-webhook.service
 After=decnet-bus.service
 

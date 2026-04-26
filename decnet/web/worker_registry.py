@@ -38,6 +38,7 @@ KNOWN_WORKERS: tuple[str, ...] = (
     "sniffer",
     "prober",
     "mutator",
+    "reuse-correlator",  # credential-reuse pass — bus-woken on credential.captured
     "webhook",    # external SIEM/SOAR egress — bus consumer → HMAC HTTP POSTs
     "agent",
     "forwarder",
