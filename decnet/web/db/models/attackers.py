@@ -30,9 +30,28 @@ KD_START_OF_ACTION_IDLE_S: float = 2.0  # idle gap that counts as "new action"
 
 
 class Attacker(SQLModel, table=True):
+    """
+    Per-IP **observation** row. Every distinct source IP we observe gets
+    one of these. The semantic role is "observation event," not "actor
+    identity" — an actor rotating across N IPs produces N rows here.
+
+    The deduped actor view lives in ``AttackerIdentity`` (one identity
+    per actor; many observations per identity); the per-operation view
+    lives in ``Campaign``. ``identity_id`` is set by the clusterer
+    worker once it resolves which observations are the same hands.
+    NULL while the clusterer hasn't run on this row yet.
+
+    See ``development/IDENTITY_RESOLUTION.md`` for the three-level
+    hierarchy rationale.
+    """
     __tablename__ = "attackers"
     uuid: str = Field(primary_key=True)
     ip: str = Field(index=True)
+    identity_id: Optional[str] = Field(
+        default=None,
+        foreign_key="attacker_identities.uuid",
+        index=True,
+    )
     first_seen: datetime = Field(index=True)
     last_seen: datetime = Field(index=True)
     event_count: int = Field(default=0)
@@ -76,6 +95,91 @@ class Attacker(SQLModel, table=True):
     ptr_record: Optional[str] = Field(default=None, max_length=256)
     updated_at: datetime = Field(
         default_factory=lambda: datetime.now(timezone.utc), index=True
+    )
+
+
+class AttackerIdentity(SQLModel, table=True):
+    """
+    Resolved actor identity — the dedup'd "same hands" row that one or
+    more ``Attacker`` observations FK into. Populated by the (future)
+    clusterer worker; NULL on every observation until it runs.
+
+    Why a separate table from ``Attacker``: an actor rotating across N
+    IPs produces N observation rows but only ONE identity row. The
+    identity is recovered from signals the attacker can't cheaply
+    rotate — JA3, HASSH, payload hashes, C2 callbacks, and (V2)
+    keystroke-rhythm SimHash. See ``development/IDENTITY_RESOLUTION.md``.
+
+    All clusterer-populated fields are nullable; the table ships empty
+    in the schema-only PR (commit 1) and stays empty until the
+    clusterer lands. Empty is valid.
+
+    ``schema_version`` is non-negotiable from day one. Federation
+    gossip in V2 will share identity vectors across operators;
+    bumping feature definitions without a version field silently
+    poisons receivers.
+    """
+    __tablename__ = "attacker_identities"
+    uuid: str = Field(primary_key=True)
+    schema_version: int = Field(default=1)
+    # Set by the campaign clusterer, downstream effort. The campaigns
+    # table doesn't exist yet — no FK constraint, just a soft pointer.
+    campaign_id: Optional[str] = Field(default=None, index=True)
+    first_seen_at: Optional[datetime] = Field(default=None, index=True)
+    last_seen_at: Optional[datetime] = Field(default=None, index=True)
+    created_at: datetime = Field(
+        default_factory=lambda: datetime.now(timezone.utc), index=True
+    )
+    updated_at: datetime = Field(
+        default_factory=lambda: datetime.now(timezone.utc), index=True
+    )
+    # Identity-cohesion score from the clusterer. Range [0, 1]; null
+    # until the clusterer writes. Higher = more confident the
+    # observations linked to this identity are the same hands.
+    confidence: Optional[float] = Field(default=None)
+    # Denormalized count of FK'd Attacker rows. Maintained by the
+    # clusterer when it links/unlinks. Cheap dashboard read.
+    observation_count: int = Field(default=0)
+    # Fingerprint summary columns. JSON-serialized list[str] in TEXT
+    # because: (a) federation gossip wants this exact shape on the
+    # wire, (b) MySQL can't index BLOB/TEXT without prefix lengths,
+    # (c) actors can present multiple JA3/HASSH values across tools
+    # so a scalar column is wrong.
+    ja3_hashes: Optional[str] = Field(
+        default=None, sa_column=Column("ja3_hashes", Text, nullable=True)
+    )
+    hassh_hashes: Optional[str] = Field(
+        default=None, sa_column=Column("hassh_hashes", Text, nullable=True)
+    )
+    # Payload SimHash list — 64-bit ints serialized as hex strings.
+    # SimHashes are Hamming-comparable, which is the entire reason
+    # they're a list (not a set).
+    payload_simhashes: Optional[str] = Field(
+        default=None, sa_column=Column("payload_simhashes", Text, nullable=True)
+    )
+    c2_endpoints: Optional[str] = Field(
+        default=None, sa_column=Column("c2_endpoints", Text, nullable=True)
+    )
+    # V2 keystroke-dynamics hook. Same shape as
+    # SessionProfile.kd_digraph_simhash; this is the centroid (or
+    # majority vote) across the identity's sessions. BINARY(8) so
+    # MySQL can index without a prefix length, same as session_profile.
+    kd_digraph_simhash: Optional[bytes] = Field(
+        default=None,
+        sa_column=Column("kd_digraph_simhash", BINARY(8), nullable=True, index=True),
+    )
+    # Soft-merge audit trail. When the clusterer collapses two
+    # identities, the loser's row stays in place with this set to the
+    # winner's UUID — preserves the audit trail without orphaning FKs
+    # from any cached subscribers. Resolvers (e.g.
+    # GET /identities/{uuid}) follow the chain and surface the winner.
+    merged_into_uuid: Optional[str] = Field(
+        default=None, foreign_key="attacker_identities.uuid", index=True
+    )
+    # Operator-editable free-form notes — annotation surface for human
+    # analysts ("known APT-XX cluster," "matches MISP event 1234").
+    notes: Optional[str] = Field(
+        default=None, sa_column=Column("notes", Text, nullable=True)
     )
 
 

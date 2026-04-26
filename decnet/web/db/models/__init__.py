@@ -31,6 +31,7 @@ from .auth import (
 from .attackers import (
     Attacker,
     AttackerBehavior,
+    AttackerIdentity,
     AttackersResponse,
     SessionProfile,
     SmtpTarget,
@@ -160,6 +161,7 @@ __all__ = [
     # attackers
     "Attacker",
     "AttackerBehavior",
+    "AttackerIdentity",
     "AttackerIntel",
     "AttackersResponse",
     "SessionProfile",
