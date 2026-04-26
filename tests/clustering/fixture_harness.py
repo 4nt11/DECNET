@@ -6,18 +6,36 @@ Each fixture lives at `tests/fixtures/campaigns/<name>.yaml` with paired
 fixture test file down to "load corpus → predict → assert bounds" without
 copy-pasting the bound-walk loop or reference clusterers across files.
 
-Two reference clusterers are provided:
+Reference clusterers are provided as the algorithm under test in each
+fixture's bound assertions; their names describe the *signal* they
+cluster on, not the quality of the result.
 
 * `identity_clusterer` — every attacker is its own cluster. Trivially
   passes any fixture whose ground truth is all singletons (lone_wolf,
   shared_wordlist before merge, etc). Useful as a green baseline while
   the real connected-components algorithm is under construction.
 
+* `fingerprint_clusterer` — groups attackers by ``(ja3, hassh)``.
+  Approximates the "stable signals an attacker can't cheaply rotate"
+  arm of the planned similarity graph (see IDENTITY_RESOLUTION.md
+  Premise). Folds rotated-IP observations of one actor into one
+  cluster when the actor's JA3 + HASSH stay stable. Attackers whose
+  fingerprints are both NULL (typical of un-fingerprinted noise
+  scanners) are treated as un-mergeable — each becomes its own
+  singleton — so this clusterer doesn't trivially fuse all noise
+  into one mega-cluster.
+
 * `credential_jaccard_clusterer` — deliberately-bad reference that
   merges any two attackers whose credential-attempt sets overlap above
   a threshold. Exists so fixtures like `shared_wordlist` can prove
   they fail a clusterer that relies on credential overlap alone — the
   whole point of fixture #1.
+
+* `asn_clusterer` — deliberately-bad reference that groups attackers
+  by source ASN. Exists so fixtures like `vpn_hopping` (fixture #2)
+  can prove they fail a clusterer that treats ASN match as a
+  high-weight signal — VPN/proxy hopping shatters ASN within a single
+  identity and a clusterer that leans on it tanks completeness.
 """
 from __future__ import annotations
 
@@ -75,6 +93,28 @@ def assert_fixture_bounds(
 def identity_clusterer(corpus: GeneratedCorpus) -> dict[str, str]:
     """Every attacker → its own cluster. Placeholder until §4 algorithm lands."""
     return {a.attacker_id: f"cluster-{a.attacker_id}" for a in corpus.attackers}
+
+
+def fingerprint_clusterer(corpus: GeneratedCorpus) -> dict[str, str]:
+    """Group by ``(ja3, hassh)``. Un-fingerprinted rows stay singleton.
+
+    Approximates the stable-signal arm of the planned similarity graph;
+    the real algorithm in `decnet/clustering/` will extend this with
+    payload simhashes, C2 callback overlap, and phase-handoff edges.
+    """
+    pred: dict[str, str] = {}
+    for att in corpus.attackers:
+        if att.ja3 is None and att.hassh is None:
+            # No fingerprint to share — un-mergeable, own cluster.
+            pred[att.attacker_id] = f"fp-singleton-{att.attacker_id}"
+        else:
+            pred[att.attacker_id] = f"fp::{att.ja3}::{att.hassh}"
+    return pred
+
+
+def asn_clusterer(corpus: GeneratedCorpus) -> dict[str, str]:
+    """Group by source ASN. Deliberately-bad — see fixture 2."""
+    return {a.attacker_id: f"asn-{a.asn}" for a in corpus.attackers}
 
 
 def credential_jaccard_clusterer(

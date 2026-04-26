@@ -1,0 +1,55 @@
+# Fixture 2 (vpn_hopping) — see development/CAMPAIGN_CLUSTERING.md §2
+# and development/IDENTITY_RESOLUTION.md.
+#
+# One campaign, one actor, rotating across 5 distinct ASNs. JA3, HASSH,
+# and payload_hash are STABLE across every rotation — these are the
+# signals "the attacker can't cheaply rotate" (per the identity
+# resolution design doc) and they're the reason a clusterer should
+# recover all 5 observation rows as ONE identity, ONE campaign.
+#
+# Ground truth (verified at every level):
+#   - 5 observations  → 1 identity → 1 campaign  (per truth_labels())
+#
+# Pass condition: a fingerprint-driven clusterer must fold all 5 rows
+# into one cluster at both campaign-level and identity-level scoring.
+#
+# Adversarial condition: an asn_clusterer (group attackers by ASN —
+# the textbook bad heuristic) must fragment the campaign into 5
+# pieces and breach the completeness floor. This is what proves "ASN
+# match" is correctly weighted "very low" in the planned similarity
+# graph (per TODO clusterer feature list).
+#
+# ASN choice: synthetic private-use values (RFC 6996 64512–64534) so
+# the fixture never collides with real-world data and signals "not
+# real" to readers at a glance.
+campaign:
+  id: vpn-hopping-001
+  actors:
+    - id: hopper-a
+      asn: 64512                    # primary; rotation_asns overrides per row
+      ip_pool: rotating
+      rotation_count: 5
+      rotation_asns: [64512, 64513, 64514, 64515, 64516]
+      ja3: "771,4865-4866-4867-49195-49199-49196-49200,0-23-65281-10-11-35-16-5-13-18-51-45-43-27,29-23-24,0"
+      hassh: "vpn-hopper-cccccccc-cccccccc-cccccccc"
+      hours_active_utc: [12, 13, 14, 15, 16]
+      jitter_seconds: 60
+  phases:
+    - name: delivery
+      actor: hopper-a
+      target_selector: { service: ssh, count: 5 }
+      dwell_seconds: 1
+    - name: exploitation
+      actor: hopper-a
+      tool_signature:
+        # Stable payload across every rotation — same dropper from
+        # whatever staging the operator uses, regardless of which VPN
+        # exit they emerge from.
+        payload_hash: "vpn-hopper-stage1-payload"
+      target_selector: { service: ssh, count: 5 }
+      dwell_seconds: 5
+    - name: discovery
+      actor: hopper-a
+      target_selector: { service: ssh, count: 5 }
+      dwell_seconds: 5
+  duration_days: 2
