@@ -528,3 +528,25 @@
 .fp-card-body {
   padding: 12px 16px;
 }
+
+/* Identity / Campaign fingerprint groupings — used inside a logs-section */
+.fp-group {
+  margin-bottom: 12px;
+}
+.fp-group:last-child { margin-bottom: 0; }
+
+.fp-group-label {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 0.7rem;
+  letter-spacing: 2px;
+  opacity: 0.7;
+  margin-bottom: 6px;
+}
+
+.fp-group-items {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}

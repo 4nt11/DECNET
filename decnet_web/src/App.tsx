@@ -19,7 +19,9 @@ const LiveLogs       = lazy(() => import('./components/LiveLogs'));
 const Webhooks       = lazy(() => import('./components/Webhooks'));
 const Attackers      = lazy(() => import('./components/Attackers'));
 const AttackerDetail = lazy(() => import('./components/AttackerDetail'));
+const Identities    = lazy(() => import('./components/Identities'));
 const IdentityDetail = lazy(() => import('./components/IdentityDetail'));
+const Campaigns     = lazy(() => import('./components/Campaigns'));
 const CampaignDetail = lazy(() => import('./components/CampaignDetail'));
 const Config         = lazy(() => import('./components/Config'));
 const Bounty         = lazy(() => import('./components/Bounty'));
@@ -115,7 +117,9 @@ const AuthedShell: React.FC<AuthedShellProps> = ({ onLogout, onSearch, searchQue
             <Route path="/credentials" element={<Credentials />} />
             <Route path="/attackers" element={<Attackers />} />
             <Route path="/attackers/:id" element={<AttackerDetail />} />
+            <Route path="/identities" element={<Identities />} />
             <Route path="/identities/:id" element={<IdentityDetail />} />
+            <Route path="/campaigns" element={<Campaigns />} />
             <Route path="/campaigns/:id" element={<CampaignDetail />} />
             <Route path="/config" element={<Config />} />
             <Route path="/swarm-updates" element={<RemoteUpdates />} />

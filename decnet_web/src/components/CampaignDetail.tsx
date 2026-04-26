@@ -1,18 +1,17 @@
 import React, { useEffect, useState } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
-import { ArrowLeft, Crosshair, Fingerprint, Globe, Radio } from '../icons';
+import { ArrowLeft, Crosshair, Filter, Fingerprint, Globe, Radio } from '../icons';
 import api from '../utils/api';
+import EmptyState from './EmptyState/EmptyState';
 import { useCampaignStream } from './useCampaignStream';
 import './Dashboard.css';
 
 /*
  * CampaignDetail — read-only view of a campaign-clustered operation.
  *
- * The layer above identity resolution. Member identities are visible
- * here as rows that link back to IdentityDetail. Same visual vocabulary
- * as IdentityDetail by design — the substrate (soft merges, schema
- * version, JSON fingerprint summaries, live SSE updates) is identical
- * one layer up.
+ * Layer above identity resolution. Member identities link back to
+ * IdentityDetail; same visual vocabulary as the rest of the app
+ * (page-header / sections / chips), no inline-style drift.
  */
 
 interface CampaignData {
@@ -97,26 +96,23 @@ const CampaignDetail: React.FC = () => {
     fetchIdentities();
   }, [id]);
 
-  // Live updates: refetch when a campaign event references this uuid.
+  // Refetch when a campaign event references this uuid.
   useCampaignStream({
     enabled: !!id,
     onEvent: (ev) => {
       if (!id) return;
-      const payload = ev.payload || {};
       const refs = new Set<string>();
       const addUuid = (v: unknown) => {
         if (typeof v === 'string') refs.add(v);
       };
+      const payload = ev.payload || {};
       addUuid(payload.campaign_uuid);
       addUuid(payload.winner_uuid);
       addUuid(payload.loser_uuid);
       addUuid(payload.resurrected_uuid);
       addUuid(payload.former_winner_uuid);
-
       if (refs.has(id)) {
-        api.get(`/campaigns/${id}`)
-          .then((res) => setCampaign(res.data))
-          .catch(() => {});
+        api.get(`/campaigns/${id}`).then((res) => setCampaign(res.data)).catch(() => {});
         api.get(`/campaigns/${id}/identities?limit=50&offset=0`)
           .then((res) => {
             setIdentities(res.data.data ?? []);
@@ -129,24 +125,20 @@ const CampaignDetail: React.FC = () => {
 
   if (loading) {
     return (
-      <div className="dashboard">
-        <div style={{ textAlign: 'center', padding: '80px', opacity: 0.5, letterSpacing: '4px' }}>
-          LOADING CAMPAIGN…
-        </div>
+      <div className="bounty-root">
+        <EmptyState icon={Crosshair} title="LOADING CAMPAIGN…" />
       </div>
     );
   }
 
   if (error || !campaign) {
     return (
-      <div className="dashboard">
-        <button onClick={() => navigate('/attackers')} className="back-button">
+      <div className="bounty-root">
+        <button onClick={() => navigate('/campaigns')} className="back-button">
           <ArrowLeft size={18} />
-          <span>BACK TO ATTACKERS</span>
+          <span>BACK TO CAMPAIGNS</span>
         </button>
-        <div style={{ textAlign: 'center', padding: '80px', opacity: 0.5, letterSpacing: '4px' }}>
-          {error || 'CAMPAIGN NOT FOUND'}
-        </div>
+        <EmptyState icon={Crosshair} title={error || 'CAMPAIGN NOT FOUND'} />
       </div>
     );
   }
@@ -157,122 +149,117 @@ const CampaignDetail: React.FC = () => {
   const c2List = safeParseJsonList(campaign.c2_endpoints);
 
   return (
-    <div className="dashboard">
-      <button onClick={() => navigate('/attackers')} className="back-button">
+    <div className="bounty-root">
+      <button onClick={() => navigate('/campaigns')} className="back-button">
         <ArrowLeft size={18} />
-        <span>BACK TO ATTACKERS</span>
+        <span>BACK TO CAMPAIGNS</span>
       </button>
 
-      <div style={{ display: 'flex', alignItems: 'center', gap: '16px' }}>
-        <Fingerprint size={32} className="violet-accent" />
-        <h1 className="matrix-text" style={{ fontSize: '1.4rem', letterSpacing: '2px' }}>
-          CAMPAIGN · {campaign.uuid}
-        </h1>
-        {campaign.merged_into_uuid && (
-          <span
-            className="traversal-badge"
-            style={{ fontSize: '0.8rem', cursor: 'pointer', letterSpacing: '2px', opacity: 0.7 }}
-            title="This campaign was soft-merged into another. Click to view the canonical winner."
-            onClick={() => navigate(`/campaigns/${campaign.merged_into_uuid}`)}
-          >
-            MERGED INTO {campaign.merged_into_uuid.slice(0, 8)}
-          </span>
-        )}
-      </div>
-
-      <div className="stats-grid" style={{ gridTemplateColumns: 'repeat(5, 1fr)' }}>
-        <div className="stat-card" title="Live count of identities FK'd to this campaign">
-          <div className="stat-value matrix-text">{campaign.identity_count_live}</div>
-          <div className="stat-label">IDENTITIES</div>
-        </div>
-        <div className="stat-card" title="Distinct JA3 fingerprints across member identities">
-          <div className="stat-value violet-accent">{ja3List.length}</div>
-          <div className="stat-label">JA3</div>
-        </div>
-        <div className="stat-card" title="Distinct HASSH fingerprints">
-          <div className="stat-value violet-accent">{hasshList.length}</div>
-          <div className="stat-label">HASSH</div>
-        </div>
-        <div className="stat-card" title="Distinct payload SimHashes aggregated across identities">
-          <div className="stat-value matrix-text">{payloadList.length}</div>
-          <div className="stat-label">PAYLOADS</div>
-        </div>
-        <div className="stat-card" title="C2 callback endpoints aggregated across identities">
-          <div className="stat-value matrix-text">{c2List.length}</div>
-          <div className="stat-label">C2 ENDPOINTS</div>
-        </div>
-      </div>
-
-      {(campaign.confidence !== null || campaign.schema_version > 1) && (
-        <div style={{ display: 'flex', gap: '24px', padding: '12px 0', opacity: 0.7, fontSize: '0.85rem' }}>
-          {campaign.confidence !== null && (
-            <span title="Campaign-cohesion score from the clusterer (0–1)">
-              CONFIDENCE · {campaign.confidence.toFixed(3)}
-            </span>
-          )}
-          <span title="Federation gossip schema version">
-            SCHEMA · v{campaign.schema_version}
-          </span>
-        </div>
-      )}
-
-      {ja3List.length > 0 && (
-        <FingerprintList icon={<Globe size={18} />} label="JA3" items={ja3List} />
-      )}
-      {hasshList.length > 0 && (
-        <FingerprintList icon={<Globe size={18} />} label="HASSH" items={hasshList} />
-      )}
-      {c2List.length > 0 && (
-        <FingerprintList icon={<Radio size={18} />} label="C2 ENDPOINTS" items={c2List} />
-      )}
-
-      <div style={{ marginTop: '24px' }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: '12px', marginBottom: '12px' }}>
-          <Crosshair size={20} className="violet-accent" />
-          <h2 className="matrix-text" style={{ fontSize: '1.0rem', letterSpacing: '2px' }}>
-            IDENTITIES · {identityTotal}
-          </h2>
-        </div>
-        {identities.length === 0 ? (
-          <div style={{ padding: '24px', opacity: 0.5, fontFamily: 'var(--font-mono)' }}>
-            No identities linked yet. The campaign clusterer assigns
-            identities asynchronously; they should appear shortly after
-            the next clusterer pass.
+      <div className="page-header">
+        <div className="page-title-group">
+          <div style={{ display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap' }}>
+            <Crosshair size={22} className="violet-accent" />
+            <h1>CAMPAIGN · {campaign.uuid.slice(0, 12)}…</h1>
+            {campaign.merged_into_uuid && (
+              <span
+                className="chip dim-chip"
+                style={{ cursor: 'pointer' }}
+                onClick={() => navigate(`/campaigns/${campaign.merged_into_uuid}`)}
+                title="Soft-merged. Click to view canonical winner."
+              >
+                MERGED → {campaign.merged_into_uuid.slice(0, 8)}…
+              </span>
+            )}
           </div>
-        ) : (
-          <table className="data-table" style={{ width: '100%' }}>
-            <thead>
-              <tr>
-                <th>IDENTITY</th>
-                <th>FIRST SEEN</th>
-                <th>LAST SEEN</th>
-                <th style={{ textAlign: 'right' }}>OBSERVATIONS</th>
-              </tr>
-            </thead>
-            <tbody>
-              {identities.map((ident) => (
-                <tr
-                  key={ident.uuid}
-                  style={{ cursor: 'pointer' }}
-                  onClick={() => navigate(`/identities/${ident.uuid}`)}
-                >
-                  <td>{ident.uuid.slice(0, 12)}…</td>
-                  <td style={{ opacity: 0.7 }}>{ident.first_seen_at ?? '—'}</td>
-                  <td style={{ opacity: 0.7 }}>{ident.last_seen_at ?? '—'}</td>
-                  <td style={{ textAlign: 'right' }}>{ident.observation_count}</td>
+          <span className="page-sub">
+            {campaign.identity_count_live} IDENTITIES ·
+            {' '}{ja3List.length} JA3 · {hasshList.length} HASSH ·
+            {' '}{payloadList.length} PAYLOAD · {c2List.length} C2
+            {campaign.confidence !== null && (
+              <> · CONFIDENCE {campaign.confidence.toFixed(3)}</>
+            )}
+            {' '}· SCHEMA v{campaign.schema_version}
+          </span>
+        </div>
+      </div>
+
+      {(ja3List.length > 0 || hasshList.length > 0 || c2List.length > 0) && (
+        <div className="logs-section">
+          <div className="section-header">
+            <div className="section-title">
+              <Fingerprint size={14} />
+              <span>AGGREGATED FINGERPRINTS</span>
+            </div>
+          </div>
+          <div className="logs-table-container" style={{ padding: 12 }}>
+            {ja3List.length > 0 && (
+              <FingerprintGroup icon={<Globe size={14} />} label="JA3" items={ja3List} />
+            )}
+            {hasshList.length > 0 && (
+              <FingerprintGroup icon={<Globe size={14} />} label="HASSH" items={hasshList} />
+            )}
+            {c2List.length > 0 && (
+              <FingerprintGroup icon={<Radio size={14} />} label="C2 ENDPOINTS" items={c2List} />
+            )}
+          </div>
+        </div>
+      )}
+
+      <div className="logs-section">
+        <div className="section-header">
+          <div className="section-title">
+            <Filter size={14} />
+            <span>{identityTotal} IDENTITIES IN THIS CAMPAIGN</span>
+          </div>
+        </div>
+        <div className="logs-table-container">
+          {identities.length === 0 ? (
+            <EmptyState
+              icon={Crosshair}
+              title="NO IDENTITIES LINKED YET"
+              hint="the campaign clusterer assigns identities asynchronously"
+            />
+          ) : (
+            <table className="logs-table">
+              <thead>
+                <tr>
+                  <th>IDENTITY</th>
+                  <th>FIRST SEEN</th>
+                  <th>LAST SEEN</th>
+                  <th style={{ textAlign: 'right' }}>OBSERVATIONS</th>
                 </tr>
-              ))}
-            </tbody>
-          </table>
-        )}
+              </thead>
+              <tbody>
+                {identities.map((ident) => (
+                  <tr
+                    key={ident.uuid}
+                    className="clickable"
+                    onClick={() => navigate(`/identities/${ident.uuid}`)}
+                  >
+                    <td className="matrix-text" style={{ fontFamily: 'var(--font-mono)' }}>
+                      {ident.uuid.slice(0, 12)}…
+                    </td>
+                    <td className="dim">{ident.first_seen_at ?? '—'}</td>
+                    <td className="dim">{ident.last_seen_at ?? '—'}</td>
+                    <td className="matrix-text" style={{ textAlign: 'right' }}>
+                      {ident.observation_count}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          )}
+        </div>
       </div>
 
       {campaign.notes && (
-        <div style={{ marginTop: '24px', padding: '12px', borderLeft: '2px solid var(--violet)', opacity: 0.85 }}>
-          <div style={{ fontSize: '0.75rem', opacity: 0.7, letterSpacing: '2px', marginBottom: '4px' }}>
-            ANALYST NOTES
+        <div className="logs-section">
+          <div className="section-header">
+            <div className="section-title">
+              <span>ANALYST NOTES</span>
+            </div>
           </div>
-          <div style={{ fontFamily: 'var(--font-mono)', whiteSpace: 'pre-wrap' }}>
+          <div className="logs-table-container" style={{ padding: 12, fontFamily: 'var(--font-mono)', whiteSpace: 'pre-wrap' }}>
             {campaign.notes}
           </div>
         </div>
@@ -281,32 +268,19 @@ const CampaignDetail: React.FC = () => {
   );
 };
 
-const FingerprintList: React.FC<{
+const FingerprintGroup: React.FC<{
   icon: React.ReactNode;
   label: string;
   items: string[];
 }> = ({ icon, label, items }) => (
-  <div style={{ marginTop: '16px' }}>
-    <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '8px' }}>
+  <div className="fp-group">
+    <div className="fp-group-label">
       {icon}
-      <span className="matrix-text" style={{ fontSize: '0.85rem', letterSpacing: '2px' }}>
-        {label}
-      </span>
+      <span>{label}</span>
     </div>
-    <div style={{ display: 'flex', flexWrap: 'wrap', gap: '6px' }}>
+    <div className="fp-group-items">
       {items.map((v) => (
-        <code
-          key={v}
-          style={{
-            fontSize: '0.75rem',
-            padding: '4px 8px',
-            background: 'var(--card-bg)',
-            border: '1px solid var(--border-color)',
-            borderRadius: '2px',
-          }}
-        >
-          {v}
-        </code>
+        <span key={v} className="chip dim-chip">{v}</span>
       ))}
     </div>
   </div>

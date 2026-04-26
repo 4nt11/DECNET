@@ -3,7 +3,7 @@ import { NavLink, useLocation } from 'react-router-dom';
 import {
   Menu, X, Search, Activity, LayoutDashboard, Terminal, Settings, LogOut,
   Server, Archive, Package, Network, ChevronDown, ChevronRight, HardDrive,
-  ShieldAlert, Bell, Webhook, Lock,
+  ShieldAlert, Bell, Webhook, Lock, Crosshair, Fingerprint,
 } from '../icons';
 import { prefetchRoute } from '../routePrefetch';
 import './Layout.css';
@@ -31,6 +31,8 @@ const ROUTE_LABELS: Record<string, string> = {
   '/bounty': 'BOUNTY',
   '/credentials': 'CREDENTIALS',
   '/attackers': 'ATTACKERS',
+  '/identities': 'IDENTITIES',
+  '/campaigns': 'CAMPAIGNS',
   '/config': 'CONFIG',
   '/swarm-updates': 'REMOTE UPDATES',
   '/swarm/hosts': 'SWARM HOSTS',
@@ -126,7 +128,11 @@ const Layout: React.FC<LayoutProps> = ({
           </NavGroup>
           <NavItem to="/bounty" icon={<Archive size={20} />} label="Bounty" open={sidebarOpen} />
           <NavItem to="/credentials" icon={<Lock size={20} />} label="Credentials" open={sidebarOpen} />
-          <NavItem to="/attackers" icon={<Activity size={20} />} label="Attackers" open={sidebarOpen} />
+          <NavGroup label="THREAT DATA" icon={<Activity size={20} />} open={sidebarOpen}>
+            <NavItem to="/attackers" icon={<Activity size={18} />} label="Attackers" open={sidebarOpen} indent />
+            <NavItem to="/identities" icon={<Fingerprint size={18} />} label="Identities" open={sidebarOpen} indent />
+            <NavItem to="/campaigns" icon={<Crosshair size={18} />} label="Campaigns" open={sidebarOpen} indent />
+          </NavGroup>
           <NavGroup label="SWARM" icon={<Network size={20} />} open={sidebarOpen}>
             <NavItem to="/swarm/hosts" icon={<HardDrive size={18} />} label="SWARM Hosts" open={sidebarOpen} indent />
             <NavItem to="/swarm-updates" icon={<Package size={18} />} label="Remote Updates" open={sidebarOpen} indent />
