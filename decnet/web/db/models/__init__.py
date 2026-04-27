@@ -77,6 +77,10 @@ from .orchestrator import (
     OrchestratorEvent,
     OrchestratorEventsResponse,
 )
+from .realism import (
+    SyntheticFile,
+    SyntheticFilesResponse,
+)
 from .logs import (
     Bounty,
     BountyResponse,
@@ -226,6 +230,9 @@ __all__ = [
     "OrchestratorEmailsResponse",
     "OrchestratorEvent",
     "OrchestratorEventsResponse",
+    # realism
+    "SyntheticFile",
+    "SyntheticFilesResponse",
     # logs
     "Bounty",
     "BountyResponse",

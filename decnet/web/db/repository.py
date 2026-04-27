@@ -1100,3 +1100,60 @@ class BaseRepository(ABC):
         this on a periodic tick.
         """
         raise NotImplementedError
+
+    # ------------------------------------------------------------- realism
+
+    async def record_synthetic_file(self, data: dict[str, Any]) -> str:
+        """Insert a new synthetic_files row, returning its uuid.
+
+        The ``(decky_uuid, path)`` pair has a UNIQUE constraint, so two
+        creates for the same target raise — callers either use this for
+        first-time plants and :meth:`update_synthetic_file` for edits,
+        or wrap in a transaction that catches the conflict.
+        """
+        raise NotImplementedError
+
+    async def update_synthetic_file(
+        self, uuid: str, data: dict[str, Any],
+    ) -> None:
+        """Patch an existing synthetic_files row.
+
+        Used by the realism edit-in-place flow (stage 3b): bumps
+        ``last_body``, ``content_hash``, ``last_modified``, and
+        ``edit_count``.  No-op when *uuid* doesn't exist (the row may
+        have been pruned between pick and apply).
+        """
+        raise NotImplementedError
+
+    async def list_synthetic_files(
+        self,
+        *,
+        decky_uuid: Optional[str] = None,
+        persona: Optional[str] = None,
+        limit: int = 100,
+        offset: int = 0,
+    ) -> list[dict[str, Any]]:
+        """Paginated synthetic_files newest-first.
+
+        Optional filters narrow to one decky and/or one persona, used by
+        the dashboard's "files this decky has grown" view.
+        """
+        raise NotImplementedError
+
+    async def pick_random_synthetic_file_for_edit(
+        self,
+        decky_uuid: str,
+        *,
+        max_age_days: int = 30,
+    ) -> Optional[dict[str, Any]]:
+        """Return a random eligible synthetic_files row for re-edit.
+
+        "Eligible" = belongs to *decky_uuid*, last_modified within
+        *max_age_days*, content_class supports body-level mutation
+        (``note``, ``todo``, ``draft``, ``script``, ``log_*``).
+        Returns ``None`` when nothing matches.
+
+        Used by the realism planner's ``action="edit"`` branch
+        (stage 3b).
+        """
+        raise NotImplementedError

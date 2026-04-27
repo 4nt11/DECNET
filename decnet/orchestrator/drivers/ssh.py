@@ -139,11 +139,14 @@ class SSHDriver(ActivityDriver):
         # FileAction's content is a string; the realism path uses
         # bytes-typed plant_file so binary blobs (DOCX/PDF, future
         # canary artifacts) survive the wire.  Encode-once here.
+        # mtime carries through from the realism planner so the file
+        # doesn't stamp at wall-clock-now (the realism failure today).
         return await self.plant_file(
             action.dst_name,
             action.path,
             action.content.encode("utf-8"),
             mode=0o644,
+            mtime=action.mtime,
         )
 
     async def plant_file(

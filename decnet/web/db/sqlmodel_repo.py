@@ -53,6 +53,7 @@ from decnet.web.db.models import (
     TopologyMutation,
     OrchestratorEmail,
     OrchestratorEvent,
+    SyntheticFile,
     WebhookSubscription,
     CanaryBlob,
     CanaryToken,
@@ -3330,3 +3331,80 @@ class SQLModelRepository(BaseRepository):
                 deleted += res.rowcount or 0
             await session.commit()
         return deleted
+
+    # ------------------------------------------------------------ realism
+
+    async def record_synthetic_file(self, data: dict[str, Any]) -> str:
+        async with self._session() as session:
+            row = SyntheticFile(**data)
+            session.add(row)
+            await session.commit()
+            await session.refresh(row)
+            return row.uuid
+
+    async def update_synthetic_file(
+        self, row_uuid: str, data: dict[str, Any],
+    ) -> None:
+        async with self._session() as session:
+            stmt = (
+                update(SyntheticFile)
+                .where(SyntheticFile.uuid == row_uuid)
+                .values(**data)
+            )
+            await session.execute(stmt)
+            await session.commit()
+
+    async def list_synthetic_files(
+        self,
+        *,
+        decky_uuid: Optional[str] = None,
+        persona: Optional[str] = None,
+        limit: int = 100,
+        offset: int = 0,
+    ) -> list[dict[str, Any]]:
+        async with self._session() as session:
+            stmt = select(SyntheticFile)
+            if decky_uuid is not None:
+                stmt = stmt.where(SyntheticFile.decky_uuid == decky_uuid)
+            if persona is not None:
+                stmt = stmt.where(SyntheticFile.persona == persona)
+            stmt = (
+                stmt.order_by(desc(SyntheticFile.last_modified))
+                .offset(offset)
+                .limit(limit)
+            )
+            result = await session.execute(stmt)
+            return [r.model_dump(mode="json") for r in result.scalars().all()]
+
+    async def pick_random_synthetic_file_for_edit(
+        self,
+        decky_uuid: str,
+        *,
+        max_age_days: int = 30,
+    ) -> Optional[dict[str, Any]]:
+        # Editable classes: anything whose body is plain text we can
+        # mutate idempotently. Binary canary artifacts are out — they
+        # rotate via a fresh plant, not an edit.
+        editable = (
+            "note", "todo", "draft", "script", "log_cron", "log_daemon",
+        )
+        from datetime import timedelta
+        cutoff = datetime.now(timezone.utc) - timedelta(days=max_age_days)
+        async with self._session() as session:
+            stmt = (
+                select(SyntheticFile)
+                .where(
+                    SyntheticFile.decky_uuid == decky_uuid,
+                    SyntheticFile.content_class.in_(editable),  # type: ignore[attr-defined]
+                    SyntheticFile.last_modified >= cutoff,
+                )
+                # SQLite + MySQL both support func.random() / RAND() —
+                # SQLAlchemy's func.random() compiles per-dialect.
+                .order_by(func.random())
+                .limit(1)
+            )
+            result = await session.execute(stmt)
+            row = result.scalars().first()
+            if row is None:
+                return None
+            return row.model_dump(mode="json")
