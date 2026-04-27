@@ -152,6 +152,29 @@ async def test_get_synthetic_file_returns_none_when_missing(repo):
     assert await repo.get_synthetic_file("does-not-exist") is None
 
 
+@pytest.mark.asyncio
+async def test_realism_config_get_returns_none_when_unset(repo):
+    assert await repo.get_realism_config("weights") is None
+
+
+@pytest.mark.asyncio
+async def test_realism_config_set_then_get_roundtrips(repo):
+    await repo.set_realism_config("weights", '{"canary_probability": 0.07}')
+    row = await repo.get_realism_config("weights")
+    assert row is not None
+    assert row["key"] == "weights"
+    assert row["value"] == '{"canary_probability": 0.07}'
+
+
+@pytest.mark.asyncio
+async def test_realism_config_set_is_upsert(repo):
+    await repo.set_realism_config("weights", '{"a": 1}')
+    await repo.set_realism_config("weights", '{"a": 2}')
+    row = await repo.get_realism_config("weights")
+    assert row is not None
+    assert row["value"] == '{"a": 2}'
+
+
 def test_path_max_length_fits_mysql_utf8mb4_index_limit():
     """The unique (decky_uuid, path) index has to fit MySQL's 3072-byte
     utf8mb4 cap: (decky_uuid_len + path_len) * 4 <= 3072. A regression

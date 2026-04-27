@@ -39,6 +39,7 @@ from decnet.orchestrator.emailgen import (
     scheduler as email_scheduler,
 )
 from decnet.orchestrator.emailgen.scheduler import EmailAction
+from decnet.realism import planner as realism_planner
 from decnet.realism.llm.circuit import LLMCircuitBreaker
 from decnet.web.db.repository import BaseRepository
 
@@ -51,6 +52,12 @@ logger = get_logger("orchestrator")
 _PRUNE_EVERY_TICKS = 100
 _PRUNE_PER_DST_CAP = 10000
 _PRUNE_PER_MAIL_DECKY_CAP = 5000
+
+# Refresh planner weights from realism_config every N ticks. Operator
+# tunables drift slowly; ~minute-scale latency between PUT and effect
+# is fine. No bus signal — keeps the path simple and the orchestrator
+# self-contained.
+_REALISM_CONFIG_REFRESH_TICKS = 5
 
 # Action-kind weights for the per-tick roll.  Email is rare because
 # each LLM round-trip is expensive (~seconds) and the prior emailgen
@@ -115,6 +122,12 @@ async def orchestrator_worker(
         )
         bus = None
 
+    # Initial load — pulls the operator-tuned weights from
+    # realism_config so the orchestrator starts ticking with the
+    # operator's intent rather than the baked-in defaults. A failure
+    # here logs and falls through; the planner already holds defaults.
+    await _refresh_realism_config(repo)
+
     shutdown = asyncio.Event()
     heartbeat_task = asyncio.create_task(
         run_health_heartbeat(
@@ -141,6 +154,8 @@ async def orchestrator_worker(
             tick_n += 1
             if tick_n % _PRUNE_EVERY_TICKS == 0:
                 await _periodic_prune(repo)
+            if tick_n % _REALISM_CONFIG_REFRESH_TICKS == 0:
+                await _refresh_realism_config(repo)
     finally:
         for t in (heartbeat_task, control_task):
             t.cancel()
@@ -172,6 +187,35 @@ async def _periodic_prune(repo: BaseRepository) -> None:
             )
     except Exception as exc:  # noqa: BLE001
         logger.error("orchestrator emails prune failed: %s", exc)
+
+
+async def _refresh_realism_config(repo: BaseRepository) -> None:
+    """Pull operator-tuned weights from realism_config into the planner.
+
+    Failure modes (DB unreachable, malformed JSON, validation reject)
+    log and leave the planner's current weights in place. The orchestrator
+    keeps ticking with whatever it had — never blocks on config.
+    """
+    try:
+        row = await repo.get_realism_config("weights")
+    except Exception as exc:  # noqa: BLE001
+        logger.warning("realism config refresh: DB read failed: %s", exc)
+        return
+    if row is None:
+        return  # no overrides set; defaults stand
+    import json
+    try:
+        payload = json.loads(row.get("value") or "{}")
+    except json.JSONDecodeError as exc:
+        logger.warning("realism config refresh: malformed JSON: %s", exc)
+        return
+    if not isinstance(payload, dict):
+        logger.warning("realism config refresh: payload not an object")
+        return
+    try:
+        realism_planner.apply_payload(payload)
+    except ValueError as exc:
+        logger.warning("realism config refresh: rejected payload: %s", exc)
 
 
 def _roll_action_kind(rng: secrets.SystemRandom) -> str:

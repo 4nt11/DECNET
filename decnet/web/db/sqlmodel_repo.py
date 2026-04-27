@@ -53,6 +53,7 @@ from decnet.web.db.models import (
     TopologyMutation,
     OrchestratorEmail,
     OrchestratorEvent,
+    RealismConfig,
     SyntheticFile,
     WebhookSubscription,
     CanaryBlob,
@@ -3414,6 +3415,39 @@ class SQLModelRepository(BaseRepository):
             if row is None:
                 return None
             return row.model_dump(mode="json")
+
+    async def get_realism_config(
+        self, key: str,
+    ) -> Optional[dict[str, Any]]:
+        async with self._session() as session:
+            stmt = select(RealismConfig).where(RealismConfig.key == key)
+            result = await session.execute(stmt)
+            row = result.scalars().first()
+            if row is None:
+                return None
+            return row.model_dump(mode="json")
+
+    async def set_realism_config(
+        self, key: str, value: str,
+    ) -> None:
+        """Upsert one realism_config row. Last-write-wins."""
+        async with self._session() as session:
+            stmt = select(RealismConfig).where(RealismConfig.key == key)
+            result = await session.execute(stmt)
+            row = result.scalars().first()
+            if row is None:
+                session.add(RealismConfig(
+                    key=key, value=value,
+                    updated_at=datetime.now(timezone.utc),
+                ))
+            else:
+                upd = (
+                    update(RealismConfig)
+                    .where(RealismConfig.uuid == row.uuid)
+                    .values(value=value, updated_at=datetime.now(timezone.utc))
+                )
+                await session.execute(upd)
+            await session.commit()
 
     async def pick_random_synthetic_file_for_edit(
         self,

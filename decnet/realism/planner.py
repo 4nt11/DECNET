@@ -29,27 +29,31 @@ from decnet.realism.personas import EmailPersona
 from decnet.realism.taxonomy import ContentClass, Plan, PlanAction  # noqa: F401
 
 
-# Stage-3 weighted sampling:
+# Stage-3 weighted sampling defaults:
 #   * User content (notes/todo/draft/script) gets the bulk — those are
 #     the realism win when a persona "looks busy."
 #   * System content (cron/daemon/cache) is plausible filler.
 #   * Email + canary are owned by other paths and not picked here.
-_USER_CLASS_WEIGHTS: tuple[tuple[ContentClass, int], ...] = (
+#   * Canary classes are picked rarely. Each plant materialises a real
+#     CanaryToken row + DNS slug + HTTP URL — flooding the fleet makes
+#     the dashboard noisy. ~3% of file picks land here.
+#
+# These are the *defaults*. Operator-tuned overrides arrive via
+# :func:`apply_payload` (admin PUT /api/v1/realism/config). The
+# orchestrator worker periodically refreshes the in-process state from
+# the ``realism_config`` table; pick() reads the live globals each call.
+_DEFAULT_USER_CLASS_WEIGHTS: tuple[tuple[ContentClass, int], ...] = (
     (ContentClass.NOTE, 30),
     (ContentClass.TODO, 20),
     (ContentClass.DRAFT, 15),
     (ContentClass.SCRIPT, 10),
 )
-_SYSTEM_CLASS_WEIGHTS: tuple[tuple[ContentClass, int], ...] = (
+_DEFAULT_SYSTEM_CLASS_WEIGHTS: tuple[tuple[ContentClass, int], ...] = (
     (ContentClass.LOG_CRON, 12),
     (ContentClass.LOG_DAEMON, 8),
     (ContentClass.CACHE_TMP, 5),
 )
-# Canary classes are picked rarely.  Each plant materialises a real
-# CanaryToken row + DNS slug + HTTP URL — flooding the fleet with
-# canaries makes the dashboard noisy and the per-decky alert surface
-# explode.  ~3% of file picks land here.
-_CANARY_CLASS_WEIGHTS: tuple[tuple[ContentClass, int], ...] = (
+_DEFAULT_CANARY_CLASS_WEIGHTS: tuple[tuple[ContentClass, int], ...] = (
     (ContentClass.CANARY_AWS_CREDS, 1),
     (ContentClass.CANARY_ENV_FILE, 1),
     (ContentClass.CANARY_GIT_CONFIG, 1),
@@ -59,7 +63,139 @@ _CANARY_CLASS_WEIGHTS: tuple[tuple[ContentClass, int], ...] = (
     (ContentClass.CANARY_HONEYDOC_PDF, 1),
     (ContentClass.CANARY_MYSQL_DUMP, 1),
 )
-_CANARY_PROBABILITY = 0.03
+_DEFAULT_CANARY_PROBABILITY = 0.03
+
+# Live (mutable) globals — reassigned by :func:`apply_payload`. pick()
+# reads these. Reset to defaults via :func:`reset_to_defaults` (used by
+# tests + the API DELETE path).
+_USER_CLASS_WEIGHTS: tuple[tuple[ContentClass, int], ...] = _DEFAULT_USER_CLASS_WEIGHTS
+_SYSTEM_CLASS_WEIGHTS: tuple[tuple[ContentClass, int], ...] = _DEFAULT_SYSTEM_CLASS_WEIGHTS
+_CANARY_CLASS_WEIGHTS: tuple[tuple[ContentClass, int], ...] = _DEFAULT_CANARY_CLASS_WEIGHTS
+_CANARY_PROBABILITY: float = _DEFAULT_CANARY_PROBABILITY
+
+
+def _serialize_weights(
+    weights: tuple[tuple[ContentClass, int], ...],
+) -> list[dict[str, Any]]:
+    return [{"content_class": cls.value, "weight": w} for cls, w in weights]
+
+
+def _parse_weights(
+    raw: Any, allowed: set[ContentClass],
+) -> tuple[tuple[ContentClass, int], ...]:
+    """Parse ``[{"content_class": "...", "weight": N}, ...]`` into the
+    planner's internal tuple shape. Drops entries whose ``content_class``
+    isn't in *allowed* (defends against an operator pasting in a canary
+    class on the user list, which would skew sampling without the
+    canary-probability gate).
+
+    Raises ``ValueError`` on structural problems (non-list, non-int
+    weight, negative weight, empty result) so the API can return 400.
+    """
+    if not isinstance(raw, list):
+        raise ValueError("weights must be a list")
+    out: list[tuple[ContentClass, int]] = []
+    for entry in raw:
+        if not isinstance(entry, dict):
+            raise ValueError("each weight entry must be an object")
+        cls_name = entry.get("content_class")
+        weight = entry.get("weight")
+        if not isinstance(weight, int) or weight < 0:
+            raise ValueError(
+                f"weight for {cls_name!r} must be a non-negative integer"
+            )
+        try:
+            cls = ContentClass(cls_name)
+        except (ValueError, TypeError):
+            raise ValueError(f"unknown content_class: {cls_name!r}")
+        if cls not in allowed:
+            # Silently drop — a class that doesn't belong on this list
+            # (e.g. a canary class on the user list) is operator error,
+            # but we don't want to fail the whole save over one stray
+            # entry. The roundtrip in current_payload() will show the
+            # operator their entry didn't land.
+            continue
+        out.append((cls, weight))
+    if not out:
+        raise ValueError("weights list resolved to zero valid entries")
+    if sum(w for _, w in out) <= 0:
+        raise ValueError("weights must sum to a positive number")
+    return tuple(out)
+
+
+_USER_CLASSES: set[ContentClass] = {
+    ContentClass.NOTE, ContentClass.TODO, ContentClass.DRAFT, ContentClass.SCRIPT,
+}
+_SYSTEM_CLASSES: set[ContentClass] = {
+    ContentClass.LOG_CRON, ContentClass.LOG_DAEMON, ContentClass.CACHE_TMP,
+}
+_CANARY_CLASSES: set[ContentClass] = {
+    ContentClass.CANARY_AWS_CREDS, ContentClass.CANARY_ENV_FILE,
+    ContentClass.CANARY_GIT_CONFIG, ContentClass.CANARY_SSH_KEY,
+    ContentClass.CANARY_HONEYDOC, ContentClass.CANARY_HONEYDOC_DOCX,
+    ContentClass.CANARY_HONEYDOC_PDF, ContentClass.CANARY_MYSQL_DUMP,
+}
+
+
+def current_payload() -> dict[str, Any]:
+    """Export the live planner config as a JSON-safe dict.
+
+    Wire shape returned by ``GET /api/v1/realism/config``."""
+    return {
+        "user_class_weights": _serialize_weights(_USER_CLASS_WEIGHTS),
+        "system_class_weights": _serialize_weights(_SYSTEM_CLASS_WEIGHTS),
+        "canary_class_weights": _serialize_weights(_CANARY_CLASS_WEIGHTS),
+        "canary_probability": _CANARY_PROBABILITY,
+    }
+
+
+def apply_payload(payload: dict[str, Any]) -> None:
+    """Override the planner's live globals from a wire payload.
+
+    Validates structurally and rebinds module-level names atomically
+    per field — partial failures don't leave the planner in a torn
+    state because validation happens before any rebind.
+
+    Unknown fields are ignored (forward-compat); fields not present
+    leave the corresponding global untouched."""
+    global _USER_CLASS_WEIGHTS, _SYSTEM_CLASS_WEIGHTS
+    global _CANARY_CLASS_WEIGHTS, _CANARY_PROBABILITY
+
+    new_user = _USER_CLASS_WEIGHTS
+    new_system = _SYSTEM_CLASS_WEIGHTS
+    new_canary = _CANARY_CLASS_WEIGHTS
+    new_prob = _CANARY_PROBABILITY
+
+    if "user_class_weights" in payload:
+        new_user = _parse_weights(payload["user_class_weights"], _USER_CLASSES)
+    if "system_class_weights" in payload:
+        new_system = _parse_weights(
+            payload["system_class_weights"], _SYSTEM_CLASSES,
+        )
+    if "canary_class_weights" in payload:
+        new_canary = _parse_weights(
+            payload["canary_class_weights"], _CANARY_CLASSES,
+        )
+    if "canary_probability" in payload:
+        prob = payload["canary_probability"]
+        if not isinstance(prob, (int, float)) or not (0.0 <= prob <= 1.0):
+            raise ValueError("canary_probability must be in [0.0, 1.0]")
+        new_prob = float(prob)
+
+    _USER_CLASS_WEIGHTS = new_user
+    _SYSTEM_CLASS_WEIGHTS = new_system
+    _CANARY_CLASS_WEIGHTS = new_canary
+    _CANARY_PROBABILITY = new_prob
+
+
+def reset_to_defaults() -> None:
+    """Restore hardcoded defaults. Used by tests and the API reset path."""
+    global _USER_CLASS_WEIGHTS, _SYSTEM_CLASS_WEIGHTS
+    global _CANARY_CLASS_WEIGHTS, _CANARY_PROBABILITY
+    _USER_CLASS_WEIGHTS = _DEFAULT_USER_CLASS_WEIGHTS
+    _SYSTEM_CLASS_WEIGHTS = _DEFAULT_SYSTEM_CLASS_WEIGHTS
+    _CANARY_CLASS_WEIGHTS = _DEFAULT_CANARY_CLASS_WEIGHTS
+    _CANARY_PROBABILITY = _DEFAULT_CANARY_PROBABILITY
 
 
 def _weighted_pick(

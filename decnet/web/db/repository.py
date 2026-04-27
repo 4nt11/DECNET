@@ -1159,6 +1159,28 @@ class BaseRepository(ABC):
         """Single synthetic_files row by uuid, or ``None``."""
         raise NotImplementedError
 
+    async def get_realism_config(
+        self, key: str,
+    ) -> Optional[dict[str, Any]]:
+        """Read one ``realism_config`` row by key.
+
+        Today only ``key="weights"`` is used; the schema is
+        single-row-per-key so future tunables can land without a new
+        table. Returns ``None`` when the key has never been set —
+        callers fall back to hardcoded defaults in
+        :mod:`decnet.realism.planner`.
+        """
+        raise NotImplementedError
+
+    async def set_realism_config(
+        self, key: str, value: str,
+    ) -> None:
+        """Upsert one ``realism_config`` row. Last-write-wins.
+
+        *value* is opaque JSON text; validation belongs to the API
+        layer (the planner only reads what landed)."""
+        raise NotImplementedError
+
     async def pick_random_synthetic_file_for_edit(
         self,
         decky_uuid: str,

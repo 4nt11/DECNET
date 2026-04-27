@@ -78,6 +78,7 @@ from .orchestrator import (
     OrchestratorEventsResponse,
 )
 from .realism import (
+    RealismConfig,
     SyntheticFile,
     SyntheticFilesResponse,
 )
@@ -231,6 +232,7 @@ __all__ = [
     "OrchestratorEvent",
     "OrchestratorEventsResponse",
     # realism
+    "RealismConfig",
     "SyntheticFile",
     "SyntheticFilesResponse",
     # logs

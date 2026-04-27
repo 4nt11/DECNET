@@ -31,6 +31,7 @@ from .campaigns.api_list_campaign_identities import router as campaign_identitie
 from .campaigns.api_events import router as campaign_events_router
 from .orchestrator.api_list_events import router as orchestrator_list_router
 from .orchestrator.api_events import router as orchestrator_events_router
+from .realism.api_config import router as realism_config_router
 from .realism.api_personas import router as realism_personas_router
 from .realism.api_synthetic_files import router as realism_synthetic_files_router
 from .transcripts import transcripts_router
@@ -117,6 +118,7 @@ api_router.include_router(orchestrator_events_router)
 # on-disk JSON file directly (see decnet.realism.personas_pool).
 api_router.include_router(realism_personas_router)
 api_router.include_router(realism_synthetic_files_router)
+api_router.include_router(realism_config_router)
 
 # Observability
 api_router.include_router(stats_router)

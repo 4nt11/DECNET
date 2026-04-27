@@ -83,3 +83,25 @@ class SyntheticFilesResponse(BaseModel):
     limit: int
     offset: int
     data: List[dict[str, Any]]
+
+
+class RealismConfig(SQLModel, table=True):
+    """Operator-tunable realism knobs.
+
+    Single-row-per-key schema: each row carries one piece of operator
+    config (today: ``key="weights"`` → JSON encoding the planner's
+    user/system/canary weights and canary probability). The planner
+    reads in-memory module globals; the orchestrator worker refreshes
+    those globals from this table on a periodic tick.
+
+    UUID PK + unique key per ``feedback_uuid_over_natural_keys.md``.
+    """
+    __tablename__ = "realism_config"
+    uuid: str = Field(default_factory=lambda: str(uuid4()), primary_key=True)
+    key: str = Field(max_length=64, unique=True, index=True)
+    value: str = Field(
+        sa_column=Column("value", Text, nullable=False, default="{}"),
+    )
+    updated_at: datetime = Field(
+        default_factory=lambda: datetime.now(timezone.utc),
+    )
