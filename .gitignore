@@ -12,6 +12,10 @@ __pycache__/
 dist/
 build/
 decnet-compose.yml
+# Per-topology compose fragments emitted by `decnet topology deploy`.
+decnet-topology-*-compose.yml
+# Docker build context cache.
+.docker/
 decnet-state.json
 *.ini
 decnet.log*
@@ -24,6 +28,9 @@ windows1
 *.db-shm
 *.db-wal
 decnet.*.log
+# Rotated copies (logrotate appends .1, .2, .gz...) — the existing
+# decnet.*.log glob doesn't catch the suffix.
+decnet.*.log.*
 decnet.json
 .env*
 .env.local
