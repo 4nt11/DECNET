@@ -60,18 +60,24 @@ const STATE_COLOR = {
 
 // ─── CREATE MODAL ──────────────────────────────────────────────────────────
 
+interface DeckyOption {
+  name: string;
+  ip?: string;
+}
+
 interface CreateModalProps {
   blobs: BlobRow[];
+  deckies: DeckyOption[];
   onClose: () => void;
   onCreated: (token: CanaryTokenRow) => void;
 }
 
-const CreateModal: React.FC<CreateModalProps> = ({ blobs, onClose, onCreated }) => {
+const CreateModal: React.FC<CreateModalProps> = ({ blobs, deckies, onClose, onCreated }) => {
   const panelRef = useRef<HTMLDivElement | null>(null);
   useEscapeKey(onClose, true);
   useFocusTrap(panelRef, true);
 
-  const [decky, setDecky] = useState('');
+  const [decky, setDecky] = useState(deckies[0]?.name ?? '');
   const [kind, setKind] = useState<'http' | 'dns' | 'aws_passive'>('http');
   const [path, setPath] = useState('/home/admin/.aws/credentials');
   const [source, setSource] = useState<'generator' | 'blob'>('generator');
@@ -82,7 +88,7 @@ const CreateModal: React.FC<CreateModalProps> = ({ blobs, onClose, onCreated }) 
 
   const handleSubmit = async () => {
     setError(null);
-    if (!decky.trim()) return setError('decky_name required.');
+    if (!decky.trim()) return setError('Pick a decky.');
     if (!path.trim().startsWith('/')) return setError('placement_path must be absolute.');
     if (source === 'blob' && !blobUuid) return setError('Pick a blob or switch to Generator.');
     setSubmitting(true);
@@ -131,14 +137,25 @@ const CreateModal: React.FC<CreateModalProps> = ({ blobs, onClose, onCreated }) 
           </button>
         </div>
 
-        <Field label="Decky name">
-          <input
-            value={decky}
-            onChange={(e) => setDecky(e.target.value)}
-            placeholder="web1"
-            autoFocus
-            style={INPUT_STYLE}
-          />
+        <Field label="Decky">
+          {deckies.length === 0 ? (
+            <div style={{ fontSize: '0.8rem', opacity: 0.6, padding: '8px 0' }}>
+              No deckies running. Deploy a fleet first.
+            </div>
+          ) : (
+            <select
+              value={decky}
+              onChange={(e) => setDecky(e.target.value)}
+              autoFocus
+              style={INPUT_STYLE}
+            >
+              {deckies.map((d) => (
+                <option key={d.name} value={d.name}>
+                  {d.name}{d.ip ? ` (${d.ip})` : ''}
+                </option>
+              ))}
+            </select>
+          )}
         </Field>
 
         <Field label="Kind">
@@ -372,6 +389,7 @@ const UploadModal: React.FC<UploadModalProps> = ({ onClose, onUploaded }) => {
 const CanaryTokens: React.FC = () => {
   const [tokens, setTokens] = useState<CanaryTokenRow[]>([]);
   const [blobs, setBlobs] = useState<BlobRow[]>([]);
+  const [deckies, setDeckies] = useState<DeckyOption[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [tab, setTab] = useState<'tokens' | 'blobs'>('tokens');
@@ -386,12 +404,14 @@ const CanaryTokens: React.FC = () => {
     setLoading(true);
     setError(null);
     try {
-      const [t, b] = await Promise.all([
+      const [t, b, d] = await Promise.all([
         api.get('/canary/tokens'),
         api.get('/canary/blobs').catch(() => ({ data: { blobs: [] } })), // viewers can't list blobs
+        api.get<DeckyOption[]>('/deckies').catch(() => ({ data: [] })),
       ]);
       setTokens(t.data.tokens || []);
       setBlobs(b.data.blobs || []);
+      setDeckies(Array.isArray(d.data) ? d.data : []);
     } catch (err) {
       setError(extractError(err, 'Failed to load canary tokens.'));
     } finally {
@@ -618,6 +638,7 @@ const CanaryTokens: React.FC = () => {
       {showCreate && (
         <CreateModal
           blobs={blobs}
+          deckies={deckies}
           onClose={() => setShowCreate(false)}
           onCreated={(t) => {
             setTokens((prev) => [t, ...prev]);
