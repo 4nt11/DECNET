@@ -1,27 +1,27 @@
-"""Email driver — Ollama-backed EML generation + decky-side delivery.
+"""Email driver — pluggable-LLM EML generation + decky-side delivery.
 
 One :class:`EmailAction` becomes one EML written into the mail decky's
 configured emailgen spool directory (``/var/spool/decnet-emails/`` by
-default).  An integration follow-up wires the IMAP/POP3 service templates
-to read EMLs from that spool at request time so attackers see the
-generated mail in their MUA.
+default).  The IMAP/POP3 service templates read that spool at request
+time so attackers see the generated mail in their MUA.
 
-The Ollama call shells out via ``ollama run <model>`` — the prototype at
-``DECNET-EMAILs/main.py`` proved the round-trip works.  Output is
-parsed-and-repaired into a valid EML using :mod:`email.mime.*`; the
-worker then ``docker exec``\\s a ``tee`` to drop the file inside the
-target container.
+The LLM call goes through :mod:`decnet.orchestrator.emailgen.llm` —
+backend-agnostic by construction so swapping Ollama for the Anthropic
+API, vLLM, or llama.cpp is a config change, not a driver rewrite.
+Output is parsed-and-repaired into a valid EML using
+:mod:`email.mime.*`; the worker then ``docker exec``\\s a ``tee`` to
+drop the file inside the target container, followed by a
+``touch -d <Date>`` so the file's mtime matches the email's RFC 2822
+``Date:`` header.
 
 Per CLAUDE.md "no shell strings": every subprocess invocation uses an
-argv list, never ``shell=True``.  Ollama prompts and EML payloads are
-piped via ``stdin``, not interpolated into argv.
+argv list, never ``shell=True``.  EML payloads are piped via ``stdin``,
+not interpolated into argv.
 """
 from __future__ import annotations
 
 import asyncio
-import os
 import shlex
-import time
 from datetime import datetime, timezone
 from email.mime.text import MIMEText
 from email.utils import formatdate
@@ -29,6 +29,7 @@ from typing import Any, Optional
 
 from decnet.logging import get_logger
 from decnet.orchestrator.drivers.base import ActivityResult
+from decnet.orchestrator.emailgen.llm import LLMBackend, LLMTimeout, get_llm
 from decnet.orchestrator.emailgen.prompt import PromptInputs, build as build_prompt
 from decnet.orchestrator.emailgen.scheduler import EmailAction
 from decnet.orchestrator.emailgen.threads import new_message_id
@@ -36,12 +37,6 @@ from decnet.orchestrator.emailgen.threads import new_message_id
 log = get_logger("orchestrator.email")
 
 _DOCKER = "docker"
-_OLLAMA = "ollama"
-# Wall-clock cap for the LLM call.  Big enough for a 4070 running
-# llama3.1; small enough that a stuck Ollama server doesn't wedge the
-# emailgen tick.
-_DEFAULT_OLLAMA_TIMEOUT = float(os.environ.get("DECNET_EMAILGEN_TIMEOUT", "60"))
-_DEFAULT_MODEL = os.environ.get("DECNET_EMAILGEN_MODEL", "llama3.1")
 # docker-exec wall-clock cap for the per-EML write.
 _DOCKER_TIMEOUT = 8.0
 # Container suffix for the IMAP service on a mail decky.
@@ -156,31 +151,35 @@ def _build_eml(
 class EmailDriver:
     """Concrete driver for :class:`EmailAction`.
 
-    Stateless across calls — Ollama model + timeout are constructor
-    args, not per-call.  The driver does *not* know about the bus or
-    DB; it returns an :class:`ActivityResult` that the worker pipes
-    onward.
+    Stateless across calls — the LLM backend is constructed once at
+    init time (or injected for tests).  The driver itself does *not*
+    know about the bus or DB; it returns an :class:`ActivityResult`
+    that the worker pipes onward.
     """
 
     def __init__(
         self,
         *,
-        model: str = _DEFAULT_MODEL,
-        ollama_timeout: float = _DEFAULT_OLLAMA_TIMEOUT,
+        llm: Optional[LLMBackend] = None,
+        model: Optional[str] = None,
         spool_dir: str = _SPOOL_DIR,
     ) -> None:
-        self.model = model
-        self.ollama_timeout = ollama_timeout
+        # *llm* takes precedence so tests can inject a FakeBackend
+        # without env-var trickery.  *model* lets the worker honour
+        # ``--model`` from the CLI without each backend needing to know
+        # about CLI flags.
+        self._llm = llm if llm is not None else get_llm(model=model)
         self.spool_dir = spool_dir
 
+    @property
+    def model(self) -> str:
+        """Convenience accessor for telemetry / logging."""
+        return self._llm.model
+
     async def run(self, action: EmailAction) -> ActivityResult:
-        # Look up the mail-decky container name + services.  The driver
-        # receives a denormalised view via the action — the worker
-        # populates it from the same list the scheduler used.
         return await self._run_email(action)
 
     async def _run_email(self, action: EmailAction) -> ActivityResult:
-        t0 = time.monotonic()
         prompt, mannerisms_used = build_prompt(
             PromptInputs(
                 sender=action.sender,
@@ -190,30 +189,41 @@ class EmailDriver:
                 parent_excerpt=action.parent_excerpt,
             )
         )
-        rc, stdout, stderr = await _run_capture(
-            [_OLLAMA, "run", self.model],
-            stdin_data=prompt.encode("utf-8"),
-            timeout=self.ollama_timeout,
-        )
-        gen_ms = int((time.monotonic() - t0) * 1000)
-        if rc != 0 or not stdout.strip():
-            log.warning(
-                "emailgen ollama failed rc=%d stderr=%r model=%s",
-                rc, stderr[:200], self.model,
-            )
+        try:
+            llm_result = await self._llm.generate(prompt)
+        except LLMTimeout as exc:
+            log.warning("emailgen llm timeout model=%s: %s", self._llm.model, exc)
             return ActivityResult(
                 success=False,
                 payload={
-                    "stage": "ollama",
-                    "rc": rc,
-                    "stderr": stderr.strip()[:256],
-                    "generation_ms": gen_ms,
-                    "model": self.model,
+                    "stage": "llm",
+                    "error": "timeout",
+                    "model": self._llm.model,
                     "thread_id": action.thread_id,
                 },
             )
 
-        subject, body = _parse_subject_and_body(stdout)
+        gen_ms = llm_result.latency_ms
+        if not llm_result.success or not llm_result.text.strip():
+            log.warning(
+                "emailgen llm produced no usable output model=%s extra=%r",
+                self._llm.model, llm_result.extra,
+            )
+            return ActivityResult(
+                success=False,
+                payload={
+                    "stage": "llm",
+                    "model": self._llm.model,
+                    "generation_ms": gen_ms,
+                    "thread_id": action.thread_id,
+                    **{
+                        k: v for k, v in llm_result.extra.items()
+                        if k in ("rc", "stderr")
+                    },
+                },
+            )
+
+        subject, body = _parse_subject_and_body(llm_result.text)
         message_id = new_message_id(action.sender.email.split("@", 1)[1])
         ts = datetime.now(timezone.utc)
         eml_bytes = _build_eml(

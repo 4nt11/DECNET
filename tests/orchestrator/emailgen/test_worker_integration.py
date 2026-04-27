@@ -10,6 +10,7 @@ import pytest_asyncio
 from decnet.bus.fake import FakeBus
 from decnet.orchestrator.drivers import email as email_driver
 from decnet.orchestrator.emailgen import worker as eg_worker
+from decnet.orchestrator.emailgen.llm.impl.fake import FakeBackend
 from decnet.orchestrator.emailgen.scheduler import EmailAction  # noqa: F401
 from decnet.web.db.models import Topology, TopologyDecky
 from decnet.web.db.sqlite.repository import SQLiteRepository
@@ -82,9 +83,9 @@ async def _seed_mail_topology(repo: SQLiteRepository) -> str:
 async def test_one_tick_records_and_publishes(repo, fake_bus, monkeypatch):
     decky_uuid = await _seed_mail_topology(repo)
 
+    # Stub only the docker exec subprocess; the LLM call goes through
+    # an injected FakeBackend with deterministic output.
     async def fake_run_capture(argv, *, stdin_data=None, timeout=8.0):
-        if argv[0] == "ollama":
-            return 0, "Subject: Hi\n\nBody here.\n", ""
         return 0, "", ""
 
     monkeypatch.setattr(email_driver, "_run_capture", fake_run_capture)
@@ -101,7 +102,9 @@ async def test_one_tick_records_and_publishes(repo, fake_bus, monkeypatch):
     collector = asyncio.create_task(collect())
     await asyncio.sleep(0)
 
-    driver = email_driver.EmailDriver()
+    driver = email_driver.EmailDriver(
+        llm=FakeBackend(output="Subject: Hi\n\nBody here.\n"),
+    )
     await eg_worker._one_tick(repo, driver, fake_bus)
     await asyncio.wait_for(collector, timeout=2.0)
 
@@ -126,11 +129,13 @@ async def test_one_tick_noop_when_no_mail_decky(repo, fake_bus, monkeypatch):
     async def fake_run_capture(argv, *, stdin_data=None, timeout=8.0):
         nonlocal called
         called = True
-        return 0, "Subject: x\n\nb\n", ""
+        return 0, "", ""
 
     monkeypatch.setattr(email_driver, "_run_capture", fake_run_capture)
 
-    driver = email_driver.EmailDriver()
+    driver = email_driver.EmailDriver(
+        llm=FakeBackend(output="Subject: x\n\nb\n"),
+    )
     await eg_worker._one_tick(repo, driver, fake_bus)
     assert called is False
     assert await repo.list_orchestrator_emails() == []

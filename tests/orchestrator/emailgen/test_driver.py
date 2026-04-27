@@ -1,12 +1,38 @@
-"""EmailDriver: stub the Ollama subprocess + docker exec; verify EML
-parse-and-repair and payload metadata."""
+"""EmailDriver: inject a fake LLM backend + stub docker exec; verify
+EML parse-and-repair and payload metadata."""
 from __future__ import annotations
 
 import pytest
 
 from decnet.orchestrator.drivers import email as email_driver
+from decnet.orchestrator.emailgen.llm.base import LLMResult, LLMTimeout
+from decnet.orchestrator.emailgen.llm.impl.fake import FakeBackend
 from decnet.orchestrator.emailgen.personas import EmailPersona
 from decnet.orchestrator.emailgen.scheduler import EmailAction
+
+
+class _RaisingBackend:
+    """Async stub that raises LLMTimeout on every call."""
+    model = "stuck-model"
+    timeout = 0.1
+
+    async def generate(self, prompt: str) -> LLMResult:    # noqa: ARG002
+        raise LLMTimeout("stuck")
+
+
+class _FailingBackend:
+    """Async stub that returns success=False."""
+    model = "broken-model"
+    timeout = 1.0
+
+    async def generate(self, prompt: str) -> LLMResult:    # noqa: ARG002
+        return LLMResult(
+            success=False,
+            text="",
+            model=self.model,
+            latency_ms=5,
+            extra={"rc": 1, "stderr": "model not found"},
+        )
 
 
 def _persona(name="John", email="john@corp.com"):
@@ -110,19 +136,20 @@ def test_container_for_pop3_only():
 
 @pytest.mark.asyncio
 async def test_driver_run_success_path(monkeypatch):
-    """Stub both subprocess calls (ollama + docker exec) as success."""
-    calls: list[list[str]] = []
+    """Inject a FakeBackend + stub docker exec; success end-to-end."""
+    docker_calls: list[list[str]] = []
 
     async def fake_run_capture(argv, *, stdin_data=None, timeout=8.0):
-        calls.append(list(argv))
-        if argv[0] == "ollama":
-            return 0, "Subject: Q3 budget\n\nHi Sarah,\nNumbers attached.\n", ""
-        # docker exec
+        docker_calls.append(list(argv))
         return 0, "", ""
 
     monkeypatch.setattr(email_driver, "_run_capture", fake_run_capture)
 
-    drv = email_driver.EmailDriver(model="llama3.1", ollama_timeout=1.0)
+    llm = FakeBackend(
+        model="llama3.1",
+        output="Subject: Q3 budget\n\nHi Sarah,\nNumbers attached.\n",
+    )
+    drv = email_driver.EmailDriver(llm=llm)
     result = await drv.run(_action())
     assert result.success is True
     assert result.payload["model"] == "llama3.1"
@@ -132,46 +159,56 @@ async def test_driver_run_success_path(monkeypatch):
     assert result.payload["message_id"].startswith("<")
     assert result.payload["eml_path"].endswith(".eml")
     assert result.payload["container"] == "mailhost-imap"
-    # Two subprocess calls: ollama, then docker exec.
-    assert calls[0][0] == "ollama"
-    assert calls[1][0] == "docker"
-    # docker exec shell command must include `touch -d` so the file's
-    # mtime matches the EML's Date: header — otherwise the spool's
-    # `ls -lt` clusters every email inside the worker tick window.
-    docker_sh = calls[1][-1]
+    # Only docker exec is shelled out now — the LLM call is in-process
+    # via the FakeBackend.
+    assert len(docker_calls) == 1
+    assert docker_calls[0][0] == "docker"
+    docker_sh = docker_calls[0][-1]
     assert "touch -d" in docker_sh
     assert "tee" in docker_sh
-    # And tee must come before touch so we don't touch a file that
-    # doesn't exist yet.
     assert docker_sh.index("tee") < docker_sh.index("touch -d")
 
 
 @pytest.mark.asyncio
-async def test_driver_run_ollama_failure_short_circuits(monkeypatch):
+async def test_driver_run_llm_failure_short_circuits(monkeypatch):
+    """When the backend reports success=False, no docker exec should fire."""
+    docker_called = False
+
     async def fake_run_capture(argv, *, stdin_data=None, timeout=8.0):
-        if argv[0] == "ollama":
-            return 1, "", "ollama: model not found"
+        nonlocal docker_called
+        docker_called = True
         return 0, "", ""
 
     monkeypatch.setattr(email_driver, "_run_capture", fake_run_capture)
 
-    drv = email_driver.EmailDriver()
+    drv = email_driver.EmailDriver(llm=_FailingBackend())
     result = await drv.run(_action())
     assert result.success is False
-    assert result.payload["stage"] == "ollama"
+    assert result.payload["stage"] == "llm"
+    assert "stderr" in result.payload
     assert "model not found" in result.payload["stderr"]
+    assert docker_called is False
+
+
+@pytest.mark.asyncio
+async def test_driver_run_llm_timeout_reported_distinctly(monkeypatch):
+    drv = email_driver.EmailDriver(llm=_RaisingBackend())
+    result = await drv.run(_action())
+    assert result.success is False
+    assert result.payload["stage"] == "llm"
+    assert result.payload["error"] == "timeout"
 
 
 @pytest.mark.asyncio
 async def test_driver_run_delivery_failure(monkeypatch):
     async def fake_run_capture(argv, *, stdin_data=None, timeout=8.0):
-        if argv[0] == "ollama":
-            return 0, "Subject: hi\n\nbody\n", ""
         return 1, "", "no such container"
 
     monkeypatch.setattr(email_driver, "_run_capture", fake_run_capture)
 
-    drv = email_driver.EmailDriver()
+    drv = email_driver.EmailDriver(
+        llm=FakeBackend(output="Subject: hi\n\nbody\n"),
+    )
     result = await drv.run(_action())
     assert result.success is False
     assert result.payload["stage"] == "delivery"
