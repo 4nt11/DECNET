@@ -14,6 +14,20 @@ from ._base import (
 from .common import (
     MessageResponse,
 )
+from .canary import (
+    CanaryBlob,
+    CanaryBlobResponse,
+    CanaryBlobsResponse,
+    CanaryKind,
+    CanaryState,
+    CanaryToken,
+    CanaryTokenCreateRequest,
+    CanaryTokenResponse,
+    CanaryTokensResponse,
+    CanaryTrigger,
+    CanaryTriggerResponse,
+    CanaryTriggersResponse,
+)
 from .auth import (
     AdminConfigResponse,
     ChangePasswordRequest,
@@ -159,6 +173,19 @@ __all__ = [
     "_normalize_null",
     # common
     "MessageResponse",
+    # canary
+    "CanaryBlob",
+    "CanaryBlobResponse",
+    "CanaryBlobsResponse",
+    "CanaryKind",
+    "CanaryState",
+    "CanaryToken",
+    "CanaryTokenCreateRequest",
+    "CanaryTokenResponse",
+    "CanaryTokensResponse",
+    "CanaryTrigger",
+    "CanaryTriggerResponse",
+    "CanaryTriggersResponse",
     # auth
     "AdminConfigResponse",
     "ChangePasswordRequest",
