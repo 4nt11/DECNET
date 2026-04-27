@@ -1,8 +1,14 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import api from '../../utils/api';
 import { useToast } from '../Toasts/useToast';
-import { Sliders, Save, RotateCcw } from '../../icons';
+import { Save, RotateCcw, AlertTriangle } from '../../icons';
 import { contentClassLabel, isCanaryClass } from '../../realism/labels';
+// Reuse the DeckyFleet shell (page-header / btn / fleet-* / dim / mono) and
+// the persona-page tweaks (info-banner, .input) so the realism config panel
+// reads the same as the rest of the realism nav group.
+import '../DeckyFleet.css';
+import '../PersonaGeneration.css';
+import './RealismConfig.css';
 
 // ─── Types ───────────────────────────────────────────────────────────────────
 
@@ -43,73 +49,61 @@ const DEFAULTS: ConfigPayload = {
   canary_probability: 0.03,
 };
 
-// ─── Helpers ─────────────────────────────────────────────────────────────────
-
-function pct(weights: WeightEntry[], idx: number): string {
-  const total = weights.reduce((s, w) => s + Math.max(0, w.weight), 0);
-  if (total === 0) return '—';
-  return `${((weights[idx].weight / total) * 100).toFixed(1)}%`;
-}
-
 // ─── Subcomponent ────────────────────────────────────────────────────────────
 
 const WeightTable: React.FC<{
   title: string;
+  help: string;
   weights: WeightEntry[];
   onChange: (next: WeightEntry[]) => void;
-}> = ({ title, weights, onChange }) => {
+}> = ({ title, help, weights, onChange }) => {
   const total = weights.reduce((s, w) => s + Math.max(0, w.weight), 0);
   return (
-    <div style={{ marginBottom: '20px' }}>
-      <div style={{
-        fontSize: '0.7rem', color: 'var(--dim-color)', letterSpacing: '0.1em',
-        marginBottom: '8px',
-      }}>
-        {title} · TOTAL {total}
+    <>
+      <div className="section-head">
+        <span>{title}</span>
+        <span className="total">TOTAL {total}</span>
       </div>
-      <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.85rem' }}>
+      <div className="section-help">{help}</div>
+      <table className="weight-table">
         <tbody>
-          {weights.map((w, i) => (
-            <tr key={w.content_class} style={{ borderBottom: '1px solid rgba(255,255,255,0.04)' }}>
-              <td style={{ padding: '6px 12px', width: '45%' }}>
-                <span style={{ color: isCanaryClass(w.content_class) ? '#ffaa66' : 'inherit' }}>
-                  {contentClassLabel(w.content_class)}
-                </span>
-                <span className="mono" style={{
-                  marginLeft: 8, fontSize: '0.7rem', color: 'var(--dim-color)',
-                }}>
-                  {w.content_class}
-                </span>
-              </td>
-              <td style={{ padding: '6px 12px', width: '30%' }}>
-                <input
-                  type="number"
-                  min={0}
-                  step={1}
-                  value={w.weight}
-                  onChange={(e) => {
-                    const next = weights.slice();
-                    const v = parseInt(e.target.value, 10);
-                    next[i] = { ...next[i], weight: Number.isFinite(v) ? Math.max(0, v) : 0 };
-                    onChange(next);
-                  }}
-                  style={{
-                    width: '80px',
-                    backgroundColor: 'rgba(255,255,255,0.03)',
-                    color: 'var(--text-color)',
-                    border: '1px solid rgba(255,255,255,0.1)',
-                    padding: '4px 8px', fontFamily: 'inherit',
-                  }}
-                />
-              </td>
-              <td style={{ padding: '6px 12px', color: 'var(--dim-color)', fontVariantNumeric: 'tabular-nums' }}>
-                {pct(weights, i)}
-              </td>
-            </tr>
-          ))}
+          {weights.map((w, i) => {
+            const canary = isCanaryClass(w.content_class);
+            const share =
+              total === 0
+                ? '—'
+                : `${((Math.max(0, w.weight) / total) * 100).toFixed(1)}%`;
+            return (
+              <tr key={w.content_class}>
+                <td className={`cls${canary ? ' canary' : ''}`}>
+                  <span className="cls-label">{contentClassLabel(w.content_class)}</span>
+                  <span className="cls-enum">{w.content_class}</span>
+                </td>
+                <td className="weight">
+                  <input
+                    type="number"
+                    min={0}
+                    step={1}
+                    className="weight-input"
+                    value={w.weight}
+                    onChange={(e) => {
+                      const v = parseInt(e.target.value, 10);
+                      const next = weights.slice();
+                      next[i] = {
+                        ...next[i],
+                        weight: Number.isFinite(v) ? Math.max(0, v) : 0,
+                      };
+                      onChange(next);
+                    }}
+                  />
+                </td>
+                <td className="share">{share}</td>
+              </tr>
+            );
+          })}
         </tbody>
       </table>
-    </div>
+    </>
   );
 };
 
@@ -156,98 +150,110 @@ const RealismConfig: React.FC = () => {
   };
 
   const handleReset = () => {
-    if (!window.confirm('Reset to baked-in defaults? This will overwrite the current saved config on next save.')) return;
+    if (!window.confirm(
+      'Reset to baked-in defaults? This will overwrite the saved config on next save.',
+    )) return;
     setConfig(DEFAULTS);
   };
 
-  return (
-    <div style={{ padding: '24px', color: 'var(--text-color)', maxWidth: '900px' }}>
-      <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '8px' }}>
-        <Sliders size={18} />
-        <h2 style={{ margin: 0, fontSize: '1.1rem', letterSpacing: '0.05em' }}>REALISM CONFIG</h2>
-      </div>
-      <p style={{ color: 'var(--dim-color)', fontSize: '0.85rem', marginTop: 0 }}>
-        Operator-tuned planner weights. The orchestrator refreshes from the DB
-        every ~5 minutes; saved changes land within one refresh window.
-      </p>
+  const totals = useMemo(() => ({
+    user: config.user_class_weights.reduce((s, w) => s + Math.max(0, w.weight), 0),
+    system: config.system_class_weights.reduce((s, w) => s + Math.max(0, w.weight), 0),
+    canary: config.canary_class_weights.reduce((s, w) => s + Math.max(0, w.weight), 0),
+  }), [config]);
 
-      {error && <div style={{ color: '#ff5555', marginBottom: '12px' }}>{error}</div>}
+  return (
+    <div className="fleet-root realism-config-root">
+      <div className="page-header">
+        <div className="page-title-group">
+          <h1>REALISM CONFIG</h1>
+          <span className="page-sub">
+            USER {totals.user} · SYSTEM {totals.system} · CANARY {totals.canary} ·
+            {' '}CANARY PROB {(config.canary_probability * 100).toFixed(1)}%
+          </span>
+        </div>
+        <div className="actions">
+          <button
+            className="btn ghost"
+            onClick={handleReset}
+            disabled={saving || loading}
+            title="Reset form fields to baked-in defaults (does not save until you press SAVE)"
+          >
+            <RotateCcw size={12} /> RESET
+          </button>
+          <button
+            className="btn violet"
+            onClick={handleSave}
+            disabled={saving || loading}
+            title="Persist current values to realism_config; orchestrator picks them up within one refresh tick (~5 min)."
+          >
+            <Save size={12} /> {saving ? 'SAVING…' : 'SAVE'}
+          </button>
+        </div>
+      </div>
+
+      <div className="info-banner">
+        <div>
+          <strong>Scope:</strong> tunes the orchestrator's <em>realism planner</em>
+          {' '}— how often each kind of synthetic file lands on a decky, and
+          how rare canary plants are. Persisted in the{' '}
+          <span className="mono matrix-text">realism_config</span> table; the
+          orchestrator refreshes from the DB every ~5 minutes.
+        </div>
+        {error && (
+          <div className="info-line alert-text" style={{ marginTop: 8 }}>
+            <AlertTriangle size={12} /> {error}
+          </div>
+        )}
+      </div>
 
       {loading ? (
-        <div style={{ opacity: 0.6 }}>Loading…</div>
+        <div className="dim" style={{ padding: '24px 0' }}>Loading…</div>
       ) : (
         <>
           <WeightTable
-            title="USER CLASS WEIGHTS · written by personas during work hours"
+            title="User Class Weights"
+            help="Files written by personas during their work hours. The realism win when a persona looks busy."
             weights={config.user_class_weights}
             onChange={(next) => setConfig({ ...config, user_class_weights: next })}
           />
           <WeightTable
-            title="SYSTEM CLASS WEIGHTS · plausible OS-side filler"
+            title="System Class Weights"
+            help="Plausible OS-side filler — rotated logs, daemon noise, ephemeral cache."
             weights={config.system_class_weights}
             onChange={(next) => setConfig({ ...config, system_class_weights: next })}
           />
           <WeightTable
-            title="CANARY CLASS WEIGHTS · uniform across generators by default"
+            title="Canary Class Weights"
+            help="Callback-bearing artifacts. Uniform across generators by default; raise one to bias toward a specific bait flavour."
             weights={config.canary_class_weights}
             onChange={(next) => setConfig({ ...config, canary_class_weights: next })}
           />
 
-          <div style={{ marginBottom: '24px' }}>
-            <div style={{
-              fontSize: '0.7rem', color: 'var(--dim-color)', letterSpacing: '0.1em',
-              marginBottom: '8px',
-            }}>
-              CANARY PROBABILITY · share of file picks that materialise a canary
-            </div>
-            <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
-              <input
-                type="range"
-                min={0}
-                max={1}
-                step={0.005}
-                value={config.canary_probability}
-                onChange={(e) => setConfig({
-                  ...config,
-                  canary_probability: parseFloat(e.target.value),
-                })}
-                style={{ flex: 1 }}
-              />
-              <span className="mono" style={{ minWidth: '60px', textAlign: 'right' }}>
-                {(config.canary_probability * 100).toFixed(1)}%
-              </span>
-            </div>
+          <div className="section-head">
+            <span>Canary Probability</span>
+            <span className="total">{(config.canary_probability * 100).toFixed(1)}%</span>
           </div>
-
-          <div style={{ display: 'flex', gap: '8px' }}>
-            <button
-              className="action-btn"
-              onClick={handleSave}
-              disabled={saving}
-              style={{
-                padding: '8px 16px',
-                display: 'inline-flex', alignItems: 'center', gap: 6,
-                color: 'var(--matrix)',
-                borderColor: 'var(--matrix)',
-                opacity: saving ? 0.5 : 1,
-              }}
-              title="Persist current values to realism_config; orchestrator picks them up within one refresh tick."
-            >
-              <Save size={12} />
-              {saving ? 'SAVING…' : 'SAVE'}
-            </button>
-            <button
-              className="action-btn"
-              onClick={handleReset}
-              style={{
-                padding: '8px 16px',
-                display: 'inline-flex', alignItems: 'center', gap: 6,
-              }}
-              title="Reset form fields to baked-in defaults (does not save until you press SAVE)"
-            >
-              <RotateCcw size={12} />
-              RESET TO DEFAULTS
-            </button>
+          <div className="section-help">
+            Share of file picks that materialise a canary. Each plant
+            creates a real canary token row + DNS slug or HTTP URL —
+            keeping this rare prevents a noisy alert surface.
+          </div>
+          <div className="prob-row">
+            <input
+              type="range"
+              min={0}
+              max={1}
+              step={0.005}
+              value={config.canary_probability}
+              onChange={(e) => setConfig({
+                ...config,
+                canary_probability: parseFloat(e.target.value),
+              })}
+            />
+            <span className="prob-value">
+              {(config.canary_probability * 100).toFixed(1)}%
+            </span>
           </div>
         </>
       )}

@@ -1,0 +1,122 @@
+/* Realism Config — layered on DeckyFleet.css.
+   Adds: weight tables (label + numeric input + percent share),
+   canary-class accent, canary-probability slider row. */
+
+.realism-config-root .mono { font-family: var(--font-mono); }
+
+.realism-config-root .info-banner {
+  background: rgba(255, 255, 255, 0.02);
+  border: 1px solid var(--border);
+  border-left: 3px solid var(--violet);
+  padding: 10px 14px;
+  font-size: 0.78rem;
+  line-height: 1.5;
+}
+.realism-config-root .info-banner em { color: var(--matrix); font-style: normal; }
+
+/* Section heading above each weight table. */
+.realism-config-root .section-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  font-size: 0.7rem;
+  letter-spacing: 1.5px;
+  color: var(--dim);
+  text-transform: uppercase;
+  margin: 0 0 8px;
+}
+.realism-config-root .section-head .total {
+  font-family: var(--font-mono);
+  color: var(--matrix);
+  letter-spacing: 1px;
+}
+.realism-config-root .section-help {
+  font-size: 0.7rem;
+  opacity: 0.45;
+  letter-spacing: 0.5px;
+  margin: -4px 0 8px;
+}
+
+/* Weight table: class label · raw enum · weight input · percent share. */
+.realism-config-root .weight-table {
+  width: 100%;
+  border-collapse: collapse;
+  background: var(--panel);
+  border: 1px solid var(--border);
+  margin-bottom: 24px;
+  font-size: 0.82rem;
+}
+.realism-config-root .weight-table tr {
+  border-bottom: 1px solid var(--border);
+}
+.realism-config-root .weight-table tr:last-child { border-bottom: none; }
+.realism-config-root .weight-table td {
+  padding: 8px 14px;
+  vertical-align: middle;
+}
+.realism-config-root .weight-table td.cls { width: 50%; }
+.realism-config-root .weight-table td.cls .cls-label { font-weight: 600; }
+.realism-config-root .weight-table td.cls .cls-enum {
+  margin-left: 10px;
+  font-family: var(--font-mono);
+  font-size: 0.7rem;
+  color: var(--dim);
+  letter-spacing: 0.5px;
+}
+.realism-config-root .weight-table td.cls.canary .cls-label {
+  color: var(--amber, #f59e0b);
+}
+.realism-config-root .weight-table td.weight {
+  width: 130px;
+}
+.realism-config-root .weight-table input.weight-input {
+  width: 90px;
+  background: var(--bg-elev, rgba(0, 0, 0, 0.3));
+  border: 1px solid var(--border);
+  color: var(--matrix);
+  padding: 5px 9px;
+  font-family: var(--font-mono);
+  font-size: 0.85rem;
+  outline: none;
+  transition: border-color 0.15s, box-shadow 0.15s;
+  text-align: right;
+}
+.realism-config-root .weight-table input.weight-input:focus {
+  border-color: var(--violet);
+  box-shadow: 0 0 0 1px var(--violet);
+}
+.realism-config-root .weight-table td.share {
+  font-family: var(--font-mono);
+  color: var(--dim);
+  width: 80px;
+  text-align: right;
+}
+
+/* Canary probability slider row. */
+.realism-config-root .prob-row {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  background: var(--panel);
+  border: 1px solid var(--border);
+  padding: 12px 16px;
+  margin-bottom: 24px;
+}
+.realism-config-root .prob-row input[type="range"] {
+  flex: 1;
+  accent-color: var(--violet);
+}
+.realism-config-root .prob-row .prob-value {
+  font-family: var(--font-mono);
+  font-size: 1rem;
+  color: var(--matrix);
+  letter-spacing: 1px;
+  min-width: 70px;
+  text-align: right;
+}
+
+.realism-config-root .footer-actions {
+  display: flex;
+  gap: 12px;
+  margin-top: 8px;
+}
