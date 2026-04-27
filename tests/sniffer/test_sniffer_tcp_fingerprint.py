@@ -147,6 +147,22 @@ class TestSynFingerprintEmission:
         fp_lines = [ln for ln in captured if _msgid(ln) == "tcp_syn_fingerprint"]
         assert len(fp_lines) == 2
 
+    def test_tos_dscp_ecn_emitted(self):
+        engine, captured = _make_engine()
+        # ToS 0x2A → DSCP 10 (AF11), ECN 2 (ECT(0))
+        pkt = IP(src=_ATTACKER_IP, dst=_DECKY_IP, ttl=64, tos=0x2A) / TCP(
+            sport=45100, dport=22, flags="S", window=29200,
+            options=[("MSS", 1460), ("SAckOK", b""), ("Timestamp", (0, 0)),
+                     ("NOP", None), ("WScale", 7)],
+        )
+        engine.on_packet(pkt)
+        fp_lines = [ln for ln in captured if _msgid(ln) == "tcp_syn_fingerprint"]
+        assert len(fp_lines) == 1
+        f = _fields_from_line(fp_lines[0])
+        assert f["tos"] == "42"
+        assert f["dscp"] == "10"
+        assert f["ecn"] == "2"
+
     def test_decky_source_does_not_emit(self):
         """Packets originating from a decky (outbound reply) should NOT
         be classified as an attacker fingerprint."""

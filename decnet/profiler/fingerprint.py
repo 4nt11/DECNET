@@ -181,6 +181,9 @@ def sniffer_rollup(events: list[LogEvent]) -> dict[str, Any]:
                 "options_sig": e.fields.get("options_sig", ""),
                 "has_sack": e.fields.get("has_sack") == "true",
                 "has_timestamps": e.fields.get("has_timestamps") == "true",
+                "tos": _int_or_none(e.fields.get("tos")),
+                "dscp": _int_or_none(e.fields.get("dscp")),
+                "ecn": _int_or_none(e.fields.get("ecn")),
             }
             tcp_fp_context = "syn"
 
@@ -236,6 +239,9 @@ def sniffer_rollup(events: list[LogEvent]) -> dict[str, Any]:
                 "options_sig":    e.fields.get("options_order", ""),
                 "has_sack":       e.fields.get("sack_ok") == "1",
                 "has_timestamps": e.fields.get("timestamp") == "1",
+                "tos":            _int_or_none(e.fields.get("tos")),
+                "dscp":           _int_or_none(e.fields.get("dscp")),
+                "ecn":            _int_or_none(e.fields.get("ecn")),
             }
             tcp_fp_context = "synack"  # prober sent SYN, captured attacker's SYN-ACK
 

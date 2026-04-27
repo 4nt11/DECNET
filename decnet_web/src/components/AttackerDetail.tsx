@@ -19,6 +19,9 @@ interface AttackerBehavior {
     options_sig?: string;
     has_sack?: boolean;
     has_timestamps?: boolean;
+    tos?: number | null;
+    dscp?: number | null;
+    ecn?: number | null;
   } | null;
   retransmit_count: number;
   behavior_class: string | null;
@@ -688,7 +691,7 @@ const BeaconBlock: React.FC<{ b: AttackerBehavior }> = ({ b }) => {
 
 const TcpStackBlock: React.FC<{ b: AttackerBehavior }> = ({ b }) => {
   const fp = b.tcp_fingerprint;
-  if (!fp || (!fp.window && !fp.mss && !fp.options_sig)) return null;
+  if (!fp || (!fp.window && !fp.mss && !fp.options_sig && fp.dscp == null && fp.ecn == null)) return null;
   return (
     <div style={{
       border: '1px solid var(--border-color)', padding: '12px 16px',
@@ -721,6 +724,18 @@ const TcpStackBlock: React.FC<{ b: AttackerBehavior }> = ({ b }) => {
             <div>
               <span className="dim" style={{ fontSize: '0.7rem' }}>MSS </span>
               <span className="matrix-text" style={{ fontSize: '1.1rem' }}>{fp.mss}</span>
+            </div>
+          )}
+          {fp.dscp !== null && fp.dscp !== undefined && (
+            <div>
+              <span className="dim" style={{ fontSize: '0.7rem' }}>DSCP </span>
+              <span className="matrix-text" style={{ fontSize: '1.1rem' }}>{fp.dscp}</span>
+            </div>
+          )}
+          {fp.ecn !== null && fp.ecn !== undefined && (
+            <div>
+              <span className="dim" style={{ fontSize: '0.7rem' }}>ECN </span>
+              <span className="matrix-text" style={{ fontSize: '1.1rem' }}>{fp.ecn}</span>
             </div>
           )}
           <div>
@@ -1597,29 +1612,47 @@ const AttackerDetail: React.FC = () => {
 
       {/* Services */}
       <Section title="SERVICES TARGETED" open={openSections.services} onToggle={() => toggle('services')}>
-        <div style={{ padding: '16px', display: 'flex', flexWrap: 'wrap', gap: '8px' }}>
-          {attacker.services.length > 0 ? attacker.services.map((svc) => {
-            const isActive = serviceFilter === svc;
-            return (
-              <span
-                key={svc}
-                className="service-badge"
-                style={{
-                  fontSize: '0.85rem', padding: '4px 12px', cursor: 'pointer',
-                  ...(isActive ? {
-                    backgroundColor: 'var(--text-color)',
-                    color: 'var(--bg-color)',
-                    borderColor: 'var(--text-color)',
-                  } : {}),
-                }}
-                onClick={() => setServiceFilter(isActive ? null : svc)}
-                title={isActive ? 'Clear filter' : `Filter by ${svc.toUpperCase()}`}
-              >
-                {svc.toUpperCase()}
-              </span>
-            );
-          }) : (
-            <span className="dim">No services recorded</span>
+        <div style={{ padding: '16px' }}>
+          <div style={{ display: 'flex', flexWrap: 'wrap', gap: '8px' }}>
+            {attacker.services.length > 0 ? attacker.services.map((svc) => {
+              const isActive = serviceFilter === svc;
+              const interacted = attacker.service_activity?.interacted.includes(svc) ?? false;
+              const baseStyle: React.CSSProperties = interacted
+                ? { borderColor: 'var(--accent-color)', color: 'var(--accent-color)', background: 'rgba(238, 130, 238, 0.08)' }
+                : { opacity: 0.55 };
+              const activeStyle: React.CSSProperties = isActive
+                ? interacted
+                  ? { backgroundColor: 'var(--accent-color)', color: 'var(--bg-color)', borderColor: 'var(--accent-color)', opacity: 1 }
+                  : { backgroundColor: 'var(--text-color)', color: 'var(--bg-color)', borderColor: 'var(--text-color)', opacity: 1 }
+                : {};
+              return (
+                <span
+                  key={svc}
+                  className="service-badge"
+                  style={{
+                    fontSize: '0.85rem', padding: '4px 12px', cursor: 'pointer',
+                    ...baseStyle,
+                    ...activeStyle,
+                  }}
+                  onClick={() => setServiceFilter(isActive ? null : svc)}
+                  title={
+                    isActive
+                      ? 'Clear filter'
+                      : `Filter by ${svc.toUpperCase()} — ${interacted ? 'interacted with' : 'scanned only'}`
+                  }
+                >
+                  {interacted ? '· ' : ''}{svc.toUpperCase()}
+                </span>
+              );
+            }) : (
+              <span className="dim">No services recorded</span>
+            )}
+          </div>
+          {attacker.services.length > 0 && (
+            <div style={{ marginTop: '12px', fontSize: '0.7rem', display: 'flex', gap: '16px' }}>
+              <span style={{ color: 'var(--accent-color)' }}>· INTERACTED</span>
+              <span className="dim">SCAN-ONLY</span>
+            </div>
           )}
         </div>
       </Section>

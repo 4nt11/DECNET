@@ -412,6 +412,9 @@ def _tcpfp_phase(
                 sack_ok=str(result["sack_ok"]),
                 timestamp=str(result["timestamp"]),
                 options_order=result["options_order"],
+                tos=str(result["tos"]),
+                dscp=str(result["dscp"]),
+                ecn=str(result["ecn"]),
                 msg=f"TCPFP {ip}:{port} = {result['tcpfp_hash']}",
             )
             logger.info("prober: TCPFP %s:%d = %s", ip, port, result["tcpfp_hash"])

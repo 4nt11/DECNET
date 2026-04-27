@@ -1056,6 +1056,9 @@ class SnifferEngine:
                         options_sig=tcp_fp["options_sig"],
                         has_sack=str(tcp_fp["sack_ok"]).lower(),
                         has_timestamps=str(tcp_fp["has_timestamps"]).lower(),
+                        tos=str(int(getattr(ip, "tos", 0))),
+                        dscp=str((int(getattr(ip, "tos", 0)) >> 2) & 0x3F),
+                        ecn=str(int(getattr(ip, "tos", 0)) & 0x3),
                         os_guess=os_label,
                     )
 
