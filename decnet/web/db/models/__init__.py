@@ -58,6 +58,8 @@ from .health import (
     HealthResponse,
 )
 from .orchestrator import (
+    OrchestratorEmail,
+    OrchestratorEmailsResponse,
     OrchestratorEvent,
     OrchestratorEventsResponse,
 )
@@ -193,6 +195,8 @@ __all__ = [
     "ComponentHealth",
     "HealthResponse",
     # orchestrator
+    "OrchestratorEmail",
+    "OrchestratorEmailsResponse",
     "OrchestratorEvent",
     "OrchestratorEventsResponse",
     # logs

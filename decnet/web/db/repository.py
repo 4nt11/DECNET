@@ -952,3 +952,57 @@ class BaseRepository(ABC):
         unbounded growth without paying the cost on every write.
         """
         raise NotImplementedError
+
+    async def record_orchestrator_email(self, data: dict[str, Any]) -> str:
+        """Insert one orchestrator-generated email row, returning its uuid."""
+        raise NotImplementedError
+
+    async def list_orchestrator_emails(
+        self,
+        limit: int = 100,
+        offset: int = 0,
+        *,
+        mail_decky_uuid: Optional[str] = None,
+        thread_id: Optional[str] = None,
+        since_ts: Optional[Any] = None,
+    ) -> list[dict[str, Any]]:
+        """Paginated orchestrator emails newest-first.
+
+        Optional filters narrow to a single mail decky or to one thread,
+        used by the dashboard's mailbox-inspector view.
+        """
+        raise NotImplementedError
+
+    async def count_orchestrator_emails(
+        self,
+        *,
+        mail_decky_uuid: Optional[str] = None,
+    ) -> int:
+        """Total orchestrator-email rows, optionally filtered by mail decky."""
+        raise NotImplementedError
+
+    async def list_orchestrator_email_threads(
+        self,
+        mail_decky_uuid: str,
+        sender_email: str,
+        recipient_email: str,
+        *,
+        limit: int = 50,
+    ) -> list[dict[str, Any]]:
+        """Open threads between *sender_email* and *recipient_email* on
+        *mail_decky_uuid*, newest-first.
+
+        Used by the emailgen scheduler to decide whether to start a new
+        thread or reply on an existing one.  Each entry is one row's
+        worth of dict — the worker only needs ``thread_id`` and the most
+        recent ``message_id`` / ``subject`` to build the reply.
+        """
+        raise NotImplementedError
+
+    async def prune_orchestrator_emails(self, per_decky_cap: int = 10000) -> int:
+        """Trim per-``mail_decky_uuid`` rows to a cap. Returns deleted count.
+
+        Mirrors :meth:`prune_orchestrator_events`; emailgen worker calls
+        this on a periodic tick.
+        """
+        raise NotImplementedError

@@ -12,6 +12,7 @@ Token structure (NATS-style, dot-separated):
     decky.{decky_id}.traffic
     orchestrator.traffic.{decky_id}
     orchestrator.file.{decky_id}
+    orchestrator.email.{decky_id}
     attacker.observed
     attacker.scored
     attacker.session.started
@@ -172,6 +173,11 @@ CREDENTIAL_REUSE_DETECTED = "reuse.detected"
 # stream via ``orchestrator.*.<decky_uuid>``.
 ORCHESTRATOR_TRAFFIC = "traffic"
 ORCHESTRATOR_FILE = "file"
+# Emailgen — published by the ``decnet emailgen`` worker once per generated
+# fake email delivered into a mail decky's maildir.  Third token is the
+# destination mail-decky uuid (the IMAP/POP3 host serving the mailbox),
+# matching the ``orchestrator.*.<decky_uuid>`` subscription pattern.
+ORCHESTRATOR_EMAIL = "email"
 
 # System event types.
 SYSTEM_LOG = "log"

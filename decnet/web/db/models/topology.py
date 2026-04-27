@@ -47,6 +47,18 @@ class Topology(SQLModel, table=True):
     # running.  Drained by the mutator watch loop, which re-pushes via
     # AgentClient and clears the flag.  NULL for unihost topologies.
     needs_resync: bool = Field(default=False, nullable=False)
+    # JSON-serialised list of EmailPersona dicts consumed by the
+    # ``decnet emailgen`` worker.  Empty list = no fake mailbox owners
+    # configured for this topology, the worker skips it.
+    email_personas: str = Field(
+        sa_column=Column(
+            "email_personas", _BIG_TEXT, nullable=False, default="[]"
+        )
+    )
+    # ISO 639-1 language code applied to any persona that doesn't override
+    # ``language`` itself.  English by default; ANTI's deployments default
+    # to "es" by editing this column.
+    language_default: str = Field(default="en", max_length=8)
 
 
 class LAN(SQLModel, table=True):

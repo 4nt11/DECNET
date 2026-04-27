@@ -51,6 +51,7 @@ from decnet.web.db.models import (
     TopologyEdge,
     TopologyStatusEvent,
     TopologyMutation,
+    OrchestratorEmail,
     OrchestratorEvent,
     WebhookSubscription,
 )
@@ -2998,6 +2999,116 @@ class SQLModelRepository(BaseRepository):
                 stmt = _delete(OrchestratorEvent).where(
                     OrchestratorEvent.dst_decky_uuid == dst,
                     OrchestratorEvent.uuid.notin_(keep_uuids),
+                )
+                res = await session.execute(stmt)
+                deleted += res.rowcount or 0
+            await session.commit()
+        return deleted
+
+    # ---------------------------------------------------------- emailgen
+
+    async def record_orchestrator_email(self, data: dict[str, Any]) -> str:
+        payload = data.get("payload")
+        if isinstance(payload, (dict, list)):
+            data = {**data, "payload": json.dumps(payload)}
+        async with self._session() as session:
+            row = OrchestratorEmail(**data)
+            session.add(row)
+            await session.commit()
+            await session.refresh(row)
+            return row.uuid
+
+    async def list_orchestrator_emails(
+        self,
+        limit: int = 100,
+        offset: int = 0,
+        *,
+        mail_decky_uuid: Optional[str] = None,
+        thread_id: Optional[str] = None,
+        since_ts: Optional[datetime] = None,
+    ) -> list[dict[str, Any]]:
+        async with self._session() as session:
+            stmt = select(OrchestratorEmail)
+            if mail_decky_uuid is not None:
+                stmt = stmt.where(
+                    OrchestratorEmail.mail_decky_uuid == mail_decky_uuid
+                )
+            if thread_id is not None:
+                stmt = stmt.where(OrchestratorEmail.thread_id == thread_id)
+            if since_ts is not None:
+                stmt = stmt.where(OrchestratorEmail.ts >= since_ts)
+            stmt = (
+                stmt.order_by(desc(OrchestratorEmail.ts))
+                .offset(offset)
+                .limit(limit)
+            )
+            result = await session.execute(stmt)
+            return [r.model_dump(mode="json") for r in result.scalars().all()]
+
+    async def count_orchestrator_emails(
+        self,
+        *,
+        mail_decky_uuid: Optional[str] = None,
+    ) -> int:
+        stmt = select(func.count()).select_from(OrchestratorEmail)
+        if mail_decky_uuid is not None:
+            stmt = stmt.where(OrchestratorEmail.mail_decky_uuid == mail_decky_uuid)
+        async with self._session() as session:
+            result = await session.execute(stmt)
+            return result.scalar() or 0
+
+    async def list_orchestrator_email_threads(
+        self,
+        mail_decky_uuid: str,
+        sender_email: str,
+        recipient_email: str,
+        *,
+        limit: int = 50,
+    ) -> list[dict[str, Any]]:
+        # Most-recent row per (sender, recipient) pair under this mail decky.
+        # The scheduler only needs the latest message_id/subject/thread_id to
+        # construct a reply; older rows in the same thread aren't relevant
+        # for the "do we reply or start fresh" decision.
+        async with self._session() as session:
+            stmt = (
+                select(OrchestratorEmail)
+                .where(
+                    OrchestratorEmail.mail_decky_uuid == mail_decky_uuid,
+                    or_(
+                        (OrchestratorEmail.sender_email == sender_email)
+                        & (OrchestratorEmail.recipient_email == recipient_email),
+                        (OrchestratorEmail.sender_email == recipient_email)
+                        & (OrchestratorEmail.recipient_email == sender_email),
+                    ),
+                    OrchestratorEmail.success.is_(True),
+                )
+                .order_by(desc(OrchestratorEmail.ts))
+                .limit(limit)
+            )
+            result = await session.execute(stmt)
+            return [r.model_dump(mode="json") for r in result.scalars().all()]
+
+    async def prune_orchestrator_emails(self, per_decky_cap: int = 10000) -> int:
+        """Trim per-mail-decky rows to *per_decky_cap*, oldest-first."""
+        deleted = 0
+        async with self._session() as session:
+            decky_rows = await session.execute(
+                select(OrchestratorEmail.mail_decky_uuid).distinct()
+            )
+            for (mail_uuid,) in decky_rows.all():
+                keep = await session.execute(
+                    select(OrchestratorEmail.uuid)
+                    .where(OrchestratorEmail.mail_decky_uuid == mail_uuid)
+                    .order_by(desc(OrchestratorEmail.ts))
+                    .limit(per_decky_cap)
+                )
+                keep_uuids = [u for (u,) in keep.all()]
+                if not keep_uuids:
+                    continue
+                from sqlalchemy import delete as _delete
+                stmt = _delete(OrchestratorEmail).where(
+                    OrchestratorEmail.mail_decky_uuid == mail_uuid,
+                    OrchestratorEmail.uuid.notin_(keep_uuids),
                 )
                 res = await session.execute(stmt)
                 deleted += res.rowcount or 0

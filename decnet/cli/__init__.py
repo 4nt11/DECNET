@@ -24,6 +24,7 @@ from . import (
     bus,
     db,
     deploy,
+    emailgen,
     forwarder,
     geoip,
     init,
@@ -56,7 +57,7 @@ for _mod in (
     api, swarmctl, agent, updater, listener, forwarder,
     swarm,
     deploy, lifecycle, workers, inventory,
-    web, profiler, orchestrator, reconciler, sniffer, db,
+    web, profiler, orchestrator, emailgen, reconciler, sniffer, db,
     topology, bus, geoip, init, webhook,
 ):
     _mod.register(app)
