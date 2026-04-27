@@ -256,6 +256,103 @@ class TestReconcileOnce:
         assert any(r["host_uuid"] == "host-b" for r in repo.rows)
 
     @pytest.mark.anyio
+    async def test_publishes_decky_state_on_transitions(self):
+        """When *bus* is provided, every insert/delete/state-change must
+        publish on ``decky.<host_uuid:name>.state``."""
+        from decnet.bus.fake import FakeBus
+        bus = FakeBus()
+        await bus.connect()
+
+        published: list = []
+
+        async def collect():
+            async with bus.subscribe("decky.>") as sub:
+                async for ev in sub:
+                    published.append(ev)
+                    if len(published) >= 3:
+                        return
+
+        try:
+            collector = asyncio.create_task(collect())
+            await asyncio.sleep(0)  # let subscription register
+
+            repo = FakeRepo([
+                # An existing row that will be deleted (not in JSON).
+                {"host_uuid": "local", "name": "ghost", "services": ["ssh"],
+                 "state": "running", "decky_ip": "10.0.0.99"},
+                # An existing row whose state will flip running → failed.
+                {"host_uuid": "local", "name": "d-flip", "services": ["ssh"],
+                 "state": "running", "decky_ip": "10.0.0.20"},
+            ])
+            json_deckies = [
+                _decky(name="d-new", ip="10.0.0.30", services=["http"]),
+                _decky(name="d-flip", ip="10.0.0.20", services=["ssh"]),
+            ]
+            await reconcile_once(
+                repo,
+                load_state_fn=_state_loader(json_deckies),
+                docker_client_factory=_docker_factory({
+                    "d-new-http": "running",
+                    "d-flip-ssh": "exited",
+                }),
+                bus=bus,
+            )
+            await asyncio.wait_for(collector, timeout=2.0)
+        finally:
+            await bus.close()
+
+        topics = sorted(ev.topic for ev in published)
+        assert topics == [
+            "decky.local:d-flip.state",
+            "decky.local:d-new.state",
+            "decky.local:ghost.state",
+        ]
+        by_name = {ev.payload["name"]: ev.payload for ev in published}
+        assert by_name["d-new"]["transition"] == "inserted"
+        assert by_name["d-new"]["state"] == "running"
+        assert by_name["ghost"]["transition"] == "deleted"
+        assert by_name["ghost"]["state"] == "torn_down"
+        assert by_name["d-flip"]["transition"] == "state_changed"
+        assert by_name["d-flip"]["state"] == "failed"
+        assert by_name["d-flip"]["previous_state"] == "running"
+
+    @pytest.mark.anyio
+    async def test_no_bus_publish_when_already_converged(self):
+        """Quiet ticks must not publish — otherwise every 30s the bus
+        floods with no-op events."""
+        from decnet.bus.fake import FakeBus
+        bus = FakeBus()
+        await bus.connect()
+        try:
+            published: list = []
+
+            async def collect():
+                async with bus.subscribe("decky.>") as sub:
+                    async for ev in sub:
+                        published.append(ev)
+
+            collector = asyncio.create_task(collect())
+            await asyncio.sleep(0)
+
+            repo = FakeRepo([
+                {"host_uuid": "local", "name": "d1", "services": ["ssh"],
+                 "state": "running", "decky_ip": "10.0.0.10"},
+            ])
+            d = _decky(name="d1", services=["ssh"])
+            await reconcile_once(
+                repo,
+                load_state_fn=_state_loader([d]),
+                docker_client_factory=_docker_factory({"d1-ssh": "running"}),
+                bus=bus,
+            )
+            await asyncio.sleep(0.1)  # give the bus a window to deliver
+            collector.cancel()
+        finally:
+            await bus.close()
+
+        assert published == []
+
+    @pytest.mark.anyio
     async def test_combined_drift_in_one_pass(self):
         """JSON has new decky AND DB has stale decky AND third decky's
         container died — all three converge in a single tick."""

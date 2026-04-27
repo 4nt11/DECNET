@@ -65,7 +65,9 @@ async def fleet_reconciler_worker(
             if shutdown.is_set():
                 break
             try:
-                counts = await reconcile_once(repo, host_uuid=host_uuid)
+                counts = await reconcile_once(
+                    repo, host_uuid=host_uuid, bus=bus,
+                )
                 if any(counts.values()):
                     logger.info(
                         "reconcile inserted=%d deleted=%d state_updated=%d",
