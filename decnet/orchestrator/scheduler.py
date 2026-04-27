@@ -121,6 +121,9 @@ async def pick_file(
     *,
     now: Optional[datetime] = None,
     rand: Optional[secrets.SystemRandom] = None,
+    llm: Any = None,
+    llm_breaker: Any = None,
+    llm_timeout: float = 60.0,
 ) -> Optional[Action]:
     """Realism-driven file action — create or edit.
 
@@ -179,15 +182,44 @@ async def pick_file(
             synthetic_file_uuid=(edit_candidate or {}).get("uuid", ""),
             mtime=plan.mtime,
         )
+
+    # Create branch.  If LLM is wired, optionally swap body_hint for
+    # an LLM-authored body.  Always keep the deterministic body_hint
+    # as the fallback the function call returns when LLM
+    # times out / errors / breaker-trips.
+    body = plan.body_hint or ""
+    if llm is not None and plan.content_class.is_user_class():
+        persona_obj = _persona_by_name(enriched, plan.persona)
+        if persona_obj is not None:
+            from decnet.realism.bodies import make_body_with_llm
+            body = await make_body_with_llm(
+                plan.content_class,
+                persona_obj,
+                llm=llm,
+                breaker=llm_breaker,
+                timeout=llm_timeout,
+                rand=rng,
+            )
     return FileAction(
         dst_uuid=plan.decky_uuid,
         dst_name=plan.decky_name,
         path=plan.target_path,
-        content=plan.body_hint or "",
+        content=body,
         persona=plan.persona,
         content_class=plan.content_class.value,
         mtime=plan.mtime,
     )
+
+
+def _persona_by_name(
+    enriched: list[dict[str, Any]], name: str,
+) -> Optional[EmailPersona]:
+    """Find the persona instance the planner used; ``None`` if missing."""
+    for decky in enriched:
+        for persona in decky.get("_realism_personas") or []:
+            if persona.name == name:
+                return persona
+    return None
 
 
 async def _resolve_personas(

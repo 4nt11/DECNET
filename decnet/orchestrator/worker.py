@@ -20,8 +20,10 @@ from __future__ import annotations
 import asyncio
 import contextlib
 import hashlib
+import os
 import secrets
 from datetime import datetime, timezone
+from typing import Any, Optional
 
 from decnet.bus.factory import get_bus
 from decnet.bus.publish import (
@@ -37,6 +39,7 @@ from decnet.orchestrator.emailgen import (
     scheduler as email_scheduler,
 )
 from decnet.orchestrator.emailgen.scheduler import EmailAction
+from decnet.realism.llm.circuit import LLMCircuitBreaker
 from decnet.web.db.repository import BaseRepository
 
 logger = get_logger("orchestrator")
@@ -65,13 +68,42 @@ async def orchestrator_worker(
     repo: BaseRepository,
     *,
     interval: int = 60,
+    llm_enabled: Optional[bool] = None,
 ) -> None:
     """Periodically inject synthetic activity into the running fleet.
 
     Runs as a long-lived asyncio task.  Honours the bus control topic
     (``system.orchestrator.control``) for graceful shutdown.
+
+    LLM enrichment for user-class file bodies is opt-in via the
+    ``DECNET_REALISM_LLM`` env var (set to ``ollama`` / ``fake`` /
+    empty).  Pass ``llm_enabled=False`` from the CLI to override
+    (``decnet orchestrate --no-llm``).  When the LLM is unreachable
+    or wedged, a process-local circuit breaker
+    (:class:`LLMCircuitBreaker`) trips after 3 consecutive failures
+    and the worker falls back to deterministic templates for 60
+    seconds before re-probing.
     """
     logger.info("orchestrator worker started interval=%ds", interval)
+
+    llm: Any = None
+    breaker: Optional[LLMCircuitBreaker] = None
+    if _llm_should_enable(llm_enabled):
+        try:
+            from decnet.realism.llm import get_llm
+            llm = get_llm()
+            breaker = LLMCircuitBreaker()
+            logger.info(
+                "orchestrator: LLM enrichment enabled backend=%s model=%s",
+                os.environ.get("DECNET_REALISM_LLM", "ollama"),
+                getattr(llm, "model", "?"),
+            )
+        except Exception as exc:  # noqa: BLE001
+            logger.warning(
+                "orchestrator: LLM init failed, continuing without "
+                "enrichment: %s", exc,
+            )
+            llm = None
 
     bus = None
     try:
@@ -98,7 +130,7 @@ async def orchestrator_worker(
             if shutdown.is_set():
                 break
             try:
-                await _one_tick(repo, bus)
+                await _one_tick(repo, bus, llm=llm, breaker=breaker)
             except Exception as exc:  # noqa: BLE001
                 logger.error("orchestrator tick failed: %s", exc)
             tick_n += 1
@@ -148,10 +180,29 @@ def _roll_action_kind(rng: secrets.SystemRandom) -> str:
     return _ACTION_WEIGHTS[-1][0]  # unreachable, satisfy mypy
 
 
+def _llm_should_enable(explicit: Optional[bool]) -> bool:
+    """Resolve the LLM-enabled flag from CLI / env / defaults.
+
+    *explicit* takes precedence (``--llm`` / ``--no-llm``).  When unset,
+    the env var ``DECNET_REALISM_LLM`` decides: any non-empty value
+    (``ollama`` / ``fake`` / etc.) enables; empty string or ``off`` /
+    ``none`` / ``0`` / ``false`` disables.
+    """
+    if explicit is not None:
+        return explicit
+    raw = os.environ.get("DECNET_REALISM_LLM", "").strip().lower()
+    if raw in ("", "off", "none", "0", "false", "disabled"):
+        return False
+    return True
+
+
 async def _pick_action(
     repo: BaseRepository,
     deckies: list[dict],
     rng: secrets.SystemRandom,
+    *,
+    llm: Any = None,
+    breaker: Optional[LLMCircuitBreaker] = None,
 ):
     """Roll an action-kind, then pick the matching action.
 
@@ -168,7 +219,10 @@ async def _pick_action(
         if kind == "traffic":
             action = scheduler.pick(deckies, rand=rng)
         elif kind == "file":
-            action = await scheduler.pick_file(deckies, repo, rand=rng)
+            action = await scheduler.pick_file(
+                deckies, repo, rand=rng,
+                llm=llm, llm_breaker=breaker,
+            )
         elif kind == "email":
             try:
                 action = await email_scheduler.pick(repo, rand=rng)
@@ -182,11 +236,17 @@ async def _pick_action(
     return None
 
 
-async def _one_tick(repo: BaseRepository, bus) -> None:
+async def _one_tick(
+    repo: BaseRepository,
+    bus,
+    *,
+    llm: Any = None,
+    breaker: Optional[LLMCircuitBreaker] = None,
+) -> None:
     deckies = await repo.list_running_deckies()
     rng = secrets.SystemRandom()
 
-    action = await _pick_action(repo, deckies, rng)
+    action = await _pick_action(repo, deckies, rng, llm=llm, breaker=breaker)
     if action is None:
         ssh_eligible = sum(
             1 for d in deckies

@@ -22,11 +22,15 @@ respectively, not from realism.bodies.
 """
 from __future__ import annotations
 
+import asyncio
 import secrets
 from datetime import datetime, timezone
 from typing import Callable, Optional
 
+from decnet.logging import get_logger
 from decnet.realism.taxonomy import ContentClass
+
+log = get_logger("realism.bodies")
 
 
 # ── User-class body generators ─────────────────────────────────────────────
@@ -220,9 +224,10 @@ def make_body(
 ) -> str:
     """Return deterministic body bytes (utf-8 string) for *content_class*.
 
-    Stage 3 ships templates only; stage 6 adds an optional
-    ``LLMBackend`` parameter that, when supplied and the breaker is
-    closed, replaces the template return for user-classes.
+    Stage 3 ships templates only.  :func:`make_body_with_llm` is the
+    LLM-aware variant added in stage 6 — kept on a separate name so
+    the deterministic path stays trivially callable from tests and
+    from the LLM fallback itself.
     """
     rng = rand or secrets.SystemRandom()
     gen = _BODIES.get(content_class)
@@ -231,6 +236,72 @@ def make_body(
             f"no body generator registered for content_class={content_class!r}"
         )
     return gen(persona, rng)
+
+
+async def make_body_with_llm(
+    content_class: ContentClass,
+    persona,  # EmailPersona — typed loosely to avoid an import cycle
+    *,
+    llm=None,  # LLMBackend | None
+    breaker=None,  # LLMCircuitBreaker | None
+    timeout: float = 60.0,
+    rand: Optional[secrets.SystemRandom] = None,
+) -> str:
+    """LLM-enriched body for user-classes; deterministic fallback otherwise.
+
+    Falls back to :func:`make_body` whenever:
+
+    * ``llm`` is None,
+    * ``breaker.allow_call()`` returns False (sustained failure),
+    * the LLM call times out or returns empty,
+    * the content class isn't a user-class (system-class content
+      should look formulaic, so we never invoke LLM there).
+
+    Em-dash stripping runs on the LLM output as a belt-and-braces
+    guard (see :mod:`decnet.realism.prompts._style`).  The function
+    is async because LLM calls are; the deterministic path returns
+    immediately so the orchestrator's tick doesn't pay async overhead
+    when LLM is disabled.
+    """
+    rng = rand or secrets.SystemRandom()
+
+    # System / canary / email classes never touch the LLM.
+    if not content_class.is_user_class():
+        return make_body(content_class, persona.name, rand=rng)
+
+    if llm is None or (breaker is not None and not breaker.allow_call()):
+        return make_body(content_class, persona.name, rand=rng)
+
+    # Lazy imports keep the prompt + style modules out of the
+    # deterministic path's import graph.
+    from decnet.realism.llm.base import LLMTimeout
+    from decnet.realism.prompts import filebody as _filebody
+    from decnet.realism.prompts._style import strip_em_dashes
+
+    prompt = _filebody.build(content_class, persona)
+    try:
+        result = await asyncio.wait_for(llm.generate(prompt), timeout=timeout)
+    except (LLMTimeout, asyncio.TimeoutError):
+        log.debug("realism.bodies LLM timeout class=%s persona=%s",
+                  content_class.value, persona.name)
+        if breaker is not None:
+            breaker.record_failure()
+        return make_body(content_class, persona.name, rand=rng)
+    except Exception as exc:  # noqa: BLE001
+        log.warning("realism.bodies LLM error class=%s persona=%s: %s",
+                    content_class.value, persona.name, exc)
+        if breaker is not None:
+            breaker.record_failure()
+        return make_body(content_class, persona.name, rand=rng)
+
+    if not result.success or not result.text.strip():
+        if breaker is not None:
+            breaker.record_failure()
+        return make_body(content_class, persona.name, rand=rng)
+
+    if breaker is not None:
+        breaker.record_success()
+    return strip_em_dashes(result.text.rstrip() + "\n", persona)
 
 
 # ── Edit-in-place mutators ─────────────────────────────────────────────────
