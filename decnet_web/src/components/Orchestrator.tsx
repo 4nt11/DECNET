@@ -1,12 +1,12 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import {
-  ChevronLeft, ChevronRight, Filter, Cpu, AlertTriangle,
+  ChevronLeft, ChevronRight, Filter, Cpu, AlertTriangle, Pause, Play,
 } from '../icons';
 import api from '../utils/api';
 import EmptyState from './EmptyState/EmptyState';
 import { useOrchestratorStream, type OrchestratorStreamEvent } from './useOrchestratorStream';
-import './Dashboard.css';
+import './Orchestrator.css';
 
 interface OrchestratorEntry {
   uuid: string;
@@ -25,6 +25,7 @@ type StreamStatus = 'connecting' | 'live' | 'error';
 
 const ROW_CAP = 500;
 const HOUR_MS = 60 * 60 * 1000;
+const FRESH_MS = 5_000;
 
 const timeAgo = (dateStr: string | null): string => {
   if (!dateStr) return '—';
@@ -49,17 +50,26 @@ const Orchestrator: React.FC = () => {
   const [loading, setLoading] = useState(true);
   const [status, setStatus] = useState<StreamStatus>('connecting');
   const [paused, setPaused] = useState(false);
+  const [now, setNow] = useState(Date.now());
 
   const limit = 50;
   const pausedRef = useRef(paused);
   useEffect(() => { pausedRef.current = paused; }, [paused]);
+
+  // Tick to refresh the "Xs ago" labels and fade the fresh-row tint.
+  useEffect(() => {
+    const t = setInterval(() => setNow(Date.now()), 5_000);
+    return () => clearInterval(t);
+  }, []);
 
   const fetchEvents = async () => {
     setLoading(true);
     try {
       const offset = (page - 1) * limit;
       const kindQ = kindParam !== 'all' ? `&kind=${kindParam}` : '';
-      const res = await api.get(`/orchestrator/events?limit=${limit}&offset=${offset}${kindQ}`);
+      const res = await api.get(
+        `/orchestrator/events?limit=${limit}&offset=${offset}${kindQ}`,
+      );
       setRows(res.data.data ?? []);
       setTotal(res.data.total ?? 0);
     } catch (err) {
@@ -76,7 +86,6 @@ const Orchestrator: React.FC = () => {
     onStatus: setStatus,
     onEvent: (ev: OrchestratorStreamEvent) => {
       if (pausedRef.current) return;
-      if (ev.name === 'snapshot') return;
       if (ev.name !== 'traffic' && ev.name !== 'file') return;
       const p = ev.payload as Partial<OrchestratorEntry>;
       const row: OrchestratorEntry = {
@@ -108,29 +117,32 @@ const Orchestrator: React.FC = () => {
   }, [streamRows, rows, kindParam]);
 
   const failuresLastHour = useMemo(() => {
-    const cutoff = Date.now() - HOUR_MS;
+    const cutoff = now - HOUR_MS;
     return [...streamRows, ...rows].filter(
       (r) => !r.success && new Date(r.ts).getTime() >= cutoff,
     ).length;
-  }, [streamRows, rows]);
+  }, [streamRows, rows, now]);
 
-  const statusPill = (
-    <span className={`chip ${status === 'live' ? 'success-chip' : 'dim-chip'}`}>
-      {status === 'live' ? '● LIVE' : status === 'connecting' ? '● CONNECTING' : '● OFFLINE'}
-    </span>
-  );
+  const statusLabel =
+    status === 'live' ? 'LIVE'
+      : status === 'connecting' ? 'CONNECTING'
+        : 'OFFLINE';
 
   return (
-    <div className="bounty-root">
+    <div className="orchestrator-root">
       <div className="page-header">
         <div className="page-title-group">
-          <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+          <div className="header-line">
             <Cpu size={22} className="violet-accent" />
             <h1>ORCHESTRATOR</h1>
-            {statusPill}
+            <span className={`status-pill ${status}`}>
+              <span className="dot" />
+              {statusLabel}
+            </span>
             {failuresLastHour > 0 && (
-              <span className="chip" style={{ background: 'rgba(220,60,60,0.18)', color: '#ff6e6e' }}>
-                <AlertTriangle size={12} /> {failuresLastHour} FAILURES / 1h
+              <span className="failure-pill">
+                <AlertTriangle size={12} />
+                {failuresLastHour} FAILURES / 1H
               </span>
             )}
           </div>
@@ -140,24 +152,27 @@ const Orchestrator: React.FC = () => {
         </div>
       </div>
 
-      <div className="controls-row" style={{ gap: 8 }}>
+      <div className="controls-row">
+        <div className="seg-group" role="tablist" aria-label="Filter by event kind">
+          {(['all', 'traffic', 'file'] as KindFilter[]).map((k) => (
+            <button
+              key={k}
+              className={kindParam === k ? 'active' : ''}
+              onClick={() => setKind(k)}
+              role="tab"
+              aria-selected={kindParam === k}
+            >
+              {k}
+            </button>
+          ))}
+        </div>
         <button
-          className={`chip ${kindParam === 'all' ? 'success-chip' : 'dim-chip'}`}
-          onClick={() => setKind('all')}
-        >ALL</button>
-        <button
-          className={`chip ${kindParam === 'traffic' ? 'success-chip' : 'dim-chip'}`}
-          onClick={() => setKind('traffic')}
-        >TRAFFIC</button>
-        <button
-          className={`chip ${kindParam === 'file' ? 'success-chip' : 'dim-chip'}`}
-          onClick={() => setKind('file')}
-        >FILE</button>
-        <span style={{ flex: 1 }} />
-        <button
-          className={`chip ${paused ? 'dim-chip' : 'success-chip'}`}
+          className={`btn ${paused ? 'paused' : ''}`}
           onClick={() => setPaused((v) => !v)}
-        >{paused ? '▶ RESUME' : '⏸ PAUSE'}</button>
+        >
+          {paused ? <Play size={12} /> : <Pause size={12} />}
+          {paused ? 'RESUME STREAM' : 'PAUSE STREAM'}
+        </button>
       </div>
 
       <div className="logs-section">
@@ -166,16 +181,14 @@ const Orchestrator: React.FC = () => {
             <Filter size={14} />
             <span>{visible.length.toLocaleString()} EVENTS SHOWN</span>
           </div>
-          <div className="section-actions">
-            <div className="pager">
-              <span className="dim">Page {page} of {totalPages}</span>
-              <button disabled={page <= 1} onClick={() => setPage(page - 1)} aria-label="Previous page">
-                <ChevronLeft size={14} />
-              </button>
-              <button disabled={page >= totalPages} onClick={() => setPage(page + 1)} aria-label="Next page">
-                <ChevronRight size={14} />
-              </button>
-            </div>
+          <div className="pager">
+            <span className="dim">Page {page} of {totalPages}</span>
+            <button disabled={page <= 1} onClick={() => setPage(page - 1)} aria-label="Previous page">
+              <ChevronLeft size={14} />
+            </button>
+            <button disabled={page >= totalPages} onClick={() => setPage(page + 1)} aria-label="Next page">
+              <ChevronRight size={14} />
+            </button>
           </div>
         </div>
 
@@ -192,32 +205,32 @@ const Orchestrator: React.FC = () => {
               </tr>
             </thead>
             <tbody>
-              {visible.length > 0 ? visible.map((r) => (
-                <tr
-                  key={r.uuid}
-                  style={!r.success ? { background: 'rgba(220,60,60,0.06)' } : undefined}
-                >
-                  <td className="dim">{timeAgo(r.ts)}</td>
-                  <td>
-                    <span className={`chip ${r.kind === 'traffic' ? 'success-chip' : 'dim-chip'}`}>
-                      {r.kind.toUpperCase()}
-                    </span>
-                  </td>
-                  <td className="matrix-text" style={{ fontFamily: 'var(--font-mono)' }}>
-                    {r.action}
-                  </td>
-                  <td className="dim" style={{ fontFamily: 'var(--font-mono)' }}>
-                    {r.src_decky_uuid ? `${r.src_decky_uuid.slice(0, 8)}…` : '—'}
-                    {' → '}
-                    {r.dst_decky_uuid ? `${r.dst_decky_uuid.slice(0, 8)}…` : '—'}
-                  </td>
-                  <td>{r.success ? '✓' : '✗'}</td>
-                  <td className="dim" style={{ fontFamily: 'var(--font-mono)', maxWidth: 360, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                    {r.payload}
-                  </td>
-                </tr>
-              )) : (
-                <tr>
+              {visible.length > 0 ? visible.map((r) => {
+                const fresh = now - new Date(r.ts).getTime() < FRESH_MS;
+                const cls = !r.success ? 'fail' : fresh ? 'fresh' : '';
+                const kindCls = r.kind === 'traffic' || r.kind === 'file' ? r.kind : '';
+                return (
+                  <tr key={r.uuid} className={cls}>
+                    <td className="dim">{timeAgo(r.ts)}</td>
+                    <td>
+                      <span className={`kind-chip ${kindCls}`}>{r.kind}</span>
+                    </td>
+                    <td className="mono matrix-text">{r.action}</td>
+                    <td className="src-dst">
+                      {r.src_decky_uuid ? `${r.src_decky_uuid.slice(0, 8)}…` : '—'}
+                      <span className="arrow">→</span>
+                      {r.dst_decky_uuid ? `${r.dst_decky_uuid.slice(0, 8)}…` : '—'}
+                    </td>
+                    <td>
+                      <span className={r.success ? 'ok-yes' : 'ok-no'}>
+                        {r.success ? '✓' : '✗'}
+                      </span>
+                    </td>
+                    <td className="payload-cell">{r.payload}</td>
+                  </tr>
+                );
+              }) : (
+                <tr className="empty-row">
                   <td colSpan={6}>
                     <EmptyState
                       icon={Cpu}
