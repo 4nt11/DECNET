@@ -25,6 +25,10 @@ const Campaigns     = lazy(() => import('./components/Campaigns'));
 const CampaignDetail = lazy(() => import('./components/CampaignDetail'));
 const Orchestrator   = lazy(() => import('./components/Orchestrator'));
 const PersonaGeneration = lazy(() => import('./components/PersonaGeneration'));
+const CanaryTokens   = lazy(() => import('./components/CanaryTokens'));
+const TopologyPersonaGeneration = lazy(() =>
+  import('./components/PersonaGeneration').then((m) => ({ default: m.TopologyPersonaGeneration })),
+);
 const Config         = lazy(() => import('./components/Config'));
 const Bounty         = lazy(() => import('./components/Bounty'));
 const Credentials    = lazy(() => import('./components/Credentials'));
@@ -125,6 +129,8 @@ const AuthedShell: React.FC<AuthedShellProps> = ({ onLogout, onSearch, searchQue
             <Route path="/campaigns/:id" element={<CampaignDetail />} />
             <Route path="/orchestrator" element={<Orchestrator />} />
             <Route path="/persona-generation" element={<PersonaGeneration />} />
+            <Route path="/canary-tokens" element={<CanaryTokens />} />
+            <Route path="/topologies/:id/personas" element={<TopologyPersonaGeneration />} />
             <Route path="/config" element={<Config />} />
             <Route path="/swarm-updates" element={<RemoteUpdates />} />
             <Route path="/swarm/hosts" element={<SwarmHosts />} />
