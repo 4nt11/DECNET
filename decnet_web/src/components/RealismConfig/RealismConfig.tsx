@@ -2,6 +2,7 @@ import React, { useEffect, useState } from 'react';
 import api from '../../utils/api';
 import { useToast } from '../Toasts/useToast';
 import { Sliders, Save, RotateCcw } from '../../icons';
+import { contentClassLabel, isCanaryClass } from '../../realism/labels';
 
 // ─── Types ───────────────────────────────────────────────────────────────────
 
@@ -70,8 +71,15 @@ const WeightTable: React.FC<{
         <tbody>
           {weights.map((w, i) => (
             <tr key={w.content_class} style={{ borderBottom: '1px solid rgba(255,255,255,0.04)' }}>
-              <td className="mono" style={{ padding: '6px 12px', width: '40%' }}>
-                {w.content_class}
+              <td style={{ padding: '6px 12px', width: '45%' }}>
+                <span style={{ color: isCanaryClass(w.content_class) ? '#ffaa66' : 'inherit' }}>
+                  {contentClassLabel(w.content_class)}
+                </span>
+                <span className="mono" style={{
+                  marginLeft: 8, fontSize: '0.7rem', color: 'var(--dim-color)',
+                }}>
+                  {w.content_class}
+                </span>
               </td>
               <td style={{ padding: '6px 12px', width: '30%' }}>
                 <input

@@ -3,6 +3,7 @@ import api from '../../utils/api';
 import { useEscapeKey } from '../../hooks/useEscapeKey';
 import { useFocusTrap } from '../../hooks/useFocusTrap';
 import { X, FileText } from '../../icons';
+import { contentClassLabel, isCanaryClass } from '../../realism/labels';
 
 // ─── Types ───────────────────────────────────────────────────────────────────
 
@@ -142,7 +143,15 @@ const SyntheticFileDrawer: React.FC<DrawerProps> = ({ uuid, deckies, onClose }) 
           <>
             <div style={{ display: 'grid', gridTemplateColumns: '140px 1fr', rowGap: '6px', fontSize: '0.85rem', marginBottom: '16px' }}>
               <div style={{ color: 'var(--dim-color)' }}>PERSONA</div><div>{row.persona}</div>
-              <div style={{ color: 'var(--dim-color)' }}>CONTENT CLASS</div><div className="mono">{row.content_class}</div>
+              <div style={{ color: 'var(--dim-color)' }}>CONTENT CLASS</div>
+              <div>
+                <span style={{ color: isCanaryClass(row.content_class) ? '#ffaa66' : 'inherit' }}>
+                  {contentClassLabel(row.content_class)}
+                </span>
+                <span className="mono" style={{ marginLeft: 8, fontSize: '0.75rem', color: 'var(--dim-color)' }}>
+                  {row.content_class}
+                </span>
+              </div>
               <div style={{ color: 'var(--dim-color)' }}>EDIT COUNT</div><div>{row.edit_count}</div>
               <div style={{ color: 'var(--dim-color)' }}>CREATED</div><div>{fmt(row.created_at)}</div>
               <div style={{ color: 'var(--dim-color)' }}>LAST MODIFIED</div><div>{fmt(row.last_modified)}</div>
@@ -282,7 +291,7 @@ const SyntheticFiles: React.FC = () => {
           >
             <option value="">All</option>
             {CONTENT_CLASSES.map((c) => (
-              <option key={c} value={c}>{c}</option>
+              <option key={c} value={c}>{contentClassLabel(c)}</option>
             ))}
           </select>
         </label>
@@ -322,7 +331,12 @@ const SyntheticFiles: React.FC = () => {
                 <td style={{ padding: '8px 12px' }}>{deckyLabel(r.decky_uuid, deckies)}</td>
                 <td className="mono" style={{ padding: '8px 12px', wordBreak: 'break-all' }}>{r.path}</td>
                 <td style={{ padding: '8px 12px' }}>{r.persona}</td>
-                <td className="mono" style={{ padding: '8px 12px' }}>{r.content_class}</td>
+                <td style={{
+                  padding: '8px 12px',
+                  color: isCanaryClass(r.content_class) ? '#ffaa66' : 'inherit',
+                }}>
+                  {contentClassLabel(r.content_class)}
+                </td>
                 <td style={{ padding: '8px 12px' }}>{fmt(r.last_modified)}</td>
                 <td style={{ padding: '8px 12px' }}>{r.edit_count}</td>
                 <td className="mono" style={{ padding: '8px 12px', opacity: 0.7 }}>{r.content_hash.slice(0, 12)}…</td>
