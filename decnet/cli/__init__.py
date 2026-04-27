@@ -22,6 +22,7 @@ from . import (
     agent,
     api,
     bus,
+    canary,
     db,
     deploy,
     emailgen,
@@ -58,7 +59,7 @@ for _mod in (
     swarm,
     deploy, lifecycle, workers, inventory,
     web, profiler, orchestrator, emailgen, reconciler, sniffer, db,
-    topology, bus, geoip, init, webhook,
+    topology, bus, geoip, init, webhook, canary,
 ):
     _mod.register(app)
 
