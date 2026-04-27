@@ -49,6 +49,10 @@ from .deploy import (
     MutateIntervalRequest,
     PurgeResponse,
 )
+from .fleet import (
+    LOCAL_HOST_SENTINEL,
+    FleetDecky,
+)
 from .health import (
     ComponentHealth,
     HealthResponse,
@@ -182,6 +186,9 @@ __all__ = [
     "DeployResponse",
     "MutateIntervalRequest",
     "PurgeResponse",
+    # fleet
+    "LOCAL_HOST_SENTINEL",
+    "FleetDecky",
     # health
     "ComponentHealth",
     "HealthResponse",

@@ -858,6 +858,56 @@ class BaseRepository(ABC):
         ``enabled=False`` and stamps ``auto_disabled_at``."""
         raise NotImplementedError
 
+    # ----------------------------------------------------------------- fleet
+
+    async def upsert_fleet_decky(self, data: dict[str, Any]) -> None:
+        """Insert-or-update a FleetDecky row keyed by ``(host_uuid, name)``.
+
+        Used by ``engine.deployer.deploy`` and the API deploy path to mirror
+        ``decnet-state.json`` into the DB.  Idempotent: calling with the same
+        key updates the existing row's mutable fields.
+        """
+        raise NotImplementedError
+
+    async def delete_fleet_decky(self, *, host_uuid: str, name: str) -> None:
+        """Remove a FleetDecky row.  No-op if the row doesn't exist."""
+        raise NotImplementedError
+
+    async def list_fleet_deckies(
+        self, *, host_uuid: Optional[str] = None,
+    ) -> list[dict[str, Any]]:
+        """Return all FleetDecky rows, optionally scoped to a single host."""
+        raise NotImplementedError
+
+    async def list_running_fleet_deckies(self) -> list[dict[str, Any]]:
+        """Return every FleetDecky row whose ``state == 'running'``.
+
+        Joined alongside :meth:`list_running_topology_deckies` and the SWARM
+        ``DeckyShard`` view by :meth:`list_running_deckies`.
+        """
+        raise NotImplementedError
+
+    async def update_fleet_decky_state(
+        self, *, host_uuid: str, name: str, state: str,
+        last_error: Optional[str] = None,
+    ) -> None:
+        """Update only the ``state``/``last_error``/``last_seen`` fields.
+
+        Called by the reconciler when ``docker inspect`` reports a fresh
+        container state.  Avoids clobbering operator-edited config fields.
+        """
+        raise NotImplementedError
+
+    async def list_running_deckies(self) -> list[dict[str, Any]]:
+        """Union of running deckies across MazeNET, SWARM, and fleet sources.
+
+        Returns dicts shaped for the orchestrator's scheduler:
+        ``{uuid, name, ip, services: list[str], source}`` where ``source`` is
+        one of ``"topology" | "shard" | "fleet"``.  Rows from each source are
+        normalised so the scheduler doesn't need to branch on origin.
+        """
+        raise NotImplementedError
+
     # ---------------------------------------------------------- orchestrator
 
     async def list_running_topology_deckies(self) -> list[dict[str, Any]]:
