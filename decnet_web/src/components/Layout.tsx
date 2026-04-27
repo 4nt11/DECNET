@@ -4,7 +4,7 @@ import {
   Menu, X, Search, Activity, LayoutDashboard, Terminal, Settings, LogOut,
   Server, Archive, Package, Network, ChevronDown, ChevronRight, HardDrive,
   ShieldAlert, Bell, Webhook, Lock, Crosshair, Fingerprint, Zap, Cpu, Mail,
-  Target, FileText,
+  Target, FileText, Sliders,
 } from '../icons';
 import { prefetchRoute } from '../routePrefetch';
 import './Layout.css';
@@ -37,6 +37,7 @@ const ROUTE_LABELS: Record<string, string> = {
   '/orchestrator': 'ORCHESTRATOR',
   '/persona-generation': 'PERSONA GENERATION',
   '/synthetic-files': 'SYNTHETIC FILES',
+  '/realism-config': 'REALISM CONFIG',
   '/canary-tokens': 'CANARY TOKENS',
   '/config': 'CONFIG',
   '/swarm-updates': 'REMOTE UPDATES',
@@ -144,6 +145,7 @@ const Layout: React.FC<LayoutProps> = ({
             <NavItem to="/orchestrator" icon={<Cpu size={18} />} label="Orchestrator" open={sidebarOpen} indent />
             <NavItem to="/persona-generation" icon={<Mail size={18} />} label="Persona Generation" open={sidebarOpen} indent />
             <NavItem to="/synthetic-files" icon={<FileText size={18} />} label="Synthetic Files" open={sidebarOpen} indent />
+            <NavItem to="/realism-config" icon={<Sliders size={18} />} label="Realism Config" open={sidebarOpen} indent />
             <NavItem to="/canary-tokens" icon={<Target size={18} />} label="Canary Tokens" open={sidebarOpen} indent />
           </NavGroup>
           <NavGroup label="SWARM" icon={<Network size={20} />} open={sidebarOpen}>
