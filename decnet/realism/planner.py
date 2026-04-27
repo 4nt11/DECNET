@@ -26,7 +26,7 @@ from typing import Any, Optional, Sequence
 from decnet.realism import bodies, naming
 from decnet.realism.diurnal import in_work_hours, sample_mtime
 from decnet.realism.personas import EmailPersona
-from decnet.realism.taxonomy import ContentClass, Plan
+from decnet.realism.taxonomy import ContentClass, Plan, PlanAction  # noqa: F401
 
 
 # Stage-3 weighted sampling:
@@ -83,16 +83,23 @@ def pick(
     deckies: Sequence[dict[str, Any]],
     now: datetime,
     *,
+    edit_candidate: Optional[dict[str, Any]] = None,
     rand: Optional[secrets.SystemRandom] = None,
 ) -> Optional[Plan]:
     """Return a single :class:`Plan` for the orchestrator's tick.
 
-    Stage-3 policy: create-only.  Stage 3b extends with the
-    create/edit/leave roll and the synthetic_files lookup for edits.
+    Stage-3b policy: weighted action roll — 60% create, 30% edit, 10%
+    "leave alone" (planner returns ``None`` to skip).  When the roll
+    is "edit" and *edit_candidate* is set (a row from
+    :meth:`BaseRepository.pick_random_synthetic_file_for_edit`), we
+    return an edit Plan; otherwise we fall through to create.
 
-    Returns ``None`` when no eligible (decky, persona) pair exists —
-    the orchestrator treats that as "skip this tick" the same way the
-    pre-realism scheduler did.
+    The orchestrator scheduler is responsible for fetching the edit
+    candidate before calling — keeps this function pure-of-DB and
+    test-friendly.
+
+    Returns ``None`` when no eligible (decky, persona) pair exists or
+    when the action roll lands on "leave alone."
     """
     rng = rand or secrets.SystemRandom()
 
@@ -100,12 +107,18 @@ def pick(
     if not eligible:
         return None
 
+    # Action roll.  Edit only fires when there's a candidate from the
+    # repo — otherwise we either re-roll to create or skip.
+    roll = rng.random()
+    if roll < 0.10:
+        return None  # "leave alone" — quiet tick is realism too
+    if roll < 0.40 and edit_candidate is not None:
+        return _edit_plan(edit_candidate, now, rng)
+
     decky, persona = rng.choice(eligible)
 
     # User vs system content — biased toward user (realism wins are
-    # bigger there).  Once stage 3b ships edit-in-place, the edit
-    # branch will reuse the same content_class as the existing row;
-    # the create branch picks fresh here.
+    # bigger there).
     if rng.random() < 0.7:
         content_class = _weighted_pick(_USER_CLASS_WEIGHTS, rng)
     else:
@@ -128,5 +141,50 @@ def pick(
             f"persona={persona.name}",
             f"class={content_class.value}",
             f"window={persona.active_hours}",
+        ),
+    )
+
+
+def _edit_plan(
+    candidate: dict[str, Any],
+    now: datetime,
+    rng: secrets.SystemRandom,
+) -> Optional[Plan]:
+    """Build an edit-action :class:`Plan` from a synthetic_files row.
+
+    The candidate dict is the shape :meth:`BaseRepository.list_synthetic_files`
+    returns — we only need ``decky_uuid``, ``path``, ``persona``,
+    ``content_class``, ``last_body``, ``uuid``.  Returns ``None`` if
+    the candidate's content_class is somehow not editable (defensive
+    — the repo query already filters those out).
+    """
+    try:
+        cls = ContentClass(candidate["content_class"])
+    except (KeyError, ValueError):
+        return None
+    if cls.is_canary() or cls == ContentClass.CACHE_TMP:
+        return None
+    # mtime: edits bump forward by ~hours-to-days, but never past now.
+    # We model as "the file was edited some time after creation but
+    # before now" — sample_mtime with a tighter cap keeps it recent.
+    edit_mtime = sample_mtime(
+        "00:00-00:00", now, rand=rng,
+        backdate_min_hours=1.0, backdate_max_days=2.0,
+    )
+    return Plan(
+        decky_uuid=candidate["decky_uuid"],
+        decky_name=candidate.get("decky_name", ""),
+        persona=candidate.get("persona", ""),
+        content_class=cls,
+        action="edit",
+        target_path=candidate["path"],
+        mtime=edit_mtime,
+        body_hint=None,  # edit uses previous_body, not a fresh hint
+        previous_body=candidate.get("last_body", ""),
+        notes=(
+            f"persona={candidate.get('persona', '')}",
+            f"class={cls.value}",
+            "action=edit",
+            f"synthetic_file_uuid={candidate.get('uuid', '')}",
         ),
     )

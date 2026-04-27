@@ -58,7 +58,28 @@ class FileAction:
     description: str = "file:create"
 
 
-Action = TrafficAction | FileAction
+@dataclass(frozen=True)
+class EditAction:
+    """Read-modify-write of an existing synthetic file.
+
+    Stage 3b of the realism migration: a previously-planted ``TODO.md``
+    gets a checkbox flipped, a notes file gets a new line appended, a
+    cron log gets a fresh entry tacked on.  ``synthetic_file_uuid`` is
+    the row in ``synthetic_files`` to update; ``previous_body`` is
+    what the planner already saw so the driver doesn't double-fetch.
+    """
+    dst_uuid: str
+    dst_name: str
+    path: str
+    persona: str
+    content_class: str
+    previous_body: str
+    synthetic_file_uuid: str
+    mtime: Optional[datetime] = None
+    description: str = "file:edit"
+
+
+Action = TrafficAction | FileAction | EditAction
 
 
 def _has_ssh(decky: dict[str, Any]) -> bool:
@@ -100,26 +121,64 @@ async def pick_file(
     *,
     now: Optional[datetime] = None,
     rand: Optional[secrets.SystemRandom] = None,
-) -> Optional[FileAction]:
-    """Realism-driven file action.
+) -> Optional[Action]:
+    """Realism-driven file action — create or edit.
 
     Resolves personas per decky (topology pool when the decky has a
     parent topology; global pool otherwise), filters to deckies in any
-    persona's work hours, asks :func:`decnet.realism.planner.pick` to
-    pick the (decky, persona, content_class, path, body, mtime), and
-    maps the resulting :class:`Plan` to a :class:`FileAction` the
+    persona's work hours, optionally fetches an edit candidate from
+    the synthetic_files table, and asks
+    :func:`decnet.realism.planner.pick` to choose between create / edit
+    / leave-alone.  Maps the resulting :class:`Plan` to a
+    :class:`FileAction` (create) or :class:`EditAction` (edit) the
     SSH driver can dispatch.
 
     Returns ``None`` when no decky has a non-empty persona pool with a
-    persona currently in its active-hours window.
+    persona currently in its active-hours window, or when the planner
+    rolled "leave alone."
     """
     rng = rand or secrets.SystemRandom()
     when = now or datetime.now(timezone.utc)
 
     enriched = await _resolve_personas(deckies, repo)
-    plan = _realism_pick(enriched, when, rand=rng)
+    if not enriched:
+        return None
+
+    # Pre-fetch a single edit candidate from a random eligible decky,
+    # so the planner can decide whether to use it.  We pick the decky
+    # client-side (cheap) and ask the repo for one row; if there's
+    # nothing editable, planner falls back to create.
+    edit_candidate = None
+    if rng.random() < 0.5 and enriched:
+        # Half the ticks consider an edit. Lower than the planner's
+        # 30% edit weight on purpose — the repo lookup is the
+        # expensive part, no point doing it on every tick.
+        candidate_decky = rng.choice(enriched)
+        try:
+            row = await repo.pick_random_synthetic_file_for_edit(
+                candidate_decky["uuid"],
+            )
+        except Exception:  # noqa: BLE001
+            row = None
+        if row is not None:
+            row = {**row, "decky_name": candidate_decky["name"]}
+            edit_candidate = row
+
+    plan = _realism_pick(enriched, when, edit_candidate=edit_candidate, rand=rng)
     if plan is None:
         return None
+
+    if plan.action == "edit":
+        return EditAction(
+            dst_uuid=plan.decky_uuid,
+            dst_name=plan.decky_name,
+            path=plan.target_path,
+            persona=plan.persona,
+            content_class=plan.content_class.value,
+            previous_body=plan.previous_body or "",
+            synthetic_file_uuid=(edit_candidate or {}).get("uuid", ""),
+            mtime=plan.mtime,
+        )
     return FileAction(
         dst_uuid=plan.decky_uuid,
         dst_name=plan.decky_name,
@@ -203,6 +262,7 @@ def _topology_personas(topology: Optional[dict[str, Any]]) -> list[EmailPersona]
 # ``Plan`` from the scheduler keep working through the migration.
 __all__ = [
     "Action",
+    "EditAction",
     "FileAction",
     "Plan",
     "TrafficAction",

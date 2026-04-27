@@ -6,7 +6,12 @@ from typing import Any
 
 from decnet.bus import topics as _topics
 from decnet.orchestrator.drivers.base import ActivityResult
-from decnet.orchestrator.scheduler import Action, FileAction, TrafficAction
+from decnet.orchestrator.scheduler import (
+    Action,
+    EditAction,
+    FileAction,
+    TrafficAction,
+)
 
 
 def to_row(action: Action, result: ActivityResult) -> dict[str, Any]:
@@ -31,6 +36,16 @@ def to_row(action: Action, result: ActivityResult) -> dict[str, Any]:
             src_decky_uuid=None,
             dst_decky_uuid=action.dst_uuid,
         )
+    elif isinstance(action, EditAction):
+        # EditAction shares the "file" kind (same dashboard view, same
+        # bus topic family) but action="file:edit" lets queries
+        # discriminate when needed.
+        base.update(
+            kind="file",
+            action=action.description,
+            src_decky_uuid=None,
+            dst_decky_uuid=action.dst_uuid,
+        )
     else:
         raise TypeError(f"unsupported action type: {type(action)!r}")
     return base
@@ -40,7 +55,7 @@ def topic_for(action: Action) -> str:
     """Map an action to its bus topic."""
     if isinstance(action, TrafficAction):
         return _topics.orchestrator(_topics.ORCHESTRATOR_TRAFFIC, action.dst_uuid)
-    if isinstance(action, FileAction):
+    if isinstance(action, (FileAction, EditAction)):
         return _topics.orchestrator(_topics.ORCHESTRATOR_FILE, action.dst_uuid)
     raise TypeError(f"unsupported action type: {type(action)!r}")
 
@@ -48,6 +63,6 @@ def topic_for(action: Action) -> str:
 def event_type_for(action: Action) -> str:
     if isinstance(action, TrafficAction):
         return _topics.ORCHESTRATOR_TRAFFIC
-    if isinstance(action, FileAction):
+    if isinstance(action, (FileAction, EditAction)):
         return _topics.ORCHESTRATOR_FILE
     raise TypeError(f"unsupported action type: {type(action)!r}")

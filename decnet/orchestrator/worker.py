@@ -212,14 +212,24 @@ async def _one_tick(repo: BaseRepository, bus) -> None:
         await _persist_email(repo, action, result, bus)
     else:
         await _persist_event(repo, action, result, bus)
-        if isinstance(action, scheduler.FileAction) and result.success:
-            try:
-                await _record_synthetic_file(repo, action)
-            except Exception as exc:  # noqa: BLE001
-                logger.warning(
-                    "orchestrator: synthetic_files write failed dst=%s path=%s: %s",
-                    action.dst_uuid, action.path, exc,
-                )
+        if result.success:
+            if isinstance(action, scheduler.FileAction):
+                try:
+                    await _record_synthetic_file(repo, action)
+                except Exception as exc:  # noqa: BLE001
+                    logger.warning(
+                        "orchestrator: synthetic_files write failed dst=%s path=%s: %s",
+                        action.dst_uuid, action.path, exc,
+                    )
+            elif isinstance(action, scheduler.EditAction):
+                try:
+                    await _bump_synthetic_file_after_edit(repo, action, result)
+                except Exception as exc:  # noqa: BLE001
+                    logger.warning(
+                        "orchestrator: synthetic_files edit-bump failed "
+                        "dst=%s path=%s: %s",
+                        action.dst_uuid, action.path, exc,
+                    )
 
 
 async def _persist_event(repo, action, result, bus) -> None:
@@ -282,6 +292,41 @@ async def _persist_email(repo, action: EmailAction, result, bus) -> None:
         "orchestrator tick kind=email mail_decky=%s thread=%s success=%s reply=%s",
         row["mail_decky_uuid"], row["thread_id"], row["success"], action.is_reply,
     )
+
+
+async def _bump_synthetic_file_after_edit(repo, action, result) -> None:
+    """Patch ``synthetic_files`` after a successful EditAction.
+
+    Bumps ``edit_count`` + ``last_modified`` + ``content_hash`` so the
+    dashboard's lineage view shows the change.  When the row's UUID
+    isn't on the action (planner produced an edit plan from a stale
+    candidate that the repo pruned in between), the update is a no-op
+    — resurrecting a pruned row isn't this layer's job.
+
+    The new body comes from ``result.payload["new_body"]`` (the SSH
+    driver stashes it on success); we re-hash here so the orchestrator,
+    not the driver, owns the canonical hash field.
+    """
+    if not action.synthetic_file_uuid:
+        return
+    new_body = result.payload.get("new_body", "")
+    rows = await repo.list_synthetic_files(decky_uuid=action.dst_uuid, limit=200)
+    existing = next(
+        (r for r in rows if r.get("uuid") == action.synthetic_file_uuid),
+        None,
+    )
+    if existing is None:
+        return  # candidate was pruned mid-flight; skip silently
+    patch: dict = {
+        "last_modified": datetime.now(timezone.utc),
+        "edit_count": int(existing.get("edit_count", 0)) + 1,
+    }
+    if new_body:
+        patch["content_hash"] = hashlib.sha256(
+            new_body.encode("utf-8"),
+        ).hexdigest()
+        patch["last_body"] = new_body[:65536]
+    await repo.update_synthetic_file(action.synthetic_file_uuid, patch)
 
 
 async def _record_synthetic_file(repo, action) -> None:

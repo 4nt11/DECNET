@@ -26,7 +26,12 @@ from datetime import datetime, timezone
 
 from decnet.logging import get_logger
 from decnet.orchestrator.drivers.base import ActivityDriver, ActivityResult
-from decnet.orchestrator.scheduler import Action, FileAction, TrafficAction
+from decnet.orchestrator.scheduler import (
+    Action,
+    EditAction,
+    FileAction,
+    TrafficAction,
+)
 
 log = get_logger("orchestrator.ssh")
 
@@ -109,6 +114,8 @@ class SSHDriver(ActivityDriver):
             return await self._run_traffic(action)
         if isinstance(action, FileAction):
             return await self._run_file(action)
+        if isinstance(action, EditAction):
+            return await self._run_edit(action)
         raise TypeError(f"unsupported action type: {type(action)!r}")
 
     async def _run_traffic(self, action: TrafficAction) -> ActivityResult:
@@ -134,6 +141,61 @@ class SSHDriver(ActivityDriver):
                 action.src_name, action.dst_name, rc, stderr[:120],
             )
         return ActivityResult(success=success, payload=payload)
+
+    async def _run_edit(self, action: EditAction) -> ActivityResult:
+        """Mutate an existing synthetic file in place.
+
+        The realism planner already loaded the previous body from the
+        ``synthetic_files`` row, so we don't re-fetch via ``read_file``;
+        the body the planner saw is the body we mutate.  This avoids a
+        TOCTOU window where the file changed between pick and apply
+        (the realism worker is the only writer in the MVP, but the
+        contract should still be tight).
+        """
+        from decnet.realism.bodies import next_iteration as _next_iteration
+        from decnet.realism.taxonomy import ContentClass
+
+        try:
+            cls = ContentClass(action.content_class)
+        except ValueError:
+            return ActivityResult(
+                success=False,
+                payload={
+                    "dst_decky": action.dst_name,
+                    "path": action.path,
+                    "error": f"unknown content_class: {action.content_class!r}",
+                },
+            )
+        try:
+            new_body = _next_iteration(
+                cls, action.persona, action.previous_body,
+            )
+        except KeyError:
+            return ActivityResult(
+                success=False,
+                payload={
+                    "dst_decky": action.dst_name,
+                    "path": action.path,
+                    "error": (
+                        f"content_class={cls!s} does not support edits"
+                    ),
+                },
+            )
+        result = await self.plant_file(
+            action.dst_name,
+            action.path,
+            new_body.encode("utf-8"),
+            mode=0o644,
+            mtime=action.mtime,
+        )
+        # Carry edit-specific metadata through to the orchestrator
+        # event payload so the worker's synthetic_files bump (and the
+        # dashboard's lineage view) sees what actually landed.
+        if result.success:
+            result.payload["new_body"] = new_body
+            result.payload["new_body_bytes"] = len(new_body.encode("utf-8"))
+            result.payload["synthetic_file_uuid"] = action.synthetic_file_uuid
+        return result
 
     async def _run_file(self, action: FileAction) -> ActivityResult:
         # FileAction's content is a string; the realism path uses

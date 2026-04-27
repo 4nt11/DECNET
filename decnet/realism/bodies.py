@@ -231,3 +231,120 @@ def make_body(
             f"no body generator registered for content_class={content_class!r}"
         )
     return gen(persona, rng)
+
+
+# ── Edit-in-place mutators ─────────────────────────────────────────────────
+# Stage 3b: deterministic per-class mutations.  The contract: take the
+# previous body bytes, return a plausible *next* iteration (append a
+# line, flip a checkbox, fix a typo).  Append-only for logs; small
+# in-place edits for user content.  LLM enrichment in stage 6 wires
+# next_iteration to ask "what would <persona> write next" with the
+# previous body in the prompt; the deterministic path stays as the
+# fallback.
+
+
+def _edit_todo(
+    prev: str, persona: str, rng: secrets.SystemRandom,
+) -> str:
+    """Flip an unchecked box, append a new item, or both.
+
+    Real TODO files evolve: items get checked off as work happens, new
+    items get added, occasionally a sub-bullet appears under an
+    existing one.  We pick one of those mutations per call.
+    """
+    lines = prev.splitlines()
+    unchecked_indices = [
+        i for i, ln in enumerate(lines) if ln.startswith("- [ ]")
+    ]
+    op = rng.choice(("flip", "append", "both") if unchecked_indices else ("append",))
+    if op in ("flip", "both") and unchecked_indices:
+        idx = rng.choice(unchecked_indices)
+        lines[idx] = lines[idx].replace("- [ ]", "- [x]", 1)
+    if op in ("append", "both"):
+        new_item = rng.choice(_TODO_VERBS)
+        marker = "[x]" if rng.random() < 0.15 else "[ ]"
+        lines.append(f"- {marker} {new_item}")
+    return "\n".join(lines) + ("" if prev.endswith("\n") else "\n")
+
+
+def _edit_note(
+    prev: str, persona: str, rng: secrets.SystemRandom,
+) -> str:
+    """Append one new note line or insert a follow-up under an existing one."""
+    new_line = rng.choice(_NOTE_TEMPLATES)
+    if prev.endswith("\n"):
+        return prev + new_line + "\n"
+    return prev + "\n" + new_line + "\n"
+
+
+def _edit_draft(
+    prev: str, persona: str, rng: secrets.SystemRandom,
+) -> str:
+    """Append a new short paragraph to the existing draft."""
+    addition = (
+        "\nFollow-up: I'll send the deck once finance signs off on the numbers.\n",
+        "\nP.S.: Looping in ops on the rollout sequence — they have context I don't.\n",
+        "\nLet me know if any of this needs another pass.\n",
+    )
+    return prev.rstrip() + "\n" + rng.choice(addition)
+
+
+def _edit_script(
+    prev: str, persona: str, rng: secrets.SystemRandom,
+) -> str:
+    """Append a comment line — scripts evolve via comments and small fixes."""
+    comments = (
+        "# TODO: handle the empty-input case\n",
+        "# 2026-04-27: hardened error path after the prod incident\n",
+        "# noqa: shellcheck disagrees but this is what the runbook says\n",
+    )
+    return prev.rstrip() + "\n" + rng.choice(comments)
+
+
+def _edit_log_cron(
+    prev: str, persona: str, rng: secrets.SystemRandom,
+) -> str:
+    """Append one new cron syslog line — logs only ever grow."""
+    extra = _body_log_cron(persona, rng)
+    return prev.rstrip() + "\n" + extra.splitlines()[-1] + "\n"
+
+
+def _edit_log_daemon(
+    prev: str, persona: str, rng: secrets.SystemRandom,
+) -> str:
+    extra = _body_log_daemon(persona, rng)
+    return prev.rstrip() + "\n" + extra.splitlines()[-1] + "\n"
+
+
+_EDITORS: dict[ContentClass, Callable[[str, str, secrets.SystemRandom], str]] = {
+    ContentClass.NOTE: _edit_note,
+    ContentClass.TODO: _edit_todo,
+    ContentClass.DRAFT: _edit_draft,
+    ContentClass.SCRIPT: _edit_script,
+    ContentClass.LOG_CRON: _edit_log_cron,
+    ContentClass.LOG_DAEMON: _edit_log_daemon,
+}
+
+
+def next_iteration(
+    content_class: ContentClass,
+    persona: str,
+    previous_body: str,
+    *,
+    rand: Optional[secrets.SystemRandom] = None,
+) -> str:
+    """Return the next-iteration body for an edit-in-place mutation.
+
+    Raises :class:`KeyError` for content classes that don't support
+    editing (canary blobs, cache-tmp scratch files, email).  The
+    planner filters those out before producing an :class:`EditAction`,
+    so reaching this branch with an unsupported class is a bug worth
+    surfacing loudly.
+    """
+    rng = rand or secrets.SystemRandom()
+    editor = _EDITORS.get(content_class)
+    if editor is None:
+        raise KeyError(
+            f"content_class={content_class!r} does not support edits"
+        )
+    return editor(previous_body, persona, rng)
