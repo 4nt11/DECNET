@@ -116,7 +116,12 @@ async def orchestrator_worker(
         bus = None
 
     shutdown = asyncio.Event()
-    heartbeat_task = asyncio.create_task(run_health_heartbeat(bus, "orchestrator"))
+    heartbeat_task = asyncio.create_task(
+        run_health_heartbeat(
+            bus, "orchestrator",
+            extra=lambda: {"realism": _realism_health_snapshot(llm, breaker)},
+        )
+    )
     control_task = asyncio.create_task(
         run_control_listener(bus, "orchestrator", shutdown),
     )
@@ -178,6 +183,35 @@ def _roll_action_kind(rng: secrets.SystemRandom) -> str:
         if target <= running:
             return kind
     return _ACTION_WEIGHTS[-1][0]  # unreachable, satisfy mypy
+
+
+def _realism_health_snapshot(
+    llm: Any, breaker: Optional[LLMCircuitBreaker],
+) -> dict[str, Any]:
+    """Snapshot of the orchestrator's realism subsystem for the
+    heartbeat ``extra`` payload.
+
+    Surfaces the LLM backend / model / circuit-breaker state so the
+    dashboard can render a status badge without reaching into worker
+    process memory. Read-only — the heartbeat ticks every 30s; this
+    snapshot is recomputed each tick.
+
+    When LLM is disabled (``llm is None``) the snapshot still
+    returns a dict so consumers can branch on ``llm_enabled`` alone.
+    """
+    if llm is None:
+        return {
+            "llm_enabled": False,
+            "llm_backend": None,
+            "llm_model": None,
+            "llm_breaker_state": None,
+        }
+    return {
+        "llm_enabled": True,
+        "llm_backend": os.environ.get("DECNET_REALISM_LLM", "ollama"),
+        "llm_model": getattr(llm, "model", None),
+        "llm_breaker_state": breaker.state if breaker is not None else None,
+    }
 
 
 def _llm_should_enable(explicit: Optional[bool]) -> bool:

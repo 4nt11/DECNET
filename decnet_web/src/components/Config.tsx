@@ -601,6 +601,54 @@ interface WorkersPanelProps {
   pushToast: ReturnType<typeof useToast>['push'];
 }
 
+
+// Renders the LLM status of a realism-emitting worker (today: orchestrator).
+// Sourced from the heartbeat ``extra.realism`` payload published by
+// :func:`decnet.orchestrator.worker._realism_health_snapshot`.
+const RealismBadge: React.FC<{
+  realism: {
+    llm_enabled?: boolean;
+    llm_backend?: string | null;
+    llm_model?: string | null;
+    llm_breaker_state?: 'closed' | 'open' | 'half_open' | null;
+  };
+}> = ({ realism }) => {
+  if (!realism.llm_enabled) {
+    return (
+      <span
+        className="chip dim-chip"
+        style={{ marginLeft: 8 }}
+        title="LLM enrichment disabled (DECNET_REALISM_LLM unset or --no-llm)"
+      >
+        LLM OFF
+      </span>
+    );
+  }
+  const breaker = realism.llm_breaker_state ?? 'closed';
+  const breakerColor =
+    breaker === 'open' ? '#ff5555'
+    : breaker === 'half_open' ? '#ffaa00'
+    : 'var(--matrix)';
+  const tooltip = [
+    `Backend: ${realism.llm_backend ?? '?'}`,
+    realism.llm_model ? `Model: ${realism.llm_model}` : null,
+    `Circuit breaker: ${breaker}`,
+  ].filter(Boolean).join('\n');
+  return (
+    <span
+      className="chip dim-chip"
+      style={{ marginLeft: 8, display: 'inline-flex', alignItems: 'center', gap: 4 }}
+      title={tooltip}
+    >
+      <span style={{
+        display: 'inline-block', width: 6, height: 6, borderRadius: '50%',
+        backgroundColor: breakerColor,
+      }} />
+      LLM {(realism.llm_backend ?? 'on').toUpperCase()}
+    </span>
+  );
+};
+
 const WorkersPanel: React.FC<WorkersPanelProps> = ({ pushToast }) => {
   const [workers, setWorkers] = useState<WorkerStatusRow[] | null>(null);
   const [busConnected, setBusConnected] = useState<boolean | null>(null);
@@ -833,10 +881,21 @@ const WorkersPanel: React.FC<WorkersPanelProps> = ({ pushToast }) => {
           {workers.map((w) => {
             const isStopping = !!stopping[w.name];
             const canStop = w.status === 'ok' && !isStopping && !busOffline;
+            const realism = (w.extra && (w.extra as any).realism) as
+              | {
+                  llm_enabled?: boolean;
+                  llm_backend?: string | null;
+                  llm_model?: string | null;
+                  llm_breaker_state?: 'closed' | 'open' | 'half_open' | null;
+                }
+              | undefined;
             return (
               <tr key={w.name}>
                 <td><span className={dotClass(w.status)} /></td>
-                <td style={{ fontWeight: 700, letterSpacing: 1 }}>{w.name.toUpperCase()}</td>
+                <td style={{ fontWeight: 700, letterSpacing: 1 }}>
+                  {w.name.toUpperCase()}
+                  {realism && <RealismBadge realism={realism} />}
+                </td>
                 <td style={{
                   color: w.status === 'ok' ? 'var(--matrix)'
                        : w.status === 'stale' ? '#ffaa00'
