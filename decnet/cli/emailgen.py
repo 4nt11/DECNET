@@ -22,6 +22,7 @@ from typing import Optional
 import typer
 
 from . import utils as _utils
+from .gating import _require_master_mode
 from .utils import console, log
 
 
@@ -61,6 +62,10 @@ def register(app: typer.Typer) -> None:
         ),
     ) -> None:
         """Start the long-running email-generation worker."""
+        # Defence-in-depth: the registration-time gate already hides
+        # ``emailgen`` from Typer when DECNET_MODE=agent, but a direct
+        # callable import would bypass that — block here too.
+        _require_master_mode("emailgen run")
         import asyncio
         from decnet.orchestrator.emailgen import emailgen_worker
         from decnet.web.dependencies import repo
@@ -116,6 +121,7 @@ def register(app: typer.Typer) -> None:
         topology mail deckies use ``Topology.email_personas`` instead and
         this command does not touch them.
         """
+        _require_master_mode("emailgen import-personas")
         from decnet.orchestrator.emailgen import global_pool
         from decnet.orchestrator.emailgen.personas import parse_personas
 

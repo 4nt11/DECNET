@@ -31,7 +31,9 @@ MASTER_ONLY_COMMANDS: frozenset[str] = frozenset({
     "services", "distros", "correlate", "archetypes", "web",
     "db-reset", "init", "webhook", "clusterer", "campaign-clusterer",
 })
-MASTER_ONLY_GROUPS: frozenset[str] = frozenset({"swarm", "topology", "geoip"})
+MASTER_ONLY_GROUPS: frozenset[str] = frozenset(
+    {"swarm", "topology", "geoip", "emailgen"}
+)
 
 
 def _agent_mode_active() -> bool:
