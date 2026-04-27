@@ -24,6 +24,7 @@ import secrets
 import string
 from typing import Callable, Optional
 
+from decnet.realism.personas import login_for
 from decnet.realism.taxonomy import ContentClass
 
 
@@ -32,17 +33,8 @@ from decnet.realism.taxonomy import ContentClass
 # paths (out of scope until per-OS personas land).  For now everything
 # is POSIX.
 def _home(persona: str) -> str:
-    """Return the canonical home directory for *persona*.
-
-    The persona's ``name`` is used as the linux username when it's a
-    plausible login (lowercase, no spaces); otherwise we fall back to
-    a generic ``user`` so the path doesn't reveal a persona display
-    name on the decky filesystem.
-    """
-    candidate = persona.lower().replace(" ", "")
-    if candidate.isalnum() and candidate.isascii() and candidate:
-        return f"/home/{candidate}"
-    return "/home/user"
+    """Return the canonical home directory for *persona*."""
+    return f"/home/{login_for(persona)}"
 
 
 def _random_token(rng: secrets.SystemRandom, length: int = 6) -> str:

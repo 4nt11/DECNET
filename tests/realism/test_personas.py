@@ -6,6 +6,7 @@ import json
 from decnet.realism.personas import (
     EmailPersona,
     in_active_hours,
+    login_for,
     parse_personas,
 )
 
@@ -99,3 +100,28 @@ def test_active_hours_malformed_treats_as_always_on():
 def test_active_hours_equal_window_treated_as_always_on():
     p = EmailPersona(**_persona(active_hours="10:00-10:00"))
     assert in_active_hours(p, 5) is True
+
+
+def test_login_for_normalises_display_name():
+    assert login_for("John Smith") == "johnsmith"
+    assert login_for("alice") == "alice"
+
+
+def test_login_for_falls_back_to_user_on_punctuation():
+    # The realism namer and canary cultivator both rely on this so the
+    # decky filesystem doesn't end up with an unexpected username.
+    assert login_for("Mr. Robot") == "user"
+    assert login_for("") == "user"
+    assert login_for("Renée") == "user"  # non-ASCII falls back
+
+
+def test_login_for_shared_by_naming_and_cultivator():
+    """Single source of truth: realism naming and canary cultivator
+    must agree on the persona→login mapping."""
+    from decnet.canary import cultivator
+    from decnet.realism import naming
+    persona = "John Smith"
+    expected = login_for(persona)
+    assert naming._home(persona) == f"/home/{expected}"
+    # cultivator imports login_for; not duplicated.
+    assert cultivator.login_for is login_for

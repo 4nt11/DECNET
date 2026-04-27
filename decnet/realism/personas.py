@@ -117,6 +117,21 @@ def parse_personas(
     return out
 
 
+def login_for(persona: str) -> str:
+    """Return the linux login derived from a persona's display name.
+
+    Lowercase, strip spaces; if the result isn't a plausible POSIX
+    login (alnum ASCII), fall back to ``user`` so the path doesn't
+    leak the persona's display name onto the decky filesystem.
+    Shared by realism path naming (``decnet/realism/naming.py``) and
+    canary cultivation (``decnet/canary/cultivator.py``).
+    """
+    candidate = persona.lower().replace(" ", "")
+    if candidate.isalnum() and candidate.isascii() and candidate:
+        return candidate
+    return "user"
+
+
 def in_active_hours(persona: EmailPersona, now_hour: int) -> bool:
     """Return True if *now_hour* (0–23) falls in the persona's window.
 

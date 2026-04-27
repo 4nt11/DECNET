@@ -29,6 +29,7 @@ from typing import Any, Optional
 from decnet.canary.base import CanaryArtifact, CanaryContext
 from decnet.canary.factory import get_generator
 from decnet.logging import get_logger
+from decnet.realism.personas import login_for
 from decnet.realism.taxonomy import ContentClass, Plan
 
 log = get_logger("canary.cultivator")
@@ -64,14 +65,6 @@ _DEFAULT_PATH: dict[ContentClass, str] = {
 }
 
 
-def _persona_login(persona: str) -> str:
-    """Mirror :func:`decnet.realism.naming._home`'s username conventions."""
-    candidate = persona.lower().replace(" ", "")
-    if candidate.isalnum() and candidate.isascii() and candidate:
-        return candidate
-    return "user"
-
-
 def _path_for(plan: Plan) -> str:
     """Produce the canary placement path for *plan*.
 
@@ -84,7 +77,7 @@ def _path_for(plan: Plan) -> str:
     template = _DEFAULT_PATH.get(plan.content_class)
     if template is None:
         return plan.target_path
-    return template.format(persona=_persona_login(plan.persona))
+    return template.format(persona=login_for(plan.persona))
 
 
 def _new_callback_token() -> str:
