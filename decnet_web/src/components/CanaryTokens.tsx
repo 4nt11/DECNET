@@ -20,7 +20,8 @@ interface BlobRow {
 }
 
 const KNOWN_GENERATORS = [
-  'git_config', 'env_file', 'ssh_key', 'aws_creds', 'honeydoc',
+  'git_config', 'env_file', 'ssh_key', 'aws_creds',
+  'honeydoc', 'honeydoc_docx', 'honeydoc_pdf',
 ] as const;
 type GeneratorName = typeof KNOWN_GENERATORS[number];
 

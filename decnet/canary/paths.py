@@ -25,7 +25,9 @@ _LINUX_DEFAULTS: dict[str, str] = {
     "env_file": "/home/{user}/.env",
     "ssh_key": "/home/{user}/.ssh/id_rsa",
     "aws_creds": "/home/{user}/.aws/credentials",
-    "honeydoc": "/home/{user}/Documents/quarterly_report.docx",
+    "honeydoc": "/home/{user}/Documents/quarterly_report.html",
+    "honeydoc_docx": "/home/{user}/Documents/quarterly_report.docx",
+    "honeydoc_pdf": "/home/{user}/Documents/quarterly_report.pdf",
 }
 
 _WINDOWS_DEFAULTS: dict[str, str] = {
@@ -33,7 +35,9 @@ _WINDOWS_DEFAULTS: dict[str, str] = {
     "env_file": "/home/{user}/Desktop/prod.env",
     "ssh_key": "/home/{user}/.ssh/id_rsa",  # OpenSSH on Windows uses the same path
     "aws_creds": "/home/{user}/.aws/credentials",
-    "honeydoc": "/home/{user}/Documents/quarterly_report.docx",
+    "honeydoc": "/home/{user}/Documents/quarterly_report.html",
+    "honeydoc_docx": "/home/{user}/Documents/quarterly_report.docx",
+    "honeydoc_pdf": "/home/{user}/Documents/quarterly_report.pdf",
 }
 
 

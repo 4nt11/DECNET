@@ -90,6 +90,37 @@ def test_honeydoc_html_is_valid_ish_html() -> None:
     assert "width=\"1\" height=\"1\"" in body
 
 
+def test_honeydoc_docx_produces_valid_zip_with_callback() -> None:
+    import io
+    import zipfile
+    g = get_generator("honeydoc_docx")
+    art = g.generate(_ctx(callback_token="slugDX"))
+    assert art.content[:4] == b"PK\x03\x04"  # zip magic
+    with zipfile.ZipFile(io.BytesIO(art.content), "r") as zf:
+        names = set(zf.namelist())
+        assert {"[Content_Types].xml", "_rels/.rels", "word/document.xml",
+                "word/_rels/document.xml.rels"} <= names
+        rels = zf.read("word/_rels/document.xml.rels").decode()
+        assert "https://canary.example.test/c/slugDX" in rels
+        assert "TargetMode=\"External\"" in rels
+        doc = zf.read("word/document.xml").decode()
+        assert "Q3 Operations Review" in doc
+        assert "<w:drawing>" in doc
+
+
+def test_honeydoc_pdf_produces_valid_pdf_with_openaction() -> None:
+    pikepdf = pytest.importorskip("pikepdf")
+    g = get_generator("honeydoc_pdf")
+    art = g.generate(_ctx(callback_token="slugPDF"))
+    assert art.content[:5] == b"%PDF-"
+    # Re-open and confirm OpenAction URI round-trips.
+    import io
+    with pikepdf.open(io.BytesIO(art.content)) as pdf:
+        action = pdf.Root["/OpenAction"]
+        assert str(action["/S"]) == "/URI"
+        assert str(action["/URI"]) == "https://canary.example.test/c/slugPDF"
+
+
 def test_git_config_remote_url_shape() -> None:
     g = get_generator("git_config")
     art = g.generate(_ctx(callback_token="slug42"))

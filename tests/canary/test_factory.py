@@ -59,7 +59,8 @@ def test_known_lists_are_stable() -> None:
     # If anyone adds/removes from the dispatch tables, the test
     # surfaces it. Keeps the schema-of-record in one place.
     assert KNOWN_GENERATORS == (
-        "git_config", "env_file", "ssh_key", "aws_creds", "honeydoc",
+        "git_config", "env_file", "ssh_key", "aws_creds",
+        "honeydoc", "honeydoc_docx", "honeydoc_pdf",
     )
     assert KNOWN_INSTRUMENTERS == (
         "docx", "xlsx", "pdf", "html", "image", "plain", "passthrough",

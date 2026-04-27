@@ -28,7 +28,9 @@ def test_default_user_dispatch() -> None:
         ("env_file", "windows", "/home/Administrator/Desktop/prod.env"),
         ("git_config", "linux", "/home/admin/.git/config"),
         ("ssh_key", "linux", "/home/admin/.ssh/id_rsa"),
-        ("honeydoc", "linux", "/home/admin/Documents/quarterly_report.docx"),
+        ("honeydoc", "linux", "/home/admin/Documents/quarterly_report.html"),
+        ("honeydoc_docx", "linux", "/home/admin/Documents/quarterly_report.docx"),
+        ("honeydoc_pdf", "linux", "/home/admin/Documents/quarterly_report.pdf"),
     ],
 )
 def test_default_path_for_known_generators(

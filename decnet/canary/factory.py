@@ -18,6 +18,8 @@ KNOWN_GENERATORS: Tuple[str, ...] = (
     "ssh_key",
     "aws_creds",
     "honeydoc",
+    "honeydoc_docx",
+    "honeydoc_pdf",
 )
 
 KNOWN_INSTRUMENTERS: Tuple[str, ...] = (
@@ -52,6 +54,12 @@ def get_generator(name: str) -> CanaryGenerator:
     if name == "honeydoc":
         from decnet.canary.generators.honeydoc import HoneydocGenerator
         return HoneydocGenerator()
+    if name == "honeydoc_docx":
+        from decnet.canary.generators.honeydoc_docx import HoneydocDocxGenerator
+        return HoneydocDocxGenerator()
+    if name == "honeydoc_pdf":
+        from decnet.canary.generators.honeydoc_pdf import HoneydocPdfGenerator
+        return HoneydocPdfGenerator()
     raise ValueError(
         f"Unknown canary generator: {name!r}. Known: {KNOWN_GENERATORS}"
     )
