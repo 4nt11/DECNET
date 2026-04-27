@@ -1,0 +1,54 @@
+[Unit]
+Description=DECNET Emailgen (LLM-driven fake corporate email into IMAP/POP3 deckies)
+Documentation=https://git.resacachile.cl/anti/DECNET/wiki/Workers#emailgen
+After=network-online.target decnet-bus.service
+Wants=network-online.target decnet-bus.service
+
+[Service]
+Type=simple
+User={{ user }}
+Group={{ group }}
+WorkingDirectory={{ install_dir }}
+EnvironmentFile=-{{ install_dir }}/.env.local
+Environment=DECNET_SYSTEM_LOGS=/var/log/decnet/decnet.emailgen.log
+# LLM backend selection + model are operator-tunable via .env.local:
+#   DECNET_EMAILGEN_LLM=ollama|fake     (default: ollama)
+#   DECNET_EMAILGEN_MODEL=llama3.1      (default: llama3.1)
+#   DECNET_EMAILGEN_TIMEOUT=60          (LLM wall-clock cap, seconds)
+#   DECNET_EMAILGEN_PERSONAS=/etc/decnet/email_personas.json
+#                                       (override the global persona pool)
+ExecStart={{ venv_dir }}/bin/decnet emailgen run
+StandardOutput=append:/var/log/decnet/decnet.emailgen.log
+StandardError=append:/var/log/decnet/decnet.emailgen.log
+
+# Emailgen drives `docker exec` against IMAP/POP3 decky containers to drop
+# .eml files into the spool, identical to the SSH-flavoured orchestrator.
+# It does NOT bind to the network, launch new containers, or write outside
+# its own logs and install dir.
+SupplementaryGroups=docker
+
+CapabilityBoundingSet=
+AmbientCapabilities=
+
+# Security Hardening
+NoNewPrivileges=yes
+ProtectSystem=full
+ProtectHome=read-only
+PrivateTmp=yes
+ProtectKernelTunables=yes
+ProtectKernelModules=yes
+ProtectControlGroups=yes
+RestrictSUIDSGID=yes
+LockPersonality=yes
+# /etc/decnet is included so `decnet emailgen import-personas` can write
+# the canonical /etc/decnet/email_personas.json without the worker losing
+# read access (it lives outside ReadWritePaths so writes from the worker
+# itself are still blocked — only the operator-run CLI writes here).
+ReadWritePaths={{ install_dir }} /var/log/decnet
+
+Restart=on-failure
+RestartSec=5
+TimeoutStopSec=15
+
+[Install]
+WantedBy=multi-user.target

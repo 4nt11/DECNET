@@ -18,7 +18,9 @@ Wants=decnet-bus.service \
       decnet-enrich.service \
       decnet-clusterer.service \
       decnet-campaign-clusterer.service \
-      decnet-webhook.service
+      decnet-webhook.service \
+      decnet-orchestrator.service \
+      decnet-emailgen.service
 After=decnet-bus.service
 
 [Install]
