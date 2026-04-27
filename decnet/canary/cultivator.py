@@ -49,6 +49,22 @@ _CLASS_TO_GENERATOR: dict[ContentClass, str] = {
 }
 
 
+# Generator → CanaryKind. The trip surface (HTTP slug callback / DNS
+# resolution / passive bait) determines how the canary worker matches
+# an attacker callback to this token. Aligned with
+# :data:`decnet.web.db.models.canary.CanaryKind`.
+_GENERATOR_TO_KIND: dict[str, str] = {
+    "aws_creds": "aws_passive",   # no embedded callback; passive bait
+    "env_file": "http",
+    "git_config": "http",
+    "honeydoc": "http",
+    "honeydoc_docx": "http",
+    "honeydoc_pdf": "http",
+    "ssh_key": "dns",             # trip is DNS resolution of host comment
+    "mysql_dump": "dns",          # trip is DNS resolution of subdomain
+}
+
+
 # Path conventions per generator.  The realism planner doesn't know
 # about decoy-realistic credential locations (``~/.aws/credentials``,
 # ``~/.git/config``); we map them per-class here so the planted
@@ -139,7 +155,7 @@ async def cultivate(
     # itself (improbable but possible — DOCX viewers can preview
     # autoplay-style).
     await repo.create_canary_token({
-        "kind": "http",  # MVP: all realism-cultivated tokens use HTTP
+        "kind": _GENERATOR_TO_KIND.get(gen_name, "http"),
         "decky_name": plan.decky_name,
         "instrumenter": None,
         "generator": gen_name,

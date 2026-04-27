@@ -112,3 +112,34 @@ async def test_cultivate_artifact_does_not_leak_decnet_string(repo, monkeypatch)
             f"{cls.value!r} body leaked 'decnet': "
             f"{body[:120]!r}"
         )
+
+
+@pytest.mark.asyncio
+async def test_cultivate_records_kind_per_generator(repo, monkeypatch):
+    """The token row's ``kind`` reflects the trip surface of the
+    underlying generator: HTTP slug callback, DNS resolution, or
+    passive bait. The canary worker uses ``kind`` to route incoming
+    callbacks; a wrong kind means the trip won't attribute correctly."""
+    monkeypatch.setenv("DECNET_CANARY_HTTP_BASE", "https://canary.example.test")
+    monkeypatch.setenv("DECNET_CANARY_DNS_ZONE", "canary.example.test")
+    cases = [
+        (ContentClass.CANARY_AWS_CREDS, "aws_passive"),
+        (ContentClass.CANARY_ENV_FILE, "http"),
+        (ContentClass.CANARY_GIT_CONFIG, "http"),
+        (ContentClass.CANARY_HONEYDOC, "http"),
+        (ContentClass.CANARY_HONEYDOC_DOCX, "http"),
+        (ContentClass.CANARY_HONEYDOC_PDF, "http"),
+        (ContentClass.CANARY_SSH_KEY, "dns"),
+        (ContentClass.CANARY_MYSQL_DUMP, "dns"),
+    ]
+    for cls, expected_kind in cases:
+        await cultivate(_plan(cls, persona=f"p-{cls.value}"), repo)
+    rows = await repo.list_canary_tokens(decky_name="alpha")
+    by_gen = {r["generator"]: r["kind"] for r in rows}
+    for cls, expected_kind in cases:
+        from decnet.canary.cultivator import _CLASS_TO_GENERATOR
+        gen = _CLASS_TO_GENERATOR[cls]
+        assert by_gen[gen] == expected_kind, (
+            f"{cls.value!r} → generator {gen!r} got kind={by_gen[gen]!r}, "
+            f"want {expected_kind!r}"
+        )
