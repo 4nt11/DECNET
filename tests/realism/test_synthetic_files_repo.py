@@ -150,3 +150,18 @@ async def test_get_synthetic_file_returns_row(repo):
 @pytest.mark.asyncio
 async def test_get_synthetic_file_returns_none_when_missing(repo):
     assert await repo.get_synthetic_file("does-not-exist") is None
+
+
+def test_path_max_length_fits_mysql_utf8mb4_index_limit():
+    """The unique (decky_uuid, path) index has to fit MySQL's 3072-byte
+    utf8mb4 cap: (decky_uuid_len + path_len) * 4 <= 3072. A regression
+    that widens path past this triggers
+    ``Specified key was too long`` on MySQL DB init."""
+    from decnet.web.db.models.realism import SyntheticFile
+    fields = SyntheticFile.model_fields
+    decky_len = fields["decky_uuid"].metadata[0].max_length  # type: ignore[attr-defined]
+    path_len = fields["path"].metadata[0].max_length  # type: ignore[attr-defined]
+    assert (decky_len + path_len) * 4 <= 3072, (
+        f"(decky_uuid={decky_len} + path={path_len}) * 4 = "
+        f"{(decky_len + path_len) * 4} exceeds MySQL utf8mb4 index cap"
+    )

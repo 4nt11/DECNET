@@ -58,7 +58,11 @@ class SyntheticFile(SQLModel, table=True):
     )
     uuid: str = Field(default_factory=lambda: str(uuid4()), primary_key=True)
     decky_uuid: str = Field(index=True, max_length=64)
-    path: str = Field(max_length=1024)
+    # Capped at 512 so the (decky_uuid, path) unique index fits MySQL's
+    # 3072-byte utf8mb4 limit: (64+512)*4 = 2304 bytes. Real realism +
+    # canary paths are well under (longest is
+    # ``/home/<persona>/Documents/Q3-Operations-Review.docx``, ~70 chars).
+    path: str = Field(max_length=512)
     persona: str = Field(max_length=128)              # EmailPersona.name
     content_class: str = Field(max_length=32, index=True)  # ContentClass enum value
     created_at: datetime = Field(
