@@ -707,6 +707,11 @@ class BaseRepository(ABC):
     async def set_topology_resync(self, topology_id: str, value: bool) -> None:
         raise NotImplementedError
 
+    async def set_topology_email_personas(
+        self, topology_id: str, personas_json: str,
+    ) -> bool:
+        raise NotImplementedError
+
     async def list_topologies_needing_resync(self) -> list[dict[str, Any]]:
         raise NotImplementedError
 
@@ -856,6 +861,95 @@ class BaseRepository(ABC):
     async def trip_webhook_circuit(self, uuid: str, ts: Any) -> None:
         """Auto-disable a subscription after repeated failures. Sets
         ``enabled=False`` and stamps ``auto_disabled_at``."""
+        raise NotImplementedError
+
+    # ------------------------------------------------------------ canary
+    # Canary-token CRUD.  Same NotImplementedError default as webhooks.
+    # Three resources: blobs (operator uploads, deduped), tokens (one
+    # planted artifact in one decky), triggers (append-only callback log).
+
+    async def upsert_canary_blob(self, data: dict[str, Any]) -> dict[str, Any]:
+        """Insert a CanaryBlob, or return the existing row matching
+        ``sha256``.  Returns the row dict either way so the caller can
+        report ``token_count`` and ``uploaded_at`` of the canonical row.
+        """
+        raise NotImplementedError
+
+    async def get_canary_blob(self, uuid: str) -> Optional[dict[str, Any]]:
+        raise NotImplementedError
+
+    async def get_canary_blob_by_sha256(
+        self, sha256: str
+    ) -> Optional[dict[str, Any]]:
+        raise NotImplementedError
+
+    async def list_canary_blobs(self) -> list[dict[str, Any]]:
+        """Each row carries ``token_count`` (live references) so the UI
+        can grey out blobs that are still in use and the delete path
+        can return 409 without a second query.
+        """
+        raise NotImplementedError
+
+    async def delete_canary_blob(self, uuid: str) -> bool:
+        """Refcount-aware: returns False if any token still references
+        the blob; raises nothing for the not-found case (also False).
+        """
+        raise NotImplementedError
+
+    async def create_canary_token(self, data: dict[str, Any]) -> None:
+        raise NotImplementedError
+
+    async def get_canary_token(self, uuid: str) -> Optional[dict[str, Any]]:
+        raise NotImplementedError
+
+    async def get_canary_token_by_slug(
+        self, callback_token: str
+    ) -> Optional[dict[str, Any]]:
+        """Hot path for ``decnet canary`` — slug lookup on every HTTP
+        hit and DNS query.  Indexed unique on the column.
+        """
+        raise NotImplementedError
+
+    async def list_canary_tokens(
+        self,
+        *,
+        decky_name: Optional[str] = None,
+        state: Optional[str] = None,
+        kind: Optional[str] = None,
+    ) -> list[dict[str, Any]]:
+        raise NotImplementedError
+
+    async def update_canary_token_state(
+        self,
+        uuid: str,
+        state: str,
+        last_error: Optional[str] = None,
+    ) -> bool:
+        """Used by the planter when placement succeeds/fails and by the
+        revoke path."""
+        raise NotImplementedError
+
+    async def record_canary_trigger(
+        self, data: dict[str, Any]
+    ) -> str:
+        """Insert a trigger row and bump the parent token's
+        ``trigger_count`` + ``last_triggered_at``.  Returns the new
+        trigger uuid so the caller can reference it in the bus event.
+        """
+        raise NotImplementedError
+
+    async def list_canary_triggers(
+        self, token_uuid: str, *, limit: int = 100, offset: int = 0,
+    ) -> list[dict[str, Any]]:
+        raise NotImplementedError
+
+    async def attribute_canary_trigger(
+        self, trigger_uuid: str, attacker_id: str,
+    ) -> bool:
+        """Set ``attacker_id`` on a trigger row.  Called by the
+        correlator after it links ``src_ip`` to an existing
+        :class:`Attacker` (idempotent).
+        """
         raise NotImplementedError
 
     # ----------------------------------------------------------------- fleet
