@@ -99,7 +99,7 @@
 
 ### Timing & Behavioral
 - [x] **Inter-packet arrival times** — OS TCP stack fingerprint + beaconing interval detection
-- [ ] **TTL values** — Rough OS / hop-distance inference
+- [x] **TTL values** — Rough OS / hop-distance inference
 - [x] **TCP window size & scaling** — p0f-style OS fingerprinting
 - [x] **Retransmission patterns** — Identify lossy paths / throttled connections
 - [x] **Beacon jitter variance** — Attribute tooling: Cobalt Strike vs. Sliver vs. Havoc have distinct profiles
@@ -107,7 +107,7 @@
 - [x] **Data exfil timing** — Behavioral sequencing relative to recon phase
 
 ### Protocol Fingerprinting
-- [ ] **TCP/IP stack** — ISN patterns, DF bit, ToS/DSCP, IP ID sequence (random/incremental/zero)
+- [x] **TCP/IP stack** — ISN patterns, DF bit, ToS/DSCP, IP ID sequence (random/incremental/zero)
 - [x] **HASSH / HASSHServer** — SSH KEX algo, cipher, MAC order → tool fingerprint
 - [x] **HTTP/2 fingerprint** — GREASE values, settings frame order, header pseudo-field ordering
 - [ ] **QUIC fingerprint** — Connection ID length, transport parameters order
