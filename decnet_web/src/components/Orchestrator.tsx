@@ -5,6 +5,7 @@ import {
 } from '../icons';
 import api from '../utils/api';
 import EmptyState from './EmptyState/EmptyState';
+import OrchestratorInspector from './OrchestratorInspector';
 import { useOrchestratorStream, type OrchestratorStreamEvent } from './useOrchestratorStream';
 import './Orchestrator.css';
 
@@ -51,6 +52,7 @@ const Orchestrator: React.FC = () => {
   const [status, setStatus] = useState<StreamStatus>('connecting');
   const [paused, setPaused] = useState(false);
   const [now, setNow] = useState(Date.now());
+  const [selected, setSelected] = useState<OrchestratorEntry | null>(null);
 
   const limit = 50;
   const pausedRef = useRef(paused);
@@ -210,7 +212,11 @@ const Orchestrator: React.FC = () => {
                 const cls = !r.success ? 'fail' : fresh ? 'fresh' : '';
                 const kindCls = r.kind === 'traffic' || r.kind === 'file' ? r.kind : '';
                 return (
-                  <tr key={r.uuid} className={cls}>
+                  <tr
+                    key={r.uuid}
+                    className={`${cls} clickable`}
+                    onClick={() => setSelected(r)}
+                  >
                     <td className="dim">{timeAgo(r.ts)}</td>
                     <td>
                       <span className={`kind-chip ${kindCls}`}>{r.kind}</span>
@@ -244,6 +250,13 @@ const Orchestrator: React.FC = () => {
           </table>
         </div>
       </div>
+
+      {selected && (
+        <OrchestratorInspector
+          event={selected}
+          onClose={() => setSelected(null)}
+        />
+      )}
     </div>
   );
 };
