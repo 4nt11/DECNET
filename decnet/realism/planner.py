@@ -45,6 +45,21 @@ _SYSTEM_CLASS_WEIGHTS: tuple[tuple[ContentClass, int], ...] = (
     (ContentClass.LOG_DAEMON, 8),
     (ContentClass.CACHE_TMP, 5),
 )
+# Canary classes are picked rarely.  Each plant materialises a real
+# CanaryToken row + DNS slug + HTTP URL — flooding the fleet with
+# canaries makes the dashboard noisy and the per-decky alert surface
+# explode.  ~3% of file picks land here.
+_CANARY_CLASS_WEIGHTS: tuple[tuple[ContentClass, int], ...] = (
+    (ContentClass.CANARY_AWS_CREDS, 1),
+    (ContentClass.CANARY_ENV_FILE, 1),
+    (ContentClass.CANARY_GIT_CONFIG, 1),
+    (ContentClass.CANARY_SSH_KEY, 1),
+    (ContentClass.CANARY_HONEYDOC, 1),
+    (ContentClass.CANARY_HONEYDOC_DOCX, 1),
+    (ContentClass.CANARY_HONEYDOC_PDF, 1),
+    (ContentClass.CANARY_MYSQL_DUMP, 1),
+)
+_CANARY_PROBABILITY = 0.03
 
 
 def _weighted_pick(
@@ -116,6 +131,33 @@ def pick(
         return _edit_plan(edit_candidate, now, rng)
 
     decky, persona = rng.choice(eligible)
+
+    # Canary first — they're rare (~3% of file picks), uniformly
+    # weighted across generators.  Falling here means the orchestrator
+    # plants a callback-bearing artifact this tick instead of an
+    # inert one.
+    if rng.random() < _CANARY_PROBABILITY:
+        content_class = _weighted_pick(_CANARY_CLASS_WEIGHTS, rng)
+        # Canary placement is the cultivator's job — plan.target_path
+        # is advisory; a "" lets the cultivator override entirely.
+        target_path = ""
+        body_hint = None
+        mtime = sample_mtime(persona.active_hours, now, rand=rng)
+        return Plan(
+            decky_uuid=decky["uuid"],
+            decky_name=decky["name"],
+            persona=persona.name,
+            content_class=content_class,
+            action="create",
+            target_path=target_path,
+            mtime=mtime,
+            body_hint=body_hint,
+            notes=(
+                f"persona={persona.name}",
+                f"class={content_class.value}",
+                "kind=canary",
+            ),
+        )
 
     # User vs system content — biased toward user (realism wins are
     # bigger there).

@@ -198,15 +198,19 @@ class SSHDriver(ActivityDriver):
         return result
 
     async def _run_file(self, action: FileAction) -> ActivityResult:
-        # FileAction's content is a string; the realism path uses
-        # bytes-typed plant_file so binary blobs (DOCX/PDF, future
-        # canary artifacts) survive the wire.  Encode-once here.
+        # FileAction.content_bytes wins when set — canary artifacts
+        # (DOCX/PDF/honeydoc binaries) need their bytes preserved
+        # exactly. Falls back to utf-8 encoding the str content for
+        # the inert-realism path.
         # mtime carries through from the realism planner so the file
         # doesn't stamp at wall-clock-now (the realism failure today).
+        body = action.content_bytes
+        if body is None:
+            body = action.content.encode("utf-8")
         return await self.plant_file(
             action.dst_name,
             action.path,
-            action.content.encode("utf-8"),
+            body,
             mode=0o644,
             mtime=action.mtime,
         )

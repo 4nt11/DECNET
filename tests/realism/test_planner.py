@@ -80,16 +80,29 @@ def test_pick_distributes_across_user_and_system_classes() -> None:
     assert system_classes, f"no system-class plans in 80 trials: {seen}"
 
 
-def test_pick_never_returns_canary_class_in_stage3() -> None:
+def test_canary_picks_are_rare() -> None:
+    """Stage 7: canary content_classes ARE picked, but bounded.
+
+    The documented rate is ~3% of file picks per
+    decnet/realism/planner.py:_CANARY_PROBABILITY.  We trial a large
+    sample and assert the rate stays under a generous ceiling so a
+    typo bumping the constant to 30% explodes here loudly.
+    """
     deckies = [_decky()]
-    for seed in range(40):
+    canary_count = 0
+    create_count = 0
+    for seed in range(500):
         plan = pick(deckies, _NOW, rand=random.Random(seed))
         if plan is None:
             continue
-        assert not plan.content_class.is_canary(), (
-            "canary class slipped into the realism planner; cultivator "
-            "lands in stage 7"
-        )
+        create_count += 1
+        if plan.content_class.is_canary():
+            canary_count += 1
+    # 3% target with a 6% upper bound — sampling noise on 500 trials
+    # is comfortably below this for the documented rate.
+    rate = canary_count / max(1, create_count)
+    assert rate <= 0.06, f"canary rate {rate:.2%} exceeds 6% ceiling"
+    assert canary_count > 0, "expected at least one canary across 500 seeds"
 
 
 def test_pick_persists_persona_window_in_notes() -> None:

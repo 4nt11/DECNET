@@ -56,6 +56,11 @@ class FileAction:
     content_class: str = ContentClass.NOTE.value
     mtime: Optional[datetime] = None
     description: str = "file:create"
+    # Canary artifacts (DOCX/PDF/honeydoc binaries) carry their bytes
+    # here so re-encoding ``content`` from utf-8 doesn't mangle them.
+    # When set, the SSH driver uses these bytes directly and ignores
+    # ``content``.
+    content_bytes: Optional[bytes] = None
 
 
 @dataclass(frozen=True)
@@ -180,6 +185,38 @@ async def pick_file(
             content_class=plan.content_class.value,
             previous_body=plan.previous_body or "",
             synthetic_file_uuid=(edit_candidate or {}).get("uuid", ""),
+            mtime=plan.mtime,
+        )
+
+    # Canary branch — the cultivator builds the bytes, picks the
+    # placement path, and persists the canary_tokens row.  We map
+    # the resulting CanaryArtifact to a FileAction so the SSH
+    # driver's plant_file path is reused unchanged.
+    if plan.content_class.is_canary():
+        try:
+            from decnet.canary import cultivator as _cultivator
+            artifact = await _cultivator.cultivate(plan, repo)
+        except Exception:  # noqa: BLE001
+            # Cultivation failed (no http_base/dns_zone configured,
+            # generator raised, repo write failed).  Fall through to
+            # an inert file plant so the tick isn't wasted.
+            return FileAction(
+                dst_uuid=plan.decky_uuid,
+                dst_name=plan.decky_name,
+                path=plan.target_path or f"/tmp/.cache-{secrets.token_hex(3)}",  # nosec B108
+                content=plan.body_hint or "",
+                persona=plan.persona,
+                content_class=plan.content_class.value,
+                mtime=plan.mtime,
+            )
+        return FileAction(
+            dst_uuid=plan.decky_uuid,
+            dst_name=plan.decky_name,
+            path=artifact.path,
+            content="",  # ignored when content_bytes is set
+            content_bytes=artifact.content,
+            persona=plan.persona,
+            content_class=plan.content_class.value,
             mtime=plan.mtime,
         )
 
