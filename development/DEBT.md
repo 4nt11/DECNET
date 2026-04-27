@@ -1,6 +1,6 @@
 # DECNET — Technical Debt Register
 
-> Last updated: 2026-04-25 — Cred coverage rolled out across 9 more services (HTTP family + DB hash creds + form bodies + MongoDB SCRAM); RDP/SMB/NLA capture deferred to DEBT-040.
+> Last updated: 2026-04-26 — Orchestrator UI shipped; logged DEBT-042 (failure-count window) and DEBT-043 (no FE test framework).
 > Severity: 🔴 Critical · 🟠 High · 🟡 Medium · 🟢 Low
 
 ---
@@ -473,6 +473,30 @@ The prober already computes JARM (`worker.py:286`), HASSH (`worker.py:334`), and
 ~~**Files:** Project root~~  
 `requirements.lock` generated via `pip freeze`. Reproducible installs now available via `pip install -r requirements.lock`.
 
+### DEBT-042 — Orchestrator failure-count badge is window-bound
+**File:** `decnet_web/src/components/Orchestrator.tsx`
+The "X failures / 1h" header badge is computed from the in-memory SSE
+window (capped at 500 rows merged with one paginated server page). On
+busy fleets — many deckies × dense activity — failures older than the
+local window or beyond the visible page are silently excluded, so the
+badge can read low. Acceptable for MVP; the badge is a hint, not a
+metric.
+**Remediation:** add a dedicated count endpoint
+(`GET /api/v1/orchestrator/events/stats?since=1h&success=false`) and
+have the badge call it on the same cadence the page already polls.
+Trigger: first time the count visibly diverges from a hand-checked
+DB query, or fleet size ≥ 10 active deckies.
+
+### DEBT-043 — No frontend test framework configured
+**Files:** `decnet_web/package.json`
+The repo has no vitest/jest/RTL setup. Frontend changes (Orchestrator
+page, useOrchestratorStream hook, identity/campaign pages) ship with
+backend-only coverage. Component-level regressions land in production
+unless caught by manual smoke testing.
+**Remediation:** add vitest + @testing-library/react, write the
+listed-but-skipped tests for `Orchestrator.tsx` (renders empty state,
+filter toggling, mocked-EventSource prepend) as the seed suite.
+
 ---
 
 ## Summary
@@ -519,6 +543,8 @@ The prober already computes JARM (`worker.py:286`), HASSH (`worker.py:334`), and
 | ~~DEBT-039~~ | ✅ | Honeypot / Cred emitters | resolved |
 | ~~DEBT-040~~ | ✅ | Honeypot / RDP+SMB cred framers | resolved |
 | ~~DEBT-041~~ | ✅ | API / UI / Threat-intel keying | resolved |
+| DEBT-042 | 🟢 Low | UI / Orchestrator failure-count window | open |
+| DEBT-043 | 🟡 Medium | Frontend test framework missing | open |
 
-**Remaining open:** DEBT-011 (Alembic), DEBT-023 (image pinning), DEBT-026 (modular mailboxes), DEBT-027 (Dynamic bait store), DEBT-028 (deploy endpoint tests), DEBT-032 (fingerprint rotation detection), DEBT-033 (transcript shard rotation), DEBT-035 (artifacts uid/gid alignment), DEBT-036 (session-profile ingester), DEBT-037 (webhook delivery hardening), DEBT-038 (SSH PAM cred-capture limitations — document-only).
+**Remaining open:** DEBT-011 (Alembic), DEBT-023 (image pinning), DEBT-026 (modular mailboxes), DEBT-027 (Dynamic bait store), DEBT-028 (deploy endpoint tests), DEBT-032 (fingerprint rotation detection), DEBT-033 (transcript shard rotation), DEBT-035 (artifacts uid/gid alignment), DEBT-036 (session-profile ingester), DEBT-037 (webhook delivery hardening), DEBT-038 (SSH PAM cred-capture limitations — document-only), DEBT-042 (orchestrator failure-count window), DEBT-043 (frontend test framework).
 **Estimated remaining effort:** ~21 hours. DEBT-030 Phase B (optimistic staged-buffer editor) is a follow-up, not debt.
