@@ -146,11 +146,15 @@ async def test_pick_file_returns_none_when_topology_has_no_personas():
 
 @pytest.mark.asyncio
 async def test_pick_file_produces_file_action_for_topology_decky():
+    import random as _r
     repo = _FakeRepo(topologies={"t1": _topology_row(_PERSONAS_TWO)})
     deckies = [_decky()]
+    # Pin the RNG so the 3% canary gate (stage 7) and 10% leave-alone
+    # roll don't flake this test.  Seed 1 lands on a vanilla create.
     action = await scheduler.pick_file(
         deckies, repo,
         now=datetime(2026, 4, 27, 12, 0, tzinfo=timezone.utc),
+        rand=_r.Random(1),
     )
     assert isinstance(action, scheduler.FileAction)
     assert action.dst_uuid == "u1"
@@ -178,6 +182,7 @@ async def test_pick_file_skips_decky_when_personas_outside_window():
 @pytest.mark.asyncio
 async def test_pick_file_uses_global_pool_for_fleet_source(tmp_path, monkeypatch):
     import json
+    import random as _r
     pool = tmp_path / "personas.json"
     pool.write_text(json.dumps(_PERSONAS_TWO))
     monkeypatch.setenv("DECNET_REALISM_PERSONAS", str(pool))
@@ -189,9 +194,11 @@ async def test_pick_file_uses_global_pool_for_fleet_source(tmp_path, monkeypatch
     repo = _FakeRepo()  # no topology rows — fleet path
     deckies = [_decky(source="fleet", topology_id=None)]
 
+    # Pin the RNG so the canary / leave-alone rolls don't flake.
     action = await scheduler.pick_file(
         deckies, repo,
         now=datetime(2026, 4, 27, 12, 0, tzinfo=timezone.utc),
+        rand=_r.Random(1),
     )
     assert isinstance(action, scheduler.FileAction)
     assert action.dst_uuid == "u1"

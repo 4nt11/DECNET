@@ -157,6 +157,121 @@ async def test_one_tick_picks_fleet_deckies(repo, fake_bus, monkeypatch):
 
 
 @pytest.mark.asyncio
+async def test_one_tick_email_branch_records_orchestrator_email(
+    repo, fake_bus, monkeypatch,
+):
+    """Stage 5 contract: email actions land via the unified orchestrator.
+
+    The pre-collapse path was a separate ``decnet emailgen run`` worker;
+    after the realism migration the orchestrator's tick handles email
+    drops alongside traffic + file via the action-kind roll.  This test
+    seeds a topology with a mail decky + two personas, forces the
+    action roll to ``email``, stubs the LLM + docker-exec write paths,
+    and verifies an ``orchestrator_emails`` row + bus event land.
+    """
+    import json
+    from decnet.orchestrator.drivers import email as email_driver
+    from decnet.realism.llm.impl.fake import FakeBackend
+
+    personas = [
+        {
+            "name": "John Smith", "email": "john@corp.com", "role": "COO",
+            "tone": "formal", "mannerisms": ["uses 'Best regards'"],
+            "active_hours": "00:00-00:00",
+        },
+        {
+            "name": "Sarah Johnson", "email": "sarah@corp.com", "role": "PM",
+            "tone": "direct", "mannerisms": ["uses bullets"],
+            "active_hours": "00:00-00:00",
+        },
+    ]
+    async with repo._session() as session:
+        topo = Topology(
+            name="t-email", config_snapshot="{}", status="active",
+            email_personas=json.dumps(personas),
+        )
+        session.add(topo)
+        await session.commit()
+        await session.refresh(topo)
+        mail_decky = TopologyDecky(
+            topology_id=topo.id, name="mailhost",
+            services=json.dumps(["imap"]), ip="10.0.0.5", state="running",
+        )
+        session.add(mail_decky)
+        await session.commit()
+
+    # Force the worker's action roll to the email branch — no SSH-capable
+    # deckies exist in this seed (only IMAP), so traffic/file drop to
+    # None and email is the only viable branch anyway, but we pin the
+    # roll for determinism.
+    monkeypatch.setattr(orch_worker, "_roll_action_kind", lambda _rng: "email")
+
+    # Stub the LLM so we don't shell out to ollama. The driver
+    # constructs its own backend in __init__; we patch get_driver_for
+    # to return a driver with a FakeBackend pre-injected.
+    fake_eml = (
+        "Subject: Q3 ops review\n\n"
+        "Hi Sarah,\n\nQuick note on the Q3 review.\n\nBest regards,\nJohn\n"
+    )
+    fake_llm = FakeBackend(output=fake_eml)
+    fake_driver = email_driver.EmailDriver(llm=fake_llm)
+
+    def _factory(action):
+        from decnet.orchestrator.emailgen.scheduler import EmailAction as _EA
+        if isinstance(action, _EA):
+            return fake_driver
+        from decnet.orchestrator.drivers import get_driver_for as _real
+        return _real(action)
+
+    monkeypatch.setattr(orch_worker, "get_driver_for", _factory)
+
+    # Stub the docker-exec write path on the email driver — same trick
+    # the SSH driver tests use, but EmailDriver shells out via plain
+    # asyncio.create_subprocess_exec.
+    async def fake_create(*args, **kwargs):
+        class _Stub:
+            returncode = 0
+            async def communicate(self, _stdin=None):
+                return b"", b""
+        return _Stub()
+
+    import asyncio as _asyncio
+    monkeypatch.setattr(_asyncio, "create_subprocess_exec", fake_create)
+
+    received: list = []
+    async def collect():
+        async with fake_bus.subscribe("orchestrator.>") as sub:
+            async for ev in sub:
+                received.append(ev)
+                if len(received) >= 1:
+                    return
+    collector = _asyncio.create_task(collect())
+    await _asyncio.sleep(0)
+
+    await orch_worker._one_tick(repo, fake_bus)
+    await _asyncio.wait_for(collector, timeout=2.0)
+
+    # The email branch lands in orchestrator_emails, NOT
+    # orchestrator_events — separate table, separate kind discriminant.
+    emails = await repo.list_orchestrator_emails(limit=10)
+    assert len(emails) == 1
+    row = emails[0]
+    assert row["mail_decky_uuid"] == mail_decky.uuid
+    assert row["sender_email"] in {"john@corp.com", "sarah@corp.com"}
+    assert row["recipient_email"] in {"john@corp.com", "sarah@corp.com"}
+    assert row["sender_email"] != row["recipient_email"]
+    assert row["subject"]
+    assert row["success"] is True
+
+    # Bus event topic discriminator + payload kind agree.
+    assert len(received) == 1
+    ev = received[0]
+    assert ev.topic.startswith("orchestrator.email.")
+    assert ev.payload["kind"] == "email"
+    assert ev.payload["mail_decky_uuid"] == mail_decky.uuid
+
+
+@pytest.mark.asyncio
 async def test_tick_is_noop_when_no_running_deckies(repo, fake_bus, monkeypatch):
     called = False
 
