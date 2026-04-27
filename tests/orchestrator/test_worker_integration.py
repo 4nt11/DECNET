@@ -107,6 +107,44 @@ async def test_one_tick_records_event_and_publishes(repo, fake_bus, monkeypatch)
 
 
 @pytest.mark.asyncio
+async def test_one_tick_picks_fleet_deckies(repo, fake_bus, monkeypatch):
+    """Regression: orchestrator was permanently blind to unihost MACVLAN /
+    IPVLAN deckies because list_running_topology_deckies only scans
+    topology_deckies.  The new union view (list_running_deckies) must
+    pull in fleet_deckies rows too."""
+    await repo.upsert_fleet_decky({
+        "host_uuid": "local",
+        "name": "fleet-d1",
+        "services": ["ssh"],
+        "decky_ip": "10.0.0.50",
+        "state": "running",
+    })
+    await repo.upsert_fleet_decky({
+        "host_uuid": "local",
+        "name": "fleet-d2",
+        "services": ["ssh"],
+        "decky_ip": "10.0.0.51",
+        "state": "running",
+    })
+
+    async def fake_run(argv):
+        if argv[3] == "python3":
+            return 0, "SSH-2.0-OpenSSH_9.6\r\n", ""
+        return 0, "", ""
+
+    monkeypatch.setattr(ssh_driver, "_run", fake_run)
+
+    driver = ssh_driver.SSHDriver()
+    await orch_worker._one_tick(repo, driver, fake_bus)
+
+    rows = await repo.list_orchestrator_events(limit=10)
+    assert len(rows) == 1
+    # The dst_decky_uuid is our composite "host_uuid:name" identifier
+    # for fleet-source rows (see SQLModelRepository.list_running_deckies).
+    assert rows[0]["dst_decky_uuid"].startswith("local:fleet-")
+
+
+@pytest.mark.asyncio
 async def test_tick_is_noop_when_no_running_deckies(repo, fake_bus, monkeypatch):
     called = False
 

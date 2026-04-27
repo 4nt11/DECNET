@@ -98,12 +98,30 @@ async def orchestrator_worker(
 
 
 async def _one_tick(repo: BaseRepository, driver, bus) -> None:
-    deckies = await repo.list_running_topology_deckies()
+    # Union view: MazeNET topology + unihost fleet + SWARM shards.  Pre-fleet
+    # this only saw topology_deckies and was permanently blind to MACVLAN /
+    # IPVLAN unihost decoys.
+    deckies = await repo.list_running_deckies()
     action = scheduler.pick(deckies)
     if action is None:
+        # Report the actual SSH-eligible count (what the scheduler filters
+        # to), not just len(deckies) — the old "running+ssh count=N" line
+        # reported the pre-filter count and misled debugging.
+        ssh_eligible = sum(
+            1 for d in deckies
+            if isinstance(d.get("services"), list)
+            and "ssh" in d["services"]
+            and d.get("ip")
+        )
+        by_source: dict[str, int] = {}
+        for d in deckies:
+            by_source[d.get("source", "unknown")] = (
+                by_source.get(d.get("source", "unknown"), 0) + 1
+            )
         logger.debug(
-            "orchestrator: no actionable deckies (running+ssh count=%d)",
-            len(deckies),
+            "orchestrator: no actionable deckies "
+            "(running=%d ssh_eligible=%d sources=%s)",
+            len(deckies), ssh_eligible, by_source,
         )
         return
 
