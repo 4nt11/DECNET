@@ -385,7 +385,7 @@ async def _bump_synthetic_file_after_edit(repo, action, result) -> None:
         patch["content_hash"] = hashlib.sha256(
             new_body.encode("utf-8"),
         ).hexdigest()
-        patch["last_body"] = new_body[:65536]
+        patch["last_body"] = new_body
     await repo.update_synthetic_file(action.synthetic_file_uuid, patch)
 
 
@@ -411,10 +411,7 @@ async def _record_synthetic_file(repo, action) -> None:
         "last_modified": now,
         "edit_count": 0,
         "content_hash": content_hash,
-        # Cap the persisted body — large blobs (DOCX/PDF/canary
-        # artifacts in stage 7) are wasted disk on this side; the
-        # decky filesystem holds the canonical bytes.
-        "last_body": body[:65536],
+        "last_body": body,
     }
     try:
         await repo.record_synthetic_file(row)
@@ -432,7 +429,7 @@ async def _record_synthetic_file(repo, action) -> None:
             {
                 "last_modified": now,
                 "content_hash": content_hash,
-                "last_body": body[:65536],
+                "last_body": body,
                 "edit_count": int(match.get("edit_count", 0)) + 1,
             },
         )

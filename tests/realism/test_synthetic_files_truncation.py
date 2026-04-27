@@ -1,16 +1,12 @@
-"""``synthetic_files.last_body`` is capped at 64 KB.
+"""``synthetic_files.last_body`` is capped at 64 KB by the repo.
 
-The orchestrator caps the persisted body at 64 KB on every write
-(create + edit) so the table doesn't bloat with large blobs.  This
-introduces a real edge: an EditAction whose ``previous_body`` is
-sourced from the cap (not the file on disk) sees truncated bytes.
+The repo clips on both insert and update so callers may pass the full
+body. Large blobs (DOCX/PDF, canary artifacts) would bloat the table;
+the decky filesystem holds the canonical bytes.
 
-Today the realism templates produce well under 64 KB, so the edge
-isn't reachable from the planted-content path.  But a future change
-that lifts the cap, an LLM that returns a long body, or a
-``honeydoc_pdf`` body cultivated through the realism path could all
-hit it.  These tests pin the contract so a regression that drops the
-cap or applies it inconsistently fails loudly.
+These tests pin the contract so a regression that drops the cap or
+applies it inconsistently fails loudly. Note: callers pass the *full*
+body — the worker no longer clips; the repo does.
 """
 from __future__ import annotations
 
@@ -19,10 +15,11 @@ from datetime import datetime, timezone
 import pytest
 import pytest_asyncio
 
+from decnet.web.db.models.realism import SYNTHETIC_FILE_BODY_LIMIT
 from decnet.web.db.sqlite.repository import SQLiteRepository
 
 
-_LIMIT = 65536  # decnet/orchestrator/worker.py uses [:65536]
+_LIMIT = SYNTHETIC_FILE_BODY_LIMIT
 
 
 @pytest_asyncio.fixture
@@ -44,16 +41,14 @@ def _row(body: str) -> dict:
         "created_at": now,
         "last_modified": now,
         "edit_count": 0,
-        # The hash is over the *full* body in the orchestrator's write
-        # path; if the body comes from a row that was already truncated,
-        # the hash reflects the truncation.  Tests check both paths.
         "content_hash": hashlib.sha256(body.encode("utf-8")).hexdigest(),
-        "last_body": body[:_LIMIT],
+        # Caller passes the full body — the repo clips.
+        "last_body": body,
     }
 
 
 @pytest.mark.asyncio
-async def test_oversized_body_is_truncated_at_write(repo):
+async def test_repo_clips_oversized_body_at_insert(repo):
     body = "A" * (_LIMIT * 2)
     uuid = await repo.record_synthetic_file(_row(body))
     rows = await repo.list_synthetic_files(decky_uuid="d1")
@@ -65,8 +60,6 @@ async def test_oversized_body_is_truncated_at_write(repo):
 
 @pytest.mark.asyncio
 async def test_body_at_exact_limit_is_preserved(repo):
-    """Boundary: a body of exactly 64 KB must not be silently
-    truncated.  Off-by-one regression target."""
     body = "B" * _LIMIT
     await repo.record_synthetic_file(_row(body))
     rows = await repo.list_synthetic_files(decky_uuid="d1")
@@ -74,27 +67,16 @@ async def test_body_at_exact_limit_is_preserved(repo):
 
 
 @pytest.mark.asyncio
-async def test_pick_for_edit_returns_truncated_body(repo):
-    """Stage 3b contract: the edit candidate carries the *stored*
-    last_body — necessarily truncated when the original exceeded the
-    cap.  Document the consequence so a future test author doesn't
-    expect the full body to round-trip."""
+async def test_pick_for_edit_returns_clipped_body(repo):
     body = "C" * (_LIMIT * 3)
     await repo.record_synthetic_file(_row(body))
     candidate = await repo.pick_random_synthetic_file_for_edit("d1")
     assert candidate is not None
     assert len(candidate["last_body"]) == _LIMIT
-    # The edit driver mutates this body via realism.bodies.next_iteration,
-    # so callers must accept they're editing a truncated snapshot of
-    # the file that's actually on the decky.  This is documented
-    # behaviour pre-v1; if the cap rises, lift _LIMIT here too.
 
 
 @pytest.mark.asyncio
-async def test_edit_path_keeps_cap(repo):
-    """An update_synthetic_file call that tries to write a >cap body
-    must clip to the cap on the way in.  Mirrors the orchestrator
-    worker's ``last_body=body[:65536]`` line."""
+async def test_repo_clips_oversized_body_at_update(repo):
     uuid = await repo.record_synthetic_file(_row("seed"))
     big = "D" * (_LIMIT * 4)
     await repo.update_synthetic_file(
@@ -102,7 +84,7 @@ async def test_edit_path_keeps_cap(repo):
         {
             "last_modified": datetime.now(timezone.utc),
             "edit_count": 1,
-            "last_body": big[:_LIMIT],  # caller is responsible for clipping
+            "last_body": big,
         },
     )
     rows = await repo.list_synthetic_files(decky_uuid="d1")

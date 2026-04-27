@@ -3335,6 +3335,9 @@ class SQLModelRepository(BaseRepository):
     # ------------------------------------------------------------ realism
 
     async def record_synthetic_file(self, data: dict[str, Any]) -> str:
+        from decnet.web.db.models.realism import SYNTHETIC_FILE_BODY_LIMIT
+        if "last_body" in data and data["last_body"] is not None:
+            data = {**data, "last_body": data["last_body"][:SYNTHETIC_FILE_BODY_LIMIT]}
         async with self._session() as session:
             row = SyntheticFile(**data)
             session.add(row)
@@ -3345,6 +3348,9 @@ class SQLModelRepository(BaseRepository):
     async def update_synthetic_file(
         self, row_uuid: str, data: dict[str, Any],
     ) -> None:
+        from decnet.web.db.models.realism import SYNTHETIC_FILE_BODY_LIMIT
+        if "last_body" in data and data["last_body"] is not None:
+            data = {**data, "last_body": data["last_body"][:SYNTHETIC_FILE_BODY_LIMIT]}
         async with self._session() as session:
             stmt = (
                 update(SyntheticFile)

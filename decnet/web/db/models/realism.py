@@ -22,6 +22,15 @@ from sqlalchemy import Column, Index, Text, UniqueConstraint
 from sqlmodel import Field, SQLModel
 
 
+SYNTHETIC_FILE_BODY_LIMIT = 65536
+"""Cap on persisted ``synthetic_files.last_body`` bytes.
+
+Enforced by the repo on both insert and update — callers may pass the
+full body; the repo clips. Large blobs (DOCX/PDF, canary artifacts) are
+wasted disk on the master side; the decky filesystem holds the canonical
+bytes."""
+
+
 class SyntheticFile(SQLModel, table=True):
     """One realism-planted file on one decky.
 
