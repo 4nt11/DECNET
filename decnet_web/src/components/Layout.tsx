@@ -4,7 +4,7 @@ import {
   Menu, X, Search, Activity, LayoutDashboard, Terminal, Settings, LogOut,
   Server, Archive, Package, Network, ChevronDown, ChevronRight, HardDrive,
   ShieldAlert, Bell, Webhook, Lock, Crosshair, Fingerprint, Zap, Cpu, Mail,
-  Target,
+  Target, FileText,
 } from '../icons';
 import { prefetchRoute } from '../routePrefetch';
 import './Layout.css';
@@ -36,6 +36,7 @@ const ROUTE_LABELS: Record<string, string> = {
   '/campaigns': 'CAMPAIGNS',
   '/orchestrator': 'ORCHESTRATOR',
   '/persona-generation': 'PERSONA GENERATION',
+  '/synthetic-files': 'SYNTHETIC FILES',
   '/canary-tokens': 'CANARY TOKENS',
   '/config': 'CONFIG',
   '/swarm-updates': 'REMOTE UPDATES',
@@ -142,6 +143,7 @@ const Layout: React.FC<LayoutProps> = ({
           <NavGroup label="AUTOMATION" icon={<Zap size={20} />} open={sidebarOpen}>
             <NavItem to="/orchestrator" icon={<Cpu size={18} />} label="Orchestrator" open={sidebarOpen} indent />
             <NavItem to="/persona-generation" icon={<Mail size={18} />} label="Persona Generation" open={sidebarOpen} indent />
+            <NavItem to="/synthetic-files" icon={<FileText size={18} />} label="Synthetic Files" open={sidebarOpen} indent />
             <NavItem to="/canary-tokens" icon={<Target size={18} />} label="Canary Tokens" open={sidebarOpen} indent />
           </NavGroup>
           <NavGroup label="SWARM" icon={<Network size={20} />} open={sidebarOpen}>

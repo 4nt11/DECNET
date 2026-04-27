@@ -25,6 +25,7 @@ const Campaigns     = lazy(() => import('./components/Campaigns'));
 const CampaignDetail = lazy(() => import('./components/CampaignDetail'));
 const Orchestrator   = lazy(() => import('./components/Orchestrator'));
 const PersonaGeneration = lazy(() => import('./components/PersonaGeneration'));
+const SyntheticFiles = lazy(() => import('./components/SyntheticFiles/SyntheticFiles'));
 const CanaryTokens   = lazy(() => import('./components/CanaryTokens'));
 const TopologyPersonaGeneration = lazy(() =>
   import('./components/PersonaGeneration').then((m) => ({ default: m.TopologyPersonaGeneration })),
@@ -129,6 +130,7 @@ const AuthedShell: React.FC<AuthedShellProps> = ({ onLogout, onSearch, searchQue
             <Route path="/campaigns/:id" element={<CampaignDetail />} />
             <Route path="/orchestrator" element={<Orchestrator />} />
             <Route path="/persona-generation" element={<PersonaGeneration />} />
+            <Route path="/synthetic-files" element={<SyntheticFiles />} />
             <Route path="/canary-tokens" element={<CanaryTokens />} />
             <Route path="/topologies/:id/personas" element={<TopologyPersonaGeneration />} />
             <Route path="/config" element={<Config />} />
