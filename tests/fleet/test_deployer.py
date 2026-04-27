@@ -15,6 +15,19 @@ import pytest
 from decnet.config import DeckyConfig, DecnetConfig
 
 
+@pytest.fixture(autouse=True)
+def _stub_fleet_db_mirror(request):
+    """The DB-mirror helpers are exercised in :class:`TestMirrorFleetToDb`;
+    every other test in this file mocks filesystem + docker but not the DB,
+    so we no-op the mirrors elsewhere to keep the suite self-contained."""
+    if "MirrorFleetToDb" in request.node.nodeid:
+        yield
+        return
+    with patch("decnet.engine.deployer._mirror_fleet_deploy_to_db"), \
+         patch("decnet.engine.deployer._mirror_fleet_teardown_to_db"):
+        yield
+
+
 # ── Helpers ───────────────────────────────────────────────────────────────────
 
 def _decky(name: str = "decky-01", ip: str = "192.168.1.10",
@@ -557,3 +570,95 @@ class TestPrintStatus:
         from decnet.engine.deployer import _print_status
         config = _config(deckies=[_decky(), _decky("decky-02", "192.168.1.11")])
         _print_status(config)  # should not raise
+
+
+# ── DB mirror (engine ↔ fleet_deckies) ────────────────────────────────────────
+
+class TestMirrorFleetToDb:
+    """The mirror helpers are best-effort: they replicate fleet state into
+    the ``fleet_deckies`` table so DB-only consumers (orchestrator, web,
+    REST API) see the same view as JSON consumers, but a DB failure must
+    never abort a CLI deploy."""
+
+    def _make_repo(self):
+        repo = MagicMock()
+
+        async def _upsert(data):
+            self.upserts.append(data)
+        async def _delete(*, host_uuid, name):
+            self.deletes.append((host_uuid, name))
+
+        repo.upsert_fleet_decky = MagicMock(side_effect=_upsert)
+        repo.delete_fleet_decky = MagicMock(side_effect=_delete)
+        return repo
+
+    def setup_method(self) -> None:
+        self.upserts: list[dict] = []
+        self.deletes: list[tuple[str, str]] = []
+
+    @patch("decnet.web.db.factory.get_repository")
+    def test_deploy_mirror_upserts_each_decky(self, mock_get_repo):
+        from decnet.engine.deployer import _mirror_fleet_deploy_to_db
+        mock_get_repo.return_value = self._make_repo()
+        cfg = _config(deckies=[
+            _decky(name="d1", ip="10.0.0.1", services=["ssh"]),
+            _decky(name="d2", ip="10.0.0.2", services=["http", "ftp"]),
+        ])
+        _mirror_fleet_deploy_to_db(cfg)
+        assert len(self.upserts) == 2
+        names = sorted(u["name"] for u in self.upserts)
+        assert names == ["d1", "d2"]
+        u1 = next(u for u in self.upserts if u["name"] == "d1")
+        assert u1["host_uuid"] == "local"
+        assert u1["services"] == ["ssh"]
+        assert u1["state"] == "running"
+        assert u1["decky_ip"] == "10.0.0.1"
+        assert u1["decky_config"]["name"] == "d1"
+
+    @patch("decnet.web.db.factory.get_repository")
+    def test_deploy_mirror_honors_explicit_host_uuid(self, mock_get_repo):
+        from decnet.engine.deployer import _mirror_fleet_deploy_to_db
+        mock_get_repo.return_value = self._make_repo()
+        d = _decky()
+        d.host_uuid = "remote-host-abc"
+        _mirror_fleet_deploy_to_db(_config(deckies=[d]))
+        assert self.upserts[0]["host_uuid"] == "remote-host-abc"
+
+    @patch("decnet.web.db.factory.get_repository")
+    def test_deploy_mirror_swallows_db_failure(self, mock_get_repo):
+        from decnet.engine.deployer import _mirror_fleet_deploy_to_db
+        mock_get_repo.side_effect = RuntimeError("db down")
+        _mirror_fleet_deploy_to_db(_config())  # must not raise
+
+    @patch("decnet.web.db.factory.get_repository")
+    def test_teardown_mirror_deletes_each_decky(self, mock_get_repo):
+        from decnet.engine.deployer import _mirror_fleet_teardown_to_db
+        mock_get_repo.return_value = self._make_repo()
+        deckies = [
+            _decky(name="d1", ip="10.0.0.1"),
+            _decky(name="d2", ip="10.0.0.2"),
+        ]
+        _mirror_fleet_teardown_to_db(deckies)
+        assert sorted(self.deletes) == [("local", "d1"), ("local", "d2")]
+
+    @patch("decnet.web.db.factory.get_repository")
+    def test_teardown_mirror_swallows_db_failure(self, mock_get_repo):
+        from decnet.engine.deployer import _mirror_fleet_teardown_to_db
+        mock_get_repo.side_effect = RuntimeError("db down")
+        _mirror_fleet_teardown_to_db([_decky()])  # must not raise
+
+    def test_run_async_works_with_running_loop(self):
+        """``_run_async`` must work even when the caller is already inside
+        an asyncio loop (the API path calls deploy() from a FastAPI handler)."""
+        import asyncio
+        from decnet.engine.deployer import _run_async
+
+        result: list[int] = []
+
+        async def caller() -> None:
+            async def work() -> None:
+                result.append(42)
+            _run_async(work)
+
+        asyncio.run(caller())
+        assert result == [42]
