@@ -3,7 +3,7 @@ from __future__ import annotations
 
 import json
 
-from decnet.orchestrator.emailgen.personas import (
+from decnet.realism.personas import (
     EmailPersona,
     in_active_hours,
     parse_personas,

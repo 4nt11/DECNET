@@ -5,7 +5,7 @@ import json
 
 import pytest
 
-from decnet.orchestrator.emailgen import global_pool
+from decnet.realism import personas_pool as global_pool
 
 
 @pytest.fixture(autouse=True)
@@ -35,7 +35,7 @@ _TWO = [
 
 def test_load_returns_empty_when_file_missing(tmp_path, monkeypatch):
     monkeypatch.setenv(
-        "DECNET_EMAILGEN_PERSONAS", str(tmp_path / "does-not-exist.json")
+        "DECNET_REALISM_PERSONAS", str(tmp_path / "does-not-exist.json")
     )
     assert global_pool.load() == []
 
@@ -43,7 +43,7 @@ def test_load_returns_empty_when_file_missing(tmp_path, monkeypatch):
 def test_load_returns_parsed_personas(tmp_path, monkeypatch):
     f = tmp_path / "personas.json"
     f.write_text(json.dumps(_TWO))
-    monkeypatch.setenv("DECNET_EMAILGEN_PERSONAS", str(f))
+    monkeypatch.setenv("DECNET_REALISM_PERSONAS", str(f))
     personas = global_pool.load()
     assert len(personas) == 2
     assert {p.email for p in personas} == {"john@corp.com", "sarah@corp.com"}
@@ -52,7 +52,7 @@ def test_load_returns_parsed_personas(tmp_path, monkeypatch):
 def test_load_resolves_language_default(tmp_path, monkeypatch):
     f = tmp_path / "personas.json"
     f.write_text(json.dumps(_TWO))
-    monkeypatch.setenv("DECNET_EMAILGEN_PERSONAS", str(f))
+    monkeypatch.setenv("DECNET_REALISM_PERSONAS", str(f))
     personas = global_pool.load(language_default="es")
     assert all(p.language == "es" for p in personas)
 
@@ -60,14 +60,14 @@ def test_load_resolves_language_default(tmp_path, monkeypatch):
 def test_load_invalid_json_returns_empty(tmp_path, monkeypatch):
     f = tmp_path / "personas.json"
     f.write_text("{not valid")
-    monkeypatch.setenv("DECNET_EMAILGEN_PERSONAS", str(f))
+    monkeypatch.setenv("DECNET_REALISM_PERSONAS", str(f))
     assert global_pool.load() == []
 
 
 def test_load_caches_until_mtime_changes(tmp_path, monkeypatch):
     f = tmp_path / "personas.json"
     f.write_text(json.dumps(_TWO))
-    monkeypatch.setenv("DECNET_EMAILGEN_PERSONAS", str(f))
+    monkeypatch.setenv("DECNET_REALISM_PERSONAS", str(f))
 
     first = global_pool.load()
     assert len(first) == 2
@@ -84,12 +84,12 @@ def test_load_caches_until_mtime_changes(tmp_path, monkeypatch):
 
 
 def test_resolve_path_honours_env_override(tmp_path, monkeypatch):
-    monkeypatch.setenv("DECNET_EMAILGEN_PERSONAS", str(tmp_path / "x.json"))
+    monkeypatch.setenv("DECNET_REALISM_PERSONAS", str(tmp_path / "x.json"))
     assert global_pool.resolve_path() == tmp_path / "x.json"
 
 
 def test_resolve_path_falls_back_to_user_path_when_system_missing(monkeypatch):
-    monkeypatch.delenv("DECNET_EMAILGEN_PERSONAS", raising=False)
+    monkeypatch.delenv("DECNET_REALISM_PERSONAS", raising=False)
     # In a typical dev box /etc/decnet/ doesn't exist; the resolver
     # should pick ~/.decnet/email_personas.json.
     p = global_pool.resolve_path()

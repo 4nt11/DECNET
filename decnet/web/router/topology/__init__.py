@@ -21,6 +21,7 @@ from .api_get_topology import router as _get_router
 from .api_lan_crud import router as _lan_router
 from .api_list_topologies import router as _list_router
 from .api_mutations import router as _mutations_router
+from .api_personas import router as _personas_router
 from .api_reap_orphans import router as _reap_router
 from .api_teardown_topology import router as _teardown_router
 
@@ -44,6 +45,10 @@ topology_router.include_router(_decky_router)
 topology_router.include_router(_edge_router)
 topology_router.include_router(_mutations_router)
 topology_router.include_router(_events_router)
+# Personas use a literal-suffix path (`/{id}/personas`) — register
+# before the bare `/{id}` getter so FastAPI's trie sees the literal
+# segment first.
+topology_router.include_router(_personas_router)
 topology_router.include_router(_get_router)
 
 

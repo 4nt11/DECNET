@@ -113,7 +113,7 @@ api_router.include_router(orchestrator_events_router)
 
 # Emailgen — global persona pool CRUD for the dashboard's
 # "Persona Generation" page.  The worker reads from the same on-disk
-# JSON file directly (see decnet.orchestrator.emailgen.global_pool).
+# JSON file directly (see decnet.realism.personas_pool).
 api_router.include_router(emailgen_personas_router)
 
 # Observability

@@ -1,10 +1,10 @@
 """GET/PUT ``/api/v1/emailgen/personas`` — global persona pool CRUD.
 
-The "global pool" is a JSON file consumed by the emailgen worker for
-fleet (MACVLAN/IPVLAN) and SWARM-shard mail deckies — see
-:mod:`decnet.orchestrator.emailgen.global_pool`.  MazeNET topology
-mail deckies use ``Topology.email_personas`` instead and are
-configured per-topology elsewhere.
+The "global pool" is a JSON file consumed by the realism content
+engine for fleet (MACVLAN/IPVLAN) and SWARM-shard deckies — see
+:mod:`decnet.realism.personas_pool`.  MazeNET topology deckies use
+``Topology.email_personas`` instead and are configured per-topology
+elsewhere.
 
 This endpoint is the API surface behind the dashboard's "Persona
 Generation" page.  Reads accept admin or viewer; writes are admin-only
@@ -22,8 +22,8 @@ from typing import Any
 from fastapi import APIRouter, Depends, HTTPException
 
 from decnet.logging import get_logger
-from decnet.orchestrator.emailgen import global_pool
-from decnet.orchestrator.emailgen.personas import EmailPersona, parse_personas
+from decnet.realism import personas_pool as global_pool
+from decnet.realism.personas import EmailPersona, parse_personas
 from decnet.telemetry import traced as _traced
 from decnet.web.dependencies import require_admin, require_viewer
 from decnet.web.db.models.common import MessageResponse  # noqa: F401 - response shape
@@ -110,11 +110,28 @@ async def replace_personas(
         )
 
     dest = global_pool.resolve_path()
-    dest.parent.mkdir(parents=True, exist_ok=True)
-    dest.write_text(
-        json.dumps(_serialize(parsed), indent=2, ensure_ascii=False),
-        encoding="utf-8",
-    )
+    try:
+        dest.parent.mkdir(parents=True, exist_ok=True)
+        dest.write_text(
+            json.dumps(_serialize(parsed), indent=2, ensure_ascii=False),
+            encoding="utf-8",
+        )
+    except OSError as exc:
+        # Most common cause on dev boxes: ``/etc/decnet`` exists but is
+        # not writable by the API process.  Surface a 500 with the
+        # actionable hint instead of leaking a traceback.
+        log.warning(
+            "api.emailgen.replace_personas write failed path=%s err=%s",
+            dest, exc,
+        )
+        raise HTTPException(
+            status_code=500,
+            detail=(
+                f"Could not write persona pool at {dest}: {exc.strerror or exc}. "
+                f"Set DECNET_EMAILGEN_PERSONAS to a writable path "
+                f"(e.g. ~/.decnet/email_personas.json) and restart the API."
+            ),
+        ) from exc
     global_pool.reset_cache()
     log.info(
         "api.emailgen.replace_personas user=%s wrote=%d path=%s",

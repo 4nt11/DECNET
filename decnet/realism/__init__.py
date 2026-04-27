@@ -13,8 +13,8 @@ import from here.  This package owns:
   ``mtime`` sampler so planted files don't all stamp at wall-clock-now.
 * :mod:`decnet.realism.planner` — picks ``(decky, persona, class,
   action, mtime)`` tuples for the orchestrator's tick loop.
-* :mod:`decnet.realism.personas` — persona schema (lifted from
-  ``orchestrator.emailgen.personas`` in stage 2 of the migration).
+* :mod:`decnet.realism.personas` — persona schema (the
+  :class:`EmailPersona` record describing each fictional employee).
 * :mod:`decnet.realism.prompts` — prompt builders, one per content
   class, sharing an em-dash-suppression style helper.
 * :mod:`decnet.realism.llm` — :class:`LLMBackend` ABC + factory + impl

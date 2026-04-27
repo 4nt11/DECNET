@@ -5,10 +5,10 @@ from __future__ import annotations
 import pytest
 
 from decnet.orchestrator.drivers import email as email_driver
-from decnet.orchestrator.emailgen.llm.base import LLMResult, LLMTimeout
-from decnet.orchestrator.emailgen.llm.impl.fake import FakeBackend
-from decnet.orchestrator.emailgen.personas import EmailPersona
 from decnet.orchestrator.emailgen.scheduler import EmailAction
+from decnet.realism.llm.base import LLMResult, LLMTimeout
+from decnet.realism.llm.impl.fake import FakeBackend
+from decnet.realism.personas import EmailPersona
 
 
 class _RaisingBackend:

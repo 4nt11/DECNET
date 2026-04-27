@@ -7,7 +7,8 @@ from typing import Any
 
 import pytest
 
-from decnet.orchestrator.emailgen import global_pool, scheduler
+from decnet.orchestrator.emailgen import scheduler
+from decnet.realism import personas_pool as global_pool
 
 
 @pytest.fixture(autouse=True)
@@ -147,7 +148,7 @@ async def test_pick_for_fleet_source_uses_global_pool(tmp_path, monkeypatch):
     personas come from the host-wide JSON file."""
     pool_file = tmp_path / "personas.json"
     pool_file.write_text(json.dumps(_PERSONAS_TWO))
-    monkeypatch.setenv("DECNET_EMAILGEN_PERSONAS", str(pool_file))
+    monkeypatch.setenv("DECNET_REALISM_PERSONAS", str(pool_file))
 
     repo = _FakeRepo(
         deckies=[_decky(source="fleet", topology_id=None)],
@@ -163,7 +164,7 @@ async def test_pick_for_shard_source_uses_global_pool(tmp_path, monkeypatch):
     """SWARM shards are non-topology too — same path as fleet."""
     pool_file = tmp_path / "personas.json"
     pool_file.write_text(json.dumps(_PERSONAS_TWO))
-    monkeypatch.setenv("DECNET_EMAILGEN_PERSONAS", str(pool_file))
+    monkeypatch.setenv("DECNET_REALISM_PERSONAS", str(pool_file))
 
     repo = _FakeRepo(
         deckies=[_decky(source="shard", topology_id=None)],
@@ -174,7 +175,7 @@ async def test_pick_for_shard_source_uses_global_pool(tmp_path, monkeypatch):
 
 @pytest.mark.asyncio
 async def test_pick_fleet_with_empty_global_pool_returns_none(tmp_path, monkeypatch):
-    monkeypatch.setenv("DECNET_EMAILGEN_PERSONAS", str(tmp_path / "missing.json"))
+    monkeypatch.setenv("DECNET_REALISM_PERSONAS", str(tmp_path / "missing.json"))
     repo = _FakeRepo(deckies=[_decky(source="fleet", topology_id=None)])
     assert await scheduler.pick(repo, now=datetime(2026, 4, 26, 12, 0, 0)) is None
 
@@ -191,7 +192,7 @@ async def test_topology_personas_isolated_from_global_pool(tmp_path, monkeypatch
         "tone": "casual",
         "mannerisms": [],
     }]))
-    monkeypatch.setenv("DECNET_EMAILGEN_PERSONAS", str(pool_file))
+    monkeypatch.setenv("DECNET_REALISM_PERSONAS", str(pool_file))
 
     repo = _FakeRepo(
         deckies=[_decky()],

@@ -58,7 +58,7 @@ def test_in_work_hours_equal_start_end_means_always_on() -> None:
 )
 def test_malformed_window_fails_open(garbage: str) -> None:
     # The fleet must not silence on a typo — same fail-open semantics
-    # as decnet.orchestrator.emailgen.personas.in_active_hours.
+    # as decnet.realism.personas.in_active_hours.
     assert in_work_hours(garbage, _NOW) is True
 
 

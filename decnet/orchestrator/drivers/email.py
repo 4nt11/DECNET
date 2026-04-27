@@ -5,9 +5,9 @@ configured emailgen spool directory (``/var/spool/decnet-emails/`` by
 default).  The IMAP/POP3 service templates read that spool at request
 time so attackers see the generated mail in their MUA.
 
-The LLM call goes through :mod:`decnet.orchestrator.emailgen.llm` —
-backend-agnostic by construction so swapping Ollama for the Anthropic
-API, vLLM, or llama.cpp is a config change, not a driver rewrite.
+The LLM call goes through :mod:`decnet.realism.llm` — backend-agnostic
+by construction so swapping Ollama for the Anthropic API, vLLM, or
+llama.cpp is a config change, not a driver rewrite.
 Output is parsed-and-repaired into a valid EML using
 :mod:`email.mime.*`; the worker then ``docker exec``\\s a ``tee`` to
 drop the file inside the target container, followed by a
@@ -29,10 +29,10 @@ from typing import Any, Optional
 
 from decnet.logging import get_logger
 from decnet.orchestrator.drivers.base import ActivityResult
-from decnet.orchestrator.emailgen.llm import LLMBackend, LLMTimeout, get_llm
-from decnet.orchestrator.emailgen.prompt import PromptInputs, build as build_prompt
 from decnet.orchestrator.emailgen.scheduler import EmailAction
 from decnet.orchestrator.emailgen.threads import new_message_id
+from decnet.realism.llm import LLMBackend, LLMTimeout, get_llm
+from decnet.realism.prompts.email import PromptInputs, build as build_prompt
 
 log = get_logger("orchestrator.email")
 

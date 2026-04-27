@@ -5,34 +5,34 @@ import asyncio
 
 import pytest
 
-from decnet.orchestrator.emailgen.llm import LLMTimeout, get_llm
-from decnet.orchestrator.emailgen.llm.impl.fake import FakeBackend
-from decnet.orchestrator.emailgen.llm.impl.ollama import OllamaBackend
+from decnet.realism.llm import LLMTimeout, get_llm
+from decnet.realism.llm.impl.fake import FakeBackend
+from decnet.realism.llm.impl.ollama import OllamaBackend
 
 
 # ── factory dispatch ─────────────────────────────────────────────────────────
 
 
 def test_factory_default_is_ollama(monkeypatch):
-    monkeypatch.delenv("DECNET_EMAILGEN_LLM", raising=False)
+    monkeypatch.delenv("DECNET_REALISM_LLM", raising=False)
     backend = get_llm()
     assert isinstance(backend, OllamaBackend)
 
 
 def test_factory_selects_fake(monkeypatch):
-    monkeypatch.setenv("DECNET_EMAILGEN_LLM", "fake")
+    monkeypatch.setenv("DECNET_REALISM_LLM", "fake")
     backend = get_llm()
     assert isinstance(backend, FakeBackend)
 
 
 def test_factory_unknown_raises(monkeypatch):
-    monkeypatch.setenv("DECNET_EMAILGEN_LLM", "vllm-someday")
+    monkeypatch.setenv("DECNET_REALISM_LLM", "vllm-someday")
     with pytest.raises(ValueError, match="Unsupported"):
         get_llm()
 
 
 def test_factory_passes_model_through(monkeypatch):
-    monkeypatch.setenv("DECNET_EMAILGEN_LLM", "ollama")
+    monkeypatch.setenv("DECNET_REALISM_LLM", "ollama")
     backend = get_llm(model="qwen2:7b")
     assert backend.model == "qwen2:7b"
 

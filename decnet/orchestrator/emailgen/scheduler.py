@@ -25,17 +25,17 @@ from datetime import datetime
 from typing import Any, Optional
 
 from decnet.logging import get_logger
-from decnet.orchestrator.emailgen import global_pool
-from decnet.orchestrator.emailgen.personas import (
-    EmailPersona,
-    in_active_hours,
-    parse_personas,
-)
 from decnet.orchestrator.emailgen.threads import (
     ThreadChain,
     new_thread_id,
     references_for_reply,
     reply_subject,
+)
+from decnet.realism import personas_pool as global_pool
+from decnet.realism.personas import (
+    EmailPersona,
+    in_active_hours,
+    parse_personas,
 )
 
 logger = get_logger("orchestrator.emailgen")

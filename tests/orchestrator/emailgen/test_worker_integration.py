@@ -10,8 +10,8 @@ import pytest_asyncio
 from decnet.bus.fake import FakeBus
 from decnet.orchestrator.drivers import email as email_driver
 from decnet.orchestrator.emailgen import worker as eg_worker
-from decnet.orchestrator.emailgen.llm.impl.fake import FakeBackend
 from decnet.orchestrator.emailgen.scheduler import EmailAction  # noqa: F401
+from decnet.realism.llm.impl.fake import FakeBackend
 from decnet.web.db.models import Topology, TopologyDecky
 from decnet.web.db.sqlite.repository import SQLiteRepository
 

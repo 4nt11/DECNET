@@ -38,8 +38,7 @@ def _parse_window(window: str) -> tuple[int, int, int, int] | None:
 
     Returns ``None`` for malformed input — callers treat that as
     "always-on" so a single config typo never silences the whole fleet
-    (mirrors :func:`decnet.orchestrator.emailgen.personas.in_active_hours`
-    semantics).
+    (mirrors :func:`decnet.realism.personas.in_active_hours` semantics).
     """
     try:
         start_s, end_s = window.split("-")

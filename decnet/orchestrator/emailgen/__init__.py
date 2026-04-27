@@ -11,7 +11,7 @@ heartbeat / control-listener scaffolding via :mod:`decnet.bus.publish`.
 
 Lazy worker re-export: :func:`emailgen_worker` is loaded on first
 attribute access so that submodules can import package-level names
-(``decnet.orchestrator.emailgen.prompt``) without triggering an eager
+(``decnet.orchestrator.emailgen.events``) without triggering an eager
 load of the worker — and through it, the email driver, which imports
 back into this package.  Without lazy loading the package + driver +
 worker form a cycle.

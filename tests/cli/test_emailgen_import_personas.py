@@ -7,7 +7,7 @@ import pytest
 from typer.testing import CliRunner
 
 from decnet.cli import app
-from decnet.orchestrator.emailgen import global_pool
+from decnet.realism import personas_pool as global_pool
 
 
 @pytest.fixture(autouse=True)
@@ -39,7 +39,7 @@ def test_import_personas_writes_canonical_file(tmp_path, monkeypatch):
     src = tmp_path / "src.json"
     src.write_text(json.dumps(_TWO))
     dest = tmp_path / "global_pool.json"
-    monkeypatch.setenv("DECNET_EMAILGEN_PERSONAS", str(dest))
+    monkeypatch.setenv("DECNET_REALISM_PERSONAS", str(dest))
 
     result = CliRunner().invoke(
         app, ["emailgen", "import-personas", str(src)]
@@ -55,7 +55,7 @@ def test_import_personas_explicit_output_overrides_env(tmp_path, monkeypatch):
     src.write_text(json.dumps(_TWO))
     env_dest = tmp_path / "env.json"
     explicit = tmp_path / "explicit.json"
-    monkeypatch.setenv("DECNET_EMAILGEN_PERSONAS", str(env_dest))
+    monkeypatch.setenv("DECNET_REALISM_PERSONAS", str(env_dest))
 
     result = CliRunner().invoke(
         app,
@@ -79,7 +79,7 @@ def test_import_personas_rejects_invalid_json(tmp_path):
 def test_import_personas_rejects_non_list(tmp_path, monkeypatch):
     src = tmp_path / "src.json"
     src.write_text(json.dumps({"not": "a list"}))
-    monkeypatch.setenv("DECNET_EMAILGEN_PERSONAS", str(tmp_path / "out.json"))
+    monkeypatch.setenv("DECNET_REALISM_PERSONAS", str(tmp_path / "out.json"))
     result = CliRunner().invoke(
         app, ["emailgen", "import-personas", str(src)]
     )
@@ -92,7 +92,7 @@ def test_import_personas_rejects_all_invalid_entries(tmp_path, monkeypatch):
     src.write_text(json.dumps([
         {"name": "broken", "email": "no-at-symbol"},
     ]))
-    monkeypatch.setenv("DECNET_EMAILGEN_PERSONAS", str(tmp_path / "out.json"))
+    monkeypatch.setenv("DECNET_REALISM_PERSONAS", str(tmp_path / "out.json"))
     result = CliRunner().invoke(
         app, ["emailgen", "import-personas", str(src)]
     )
@@ -104,7 +104,7 @@ def test_import_personas_warns_on_single_persona(tmp_path, monkeypatch):
     src = tmp_path / "src.json"
     src.write_text(json.dumps(_TWO[:1]))
     dest = tmp_path / "out.json"
-    monkeypatch.setenv("DECNET_EMAILGEN_PERSONAS", str(dest))
+    monkeypatch.setenv("DECNET_REALISM_PERSONAS", str(dest))
     result = CliRunner().invoke(
         app, ["emailgen", "import-personas", str(src)]
     )
@@ -117,7 +117,7 @@ def test_imported_personas_load_via_global_pool(tmp_path, monkeypatch):
     src = tmp_path / "src.json"
     src.write_text(json.dumps(_TWO))
     dest = tmp_path / "out.json"
-    monkeypatch.setenv("DECNET_EMAILGEN_PERSONAS", str(dest))
+    monkeypatch.setenv("DECNET_REALISM_PERSONAS", str(dest))
 
     result = CliRunner().invoke(
         app, ["emailgen", "import-personas", str(src)]

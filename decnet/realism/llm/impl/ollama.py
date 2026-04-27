@@ -1,9 +1,6 @@
 """Ollama subprocess backend.
 
 Shells out to ``ollama run <model>`` with the prompt fed via stdin.
-Mirrors what the original prototype at ``DECNET-EMAILs/main.py`` did,
-but lifted out of the driver so the rest of emailgen never imports a
-specific transport.
 
 Why subprocess and not the Ollama HTTP API:
 * No new dependency (``ollama`` Python lib is optional).
@@ -13,9 +10,9 @@ Why subprocess and not the Ollama HTTP API:
   to debug discrepancies between worker output and a console session.
 
 Cost: per-call process spawn (~50ms on a warm box).  Acceptable for
-emailgen's tick rate (one email every 5 minutes by default).  When that
-cost matters, swap to an HTTP-API backend; the seam is in
-:mod:`decnet.orchestrator.emailgen.llm.factory`.
+realism tick rates (one body per ~5 minutes per persona by default).
+When that cost matters, swap to an HTTP-API backend; the seam is in
+:mod:`decnet.realism.llm.factory`.
 """
 from __future__ import annotations
 
@@ -25,17 +22,13 @@ import time
 from typing import Optional
 
 from decnet.logging import get_logger
-from decnet.orchestrator.emailgen.llm.base import (
-    LLMBackend,
-    LLMResult,
-    LLMTimeout,
-)
+from decnet.realism.llm.base import LLMBackend, LLMResult, LLMTimeout
 
-log = get_logger("orchestrator.emailgen.llm")
+log = get_logger("realism.llm")
 
 _OLLAMA = "ollama"
-_DEFAULT_MODEL = os.environ.get("DECNET_EMAILGEN_MODEL", "llama3.1")
-_DEFAULT_TIMEOUT = float(os.environ.get("DECNET_EMAILGEN_TIMEOUT", "60"))
+_DEFAULT_MODEL = os.environ.get("DECNET_REALISM_MODEL", "llama3.1")
+_DEFAULT_TIMEOUT = float(os.environ.get("DECNET_REALISM_TIMEOUT", "60"))
 
 
 class OllamaBackend(LLMBackend):

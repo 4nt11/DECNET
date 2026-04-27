@@ -1,9 +1,9 @@
 """In-process fake backend for tests.
 
-Returns a canned ``Subject:\\n\\nbody`` string so the driver path can be
-exercised without an Ollama install.  Configurable via ``DECNET_EMAILGEN_FAKE_OUTPUT``
-(env) or the ``output`` constructor arg — the env-var path lets
-integration tests run the worker end-to-end with deterministic output.
+Returns a canned string so the driver path can be exercised without an
+Ollama install.  Configurable via ``DECNET_REALISM_FAKE_OUTPUT`` (env)
+or the ``output`` constructor arg — the env-var path lets integration
+tests run the worker end-to-end with deterministic output.
 """
 from __future__ import annotations
 
@@ -11,7 +11,7 @@ import os
 import time
 from typing import Optional
 
-from decnet.orchestrator.emailgen.llm.base import LLMBackend, LLMResult
+from decnet.realism.llm.base import LLMBackend, LLMResult
 
 
 _DEFAULT_OUTPUT = (
@@ -34,7 +34,7 @@ class FakeBackend(LLMBackend):
         self._output = (
             output
             if output is not None
-            else os.environ.get("DECNET_EMAILGEN_FAKE_OUTPUT", _DEFAULT_OUTPUT)
+            else os.environ.get("DECNET_REALISM_FAKE_OUTPUT", _DEFAULT_OUTPUT)
         )
         self._success = success
 

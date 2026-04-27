@@ -5,7 +5,7 @@ import json
 
 import pytest
 
-from decnet.orchestrator.emailgen import global_pool
+from decnet.realism import personas_pool as global_pool
 from decnet.web.router.emailgen.api_personas import (
     list_personas,
     replace_personas,
@@ -40,7 +40,7 @@ _VALID = [
 @pytest.mark.asyncio
 async def test_list_returns_empty_when_no_pool(tmp_path, monkeypatch):
     monkeypatch.setenv(
-        "DECNET_EMAILGEN_PERSONAS", str(tmp_path / "missing.json"),
+        "DECNET_REALISM_PERSONAS", str(tmp_path / "missing.json"),
     )
     result = await list_personas(user={"uuid": "u", "role": "viewer"})
     assert result["personas"] == []
@@ -51,7 +51,7 @@ async def test_list_returns_empty_when_no_pool(tmp_path, monkeypatch):
 async def test_list_returns_existing_pool(tmp_path, monkeypatch):
     pool = tmp_path / "pool.json"
     pool.write_text(json.dumps(_VALID))
-    monkeypatch.setenv("DECNET_EMAILGEN_PERSONAS", str(pool))
+    monkeypatch.setenv("DECNET_REALISM_PERSONAS", str(pool))
 
     result = await list_personas(user={"uuid": "u", "role": "viewer"})
     assert len(result["personas"]) == 2
@@ -63,7 +63,7 @@ async def test_list_returns_existing_pool(tmp_path, monkeypatch):
 @pytest.mark.asyncio
 async def test_replace_writes_canonical_file(tmp_path, monkeypatch):
     dest = tmp_path / "pool.json"
-    monkeypatch.setenv("DECNET_EMAILGEN_PERSONAS", str(dest))
+    monkeypatch.setenv("DECNET_REALISM_PERSONAS", str(dest))
 
     result = await replace_personas(
         body={"personas": _VALID},
@@ -83,7 +83,7 @@ async def test_replace_with_empty_list_clears_pool(tmp_path, monkeypatch):
     valid and means "no fleet personas, skip fleet mail deckies"."""
     dest = tmp_path / "pool.json"
     dest.write_text(json.dumps(_VALID))
-    monkeypatch.setenv("DECNET_EMAILGEN_PERSONAS", str(dest))
+    monkeypatch.setenv("DECNET_REALISM_PERSONAS", str(dest))
 
     result = await replace_personas(
         body={"personas": []},
@@ -98,7 +98,7 @@ async def test_replace_rejects_non_list_payload(tmp_path, monkeypatch):
     from fastapi import HTTPException
 
     monkeypatch.setenv(
-        "DECNET_EMAILGEN_PERSONAS", str(tmp_path / "pool.json"),
+        "DECNET_REALISM_PERSONAS", str(tmp_path / "pool.json"),
     )
     with pytest.raises(HTTPException) as exc:
         await replace_personas(
@@ -116,7 +116,7 @@ async def test_replace_rejects_all_invalid_payload(tmp_path, monkeypatch):
     from fastapi import HTTPException
 
     monkeypatch.setenv(
-        "DECNET_EMAILGEN_PERSONAS", str(tmp_path / "pool.json"),
+        "DECNET_REALISM_PERSONAS", str(tmp_path / "pool.json"),
     )
     with pytest.raises(HTTPException) as exc:
         await replace_personas(
@@ -132,7 +132,7 @@ async def test_replace_drops_partially_invalid_entries(tmp_path, monkeypatch):
     """One bad apple doesn't kill the request — invalid entries get
     dropped, valid ones land, response shows what stuck."""
     dest = tmp_path / "pool.json"
-    monkeypatch.setenv("DECNET_EMAILGEN_PERSONAS", str(dest))
+    monkeypatch.setenv("DECNET_REALISM_PERSONAS", str(dest))
 
     result = await replace_personas(
         body={"personas": [
@@ -153,7 +153,7 @@ async def test_get_then_put_round_trips_through_pool(tmp_path, monkeypatch):
     """The worker reads the same file the API writes — verify the
     write-then-read cycle leaves the pool in the expected state."""
     dest = tmp_path / "pool.json"
-    monkeypatch.setenv("DECNET_EMAILGEN_PERSONAS", str(dest))
+    monkeypatch.setenv("DECNET_REALISM_PERSONAS", str(dest))
 
     await replace_personas(
         body={"personas": _VALID},

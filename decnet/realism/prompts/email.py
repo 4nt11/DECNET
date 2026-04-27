@@ -1,4 +1,4 @@
-"""Ollama prompt builder for emailgen.
+"""Prompt builder for the email content class.
 
 The LLM gets a tightly-scoped instruction and a small handful of
 deterministic constraints.  Persona mannerisms are *pre-selected* in
@@ -9,7 +9,10 @@ ignore it, and the corpus collapses into one voice.
 **Em-dash suppression** is on by default; suppression is lifted only
 for personas that opt in via ``uses_llms_heavily``.  Em-dashes are a
 strong stylometric tell for LLM-authored prose, and a honeypot mailbox
-where every author uses them is a tell.
+where every author uses them is a tell.  Stage 6 of the realism
+migration extracts the suppression block into a shared
+``decnet.realism.prompts._style`` helper so file-class prompts pick
+it up too.
 """
 from __future__ import annotations
 
@@ -17,7 +20,7 @@ import secrets
 from dataclasses import dataclass
 from typing import Optional
 
-from decnet.orchestrator.emailgen.personas import EmailPersona
+from decnet.realism.personas import EmailPersona
 
 
 @dataclass(frozen=True)
@@ -128,7 +131,7 @@ def build(
 Persona — sender:
 - Name: {sender.name}
 - Role: {sender.role}
-- Tone: {sender.tone}
+- Tone: {sender.tone_custom if sender.tone == "custom" and sender.tone_custom else sender.tone}
 - Mannerisms (must show through):
 {mannerism_block}
 

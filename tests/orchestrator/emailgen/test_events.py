@@ -4,7 +4,7 @@ from __future__ import annotations
 from decnet.bus import topics as _topics
 from decnet.orchestrator.drivers.base import ActivityResult
 from decnet.orchestrator.emailgen import events
-from decnet.orchestrator.emailgen.personas import EmailPersona
+from decnet.realism.personas import EmailPersona
 from decnet.orchestrator.emailgen.scheduler import EmailAction
 
 

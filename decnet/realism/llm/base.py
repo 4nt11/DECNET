@@ -1,11 +1,11 @@
 """Backend protocol shared by every LLM transport.
 
-Deliberately narrow: emailgen needs one async ``generate`` call that
-takes a prompt string and returns the model's output text plus enough
-metadata for the worker to populate the orchestrator-email payload
-(model name, latency, success bit).  Streaming, embeddings, multi-turn
-chat — all out of scope here; emailgen only ever does one-shot
-single-prompt generations.
+Deliberately narrow: realism consumers need one async ``generate``
+call that takes a prompt string and returns the model's output text
+plus enough metadata to populate per-event payloads (model name,
+latency, success bit).  Streaming, embeddings, multi-turn chat — all
+out of scope here; realism only ever does one-shot single-prompt
+generations.
 """
 from __future__ import annotations
 
@@ -39,7 +39,7 @@ class LLMResult:
 
 
 class LLMBackend(Protocol):
-    """Minimal contract for an emailgen LLM provider."""
+    """Minimal contract for a realism LLM provider."""
 
     model: str
     timeout: float

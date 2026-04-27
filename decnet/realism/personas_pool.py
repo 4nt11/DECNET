@@ -1,34 +1,36 @@
-"""Global persona pool — non-topology mail deckies.
+"""Global persona pool — non-topology deckies.
 
 DECNET runs in three deployment shapes that emit running deckies:
 
 * **MazeNET topologies**       — each topology owns its own
-  :attr:`Topology.email_personas` JSON list; the scheduler walks back
-  from the mail decky to its parent topology row.
+  :attr:`Topology.email_personas` JSON list; consumers walk from the
+  decky back to its parent topology row.
 * **Unihost fleet**            — MACVLAN/IPVLAN deckies that have no
   parent topology row at all.  They share one host-wide pool.
 * **SWARM shards**             — DeckyShard rows on enrolled workers.
-  Same shape as fleet for emailgen purposes (no parent topology row),
+  Same shape as fleet for realism purposes (no parent topology row),
   so they read the same global pool.
 
 This module owns the global pool: a JSON file on disk that operators
-populate via ``decnet emailgen import-personas <file>`` (or by editing
+populate via ``decnet realism import-personas <file>`` (or by editing
 the file directly).  The file is loaded lazily on first read and
 re-loaded on mtime change so a CLI import takes effect for the running
 worker without a restart.
 
 Path resolution order:
 
-1. ``DECNET_EMAILGEN_PERSONAS`` environment variable — explicit override.
+1. ``DECNET_REALISM_PERSONAS`` environment variable — explicit override.
 2. ``/etc/decnet/email_personas.json`` — canonical master path; this is
-   what ``decnet init`` will eventually own.
+   what ``decnet init`` will eventually own.  Filename retained
+   (``email_personas.json``) because the on-disk schema hasn't changed
+   and operators may already have committed copies.
 3. ``~/.decnet/email_personas.json`` — dev fallback so a developer can
-   exercise the worker without root or ``decnet init``.
+   exercise consumers without root or ``decnet init``.
 
 When the file is missing / empty / unparseable, the pool is empty and
-the scheduler skips fleet/shard mail deckies the same way it skips a
-topology with too few personas.  No silent fallback to dummy personas;
-silence is correct when there's no opinion to convey.
+consumers skip fleet/shard deckies the same way they skip a topology
+with too few personas.  No silent fallback to dummy personas; silence
+is correct when there's no opinion to convey.
 """
 from __future__ import annotations
 
@@ -38,11 +40,11 @@ from pathlib import Path
 from typing import Optional
 
 from decnet.logging import get_logger
-from decnet.orchestrator.emailgen.personas import EmailPersona, parse_personas
+from decnet.realism.personas import EmailPersona, parse_personas
 
-logger = get_logger("orchestrator.emailgen")
+logger = get_logger("realism.personas_pool")
 
-_ENV_VAR = "DECNET_EMAILGEN_PERSONAS"
+_ENV_VAR = "DECNET_REALISM_PERSONAS"
 _SYSTEM_PATH = Path("/etc/decnet/email_personas.json")
 
 
@@ -54,13 +56,20 @@ def resolve_path() -> Path:
     """Return the path the global pool would load from right now.
 
     The file may not exist; callers are expected to handle that.  The
-    function is pure (no I/O) so the ``decnet emailgen import-personas``
+    function is pure (no I/O) so the ``decnet realism import-personas``
     CLI can ask "where would I write to?" without touching the disk.
     """
     override = os.environ.get(_ENV_VAR, "").strip()
     if override:
         return Path(override)
-    if _SYSTEM_PATH.parent.exists() or _SYSTEM_PATH.exists():
+    if _SYSTEM_PATH.exists():
+        return _SYSTEM_PATH
+    # ``/etc/decnet`` exists on a fully-provisioned host (post ``decnet
+    # init``) but may be read-only for the API user on dev boxes — fall
+    # back to the user path when the directory isn't writable so a fresh
+    # PUT lands somewhere instead of erroring out.  We only do this when
+    # the system file doesn't exist yet; once it does, it's authoritative.
+    if _SYSTEM_PATH.parent.exists() and os.access(_SYSTEM_PATH.parent, os.W_OK):
         return _SYSTEM_PATH
     return _user_path()
 
@@ -108,7 +117,7 @@ def load(*, language_default: str = "en") -> list[EmailPersona]:
     try:
         raw = path.read_text(encoding="utf-8")
     except OSError as exc:
-        logger.warning("emailgen global pool: read failed path=%s: %s", path, exc)
+        logger.warning("realism global pool: read failed path=%s: %s", path, exc)
         return []
 
     parsed = parse_personas(raw, language_default=language_default)
@@ -118,7 +127,7 @@ def load(*, language_default: str = "en") -> list[EmailPersona]:
         _cache_mtime = st.st_mtime
     if parsed:
         logger.info(
-            "emailgen global pool: loaded %d personas from %s", len(parsed), path,
+            "realism global pool: loaded %d personas from %s", len(parsed), path,
         )
     return parsed
 

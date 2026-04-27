@@ -4,8 +4,8 @@ from __future__ import annotations
 
 import random
 
-from decnet.orchestrator.emailgen.personas import EmailPersona
-from decnet.orchestrator.emailgen.prompt import (
+from decnet.realism.personas import EmailPersona
+from decnet.realism.prompts.email import (
     PromptInputs,
     build,
     select_mannerisms,

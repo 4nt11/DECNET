@@ -122,8 +122,8 @@ def register(app: typer.Typer) -> None:
         this command does not touch them.
         """
         _require_master_mode("emailgen import-personas")
-        from decnet.orchestrator.emailgen import global_pool
-        from decnet.orchestrator.emailgen.personas import parse_personas
+        from decnet.realism import personas_pool as global_pool
+        from decnet.realism.personas import parse_personas
 
         try:
             raw = path.read_text(encoding="utf-8")
