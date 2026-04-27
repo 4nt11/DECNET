@@ -259,6 +259,12 @@ const Orchestrator: React.FC = () => {
                   r.kind === 'traffic' || r.kind === 'file' || r.kind === 'email'
                     ? r.kind : '';
                 const isEmail = r.kind === 'email';
+                // FileAction and EditAction both write kind="file"; the
+                // discriminator lives in `action` ("file:create" vs
+                // "file:edit"). Surface the difference visually without
+                // widening the kind enum (which doubles as the bus
+                // topic family).
+                const isEdit = r.kind === 'file' && r.action?.startsWith('file:edit');
                 return (
                   <tr
                     key={r.uuid}
@@ -268,6 +274,15 @@ const Orchestrator: React.FC = () => {
                     <td className="dim">{timeAgo(r.ts)}</td>
                     <td>
                       <span className={`kind-chip ${kindCls}`}>{r.kind}</span>
+                      {isEdit && (
+                        <span
+                          className="chip dim-chip"
+                          style={{ marginLeft: 4 }}
+                          title="In-place edit of a previously planted file"
+                        >
+                          EDIT
+                        </span>
+                      )}
                     </td>
                     <td className="mono matrix-text">
                       {isEmail && r.language && (

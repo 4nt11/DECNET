@@ -65,6 +65,7 @@ const OrchestratorInspector: React.FC<Props> = ({ event, onClose }) => {
     event.kind === 'traffic' || event.kind === 'file' || event.kind === 'email'
       ? event.kind : '';
   const isEmail = event.kind === 'email';
+  const isEdit = event.kind === 'file' && event.action?.startsWith('file:edit');
   const srcSrc = sourceTag(event.src_decky_uuid);
   const dstSrc = sourceTag(event.dst_decky_uuid);
   const isLive = event.uuid.startsWith('live-');
@@ -84,6 +85,15 @@ const OrchestratorInspector: React.FC<Props> = ({ event, onClose }) => {
             <span className={`kind-chip ${kindCls}`} style={{ marginLeft: 8 }}>
               {event.kind.toUpperCase()}
             </span>
+            {isEdit && (
+              <span
+                className="chip dim-chip"
+                style={{ marginLeft: 4 }}
+                title="In-place edit of a previously planted file"
+              >
+                EDIT
+              </span>
+            )}
           </h3>
           <button className="close-btn" onClick={onClose} aria-label="Close">
             <X size={16} />
