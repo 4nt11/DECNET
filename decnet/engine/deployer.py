@@ -472,6 +472,7 @@ def _mirror_fleet_deploy_to_db(config: DecnetConfig) -> None:
         repo = get_repository()
 
         async def _go() -> None:
+            from decnet.canary import planter as _canary_planter
             for d in config.deckies:
                 await repo.upsert_fleet_decky({
                     "host_uuid": d.host_uuid or LOCAL_HOST_SENTINEL,
@@ -481,6 +482,24 @@ def _mirror_fleet_deploy_to_db(config: DecnetConfig) -> None:
                     "decky_ip": d.ip,
                     "state": "running",
                 })
+                # Best-effort canary baseline seed.  A failure here is
+                # logged inside the planter and surfaces as state=failed
+                # rows in the UI; it must NOT abort the deploy (per the
+                # resilience principle in CLAUDE.md).
+                try:
+                    persona = "linux"
+                    cfg = d.model_dump(mode="json")
+                    nmap_os = cfg.get("nmap_os") or cfg.get("archetype_os")
+                    if isinstance(nmap_os, str) and nmap_os.lower().startswith("win"):
+                        persona = "windows"
+                    await _canary_planter.seed_baseline(
+                        d.name, repo, persona=persona,
+                    )
+                except Exception as exc:  # noqa: BLE001
+                    log.warning(
+                        "canary baseline seed failed (best-effort) decky=%s err=%s",
+                        d.name, exc,
+                    )
 
         _run_async(_go)
     except Exception as exc:  # noqa: BLE001
