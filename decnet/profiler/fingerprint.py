@@ -143,6 +143,7 @@ def sniffer_rollup(events: list[LogEvent]) -> dict[str, Any]:
     ttl_values: list[str] = []
     hops: list[int] = []
     tcp_fp: dict[str, Any] | None = None
+    ipid_latest: str | None = None
     # Tracks which event set tcp_fp last — picks the provider "context"
     # (syn vs synack) when we feed the p0f-v2 matcher below.
     tcp_fp_context: str = "syn"
@@ -185,6 +186,13 @@ def sniffer_rollup(events: list[LogEvent]) -> dict[str, Any]:
                 "dscp": _int_or_none(e.fields.get("dscp")),
                 "ecn": _int_or_none(e.fields.get("ecn")),
             }
+            # Sequence classifications converge as samples accumulate; the
+            # most recent non-"unknown" label wins so a later "unknown" event
+            # (e.g. a deque reset) doesn't overwrite a confident verdict.
+            ipid_class = e.fields.get("ipid_class")
+            if ipid_class and ipid_class != "unknown":
+                ipid_latest = ipid_class
+            tcp_fp["ipid_class"] = ipid_latest
             tcp_fp_context = "syn"
 
         elif e.event_type == _SNIFFER_FLOW_EVENT:

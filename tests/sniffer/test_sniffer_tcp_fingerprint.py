@@ -163,6 +163,31 @@ class TestSynFingerprintEmission:
         assert f["dscp"] == "10"
         assert f["ecn"] == "2"
 
+    def test_ipid_classified_after_enough_samples(self):
+        """Eight SYNs from one source with monotonic IP-IDs should yield
+        ipid_class=incremental on the final emission. Each transition of
+        ipid_class is part of the dedup key, so we expect exactly one
+        emission per distinct class as samples accumulate."""
+        engine, captured = _make_engine()
+        for i in range(8):
+            pkt = IP(src=_ATTACKER_IP, dst=_DECKY_IP, ttl=64, id=1000 + i) / TCP(
+                sport=46000 + i, dport=22, flags="S", seq=10_000 + i,
+                window=29200,
+                options=[("MSS", 1460), ("SAckOK", b""), ("Timestamp", (0, 0)),
+                         ("NOP", None), ("WScale", 7)],
+            )
+            engine.on_packet(pkt)
+        fp_lines = [ln for ln in captured if _msgid(ln) == "tcp_syn_fingerprint"]
+        # First emission has only 1 sample → ipid_class=unknown.
+        # Once samples reach _MIN_SAMPLES (4) classification flips →
+        # second emission has ipid_class=incremental.
+        assert len(fp_lines) == 2
+        first = _fields_from_line(fp_lines[0])
+        last = _fields_from_line(fp_lines[1])
+        assert first["ipid_class"] == "unknown"
+        assert last["ipid_class"] == "incremental"
+        assert int(last["ipid_samples"]) >= 4
+
     def test_decky_source_does_not_emit(self):
         """Packets originating from a decky (outbound reply) should NOT
         be classified as an attacker fingerprint."""

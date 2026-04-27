@@ -12,10 +12,12 @@ from __future__ import annotations
 import hashlib
 import struct
 import time
+from collections import deque
 from typing import Any, Callable
 
 from decnet.prober.tcpfp import _extract_options_order
 from decnet.sniffer.p0f import guess_os, hop_distance, initial_ttl
+from decnet.sniffer.seq_class import classify_sequence
 from decnet.sniffer.syslog import SEVERITY_INFO, SEVERITY_WARNING, syslog_line
 from decnet.telemetry import traced as _traced, get_tracer as _get_tracer
 
@@ -745,6 +747,12 @@ class SnifferEngine:
         self._tcp_syn: dict[tuple[str, int, str, int], dict[str, Any]] = {}
         self._tcp_rtt: dict[tuple[str, int, str, int], dict[str, Any]] = {}
 
+        # Per-source-IP rolling samples for sequence-pattern classification.
+        # IP-ID and TCP ISN need multiple SYNs from the same attacker before
+        # we can label them random/incremental/zero/constant.
+        self._SEQ_SAMPLE_SIZE = 8
+        self._ipid_samples: dict[str, deque[int]] = {}
+
         # Per-flow timing aggregator. Key: (src_ip, src_port, dst_ip, dst_port).
         # Flow direction is client→decky; reverse packets are associated back
         # to the forward flow so we can track retransmits and inter-arrival.
@@ -791,9 +799,16 @@ class SnifferEngine:
         if event_type == "tls_certificate":
             return fields.get("subject_cn", "") + "|" + fields.get("issuer", "")
         if event_type == "tcp_syn_fingerprint":
-            # Dedupe per (OS signature, options layout). One event per unique
-            # stack profile from this attacker IP per dedup window.
-            return fields.get("os_guess", "") + "|" + fields.get("options_sig", "")
+            # Dedupe per (OS signature, options layout, sequence-pattern
+            # classification). Including ipid_class/isn_class lets each
+            # transition (unknown → random/incremental/zero/constant) emit
+            # exactly one fresh event as samples accumulate.
+            return (
+                fields.get("os_guess", "")
+                + "|" + fields.get("options_sig", "")
+                + "|" + fields.get("ipid_class", "")
+                + "|" + fields.get("isn_class", "")
+            )
         if event_type == "tcp_flow_timing":
             # Dedup per (attacker_ip, decky_port) — src_port is deliberately
             # excluded so a port scanner rotating source ports only produces
@@ -1031,6 +1046,12 @@ class SnifferEngine:
                     _span.set_attribute("attacker_ip", src_ip)
                     _span.set_attribute("dst_port", dst_port)
                     tcp_fp = _extract_tcp_fingerprint(list(tcp.options or []))
+
+                    ipid_buf = self._ipid_samples.setdefault(
+                        src_ip, deque(maxlen=self._SEQ_SAMPLE_SIZE)
+                    )
+                    ipid_buf.append(int(ip.id))
+                    ipid_class = classify_sequence(list(ipid_buf))
                     os_label = guess_os(
                         ttl=ip.ttl,
                         window=int(tcp.window),
@@ -1059,6 +1080,8 @@ class SnifferEngine:
                         tos=str(int(getattr(ip, "tos", 0))),
                         dscp=str((int(getattr(ip, "tos", 0)) >> 2) & 0x3F),
                         ecn=str(int(getattr(ip, "tos", 0)) & 0x3),
+                        ipid_class=ipid_class,
+                        ipid_samples=str(len(ipid_buf)),
                         os_guess=os_label,
                     )
 

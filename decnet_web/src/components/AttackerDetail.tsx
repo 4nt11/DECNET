@@ -22,6 +22,7 @@ interface AttackerBehavior {
     tos?: number | null;
     dscp?: number | null;
     ecn?: number | null;
+    ipid_class?: string | null;
   } | null;
   retransmit_count: number;
   behavior_class: string | null;
@@ -143,6 +144,18 @@ const HashRow: React.FC<{ label: string; value?: string | null }> = ({ label, va
       </span>
     </div>
   );
+};
+
+// Random ISN/IP-ID is the modern default; non-random patterns are
+// fingerprinting gold (legacy stacks, custom raw-socket tools).
+const seqClassColor = (cls: string): string | undefined => {
+  switch (cls) {
+    case 'random':      return undefined;        // neutral, expected
+    case 'incremental': return '#e5c07b';        // amber — uncommon
+    case 'zero':
+    case 'constant':    return '#98c379';        // green — strong signal
+    default:            return undefined;
+  }
 };
 
 const Tag: React.FC<{ children: React.ReactNode; color?: string }> = ({ children, color }) => (
@@ -755,6 +768,9 @@ const TcpStackBlock: React.FC<{ b: AttackerBehavior }> = ({ b }) => {
         <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
           {fp.has_sack && <Tag>SACK</Tag>}
           {fp.has_timestamps && <Tag>TS</Tag>}
+          {fp.ipid_class && fp.ipid_class !== 'unknown' && (
+            <Tag color={seqClassColor(fp.ipid_class)}>IPID:{fp.ipid_class.toUpperCase()}</Tag>
+          )}
         </div>
         {fp.options_sig && (
           <div>
