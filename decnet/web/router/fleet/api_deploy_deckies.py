@@ -160,6 +160,11 @@ async def api_deploy_deckies(req: DeployIniRequest, admin: dict = Depends(requir
         }
 
     # Unihost path — docker-compose on the master itself.
+    # NB: the JSON state file (decnet-state.json) and fleet_deckies DB rows
+    # are both written *inside* _deploy(config) — engine.deployer is the
+    # single shared sink for every fleet-creation path (CLI deploy, this
+    # unihost API path, and per-worker SWARM agent deploys).  Do not
+    # duplicate save_state / fleet upserts here.
     try:
         if os.environ.get("DECNET_CONTRACT_TEST") != "true":
             _deploy(config)
