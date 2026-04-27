@@ -3365,6 +3365,7 @@ class SQLModelRepository(BaseRepository):
         *,
         decky_uuid: Optional[str] = None,
         persona: Optional[str] = None,
+        content_class: Optional[str] = None,
         limit: int = 100,
         offset: int = 0,
     ) -> list[dict[str, Any]]:
@@ -3374,6 +3375,8 @@ class SQLModelRepository(BaseRepository):
                 stmt = stmt.where(SyntheticFile.decky_uuid == decky_uuid)
             if persona is not None:
                 stmt = stmt.where(SyntheticFile.persona == persona)
+            if content_class is not None:
+                stmt = stmt.where(SyntheticFile.content_class == content_class)
             stmt = (
                 stmt.order_by(desc(SyntheticFile.last_modified))
                 .offset(offset)
@@ -3381,6 +3384,36 @@ class SQLModelRepository(BaseRepository):
             )
             result = await session.execute(stmt)
             return [r.model_dump(mode="json") for r in result.scalars().all()]
+
+    async def count_synthetic_files(
+        self,
+        *,
+        decky_uuid: Optional[str] = None,
+        persona: Optional[str] = None,
+        content_class: Optional[str] = None,
+    ) -> int:
+        from sqlalchemy import func as _f
+        async with self._session() as session:
+            stmt = select(_f.count(SyntheticFile.uuid))
+            if decky_uuid is not None:
+                stmt = stmt.where(SyntheticFile.decky_uuid == decky_uuid)
+            if persona is not None:
+                stmt = stmt.where(SyntheticFile.persona == persona)
+            if content_class is not None:
+                stmt = stmt.where(SyntheticFile.content_class == content_class)
+            result = await session.execute(stmt)
+            return int(result.scalar() or 0)
+
+    async def get_synthetic_file(
+        self, uuid: str,
+    ) -> Optional[dict[str, Any]]:
+        async with self._session() as session:
+            stmt = select(SyntheticFile).where(SyntheticFile.uuid == uuid)
+            result = await session.execute(stmt)
+            row = result.scalars().first()
+            if row is None:
+                return None
+            return row.model_dump(mode="json")
 
     async def pick_random_synthetic_file_for_edit(
         self,

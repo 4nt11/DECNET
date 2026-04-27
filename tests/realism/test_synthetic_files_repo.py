@@ -114,3 +114,39 @@ async def test_pick_random_returns_eligible_row(repo):
     assert picked is not None
     assert picked["content_class"] == "todo"
     assert picked["path"] == "/home/admin/TODO.md"
+
+
+@pytest.mark.asyncio
+async def test_count_synthetic_files_respects_filters(repo):
+    await repo.record_synthetic_file(_row(decky="d1", path="/a", cls="todo"))
+    await repo.record_synthetic_file(_row(decky="d1", path="/b", cls="note"))
+    await repo.record_synthetic_file(_row(decky="d2", path="/c", cls="todo"))
+    assert await repo.count_synthetic_files() == 3
+    assert await repo.count_synthetic_files(decky_uuid="d1") == 2
+    assert await repo.count_synthetic_files(content_class="todo") == 2
+    assert await repo.count_synthetic_files(
+        decky_uuid="d1", content_class="note",
+    ) == 1
+
+
+@pytest.mark.asyncio
+async def test_list_filters_by_content_class(repo):
+    await repo.record_synthetic_file(_row(decky="d1", path="/a", cls="todo"))
+    await repo.record_synthetic_file(_row(decky="d1", path="/b", cls="note"))
+    rows = await repo.list_synthetic_files(content_class="todo")
+    assert len(rows) == 1
+    assert rows[0]["content_class"] == "todo"
+
+
+@pytest.mark.asyncio
+async def test_get_synthetic_file_returns_row(repo):
+    uuid = await repo.record_synthetic_file(_row(decky="d1", path="/a"))
+    got = await repo.get_synthetic_file(uuid)
+    assert got is not None
+    assert got["uuid"] == uuid
+    assert got["path"] == "/a"
+
+
+@pytest.mark.asyncio
+async def test_get_synthetic_file_returns_none_when_missing(repo):
+    assert await repo.get_synthetic_file("does-not-exist") is None

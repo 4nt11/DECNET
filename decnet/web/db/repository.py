@@ -1130,14 +1130,33 @@ class BaseRepository(ABC):
         *,
         decky_uuid: Optional[str] = None,
         persona: Optional[str] = None,
+        content_class: Optional[str] = None,
         limit: int = 100,
         offset: int = 0,
     ) -> list[dict[str, Any]]:
         """Paginated synthetic_files newest-first.
 
-        Optional filters narrow to one decky and/or one persona, used by
-        the dashboard's "files this decky has grown" view.
+        Optional filters narrow to one decky, persona, and/or content
+        class — used by the dashboard's "files this decky has grown"
+        view.
         """
+        raise NotImplementedError
+
+    async def count_synthetic_files(
+        self,
+        *,
+        decky_uuid: Optional[str] = None,
+        persona: Optional[str] = None,
+        content_class: Optional[str] = None,
+    ) -> int:
+        """Total synthetic_files matching the same filters as
+        :meth:`list_synthetic_files`. Used to drive paginated UI."""
+        raise NotImplementedError
+
+    async def get_synthetic_file(
+        self, uuid: str,
+    ) -> Optional[dict[str, Any]]:
+        """Single synthetic_files row by uuid, or ``None``."""
         raise NotImplementedError
 
     async def pick_random_synthetic_file_for_edit(
