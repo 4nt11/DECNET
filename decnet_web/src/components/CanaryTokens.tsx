@@ -5,7 +5,8 @@ import {
 import api from '../utils/api';
 import { useEscapeKey } from '../hooks/useEscapeKey';
 import { useFocusTrap } from '../hooks/useFocusTrap';
-import CanaryTokenDrawer, { CanaryTokenRow } from './CanaryTokenDrawer';
+import CanaryTokenDrawer from './CanaryTokenDrawer';
+import type { CanaryTokenRow } from './CanaryTokenDrawer';
 
 interface BlobRow {
   uuid: string;
