@@ -28,6 +28,9 @@ Token structure (NATS-style, dot-separated):
     campaign.unmerged
     credential.captured
     credential.reuse.detected
+    canary.{token_id}.triggered
+    canary.{token_id}.placed
+    canary.{token_id}.revoked
     system.log
     system.bus.health
     system.{worker}.health
@@ -50,6 +53,7 @@ CAMPAIGN = "campaign"
 SYSTEM = "system"
 CREDENTIAL = "credential"
 ORCHESTRATOR = "orchestrator"
+CANARY = "canary"
 
 
 # ─── Leaf event-type constants (the last segment of each topic) ──────────────
@@ -163,6 +167,30 @@ CAMPAIGN_UNMERGED = "unmerged"
 # CredentialReuse row or grows an existing one (added decky/service/IP).
 CREDENTIAL_CAPTURED = "captured"
 CREDENTIAL_REUSE_DETECTED = "reuse.detected"
+
+# Canary-token event types (third token under ``canary``).
+#
+#   canary.{token_id}.placed     — orchestrator/API successfully planted a
+#                                  canary artifact inside a decky's
+#                                  filesystem (or persisted a passive token
+#                                  that has no callback wiring).  Lets
+#                                  dashboards reflect baseline coverage in
+#                                  real time without a DB poll.
+#   canary.{token_id}.triggered  — ``decnet canary`` worker observed a
+#                                  callback hit (HTTP slug or DNS subdomain
+#                                  lookup) for the token.  Payload carries
+#                                  ``src_ip``, ``user_agent``, ``request_path``
+#                                  and any DNS qname so downstream
+#                                  consumers (correlator, webhook fanout)
+#                                  can attribute and forward without a
+#                                  follow-up DB read.
+#   canary.{token_id}.revoked    — operator removed a token; planter unlinked
+#                                  the file (best-effort) and the row was
+#                                  marked ``revoked``.  Subscribers may
+#                                  evict cached lookups by token id.
+CANARY_PLACED = "placed"
+CANARY_TRIGGERED = "triggered"
+CANARY_REVOKED = "revoked"
 
 # Orchestrator event types (second token under ``orchestrator``).  The
 # orchestrator worker publishes one of these per synthetic action it
@@ -309,6 +337,19 @@ def orchestrator(event_type: str, decky_id: str) -> str:
     """
     _reject_tokens(event_type, decky_id)
     return f"{ORCHESTRATOR}.{event_type}.{decky_id}"
+
+
+def canary(token_id: str, event_type: str) -> str:
+    """Build ``canary.<token_id>.<event_type>``.
+
+    *event_type* should be one of :data:`CANARY_PLACED`,
+    :data:`CANARY_TRIGGERED`, or :data:`CANARY_REVOKED`.  The token id
+    is always the second token so per-token subscribers can use
+    ``canary.<token_id>.>`` and fleet-wide consumers (webhook fanout,
+    correlator) use ``canary.>``.
+    """
+    _reject_tokens(token_id, event_type)
+    return f"{CANARY}.{token_id}.{event_type}"
 
 
 def system_health(worker: str) -> str:
