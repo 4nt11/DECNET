@@ -32,7 +32,7 @@ class _FakeProc:
         self.returncode = rc
         self._stderr = stderr
 
-    async def communicate(self) -> tuple[bytes, bytes]:
+    async def communicate(self, input: bytes | None = None) -> tuple[bytes, bytes]:
         return b"", self._stderr
 
 

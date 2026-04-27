@@ -59,17 +59,22 @@ def _dirname(path: str) -> str:
     return path[:idx]
 
 
-async def _run(argv: list[str]) -> tuple[int, str, str]:
+async def _run(
+    argv: list[str], *, stdin_bytes: Optional[bytes] = None,
+) -> tuple[int, str, str]:
     try:
         proc = await asyncio.create_subprocess_exec(
             *argv,
+            stdin=asyncio.subprocess.PIPE if stdin_bytes is not None else None,
             stdout=asyncio.subprocess.PIPE,
             stderr=asyncio.subprocess.PIPE,
         )
     except FileNotFoundError as exc:
         return 127, "", f"argv[0] not found: {exc}"
     try:
-        stdout, stderr = await asyncio.wait_for(proc.communicate(), timeout=_TIMEOUT)
+        stdout, stderr = await asyncio.wait_for(
+            proc.communicate(input=stdin_bytes), timeout=_TIMEOUT,
+        )
     except asyncio.TimeoutError:
         try:
             proc.kill()
@@ -83,25 +88,26 @@ async def _run(argv: list[str]) -> tuple[int, str, str]:
     )
 
 
-def _build_plant_command(artifact: CanaryArtifact) -> str:
-    """Compose the ``sh -c`` script that writes one artifact.
+def _build_plant_command(artifact: CanaryArtifact) -> tuple[str, bytes]:
+    """Compose the ``sh -c`` script + stdin payload for one artifact.
 
-    Binary safety: we base64-encode on the host side and ``base64 -d``
-    inside the container, so the bytes never touch a shell argv
-    interpolation point.  Both ``base64`` (coreutils) and ``touch -d
-    @<unix_ts>`` are present on every Linux base image we ship, so
-    there's no per-distro branching.
+    Binary safety: we base64-encode on the host and stream the result
+    over stdin to ``base64 -d`` inside the container, so the bytes
+    never touch the argv (kernel ARG_MAX would reject anything larger
+    than ~128KB-2MB depending on the host).  Both ``base64`` (coreutils)
+    and ``touch -d @<unix_ts>`` are present on every Linux base image
+    we ship, so there's no per-distro branching.
     """
-    encoded = base64.b64encode(artifact.content).decode("ascii")
+    encoded = base64.b64encode(artifact.content)
     mtime = int(time.time() + artifact.mtime_offset)
     mode_str = oct(artifact.mode)[2:]
     parts = [
         f"mkdir -p {shlex.quote(_dirname(artifact.path))}",
-        f"printf %s {shlex.quote(encoded)} | base64 -d > {shlex.quote(artifact.path)}",
+        f"base64 -d > {shlex.quote(artifact.path)}",
         f"chmod {mode_str} {shlex.quote(artifact.path)}",
         f"touch -d @{mtime} {shlex.quote(artifact.path)}",
     ]
-    return " && ".join(parts)
+    return " && ".join(parts), encoded
 
 
 async def _publish(
@@ -151,9 +157,11 @@ async def plant(
             await repo.update_canary_token_state(token_uuid, "failed", err)
         return False, err
 
-    sh_cmd = _build_plant_command(artifact)
-    argv = [_DOCKER, "exec", _container_for(decky_name), "sh", "-c", sh_cmd]
-    rc, _stdout, stderr = await _run(argv)
+    sh_cmd, stdin_payload = _build_plant_command(artifact)
+    # ``-i`` keeps stdin attached so base64 -d inside the container can
+    # consume the encoded payload streamed from the host.
+    argv = [_DOCKER, "exec", "-i", _container_for(decky_name), "sh", "-c", sh_cmd]
+    rc, _stdout, stderr = await _run(argv, stdin_bytes=stdin_payload)
     success = rc == 0
     error = None if success else (stderr.strip()[:256] or f"rc={rc}")
 

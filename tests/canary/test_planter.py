@@ -46,12 +46,23 @@ class _FakeProc:
 
 def _patch_subprocess(rc: int = 0, stderr: bytes = b""):
     captured: list[list[str]] = []
+    stdin_seen: list[bytes | None] = []
 
     async def _fake(*argv, **kw):
         captured.append(list(argv))
-        return _FakeProc(rc, b"", stderr)
+        # Capture whatever bytes the planter would stream over stdin —
+        # the new contract pipes the base64 payload here instead of
+        # interpolating it into the sh script.
+        proc = _FakeProc(rc, b"", stderr)
+        orig = proc.communicate
 
-    return patch.object(asyncio, "create_subprocess_exec", _fake), captured
+        async def communicate(input=None):
+            stdin_seen.append(input)
+            return await orig()
+        proc.communicate = communicate  # type: ignore[assignment]
+        return proc
+
+    return patch.object(asyncio, "create_subprocess_exec", _fake), captured, stdin_seen
 
 
 @pytest_asyncio.fixture
@@ -87,7 +98,7 @@ async def test_plant_argv_and_base64_round_trip(repo: SQLiteRepository, fake_bus
         "generator": "aws_creds", "placement_path": art.path,
         "callback_token": "slug", "secret_seed": "s", "created_by": "u1",
     })
-    patcher, captured = _patch_subprocess(rc=0)
+    patcher, captured, stdin_seen = _patch_subprocess(rc=0)
     with patcher:
         ok, err = await planter.plant(
             "web1", art, token_uuid="tok-1", repo=repo, bus=fake_bus,
@@ -95,12 +106,15 @@ async def test_plant_argv_and_base64_round_trip(repo: SQLiteRepository, fake_bus
     assert ok is True and err is None
     assert len(captured) == 1
     argv = captured[0]
-    assert argv[:3] == ["docker", "exec", "web1-ssh"]
-    assert argv[3:5] == ["sh", "-c"]
-    script = argv[5]
-    # base64-decoded payload appears in the script verbatim.
-    encoded = base64.b64encode(art.content).decode()
-    assert encoded in script
+    # docker exec -i <container> sh -c <script>
+    assert argv[:4] == ["docker", "exec", "-i", "web1-ssh"]
+    assert argv[4:6] == ["sh", "-c"]
+    script = argv[6]
+    # The base64 payload is streamed via stdin, NOT interpolated into
+    # the script (would blow past ARG_MAX for any non-trivial blob).
+    assert stdin_seen[0] == base64.b64encode(art.content)
+    assert "base64 -d > /home/admin/.aws/credentials" in script
+    assert base64.b64encode(art.content).decode() not in script
     # touch -d @<mtime> with negative offset → an int strictly less than now.
     m = re.search(r"touch -d @(\d+) ", script)
     assert m and int(m.group(1)) > 0
@@ -117,7 +131,7 @@ async def test_plant_records_failure_when_docker_returns_nonzero(repo: SQLiteRep
         "callback_token": "slug2", "secret_seed": "s", "created_by": "u1",
     })
     art = CanaryArtifact(path="/x", content=b"y", generator="env_file")
-    patcher, _ = _patch_subprocess(rc=125, stderr=b"container not running")
+    patcher, _argvs, _stdin = _patch_subprocess(rc=125, stderr=b"container not running")
     with patcher:
         ok, err = await planter.plant(
             "web1", art, token_uuid="tok-2", repo=repo, bus=fake_bus,
@@ -151,7 +165,7 @@ async def test_plant_publishes_placed_event(repo: SQLiteRepository, fake_bus: Fa
     })
     sub = fake_bus.subscribe("canary.>")
     art = CanaryArtifact(path="/x", content=b"y", generator="env_file")
-    patcher, _ = _patch_subprocess(rc=0)
+    patcher, _argvs, _stdin = _patch_subprocess(rc=0)
     with patcher:
         await planter.plant(
             "web1", art, token_uuid="tok-4", repo=repo, bus=fake_bus,
@@ -173,7 +187,7 @@ async def test_revoke_unlinks_and_publishes(repo: SQLiteRepository, fake_bus: Fa
         "callback_token": "slugR", "secret_seed": "s", "created_by": "u1",
     })
     sub = fake_bus.subscribe("canary.>")
-    patcher, captured = _patch_subprocess(rc=0)
+    patcher, captured, _stdin = _patch_subprocess(rc=0)
     with patcher:
         ok, err = await planter.revoke(
             "web1", "/etc/x.env",
@@ -196,7 +210,7 @@ async def test_seed_baseline_creates_one_token_per_generator(
 ) -> None:
     monkeypatch.setenv("DECNET_CANARY_BASELINE", "git_config,env_file,aws_creds")
     monkeypatch.setenv("DECNET_CANARY_HTTP_BASE", "https://canary.test")
-    patcher, captured = _patch_subprocess(rc=0)
+    patcher, captured, _stdin = _patch_subprocess(rc=0)
     with patcher:
         rows = await planter.seed_baseline("web1", repo, bus=fake_bus)
     assert {r["generator"] for r in rows} == {"git_config", "env_file", "aws_creds"}
@@ -213,7 +227,7 @@ async def test_seed_baseline_creates_one_token_per_generator(
 @pytest.mark.asyncio
 async def test_seed_baseline_skips_unknown_generator(repo: SQLiteRepository, monkeypatch) -> None:
     monkeypatch.setenv("DECNET_CANARY_BASELINE", "env_file,bogus")
-    patcher, _ = _patch_subprocess(rc=0)
+    patcher, _argvs, _stdin = _patch_subprocess(rc=0)
     with patcher:
         rows = await planter.seed_baseline("web1", repo)
     assert {r["generator"] for r in rows} == {"env_file"}
@@ -224,7 +238,7 @@ async def test_seed_baseline_marks_failed_when_docker_errors(
     repo: SQLiteRepository, monkeypatch
 ) -> None:
     monkeypatch.setenv("DECNET_CANARY_BASELINE", "env_file")
-    patcher, _ = _patch_subprocess(rc=125, stderr=b"container down")
+    patcher, _argvs, _stdin = _patch_subprocess(rc=125, stderr=b"container down")
     with patcher:
         rows = await planter.seed_baseline("web1", repo)
     assert len(rows) == 1
