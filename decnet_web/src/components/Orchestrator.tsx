@@ -12,16 +12,27 @@ import './Orchestrator.css';
 interface OrchestratorEntry {
   uuid: string;
   ts: string;
-  kind: 'traffic' | 'file' | string;
+  kind: 'traffic' | 'file' | 'email' | string;
   protocol: string;
   action: string;
   src_decky_uuid: string | null;
   dst_decky_uuid: string;
   success: boolean;
   payload: string;
+  // Email-only extras — populated when `kind === 'email'`, undefined
+  // for traffic/file rows.  The renderer keys off `kind` to decide
+  // whether to read these.
+  subject?: string;
+  sender_email?: string;
+  recipient_email?: string;
+  language?: string;
+  thread_id?: string;
+  mail_decky_uuid?: string;
+  message_id?: string;
+  in_reply_to?: string | null;
 }
 
-type KindFilter = 'all' | 'traffic' | 'file';
+type KindFilter = 'all' | 'traffic' | 'file' | 'email';
 type StreamStatus = 'connecting' | 'live' | 'error';
 
 const ROW_CAP = 500;
@@ -88,19 +99,53 @@ const Orchestrator: React.FC = () => {
     onStatus: setStatus,
     onEvent: (ev: OrchestratorStreamEvent) => {
       if (pausedRef.current) return;
-      if (ev.name !== 'traffic' && ev.name !== 'file') return;
-      const p = ev.payload as Partial<OrchestratorEntry>;
-      const row: OrchestratorEntry = {
-        uuid: `live-${ev.ts ?? Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
-        ts: ev.ts ?? new Date().toISOString(),
-        kind: (p.kind ?? ev.name) as OrchestratorEntry['kind'],
-        protocol: p.protocol ?? '?',
-        action: p.action ?? '',
-        src_decky_uuid: p.src_decky_uuid ?? null,
-        dst_decky_uuid: p.dst_decky_uuid ?? '',
-        success: Boolean(p.success),
-        payload: typeof p.payload === 'string' ? p.payload : JSON.stringify(p.payload ?? {}),
+      if (ev.name !== 'traffic' && ev.name !== 'file' && ev.name !== 'email') return;
+      const p = ev.payload as Partial<OrchestratorEntry> & {
+        // Live email payloads come from worker._one_tick — see emailgen
+        // worker.py for the bus payload shape.
+        sender_email?: string;
+        recipient_email?: string;
+        subject?: string;
+        language?: string;
+        thread_id?: string;
+        mail_decky_uuid?: string;
+        message_id?: string;
+        in_reply_to?: string | null;
       };
+      const isEmail = ev.name === 'email' || p.kind === 'email';
+      const row: OrchestratorEntry = isEmail
+        ? {
+          uuid: `live-${ev.ts ?? Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+          ts: ev.ts ?? new Date().toISOString(),
+          kind: 'email',
+          protocol: 'smtp',
+          action: p.subject ?? '',
+          // Map sender/recipient onto src/dst so the existing inspector
+          // shows them naturally — the API does the same on REST reads.
+          src_decky_uuid: p.sender_email ?? null,
+          dst_decky_uuid: p.recipient_email ?? '',
+          success: Boolean(p.success),
+          payload: typeof p.payload === 'string' ? p.payload : JSON.stringify(p.payload ?? {}),
+          subject: p.subject,
+          sender_email: p.sender_email,
+          recipient_email: p.recipient_email,
+          language: p.language,
+          thread_id: p.thread_id,
+          mail_decky_uuid: p.mail_decky_uuid,
+          message_id: p.message_id,
+          in_reply_to: p.in_reply_to ?? null,
+        }
+        : {
+          uuid: `live-${ev.ts ?? Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+          ts: ev.ts ?? new Date().toISOString(),
+          kind: (p.kind ?? ev.name) as OrchestratorEntry['kind'],
+          protocol: p.protocol ?? '?',
+          action: p.action ?? '',
+          src_decky_uuid: p.src_decky_uuid ?? null,
+          dst_decky_uuid: p.dst_decky_uuid ?? '',
+          success: Boolean(p.success),
+          payload: typeof p.payload === 'string' ? p.payload : JSON.stringify(p.payload ?? {}),
+        };
       setStreamRows((prev) => [row, ...prev].slice(0, ROW_CAP));
     },
   });
@@ -156,7 +201,7 @@ const Orchestrator: React.FC = () => {
 
       <div className="controls-row">
         <div className="seg-group" role="tablist" aria-label="Filter by event kind">
-          {(['all', 'traffic', 'file'] as KindFilter[]).map((k) => (
+          {(['all', 'traffic', 'file', 'email'] as KindFilter[]).map((k) => (
             <button
               key={k}
               className={kindParam === k ? 'active' : ''}
@@ -210,7 +255,10 @@ const Orchestrator: React.FC = () => {
               {visible.length > 0 ? visible.map((r) => {
                 const fresh = now - new Date(r.ts).getTime() < FRESH_MS;
                 const cls = !r.success ? 'fail' : fresh ? 'fresh' : '';
-                const kindCls = r.kind === 'traffic' || r.kind === 'file' ? r.kind : '';
+                const kindCls =
+                  r.kind === 'traffic' || r.kind === 'file' || r.kind === 'email'
+                    ? r.kind : '';
+                const isEmail = r.kind === 'email';
                 return (
                   <tr
                     key={r.uuid}
@@ -221,11 +269,28 @@ const Orchestrator: React.FC = () => {
                     <td>
                       <span className={`kind-chip ${kindCls}`}>{r.kind}</span>
                     </td>
-                    <td className="mono matrix-text">{r.action}</td>
+                    <td className="mono matrix-text">
+                      {isEmail && r.language && (
+                        <span
+                          className="chip dim-chip"
+                          style={{ marginRight: 6 }}
+                          title={`Language: ${r.language}`}
+                        >
+                          {r.language.toUpperCase()}
+                        </span>
+                      )}
+                      {r.action}
+                    </td>
                     <td className="src-dst">
-                      {r.src_decky_uuid ? `${r.src_decky_uuid.slice(0, 8)}…` : '—'}
+                      {/* Email rows show full sender / recipient addresses;
+                          UUID rows stay truncated. */}
+                      {isEmail
+                        ? (r.src_decky_uuid ?? '—')
+                        : (r.src_decky_uuid ? `${r.src_decky_uuid.slice(0, 8)}…` : '—')}
                       <span className="arrow">→</span>
-                      {r.dst_decky_uuid ? `${r.dst_decky_uuid.slice(0, 8)}…` : '—'}
+                      {isEmail
+                        ? (r.dst_decky_uuid || '—')
+                        : (r.dst_decky_uuid ? `${r.dst_decky_uuid.slice(0, 8)}…` : '—')}
                     </td>
                     <td>
                       <span className={r.success ? 'ok-yes' : 'ok-no'}>
@@ -241,7 +306,13 @@ const Orchestrator: React.FC = () => {
                     <EmptyState
                       icon={Cpu}
                       title={loading ? 'LOADING…' : 'NO ORCHESTRATOR ACTIVITY YET'}
-                      hint={loading ? undefined : 'start the worker with `decnet orchestrate`'}
+                      hint={
+                        loading
+                          ? undefined
+                          : kindParam === 'email'
+                            ? 'start the worker with `decnet emailgen run`'
+                            : 'start the worker with `decnet orchestrate`'
+                      }
                     />
                   </td>
                 </tr>

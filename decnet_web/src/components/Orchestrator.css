@@ -212,6 +212,10 @@
 }
 .orchestrator-root .kind-chip.traffic { border-color: var(--matrix); color: var(--matrix); }
 .orchestrator-root .kind-chip.file { border-color: var(--violet); color: var(--violet); }
+/* Emailgen rows — distinct accent so the eye separates LLM-driven mail
+   from SSH/file activity at a glance.  Falls back to --accent when the
+   theme doesn't define --amber. */
+.orchestrator-root .kind-chip.email { border-color: var(--amber, var(--accent)); color: var(--amber, var(--accent)); }
 
 /* OK indicator */
 .orchestrator-root .ok-yes { color: var(--matrix); font-weight: 700; }

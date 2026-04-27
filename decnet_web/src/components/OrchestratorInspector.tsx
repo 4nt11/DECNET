@@ -5,13 +5,22 @@ import { useToast } from './Toasts/useToast';
 export interface OrchestratorInspectorEntry {
   uuid: string;
   ts: string;
-  kind: 'traffic' | 'file' | string;
+  kind: 'traffic' | 'file' | 'email' | string;
   protocol: string;
   action: string;
   src_decky_uuid: string | null;
   dst_decky_uuid: string;
   success: boolean;
   payload: string;
+  // Email-only extras populated when `kind === 'email'`.
+  subject?: string;
+  sender_email?: string;
+  recipient_email?: string;
+  language?: string;
+  thread_id?: string;
+  mail_decky_uuid?: string;
+  message_id?: string;
+  in_reply_to?: string | null;
 }
 
 interface Props {
@@ -52,7 +61,10 @@ const OrchestratorInspector: React.FC<Props> = ({ event, onClose }) => {
   const copyEvent = () => copy(JSON.stringify(event, null, 2), 'EVENT JSON');
   const copyPayload = () => copy(prettyPayload, 'PAYLOAD JSON');
 
-  const kindCls = event.kind === 'traffic' || event.kind === 'file' ? event.kind : '';
+  const kindCls =
+    event.kind === 'traffic' || event.kind === 'file' || event.kind === 'email'
+      ? event.kind : '';
+  const isEmail = event.kind === 'email';
   const srcSrc = sourceTag(event.src_decky_uuid);
   const dstSrc = sourceTag(event.dst_decky_uuid);
   const isLive = event.uuid.startsWith('live-');
@@ -87,8 +99,41 @@ const OrchestratorInspector: React.FC<Props> = ({ event, onClose }) => {
               <span className="chip dim-chip">{event.protocol.toUpperCase()}</span>
             </div>
 
-            <div className="k">ACTION</div>
+            <div className="k">{isEmail ? 'SUBJECT' : 'ACTION'}</div>
             <div className="v mono matrix-text">{event.action}</div>
+
+            {isEmail && event.language && (
+              <>
+                <div className="k">LANGUAGE</div>
+                <div className="v">
+                  <span className="chip dim-chip">{event.language.toUpperCase()}</span>
+                </div>
+              </>
+            )}
+            {isEmail && event.thread_id && (
+              <>
+                <div className="k">THREAD</div>
+                <div className="v">
+                  <span className="hash-text">{event.thread_id}</span>
+                </div>
+              </>
+            )}
+            {isEmail && event.in_reply_to && (
+              <>
+                <div className="k">IN-REPLY-TO</div>
+                <div className="v">
+                  <span className="hash-text">{event.in_reply_to}</span>
+                </div>
+              </>
+            )}
+            {isEmail && event.mail_decky_uuid && (
+              <>
+                <div className="k">MAIL DECKY</div>
+                <div className="v">
+                  <span className="hash-text">{event.mail_decky_uuid}</span>
+                </div>
+              </>
+            )}
 
             <div className="k">OUTCOME</div>
             <div className="v">

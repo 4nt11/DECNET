@@ -5,7 +5,11 @@
  */
 import { useEffect, useRef } from 'react';
 
-export type OrchestratorStreamEventName = 'snapshot' | 'traffic' | 'file';
+export type OrchestratorStreamEventName =
+  | 'snapshot'
+  | 'traffic'
+  | 'file'
+  | 'email';
 
 export interface OrchestratorStreamEvent {
   name: OrchestratorStreamEventName | string;
@@ -21,7 +25,13 @@ export interface UseOrchestratorStreamOptions {
   onStatus?: (status: 'connecting' | 'live' | 'error') => void;
 }
 
-const NAMED_EVENTS: OrchestratorStreamEventName[] = ['snapshot', 'traffic', 'file'];
+// Must include every leaf the SSE endpoint emits — the EventSource
+// silently drops frames whose `event:` name has no listener registered.
+// New leaves on the bus need a corresponding entry here or the
+// dashboard ignores them despite the SSE pipe carrying them through.
+const NAMED_EVENTS: OrchestratorStreamEventName[] = [
+  'snapshot', 'traffic', 'file', 'email',
+];
 
 export function useOrchestratorStream({
   enabled,
