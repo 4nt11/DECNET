@@ -188,6 +188,39 @@ class TestSynFingerprintEmission:
         assert last["ipid_class"] == "incremental"
         assert int(last["ipid_samples"]) >= 4
 
+    def test_isn_classified_random_with_high_variance_seqs(self):
+        """SYNs with widely varying ISNs should classify as random."""
+        engine, captured = _make_engine()
+        # Spread ISNs across the 32-bit space; randomised initial sequence.
+        seqs = [0x12345678, 0xABCDEF01, 0x0F0F0F0F, 0xDEADBEEF,
+                0x11223344, 0x99887766, 0x44556677, 0xCAFEBABE]
+        for i, seq in enumerate(seqs):
+            pkt = IP(src=_ATTACKER_IP, dst=_DECKY_IP, ttl=64, id=2000 + i) / TCP(
+                sport=47000 + i, dport=22, flags="S", seq=seq, window=29200,
+                options=[("MSS", 1460), ("SAckOK", b""), ("Timestamp", (0, 0)),
+                         ("NOP", None), ("WScale", 7)],
+            )
+            engine.on_packet(pkt)
+        fp_lines = [ln for ln in captured if _msgid(ln) == "tcp_syn_fingerprint"]
+        last = _fields_from_line(fp_lines[-1])
+        assert last["isn_class"] == "random"
+        assert int(last["isn_samples"]) >= 4
+
+    def test_isn_classified_incremental_with_monotonic_seqs(self):
+        """SYNs whose ISNs march upward in small steps should classify
+        as incremental — a strong fingerprint signal vs. modern stacks."""
+        engine, captured = _make_engine()
+        for i in range(8):
+            pkt = IP(src=_ATTACKER_IP, dst=_DECKY_IP, ttl=64, id=3000 + i) / TCP(
+                sport=48000 + i, dport=22, flags="S", seq=10_000 + i, window=29200,
+                options=[("MSS", 1460), ("SAckOK", b""), ("Timestamp", (0, 0)),
+                         ("NOP", None), ("WScale", 7)],
+            )
+            engine.on_packet(pkt)
+        fp_lines = [ln for ln in captured if _msgid(ln) == "tcp_syn_fingerprint"]
+        last = _fields_from_line(fp_lines[-1])
+        assert last["isn_class"] == "incremental"
+
     def test_decky_source_does_not_emit(self):
         """Packets originating from a decky (outbound reply) should NOT
         be classified as an attacker fingerprint."""

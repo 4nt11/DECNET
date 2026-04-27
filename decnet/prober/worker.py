@@ -415,6 +415,7 @@ def _tcpfp_phase(
                 tos=str(result["tos"]),
                 dscp=str(result["dscp"]),
                 ecn=str(result["ecn"]),
+                server_isn=str(result["server_isn"]),
                 msg=f"TCPFP {ip}:{port} = {result['tcpfp_hash']}",
             )
             logger.info("prober: TCPFP %s:%d = %s", ip, port, result["tcpfp_hash"])

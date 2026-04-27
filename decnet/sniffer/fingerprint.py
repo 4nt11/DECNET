@@ -752,6 +752,7 @@ class SnifferEngine:
         # we can label them random/incremental/zero/constant.
         self._SEQ_SAMPLE_SIZE = 8
         self._ipid_samples: dict[str, deque[int]] = {}
+        self._isn_samples: dict[str, deque[int]] = {}
 
         # Per-flow timing aggregator. Key: (src_ip, src_port, dst_ip, dst_port).
         # Flow direction is client→decky; reverse packets are associated back
@@ -1052,6 +1053,12 @@ class SnifferEngine:
                     )
                     ipid_buf.append(int(ip.id))
                     ipid_class = classify_sequence(list(ipid_buf))
+
+                    isn_buf = self._isn_samples.setdefault(
+                        src_ip, deque(maxlen=self._SEQ_SAMPLE_SIZE)
+                    )
+                    isn_buf.append(int(tcp.seq))
+                    isn_class = classify_sequence(list(isn_buf))
                     os_label = guess_os(
                         ttl=ip.ttl,
                         window=int(tcp.window),
@@ -1082,6 +1089,8 @@ class SnifferEngine:
                         ecn=str(int(getattr(ip, "tos", 0)) & 0x3),
                         ipid_class=ipid_class,
                         ipid_samples=str(len(ipid_buf)),
+                        isn_class=isn_class,
+                        isn_samples=str(len(isn_buf)),
                         os_guess=os_label,
                     )
 

@@ -139,6 +139,10 @@ def _parse_synack(resp: Any) -> dict[str, Any]:
 
     # TCP fields
     window_size = tcp_layer.window
+    # Server ISN: single sample from one probe — not classified here, but
+    # exported so a downstream consumer correlating multiple probes against
+    # the same target can apply seq_class.classify_sequence().
+    server_isn = int(getattr(tcp_layer, "seq", 0))
 
     # Parse TCP options
     mss = 0
@@ -165,6 +169,7 @@ def _parse_synack(resp: Any) -> dict[str, Any]:
         "tos": tos,
         "dscp": dscp,
         "ecn": ecn,
+        "server_isn": server_isn,
         "mss": mss,
         "window_scale": window_scale,
         "sack_ok": sack_ok,

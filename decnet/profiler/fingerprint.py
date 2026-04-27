@@ -144,6 +144,7 @@ def sniffer_rollup(events: list[LogEvent]) -> dict[str, Any]:
     hops: list[int] = []
     tcp_fp: dict[str, Any] | None = None
     ipid_latest: str | None = None
+    isn_latest: str | None = None
     # Tracks which event set tcp_fp last — picks the provider "context"
     # (syn vs synack) when we feed the p0f-v2 matcher below.
     tcp_fp_context: str = "syn"
@@ -193,6 +194,10 @@ def sniffer_rollup(events: list[LogEvent]) -> dict[str, Any]:
             if ipid_class and ipid_class != "unknown":
                 ipid_latest = ipid_class
             tcp_fp["ipid_class"] = ipid_latest
+            isn_class = e.fields.get("isn_class")
+            if isn_class and isn_class != "unknown":
+                isn_latest = isn_class
+            tcp_fp["isn_class"] = isn_latest
             tcp_fp_context = "syn"
 
         elif e.event_type == _SNIFFER_FLOW_EVENT:

@@ -23,6 +23,7 @@ interface AttackerBehavior {
     dscp?: number | null;
     ecn?: number | null;
     ipid_class?: string | null;
+    isn_class?: string | null;
   } | null;
   retransmit_count: number;
   behavior_class: string | null;
@@ -770,6 +771,12 @@ const TcpStackBlock: React.FC<{ b: AttackerBehavior }> = ({ b }) => {
           {fp.has_timestamps && <Tag>TS</Tag>}
           {fp.ipid_class && fp.ipid_class !== 'unknown' && (
             <Tag color={seqClassColor(fp.ipid_class)}>IPID:{fp.ipid_class.toUpperCase()}</Tag>
+          )}
+          {fp.isn_class && fp.isn_class !== 'unknown' && (
+            <Tag color={seqClassColor(fp.isn_class)}>
+              {fp.isn_class !== 'random' && '⚠ '}
+              ISN:{fp.isn_class.toUpperCase()}
+            </Tag>
           )}
         </div>
         {fp.options_sig && (

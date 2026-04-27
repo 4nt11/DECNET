@@ -32,6 +32,7 @@ def _make_synack(
     tcp_flags: int = 0x12,  # SYN-ACK
     options: list | None = None,
     ack: int = 1,
+    seq: int = 0,
 ) -> SimpleNamespace:
     """Build a fake scapy-like SYN-ACK packet for testing."""
     if options is None:
@@ -52,6 +53,7 @@ def _make_synack(
         options=options,
         dport=12345,
         ack=ack,
+        seq=seq,
     )
     ip_layer = SimpleNamespace(
         ttl=ttl,
@@ -197,6 +199,11 @@ class TestParseSynack:
         assert result["tos"] == 0x2A
         assert result["dscp"] == 10
         assert result["ecn"] == 2
+
+    def test_server_isn_captured(self):
+        resp = _make_synack(seq=0xDEADBEEF)
+        result = _parse_synack(resp)
+        assert result["server_isn"] == 0xDEADBEEF
 
     def test_tos_ce_marked(self):
         # ECN CE bit set, no DSCP marking → ToS = 0x03
