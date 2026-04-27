@@ -28,7 +28,7 @@ from email.utils import formatdate
 from typing import Any, Optional
 
 from decnet.logging import get_logger
-from decnet.orchestrator.drivers.base import ActivityResult
+from decnet.orchestrator.drivers.base import ActivityDriver, ActivityResult
 from decnet.orchestrator.emailgen.scheduler import EmailAction
 from decnet.orchestrator.emailgen.threads import new_message_id
 from decnet.realism.llm import LLMBackend, LLMTimeout, get_llm
@@ -148,7 +148,7 @@ def _build_eml(
     return msg.as_bytes()
 
 
-class EmailDriver:
+class EmailDriver(ActivityDriver):
     """Concrete driver for :class:`EmailAction`.
 
     Stateless across calls — the LLM backend is constructed once at

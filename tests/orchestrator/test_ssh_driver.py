@@ -56,13 +56,17 @@ async def test_traffic_failure_when_banner_missing(monkeypatch):
 
 @pytest.mark.asyncio
 async def test_file_action_invokes_docker_exec_on_dst(monkeypatch):
-    captured_argv: list[list[str]] = []
+    captured: list[tuple[list[str], bytes | None]] = []
 
-    async def fake_run(argv):
-        captured_argv.append(argv)
+    async def fake_run_with_stdin(argv, stdin_bytes):
+        captured.append((argv, stdin_bytes))
         return 0, "", ""
 
-    monkeypatch.setattr(ssh_driver, "_run", fake_run)
+    # plant_file streams base64 content via stdin to avoid ARG_MAX
+    # (mirrors decnet.canary.planter; see commit c17b9e0).  The test
+    # patches _run_with_stdin instead of _run because that's the
+    # codepath FileAction now exercises.
+    monkeypatch.setattr(ssh_driver, "_run_with_stdin", fake_run_with_stdin)
     drv = ssh_driver.SSHDriver()
     action = FileAction(
         dst_uuid="u2", dst_name="decky-02",
@@ -71,19 +75,20 @@ async def test_file_action_invokes_docker_exec_on_dst(monkeypatch):
     )
     result = await drv.run(action)
     assert result.success is True
-    assert result.payload["bytes"] == len("session=1700000000\n".encode())
-    argv = captured_argv[0]
-    assert argv[:3] == ["docker", "exec", "decky-02-ssh"]
-    assert argv[3] == "sh"
-    assert argv[4] == "-c"
-    # The shell payload must single-quote both the content and the path —
-    # any unquoted ``;`` or ``$`` here would mean a shell-injection bug.
-    sh_cmd = argv[5]
-    # Path appears (shlex.quote leaves safe paths unquoted) and content
-    # is single-quoted — that's the shell-injection-safe contract.
+    assert result.payload["bytes"] == len(b"session=1700000000\n")
+    argv, stdin_bytes = captured[0]
+    assert argv[:4] == ["docker", "exec", "-i", "decky-02-ssh"]
+    assert argv[4] == "sh"
+    assert argv[5] == "-c"
+    sh_cmd = argv[6]
     assert "/tmp/.cache-1700000000.tmp" in sh_cmd
-    assert "'session=1700000000\n'" in sh_cmd
+    assert "base64 -d" in sh_cmd
     assert "mkdir -p /tmp" in sh_cmd
+    # Content travels base64-encoded on stdin, not interpolated into
+    # argv — that's the ARG_MAX-safe + shell-injection-safe contract.
+    import base64
+    assert stdin_bytes is not None
+    assert base64.b64decode(stdin_bytes) == b"session=1700000000\n"
 
 
 @pytest.mark.asyncio
@@ -97,3 +102,72 @@ async def test_run_handles_missing_docker_binary(monkeypatch):
     rc, out, err = await ssh_driver._run(["docker", "exec", "x", "true"])
     assert rc == 127
     assert "not found" in err
+
+
+@pytest.mark.asyncio
+async def test_plant_file_applies_mtime_via_touch_d(monkeypatch):
+    from datetime import datetime, timezone
+    captured: list[tuple[list[str], bytes | None]] = []
+
+    async def fake_run_with_stdin(argv, stdin_bytes):
+        captured.append((argv, stdin_bytes))
+        return 0, "", ""
+
+    monkeypatch.setattr(ssh_driver, "_run_with_stdin", fake_run_with_stdin)
+    drv = ssh_driver.SSHDriver()
+    mtime = datetime(2026, 4, 20, 11, 30, 0, tzinfo=timezone.utc)
+    result = await drv.plant_file(
+        "decky-03", "/home/admin/TODO.md", b"- [ ] rotate keys\n",
+        mode=0o644, mtime=mtime,
+    )
+    assert result.success is True
+    sh_cmd = captured[0][0][6]
+    # Backdated mtime appears in the touch -d argument.
+    assert "touch -d '2026-04-20 11:30:00 UTC'" in sh_cmd
+    assert "chmod 644" in sh_cmd
+
+
+@pytest.mark.asyncio
+async def test_read_file_returns_bytes(monkeypatch):
+    async def fake_run(argv):
+        assert argv[:3] == ["docker", "exec", "decky-04-ssh"]
+        assert argv[3] == "cat"
+        return 0, "previous body\n", ""
+
+    monkeypatch.setattr(ssh_driver, "_run", fake_run)
+    drv = ssh_driver.SSHDriver()
+    body = await drv.read_file("decky-04", "/home/admin/notes.txt")
+    assert body == b"previous body\n"
+
+
+@pytest.mark.asyncio
+async def test_read_file_raises_file_not_found(monkeypatch):
+    async def fake_run(argv):
+        return 1, "", "cat: /nope: No such file or directory"
+
+    monkeypatch.setattr(ssh_driver, "_run", fake_run)
+    drv = ssh_driver.SSHDriver()
+    with pytest.raises(FileNotFoundError):
+        await drv.read_file("decky-04", "/nope")
+
+
+@pytest.mark.asyncio
+async def test_get_driver_for_dispatches_by_action_type():
+    from decnet.orchestrator.drivers import get_driver_for, SSHDriver
+    traffic = TrafficAction(
+        src_uuid="u1", src_name="a", dst_uuid="u2", dst_name="b",
+        dst_ip="10.0.0.1",
+    )
+    file_a = FileAction(
+        dst_uuid="u2", dst_name="b", path="/tmp/x", content="y",
+    )
+    assert isinstance(get_driver_for(traffic), SSHDriver)
+    assert isinstance(get_driver_for(file_a), SSHDriver)
+
+
+def test_get_driver_for_unknown_action_raises():
+    from decnet.orchestrator.drivers import get_driver_for
+    class _Bogus:
+        pass
+    with pytest.raises(TypeError, match="no driver registered"):
+        get_driver_for(_Bogus())  # type: ignore[arg-type]

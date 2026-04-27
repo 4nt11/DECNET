@@ -21,8 +21,11 @@ import asyncio
 import shlex
 from typing import Any
 
+import base64
+from datetime import datetime, timezone
+
 from decnet.logging import get_logger
-from decnet.orchestrator.drivers.base import ActivityResult
+from decnet.orchestrator.drivers.base import ActivityDriver, ActivityResult
 from decnet.orchestrator.scheduler import Action, FileAction, TrafficAction
 
 log = get_logger("orchestrator.ssh")
@@ -48,16 +51,31 @@ async def _run(argv: list[str]) -> tuple[int, str, str]:
     raises — orchestrator success/failure is a payload attribute, not
     an exception.
     """
+    return await _run_with_stdin(argv, None)
+
+
+async def _run_with_stdin(
+    argv: list[str], stdin_bytes: bytes | None,
+) -> tuple[int, str, str]:
+    """Spawn *argv*, optionally feeding *stdin_bytes*, and capture rc+output.
+
+    Used by :meth:`SSHDriver.plant_file` to stream base64 payloads via
+    stdin (avoids ARG_MAX on large blobs — same fix as the canary
+    planter in commit c17b9e0).  Same failure semantics as :func:`_run`.
+    """
     try:
         proc = await asyncio.create_subprocess_exec(
             *argv,
+            stdin=asyncio.subprocess.PIPE if stdin_bytes is not None else None,
             stdout=asyncio.subprocess.PIPE,
             stderr=asyncio.subprocess.PIPE,
         )
     except FileNotFoundError as exc:
         return 127, "", f"argv[0] not found: {exc}"
     try:
-        stdout, stderr = await asyncio.wait_for(proc.communicate(), timeout=_TIMEOUT)
+        stdout, stderr = await asyncio.wait_for(
+            proc.communicate(stdin_bytes), timeout=_TIMEOUT,
+        )
     except asyncio.TimeoutError:
         try:
             proc.kill()
@@ -83,8 +101,8 @@ _PROBE_PY = (
 )
 
 
-class SSHDriver:
-    """Concrete :class:`Driver` for the MVP."""
+class SSHDriver(ActivityDriver):
+    """Concrete :class:`ActivityDriver` for SSH-flavoured actions."""
 
     async def run(self, action: Action) -> ActivityResult:
         if isinstance(action, TrafficAction):
@@ -118,29 +136,82 @@ class SSHDriver:
         return ActivityResult(success=success, payload=payload)
 
     async def _run_file(self, action: FileAction) -> ActivityResult:
-        container = _container_for(action.dst_name)
-        # `tee` is in coreutils on every base image; using it (instead of
-        # `>` redirection) keeps the argv free of shell metacharacters
-        # the dst_name/path could otherwise weaponise.  Path validation
-        # still belongs upstream — the scheduler's templates are fixed.
-        # We do invoke `sh -c` so the parent dir gets mkdir'd in one
-        # call; the sh argv stays trivially auditable.
-        sh_cmd = (
-            f"mkdir -p {shlex.quote(_dirname(action.path))} && "
-            f"printf %s {shlex.quote(action.content)} > {shlex.quote(action.path)} && "
-            f"touch {shlex.quote(action.path)}"
+        # FileAction's content is a string; the realism path uses
+        # bytes-typed plant_file so binary blobs (DOCX/PDF, future
+        # canary artifacts) survive the wire.  Encode-once here.
+        return await self.plant_file(
+            action.dst_name,
+            action.path,
+            action.content.encode("utf-8"),
+            mode=0o644,
         )
-        argv = [_DOCKER, "exec", container, "sh", "-c", sh_cmd]
-        rc, stdout, stderr = await _run(argv)
+
+    async def plant_file(
+        self,
+        decky_name: str,
+        path: str,
+        content: bytes,
+        *,
+        mode: int = 0o600,
+        mtime: datetime | None = None,
+    ) -> ActivityResult:
+        """Write *content* to *path* inside *decky_name*'s ssh container.
+
+        Streams base64 via stdin (mirrors :mod:`decnet.canary.planter`'s
+        ARG_MAX-safe write — see commit c17b9e0).  Sets file mode and,
+        when *mtime* is provided, ``touch -d`` to backdate the file so
+        it doesn't all stamp at wall-clock-now (the realism failure
+        this migration is fixing).
+        """
+        container = _container_for(decky_name)
+        b64 = base64.b64encode(content).decode("ascii")
+        # touch -d accepts ISO 8601; we always emit UTC so the
+        # container's local TZ doesn't drift the mtime.
+        if mtime is not None:
+            ts = mtime.astimezone(timezone.utc).strftime("%Y-%m-%d %H:%M:%S UTC")
+            touch_cmd = f"touch -d {shlex.quote(ts)} {shlex.quote(path)}"
+        else:
+            touch_cmd = f"touch {shlex.quote(path)}"
+        sh_cmd = (
+            f"mkdir -p {shlex.quote(_dirname(path))} && "
+            f"base64 -d > {shlex.quote(path)} && "
+            f"chmod {mode:o} {shlex.quote(path)} && "
+            f"{touch_cmd}"
+        )
+        argv = [_DOCKER, "exec", "-i", container, "sh", "-c", sh_cmd]
+        rc, _stdout, stderr = await _run_with_stdin(argv, b64.encode("ascii"))
         success = rc == 0
         payload: dict[str, Any] = {
-            "dst_decky": action.dst_name,
-            "path": action.path,
-            "bytes": len(action.content.encode("utf-8")),
+            "dst_decky": decky_name,
+            "path": path,
+            "bytes": len(content),
             "rc": rc,
             "stderr": stderr.strip()[:256] if not success else None,
         }
         return ActivityResult(success=success, payload=payload)
+
+    async def read_file(self, decky_name: str, path: str) -> bytes:
+        """Read *path* from inside *decky_name*'s ssh container.
+
+        Used by the realism edit-in-place flow: the driver fetches
+        the previous body, the realism engine produces the next
+        iteration, the driver re-plants it via :meth:`plant_file`.
+
+        Raises :class:`FileNotFoundError` when the container path
+        doesn't exist (rc=1 from ``cat`` with stderr ``No such
+        file``).  Other failures raise :class:`RuntimeError` carrying
+        the docker stderr.
+        """
+        container = _container_for(decky_name)
+        argv = [_DOCKER, "exec", container, "cat", path]
+        rc, stdout, stderr = await _run(argv)
+        if rc == 0:
+            return stdout.encode("utf-8") if isinstance(stdout, str) else stdout
+        if "No such file" in stderr or "no such file" in stderr.lower():
+            raise FileNotFoundError(f"{path} not present in {decky_name}")
+        raise RuntimeError(
+            f"docker exec cat failed rc={rc} stderr={stderr.strip()[:256]!r}"
+        )
 
 
 def _dirname(path: str) -> str:
