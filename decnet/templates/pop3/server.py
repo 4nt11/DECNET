@@ -11,6 +11,8 @@ Credentials via IMAP_USERS env var (shared with IMAP service).
 
 import asyncio
 import os
+import time
+from pathlib import Path
 from syslog_bridge import (
     SEVERITY_WARNING,
     encode_secret,
@@ -30,9 +32,13 @@ VALID_USERS: dict[str, str] = {
     u: p for part in _RAW_USERS.split(",") if ":" in part for u, p in [part.split(":", 1)]
 }
 
-# DEBT-026: path to a JSON file with custom email definitions.
-# Wiring (service_cfg["email_seed"] → compose_fragment → env var → here) is deferred.
-_EMAIL_SEED_PATH = os.environ.get("POP3_EMAIL_SEED", "")  # stub — currently unused
+# Path to a directory of ``*.eml`` files dropped by the orchestrator
+# emailgen worker (``/var/spool/decnet-emails/`` by convention).  When
+# set and populated, those EMLs replace the hardcoded fallback list
+# below — same semantics as the IMAP template.  Empty / missing falls
+# back so a fresh deployment is never silent.
+_EMAIL_SEED_PATH = os.environ.get("POP3_EMAIL_SEED", "")
+_SEED_RESCAN_INTERVAL = float(os.environ.get("POP3_EMAIL_SEED_RESCAN", "5"))
 
 # ── Bait emails ───────────────────────────────────────────────────────────────
 
@@ -163,6 +169,64 @@ _BAIT_EMAILS: list[str] = [
     ),
 ]
 
+
+# ── Spool-backed email loader ─────────────────────────────────────────────────
+# POP3 stores each message as a single str (full RFC 822 text); when the
+# emailgen spool is configured, we read every *.eml in it and serve the
+# raw bytes as the corpus.  Same caching strategy as the IMAP template.
+
+_seed_cache: list[str] | None = None
+_seed_cache_dir_mtime: float = 0.0
+_seed_cache_loaded_at: float = 0.0
+
+
+def _scan_seed_dir(path: Path) -> list[str]:
+    """Walk *path* recursively and return each .eml's raw text content,
+    sorted by mtime so older threads get lower indices."""
+    eml_paths: list[Path] = []
+    try:
+        for p in path.rglob("*.eml"):
+            if p.is_file():
+                eml_paths.append(p)
+    except OSError:
+        return []
+    eml_paths.sort(key=lambda p: p.stat().st_mtime)
+    out: list[str] = []
+    for p in eml_paths:
+        try:
+            out.append(p.read_text(encoding="utf-8", errors="replace"))
+        except OSError:
+            continue
+    return out
+
+
+def _get_emails() -> list[str]:
+    """Return the active corpus.  Same fallback rules as IMAP template."""
+    global _seed_cache, _seed_cache_dir_mtime, _seed_cache_loaded_at
+    if not _EMAIL_SEED_PATH:
+        return _BAIT_EMAILS
+    seed_dir = Path(_EMAIL_SEED_PATH)
+    try:
+        dir_stat = seed_dir.stat()
+    except OSError:
+        return _BAIT_EMAILS
+    now = time.monotonic()
+    fresh_enough = (
+        _seed_cache is not None
+        and (now - _seed_cache_loaded_at) < _SEED_RESCAN_INTERVAL
+        and dir_stat.st_mtime == _seed_cache_dir_mtime
+    )
+    if fresh_enough:
+        return _seed_cache or _BAIT_EMAILS
+    scanned = _scan_seed_dir(seed_dir)
+    if not scanned:
+        return _BAIT_EMAILS
+    _seed_cache = scanned
+    _seed_cache_dir_mtime = dir_stat.st_mtime
+    _seed_cache_loaded_at = now
+    return scanned
+
+
 # ── Logging ───────────────────────────────────────────────────────────────────
 
 def _log(event_type: str, severity: int = 6, **kwargs) -> None:
@@ -287,7 +351,7 @@ class POP3Protocol(asyncio.Protocol):
         """Return [(1-based-num, body), ...] excluding DELE'd messages."""
         return [
             (i + 1, body)
-            for i, body in enumerate(_BAIT_EMAILS)
+            for i, body in enumerate(_get_emails())
             if i not in self._deleted
         ]
 
@@ -301,14 +365,15 @@ class POP3Protocol(asyncio.Protocol):
     def _cmd_list(self, args: str) -> None:
         if not self._require_transaction():
             return
+        emails = _get_emails()
         if args:
             try:
                 n = int(args)
                 idx = n - 1
-                if idx in self._deleted or not (0 <= idx < len(_BAIT_EMAILS)):
+                if idx in self._deleted or not (0 <= idx < len(emails)):
                     self._transport.write(b"-ERR No such message\r\n")
                 else:
-                    size = len(_BAIT_EMAILS[idx].encode())
+                    size = len(emails[idx].encode())
                     self._transport.write(f"+OK {n} {size}\r\n".encode())
             except ValueError:
                 self._transport.write(b"-ERR Invalid argument\r\n")
@@ -326,10 +391,11 @@ class POP3Protocol(asyncio.Protocol):
         try:
             n   = int(args)
             idx = n - 1
-            if idx in self._deleted or not (0 <= idx < len(_BAIT_EMAILS)):
+            emails = _get_emails()
+            if idx in self._deleted or not (0 <= idx < len(emails)):
                 self._transport.write(b"-ERR No such message\r\n")
                 return
-            body = _BAIT_EMAILS[idx]
+            body = emails[idx]
             raw  = body.encode()
             _log("retr", src=self._peer[0], message_num=n)
             self._transport.write(f"+OK {len(raw)} octets\r\n".encode())
@@ -348,10 +414,11 @@ class POP3Protocol(asyncio.Protocol):
             n         = int(parts[0])
             line_count = int(parts[1]) if len(parts) > 1 else 0
             idx = n - 1
-            if idx in self._deleted or not (0 <= idx < len(_BAIT_EMAILS)):
+            emails = _get_emails()
+            if idx in self._deleted or not (0 <= idx < len(emails)):
                 self._transport.write(b"-ERR No such message\r\n")
                 return
-            body    = _BAIT_EMAILS[idx]
+            body    = emails[idx]
             sep     = "\r\n\r\n"
             if sep in body:
                 headers, rest = body.split(sep, 1)
@@ -375,7 +442,7 @@ class POP3Protocol(asyncio.Protocol):
             try:
                 n   = int(args)
                 idx = n - 1
-                if idx in self._deleted or not (0 <= idx < len(_BAIT_EMAILS)):
+                if idx in self._deleted or not (0 <= idx < len(_get_emails())):
                     self._transport.write(b"-ERR No such message\r\n")
                 else:
                     self._transport.write(f"+OK {n} msg-{n}\r\n".encode())
@@ -393,7 +460,7 @@ class POP3Protocol(asyncio.Protocol):
         try:
             n   = int(args)
             idx = n - 1
-            if idx in self._deleted or not (0 <= idx < len(_BAIT_EMAILS)):
+            if idx in self._deleted or not (0 <= idx < len(_get_emails())):
                 self._transport.write(b"-ERR No such message\r\n")
             else:
                 self._deleted.add(idx)
