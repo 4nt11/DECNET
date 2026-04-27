@@ -22,6 +22,7 @@ const loaders: Record<string, Loader> = {
   '/config':         () => import('./components/Config'),
   '/swarm-updates':  () => import('./components/RemoteUpdates'),
   '/swarm/hosts':    () => import('./components/SwarmHosts'),
+  '/orchestrator':   () => import('./components/Orchestrator'),
 };
 
 const fired = new Set<string>();

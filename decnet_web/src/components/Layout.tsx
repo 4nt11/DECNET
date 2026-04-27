@@ -3,7 +3,7 @@ import { NavLink, useLocation } from 'react-router-dom';
 import {
   Menu, X, Search, Activity, LayoutDashboard, Terminal, Settings, LogOut,
   Server, Archive, Package, Network, ChevronDown, ChevronRight, HardDrive,
-  ShieldAlert, Bell, Webhook, Lock, Crosshair, Fingerprint,
+  ShieldAlert, Bell, Webhook, Lock, Crosshair, Fingerprint, Zap, Cpu,
 } from '../icons';
 import { prefetchRoute } from '../routePrefetch';
 import './Layout.css';
@@ -33,6 +33,7 @@ const ROUTE_LABELS: Record<string, string> = {
   '/attackers': 'ATTACKERS',
   '/identities': 'IDENTITIES',
   '/campaigns': 'CAMPAIGNS',
+  '/orchestrator': 'ORCHESTRATOR',
   '/config': 'CONFIG',
   '/swarm-updates': 'REMOTE UPDATES',
   '/swarm/hosts': 'SWARM HOSTS',
@@ -132,6 +133,9 @@ const Layout: React.FC<LayoutProps> = ({
             <NavItem to="/attackers" icon={<Activity size={18} />} label="Attackers" open={sidebarOpen} indent />
             <NavItem to="/identities" icon={<Fingerprint size={18} />} label="Identities" open={sidebarOpen} indent />
             <NavItem to="/campaigns" icon={<Crosshair size={18} />} label="Campaigns" open={sidebarOpen} indent />
+          </NavGroup>
+          <NavGroup label="AUTOMATION" icon={<Zap size={20} />} open={sidebarOpen}>
+            <NavItem to="/orchestrator" icon={<Cpu size={18} />} label="Orchestrator" open={sidebarOpen} indent />
           </NavGroup>
           <NavGroup label="SWARM" icon={<Network size={20} />} open={sidebarOpen}>
             <NavItem to="/swarm/hosts" icon={<HardDrive size={18} />} label="SWARM Hosts" open={sidebarOpen} indent />
