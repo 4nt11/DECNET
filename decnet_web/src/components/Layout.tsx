@@ -3,7 +3,7 @@ import { NavLink, useLocation } from 'react-router-dom';
 import {
   Menu, X, Search, Activity, LayoutDashboard, Terminal, Settings, LogOut,
   Server, Archive, Package, Network, ChevronDown, ChevronRight, HardDrive,
-  ShieldAlert, Bell, Webhook, Lock, Crosshair, Fingerprint, Zap, Cpu,
+  ShieldAlert, Bell, Webhook, Lock, Crosshair, Fingerprint, Zap, Cpu, Mail,
 } from '../icons';
 import { prefetchRoute } from '../routePrefetch';
 import './Layout.css';
@@ -34,6 +34,7 @@ const ROUTE_LABELS: Record<string, string> = {
   '/identities': 'IDENTITIES',
   '/campaigns': 'CAMPAIGNS',
   '/orchestrator': 'ORCHESTRATOR',
+  '/persona-generation': 'PERSONA GENERATION',
   '/config': 'CONFIG',
   '/swarm-updates': 'REMOTE UPDATES',
   '/swarm/hosts': 'SWARM HOSTS',
@@ -108,8 +109,10 @@ const Layout: React.FC<LayoutProps> = ({
 
         <nav className="sidebar-nav">
           <NavItem to="/" icon={<LayoutDashboard size={20} />} label="Dashboard" open={sidebarOpen} />
-          <NavItem to="/fleet" icon={<Server size={20} />} label="Decoy Fleet" open={sidebarOpen} />
-          <NavItem to="/mazenet" icon={<Network size={20} />} label="MazeNET" open={sidebarOpen} />
+          <NavGroup label="DEPLOY" icon={<Server size={20} />} open={sidebarOpen}>
+            <NavItem to="/fleet" icon={<Server size={18} />} label="Decoy Fleet" open={sidebarOpen} indent />
+            <NavItem to="/mazenet" icon={<Network size={18} />} label="MazeNET" open={sidebarOpen} indent />
+          </NavGroup>
           <NavGroup label="ALERTS" icon={<Bell size={20} />} open={sidebarOpen}>
             <NavItem
               to="/live-logs"
@@ -127,15 +130,16 @@ const Layout: React.FC<LayoutProps> = ({
               indent
             />
           </NavGroup>
-          <NavItem to="/bounty" icon={<Archive size={20} />} label="Bounty" open={sidebarOpen} />
-          <NavItem to="/credentials" icon={<Lock size={20} />} label="Credentials" open={sidebarOpen} />
           <NavGroup label="THREAT DATA" icon={<Activity size={20} />} open={sidebarOpen}>
             <NavItem to="/attackers" icon={<Activity size={18} />} label="Attackers" open={sidebarOpen} indent />
             <NavItem to="/identities" icon={<Fingerprint size={18} />} label="Identities" open={sidebarOpen} indent />
             <NavItem to="/campaigns" icon={<Crosshair size={18} />} label="Campaigns" open={sidebarOpen} indent />
+            <NavItem to="/credentials" icon={<Lock size={18} />} label="Credentials" open={sidebarOpen} indent />
+            <NavItem to="/bounty" icon={<Archive size={18} />} label="Bounty" open={sidebarOpen} indent />
           </NavGroup>
           <NavGroup label="AUTOMATION" icon={<Zap size={20} />} open={sidebarOpen}>
             <NavItem to="/orchestrator" icon={<Cpu size={18} />} label="Orchestrator" open={sidebarOpen} indent />
+            <NavItem to="/persona-generation" icon={<Mail size={18} />} label="Persona Generation" open={sidebarOpen} indent />
           </NavGroup>
           <NavGroup label="SWARM" icon={<Network size={20} />} open={sidebarOpen}>
             <NavItem to="/swarm/hosts" icon={<HardDrive size={18} />} label="SWARM Hosts" open={sidebarOpen} indent />
