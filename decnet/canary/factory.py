@@ -20,6 +20,7 @@ KNOWN_GENERATORS: Tuple[str, ...] = (
     "honeydoc",
     "honeydoc_docx",
     "honeydoc_pdf",
+    "mysql_dump",
 )
 
 KNOWN_INSTRUMENTERS: Tuple[str, ...] = (
@@ -60,6 +61,9 @@ def get_generator(name: str) -> CanaryGenerator:
     if name == "honeydoc_pdf":
         from decnet.canary.generators.honeydoc_pdf import HoneydocPdfGenerator
         return HoneydocPdfGenerator()
+    if name == "mysql_dump":
+        from decnet.canary.generators.mysql_dump import MySQLDumpGenerator
+        return MySQLDumpGenerator()
     raise ValueError(
         f"Unknown canary generator: {name!r}. Known: {KNOWN_GENERATORS}"
     )

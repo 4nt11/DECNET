@@ -60,7 +60,7 @@ def test_known_lists_are_stable() -> None:
     # surfaces it. Keeps the schema-of-record in one place.
     assert KNOWN_GENERATORS == (
         "git_config", "env_file", "ssh_key", "aws_creds",
-        "honeydoc", "honeydoc_docx", "honeydoc_pdf",
+        "honeydoc", "honeydoc_docx", "honeydoc_pdf", "mysql_dump",
     )
     assert KNOWN_INSTRUMENTERS == (
         "docx", "xlsx", "pdf", "html", "image", "plain", "passthrough",
