@@ -47,6 +47,7 @@ from .swarm_updates import swarm_updates_router
 from .swarm_mgmt import swarm_mgmt_router
 from .system import system_router
 from .topology import topology_router
+from .canary import canary_router
 from .webhooks import webhooks_router
 
 api_router = APIRouter(
@@ -147,6 +148,10 @@ api_router.include_router(system_router)
 
 # MazeNET Topologies (nested topology CRUD + mutation queue)
 api_router.include_router(topology_router)
+
+# Canary tokens — operator-facing CRUD (worker hosts the
+# attacker-facing surface separately via `decnet canary`).
+api_router.include_router(canary_router)
 
 # External webhook subscriptions (SIEM/SOAR egress)
 api_router.include_router(webhooks_router)
