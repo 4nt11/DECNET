@@ -239,9 +239,17 @@ class EmailDriver:
         container = _container_for(
             action.mail_decky_name, list(action.mail_decky_services),
         )
+        # Stamp the file's mtime + atime to match the EML's Date: header
+        # so an attacker `ls -lt`'ing the spool doesn't see a wall of
+        # files all created within the worker's tick window — the cluster
+        # itself is a tell.  ``touch -d`` on GNU coreutils accepts RFC
+        # 2822 dates directly via the same formatdate() string we wrote
+        # into the header, so no extra parsing on the container side.
+        eml_date_header = formatdate(ts.timestamp(), localtime=False)
         sh_cmd = (
             f"mkdir -p {shlex.quote(eml_dir)} && "
-            f"tee {shlex.quote(eml_path)} >/dev/null"
+            f"tee {shlex.quote(eml_path)} >/dev/null && "
+            f"touch -d {shlex.quote(eml_date_header)} {shlex.quote(eml_path)}"
         )
         argv = [_DOCKER, "exec", "-i", container, "sh", "-c", sh_cmd]
         rc2, _stdout2, stderr2 = await _run_capture(

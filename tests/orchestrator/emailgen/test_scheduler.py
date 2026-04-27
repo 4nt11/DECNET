@@ -7,7 +7,14 @@ from typing import Any
 
 import pytest
 
-from decnet.orchestrator.emailgen import scheduler
+from decnet.orchestrator.emailgen import global_pool, scheduler
+
+
+@pytest.fixture(autouse=True)
+def _reset_global_pool():
+    global_pool.reset_cache()
+    yield
+    global_pool.reset_cache()
 
 
 _PERSONAS_TWO = [
@@ -43,7 +50,7 @@ class _FakeRepo:
         self.threads = threads or []
         self.thread_calls = 0
 
-    async def list_running_topology_deckies(self):
+    async def list_running_deckies(self):
         return self.deckies
 
     async def get_topology(self, topology_id: str):
@@ -54,12 +61,19 @@ class _FakeRepo:
         return list(self.threads)
 
 
-def _decky(uuid="d1", name="mailhost", services=("imap",), topology_id="t1"):
+def _decky(
+    uuid="d1",
+    name="mailhost",
+    services=("imap",),
+    topology_id="t1",
+    source="topology",
+):
     return {
         "uuid": uuid,
         "name": name,
         "services": list(services),
         "topology_id": topology_id,
+        "source": source,
     }
 
 
@@ -125,6 +139,70 @@ async def test_pick_uses_pop3_decky_too():
     )
     action = await scheduler.pick(repo, now=datetime(2026, 4, 26, 12, 0, 0))
     assert action is not None
+
+
+@pytest.mark.asyncio
+async def test_pick_for_fleet_source_uses_global_pool(tmp_path, monkeypatch):
+    """Fleet (MACVLAN/IPVLAN) mail decky has no parent topology row;
+    personas come from the host-wide JSON file."""
+    pool_file = tmp_path / "personas.json"
+    pool_file.write_text(json.dumps(_PERSONAS_TWO))
+    monkeypatch.setenv("DECNET_EMAILGEN_PERSONAS", str(pool_file))
+
+    repo = _FakeRepo(
+        deckies=[_decky(source="fleet", topology_id=None)],
+        # No topology row — confirms we never walk back to the topology.
+    )
+    action = await scheduler.pick(repo, now=datetime(2026, 4, 26, 12, 0, 0))
+    assert action is not None
+    assert action.mail_decky_uuid == "d1"
+
+
+@pytest.mark.asyncio
+async def test_pick_for_shard_source_uses_global_pool(tmp_path, monkeypatch):
+    """SWARM shards are non-topology too — same path as fleet."""
+    pool_file = tmp_path / "personas.json"
+    pool_file.write_text(json.dumps(_PERSONAS_TWO))
+    monkeypatch.setenv("DECNET_EMAILGEN_PERSONAS", str(pool_file))
+
+    repo = _FakeRepo(
+        deckies=[_decky(source="shard", topology_id=None)],
+    )
+    action = await scheduler.pick(repo, now=datetime(2026, 4, 26, 12, 0, 0))
+    assert action is not None
+
+
+@pytest.mark.asyncio
+async def test_pick_fleet_with_empty_global_pool_returns_none(tmp_path, monkeypatch):
+    monkeypatch.setenv("DECNET_EMAILGEN_PERSONAS", str(tmp_path / "missing.json"))
+    repo = _FakeRepo(deckies=[_decky(source="fleet", topology_id=None)])
+    assert await scheduler.pick(repo, now=datetime(2026, 4, 26, 12, 0, 0)) is None
+
+
+@pytest.mark.asyncio
+async def test_topology_personas_isolated_from_global_pool(tmp_path, monkeypatch):
+    """A topology with its own personas must NOT leak into / pull from
+    the global pool — per-topology richness is the whole point."""
+    pool_file = tmp_path / "personas.json"
+    pool_file.write_text(json.dumps([{
+        "name": "Pool Persona",
+        "email": "pool@corp.com",
+        "role": "Pooler",
+        "tone": "casual",
+        "mannerisms": [],
+    }]))
+    monkeypatch.setenv("DECNET_EMAILGEN_PERSONAS", str(pool_file))
+
+    repo = _FakeRepo(
+        deckies=[_decky()],
+        topologies={"t1": _topology()},  # topology has _PERSONAS_TWO
+    )
+    action = await scheduler.pick(repo, now=datetime(2026, 4, 26, 12, 0, 0))
+    assert action is not None
+    # The chosen sender + recipient must come from the topology's pool,
+    # not the global one — pool@corp.com would be a leak.
+    assert action.sender.email != "pool@corp.com"
+    assert action.recipient.email != "pool@corp.com"
 
 
 @pytest.mark.asyncio

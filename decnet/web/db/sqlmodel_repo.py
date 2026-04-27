@@ -2119,13 +2119,17 @@ class SQLModelRepository(BaseRepository):
 
     async def list_running_deckies(self) -> list[dict[str, Any]]:
         out: list[dict[str, Any]] = []
-        # MazeNET — already shaped {uuid, name, ip, services}
+        # MazeNET — already shaped {uuid, name, ip, services}.  We carry
+        # topology_id through so consumers (emailgen scheduler) can walk
+        # back to the parent topology row without a second round-trip;
+        # fleet/shard rows never have one, hence Optional.
         for d in await self.list_running_topology_deckies():
             out.append({
                 "uuid": d.get("uuid"),
                 "name": d.get("name"),
                 "ip": d.get("ip"),
                 "services": d.get("services") or [],
+                "topology_id": d.get("topology_id"),
                 "source": "topology",
             })
         # Fleet — column is `decky_ip`, PK is composite (host_uuid, name)

@@ -135,6 +135,15 @@ async def test_driver_run_success_path(monkeypatch):
     # Two subprocess calls: ollama, then docker exec.
     assert calls[0][0] == "ollama"
     assert calls[1][0] == "docker"
+    # docker exec shell command must include `touch -d` so the file's
+    # mtime matches the EML's Date: header — otherwise the spool's
+    # `ls -lt` clusters every email inside the worker tick window.
+    docker_sh = calls[1][-1]
+    assert "touch -d" in docker_sh
+    assert "tee" in docker_sh
+    # And tee must come before touch so we don't touch a file that
+    # doesn't exist yet.
+    assert docker_sh.index("tee") < docker_sh.index("touch -d")
 
 
 @pytest.mark.asyncio

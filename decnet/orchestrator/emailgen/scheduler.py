@@ -25,6 +25,7 @@ from datetime import datetime
 from typing import Any, Optional
 
 from decnet.logging import get_logger
+from decnet.orchestrator.emailgen import global_pool
 from decnet.orchestrator.emailgen.personas import (
     EmailPersona,
     in_active_hours,
@@ -104,55 +105,81 @@ def _is_mail_decky(decky: dict[str, Any]) -> bool:
     return any(s in services for s in _MAIL_SERVICES)
 
 
+async def _resolve_personas(
+    repo: Any, mail_decky: dict[str, Any],
+) -> tuple[list[EmailPersona], str]:
+    """Pick the right persona source for *mail_decky* and return the list.
+
+    Returns ``(personas, source_label)`` so logs can disambiguate why a
+    tick was skipped.  Source label is the same string ``list_running_deckies``
+    sets on the row (``"topology" | "fleet" | "shard"``) so the logger
+    reads consistently against the rest of the orchestrator.
+
+    Resolution rules (matches the design discussion):
+    * **topology** source → walk to ``Topology.email_personas``; the
+      topology owns its own list.  Each topology can have different
+      personas.
+    * **fleet** / **shard** source → unihost MACVLAN/IPVLAN deckies and
+      SWARM shards have no parent topology row, so they share a single
+      host-wide pool loaded from disk by :mod:`global_pool`.
+    """
+    source = mail_decky.get("source") or "unknown"
+    if source == "topology":
+        topology_id = mail_decky.get("topology_id")
+        if not topology_id:
+            return [], source
+        topology = await repo.get_topology(topology_id)
+        if not topology:
+            return [], source
+        return (
+            parse_personas(
+                topology.get("email_personas"),
+                language_default=topology.get("language_default") or "en",
+            ),
+            source,
+        )
+    # Fleet / shard / anything else → global pool.
+    return global_pool.load(), source
+
+
 async def pick(
     repo: Any,
     *,
     rand: Optional[secrets.SystemRandom] = None,
     now: Optional[datetime] = None,
 ) -> Optional[EmailAction]:
-    """Pick one email action against the running fleet.
+    """Pick one email action against any running mail decky.
 
-    *repo* is a :class:`BaseRepository`; we fetch running topology
-    deckies + their parent topology row directly. *now* is the
-    wall-clock used for ``active_hours`` filtering — injected so tests
-    can pin the hour deterministically.
+    Mail-decky discovery uses the **union view** (``list_running_deckies``):
+    MazeNET topology deckies, unihost fleet deckies, and SWARM shards are
+    all eligible.  Persona source is per-decky-source; see
+    :func:`_resolve_personas`.  *now* is the wall-clock used for
+    ``active_hours`` filtering — injected so tests can pin the hour
+    deterministically.
     """
     rng = rand or secrets.SystemRandom()
     now_dt = now or datetime.now()
 
-    deckies = await repo.list_running_topology_deckies()
+    deckies = await repo.list_running_deckies()
     mail_deckies = [d for d in deckies if _is_mail_decky(d)]
     if not mail_deckies:
         logger.debug("emailgen pick: no running mail decky")
         return None
 
     mail_decky = rng.choice(mail_deckies)
-    topology_id = mail_decky.get("topology_id")
-    if not topology_id:
-        logger.debug("emailgen pick: mail decky has no topology_id")
-        return None
-
-    topology = await repo.get_topology(topology_id)
-    if not topology:
-        logger.debug("emailgen pick: topology %s not found", topology_id)
-        return None
-
-    personas = parse_personas(
-        topology.get("email_personas"),
-        language_default=topology.get("language_default") or "en",
-    )
+    personas, source = await _resolve_personas(repo, mail_decky)
     if len(personas) < 2:
         logger.debug(
-            "emailgen pick: topology=%s has only %d personas; need >=2",
-            topology_id, len(personas),
+            "emailgen pick: source=%s mail_decky=%s only %d personas; need >=2",
+            source, mail_decky.get("uuid"), len(personas),
         )
         return None
 
     active = [p for p in personas if in_active_hours(p, now_dt.hour)]
     if len(active) < 2:
         logger.debug(
-            "emailgen pick: topology=%s only %d personas in-hours",
-            topology_id, len(active),
+            "emailgen pick: source=%s mail_decky=%s only %d personas in-hours",
+            source, mail_decky.get("uuid"), len(active),
         )
         return None
 
