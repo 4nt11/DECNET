@@ -1,6 +1,6 @@
 import React, { useCallback, useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Network, Plus, Power, Trash2, UploadCloud, RefreshCw, Skull, Server, Cpu } from '../../icons';
+import { Network, Plus, Power, Trash2, UploadCloud, RefreshCw, Skull, Server, Cpu, Mail } from '../../icons';
 import api from '../../utils/api';
 import { useSwarmHosts } from '../../hooks/useSwarmHosts';
 import { clearLayout } from '../MazeNET/useMazeLayoutStore';
@@ -223,6 +223,14 @@ const TopologyList: React.FC = () => {
             </div>
             <div className="tlist-card-id">{r.id}</div>
             <div className="tlist-card-actions" onClick={(e) => e.stopPropagation()}>
+              <button
+                type="button"
+                className="tlist-btn small"
+                onClick={() => navigate(`/topologies/${r.id}/personas`)}
+                title="Edit email personas for this topology"
+              >
+                <Mail size={10} /> PERSONAS
+              </button>
               {r.status === 'pending' && (
                 <button
                   type="button"

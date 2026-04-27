@@ -1,4 +1,4 @@
-"""GET/PUT ``/api/v1/emailgen/personas`` — global persona pool CRUD.
+"""GET/PUT ``/api/v1/realism/personas`` — global persona pool CRUD.
 
 The "global pool" is a JSON file consumed by the realism content
 engine for fleet (MACVLAN/IPVLAN) and SWARM-shard deckies — see
@@ -29,7 +29,7 @@ from decnet.web.dependencies import require_admin, require_viewer
 from decnet.web.db.models.common import MessageResponse  # noqa: F401 - response shape
 
 router = APIRouter()
-log = get_logger("api.emailgen.personas")
+log = get_logger("api.realism.personas")
 
 
 def _serialize(personas: list[EmailPersona]) -> list[dict[str, Any]]:
@@ -38,14 +38,14 @@ def _serialize(personas: list[EmailPersona]) -> list[dict[str, Any]]:
 
 
 @router.get(
-    "/emailgen/personas",
+    "/realism/personas",
     tags=["Emailgen"],
     responses={
         401: {"description": "Could not validate credentials"},
         403: {"description": "Insufficient permissions"},
     },
 )
-@_traced("api.emailgen.list_personas")
+@_traced("api.realism.list_personas")
 async def list_personas(
     user: dict = Depends(require_viewer),
 ) -> dict[str, Any]:
@@ -56,7 +56,7 @@ async def list_personas(
     discoverable.
     """
     # Reset the in-process cache before reading so a fresh CLI-driven
-    # ``decnet emailgen import-personas`` shows up immediately rather
+    # ``decnet realism import-personas`` shows up immediately rather
     # than waiting on the worker's mtime check.
     global_pool.reset_cache()
     personas = global_pool.load()
@@ -67,7 +67,7 @@ async def list_personas(
 
 
 @router.put(
-    "/emailgen/personas",
+    "/realism/personas",
     tags=["Emailgen"],
     responses={
         400: {"description": "Invalid persona payload"},
@@ -75,7 +75,7 @@ async def list_personas(
         403: {"description": "Insufficient permissions"},
     },
 )
-@_traced("api.emailgen.replace_personas")
+@_traced("api.realism.replace_personas")
 async def replace_personas(
     body: dict[str, Any],
     user: dict = Depends(require_admin),
@@ -121,7 +121,7 @@ async def replace_personas(
         # not writable by the API process.  Surface a 500 with the
         # actionable hint instead of leaking a traceback.
         log.warning(
-            "api.emailgen.replace_personas write failed path=%s err=%s",
+            "api.realism.replace_personas write failed path=%s err=%s",
             dest, exc,
         )
         raise HTTPException(
@@ -134,7 +134,7 @@ async def replace_personas(
         ) from exc
     global_pool.reset_cache()
     log.info(
-        "api.emailgen.replace_personas user=%s wrote=%d path=%s",
+        "api.realism.replace_personas user=%s wrote=%d path=%s",
         user.get("username", user.get("uuid")), len(parsed), dest,
     )
     return {

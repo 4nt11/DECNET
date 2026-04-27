@@ -20,8 +20,7 @@ Wants=decnet-bus.service \
       decnet-campaign-clusterer.service \
       decnet-webhook.service \
       decnet-canary.service \
-      decnet-orchestrator.service \
-      decnet-emailgen.service
+      decnet-orchestrator.service
 After=decnet-bus.service
 
 [Install]

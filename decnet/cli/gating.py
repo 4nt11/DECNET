@@ -32,7 +32,7 @@ MASTER_ONLY_COMMANDS: frozenset[str] = frozenset({
     "db-reset", "init", "webhook", "clusterer", "campaign-clusterer",
 })
 MASTER_ONLY_GROUPS: frozenset[str] = frozenset(
-    {"swarm", "topology", "geoip", "emailgen"}
+    {"swarm", "topology", "geoip", "realism"}
 )
 
 

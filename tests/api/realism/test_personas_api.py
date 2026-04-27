@@ -1,4 +1,4 @@
-"""GET/PUT /api/v1/emailgen/personas — global persona pool CRUD."""
+"""GET/PUT /api/v1/realism/personas — global persona pool CRUD."""
 from __future__ import annotations
 
 import json
@@ -6,7 +6,7 @@ import json
 import pytest
 
 from decnet.realism import personas_pool as global_pool
-from decnet.web.router.emailgen.api_personas import (
+from decnet.web.router.realism.api_personas import (
     list_personas,
     replace_personas,
 )

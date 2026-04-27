@@ -31,7 +31,7 @@ from .campaigns.api_list_campaign_identities import router as campaign_identitie
 from .campaigns.api_events import router as campaign_events_router
 from .orchestrator.api_list_events import router as orchestrator_list_router
 from .orchestrator.api_events import router as orchestrator_events_router
-from .emailgen.api_personas import router as emailgen_personas_router
+from .realism.api_personas import router as realism_personas_router
 from .transcripts import transcripts_router
 from .config.api_get_config import router as config_get_router
 from .config.api_update_config import router as config_update_router
@@ -111,10 +111,10 @@ api_router.include_router(campaign_events_router)
 api_router.include_router(orchestrator_list_router)
 api_router.include_router(orchestrator_events_router)
 
-# Emailgen — global persona pool CRUD for the dashboard's
-# "Persona Generation" page.  The worker reads from the same on-disk
-# JSON file directly (see decnet.realism.personas_pool).
-api_router.include_router(emailgen_personas_router)
+# Realism — global persona pool CRUD for the dashboard's
+# "Persona Generation" page.  The orchestrator reads from the same
+# on-disk JSON file directly (see decnet.realism.personas_pool).
+api_router.include_router(realism_personas_router)
 
 # Observability
 api_router.include_router(stats_router)

@@ -1,4 +1,4 @@
-"""``decnet emailgen import-personas`` CLI command."""
+"""``decnet realism import-personas`` CLI command."""
 from __future__ import annotations
 
 import json
@@ -42,7 +42,7 @@ def test_import_personas_writes_canonical_file(tmp_path, monkeypatch):
     monkeypatch.setenv("DECNET_REALISM_PERSONAS", str(dest))
 
     result = CliRunner().invoke(
-        app, ["emailgen", "import-personas", str(src)]
+        app, ["realism", "import-personas", str(src)]
     )
     assert result.exit_code == 0, result.stdout
     assert dest.exists()
@@ -59,7 +59,7 @@ def test_import_personas_explicit_output_overrides_env(tmp_path, monkeypatch):
 
     result = CliRunner().invoke(
         app,
-        ["emailgen", "import-personas", str(src), "--output", str(explicit)],
+        ["realism", "import-personas", str(src), "--output", str(explicit)],
     )
     assert result.exit_code == 0, result.stdout
     assert explicit.exists()
@@ -70,7 +70,7 @@ def test_import_personas_rejects_invalid_json(tmp_path):
     src = tmp_path / "src.json"
     src.write_text("{not valid")
     result = CliRunner().invoke(
-        app, ["emailgen", "import-personas", str(src)]
+        app, ["realism", "import-personas", str(src)]
     )
     assert result.exit_code != 0
     assert "Invalid JSON" in result.stdout
@@ -81,7 +81,7 @@ def test_import_personas_rejects_non_list(tmp_path, monkeypatch):
     src.write_text(json.dumps({"not": "a list"}))
     monkeypatch.setenv("DECNET_REALISM_PERSONAS", str(tmp_path / "out.json"))
     result = CliRunner().invoke(
-        app, ["emailgen", "import-personas", str(src)]
+        app, ["realism", "import-personas", str(src)]
     )
     assert result.exit_code != 0
     assert "list" in result.stdout.lower()
@@ -94,7 +94,7 @@ def test_import_personas_rejects_all_invalid_entries(tmp_path, monkeypatch):
     ]))
     monkeypatch.setenv("DECNET_REALISM_PERSONAS", str(tmp_path / "out.json"))
     result = CliRunner().invoke(
-        app, ["emailgen", "import-personas", str(src)]
+        app, ["realism", "import-personas", str(src)]
     )
     assert result.exit_code != 0
     assert "No valid personas" in result.stdout
@@ -106,7 +106,7 @@ def test_import_personas_warns_on_single_persona(tmp_path, monkeypatch):
     dest = tmp_path / "out.json"
     monkeypatch.setenv("DECNET_REALISM_PERSONAS", str(dest))
     result = CliRunner().invoke(
-        app, ["emailgen", "import-personas", str(src)]
+        app, ["realism", "import-personas", str(src)]
     )
     assert result.exit_code == 0, result.stdout
     assert "Warning" in result.stdout
@@ -120,7 +120,7 @@ def test_imported_personas_load_via_global_pool(tmp_path, monkeypatch):
     monkeypatch.setenv("DECNET_REALISM_PERSONAS", str(dest))
 
     result = CliRunner().invoke(
-        app, ["emailgen", "import-personas", str(src)]
+        app, ["realism", "import-personas", str(src)]
     )
     assert result.exit_code == 0, result.stdout
 

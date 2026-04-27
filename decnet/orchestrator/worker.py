@@ -1,16 +1,27 @@
 """Orchestrator main loop.
 
-One tick = one (src, dst, action) pick + one driver invocation + one DB
-write + one fire-and-forget bus publish.  Intentionally serial — MVP
-honesty: a wedged docker exec stalls only this worker, never another.
+One tick = one action pick + one driver invocation + one DB write +
+one fire-and-forget bus publish.  Intentionally serial — MVP honesty:
+a wedged docker exec stalls only this worker, never another.
 
-Modeled after :mod:`decnet.profiler.worker` for consistency: same control
-listener, same heartbeat helper, same shutdown semantics.
+Three action shapes are folded into the single tick after stage 5 of
+the realism migration: SSH traffic between deckies, file plants on
+deckies (driven by :func:`decnet.realism.planner.pick`), and email
+drops into mail-decky maildirs (driven by
+:func:`decnet.orchestrator.emailgen.scheduler.pick`).  ``decnet
+emailgen`` and ``decnet-emailgen.service`` are gone; this worker
+covers all three.
+
+Modeled after :mod:`decnet.profiler.worker` for consistency: same
+control listener, same heartbeat helper, same shutdown semantics.
 """
 from __future__ import annotations
 
 import asyncio
 import contextlib
+import hashlib
+import secrets
+from datetime import datetime, timezone
 
 from decnet.bus.factory import get_bus
 from decnet.bus.publish import (
@@ -20,17 +31,34 @@ from decnet.bus.publish import (
 )
 from decnet.logging import get_logger
 from decnet.orchestrator import events, scheduler
-from decnet.orchestrator.drivers import SSHDriver
+from decnet.orchestrator.drivers import get_driver_for
+from decnet.orchestrator.emailgen import (
+    events as email_events,
+    scheduler as email_scheduler,
+)
+from decnet.orchestrator.emailgen.scheduler import EmailAction
 from decnet.web.db.repository import BaseRepository
 
 logger = get_logger("orchestrator")
 
 # Periodic-prune knobs. Trim per-decky history every _PRUNE_EVERY_TICKS
-# to keep orchestrator_events from unbounded growth on long-running
-# fleets. Cheap on the write path (zero overhead per tick); the cost
-# pays in once every ~100 ticks.
+# to keep orchestrator_events / orchestrator_emails from unbounded
+# growth on long-running fleets. Cheap on the write path (zero overhead
+# per tick); the cost pays in once every ~100 ticks.
 _PRUNE_EVERY_TICKS = 100
 _PRUNE_PER_DST_CAP = 10000
+_PRUNE_PER_MAIL_DECKY_CAP = 5000
+
+# Action-kind weights for the per-tick roll.  Email is rare because
+# each LLM round-trip is expensive (~seconds) and the prior emailgen
+# worker only ticked every 5 minutes.  At a 60s orchestrator interval,
+# a 10% email weight produces ~one email every ~10 minutes — close
+# enough to the pre-collapse cadence.
+_ACTION_WEIGHTS: tuple[tuple[str, int], ...] = (
+    ("traffic", 45),
+    ("file", 45),
+    ("email", 10),
+)
 
 
 async def orchestrator_worker(
@@ -55,7 +83,6 @@ async def orchestrator_worker(
         )
         bus = None
 
-    driver = SSHDriver()
     shutdown = asyncio.Event()
     heartbeat_task = asyncio.create_task(run_health_heartbeat(bus, "orchestrator"))
     control_task = asyncio.create_task(
@@ -71,22 +98,12 @@ async def orchestrator_worker(
             if shutdown.is_set():
                 break
             try:
-                await _one_tick(repo, driver, bus)
+                await _one_tick(repo, bus)
             except Exception as exc:  # noqa: BLE001
                 logger.error("orchestrator tick failed: %s", exc)
             tick_n += 1
             if tick_n % _PRUNE_EVERY_TICKS == 0:
-                try:
-                    deleted = await repo.prune_orchestrator_events(
-                        per_dst_cap=_PRUNE_PER_DST_CAP,
-                    )
-                    if deleted:
-                        logger.info(
-                            "orchestrator prune deleted=%d cap=%d",
-                            deleted, _PRUNE_PER_DST_CAP,
-                        )
-                except Exception as exc:  # noqa: BLE001
-                    logger.error("orchestrator prune failed: %s", exc)
+                await _periodic_prune(repo)
     finally:
         for t in (heartbeat_task, control_task):
             t.cancel()
@@ -97,34 +114,80 @@ async def orchestrator_worker(
                 await bus.close()
 
 
-async def _one_tick(repo: BaseRepository, driver, bus) -> None:
-    import secrets as _secrets
+async def _periodic_prune(repo: BaseRepository) -> None:
+    try:
+        deleted = await repo.prune_orchestrator_events(per_dst_cap=_PRUNE_PER_DST_CAP)
+        if deleted:
+            logger.info(
+                "orchestrator events prune deleted=%d cap=%d",
+                deleted, _PRUNE_PER_DST_CAP,
+            )
+    except Exception as exc:  # noqa: BLE001
+        logger.error("orchestrator events prune failed: %s", exc)
+    try:
+        deleted = await repo.prune_orchestrator_emails(
+            per_decky_cap=_PRUNE_PER_MAIL_DECKY_CAP,
+        )
+        if deleted:
+            logger.info(
+                "orchestrator emails prune deleted=%d cap=%d",
+                deleted, _PRUNE_PER_MAIL_DECKY_CAP,
+            )
+    except Exception as exc:  # noqa: BLE001
+        logger.error("orchestrator emails prune failed: %s", exc)
 
-    # Union view: MazeNET topology + unihost fleet + SWARM shards.  Pre-fleet
-    # this only saw topology_deckies and was permanently blind to MACVLAN /
-    # IPVLAN unihost decoys.
-    deckies = await repo.list_running_deckies()
-    rng = _secrets.SystemRandom()
 
-    # Action-kind roll: 50/50 traffic vs file.  Stage 5 of the realism
-    # migration adds an email branch (when emailgen folds in).  When a
-    # roll yields nothing actionable (e.g. file branch with no personas
-    # in any persona's work hours), we fall through to the other side
-    # so a quiet half doesn't silence the whole tick.
-    action = None
-    if rng.random() < 0.5:
-        action = scheduler.pick(deckies, rand=rng)
-        if action is None:
-            action = await scheduler.pick_file(deckies, repo, rand=rng)
-    else:
-        action = await scheduler.pick_file(deckies, repo, rand=rng)
-        if action is None:
+def _roll_action_kind(rng: secrets.SystemRandom) -> str:
+    total = sum(w for _, w in _ACTION_WEIGHTS)
+    target = rng.randint(1, total)
+    running = 0
+    for kind, w in _ACTION_WEIGHTS:
+        running += w
+        if target <= running:
+            return kind
+    return _ACTION_WEIGHTS[-1][0]  # unreachable, satisfy mypy
+
+
+async def _pick_action(
+    repo: BaseRepository,
+    deckies: list[dict],
+    rng: secrets.SystemRandom,
+):
+    """Roll an action-kind, then pick the matching action.
+
+    Quiet branches fall through to the other two so a (decky-set,
+    persona-pool, mail-decky) shape that would silence one branch
+    doesn't waste the whole tick.
+    """
+    kinds_in_priority_order = [_roll_action_kind(rng)]
+    for kind, _ in _ACTION_WEIGHTS:
+        if kind not in kinds_in_priority_order:
+            kinds_in_priority_order.append(kind)
+
+    for kind in kinds_in_priority_order:
+        if kind == "traffic":
             action = scheduler.pick(deckies, rand=rng)
+        elif kind == "file":
+            action = await scheduler.pick_file(deckies, repo, rand=rng)
+        elif kind == "email":
+            try:
+                action = await email_scheduler.pick(repo, rand=rng)
+            except Exception as exc:  # noqa: BLE001
+                logger.debug("orchestrator: email pick failed: %s", exc)
+                action = None
+        else:
+            action = None
+        if action is not None:
+            return action
+    return None
 
+
+async def _one_tick(repo: BaseRepository, bus) -> None:
+    deckies = await repo.list_running_deckies()
+    rng = secrets.SystemRandom()
+
+    action = await _pick_action(repo, deckies, rng)
     if action is None:
-        # Report the actual SSH-eligible count (what the scheduler filters
-        # to), not just len(deckies) — the old "running+ssh count=N" line
-        # reported the pre-filter count and misled debugging.
         ssh_eligible = sum(
             1 for d in deckies
             if isinstance(d.get("services"), list)
@@ -133,9 +196,8 @@ async def _one_tick(repo: BaseRepository, driver, bus) -> None:
         )
         by_source: dict[str, int] = {}
         for d in deckies:
-            by_source[d.get("source", "unknown")] = (
-                by_source.get(d.get("source", "unknown"), 0) + 1
-            )
+            src = d.get("source", "unknown")
+            by_source[src] = by_source.get(src, 0) + 1
         logger.debug(
             "orchestrator: no actionable deckies "
             "(running=%d ssh_eligible=%d sources=%s)",
@@ -143,26 +205,29 @@ async def _one_tick(repo: BaseRepository, driver, bus) -> None:
         )
         return
 
+    driver = get_driver_for(action)
     result = await driver.run(action)
+
+    if isinstance(action, EmailAction):
+        await _persist_email(repo, action, result, bus)
+    else:
+        await _persist_event(repo, action, result, bus)
+        if isinstance(action, scheduler.FileAction) and result.success:
+            try:
+                await _record_synthetic_file(repo, action)
+            except Exception as exc:  # noqa: BLE001
+                logger.warning(
+                    "orchestrator: synthetic_files write failed dst=%s path=%s: %s",
+                    action.dst_uuid, action.path, exc,
+                )
+
+
+async def _persist_event(repo, action, result, bus) -> None:
     row = events.to_row(action, result)
     await repo.record_orchestrator_event(row)
-    # Persist realism state for FileAction so stage 3b's edit-in-place
-    # has something to read back.  Failure here is logged but doesn't
-    # tank the tick — the orchestrator event is the source of truth
-    # for "this action happened."
-    if isinstance(action, scheduler.FileAction) and result.success:
-        try:
-            await _record_synthetic_file(repo, action, result)
-        except Exception as exc:  # noqa: BLE001
-            logger.warning(
-                "orchestrator: synthetic_files write failed dst=%s path=%s: %s",
-                action.dst_uuid, action.path, exc,
-            )
 
     if bus is not None:
         topic = events.topic_for(action)
-        # Bus payload mirrors the row but uses iso8601 for ts so SSE
-        # consumers don't have to JSON-handle datetime themselves.
         bus_payload = {
             "kind": row["kind"],
             "protocol": row["protocol"],
@@ -174,7 +239,7 @@ async def _one_tick(repo: BaseRepository, driver, bus) -> None:
             "ts": row["ts"].isoformat(),
         }
         await publish_safely(
-            bus, topic, bus_payload, event_type=events.event_type_for(action)
+            bus, topic, bus_payload, event_type=events.event_type_for(action),
         )
 
     logger.info(
@@ -183,19 +248,52 @@ async def _one_tick(repo: BaseRepository, driver, bus) -> None:
     )
 
 
-async def _record_synthetic_file(repo, action, result) -> None:
-    """Persist a synthetic_files row after a successful FileAction plant.
+async def _persist_email(repo, action: EmailAction, result, bus) -> None:
+    """Persist + publish an email tick result.
+
+    Mirrors the pre-collapse emailgen worker payload exactly so SSE
+    subscribers and dashboards keep working without a breaking change
+    to the on-the-wire shape.
+    """
+    row = email_events.to_row(action, result)
+    await repo.record_orchestrator_email(row)
+
+    if bus is not None:
+        topic = email_events.topic_for(action)
+        bus_payload = {
+            "kind": "email",
+            "mail_decky_uuid": row["mail_decky_uuid"],
+            "thread_id": row["thread_id"],
+            "message_id": row["message_id"],
+            "in_reply_to": row["in_reply_to"],
+            "sender_email": row["sender_email"],
+            "recipient_email": row["recipient_email"],
+            "subject": row["subject"],
+            "language": row["language"],
+            "success": row["success"],
+            "ts": row["ts"].isoformat(),
+        }
+        await publish_safely(
+            bus, topic, bus_payload,
+            event_type=email_events.event_type_for(action),
+        )
+
+    logger.info(
+        "orchestrator tick kind=email mail_decky=%s thread=%s success=%s reply=%s",
+        row["mail_decky_uuid"], row["thread_id"], row["success"], action.is_reply,
+    )
+
+
+async def _record_synthetic_file(repo, action) -> None:
+    """Persist (or patch) a synthetic_files row after a FileAction plant.
 
     Idempotent on ``(decky_uuid, path)``: when the unique constraint
-    fires (the file existed already), we instead patch the existing
-    row's ``last_modified`` / ``content_hash`` / ``last_body`` / bump
+    fires (the file existed already), we patch the existing row's
+    ``last_modified`` / ``content_hash`` / ``last_body`` / bump
     ``edit_count`` so the dashboard's "files this decky has grown"
     view stays accurate even when the orchestrator re-plants the same
     location.
     """
-    import hashlib
-    from datetime import datetime, timezone
-
     body = action.content or ""
     content_hash = hashlib.sha256(body.encode("utf-8")).hexdigest()
     now = datetime.now(timezone.utc)
@@ -216,8 +314,6 @@ async def _record_synthetic_file(repo, action, result) -> None:
     try:
         await repo.record_synthetic_file(row)
     except Exception:  # noqa: BLE001
-        # Most likely the unique constraint on (decky_uuid, path)
-        # fired — flip to update mode by looking up the existing row.
         existing = await repo.list_synthetic_files(
             decky_uuid=action.dst_uuid, limit=200,
         )

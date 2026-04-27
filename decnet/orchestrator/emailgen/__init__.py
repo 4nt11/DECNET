@@ -1,33 +1,20 @@
-"""Emailgen — second orchestrator worker.
+"""Emailgen — email-specific delivery, scheduling, and threading.
 
-Generates fake corporate emails (multi-language, threaded, persona-driven)
-and drops them into mail-decky maildirs so attackers landing on
-IMAP/POP3 honeypots find believable mailboxes instead of empty inboxes.
+After stage 5 of the realism migration, ``emailgen`` is no longer a
+separate worker / systemd unit / CLI subcommand.  It exposes:
 
-The module is intentionally a sibling of :mod:`decnet.orchestrator` (not
-a flag on it) — separate worker, separate CLI command
-(``decnet emailgen``), separate systemd-supervised lifecycle. Shares the
-heartbeat / control-listener scaffolding via :mod:`decnet.bus.publish`.
+* :mod:`decnet.orchestrator.emailgen.scheduler` — the
+  ``EmailAction`` shape and the ``pick(repo)`` policy that decides
+  which mail decky / sender / recipient / thread an email belongs to.
+* :mod:`decnet.orchestrator.emailgen.threads` — RFC 2822 thread chain
+  helpers (Message-ID generation, Re: / In-Reply-To bookkeeping).
+* :mod:`decnet.orchestrator.emailgen.events` — DB-row + bus-topic
+  builders for email events.
 
-Lazy worker re-export: :func:`emailgen_worker` is loaded on first
-attribute access so that submodules can import package-level names
-(``decnet.orchestrator.emailgen.events``) without triggering an eager
-load of the worker — and through it, the email driver, which imports
-back into this package.  Without lazy loading the package + driver +
-worker form a cycle.
+The orchestrator's main worker (:mod:`decnet.orchestrator.worker`)
+calls into these modules per tick.  LLM glue, persona schema, prompt
+builder, and the global persona pool moved to :mod:`decnet.realism`
+in stage 2 of the migration; this package keeps only the
+email-specific delivery surface.
 """
 from __future__ import annotations
-
-from typing import TYPE_CHECKING, Any
-
-if TYPE_CHECKING:  # pragma: no cover - typing only
-    from decnet.orchestrator.emailgen.worker import emailgen_worker  # noqa: F401
-
-__all__ = ["emailgen_worker"]
-
-
-def __getattr__(name: str) -> Any:
-    if name == "emailgen_worker":
-        from decnet.orchestrator.emailgen.worker import emailgen_worker as _w
-        return _w
-    raise AttributeError(f"module {__name__!r} has no attribute {name!r}")

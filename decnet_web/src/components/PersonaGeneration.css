@@ -1,60 +1,8 @@
-/* Persona Generation page — global pool CRUD UI for fleet/shard mail
-   deckies' fake-employee personas.  Mirrors Webhooks.css visual language
-   (chips, table, modal) so dashboard density stays consistent. */
+/* Persona Generation — layered on top of DeckyFleet.css.
+   Only persona-specific bits live here: tone chips, info banner,
+   dirty pill, modal form inputs, empty state, mono helper. */
 
-.persona-gen-root {
-  padding: 18px 24px;
-  color: var(--text);
-}
-
-.persona-gen-root .page-header {
-  display: flex;
-  align-items: flex-start;
-  justify-content: space-between;
-  margin-bottom: 12px;
-}
-
-.persona-gen-root .page-title-group {
-  display: flex;
-  flex-direction: column;
-  gap: 4px;
-}
-
-.persona-gen-root .header-line {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-}
-
-.persona-gen-root .header-line h1 {
-  font-size: 1.1rem;
-  letter-spacing: 2px;
-  margin: 0;
-  text-transform: uppercase;
-}
-
-.persona-gen-root .page-sub {
-  font-size: 0.7rem;
-  letter-spacing: 1.4px;
-  color: var(--dim);
-  text-transform: uppercase;
-}
-
-.persona-gen-root .violet-accent { color: var(--violet); }
-
-.persona-gen-root .dirty-pill {
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-  padding: 2px 8px;
-  border-radius: 999px;
-  background: rgba(245, 158, 11, 0.12);
-  color: var(--amber, #f59e0b);
-  font-size: 0.62rem;
-  letter-spacing: 1.4px;
-  text-transform: uppercase;
-  border: 1px solid var(--amber, #f59e0b);
-}
+.persona-gen-root .mono { font-family: var(--font-mono); }
 
 /* Info banner explaining scope (non-MazeNET) + showing pool path. */
 .persona-gen-root .info-banner {
@@ -62,115 +10,28 @@
   border: 1px solid var(--border);
   border-left: 3px solid var(--violet);
   padding: 10px 14px;
-  margin-bottom: 14px;
   font-size: 0.78rem;
   line-height: 1.5;
 }
-
 .persona-gen-root .info-banner em { color: var(--matrix); font-style: normal; }
 .persona-gen-root .info-line { margin-top: 6px; font-size: 0.72rem; }
 
-/* Action row */
-.persona-gen-root .controls-row {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  margin-bottom: 14px;
-  flex-wrap: wrap;
-}
-
-.persona-gen-root .btn {
+.persona-gen-root .dirty-pill {
   display: inline-flex;
   align-items: center;
   gap: 6px;
-  padding: 5px 12px;
-  background: var(--bg-elev);
-  border: 1px solid var(--border);
-  color: var(--text);
-  font-size: 0.7rem;
-  letter-spacing: 1.5px;
-  text-transform: uppercase;
-  cursor: pointer;
-  transition: all 0.15s;
-}
-
-.persona-gen-root .btn:hover:not(:disabled) {
-  border-color: var(--matrix);
-  color: var(--matrix);
-}
-
-.persona-gen-root .btn:disabled { opacity: 0.4; cursor: not-allowed; }
-.persona-gen-root .btn.primary { border-color: var(--matrix); color: var(--matrix); }
-.persona-gen-root .btn.primary:hover:not(:disabled) { background: rgba(0, 255, 65, 0.07); }
-.persona-gen-root .btn.ghost { background: transparent; }
-
-.persona-gen-root .error-line {
-  color: var(--alert);
-  font-size: 0.72rem;
-  display: inline-flex;
-  gap: 6px;
-  align-items: center;
-}
-
-/* Table */
-.persona-gen-root .persona-list {
-  border: 1px solid var(--border);
-  background: rgba(0, 0, 0, 0.18);
-}
-
-.persona-gen-root .persona-table {
-  width: 100%;
-  border-collapse: collapse;
-  font-size: 0.78rem;
-}
-
-.persona-gen-root .persona-table thead th {
-  text-align: left;
-  padding: 8px 10px;
+  padding: 2px 10px;
+  border-radius: 999px;
+  background: rgba(245, 158, 11, 0.12);
+  color: var(--amber, #f59e0b);
+  font-size: 0.62rem;
   letter-spacing: 1.4px;
-  font-size: 0.66rem;
-  color: var(--dim);
   text-transform: uppercase;
-  border-bottom: 1px solid var(--border);
-  background: rgba(255, 255, 255, 0.02);
+  border: 1px solid var(--amber, #f59e0b);
+  width: fit-content;
 }
 
-.persona-gen-root .persona-table tbody td {
-  padding: 8px 10px;
-  border-bottom: 1px dashed var(--border);
-  vertical-align: middle;
-}
-
-.persona-gen-root .persona-table tbody tr:hover {
-  background: rgba(0, 255, 65, 0.04);
-}
-
-.persona-gen-root .row-actions {
-  display: flex;
-  gap: 4px;
-  justify-content: flex-end;
-}
-
-.persona-gen-root .icon-btn {
-  background: transparent;
-  border: 1px solid var(--border);
-  color: var(--text);
-  padding: 4px 6px;
-  cursor: pointer;
-  transition: all 0.12s;
-}
-
-.persona-gen-root .icon-btn:hover {
-  border-color: var(--matrix);
-  color: var(--matrix);
-}
-
-.persona-gen-root .icon-btn.danger:hover {
-  border-color: var(--alert);
-  color: var(--alert);
-}
-
-/* Tone chips — subtle palette differentiation */
+/* Tone chips — keep palette differentiation from the original page. */
 .persona-gen-root .tone-chip {
   display: inline-block;
   padding: 1px 8px;
@@ -179,197 +40,68 @@
   letter-spacing: 1.5px;
   text-transform: uppercase;
 }
-
 .persona-gen-root .tone-chip.tone-formal { border-color: var(--violet); color: var(--violet); }
 .persona-gen-root .tone-chip.tone-direct { border-color: var(--matrix); color: var(--matrix); }
 .persona-gen-root .tone-chip.tone-casual { border-color: var(--amber, #f59e0b); color: var(--amber, #f59e0b); }
 .persona-gen-root .tone-chip.tone-technical { border-color: var(--cyan, #22d3ee); color: var(--cyan, #22d3ee); }
+.persona-gen-root .tone-chip.tone-custom { border-color: var(--alert, #ef4444); color: var(--alert, #ef4444); text-transform: none; letter-spacing: 0.5px; }
 
-.persona-gen-root .chip {
-  display: inline-block;
-  padding: 1px 8px;
-  border: 1px solid var(--border);
-  font-size: 0.62rem;
-  letter-spacing: 1.4px;
-  text-transform: uppercase;
+/* Card tweaks — wrap email if long. */
+.persona-card .decky-ip {
+  font-size: 0.65rem;
+  letter-spacing: 0.4px;
+  word-break: break-all;
+  max-width: 60%;
+  text-align: right;
 }
 
-.persona-gen-root .dim-chip { color: var(--dim); }
-.persona-gen-root .warn-chip {
-  border-color: var(--amber, #f59e0b);
-  color: var(--amber, #f59e0b);
-}
-
-.persona-gen-root .mono { font-family: var(--font-mono); font-size: 0.74rem; }
-.persona-gen-root .matrix-text { color: var(--matrix); }
-.persona-gen-root .dim { color: var(--dim); }
-
-/* ── Modal ──────────────────────────────────────────────────────── */
-.persona-modal-backdrop {
-  position: fixed;
-  inset: 0;
-  background: rgba(0, 0, 0, 0.65);
+/* Empty state inside the grid. */
+.fleet-root .fleet-empty {
+  grid-column: 1 / -1;
   display: flex;
+  flex-direction: column;
   align-items: center;
   justify-content: center;
-  z-index: 50;
-  backdrop-filter: blur(2px);
-}
-
-.persona-modal {
-  background: var(--bg);
-  border: 1px solid var(--border);
-  width: min(640px, 92vw);
-  max-height: 90vh;
-  overflow-y: auto;
-  box-shadow: 0 0 30px rgba(0, 0, 0, 0.6);
-  display: flex;
-  flex-direction: column;
-}
-
-.persona-modal .bd-head {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  padding: 12px 16px;
-  border-bottom: 1px solid var(--border);
-}
-
-.persona-modal .bd-head h3 {
-  margin: 0;
-  font-size: 0.85rem;
-  letter-spacing: 1.6px;
-  display: inline-flex;
-  align-items: center;
-  gap: 8px;
-}
-
-.persona-modal .close-btn {
-  background: transparent;
-  border: none;
-  color: var(--dim);
-  cursor: pointer;
-}
-
-.persona-modal .close-btn:hover { color: var(--alert); }
-
-.persona-modal .bd-body {
-  padding: 16px;
-  display: flex;
-  flex-direction: column;
-  gap: 12px;
-}
-
-.persona-modal .field {
-  display: flex;
-  flex-direction: column;
-  gap: 4px;
-}
-
-.persona-modal .field-row {
-  display: grid;
-  grid-template-columns: 1fr 1fr 1fr;
-  gap: 12px;
-}
-
-.persona-modal .field-label {
-  font-size: 0.66rem;
-  letter-spacing: 1.4px;
-  color: var(--dim);
-  text-transform: uppercase;
-}
-
-.persona-modal .field input[type="text"],
-.persona-modal .field input[type="email"],
-.persona-modal .field select,
-.persona-modal .field textarea {
-  background: var(--bg-elev);
-  border: 1px solid var(--border);
-  color: var(--text);
-  padding: 6px 10px;
-  font-size: 0.82rem;
-  font-family: inherit;
-}
-
-.persona-modal .field input:focus,
-.persona-modal .field select:focus,
-.persona-modal .field textarea:focus {
-  outline: none;
-  border-color: var(--matrix);
-}
-
-.persona-modal .check-field {
-  flex-direction: row;
-  align-items: flex-start;
-  gap: 10px;
-}
-
-.persona-modal .check-field input[type="checkbox"] {
-  margin-top: 4px;
-}
-
-.persona-modal .mannerism-input-row {
-  display: flex;
-  gap: 6px;
-}
-
-.persona-modal .mannerism-input-row input { flex: 1; }
-
-.persona-modal .mannerism-list {
-  list-style: none;
-  margin: 8px 0 0;
-  padding: 0;
-  display: flex;
-  flex-direction: column;
-  gap: 4px;
-}
-
-.persona-modal .mannerism-list li {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 8px;
-  padding: 4px 8px;
-  border: 1px solid var(--border);
-  background: rgba(255, 255, 255, 0.02);
+  gap: 14px;
+  padding: 60px 24px;
+  border: 1px dashed var(--border);
+  background: rgba(0, 0, 0, 0.18);
+  text-align: center;
+  letter-spacing: 1.5px;
   font-size: 0.78rem;
 }
 
-.persona-modal .mannerism-list li span {
-  flex: 1;
-  word-break: break-word;
+/* Modal form inputs — reuse the wizard's tweak-group / input language. */
+.persona-gen-root .grid-2,
+.modal .grid-2 {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 14px;
 }
 
-.persona-modal .draft-error {
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-  color: var(--alert);
-  font-size: 0.74rem;
-}
-
-.persona-modal .bd-actions {
+.modal .tweak-group {
   display: flex;
-  justify-content: flex-end;
-  gap: 8px;
-  padding: 12px 16px;
-  border-top: 1px solid var(--border);
-}
-
-.persona-modal .btn {
-  display: inline-flex;
-  align-items: center;
+  flex-direction: column;
   gap: 6px;
-  padding: 6px 14px;
-  background: var(--bg-elev);
+}
+.modal .tweak-group label {
+  font-size: 0.62rem;
+  letter-spacing: 1.5px;
+  color: var(--dim);
+  text-transform: uppercase;
+}
+.modal .input {
+  background: var(--bg-elev, rgba(0, 0, 0, 0.3));
   border: 1px solid var(--border);
   color: var(--text);
-  font-size: 0.7rem;
-  letter-spacing: 1.5px;
-  text-transform: uppercase;
-  cursor: pointer;
+  padding: 7px 10px;
+  font-family: inherit;
+  font-size: 0.8rem;
+  outline: none;
+  transition: border-color 0.15s;
 }
-
-.persona-modal .btn.primary { border-color: var(--matrix); color: var(--matrix); }
-.persona-modal .btn.ghost { background: transparent; }
-.persona-modal .btn:hover:not(:disabled) { border-color: var(--matrix); color: var(--matrix); }
+.modal .input:focus {
+  border-color: var(--violet);
+  box-shadow: 0 0 0 1px var(--violet);
+}
+.modal select.input { cursor: pointer; }

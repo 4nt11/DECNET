@@ -73,6 +73,13 @@ async def test_one_tick_records_event_and_publishes(repo, fake_bus, monkeypatch)
 
     monkeypatch.setattr(ssh_driver, "_run", fake_run)
 
+    async def fake_run_with_stdin(argv, stdin_bytes):
+        # plant_file takes the base64-streaming path; treat any docker
+        # exec write as a successful no-op for the integration test.
+        return 0, "", ""
+
+    monkeypatch.setattr(ssh_driver, "_run_with_stdin", fake_run_with_stdin)
+
     received: list = []
 
     async def collect():
@@ -87,8 +94,7 @@ async def test_one_tick_records_event_and_publishes(repo, fake_bus, monkeypatch)
     # Yield once so the subscription is registered before we publish.
     await asyncio.sleep(0)
 
-    driver = ssh_driver.SSHDriver()
-    await orch_worker._one_tick(repo, driver, fake_bus)
+    await orch_worker._one_tick(repo, fake_bus)
 
     await asyncio.wait_for(collector, timeout=2.0)
 
@@ -134,8 +140,14 @@ async def test_one_tick_picks_fleet_deckies(repo, fake_bus, monkeypatch):
 
     monkeypatch.setattr(ssh_driver, "_run", fake_run)
 
-    driver = ssh_driver.SSHDriver()
-    await orch_worker._one_tick(repo, driver, fake_bus)
+    async def fake_run_with_stdin(argv, stdin_bytes):
+        # plant_file takes the base64-streaming path; treat any docker
+        # exec write as a successful no-op for the integration test.
+        return 0, "", ""
+
+    monkeypatch.setattr(ssh_driver, "_run_with_stdin", fake_run_with_stdin)
+
+    await orch_worker._one_tick(repo, fake_bus)
 
     rows = await repo.list_orchestrator_events(limit=10)
     assert len(rows) == 1
@@ -154,8 +166,14 @@ async def test_tick_is_noop_when_no_running_deckies(repo, fake_bus, monkeypatch)
         return 0, "SSH-2.0-foo", ""
 
     monkeypatch.setattr(ssh_driver, "_run", fake_run)
-    driver = ssh_driver.SSHDriver()
-    await orch_worker._one_tick(repo, driver, fake_bus)
+
+    async def fake_run_with_stdin(argv, stdin_bytes):
+        # plant_file takes the base64-streaming path; treat any docker
+        # exec write as a successful no-op for the integration test.
+        return 0, "", ""
+
+    monkeypatch.setattr(ssh_driver, "_run_with_stdin", fake_run_with_stdin)
+    await orch_worker._one_tick(repo, fake_bus)
 
     assert called is False
     assert await repo.list_orchestrator_events(limit=10) == []

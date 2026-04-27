@@ -25,7 +25,6 @@ from . import (
     canary,
     db,
     deploy,
-    emailgen,
     forwarder,
     geoip,
     init,
@@ -34,6 +33,7 @@ from . import (
     listener,
     orchestrator,
     profiler,
+    realism,
     reconciler,
     sniffer,
     swarm,
@@ -58,7 +58,7 @@ for _mod in (
     api, swarmctl, agent, updater, listener, forwarder,
     swarm,
     deploy, lifecycle, workers, inventory,
-    web, profiler, orchestrator, emailgen, reconciler, sniffer, db,
+    web, profiler, orchestrator, realism, reconciler, sniffer, db,
     topology, bus, geoip, init, webhook, canary,
 ):
     _mod.register(app)

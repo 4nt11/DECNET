@@ -3,7 +3,7 @@ import { useSearchParams, useNavigate } from 'react-router-dom';
 import {
   PanelRightOpen, PanelRightClose, PanelLeftOpen, PanelLeftClose,
   Maximize2, Minimize2, RotateCcw, UploadCloud, ArrowLeft,
-  Plus, Trash2, Zap, Copy, Eye, ShieldAlert, GitMerge, Server,
+  Plus, Trash2, Zap, Copy, Eye, ShieldAlert, GitMerge, Server, Mail,
 } from '../../icons';
 import './MazeNET.css';
 import axios from '../../utils/api';
@@ -706,6 +706,15 @@ const MazeNET: React.FC = () => {
           </button>
           <button type="button" className="maze-btn ghost" onClick={refetch} title="Revert local state to server">
             <RotateCcw size={12} /> REFRESH
+          </button>
+          <button
+            type="button"
+            className="maze-btn ghost"
+            onClick={() => navigate(`/topologies/${topologyId}/personas`)}
+            disabled={!topologyId}
+            title="Edit email personas for this topology"
+          >
+            <Mail size={12} /> PERSONAS
           </button>
           <button
             type="button"
