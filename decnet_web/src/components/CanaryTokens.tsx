@@ -1,6 +1,6 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import {
-  Target, Plus, Upload, X, AlertTriangle, Search,
+  Plus, Upload, X, AlertTriangle, Search,
 } from '../icons';
 import api from '../utils/api';
 import { useEscapeKey } from '../hooks/useEscapeKey';
@@ -448,22 +448,20 @@ const CanaryTokens: React.FC = () => {
   };
 
   return (
-    <div style={{ padding: '24px', color: 'var(--text-color)' }}>
-      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '24px' }}>
-        <div>
-          <div style={{ fontSize: '0.7rem', color: 'var(--dim-color)', letterSpacing: '0.1em' }}>AUTOMATION</div>
-          <div style={{ fontSize: '1.5rem', fontWeight: 'bold', display: 'flex', alignItems: 'center', gap: '10px' }}>
-            <Target size={22} /> CANARY TOKENS
-          </div>
+    <div className="fleet-root canary-tokens-root" style={{ padding: '24px', color: 'var(--text-color)' }}>
+      <div className="page-header">
+        <div className="page-title-group">
+          <h1>CANARY TOKENS</h1>
+          <span className="page-sub">
+            {tokens.length} TOKEN{tokens.length === 1 ? '' : 'S'} · {counts.planted} PLANTED · {counts.hits} TOTAL HIT{counts.hits === 1 ? '' : 'S'} · {blobs.length} UPLOADED BLOB{blobs.length === 1 ? '' : 'S'}
+          </span>
         </div>
-        <div style={{ display: 'flex', gap: '8px' }}>
-          <button onClick={() => setShowUpload(true)} style={BTN_GHOST}>
-            <Upload size={14} style={{ marginRight: '6px', verticalAlign: 'middle' }} />
-            UPLOAD ARTIFACT
+        <div className="actions">
+          <button className="btn" onClick={() => setShowUpload(true)}>
+            <Upload size={12} /> UPLOAD ARTIFACT
           </button>
-          <button onClick={() => setShowCreate(true)} style={BTN_PRIMARY} title="Alt+C">
-            <Plus size={14} style={{ marginRight: '6px', verticalAlign: 'middle' }} />
-            NEW TOKEN
+          <button className="btn violet" onClick={() => setShowCreate(true)} title="Alt+C">
+            <Plus size={12} /> NEW TOKEN
           </button>
         </div>
       </div>
