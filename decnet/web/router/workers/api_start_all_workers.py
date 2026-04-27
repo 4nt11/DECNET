@@ -25,8 +25,11 @@ _PREFERRED_ORDER: tuple[str, ...] = (
     "sniffer",
     "prober",
     "mutator",
+    "reconciler",
     "reuse-correlator",
     "enrich",
+    "clusterer",
+    "campaign-clusterer",
     "webhook",
     "orchestrator",
 )
