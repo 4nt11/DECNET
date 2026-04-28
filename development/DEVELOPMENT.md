@@ -46,7 +46,7 @@
 ## Core / Hardening
 
 - [~] **Attacker fingerprinting** — HTTP User-Agent, VNC client version stored as `fingerprint` bounties. JA3/JA3S in progress (sniffer container). HASSH, JA4+, TCP stack, JARM planned (see Attacker Intelligence section).
-- [ ] **Canary tokens** — Embed fake AWS keys and honeydocs into decky filesystems.
+- [x] **Canary tokens** — Embed fake AWS keys and honeydocs into decky filesystems.
 - [ ] **Tarpit mode** — Slow down attackers by drip-feeding bytes or delaying responses.
 - [x] **Dynamic decky mutation** — Rotate exposed services or OS fingerprints over time.
 - [x] **Credential harvesting DB** — Centralized database for all username/password attempts.
@@ -128,8 +128,8 @@
 
 ### Service-Level Behavioral Profiling
 - [x] **Commands executed** — Full command log per session (SSH, Telnet, FTP, Redis, DB services)
-- [ ] **Services actively interacted with** — Distinguish port scans from live exploitation attempts
-- [ ] **Tooling attribution** — Byte-sequence signatures from known C2 frameworks in handshakes
+- [x] **Services actively interacted with** — Distinguish port scans from live exploitation attempts
+- [x] **Tooling attribution** — Byte-sequence signatures from known C2 frameworks in handshakes
 - [x] **Credential reuse patterns** — Same username/password tried across multiple deckies/services
 - [x] **Payload signatures** — Hash and classify uploaded files, shellcode, exploit payloads
 
