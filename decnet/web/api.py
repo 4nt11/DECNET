@@ -258,6 +258,50 @@ if DECNET_PROFILE_REQUESTS:
 app.include_router(api_router, prefix="/api/v1")
 
 
+def _custom_openapi() -> dict:
+    """Inject the global 429 response into every operation.
+
+    SlowAPI middleware can short-circuit any request with 429 once the
+    per-route or per-IP rate limit fires, so the OpenAPI spec must
+    advertise 429 on every operation — otherwise schemathesis flags
+    legitimate rate-limit responses as schema-noncompliant.
+    """
+    from fastapi.openapi.utils import get_openapi
+
+    if app.openapi_schema:
+        return app.openapi_schema
+    schema = get_openapi(
+        title=app.title,
+        version=app.version,
+        routes=app.routes,
+        description=app.description,
+    )
+    too_many = {
+        "description": "Rate limit exceeded",
+        "content": {
+            "application/json": {
+                "schema": {
+                    "type": "object",
+                    "properties": {"error": {"type": "string"}},
+                    "required": ["error"],
+                }
+            }
+        },
+    }
+    for path_item in schema.get("paths", {}).values():
+        for method, op in path_item.items():
+            if method.lower() not in {
+                "get", "post", "put", "patch", "delete", "options", "head",
+            }:
+                continue
+            op.setdefault("responses", {}).setdefault("429", too_many)
+    app.openapi_schema = schema
+    return schema
+
+
+app.openapi = _custom_openapi  # type: ignore[method-assign]
+
+
 @app.exception_handler(RequestValidationError)
 async def validation_exception_handler(request: Request, exc: RequestValidationError) -> ORJSONResponse:
     """
