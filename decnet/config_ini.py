@@ -158,7 +158,14 @@ def load_ini_config(path: Optional[Path] = None) -> Optional[Path]:
     if not path.is_file():
         return None
 
-    parser = configparser.ConfigParser()
+    # The docstring at the top of this module advertises inline ``#`` and
+    # ``;`` comments (e.g. ``mode = master    # or "agent"``). Python's
+    # ``configparser`` only recognises those when ``inline_comment_prefixes``
+    # is set explicitly — without it, the comment becomes part of the value
+    # and downstream validators reject it ("mode must be 'agent' or 'master',
+    # got 'master                  # or \"agent\"'"). Match what the docs
+    # promise.
+    parser = configparser.ConfigParser(inline_comment_prefixes=("#", ";"))
     parser.read(path)
 
     # [decnet] first — mode/disallow-master/log-directory. These seed the

@@ -27,6 +27,24 @@ def test_missing_file_is_noop(monkeypatch, tmp_path):
     assert "DECNET_AGENT_PORT" not in os.environ
 
 
+def test_inline_comments_stripped_from_values(monkeypatch, tmp_path):
+    """The module docstring teaches inline ``#`` comments — the parser
+    must accept them. Hit live on the first VPS deploy 2026-04-28: a
+    ``mode = master    # or "agent"`` line caused the value to be parsed
+    as ``master                  # or "agent"`` and downstream
+    validators rejected it."""
+    _scrub(monkeypatch, "DECNET_MODE", "DECNET_API_PORT")
+    ini = _write_ini(tmp_path, """
+[decnet]
+mode = master   # inline hash comment
+[master]
+api-port = 8000   ; inline semi comment
+""")
+    load_ini_config(ini)
+    assert os.environ["DECNET_MODE"] == "master"
+    assert os.environ["DECNET_API_PORT"] == "8000"
+
+
 def test_agent_section_only_loaded_when_mode_agent(monkeypatch, tmp_path):
     _scrub(
         monkeypatch,
