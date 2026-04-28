@@ -109,11 +109,13 @@ class TestDiscoverAttackers:
 
 class TestProbeCycleJARM:
 
+    @patch("decnet.prober.worker.fetch_leaf_cert", return_value=None)
     @patch("decnet.prober.worker.tcp_fingerprint")
     @patch("decnet.prober.worker.hassh_server")
     @patch("decnet.prober.worker.jarm_hash")
     def test_probes_new_ips(self, mock_jarm: MagicMock, mock_hassh: MagicMock,
-                            mock_tcpfp: MagicMock, tmp_path: Path):
+                            mock_tcpfp: MagicMock, mock_cert: MagicMock,
+                            tmp_path: Path):
         mock_jarm.return_value = "c0c" * 10 + "a" * 32  # fake 62-char hash
         mock_hassh.return_value = None
         mock_tcpfp.return_value = None
@@ -129,11 +131,13 @@ class TestProbeCycleJARM:
         assert 443 in probed["10.0.0.1"]["jarm"]
         assert 8443 in probed["10.0.0.1"]["jarm"]
 
+    @patch("decnet.prober.worker.fetch_leaf_cert", return_value=None)
     @patch("decnet.prober.worker.tcp_fingerprint")
     @patch("decnet.prober.worker.hassh_server")
     @patch("decnet.prober.worker.jarm_hash")
     def test_skips_already_probed_ports(self, mock_jarm: MagicMock, mock_hassh: MagicMock,
-                                        mock_tcpfp: MagicMock, tmp_path: Path):
+                                        mock_tcpfp: MagicMock, mock_cert: MagicMock,
+                                        tmp_path: Path):
         mock_jarm.return_value = "c0c" * 10 + "a" * 32
         mock_hassh.return_value = None
         mock_tcpfp.return_value = None
@@ -480,3 +484,176 @@ class TestWriteEvent:
         assert record["event_type"] == "test_event"
         assert record["service"] == "prober"
         assert record["fields"]["target_ip"] == "10.0.0.1"
+
+
+# ─── _probe_cycle: TLS certificate capture (after JARM) ───────────────────
+
+class TestProbeCycleTLSCert:
+
+    @patch("decnet.prober.worker.fetch_leaf_cert")
+    @patch("decnet.prober.worker.tcp_fingerprint")
+    @patch("decnet.prober.worker.hassh_server")
+    @patch("decnet.prober.worker.jarm_hash")
+    def test_cert_event_emitted_after_successful_jarm(
+        self,
+        mock_jarm: MagicMock,
+        mock_hassh: MagicMock,
+        mock_tcpfp: MagicMock,
+        mock_cert: MagicMock,
+        tmp_path: Path,
+    ):
+        """A non-empty JARM hash should trigger a follow-up cert fetch and
+        write a tls_certificate event with all parsed fields."""
+        mock_jarm.return_value = "c0c" * 10 + "a" * 32
+        mock_hassh.return_value = None
+        mock_tcpfp.return_value = None
+        mock_cert.return_value = {
+            "subject_cn": "evil.example.com",
+            "issuer": "CN=evil.example.com",
+            "self_signed": True,
+            "not_before": "2026-01-01T00:00:00Z",
+            "not_after": "2027-01-01T00:00:00Z",
+            "sans": ["evil.example.com", "c2.example.com"],
+            "cert_sha256": "ab" * 32,
+        }
+        log_path = tmp_path / "decnet.log"
+        json_path = tmp_path / "decnet.json"
+
+        _probe_cycle({"10.0.0.1"}, {}, [443], [], [], log_path, json_path, timeout=1.0)
+
+        mock_cert.assert_called_once_with("10.0.0.1", 443, timeout=1.0)
+        records = [
+            json.loads(line)
+            for line in json_path.read_text().splitlines() if line
+        ]
+        cert_records = [r for r in records if r["event_type"] == "tls_certificate"]
+        assert len(cert_records) == 1
+        f = cert_records[0]["fields"]
+        assert f["target_ip"] == "10.0.0.1"
+        assert f["target_port"] == "443"
+        assert f["subject_cn"] == "evil.example.com"
+        assert f["issuer"] == "CN=evil.example.com"
+        assert f["self_signed"] == "true"
+        assert f["not_before"] == "2026-01-01T00:00:00Z"
+        assert f["not_after"] == "2027-01-01T00:00:00Z"
+        assert f["sans"] == "evil.example.com,c2.example.com"
+        assert f["cert_sha256"] == "ab" * 32
+
+    @patch("decnet.prober.worker.fetch_leaf_cert")
+    @patch("decnet.prober.worker.tcp_fingerprint")
+    @patch("decnet.prober.worker.hassh_server")
+    @patch("decnet.prober.worker.jarm_hash")
+    def test_cert_fetch_skipped_on_empty_jarm(
+        self,
+        mock_jarm: MagicMock,
+        mock_hassh: MagicMock,
+        mock_tcpfp: MagicMock,
+        mock_cert: MagicMock,
+        tmp_path: Path,
+    ):
+        """JARM_EMPTY_HASH means the port doesn't speak TLS; skip cert fetch."""
+        mock_jarm.return_value = JARM_EMPTY_HASH
+        mock_hassh.return_value = None
+        mock_tcpfp.return_value = None
+        log_path = tmp_path / "decnet.log"
+        json_path = tmp_path / "decnet.json"
+
+        _probe_cycle({"10.0.0.1"}, {}, [443], [], [], log_path, json_path, timeout=1.0)
+
+        mock_cert.assert_not_called()
+
+    @patch("decnet.prober.worker.fetch_leaf_cert", return_value=None)
+    @patch("decnet.prober.worker.tcp_fingerprint")
+    @patch("decnet.prober.worker.hassh_server")
+    @patch("decnet.prober.worker.jarm_hash")
+    def test_cert_fetch_failure_silent(
+        self,
+        mock_jarm: MagicMock,
+        mock_hassh: MagicMock,
+        mock_tcpfp: MagicMock,
+        mock_cert: MagicMock,
+        tmp_path: Path,
+    ):
+        """fetch_leaf_cert returning None must not write a cert event."""
+        mock_jarm.return_value = "c0c" * 10 + "a" * 32
+        mock_hassh.return_value = None
+        mock_tcpfp.return_value = None
+        log_path = tmp_path / "decnet.log"
+        json_path = tmp_path / "decnet.json"
+
+        _probe_cycle({"10.0.0.1"}, {}, [443], [], [], log_path, json_path, timeout=1.0)
+
+        mock_cert.assert_called_once_with("10.0.0.1", 443, timeout=1.0)
+        if json_path.exists():
+            content = json_path.read_text()
+            assert "tls_certificate" not in content
+
+    @patch("decnet.prober.worker.fetch_leaf_cert")
+    @patch("decnet.prober.worker.tcp_fingerprint")
+    @patch("decnet.prober.worker.hassh_server")
+    @patch("decnet.prober.worker.jarm_hash")
+    def test_cert_fetch_crash_does_not_break_phase(
+        self,
+        mock_jarm: MagicMock,
+        mock_hassh: MagicMock,
+        mock_tcpfp: MagicMock,
+        mock_cert: MagicMock,
+        tmp_path: Path,
+    ):
+        """If fetch_leaf_cert throws despite its contract, the JARM phase
+        must keep moving to the next port without crashing."""
+        mock_jarm.return_value = "c0c" * 10 + "a" * 32
+        mock_hassh.return_value = None
+        mock_tcpfp.return_value = None
+        mock_cert.side_effect = RuntimeError("unexpected")
+        log_path = tmp_path / "decnet.log"
+        json_path = tmp_path / "decnet.json"
+
+        _probe_cycle({"10.0.0.1"}, {}, [443, 8443], [], [], log_path, json_path, timeout=1.0)
+
+        # Both ports still marked probed despite the cert-side crash.
+        from decnet.prober.worker import _probe_cycle as _  # re-import safety
+        assert mock_cert.call_count == 2
+
+    @patch("decnet.prober.worker.fetch_leaf_cert")
+    @patch("decnet.prober.worker.tcp_fingerprint")
+    @patch("decnet.prober.worker.hassh_server")
+    @patch("decnet.prober.worker.jarm_hash")
+    def test_cert_publish_fn_called(
+        self,
+        mock_jarm: MagicMock,
+        mock_hassh: MagicMock,
+        mock_tcpfp: MagicMock,
+        mock_cert: MagicMock,
+        tmp_path: Path,
+    ):
+        """publish_fn must receive a 'tls_certificate' event when capture succeeds."""
+        mock_jarm.return_value = "c0c" * 10 + "a" * 32
+        mock_hassh.return_value = None
+        mock_tcpfp.return_value = None
+        mock_cert.return_value = {
+            "subject_cn": "cn",
+            "issuer": "CN=cn",
+            "self_signed": True,
+            "not_before": "2026-01-01T00:00:00Z",
+            "not_after": "2027-01-01T00:00:00Z",
+            "sans": [],
+            "cert_sha256": "cd" * 32,
+        }
+        published: list[tuple[str, dict]] = []
+
+        def publish(kind: str, payload: dict) -> None:
+            published.append((kind, payload))
+
+        _probe_cycle(
+            {"10.0.0.1"}, {}, [443], [], [],
+            tmp_path / "decnet.log", tmp_path / "decnet.json",
+            timeout=1.0, publish_fn=publish,
+        )
+
+        cert_pubs = [p for p in published if p[0] == "tls_certificate"]
+        assert len(cert_pubs) == 1
+        assert cert_pubs[0][1]["attacker_ip"] == "10.0.0.1"
+        assert cert_pubs[0][1]["port"] == 443
+        assert cert_pubs[0][1]["cert_sha256"] == "cd" * 32
+        assert cert_pubs[0][1]["self_signed"] is True
