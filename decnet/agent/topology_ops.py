@@ -122,7 +122,20 @@ async def apply(
                 client, net_name, lan["subnet"], internal=internal
             )
         write_topology_compose(hydrated, compose_path)
-        _compose_with_retry("up", "--build", "-d", compose_file=compose_path)
+        # ``--always-recreate-deps`` keeps service containers' netns shares
+        # fresh: every decky service joins its base's netns via
+        # ``network_mode: container:<base>``, and that share is bound at
+        # service start time. If a base is recreated (e.g. when ``ports:``
+        # changes after toggling ``forwards_l3``) but compose decides the
+        # services are unchanged, the services keep a stale netns FD
+        # pointing at the destroyed base — they end up in an empty
+        # namespace with only ``lo``, and external traffic hits a closed
+        # port on the live base. Forcing dependents to recreate alongside
+        # the base is the cheapest way to make this race impossible.
+        _compose_with_retry(
+            "up", "--build", "-d", "--always-recreate-deps",
+            compose_file=compose_path,
+        )
 
     await asyncio.to_thread(_materialise)
 
