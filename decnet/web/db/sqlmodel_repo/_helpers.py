@@ -2,12 +2,20 @@
 
 ``_safe_session`` and ``_detach_close`` make session cleanup robust under
 client-cancellation. See ``_detach_close`` for the full rationale.
+
+``_serialize_json_fields`` / ``_deserialize_json_fields`` live here
+because they're used across multiple domain mixins (fleet, topology,
+…); putting them in a single mixin would force the others to inherit
+that mixin or import a free function — both worse than a shared helper.
 """
 from __future__ import annotations
 
 import asyncio
+import json
 from contextlib import asynccontextmanager
+from typing import Any
 
+import orjson
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
 from decnet.logging import get_logger
@@ -81,3 +89,25 @@ async def _safe_session(factory: async_sessionmaker[AsyncSession]):
         raise
     else:
         await session.close()
+
+
+def _serialize_json_fields(data: dict[str, Any], keys: tuple[str, ...]) -> dict[str, Any]:
+    """Encode the named keys as JSON strings if they're not already."""
+    out = dict(data)
+    for k in keys:
+        v = out.get(k)
+        if v is not None and not isinstance(v, str):
+            out[k] = orjson.dumps(v).decode()
+    return out
+
+
+def _deserialize_json_fields(d: dict[str, Any], keys: tuple[str, ...]) -> dict[str, Any]:
+    """Decode the named JSON-string keys in place."""
+    for k in keys:
+        v = d.get(k)
+        if isinstance(v, str):
+            try:
+                d[k] = json.loads(v)
+            except (json.JSONDecodeError, TypeError):
+                pass
+    return d
