@@ -451,6 +451,17 @@ async def log_collector_worker(log_file: str) -> None:
     heartbeat_task = asyncio.create_task(run_health_heartbeat(bus, "collector"))
     control_task = asyncio.create_task(run_control_listener_signal(bus, "collector"))
 
+    # Periodic re-scan of running containers. Belt to the event-watcher's
+    # suspenders: if dockerd or the SDK ever drops a start event during a
+    # reconnect window (the retry loop in ``_watch_events`` covers the
+    # restart itself, but events fired *during* the gap are lost), this
+    # loop picks up the orphan within ``RECONCILE_INTERVAL_S``. Also
+    # prunes finished futures so ``active`` doesn't accumulate over the
+    # agent's lifetime as topology mutations churn containers.
+    _reconcile_interval_s = float(
+        os.environ.get("DECNET_COLLECTOR_RECONCILE_S", "30")
+    )
+
     # Dedicated thread pool so long-running container log streams don't
     # saturate the default asyncio executor and starve short-lived
     # to_thread() calls elsewhere (e.g. load_state in the web API).
@@ -473,20 +484,73 @@ async def log_collector_worker(log_file: str) -> None:
         logger.info("collector started log_path=%s", log_path)
         client = docker.from_env()
 
+        async def _reconcile_loop() -> None:
+            while True:
+                try:
+                    await asyncio.sleep(_reconcile_interval_s)
+                    # Drop done futures so the dict's bounded by the
+                    # current container count, not lifetime churn.
+                    for cid in [c for c, t in active.items() if t.done()]:
+                        active.pop(cid, None)
+                    containers = await loop.run_in_executor(
+                        collector_pool,
+                        lambda: list(client.containers.list()),
+                    )
+                    for container in containers:
+                        if container.id in active:
+                            continue
+                        if is_service_container(container):
+                            _spawn(container.id, container.name.lstrip("/"))
+                except asyncio.CancelledError:
+                    raise
+                except Exception as exc:  # noqa: BLE001 — keep loop alive across SDK transients
+                    logger.warning("collector: reconcile pass failed: %s", exc)
+
+        reconcile_task = asyncio.create_task(_reconcile_loop())
+
         for container in client.containers.list():
             if is_service_container(container):
                 _spawn(container.id, container.name.lstrip("/"))
 
         def _watch_events() -> None:
-            for event in client.events(
-                decode=True,
-                filters={"type": "container", "event": "start"},
-            ):
-                attrs = event.get("Actor", {}).get("Attributes", {})
-                cid  = event.get("id", "")
-                name = attrs.get("name", "")
-                if cid and is_service_event(attrs):
-                    loop.call_soon_threadsafe(_spawn, cid, name)
+            # The dockerd event stream is the fast path for picking up
+            # newly-started service containers. It can break in two ways:
+            # (a) dockerd restart / reload severs the long-poll, (b) the
+            # SDK's JSON-stream decoder occasionally raises on a partial
+            # frame. Both used to make this thread return cleanly, leaving
+            # the collector "running" with no event subscription — future
+            # container starts were silently dropped until an operator
+            # restarted the unit. Retry with exponential backoff (cap at
+            # 30s, matching the heartbeat cadence) so dockerd hiccups are
+            # invisible to the operator. The reconcile loop is the safety
+            # net for any events lost during the reconnect window.
+            backoff = 1.0
+            while True:
+                try:
+                    for event in client.events(
+                        decode=True,
+                        filters={"type": "container", "event": "start"},
+                    ):
+                        attrs = event.get("Actor", {}).get("Attributes", {})
+                        cid  = event.get("id", "")
+                        name = attrs.get("name", "")
+                        if cid and is_service_event(attrs):
+                            loop.call_soon_threadsafe(_spawn, cid, name)
+                    # Clean iterator exhaustion: real dockerd doesn't
+                    # close the stream voluntarily, so this only
+                    # happens in tests with mocked iterators or in
+                    # genuinely unrecoverable daemon states. Either
+                    # way, returning lets the worker shut down
+                    # cleanly — the reconciler is the safety net for
+                    # productive cases.
+                    return
+                except Exception as exc:  # noqa: BLE001 — SDK leaks bare Exceptions on stream-decode errors
+                    logger.warning(
+                        "collector: event stream broke (%s: %s); reconnecting in %.1fs",
+                        type(exc).__name__, exc, backoff,
+                    )
+                    time.sleep(backoff)
+                    backoff = min(backoff * 2, 30.0)
 
         await loop.run_in_executor(collector_pool, _watch_events)
 
@@ -500,7 +564,12 @@ async def log_collector_worker(log_file: str) -> None:
         logger.error("collector error: %s", exc)
     finally:
         collector_pool.shutdown(wait=False)
-        for t in (heartbeat_task, control_task):
+        # `reconcile_task` may not exist if startup failed before
+        # `client = docker.from_env()` returned; tolerate that.
+        _maintenance_tasks = [heartbeat_task, control_task]
+        if "reconcile_task" in locals():
+            _maintenance_tasks.append(reconcile_task)
+        for t in _maintenance_tasks:
             t.cancel()
             with contextlib.suppress(Exception, asyncio.CancelledError):
                 await t

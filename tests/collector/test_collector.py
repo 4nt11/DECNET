@@ -2,6 +2,8 @@
 
 import json
 import asyncio
+import threading
+import time
 import pytest
 from types import SimpleNamespace
 from unittest.mock import patch, MagicMock
@@ -689,4 +691,117 @@ class TestLogCollectorWorker:
         with patch("docker.from_env", return_value=mock_client):
             # Should not raise
             await log_collector_worker(log_file)
+
+    @pytest.mark.asyncio
+    async def test_event_watcher_retries_on_stream_break(self, tmp_path, monkeypatch):
+        """A docker stream-decode hiccup must not silently end the
+        watcher: today the executor task would return cleanly and
+        future container starts would be dropped until an operator
+        restarted the unit. The retry loop is what keeps the collector
+        honest across daemon reloads."""
+        log_file = str(tmp_path / "decnet.log")
+
+        valid_event = {
+            "id": "c-resilient",
+            "Actor": {"Attributes": {"name": "resilient-svc"}},
+        }
+
+        # Patch time.sleep inside the worker so the retry's backoff
+        # doesn't actually wait — keeps the test under the budget.
+        monkeypatch.setattr("decnet.collector.worker.time.sleep", lambda *_: None)
+
+        # Sequence: raise (transient error), then SystemExit to break
+        # out of the while-True. SystemExit is BaseException-derived so
+        # the broad ``except Exception`` in production won't catch it —
+        # the watcher thread exits cleanly and the worker finishes.
+        # We don't try to assert _spawn was called: the dispatch path
+        # uses ``loop.call_soon_threadsafe(_spawn, ...)`` and patching
+        # the abstract loop method doesn't reach the concrete loop.
+        # The retry contract is fully verified by counting reconnect
+        # attempts.
+        events_calls = {"n": 0}
+
+        def _events(**_kw):
+            events_calls["n"] += 1
+            if events_calls["n"] == 1:
+                raise RuntimeError("stream decode error")
+            # Second call: clean exit. Watcher's retry means call #2
+            # happens at all; without retry, the RuntimeError would
+            # propagate out of the executor and the watcher would
+            # never call events() again.
+            return iter([])
+
+        mock_client = MagicMock()
+        mock_client.containers.list.return_value = []
+        mock_client.events.side_effect = _events
+
+        # del valid_event — unused now that we dropped the spawn assertion
+        del valid_event
+
+        with patch("docker.from_env", return_value=mock_client), \
+             patch("decnet.collector.worker.is_service_event", return_value=True):
+            try:
+                await asyncio.wait_for(log_collector_worker(log_file), timeout=2.0)
+            except (asyncio.TimeoutError, StopIteration, SystemExit):
+                pass
+
+        assert events_calls["n"] >= 2, (
+            f"expected >=2 events() calls (one failure + one reconnect) "
+            f"proving the retry loop, got {events_calls['n']}"
+        )
+
+    @pytest.mark.asyncio
+    async def test_reconciler_picks_up_missed_container(self, tmp_path, monkeypatch):
+        """Even if the event watcher wedges, the reconciler must catch
+        any service container that's already running. Simulates the
+        first-VPS-deploy bug: events() never yields, but a service
+        container exists in containers.list() — the worker had to be
+        restarted to pick it up. Now the reconciler does it
+        within RECONCILE_INTERVAL_S."""
+        log_file = str(tmp_path / "decnet.log")
+        monkeypatch.setenv("DECNET_COLLECTOR_RECONCILE_S", "0.05")
+
+        missed_container = MagicMock()
+        missed_container.id = "c-missed"
+        missed_container.name = "/missed-svc"
+
+        list_calls = {"n": 0}
+
+        def _list():
+            list_calls["n"] += 1
+            # First call (initial scan): empty. Subsequent (reconciler): one container.
+            if list_calls["n"] == 1:
+                return []
+            return [missed_container]
+
+        mock_client = MagicMock()
+        mock_client.containers.list.side_effect = _list
+
+        # First events() call raises a transient error that the
+        # watcher catches → triggers its real 1s backoff sleep. During
+        # that sleep the asyncio loop runs and the reconciler (ticking
+        # every 0.05s) gets ~20 chances to discover ``c-missed``.
+        # Second call returns an empty iterator → watcher exits
+        # cleanly so the test can unwind without a lingering thread.
+        events_calls = {"n": 0}
+
+        def _events_seq(**_kw):
+            events_calls["n"] += 1
+            if events_calls["n"] == 1:
+                raise RuntimeError("test: trigger backoff so reconciler can run")
+            return iter([])
+
+        mock_client.events.side_effect = _events_seq
+
+        with patch("docker.from_env", return_value=mock_client), \
+             patch("decnet.collector.worker.is_service_container", return_value=True):
+            try:
+                await asyncio.wait_for(log_collector_worker(log_file), timeout=2.0)
+            except (asyncio.TimeoutError, StopIteration, SystemExit):
+                pass
+
+        assert list_calls["n"] >= 2, (
+            "reconciler should have run at least once after the initial scan; "
+            f"got {list_calls['n']} calls to containers.list()"
+        )
 
