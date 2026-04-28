@@ -140,6 +140,22 @@ _IP_FIELDS = ("src_ip", "src", "client_ip", "remote_ip", "remote_addr", "target_
 # as one unit; we only care about IP-shaped fields here anyway.
 _MSG_KV_RE = re.compile(r'(\w+)=(\S+)')
 
+# Native sshd / pam syslog lines arrive without an SD block and without
+# key=value pairs. The remote address shows up as free prose:
+#   "Failed password for root from 1.2.3.4 port 42772 ssh2"
+#   "Connection from 1.2.3.4 port 42772 on 10.0.0.2 port 22"
+#   "pam_unix(sshd:auth): authentication failure; … rhost=1.2.3.4 user=root"
+# Anchored patterns first so we never confuse the attacker with the
+# local listener IP ("on 10.0.0.2"). Bare IP scan is the last resort.
+_IPV4 = r"\d{1,3}(?:\.\d{1,3}){3}"
+_IPV6 = r"[0-9a-fA-F:]+:[0-9a-fA-F:]+"
+_IP = rf"(?:{_IPV4}|{_IPV6})"
+_MSG_IP_ANCHORED_RE = re.compile(
+    rf"\b(?:from|rhost[:=]|client[:=]|src[:=])\s*({_IP})",
+    re.IGNORECASE,
+)
+_MSG_IP_BARE_RE = re.compile(rf"\b({_IPV4})\b")
+
 
 def parse_rfc5424(line: str) -> Optional[dict[str, Any]]:
     """
@@ -185,6 +201,19 @@ def parse_rfc5424(line: str) -> Optional[dict[str, Any]]:
             if k in _IP_FIELDS:
                 attacker_ip = v
                 break
+
+    # Final fallback for native syslog producers that emit free-form prose
+    # (notably sshd and pam_unix routed via rsyslog without the relay@55555
+    # SD wrapper). Prefer anchored matches so the local listener address in
+    # "Connection from X port Y on Z port 22" never wins over X.
+    if attacker_ip == "Unknown" and msg:
+        anchored = _MSG_IP_ANCHORED_RE.search(msg)
+        if anchored:
+            attacker_ip = anchored.group(1)
+        else:
+            bare = _MSG_IP_BARE_RE.search(msg)
+            if bare:
+                attacker_ip = bare.group(1)
 
     try:
         ts_formatted = datetime.fromisoformat(ts_raw).strftime("%Y-%m-%d %H:%M:%S")

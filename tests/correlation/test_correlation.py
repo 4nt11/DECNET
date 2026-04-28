@@ -154,6 +154,32 @@ class TestParserAttackerIP:
         line = format_rfc5424("http", "-", "evt", SEVERITY_INFO)
         assert parse_line(line) is None
 
+    def test_attacker_ip_from_sshd_prose(self):
+        """sshd routed via rsyslog has no SD block — IP lives in free prose.
+        Anchored "from <ip>" must beat the local listener in
+        "Connection from X port Y on Z port 22"."""
+        cases = [
+            (
+                "<38>1 2026-04-27T03:08:48+00:00 dmz-gateway sshd - - - "
+                "Failed password for root from 157.66.144.16 port 42772 ssh2",
+                "157.66.144.16",
+            ),
+            (
+                "<38>1 2026-04-27T03:08:45+00:00 dmz-gateway sshd - - - "
+                "Connection from 157.66.144.16 port 42772 on 10.0.0.2 port 22",
+                "157.66.144.16",
+            ),
+            (
+                "<38>1 2026-04-27T03:08:46+00:00 dmz-gateway sshd - - - "
+                "pam_unix(sshd:auth): authentication failure; rhost=157.66.144.16 user=root",
+                "157.66.144.16",
+            ),
+        ]
+        for line, expected in cases:
+            event = parse_line(line)
+            assert event is not None, line
+            assert event.attacker_ip == expected, (line, event.attacker_ip)
+
 
 # ---------------------------------------------------------------------------
 # graph.py — AttackerTraversal

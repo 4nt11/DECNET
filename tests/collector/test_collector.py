@@ -93,7 +93,40 @@ class TestParseRfc5424:
         assert result["decky"] == "omega-decky"
         assert result["service"] == "sshd"
         assert "Accepted password" in result["msg"]
-        assert result["attacker_ip"] == "Unknown"  # no key=value in this msg
+        # Native sshd lines have no key=value; the prose fallback pulls
+        # the IP out of "from <ip>".
+        assert result["attacker_ip"] == "192.168.1.5"
+
+    def test_extracts_attacker_ip_from_sshd_prose(self):
+        """sshd routed via rsyslog emits free prose with no SD block and no
+        key=value pairs. The parser must still find the remote IP."""
+        cases = [
+            (
+                "<38>1 2026-04-27T03:08:48+00:00 dmz-gateway sshd 940 - - "
+                "Failed password for root from 157.66.144.16 port 42772 ssh2",
+                "157.66.144.16",
+            ),
+            (
+                "<38>1 2026-04-27T03:08:45+00:00 dmz-gateway sshd 940 - - "
+                "Connection from 157.66.144.16 port 42772 on 10.0.0.2 port 22 rdomain \"\"",
+                "157.66.144.16",  # must beat the local listener 10.0.0.2
+            ),
+            (
+                "<38>1 2026-04-27T03:08:49+00:00 dmz-gateway sshd 940 - - "
+                "Connection closed by authenticating user root 157.66.144.16 port 42772 [preauth]",
+                "157.66.144.16",
+            ),
+            (
+                "<38>1 2026-04-27T03:08:46+00:00 dmz-gateway sshd 940 - - "
+                "pam_unix(sshd:auth): authentication failure; "
+                "logname= uid=0 euid=0 tty=ssh ruser= rhost=157.66.144.16 user=root",
+                "157.66.144.16",
+            ),
+        ]
+        for line, expected in cases:
+            result = parse_rfc5424(line)
+            assert result is not None, line
+            assert result["attacker_ip"] == expected, (line, result["attacker_ip"])
 
     def test_extracts_attacker_ip_from_msg_body_kv(self):
         """SSH container's bash PROMPT_COMMAND uses `logger -t bash "CMD ... src=IP ..."`

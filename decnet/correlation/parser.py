@@ -41,6 +41,20 @@ _PARAM_RE = re.compile(r'(\w+)="((?:[^"\\]|\\.)*)"')
 # Field names to probe for attacker IP, in priority order
 _IP_FIELDS = ("src_ip", "src", "client_ip", "remote_ip", "remote_addr", "target_ip", "ip")
 
+# Native syslog producers (sshd, pam_unix routed through rsyslog) emit
+# free prose with no SD block. Pull the remote address out of idiomatic
+# anchors first ("from <ip>", "rhost=<ip>"), then fall back to the first
+# IPv4 in the line. Anchored matches keep us from picking the local
+# listener in "Connection from X port Y on Z port 22".
+_IPV4 = r"\d{1,3}(?:\.\d{1,3}){3}"
+_IPV6 = r"[0-9a-fA-F:]+:[0-9a-fA-F:]+"
+_IP_RE = rf"(?:{_IPV4}|{_IPV6})"
+_MSG_IP_ANCHORED_RE = re.compile(
+    rf"\b(?:from|rhost[:=]|client[:=]|src[:=])\s*({_IP_RE})",
+    re.IGNORECASE,
+)
+_MSG_IP_BARE_RE = re.compile(rf"\b({_IPV4})\b")
+
 
 EventKind = Literal["attacker", "mutation"]
 
@@ -76,10 +90,17 @@ def _parse_sd_params(sd_rest: str) -> dict[str, str]:
     return params
 
 
-def _extract_attacker_ip(fields: dict[str, str]) -> str | None:
+def _extract_attacker_ip(fields: dict[str, str], msg: str = "") -> str | None:
     for fname in _IP_FIELDS:
         if fname in fields:
             return fields[fname]
+    if msg:
+        anchored = _MSG_IP_ANCHORED_RE.search(msg)
+        if anchored:
+            return anchored.group(1)
+        bare = _MSG_IP_BARE_RE.search(msg)
+        if bare:
+            return bare.group(1)
     return None
 
 
@@ -109,7 +130,12 @@ def parse_line(line: str) -> LogEvent | None:
         return None
 
     fields = _parse_sd_params(sd_rest)
-    attacker_ip = _extract_attacker_ip(fields)
+    if sd_rest.startswith("-"):
+        msg = sd_rest[1:].lstrip()
+    else:
+        tail = re.search(r'\]\s+(.+)$', sd_rest)
+        msg = tail.group(1).strip() if tail else ""
+    attacker_ip = _extract_attacker_ip(fields, msg)
 
     # Mutator-emitted transitions arrive on the same ingest stream but
     # belong in the substrate-state index, not the per-IP attacker one.
