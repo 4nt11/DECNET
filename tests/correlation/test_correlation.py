@@ -285,6 +285,38 @@ class TestEngineTraversals:
         assert t[0].attacker_ip == "1.1.1.1"
         assert t[0].decky_count == 2
 
+    def test_prober_event_does_not_count_as_traversal(self):
+        """Hit live on first VPS deploy: every fingerprinted attacker
+        showed up as a 2-decky traversal because the prober's outbound
+        fingerprint events (decky=decnet-prober, target_ip=<attacker>)
+        got co-indexed with the attacker's actual decoy hops. The
+        prober is internal infrastructure, not a hop — its events
+        must not bump the distinct-decky count."""
+        engine = self._engine_with([
+            ("ssh", "dmz-gateway", "conn", "1.1.1.1", _TS),
+            ("ssh", "decnet-prober", "hassh_fingerprint", "1.1.1.1", _TS2),
+        ])
+        # Only one *real* decky touched — no traversal.
+        assert engine.traversals() == []
+
+    def test_prober_excluded_from_traversal_path(self):
+        """When a real traversal exists, the prober's hops must not
+        appear in the path or inflate the decky count."""
+        engine = self._engine_with([
+            ("ssh",  "dmz-gateway",   "conn",              "1.1.1.1", _TS),
+            ("ssh",  "decnet-prober", "hassh_fingerprint", "1.1.1.1", _TS2),
+            ("http", "decky-internal", "req",              "1.1.1.1", _TS3),
+        ])
+        traversals = engine.traversals()
+        assert len(traversals) == 1
+        t = traversals[0]
+        assert t.decky_count == 2, (
+            f"prober should not inflate decky_count; got {t.decky_count}"
+        )
+        assert "decnet-prober" not in t.path, (
+            f"prober should not appear in traversal path; got {t.path!r}"
+        )
+
     def test_min_deckies_filter(self):
         engine = self._engine_with([
             ("ssh",  "decky-01", "conn", "1.1.1.1", _TS),

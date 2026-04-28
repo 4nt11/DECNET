@@ -40,6 +40,24 @@ from decnet.telemetry import traced as _traced, get_tracer as _get_tracer
 log = get_logger("correlation.engine")
 
 
+# Decky-name prefix reserved for DECNET's own infrastructure workers
+# that log attacker IPs without representing actual decoy hops. The
+# prober is the canonical example: when it fingerprints an attacker's
+# externally-exposed services, it writes events with
+# ``hostname=decnet-prober`` and ``target_ip=<attacker IP>``. The parser
+# pulls ``target_ip`` into ``attacker_ip`` so the prober event is
+# co-indexed with that attacker — but it's outbound recon from the
+# master, not the attacker traversing into another decoy. Excluding the
+# whole ``decnet-*`` namespace from distinct-decky counts and hop paths
+# avoids labelling every fingerprinted attacker as a "traversal."
+_INTERNAL_DECKY_PREFIX = "decnet-"
+
+
+def _is_internal_decky(name: str) -> bool:
+    """True if ``name`` is a DECNET internal worker (prober, etc.) — not a real decoy."""
+    return bool(name) and name.startswith(_INTERNAL_DECKY_PREFIX)
+
+
 # ``publish_fn(event_type, payload_dict)``.  Sync to avoid rippling
 # ``async`` through every call site of :meth:`CorrelationEngine.ingest`;
 # the caller wraps bus-publish via
@@ -137,11 +155,18 @@ class CorrelationEngine:
         """
         result: list[AttackerTraversal] = []
         for ip, events in self._events.items():
-            if len({e.decky for e in events}) < min_deckies:
+            # Exclude internal-infrastructure events (e.g. prober) from
+            # distinct-decky counting and the hop list. They aren't
+            # attacker movement — they're outbound recon co-indexed by
+            # attacker IP. Without this filter every fingerprinted
+            # attacker shows up as a 2-decky "traversal" with a bogus
+            # ``dmz-gateway → decnet-prober`` path.
+            decoy_events = [e for e in events if not _is_internal_decky(e.decky)]
+            if len({e.decky for e in decoy_events}) < min_deckies:
                 continue
             hops = sorted(
                 (TraversalHop(e.timestamp, e.decky, e.service, e.event_type)
-                 for e in events),
+                 for e in decoy_events),
                 key=lambda h: h.timestamp,
             )
             # Per-attacker mutation markers: any mutation on a touched
