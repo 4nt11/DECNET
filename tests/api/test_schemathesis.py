@@ -94,6 +94,12 @@ def start_automated_server() -> subprocess.Popen:
     env["DECNET_DEVELOPER"] = "true"
     env["DECNET_CONTRACT_TEST"] = "true"
     env["DECNET_JWT_SECRET"] = TEST_SECRET
+    # Schemathesis fires thousands of examples per endpoint; the login
+    # bucket (10/5min per IP) trips on the second example and turns
+    # every subsequent valid request into a RejectedPositiveData
+    # failure. Disable the limiter for the fuzz subprocess — same
+    # rationale as the load-testing knob in decnet/web/limiter.py.
+    env["DECNET_LIMITER_ENABLED"] = "false"
 
     log_dir = Path(__file__).parent.parent.parent / "logs"
     log_dir.mkdir(exist_ok=True)
