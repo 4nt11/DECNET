@@ -21,6 +21,7 @@ without actually touching the filesystem's Python toolchain.
 from __future__ import annotations
 
 import dataclasses
+import hashlib
 import os
 import pathlib
 import shutil
@@ -45,6 +46,15 @@ AGENT_PROBE_URL = "https://127.0.0.1:8765/health"
 AGENT_PROBE_ATTEMPTS = 10
 AGENT_PROBE_BACKOFF_S = 1.0
 AGENT_RESTART_GRACE_S = 10.0
+
+# Hard cap on the post-decompression size of an update tarball. The DECNET
+# source tree is on the order of single-digit MiB; 256 MiB is far above
+# that but small enough to bound damage from a gzip bomb. mTLS already
+# authenticates the master, but the worker still treats the bytes as
+# untrusted because (a) a compromised master shouldn't get arbitrary RAM
+# exhaustion on every agent, (b) bugs in the master tarball builder
+# shouldn't brick agents.
+MAX_TARBALL_UNCOMPRESSED_BYTES = 256 * 1024 * 1024
 
 
 # ------------------------------------------------------------------- errors
@@ -188,17 +198,53 @@ def clean_stale_staging(install_dir: pathlib.Path) -> None:
 def extract_tarball(tarball_bytes: bytes, dest: pathlib.Path) -> None:
     """Extract a gzipped tarball into ``dest`` (must not pre-exist).
 
-    Rejects absolute paths and ``..`` traversal in the archive.
+    Hardening on top of stdlib ``tarfile``:
+
+    * Rejects absolute paths and ``..`` traversal in member names.
+    * Rejects anything that isn't a regular file or directory — no symlinks,
+      hardlinks, devices, or FIFOs. A symlink pointing outside ``dest``
+      would let later writes (pip install, etc.) escape the staging tree.
+    * Validates that each member's *resolved* destination path stays under
+      ``dest`` after symlink resolution, in case a parent directory in the
+      tarball is itself a symlink we missed.
+    * Caps total uncompressed size to bound gzip-bomb damage.
+    * Strips suid/sgid bits from extracted file modes.
     """
     import io
 
     dest.mkdir(parents=True, exist_ok=False)
+    dest_resolved = dest.resolve()
+    total_size = 0
     with tarfile.open(fileobj=io.BytesIO(tarball_bytes), mode="r:gz") as tar:
-        for member in tar.getmembers():
+        members = tar.getmembers()
+        for member in members:
             name = member.name
             if name.startswith("/") or ".." in pathlib.PurePosixPath(name).parts:
                 raise UpdateError(f"unsafe path in tarball: {name!r}")
-        tar.extractall(dest)  # nosec B202 — validated above
+            if not (member.isfile() or member.isdir()):
+                raise UpdateError(
+                    f"unsupported tar entry {name!r}: type={member.type!r}; "
+                    "only regular files and directories are allowed"
+                )
+            total_size += max(member.size, 0)
+            if total_size > MAX_TARBALL_UNCOMPRESSED_BYTES:
+                raise UpdateError(
+                    f"tarball exceeds size cap "
+                    f"({total_size} > {MAX_TARBALL_UNCOMPRESSED_BYTES} bytes)"
+                )
+            # Strip setuid/setgid/sticky bits — extracted files should never
+            # acquire elevated mode, even if the master built the tarball
+            # against a tree that has them by accident.
+            member.mode = member.mode & 0o777 & ~0o7000
+        for member in members:
+            target = (dest / member.name).resolve()
+            try:
+                target.relative_to(dest_resolved)
+            except ValueError:
+                raise UpdateError(
+                    f"resolved path escapes dest: {member.name!r} -> {target}"
+                ) from None
+        tar.extractall(dest)  # nosec B202 — every member validated above
 
 
 # ---------------------------------------------------------------- seams
@@ -529,14 +575,39 @@ def _point_current_at(install_dir: pathlib.Path, target: pathlib.Path) -> None:
     os.replace(tmp, link)
 
 
+def _verify_tarball_sha256(tarball_bytes: bytes, expected_sha256: Optional[str]) -> None:
+    """Refuse to extract a tarball whose SHA-256 disagrees with the operator-supplied digest.
+
+    mTLS already authenticates the master, so a network MITM can't forge
+    bytes. This check exists for two narrower cases: catching corruption
+    in transit (proxies, broken disks) before we explode a half-decoded
+    archive into the staging tree, and giving the operator a way to pin
+    "exactly these bytes" when distributing a vetted release. The form
+    field is optional — if the caller doesn't send one, we skip the
+    check rather than reject (no breaking change for older masters).
+    """
+    if not expected_sha256:
+        return
+    expected = expected_sha256.strip().lower()
+    if len(expected) != 64 or any(c not in "0123456789abcdef" for c in expected):
+        raise UpdateError(f"sha256 digest is not a 64-char hex string: {expected_sha256!r}")
+    actual = hashlib.sha256(tarball_bytes).hexdigest()
+    if actual != expected:
+        raise UpdateError(
+            f"tarball sha256 mismatch (expected={expected[:16]}…, got={actual[:16]}…)"
+        )
+
+
 def run_update(
     tarball_bytes: bytes,
     sha: Optional[str],
     install_dir: pathlib.Path = DEFAULT_INSTALL_DIR,
     agent_dir: pathlib.Path = pki.DEFAULT_AGENT_DIR,
+    expected_sha256: Optional[str] = None,
 ) -> dict[str, Any]:
     """Apply an update atomically. Rolls back on probe failure."""
     log.info("update received sha=%s bytes=%d install_dir=%s", sha, len(tarball_bytes), install_dir)
+    _verify_tarball_sha256(tarball_bytes, expected_sha256)
     clean_stale_staging(install_dir)
     staging = _staging_dir(install_dir)
 
@@ -628,6 +699,7 @@ def run_update_self(
     sha: Optional[str],
     updater_install_dir: pathlib.Path,
     exec_cb: Optional[Callable[[list[str]], None]] = None,
+    expected_sha256: Optional[str] = None,
 ) -> dict[str, Any]:
     """Replace the updater's own source tree, then re-exec this process.
 
@@ -635,6 +707,7 @@ def run_update_self(
     returns new SHA within 30s" as success.
     """
     log.info("self-update received sha=%s bytes=%d install_dir=%s", sha, len(tarball_bytes), updater_install_dir)
+    _verify_tarball_sha256(tarball_bytes, expected_sha256)
     clean_stale_staging(updater_install_dir)
     staging = _staging_dir(updater_install_dir)
     log.info("extracting tarball -> %s", staging)

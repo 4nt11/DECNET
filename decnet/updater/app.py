@@ -129,12 +129,14 @@ async def releases() -> dict:
 async def update(
     tarball: UploadFile = File(..., description="tar.gz of the working tree"),
     sha: str = Form("", description="git SHA of the tree for provenance"),
+    sha256: str = Form("", description="hex SHA-256 of the tarball bytes; verified before extract"),
 ) -> dict:
     body = await tarball.read()
     try:
         return _exec.run_update(
             body, sha=sha or None,
             install_dir=_Config.install_dir, agent_dir=_Config.agent_dir,
+            expected_sha256=sha256 or None,
         )
     except _exec.UpdateError as exc:
         status = 409 if exc.rolled_back else 500
@@ -148,6 +150,7 @@ async def update(
 async def update_self(
     tarball: UploadFile = File(...),
     sha: str = Form(""),
+    sha256: str = Form("", description="hex SHA-256 of the tarball bytes; verified before extract"),
     confirm_self: str = Form("", description="Must be 'true' to proceed"),
 ) -> dict:
     if confirm_self.lower() != "true":
@@ -160,6 +163,7 @@ async def update_self(
         return _exec.run_update_self(
             body, sha=sha or None,
             updater_install_dir=_Config.updater_install_dir,
+            expected_sha256=sha256 or None,
         )
     except _exec.UpdateError as exc:
         raise HTTPException(

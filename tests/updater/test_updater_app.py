@@ -51,7 +51,7 @@ def test_health_returns_role_and_releases(client: TestClient, monkeypatch: pytes
 def test_update_happy_path(client: TestClient, monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr(
         ex, "run_update",
-        lambda data, sha, install_dir, agent_dir: {"status": "updated", "release": {"slot": "active", "sha": sha}, "probe": "ok"},
+        lambda data, sha, install_dir, agent_dir, expected_sha256=None: {"status": "updated", "release": {"slot": "active", "sha": sha}, "probe": "ok"},
     )
     r = client.post(
         "/update",
@@ -97,7 +97,7 @@ def test_update_self_requires_confirm(client: TestClient) -> None:
 def test_update_self_happy_path(client: TestClient, monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr(
         ex, "run_update_self",
-        lambda data, sha, updater_install_dir: {"status": "self_update_queued", "argv": ["python", "-m", "decnet", "updater"]},
+        lambda data, sha, updater_install_dir, expected_sha256=None: {"status": "self_update_queued", "argv": ["python", "-m", "decnet", "updater"]},
     )
     r = client.post(
         "/update-self",
