@@ -474,6 +474,26 @@ class BaseRepository(ABC):
         """
         pass
 
+    @abstractmethod
+    async def update_identity_fingerprints(
+        self,
+        identity_uuid: str,
+        *,
+        ja3_hashes: Optional[str] = None,
+        hassh_hashes: Optional[str] = None,
+        tls_cert_sha256: Optional[str] = None,
+    ) -> None:
+        """Set the fingerprint summary columns on one ``AttackerIdentity``.
+
+        Each argument is a JSON-encoded ``list[str]`` (the federation
+        wire shape) or ``None`` to leave the corresponding column at
+        ``NULL``. Always overwrites — the rollup writer is the source
+        of truth for these columns, computed deterministically from
+        the identity's member observations every clusterer tick. Also
+        bumps ``updated_at`` so cache subscribers can invalidate.
+        """
+        pass
+
     # ─── Campaign clustering reads ────────────────────────────────────────
     # Layer above identity resolution: campaigns group identities into
     # operations. Populated by ``decnet campaign-clusterer``. The

@@ -41,6 +41,7 @@ from decnet.clustering.impl.similarity import (
     combined_edge_weight,
 )
 from decnet.logging import get_logger
+from decnet.profiler.identity_rollup import extract_fp_summaries
 from decnet.web.db.repository import BaseRepository
 
 log = get_logger("clustering.connected_components")
@@ -217,6 +218,9 @@ class ConnectedComponentsClusterer(Clusterer):
                         "identity_uuid": identity_uuid,
                         "observation_uuids": linked,
                     })
+                await _roll_up_fingerprints(
+                    repo, identity_uuid, [row_by_id[m] for m in member_ids],
+                )
                 continue
 
             # Deterministic winner so two clusterer runs produce the
@@ -249,6 +253,14 @@ class ConnectedComponentsClusterer(Clusterer):
                         "identity_uuid": winner_uuid,
                         "observation_uuid": obs_id,
                     })
+
+            # Re-roll the winner's fingerprint summary across every
+            # observation now in this component (including the loser
+            # side — the merge unifies their evidence even though the
+            # loser's identity row stays FK'd via merged_into_uuid).
+            await _roll_up_fingerprints(
+                repo, winner_uuid, [row_by_id[m] for m in member_ids],
+            )
 
         # Pass 2 — revocable-merge undo. For each currently-merged-out
         # identity, check whether its observations still cluster with
@@ -339,6 +351,25 @@ async def _link(
             observation_uuid, identity_uuid,
         )
         return False
+
+
+async def _roll_up_fingerprints(
+    repo: BaseRepository,
+    identity_uuid: str,
+    member_rows: list[dict[str, Any]],
+) -> None:
+    """Project member observations' fingerprint blobs onto the identity's
+    summary columns. Best-effort: a write failure is logged but never
+    breaks the clusterer tick — the columns just stay stale until the
+    next pass."""
+    summaries = extract_fp_summaries(member_rows)
+    try:
+        await repo.update_identity_fingerprints(identity_uuid, **summaries)
+    except Exception:  # noqa: BLE001
+        log.exception(
+            "clusterer: failed to roll up fingerprints for identity=%s",
+            identity_uuid,
+        )
 
 
 __all__ = [

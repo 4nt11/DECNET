@@ -140,14 +140,41 @@ async def repo(tmp_path):
 
 async def _seed_attacker(
     repo, ip: str, *,
-    ja3: str | None = None, hassh: str | None = None, asn: int | None = None,
+    ja3: str | None = None,
+    hassh: str | None = None,
+    asn: int | None = None,
+    cert_sha256: str | None = None,
 ) -> str:
     now = datetime.now(timezone.utc)
-    fingerprints = []
+    # Two-shape fingerprint payload:
+    #   - the "kind" entries feed the clusterer's from_attacker_row
+    #     (test-fixture shape, line ~115 of connected_components.py)
+    #   - the "bounty_type/payload" entries feed identity_rollup's
+    #     extract_fp_summaries (production shape, written by the
+    #     profiler from real bounty rows). Both shapes coexist in
+    #     the same JSON list so the same seed exercises clustering
+    #     AND the identity-column rollup.
+    fingerprints: list[dict] = []
     if ja3:
         fingerprints.append({"kind": "ja3", "hash": ja3})
+        fingerprints.append({
+            "bounty_type": "fingerprint",
+            "payload": {"fingerprint_type": "ja3", "ja3": ja3},
+        })
     if hassh:
         fingerprints.append({"kind": "hassh", "hash": hassh})
+        fingerprints.append({
+            "bounty_type": "fingerprint",
+            "payload": {"fingerprint_type": "hassh_server", "hash": hassh},
+        })
+    if cert_sha256:
+        fingerprints.append({
+            "bounty_type": "fingerprint",
+            "payload": {
+                "fingerprint_type": "tls_certificate",
+                "cert_sha256": cert_sha256,
+            },
+        })
     return await repo.upsert_attacker({
         "ip": ip,
         "first_seen": now,
@@ -375,6 +402,70 @@ async def test_tick_links_new_observation_to_existing_identity(repo):
     )
     linked_uuids = {l_["observation_uuid"] for l_ in second.observations_linked}
     assert d in linked_uuids
+
+
+# ─── identity fingerprint rollup ───────────────────────────────────────────
+
+
+@pytest.mark.anyio
+async def test_tick_rolls_up_fingerprint_columns_on_create(repo):
+    """A fresh-component tick must populate ja3_hashes / hassh_hashes /
+    tls_cert_sha256 on the newly-minted identity row, deduplicated and
+    sorted across all member observations."""
+    await _seed_attacker(
+        repo, "1.1.1.1", ja3="ja3-x", hassh="hassh-y", cert_sha256="ab" * 32,
+    )
+    await _seed_attacker(
+        repo, "2.2.2.2", ja3="ja3-x", hassh="hassh-y", cert_sha256="cd" * 32,
+    )
+    c = ConnectedComponentsClusterer()
+    result = await c.tick(repo)
+    assert len(result.identities_formed) == 1
+    identity_uuid = result.identities_formed[0]["identity_uuid"]
+
+    rows = {i["uuid"]: i for i in await repo.list_all_identities()}
+    identity = rows[identity_uuid]
+    assert json.loads(identity["ja3_hashes"]) == ["ja3-x"]
+    assert json.loads(identity["hassh_hashes"]) == ["hassh-y"]
+    assert json.loads(identity["tls_cert_sha256"]) == sorted(["ab" * 32, "cd" * 32])
+
+
+@pytest.mark.anyio
+async def test_tick_rolls_up_fingerprints_on_link(repo):
+    """When a new observation links into an existing identity, the
+    rollup must reflect any new cert SHA-256 it brings."""
+    await _seed_attacker(
+        repo, "1.1.1.1", ja3="ja3-x", cert_sha256="ab" * 32,
+    )
+    c = ConnectedComponentsClusterer()
+    first = await c.tick(repo)
+    identity_uuid = first.identities_formed[0]["identity_uuid"]
+
+    # New observation, same JA3, fresh cert.
+    await _seed_attacker(
+        repo, "2.2.2.2", ja3="ja3-x", cert_sha256="cd" * 32,
+    )
+    await c.tick(repo)
+
+    rows = {i["uuid"]: i for i in await repo.list_all_identities()}
+    identity = rows[identity_uuid]
+    assert json.loads(identity["tls_cert_sha256"]) == sorted(["ab" * 32, "cd" * 32])
+
+
+@pytest.mark.anyio
+async def test_tick_leaves_columns_null_when_no_fingerprints(repo):
+    """Two attackers with NO fingerprint signal cluster as separate
+    singletons; their identity rows must keep all rollup columns NULL
+    (not "[]" — NULL distinguishes 'no signal yet' from 'known empty')."""
+    await _seed_attacker(repo, "1.1.1.1")
+    await _seed_attacker(repo, "2.2.2.2")
+    c = ConnectedComponentsClusterer()
+    await c.tick(repo)
+
+    for identity in await repo.list_all_identities():
+        assert identity["ja3_hashes"] is None
+        assert identity["hassh_hashes"] is None
+        assert identity["tls_cert_sha256"] is None
 
 
 # ─── fixture-bound assertions (in-memory) ──────────────────────────────────

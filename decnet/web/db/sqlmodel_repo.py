@@ -1545,6 +1545,28 @@ class SQLModelRepository(BaseRepository):
             await session.execute(statement)
             await session.commit()
 
+    async def update_identity_fingerprints(
+        self,
+        identity_uuid: str,
+        *,
+        ja3_hashes: Optional[str] = None,
+        hassh_hashes: Optional[str] = None,
+        tls_cert_sha256: Optional[str] = None,
+    ) -> None:
+        statement = (
+            update(AttackerIdentity)
+            .where(AttackerIdentity.uuid == identity_uuid)
+            .values(
+                ja3_hashes=ja3_hashes,
+                hassh_hashes=hassh_hashes,
+                tls_cert_sha256=tls_cert_sha256,
+                updated_at=datetime.now(timezone.utc),
+            )
+        )
+        async with self._session() as session:
+            await session.execute(statement)
+            await session.commit()
+
     # ─── Campaign clustering reads ────────────────────────────────────────
 
     async def get_campaign_by_uuid(self, uuid: str) -> Optional[dict[str, Any]]:
