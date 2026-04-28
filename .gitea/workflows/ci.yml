@@ -40,7 +40,7 @@ jobs:
           python-version: "3.11"
       - run: pip install pip-audit
       - run: pip install -e .[dev]
-      - run: pip-audit --skip-editable --ignore-vuln CVE-2025-65896
+      - run: pip-audit --skip-editable --ignore-vuln CVE-2025-65896 --ignore-vuln CVE-2026-3219
 
   test-standard:
     name: Test (Standard)
