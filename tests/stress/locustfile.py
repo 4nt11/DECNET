@@ -60,20 +60,21 @@ class DecnetUser(HttpUser):
         raise RuntimeError(f"Login failed after {_MAX_LOGIN_RETRIES} retries (last status: {resp.status_code})")
 
     def on_start(self):
-        token, must_change = self._login_with_retry()
-
-        # Only pay the change-password + re-login cost on the very first run
-        # against a fresh DB. Every run after that, must_change_password is
-        # already False — skip it or the login path becomes a bcrypt storm.
-        if must_change:
-            self.client.post(
-                "/api/v1/auth/change-password",
-                json={"old_password": ADMIN_PASS, "new_password": ADMIN_PASS},
-                headers={"Authorization": f"Bearer {token}"},
-            )
-            token, _ = self._login_with_retry()
-
-        self.token = token
+        # Prefer the fixture-supplied token: 1000 simultaneous bcrypt logins
+        # never finish inside a spike window, leaving aggregated requests at 0.
+        preset = os.environ.get("DECNET_STRESS_TOKEN")
+        if preset:
+            self.token = preset
+        else:
+            token, must_change = self._login_with_retry()
+            if must_change:
+                self.client.post(
+                    "/api/v1/auth/change-password",
+                    json={"old_password": ADMIN_PASS, "new_password": ADMIN_PASS},
+                    headers={"Authorization": f"Bearer {token}"},
+                )
+                token, _ = self._login_with_retry()
+            self.token = token
         self.client.headers.update({"Authorization": f"Bearer {self.token}"})
 
     # --- Read-hot paths (high weight) ---
