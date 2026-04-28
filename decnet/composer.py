@@ -64,6 +64,8 @@ def generate_compose(config: DecnetConfig) -> dict:
         # --- Service containers: share base network namespace ---
         for svc_name in decky.services:
             svc = get_service(svc_name)
+            if svc.fleet_singleton:
+                continue
             svc_cfg = decky.service_config.get(svc_name, {})
             fragment = svc.compose_fragment(decky.name, service_cfg=svc_cfg)
 
@@ -88,6 +90,19 @@ def generate_compose(config: DecnetConfig) -> dict:
 
             # Rotate Docker logs so disk usage is bounded
             fragment["logging"] = _DOCKER_LOGGING
+
+            # Stamp DECNET ownership labels so the collector's docker-events
+            # watcher can identify newly-started containers without consulting
+            # decnet-state.json (which is written and read out-of-band with
+            # `docker compose up`, leaving a race window where freshly started
+            # containers were silently ignored).
+            labels = dict(fragment.get("labels") or {})
+            labels.update({
+                "decnet.fleet.service": "true",
+                "decnet.fleet.decky": decky.name,
+                "decnet.fleet.service_name": svc_name,
+            })
+            fragment["labels"] = labels
 
             services[f"{decky.name}-{svc_name}"] = fragment
 

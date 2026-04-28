@@ -1,8 +1,14 @@
+import os
 from pathlib import Path
 
 from decnet.services.base import BaseService
 
-TEMPLATES_DIR = Path(__file__).parent.parent.parent / "templates" / "smtp"
+TEMPLATES_DIR = Path(__file__).parent.parent / "templates" / "smtp"
+ARTIFACTS_ROOT = os.environ.get("DECNET_ARTIFACTS_ROOT", "/var/lib/decnet/artifacts")
+# In-container path for full-message capture. /var/spool/mqueue is where
+# sendmail historically parks unsent messages, so `ls` / `mount` inside the
+# container looks benign to an attacker poking around.
+_IN_CONTAINER_QUARANTINE = "/var/spool/mqueue"
 
 
 class SMTPService(BaseService):
@@ -17,6 +23,7 @@ class SMTPService(BaseService):
         service_cfg: dict | None = None,
     ) -> dict:
         cfg = service_cfg or {}
+        quarantine_host = f"{ARTIFACTS_ROOT}/{decky_name}/smtp"
         fragment: dict = {
             "build": {"context": str(TEMPLATES_DIR)},
             "container_name": f"{decky_name}-smtp",
@@ -24,7 +31,9 @@ class SMTPService(BaseService):
             "cap_add": ["NET_BIND_SERVICE"],
             "environment": {
                 "NODE_NAME": decky_name,
+                "SMTP_QUARANTINE_DIR": _IN_CONTAINER_QUARANTINE,
             },
+            "volumes": [f"{quarantine_host}:{_IN_CONTAINER_QUARANTINE}:rw"],
         }
         if log_target:
             fragment["environment"]["LOG_TARGET"] = log_target

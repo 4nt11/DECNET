@@ -1,5 +1,5 @@
 """
-Tests for templates/mongodb/server.py
+Tests for decnet/templates/mongodb/server.py
 
 Covers the MongoDB wire-protocol (OP_MSG / OP_QUERY) happy path and regression
 tests for the zero-length msg_len infinite-loop bug and oversized msg_len.
@@ -14,17 +14,22 @@ import pytest
 from hypothesis import given, settings
 from hypothesis import strategies as st
 
-from .conftest import _FUZZ_SETTINGS, make_fake_decnet_logging, run_with_timeout
+from .conftest import (
+    _FUZZ_SETTINGS,
+    load_real_instance_seed,
+    make_fake_syslog_bridge,
+    run_with_timeout,
+)
 
 
 # ── Helpers ───────────────────────────────────────────────────────────────────
 
 def _load_mongodb():
-    for key in list(sys.modules):
-        if key in ("mongodb_server", "decnet_logging"):
-            del sys.modules[key]
-    sys.modules["decnet_logging"] = make_fake_decnet_logging()
-    spec = importlib.util.spec_from_file_location("mongodb_server", "templates/mongodb/server.py")
+    for key in ("mongodb_server", "syslog_bridge", "instance_seed"):
+        sys.modules.pop(key, None)
+    sys.modules["syslog_bridge"] = make_fake_syslog_bridge()
+    sys.modules["instance_seed"] = load_real_instance_seed()
+    spec = importlib.util.spec_from_file_location("mongodb_server", "decnet/templates/mongodb/server.py")
     mod = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(mod)
     return mod

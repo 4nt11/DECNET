@@ -60,13 +60,18 @@ class TestPostgresLive:
     def test_auth_hash_logged(self, live_service):
         port, drain = live_service("postgres")
         import psycopg2
+        # Real PG rejects before asking for a password when the requested
+        # db doesn't exist, and the honeypot faithfully mirrors that. So
+        # we must target an always-present database (``postgres`` is in
+        # _BASE_DBS) to get past startup and into the password-auth stage
+        # that this test is asserting on.
         try:
             psycopg2.connect(
                 host="127.0.0.1",
                 port=port,
                 user="root",
                 password="toor",
-                dbname="prod",
+                dbname="postgres",
                 connect_timeout=5,
             )
         except psycopg2.OperationalError:

@@ -32,4 +32,4 @@ class ConpotService(BaseService):
         }
 
     def dockerfile_context(self):
-        return Path(__file__).parent.parent.parent / "templates" / "conpot"
+        return Path(__file__).parent.parent / "templates" / "conpot"

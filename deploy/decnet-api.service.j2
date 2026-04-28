@@ -1,0 +1,49 @@
+[Unit]
+Description=DECNET API Service
+Documentation=https://git.resacachile.cl/anti/DECNET/wiki/REST-API-Reference
+After=network-online.target docker.service
+Wants=network-online.target
+Requires=docker.service
+
+[Service]
+Type=simple
+User={{ user }}
+Group={{ group }}
+# docker.sock is group-readable by 'docker'; the API ingester tails container logs.
+SupplementaryGroups=docker
+WorkingDirectory={{ install_dir }}
+EnvironmentFile=-{{ install_dir }}/.env.local
+Environment=DECNET_SYSTEM_LOGS=/var/log/decnet/decnet.api.log
+# ProtectHome=read-only (below) makes the user's $HOME read-only inside
+# the unit's namespace, which breaks `docker compose build` because the
+# CLI writes ~/.docker/buildx/activity/. Redirect the docker CLI's
+# config root into install_dir (already in ReadWritePaths) so the
+# hardening stays on without crippling the build path.
+Environment=DOCKER_CONFIG={{ install_dir }}/.docker
+Environment=BUILDX_CONFIG={{ install_dir }}/.docker/buildx
+ExecStart={{ venv_dir }}/bin/decnet api
+StandardOutput=append:/var/log/decnet/decnet.api.log
+StandardError=append:/var/log/decnet/decnet.api.log
+
+# MACVLAN/IPVLAN setup runs from the API lifespan when the embedded sniffer is on.
+CapabilityBoundingSet=CAP_NET_ADMIN CAP_NET_RAW
+AmbientCapabilities=CAP_NET_ADMIN CAP_NET_RAW
+
+# Security Hardening
+NoNewPrivileges=yes
+ProtectSystem=full
+ProtectHome=read-only
+PrivateTmp=yes
+ProtectKernelTunables=yes
+ProtectKernelModules=yes
+ProtectControlGroups=yes
+RestrictSUIDSGID=yes
+LockPersonality=yes
+ReadWritePaths={{ install_dir }} /var/log/decnet
+
+Restart=on-failure
+RestartSec=5
+TimeoutStopSec=15
+
+[Install]
+WantedBy=multi-user.target

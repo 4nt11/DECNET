@@ -12,6 +12,18 @@ from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_asyn
 from sqlalchemy.pool import StaticPool
 import os as _os
 
+
+def pytest_ignore_collect(collection_path, config):
+    """Skip test_schemathesis.py unless fuzz marker is selected.
+
+    Its module-level code starts a subprocess server and mutates
+    decnet.web.auth.SECRET_KEY, which poisons other test suites.
+    """
+    if collection_path.name == "test_schemathesis.py":
+        markexpr = config.getoption("markexpr", default="")
+        if "fuzz" not in markexpr:
+            return True
+
 # Must be set before any decnet import touches decnet.env
 os.environ["DECNET_JWT_SECRET"] = "test-secret-key-at-least-32-chars-long!!"
 os.environ["DECNET_ADMIN_PASSWORD"] = "test-password-123"
@@ -20,8 +32,31 @@ from decnet.web.api import app
 from decnet.web.dependencies import repo
 from decnet.web.db.models import User
 from decnet.web.auth import get_password_hash
+from decnet.web.limiter import limiter as _login_limiter
 from decnet.env import DECNET_ADMIN_USER, DECNET_ADMIN_PASSWORD
 import decnet.config
+
+
+@pytest.fixture(autouse=True)
+def _reset_login_rate_limiter() -> None:
+    """Rate-limit buckets are process-wide; clear before each test so
+    prior tests don't consume another test's budget."""
+    _login_limiter.reset()
+    yield
+    _login_limiter.reset()
+
+
+@pytest.fixture(autouse=True)
+def _reset_sse_limits() -> None:
+    """SSE connection counters are module-level dicts; reset between
+    tests so leftover slots don't leak across cases."""
+    from decnet.web import sse_limits
+    sse_limits._reset_for_tests()
+    yield
+    sse_limits._reset_for_tests()
+
+VIEWER_USERNAME = "testviewer"
+VIEWER_PASSWORD = "viewer-pass-123"
 
 
 @pytest.fixture(scope="function", autouse=True)
@@ -37,6 +72,26 @@ async def setup_db(monkeypatch) -> AsyncGenerator[None, None]:
     # Patch BOTH — session_factory is what all queries actually use
     monkeypatch.setattr(repo, "engine", engine)
     monkeypatch.setattr(repo, "session_factory", session_factory)
+
+    # Reset per-request TTL caches so they don't leak across tests
+    from decnet.web.router.health import api_get_health as _h
+    from decnet.web.router.config import api_get_config as _c
+    from decnet.web.router.stats import api_get_stats as _s
+    from decnet.web.router.logs import api_get_logs as _l
+    from decnet.web.router.attackers import api_get_attackers as _a
+    from decnet.web.router.bounty import api_get_bounties as _b
+    from decnet.web.router.logs import api_get_histogram as _lh
+    from decnet.web.router.fleet import api_get_deckies as _d
+    from decnet.web import dependencies as _deps
+    _h._reset_db_cache()
+    _c._reset_state_cache()
+    _deps._reset_user_cache()
+    _s._reset_stats_cache()
+    _l._reset_total_cache()
+    _a._reset_total_cache()
+    _b._reset_bounty_cache()
+    _lh._reset_histogram_cache()
+    _d._reset_deckies_cache()
 
     # Create schema
     async with engine.begin() as conn:
@@ -75,6 +130,30 @@ async def auth_token(client: httpx.AsyncClient) -> str:
     )
     resp2 = await client.post("/api/v1/auth/login", json={"username": DECNET_ADMIN_USER, "password": DECNET_ADMIN_PASSWORD})
     return resp2.json()["access_token"]
+
+@pytest.fixture
+async def viewer_token(client, setup_db):
+    """Seed a viewer user and return their auth token."""
+    async with repo.session_factory() as session:
+        result = await session.execute(
+            select(User).where(User.username == VIEWER_USERNAME)
+        )
+        if not result.scalar_one_or_none():
+            session.add(User(
+                uuid=str(_uuid.uuid4()),
+                username=VIEWER_USERNAME,
+                password_hash=get_password_hash(VIEWER_PASSWORD),
+                role="viewer",
+                must_change_password=False,
+            ))
+            await session.commit()
+
+    resp = await client.post("/api/v1/auth/login", json={
+        "username": VIEWER_USERNAME,
+        "password": VIEWER_PASSWORD,
+    })
+    return resp.json()["access_token"]
+
 
 @pytest.fixture(autouse=True)
 def patch_state_file(monkeypatch, tmp_path) -> Path:

@@ -1,5 +1,5 @@
 """
-Tests for templates/smtp/server.py
+Tests for decnet/templates/smtp/server.py
 
 Exercises both modes:
   - credential-harvester (SMTP_OPEN_RELAY=0, default)
@@ -19,33 +19,42 @@ import pytest
 
 # ── Helpers ───────────────────────────────────────────────────────────────────
 
-def _make_fake_decnet_logging() -> ModuleType:
-    """Return a stub decnet_logging module that does nothing."""
-    mod = ModuleType("decnet_logging")
+def _make_fake_syslog_bridge() -> ModuleType:
+    """Return a stub syslog_bridge module that does nothing."""
+    mod = ModuleType("syslog_bridge")
     mod.syslog_line = MagicMock(return_value="")
     mod.write_syslog_file = MagicMock()
     mod.forward_syslog = MagicMock()
     mod.SEVERITY_WARNING = 4
     mod.SEVERITY_INFO = 6
+    mod.encode_secret = MagicMock(return_value={"secret_printable": "", "secret_b64": ""})
+    mod.classify_authorization = MagicMock(return_value=None)
     return mod
 
 
 def _load_smtp(open_relay: bool):
     """Import smtp server module with desired OPEN_RELAY value.
 
-    Injects a stub decnet_logging into sys.modules so the template can import
+    Injects a stub syslog_bridge into sys.modules so the template can import
     it without needing the real file on sys.path.
     """
-    env = {"SMTP_OPEN_RELAY": "1" if open_relay else "0", "NODE_NAME": "testhost"}
-    for key in list(sys.modules):
-        if key in ("smtp_server", "decnet_logging"):
-            del sys.modules[key]
+    env = {
+        "SMTP_OPEN_RELAY": "1" if open_relay else "0",
+        "NODE_NAME": "testhost",
+        # Force deterministic RCPT acceptance in tests; relay filtering is
+        # covered in its own dedicated test class below.
+        "SMTP_RCPT_DROP_RATE": "0",
+    }
+    for key in ("smtp_server", "syslog_bridge", "instance_seed"):
+        sys.modules.pop(key, None)
 
-    sys.modules["decnet_logging"] = _make_fake_decnet_logging()
+    sys.modules["syslog_bridge"] = _make_fake_syslog_bridge()
 
-    spec = importlib.util.spec_from_file_location("smtp_server", "templates/smtp/server.py")
+    spec = importlib.util.spec_from_file_location("smtp_server", "decnet/templates/smtp/server.py")
     mod = importlib.util.module_from_spec(spec)
     with patch.dict("os.environ", env, clear=False):
+        from .conftest import load_real_instance_seed
+        sys.modules["instance_seed"] = load_real_instance_seed()
         spec.loader.exec_module(mod)
     return mod
 
@@ -112,6 +121,20 @@ def test_ehlo_returns_250_multiline(relay_mod):
     assert "250" in combined
     assert "AUTH" in combined
     assert "PIPELINING" in combined
+
+
+def test_ehlo_empty_domain_rejected(relay_mod):
+    proto, _, written = _make_protocol(relay_mod)
+    _send(proto, "EHLO")
+    replies = _replies(written)
+    assert any(r.startswith("501") for r in replies)
+
+
+def test_helo_empty_domain_rejected(relay_mod):
+    proto, _, written = _make_protocol(relay_mod)
+    _send(proto, "HELO")
+    replies = _replies(written)
+    assert any(r.startswith("501") for r in replies)
 
 
 # ── OPEN RELAY MODE ───────────────────────────────────────────────────────────
@@ -223,6 +246,63 @@ class TestOpenRelay:
         assert any("queued as" in r for r in replies)
 
 
+# ── OPEN-RELAY FILTERING ─────────────────────────────────────────────────────
+
+class TestOpenRelayFiltering:
+    """Real open relays reject malformed/bogus RCPTs even when they accept
+    external mail — a pure tarpit is a honeypot tell."""
+
+    @staticmethod
+    def _session_with_env(env_extra: dict, *lines) -> list[str]:
+        env = {
+            "SMTP_OPEN_RELAY": "1",
+            "NODE_NAME": "testhost",
+            "SMTP_RCPT_DROP_RATE": "0",
+            **env_extra,
+        }
+        for key in ("smtp_server", "syslog_bridge", "instance_seed"):
+            sys.modules.pop(key, None)
+        sys.modules["syslog_bridge"] = _make_fake_syslog_bridge()
+        spec = importlib.util.spec_from_file_location(
+            "smtp_server", "decnet/templates/smtp/server.py"
+        )
+        mod = importlib.util.module_from_spec(spec)
+        with patch.dict("os.environ", env, clear=False):
+            from .conftest import load_real_instance_seed
+            sys.modules["instance_seed"] = load_real_instance_seed()
+            spec.loader.exec_module(mod)
+        proto, _, written = _make_protocol(mod)
+        _send(proto, *lines)
+        return _replies(written)
+
+    def test_malformed_rcpt_returns_501(self):
+        replies = self._session_with_env(
+            {},
+            "EHLO x.com",
+            "MAIL FROM:<a@b.com>",
+            "RCPT TO:<notanaddress>",
+        )
+        assert any(r.startswith("501") for r in replies)
+
+    def test_blocked_tld_returns_550(self):
+        replies = self._session_with_env(
+            {},
+            "EHLO x.com",
+            "MAIL FROM:<a@b.com>",
+            "RCPT TO:<admin@foo.invalid>",
+        )
+        assert any(r.startswith("550") for r in replies)
+
+    def test_always_greylist_returns_451(self):
+        replies = self._session_with_env(
+            {"SMTP_RCPT_DROP_RATE": "1.0"},
+            "EHLO x.com",
+            "MAIL FROM:<a@b.com>",
+            "RCPT TO:<victim@legit-domain.com>",
+        )
+        assert any(r.startswith("451") for r in replies)
+
+
 # ── CREDENTIAL HARVESTER MODE ─────────────────────────────────────────────────
 
 class TestCredentialHarvester:
@@ -282,10 +362,14 @@ class TestCredentialHarvester:
 # ── Queue ID ──────────────────────────────────────────────────────────────────
 
 def test_rand_msg_id_format(relay_mod):
+    # Postfix queue IDs use a vowel-free alphabet (no aeiou, no 0/1) and
+    # vary in length with the current microsecond magnitude — typically
+    # 10-12 chars.
+    postfix_alphabet = set("BCDFGHJKLMNPQRSTVWXYZ23456789")
     for _ in range(50):
         mid = relay_mod._rand_msg_id()
-        assert len(mid) == 12
-        assert mid.isalnum()
+        assert 10 <= len(mid) <= 12
+        assert set(mid).issubset(postfix_alphabet)
 
 
 # ── AUTH PLAIN decode ─────────────────────────────────────────────────────────
@@ -301,3 +385,276 @@ def test_decode_auth_plain_garbage_no_raise(relay_mod):
     user, pw = relay_mod._decode_auth_plain("!!!notbase64!!!")
     assert isinstance(user, str)
     assert isinstance(pw, str)
+
+
+# ── Bare LF line endings ────────────────────────────────────────────────────
+
+def _send_bare_lf(proto, *lines: str) -> None:
+    """Feed LF-only terminated lines to the protocol (simulates telnet/nc)."""
+    for line in lines:
+        proto.data_received((line + "\n").encode())
+
+
+def test_ehlo_works_with_bare_lf(relay_mod):
+    """Clients sending bare LF (telnet, nc) must get EHLO responses."""
+    proto, _, written = _make_protocol(relay_mod)
+    _send_bare_lf(proto, "EHLO attacker.com")
+    combined = b"".join(written).decode()
+    assert "250" in combined
+    assert "AUTH" in combined
+
+
+def test_full_session_with_bare_lf(relay_mod):
+    """A complete relay session using bare LF line endings."""
+    proto, _, written = _make_protocol(relay_mod)
+    _send_bare_lf(
+        proto,
+        "EHLO attacker.com",
+        "MAIL FROM:<hacker@evil.com>",
+        "RCPT TO:<admin@target.com>",
+        "DATA",
+        "Subject: test",
+        "",
+        "body",
+        ".",
+        "QUIT",
+    )
+    replies = _replies(written)
+    assert any("queued as" in r for r in replies)
+    assert any(r.startswith("221") for r in replies)
+
+
+def test_mixed_line_endings(relay_mod):
+    """A single data_received call containing a mix of CRLF and bare LF."""
+    proto, _, written = _make_protocol(relay_mod)
+    proto.data_received(b"EHLO test.com\r\nMAIL FROM:<a@b.com>\nRCPT TO:<c@d.com>\r\n")
+    replies = _replies(written)
+    assert any("250" in r for r in replies)
+    assert any(r.startswith("250 2.1.0") for r in replies)
+    assert any(r.startswith("250 2.1.5") for r in replies)
+
+
+# ── AUTH PLAIN continuation (no inline credentials) ──────────────────────────
+
+def test_auth_plain_continuation_relay(relay_mod):
+    """AUTH PLAIN without inline creds should prompt then accept on next line."""
+    proto, _, written = _make_protocol(relay_mod)
+    _send(proto, "AUTH PLAIN")
+    replies = _replies(written)
+    assert any(r.startswith("334") for r in replies), "Expected 334 continuation"
+    written.clear()
+    creds = base64.b64encode(b"\x00admin\x00password").decode()
+    _send(proto, creds)
+    replies = _replies(written)
+    assert any(r.startswith("235") for r in replies), "Expected 235 auth success"
+
+
+def test_auth_plain_continuation_harvester(harvester_mod):
+    """AUTH PLAIN continuation in harvester mode should reject with 535."""
+    proto, _, written = _make_protocol(harvester_mod)
+    _send(proto, "AUTH PLAIN")
+    replies = _replies(written)
+    assert any(r.startswith("334") for r in replies)
+    written.clear()
+    creds = base64.b64encode(b"\x00admin\x00password").decode()
+    _send(proto, creds)
+    replies = _replies(written)
+    assert any(r.startswith("535") for r in replies)
+
+
+# ── FULL-MESSAGE CAPTURE (quarantine + message_stored event) ─────────────────
+
+def _load_smtp_with_quarantine(quarantine_dir: str, max_body_bytes: int | None = None):
+    """Reload the SMTP template with a quarantine dir + optional body cap.
+
+    Same mechanics as _load_smtp but threads extra env through so the module's
+    capture-path code is exercised end-to-end (file write + parse).
+    """
+    env = {
+        "SMTP_OPEN_RELAY": "1",
+        "NODE_NAME": "testhost",
+        "SMTP_RCPT_DROP_RATE": "0",
+        "SMTP_QUARANTINE_DIR": quarantine_dir,
+    }
+    if max_body_bytes is not None:
+        env["SMTP_MAX_BODY_BYTES"] = str(max_body_bytes)
+    for key in ("smtp_server", "syslog_bridge", "instance_seed"):
+        sys.modules.pop(key, None)
+    sys.modules["syslog_bridge"] = _make_fake_syslog_bridge()
+    spec = importlib.util.spec_from_file_location(
+        "smtp_server", "decnet/templates/smtp/server.py"
+    )
+    mod = importlib.util.module_from_spec(spec)
+    with patch.dict("os.environ", env, clear=False):
+        from .conftest import load_real_instance_seed
+        sys.modules["instance_seed"] = load_real_instance_seed()
+        spec.loader.exec_module(mod)
+    return mod
+
+
+def _logged_events(mod) -> list[tuple[str, dict]]:
+    """Return every (event_type, fields) tuple syslog_bridge was called with."""
+    calls = mod.syslog_line.call_args_list
+    events: list[tuple[str, dict]] = []
+    for call in calls:
+        args, kwargs = call
+        # syslog_line(service, hostname, event_type, severity=..., **fields)
+        event_type = args[2] if len(args) > 2 else kwargs.get("event_type", "")
+        # Strip positional service/hostname/event_type/severity when present.
+        fields = dict(kwargs)
+        fields.pop("severity", None)
+        events.append((event_type, fields))
+    return events
+
+
+class TestMessageCapture:
+
+    def test_message_stored_event_written(self, tmp_path):
+        mod = _load_smtp_with_quarantine(str(tmp_path))
+        proto, _, _ = _make_protocol(mod)
+        _send(
+            proto,
+            "EHLO x.com",
+            "MAIL FROM:<spam@evil.com>",
+            "RCPT TO:<victim@target.com>",
+            "DATA",
+            "Subject: hello",
+            "From: spam@evil.com",
+            "",
+            "body line",
+            ".",
+        )
+        events = _logged_events(mod)
+        stored = [f for t, f in events if t == "message_stored"]
+        assert len(stored) == 1, f"expected 1 message_stored event, got {events}"
+        rec = stored[0]
+        assert rec["subject"] == "hello"
+        assert rec["from_hdr"] == "spam@evil.com"
+        assert rec["mail_from"] == "<spam@evil.com>"
+        assert rec["rcpt_to"] == "<victim@target.com>"
+        assert rec["attachment_count"] == 0
+        # Filename matches artifact endpoint's regex.
+        import re as _re
+        assert _re.fullmatch(
+            r"\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}Z_[a-f0-9]{12}_[A-Za-z0-9._-]{1,255}",
+            rec["stored_as"],
+        )
+
+    def test_message_file_written_to_quarantine(self, tmp_path):
+        mod = _load_smtp_with_quarantine(str(tmp_path))
+        proto, _, _ = _make_protocol(mod)
+        _send(
+            proto,
+            "EHLO x.com",
+            "MAIL FROM:<a@b.com>",
+            "RCPT TO:<c@d.com>",
+            "DATA",
+            "Subject: test",
+            "",
+            "payload bytes",
+            ".",
+        )
+        files = list(tmp_path.iterdir())
+        assert len(files) == 1
+        contents = files[0].read_bytes()
+        assert b"Subject: test" in contents
+        assert b"payload bytes" in contents
+        assert files[0].name.endswith(".eml")
+
+    def test_attachment_manifest_captured(self, tmp_path):
+        """A multipart message with an attachment must report filename + sha256."""
+        import hashlib as _hashlib
+        mod = _load_smtp_with_quarantine(str(tmp_path))
+        proto, _, _ = _make_protocol(mod)
+        boundary = "----ABC"
+        payload = b"MZ\x90\x00fake-exe-bytes"
+        import base64 as _b64
+        payload_b64 = _b64.b64encode(payload).decode()
+        _send(
+            proto,
+            "EHLO x.com",
+            "MAIL FROM:<a@b.com>",
+            "RCPT TO:<c@d.com>",
+            "DATA",
+            "Subject: malware",
+            f"Content-Type: multipart/mixed; boundary={boundary}",
+            "MIME-Version: 1.0",
+            "",
+            f"--{boundary}",
+            'Content-Type: text/plain',
+            "",
+            "see attached",
+            f"--{boundary}",
+            'Content-Type: application/octet-stream; name="payload.exe"',
+            'Content-Disposition: attachment; filename="payload.exe"',
+            "Content-Transfer-Encoding: base64",
+            "",
+            payload_b64,
+            f"--{boundary}--",
+            ".",
+        )
+        events = _logged_events(mod)
+        stored = [f for t, f in events if t == "message_stored"]
+        assert len(stored) == 1
+        rec = stored[0]
+        assert rec["attachment_count"] == 1
+        import json as _json
+        manifest = _json.loads(rec["attachments_json"])
+        assert len(manifest) == 1
+        assert manifest[0]["filename"] == "payload.exe"
+        assert manifest[0]["sha256"] == _hashlib.sha256(payload).hexdigest()
+        assert manifest[0]["size"] == len(payload)
+
+    def test_capture_disabled_when_dir_unset(self, tmp_path, relay_mod):
+        """With SMTP_QUARANTINE_DIR unset, message_accepted fires but no
+        message_stored event and no files are written."""
+        proto, _, _ = _make_protocol(relay_mod)
+        _send(
+            proto,
+            "EHLO x.com",
+            "MAIL FROM:<a@b.com>",
+            "RCPT TO:<c@d.com>",
+            "DATA",
+            "Subject: no-capture",
+            "",
+            "body",
+            ".",
+        )
+        events = _logged_events(relay_mod)
+        assert any(t == "message_accepted" for t, _ in events)
+        assert not any(t == "message_stored" for t, _ in events)
+
+    def test_body_size_cap_truncates(self, tmp_path):
+        """Body beyond SMTP_MAX_BODY_BYTES is dropped but the session still
+        terminates and truncated=1 is flagged."""
+        mod = _load_smtp_with_quarantine(str(tmp_path), max_body_bytes=64)
+        proto, _, _ = _make_protocol(mod)
+        big_line = "A" * 500
+        _send(
+            proto,
+            "EHLO x.com",
+            "MAIL FROM:<a@b.com>",
+            "RCPT TO:<c@d.com>",
+            "DATA",
+            "Subject: big",
+            "",
+            big_line,
+            big_line,
+            ".",
+        )
+        events = _logged_events(mod)
+        stored = [f for t, f in events if t == "message_stored"]
+        accepted = [f for t, f in events if t == "message_accepted"]
+        assert accepted and accepted[0]["truncated"] == 1
+        # File still written with whatever we managed to buffer.
+        assert len(list(tmp_path.iterdir())) == 1
+        assert stored and stored[0]["truncated"] == 1
+
+    def test_rset_resets_body_state(self, tmp_path):
+        """RSET must clear data_bytes + truncated flag so a fresh transaction
+        is not accounted against the prior one."""
+        mod = _load_smtp_with_quarantine(str(tmp_path))
+        proto, _, _ = _make_protocol(mod)
+        _send(proto, "EHLO x.com", "MAIL FROM:<a@b.com>", "RCPT TO:<c@d.com>", "RSET")
+        assert proto._data_bytes == 0
+        assert proto._data_truncated is False

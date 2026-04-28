@@ -1,5 +1,5 @@
 """
-Tests for templates/mqtt/server.py
+Tests for decnet/templates/mqtt/server.py
 
 Exercises behavior with MQTT_ACCEPT_ALL=1 and customizable topics.
 Uses asyncio transport/protocol directly.
@@ -16,13 +16,15 @@ import pytest
 
 # ── Helpers ───────────────────────────────────────────────────────────────────
 
-def _make_fake_decnet_logging() -> ModuleType:
-    mod = ModuleType("decnet_logging")
+def _make_fake_syslog_bridge() -> ModuleType:
+    mod = ModuleType("syslog_bridge")
     mod.syslog_line = MagicMock(return_value="")
     mod.write_syslog_file = MagicMock()
     mod.forward_syslog = MagicMock()
     mod.SEVERITY_WARNING = 4
     mod.SEVERITY_INFO = 6
+    mod.encode_secret = MagicMock(return_value={"secret_printable": "", "secret_b64": ""})
+    mod.classify_authorization = MagicMock(return_value=None)
     return mod
 
 
@@ -33,15 +35,16 @@ def _load_mqtt(accept_all: bool = True, custom_topics: str = "", persona: str = 
         "MQTT_PERSONA": persona,
         "MQTT_CUSTOM_TOPICS": custom_topics,
     }
-    for key in list(sys.modules):
-        if key in ("mqtt_server", "decnet_logging"):
-            del sys.modules[key]
+    for key in ("mqtt_server", "syslog_bridge", "instance_seed"):
+        sys.modules.pop(key, None)
 
-    sys.modules["decnet_logging"] = _make_fake_decnet_logging()
+    sys.modules["syslog_bridge"] = _make_fake_syslog_bridge()
 
-    spec = importlib.util.spec_from_file_location("mqtt_server", "templates/mqtt/server.py")
+    spec = importlib.util.spec_from_file_location("mqtt_server", "decnet/templates/mqtt/server.py")
     mod = importlib.util.module_from_spec(spec)
     with patch.dict("os.environ", env, clear=False):
+        from .conftest import load_real_instance_seed
+        sys.modules["instance_seed"] = load_real_instance_seed()
         spec.loader.exec_module(mod)
     return mod
 
@@ -127,14 +130,18 @@ def test_subscribe_wildcard_retained(mqtt_mod):
     _send(proto, _connect_packet())
     written.clear()
 
-    _send(proto, _subscribe_packet("plant/#"))
+    # The water_plant persona now picks a per-instance site prefix (north,
+    # south, plant-a, etc.) instead of hardcoding "plant/". Use the top-level
+    # wildcard so the test doesn't depend on which site this decky rolled.
+    _send(proto, _subscribe_packet("#"))
 
-    assert len(written) >= 2 # At least SUBACK + some publishes
-    assert written[0].startswith(b"\x90") # SUBACK
+    assert len(written) >= 2  # At least SUBACK + some publishes
+    assert written[0].startswith(b"\x90")  # SUBACK
 
     combined = b"".join(written[1:])
-    # Should contain some water plant topics
-    assert b"plant/water/tank1/level" in combined
+    # The identifying tail of water-plant topics is stable regardless of
+    # which site prefix was chosen at instance boot.
+    assert b"water/tank1/level" in combined
 
 def test_publish_qos1_returns_puback(mqtt_mod):
     proto, _, written = _make_protocol(mqtt_mod)

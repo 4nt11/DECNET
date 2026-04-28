@@ -33,13 +33,13 @@ jobs:
         id: version
         run: |
           # Calculate next version (v0.x)
-          LATEST_TAG=$(git describe --tags --abbrev=0 2>/dev/null || echo "v0.0")
+          LATEST_TAG=$(git describe --tags --abbrev=0 2>/dev/null || echo "v0.0.0")
           NEXT_VER=$(python3 -c "
           tag = '$LATEST_TAG'.lstrip('v')
           parts = tag.split('.')
           major = int(parts[0]) if parts[0] else 0
           minor = int(parts[1]) if len(parts) > 1 else 0
-          print(f'{major}.{minor + 1}')
+          print(f'{major}.{minor + 1}.0')
           ")
           
           echo "Next version: $NEXT_VER (calculated from $LATEST_TAG)"
@@ -49,7 +49,11 @@ jobs:
           
           git add pyproject.toml
           git commit -m "chore: auto-release v$NEXT_VER [skip ci]" || echo "No changes to commit"
-          git tag -a "v$NEXT_VER" -m "Auto-release v$NEXT_VER"
+          CHANGELOG=$(git log ${LATEST_TAG}..HEAD --oneline --no-decorate --no-merges)
+          git tag -a "v$NEXT_VER" -m "Auto-release v$NEXT_VER
+
+Changes since $LATEST_TAG:
+$CHANGELOG"
           git push origin main --follow-tags
           
           echo "version=$NEXT_VER" >> $GITHUB_OUTPUT
@@ -111,13 +115,13 @@ jobs:
           cache-from: type=gha
           cache-to: type=gha,mode=max
 
+      - name: Install Trivy
+        run: |
+          curl -sfL https://raw.githubusercontent.com/aquasecurity/trivy/main/contrib/install.sh | sh -s -- -b /usr/local/bin
+
       - name: Scan with Trivy
-        uses: aquasecurity/trivy-action@master
-        with:
-          image-ref: decnet-${{ matrix.service }}:scan
-          exit-code: "1"
-          severity: CRITICAL
-          ignore-unfixed: true
+        run: |
+          trivy image --exit-code 1 --severity CRITICAL --ignore-unfixed decnet-${{ matrix.service }}:scan
 
       - name: Push image
         if: success()

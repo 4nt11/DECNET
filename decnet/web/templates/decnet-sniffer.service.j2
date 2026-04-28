@@ -1,0 +1,24 @@
+[Unit]
+Description=DECNET network sniffer — {{ agent_name }}
+Documentation=https://github.com/anti/DECNET
+After=network-online.target decnet-agent.service
+Wants=network-online.target
+PartOf=decnet-agent.service
+
+[Service]
+Type=simple
+WorkingDirectory=/opt/decnet
+Environment=DECNET_MODE=agent
+Environment=DECNET_SYSTEM_LOGS=/var/log/decnet/decnet.sniffer.log
+# scapy needs raw sockets; forwarder already runs with these caps, so we
+# mirror the same ambient set here.
+AmbientCapabilities=CAP_NET_ADMIN CAP_NET_RAW
+CapabilityBoundingSet=CAP_NET_ADMIN CAP_NET_RAW
+ExecStart=/usr/local/bin/decnet sniffer --log-file /var/log/decnet/decnet.log
+Restart=on-failure
+RestartSec=5
+StandardOutput=append:/var/log/decnet/decnet.sniffer.log
+StandardError=append:/var/log/decnet/decnet.sniffer.log
+
+[Install]
+WantedBy=multi-user.target

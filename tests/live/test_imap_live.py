@@ -60,7 +60,7 @@ class TestIMAPLive:
             pass
         lines += drain()
         matched = assert_rfc5424(lines, service="imap", event_type="auth")
-        assert "failed" in matched, f"Expected auth failure in log. Got:\n{matched!r}"
+        assert "failure" in matched, f"Expected auth failure in log. Got:\n{matched!r}"
 
     def test_select_inbox_after_login(self, live_service):
         port, drain = live_service("imap")

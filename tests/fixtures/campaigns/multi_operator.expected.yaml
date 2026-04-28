@@ -1,0 +1,25 @@
+# Bounds for fixture 5 (multi_operator).
+#
+# Ground truth at campaign-level: 1 campaign of 2 observation rows
+# (one per DSL actor). A correct algorithm scores 1.0 across every
+# metric on this fixture.
+#
+# Completeness is the load-bearing metric: a clusterer that splits
+# the two operators by shift / by tooling / by ASN tanks
+# completeness (the one true class is split across two predicted
+# clusters). The adversarial shift_clusterer demonstrates this and
+# the bound below rejects it.
+#
+# Campaign-level fixture only — the two DSL actors model two
+# distinct identities (different tooling, different operators) by
+# design. See the YAML header for the modeling note.
+#
+# Bounds are loose at v1; tighten as the algorithm matures.
+adjusted_rand_index:
+  min: 1.0
+homogeneity:
+  min: 1.0
+completeness:
+  min: 1.0
+singleton_recall:
+  min: 1.0

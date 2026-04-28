@@ -9,7 +9,11 @@ from tests.live.conftest import assert_rfc5424
 @pytest.mark.live
 class TestMQTTLive:
     def test_connect_accepted(self, live_service):
-        port, drain = live_service("mqtt")
+        # The honeypot defaults to auth-required (post-2018 realistic
+        # broker posture). Opt into accept-all mode to exercise the
+        # happy-path CONNACK rc=0 code path. See decnet/templates/mqtt/
+        # server.py::MQTT_ACCEPT_ALL.
+        port, drain = live_service("mqtt", env={"MQTT_ACCEPT_ALL": "1"})
         connected = []
         client = mqtt.Client(client_id="test-scanner")
         client.on_connect = lambda c, u, f, rc: connected.append(rc)
@@ -48,7 +52,9 @@ class TestMQTTLive:
         )
 
     def test_subscribe_logged(self, live_service):
-        port, drain = live_service("mqtt")
+        # SUBSCRIBE is gated on successful auth — accept-all lets the test
+        # reach the subscribe path without planting credentials.
+        port, drain = live_service("mqtt", env={"MQTT_ACCEPT_ALL": "1"})
         subscribed = []
         client = mqtt.Client(client_id="sub-test")
         client.on_subscribe = lambda c, u, mid, qos: subscribed.append(mid)

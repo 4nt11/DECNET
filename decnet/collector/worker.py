@@ -7,14 +7,114 @@ The ingester tails the .json file; rsyslog can consume the .log file independent
 """
 
 import asyncio
+import contextlib
 import json
-import logging
+import os
 import re
+import threading
+import time
+from concurrent.futures import ThreadPoolExecutor
 from datetime import datetime
 from pathlib import Path
-from typing import Any, Optional
+from typing import Any, Callable, Optional
 
-logger = logging.getLogger("decnet.collector")
+from decnet.bus import topics as _topics
+from decnet.bus.factory import get_bus
+from decnet.bus.publish import (
+    make_thread_safe_publisher,
+    run_control_listener_signal,
+    run_health_heartbeat,
+)
+from decnet.logging import get_logger
+from decnet.telemetry import traced as _traced, get_tracer as _get_tracer, inject_context as _inject_ctx
+
+# Collector publish signature: ``publish_fn(parsed_event_dict)``.  Callable
+# from the container-stream threads; the worker wraps it around a thread-safe
+# bus publisher that marshals onto the asyncio loop.
+CollectorPublishFn = Callable[[dict[str, Any]], None]
+
+logger = get_logger("collector")
+
+# ─── Ingestion rate limiter ───────────────────────────────────────────────────
+#
+# Rationale: connection-lifecycle events (connect/disconnect/accept/close) are
+# emitted once per TCP connection. During a portscan or credential-stuffing
+# run, a single attacker can generate hundreds of these per second from the
+# honeypot services themselves — each becoming a tiny WAL-write transaction
+# through the ingester, starving reads until the queue drains.
+#
+# The collector still writes every line to the raw .log file (forensic record
+# for rsyslog/SIEM). Only the .json path — which feeds SQLite — is deduped.
+#
+# Dedup key: (attacker_ip, decky, service, event_type)
+# Window:    DECNET_COLLECTOR_RL_WINDOW_SEC seconds (default 1.0)
+# Scope:     DECNET_COLLECTOR_RL_EVENT_TYPES comma list
+#            (default: connect,disconnect,connection,accept,close)
+# Events outside that set bypass the limiter untouched.
+
+def _parse_float_env(name: str, default: float) -> float:
+    raw = os.environ.get(name)
+    if raw is None:
+        return default
+    try:
+        value = float(raw)
+    except ValueError:
+        logger.warning("collector: invalid %s=%r, using default %s", name, raw, default)
+        return default
+    return max(0.0, value)
+
+
+_RL_WINDOW_SEC: float = _parse_float_env("DECNET_COLLECTOR_RL_WINDOW_SEC", 1.0)
+_RL_EVENT_TYPES: frozenset[str] = frozenset(
+    t.strip()
+    for t in os.environ.get(
+        "DECNET_COLLECTOR_RL_EVENT_TYPES",
+        "connect,disconnect,connection,accept,close",
+    ).split(",")
+    if t.strip()
+)
+_RL_MAX_ENTRIES: int = 10_000
+
+_rl_lock: threading.Lock = threading.Lock()
+_rl_last: dict[tuple[str, str, str, str], float] = {}
+
+
+def _should_ingest(parsed: dict[str, Any]) -> bool:
+    """
+    Return True if this parsed event should be written to the JSON ingestion
+    stream. Rate-limited connection-lifecycle events return False when another
+    event with the same (attacker_ip, decky, service, event_type) was emitted
+    inside the dedup window.
+    """
+    event_type = parsed.get("event_type", "")
+    if _RL_WINDOW_SEC <= 0.0 or event_type not in _RL_EVENT_TYPES:
+        return True
+    key = (
+        parsed.get("attacker_ip", "Unknown"),
+        parsed.get("decky", ""),
+        parsed.get("service", ""),
+        event_type,
+    )
+    now = time.monotonic()
+    with _rl_lock:
+        last = _rl_last.get(key, 0.0)
+        if now - last < _RL_WINDOW_SEC:
+            return False
+        _rl_last[key] = now
+        # Opportunistic GC: when the map grows past the cap, drop entries older
+        # than 60 windows (well outside any realistic in-flight dedup range).
+        if len(_rl_last) > _RL_MAX_ENTRIES:
+            cutoff = now - (_RL_WINDOW_SEC * 60.0)
+            stale = [k for k, t in _rl_last.items() if t < cutoff]
+            for k in stale:
+                del _rl_last[k]
+    return True
+
+
+def _reset_rate_limiter() -> None:
+    """Test-only helper — clear dedup state between test cases."""
+    with _rl_lock:
+        _rl_last.clear()
 
 # ─── RFC 5424 parser ──────────────────────────────────────────────────────────
 
@@ -23,13 +123,38 @@ _RFC5424_RE = re.compile(
     r"(\S+) "       # 1: TIMESTAMP
     r"(\S+) "       # 2: HOSTNAME (decky name)
     r"(\S+) "       # 3: APP-NAME (service)
-    r"- "           # PROCID always NILVALUE
+    r"\S+ "         # PROCID — NILVALUE ("-") for syslog_bridge emitters,
+                    # real PID for native syslog callers like sshd/sudo
+                    # routed through rsyslog. Accept both; we don't consume it.
     r"(\S+) "       # 4: MSGID (event_type)
     r"(.+)$",       # 5: SD element + optional MSG
 )
-_SD_BLOCK_RE = re.compile(r'\[decnet@55555\s+(.*?)\]', re.DOTALL)
+_SD_BLOCK_RE = re.compile(r'\[relay@55555\s+(.*?)\]', re.DOTALL)
 _PARAM_RE = re.compile(r'(\w+)="((?:[^"\\]|\\.)*)"')
-_IP_FIELDS = ("src_ip", "src", "client_ip", "remote_ip", "ip")
+_IP_FIELDS = ("src_ip", "src", "client_ip", "remote_ip", "remote_addr", "target_ip", "ip")
+
+# Free-form `key=value` pairs in the MSG body. Used for lines that bypass the
+# syslog_bridge SD format — e.g. the SSH container's PROMPT_COMMAND which
+# calls `logger -t bash "CMD uid=0 user=root src=1.2.3.4 pwd=/root cmd=…"`.
+# Values run until the next whitespace, so `cmd=…` at end-of-line is preserved
+# as one unit; we only care about IP-shaped fields here anyway.
+_MSG_KV_RE = re.compile(r'(\w+)=(\S+)')
+
+# Native sshd / pam syslog lines arrive without an SD block and without
+# key=value pairs. The remote address shows up as free prose:
+#   "Failed password for root from 1.2.3.4 port 42772 ssh2"
+#   "Connection from 1.2.3.4 port 42772 on 10.0.0.2 port 22"
+#   "pam_unix(sshd:auth): authentication failure; … rhost=1.2.3.4 user=root"
+# Anchored patterns first so we never confuse the attacker with the
+# local listener IP ("on 10.0.0.2"). Bare IP scan is the last resort.
+_IPV4 = r"\d{1,3}(?:\.\d{1,3}){3}"
+_IPV6 = r"[0-9a-fA-F:]+:[0-9a-fA-F:]+"
+_IP = rf"(?:{_IPV4}|{_IPV6})"
+_MSG_IP_ANCHORED_RE = re.compile(
+    rf"\b(?:from|rhost[:=]|client[:=]|src[:=])\s*({_IP})",
+    re.IGNORECASE,
+)
+_MSG_IP_BARE_RE = re.compile(rf"\b({_IPV4})\b")
 
 
 def parse_rfc5424(line: str) -> Optional[dict[str, Any]]:
@@ -63,6 +188,32 @@ def parse_rfc5424(line: str) -> Optional[dict[str, Any]]:
         if fname in fields:
             attacker_ip = fields[fname]
             break
+
+    # Fallback for plain `logger` callers that don't use SD params (notably
+    # the SSH container's bash PROMPT_COMMAND: `logger -t bash "CMD … src=IP …"`).
+    # Scan the MSG body for IP-shaped `key=value` tokens ONLY — don't fold
+    # them into `fields`, because the frontend's parseEventBody already
+    # renders kv pairs from the msg and doubling them up produces noisy
+    # duplicate pills. This keeps attacker attribution working without
+    # changing the shape of `fields` for non-SD lines.
+    if attacker_ip == "Unknown" and msg:
+        for k, v in _MSG_KV_RE.findall(msg):
+            if k in _IP_FIELDS:
+                attacker_ip = v
+                break
+
+    # Final fallback for native syslog producers that emit free-form prose
+    # (notably sshd and pam_unix routed via rsyslog without the relay@55555
+    # SD wrapper). Prefer anchored matches so the local listener address in
+    # "Connection from X port Y on Z port 22" never wins over X.
+    if attacker_ip == "Unknown" and msg:
+        anchored = _MSG_IP_ANCHORED_RE.search(msg)
+        if anchored:
+            attacker_ip = anchored.group(1)
+        else:
+            bare = _MSG_IP_BARE_RE.search(msg)
+            if bare:
+                attacker_ip = bare.group(1)
 
     try:
         ts_formatted = datetime.fromisoformat(ts_raw).strftime("%Y-%m-%d %H:%M:%S")
@@ -101,48 +252,192 @@ def _load_service_container_names() -> set[str]:
     return names
 
 
+_TOPOLOGY_SERVICE_LABEL = "decnet.topology.service"
+_FLEET_SERVICE_LABEL = "decnet.fleet.service"
+
+
+def _has_decnet_service_label(labels: Optional[dict]) -> bool:
+    """Recognize both fleet (``decnet.fleet.service``, set by
+    ``decnet/composer.py``) and MazeNET topology (``decnet.topology.service``,
+    set by ``decnet/topology/compose.py``) containers.
+
+    Label-based detection is the canonical path: it's stateless and avoids
+    the race between ``docker compose up`` and the ``decnet-state.json``
+    write that previously caused freshly-deployed fleet containers to be
+    silently dropped by the docker-events watcher.
+    """
+    if not labels:
+        return False
+    return (
+        labels.get(_TOPOLOGY_SERVICE_LABEL) == "true"
+        or labels.get(_FLEET_SERVICE_LABEL) == "true"
+    )
+
+
 def is_service_container(container) -> bool:
-    """Return True if this Docker container is a known DECNET service container."""
-    name = (container if isinstance(container, str) else container.name).lstrip("/")
+    """Return True if this Docker container is a known DECNET service container.
+
+    Label-based detection is preferred (works for both fleet and MazeNET
+    topology containers without touching decnet-state.json). The
+    state-file name match remains as a fallback so containers built from
+    older composes — which predate the ``decnet.fleet.service`` label —
+    are still picked up.
+    """
+    if isinstance(container, str):
+        return container.lstrip("/") in _load_service_container_names()
+    labels: Optional[dict] = None
+    attrs = getattr(container, "attrs", None)
+    if isinstance(attrs, dict):
+        labels = (attrs.get("Config") or {}).get("Labels")
+    if labels is None:
+        labels = getattr(container, "labels", None)
+    if _has_decnet_service_label(labels):
+        return True
+    # Fallback: legacy containers without labels still match by name.
+    name = container.name.lstrip("/")
     return name in _load_service_container_names()
 
 
 def is_service_event(attrs: dict) -> bool:
-    """Return True if a Docker start event is for a known DECNET service container."""
+    """Return True if a Docker start event is for a known DECNET service container.
+
+    Docker start-event attrs flatten every container label alongside the
+    ``name``/``image`` keys — no separate ``labels`` sub-dict — so label
+    detection happens directly on ``attrs``.
+
+    Prefer the label path because it's race-free with respect to the
+    ``decnet-state.json`` write that ``decnet deploy`` performs around
+    ``docker compose up``: a freshly-started container's start event can
+    arrive before the state file has been updated, and the legacy
+    name-based fallback would then drop the event.
+    """
+    if _has_decnet_service_label(attrs):
+        return True
     name = attrs.get("name", "").lstrip("/")
     return name in _load_service_container_names()
 
 
 # ─── Blocking stream worker (runs in a thread) ────────────────────────────────
 
-def _stream_container(container_id: str, log_path: Path, json_path: Path) -> None:
+def _reopen_if_needed(path: Path, fh: Optional[Any]) -> Any:
+    """Return fh if it still points to the same inode as path; otherwise close
+    fh and open a fresh handle.  Handles the file being deleted (manual rm) or
+    rotated (logrotate rename + create)."""
+    try:
+        if fh is not None and os.fstat(fh.fileno()).st_ino == os.stat(path).st_ino:
+            return fh
+    except OSError:
+        pass
+    # File gone or inode changed — close stale handle and open a new one.
+    if fh is not None:
+        try:
+            fh.close()
+        except Exception:  # nosec B110 — best-effort file handle cleanup
+            pass
+    path.parent.mkdir(parents=True, exist_ok=True)
+    return open(path, "a", encoding="utf-8")
+
+
+@_traced("collector.stream_container")
+def _stream_container(
+    container_id: str,
+    log_path: Path,
+    json_path: Path,
+    publish_fn: CollectorPublishFn | None = None,
+) -> None:
     """Stream logs from one container and append to the host log files."""
     import docker  # type: ignore[import]
 
+    lf: Optional[Any] = None
+    jf: Optional[Any] = None
     try:
         client = docker.from_env()
         container = client.containers.get(container_id)
         log_stream = container.logs(stream=True, follow=True, stdout=True, stderr=False)
         buf = ""
-        with (
-            open(log_path, "a", encoding="utf-8") as lf,
-            open(json_path, "a", encoding="utf-8") as jf,
-        ):
-            for chunk in log_stream:
-                buf += chunk.decode("utf-8", errors="replace")
-                while "\n" in buf:
-                    line, buf = buf.split("\n", 1)
-                    line = line.rstrip()
-                    if not line:
-                        continue
-                    lf.write(line + "\n")
-                    lf.flush()
-                    parsed = parse_rfc5424(line)
-                    if parsed:
-                        jf.write(json.dumps(parsed) + "\n")
-                        jf.flush()
+        for chunk in log_stream:
+            buf += chunk.decode("utf-8", errors="replace")
+            while "\n" in buf:
+                line, buf = buf.split("\n", 1)
+                line = line.rstrip()
+                if not line:
+                    continue
+                lf = _reopen_if_needed(log_path, lf)
+                lf.write(line + "\n")
+                lf.flush()
+                parsed = parse_rfc5424(line)
+                if parsed:
+                    if _should_ingest(parsed):
+                        _tracer = _get_tracer("collector")
+                        with _tracer.start_as_current_span("collector.event") as _span:
+                            _span.set_attribute("decky", parsed.get("decky", ""))
+                            _span.set_attribute("service", parsed.get("service", ""))
+                            _span.set_attribute("event_type", parsed.get("event_type", ""))
+                            _span.set_attribute("attacker_ip", parsed.get("attacker_ip", ""))
+                            _inject_ctx(parsed)
+                            logger.debug("collector: event written decky=%s type=%s", parsed.get("decky"), parsed.get("event_type"))
+                            jf = _reopen_if_needed(json_path, jf)
+                            jf.write(json.dumps(parsed) + "\n")
+                            jf.flush()
+                            if publish_fn is not None:
+                                try:
+                                    publish_fn(parsed)
+                                except Exception as exc:
+                                    logger.debug(
+                                        "collector: bus publish failed: %s", exc,
+                                    )
+                    else:
+                        logger.debug(
+                            "collector: rate-limited decky=%s service=%s type=%s attacker=%s",
+                            parsed.get("decky"), parsed.get("service"),
+                            parsed.get("event_type"), parsed.get("attacker_ip"),
+                        )
+                else:
+                    logger.debug("collector: malformed RFC5424 line snippet=%r", line[:80])
     except Exception as exc:
-        logger.debug("Log stream ended for container %s: %s", container_id, exc)
+        logger.debug("collector: log stream ended container_id=%s reason=%s", container_id, exc)
+    finally:
+        for fh in (lf, jf):
+            if fh is not None:
+                try:
+                    fh.close()
+                except Exception:  # nosec B110 — best-effort file handle cleanup
+                    pass
+
+
+# ─── Bus plumbing ─────────────────────────────────────────────────────────────
+
+def _make_system_log_publisher(
+    bus: Any, loop: asyncio.AbstractEventLoop,
+) -> CollectorPublishFn:
+    """Factory: returns a ``publish_fn(parsed)`` for use by stream threads.
+
+    When *bus* is ``None`` the returned callable is a no-op, so the stream
+    thread can call it unconditionally.  Otherwise each call is marshalled
+    onto *loop* (the asyncio event loop that owns the bus socket) via
+    ``make_thread_safe_publisher``.
+    """
+    raw_publish = make_thread_safe_publisher(bus, loop) if bus is not None else None
+    if raw_publish is None:
+        return lambda _parsed: None
+
+    topic = _topics.system(_topics.SYSTEM_LOG)
+
+    def _publish(parsed: dict[str, Any]) -> None:
+        event_type = parsed.get("event_type", "")
+        raw_publish(
+            topic,
+            {
+                "decky": parsed.get("decky", ""),
+                "service": parsed.get("service", ""),
+                "event_type": event_type,
+                "attacker_ip": parsed.get("attacker_ip", "Unknown"),
+                "timestamp": parsed.get("timestamp", ""),
+            },
+            event_type,
+        )
+
+    return _publish
 
 
 # ─── Async collector ──────────────────────────────────────────────────────────
@@ -164,37 +459,149 @@ async def log_collector_worker(log_file: str) -> None:
     active: dict[str, asyncio.Task[None]] = {}
     loop = asyncio.get_running_loop()
 
+    # Optional bus wiring — per-line system.log publish.  Fan-in from many
+    # container-stream threads is handled by make_thread_safe_publisher,
+    # which marshals each publish onto this loop.
+    bus = None
+    try:
+        bus = get_bus(client_name="collector")
+        await bus.connect()
+    except Exception as exc:
+        logger.warning("collector: bus unavailable, continuing without publish: %s", exc)
+        bus = None
+
+    _publish_log = _make_system_log_publisher(bus, loop)
+
+    # Workers panel health heartbeat + bus-driven stop control.  The
+    # heartbeat beacons on system.collector.health every 30s; the
+    # control listener translates a bus stop intent into a SIGTERM to
+    # this process (collector's main loop is a blocking thread pool, so
+    # self-signalling is cleaner than threading a shutdown event).
+    heartbeat_task = asyncio.create_task(run_health_heartbeat(bus, "collector"))
+    control_task = asyncio.create_task(run_control_listener_signal(bus, "collector"))
+
+    # Periodic re-scan of running containers. Belt to the event-watcher's
+    # suspenders: if dockerd or the SDK ever drops a start event during a
+    # reconnect window (the retry loop in ``_watch_events`` covers the
+    # restart itself, but events fired *during* the gap are lost), this
+    # loop picks up the orphan within ``RECONCILE_INTERVAL_S``. Also
+    # prunes finished futures so ``active`` doesn't accumulate over the
+    # agent's lifetime as topology mutations churn containers.
+    _reconcile_interval_s = float(
+        os.environ.get("DECNET_COLLECTOR_RECONCILE_S", "30")
+    )
+
+    # Dedicated thread pool so long-running container log streams don't
+    # saturate the default asyncio executor and starve short-lived
+    # to_thread() calls elsewhere (e.g. load_state in the web API).
+    collector_pool = ThreadPoolExecutor(
+        max_workers=64, thread_name_prefix="decnet-collector",
+    )
+
     def _spawn(container_id: str, container_name: str) -> None:
         if container_id not in active or active[container_id].done():
             active[container_id] = asyncio.ensure_future(
-                asyncio.to_thread(_stream_container, container_id, log_path, json_path),
+                loop.run_in_executor(
+                    collector_pool, _stream_container,
+                    container_id, log_path, json_path, _publish_log,
+                ),
                 loop=loop,
             )
-            logger.info("Collecting logs from container: %s", container_name)
+            logger.info("collector: streaming container=%s", container_name)
 
     try:
+        logger.info("collector started log_path=%s", log_path)
         client = docker.from_env()
+
+        async def _reconcile_loop() -> None:
+            while True:
+                try:
+                    await asyncio.sleep(_reconcile_interval_s)
+                    # Drop done futures so the dict's bounded by the
+                    # current container count, not lifetime churn.
+                    for cid in [c for c, t in active.items() if t.done()]:
+                        active.pop(cid, None)
+                    containers = await loop.run_in_executor(
+                        collector_pool,
+                        lambda: list(client.containers.list()),
+                    )
+                    for container in containers:
+                        if container.id in active:
+                            continue
+                        if is_service_container(container):
+                            _spawn(container.id, container.name.lstrip("/"))
+                except asyncio.CancelledError:
+                    raise
+                except Exception as exc:  # noqa: BLE001 — keep loop alive across SDK transients
+                    logger.warning("collector: reconcile pass failed: %s", exc)
+
+        reconcile_task = asyncio.create_task(_reconcile_loop())
 
         for container in client.containers.list():
             if is_service_container(container):
                 _spawn(container.id, container.name.lstrip("/"))
 
         def _watch_events() -> None:
-            for event in client.events(
-                decode=True,
-                filters={"type": "container", "event": "start"},
-            ):
-                attrs = event.get("Actor", {}).get("Attributes", {})
-                cid  = event.get("id", "")
-                name = attrs.get("name", "")
-                if cid and is_service_event(attrs):
-                    loop.call_soon_threadsafe(_spawn, cid, name)
+            # The dockerd event stream is the fast path for picking up
+            # newly-started service containers. It can break in two ways:
+            # (a) dockerd restart / reload severs the long-poll, (b) the
+            # SDK's JSON-stream decoder occasionally raises on a partial
+            # frame. Both used to make this thread return cleanly, leaving
+            # the collector "running" with no event subscription — future
+            # container starts were silently dropped until an operator
+            # restarted the unit. Retry with exponential backoff (cap at
+            # 30s, matching the heartbeat cadence) so dockerd hiccups are
+            # invisible to the operator. The reconcile loop is the safety
+            # net for any events lost during the reconnect window.
+            backoff = 1.0
+            while True:
+                try:
+                    for event in client.events(
+                        decode=True,
+                        filters={"type": "container", "event": "start"},
+                    ):
+                        attrs = event.get("Actor", {}).get("Attributes", {})
+                        cid  = event.get("id", "")
+                        name = attrs.get("name", "")
+                        if cid and is_service_event(attrs):
+                            loop.call_soon_threadsafe(_spawn, cid, name)
+                    # Clean iterator exhaustion: real dockerd doesn't
+                    # close the stream voluntarily, so this only
+                    # happens in tests with mocked iterators or in
+                    # genuinely unrecoverable daemon states. Either
+                    # way, returning lets the worker shut down
+                    # cleanly — the reconciler is the safety net for
+                    # productive cases.
+                    return
+                except Exception as exc:  # noqa: BLE001 — SDK leaks bare Exceptions on stream-decode errors
+                    logger.warning(
+                        "collector: event stream broke (%s: %s); reconnecting in %.1fs",
+                        type(exc).__name__, exc, backoff,
+                    )
+                    time.sleep(backoff)
+                    backoff = min(backoff * 2, 30.0)
 
-        await asyncio.to_thread(_watch_events)
+        await loop.run_in_executor(collector_pool, _watch_events)
 
     except asyncio.CancelledError:
+        logger.info("collector shutdown requested cancelling %d tasks", len(active))
         for task in active.values():
             task.cancel()
+        collector_pool.shutdown(wait=False)
         raise
     except Exception as exc:
-        logger.error("Collector error: %s", exc)
+        logger.error("collector error: %s", exc)
+    finally:
+        collector_pool.shutdown(wait=False)
+        # `reconcile_task` may not exist if startup failed before
+        # `client = docker.from_env()` returned; tolerate that.
+        _maintenance_tasks = [heartbeat_task, control_task]
+        if "reconcile_task" in locals():
+            _maintenance_tasks.append(reconcile_task)
+        for t in _maintenance_tasks:
+            t.cancel()
+            with contextlib.suppress(Exception, asyncio.CancelledError):
+                await t
+        if bus is not None:
+            with contextlib.suppress(Exception):
+                await bus.close()

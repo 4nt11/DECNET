@@ -1,8 +1,9 @@
 from fastapi import APIRouter, Depends, HTTPException
 
+from decnet.telemetry import traced as _traced
 from decnet.config import DecnetConfig
-from decnet.web.dependencies import get_current_user, repo
-from decnet.web.db.models import MutateIntervalRequest
+from decnet.web.dependencies import require_admin, repo
+from decnet.web.db.models import MessageResponse, MutateIntervalRequest
 
 router = APIRouter()
 
@@ -16,14 +17,17 @@ def _parse_duration(s: str) -> int:
 
 
 @router.put("/deckies/{decky_name}/mutate-interval", tags=["Fleet Management"],
+    response_model=MessageResponse,
     responses={
         400: {"description": "Bad Request (e.g. malformed JSON)"},
         401: {"description": "Could not validate credentials"},
+        403: {"description": "Insufficient permissions"},
         404: {"description": "No active deployment or decky not found"},
         422: {"description": "Validation error"}
     },
 )
-async def api_update_mutate_interval(decky_name: str, req: MutateIntervalRequest, current_user: str = Depends(get_current_user)) -> dict[str, str]:
+@_traced("api.update_mutate_interval")
+async def api_update_mutate_interval(decky_name: str, req: MutateIntervalRequest, admin: dict = Depends(require_admin)) -> dict[str, str]:
     state_dict = await repo.get_state("deployment")
     if not state_dict:
         raise HTTPException(status_code=404, detail="No active deployment")

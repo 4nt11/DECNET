@@ -17,6 +17,35 @@ async def repo(tmp_path):
 
 
 @pytest.mark.anyio
+async def test_add_logs_bulk(repo):
+    _batch = [
+        {
+            "decky": f"decky-{i:02d}",
+            "service": "ssh",
+            "event_type": "connect",
+            "attacker_ip": f"10.0.0.{i}",
+            "raw_line": f"row {i}",
+            "fields": {"port": 22, "i": i},
+            "msg": "bulk",
+        }
+        for i in range(1, 11)
+    ]
+    await repo.add_logs(_batch)
+    logs = await repo.get_logs(limit=50, offset=0)
+    assert len(logs) == 10
+    # fields dict was normalized to JSON string and round-trips
+    _ips = {entry["attacker_ip"] for entry in logs}
+    assert _ips == {f"10.0.0.{i}" for i in range(1, 11)}
+
+
+@pytest.mark.anyio
+async def test_add_logs_empty_is_noop(repo):
+    await repo.add_logs([])
+    logs = await repo.get_logs(limit=10, offset=0)
+    assert logs == []
+
+
+@pytest.mark.anyio
 async def test_add_and_get_log(repo):
     await repo.add_log({
         "decky": "decky-01",

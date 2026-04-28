@@ -20,7 +20,7 @@ from pathlib import Path
 import pytest
 
 _REPO_ROOT = Path(__file__).parent.parent.parent
-_TEMPLATES = _REPO_ROOT / "templates"
+_TEMPLATES = _REPO_ROOT / "decnet" / "templates"
 
 # Prefer the project venv's Python (has Flask, Twisted, etc.) over system Python
 _VENV_PYTHON = _REPO_ROOT / ".venv" / "bin" / "python"
@@ -30,6 +30,13 @@ _PYTHON = str(_VENV_PYTHON) if _VENV_PYTHON.exists() else sys.executable
 # Use search (not match) so lines prefixed by Twisted timestamps are handled.
 _RFC5424_RE = re.compile(r"<\d+>1 \S+ \S+ \S+ - \S+ ")
 
+def _mysql_available() -> bool:
+    try:
+        s = socket.create_connection(("127.0.0.1", 3307), timeout=1)
+        s.close()
+        return True
+    except OSError:
+        return False
 
 def _free_port() -> int:
     with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
@@ -90,7 +97,7 @@ def assert_rfc5424(
 class _ServiceProcess:
     """Manages a live service subprocess and its stdout log queue."""
 
-    def __init__(self, service: str, port: int):
+    def __init__(self, service: str, port: int, extra_env: dict | None = None):
         template_dir = _TEMPLATES / service
         env = {
             **os.environ,
@@ -99,6 +106,8 @@ class _ServiceProcess:
             "PYTHONPATH": str(template_dir),
             "LOG_TARGET": "",
         }
+        if extra_env:
+            env.update(extra_env)
         self._proc = subprocess.Popen(
             [_PYTHON, str(template_dir / "server.py")],
             cwd=str(template_dir),
@@ -143,9 +152,9 @@ def live_service() -> Generator:
     """
     started: list[_ServiceProcess] = []
 
-    def _start(service: str) -> tuple[int, callable]:
+    def _start(service: str, env: dict | None = None) -> tuple[int, callable]:
         port = _free_port()
-        svc = _ServiceProcess(service, port)
+        svc = _ServiceProcess(service, port, extra_env=env)
         started.append(svc)
         if not _wait_for_port(port):
             svc.stop()

@@ -1,0 +1,200 @@
+.attackers-root {
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+}
+
+.attackers-root .controls-row {
+  display: flex;
+  gap: 12px;
+  align-items: stretch;
+}
+.attackers-root .controls-row .search-container { flex: 1; max-width: none; }
+
+.attackers-root .sort-select {
+  background: var(--panel);
+  border: 1px solid var(--border);
+  color: var(--matrix);
+  padding: 8px 14px;
+  font-family: inherit;
+  font-size: 0.72rem;
+  letter-spacing: 2px;
+  cursor: pointer;
+}
+.attackers-root .sort-select:focus { outline: none; border-color: var(--accent); }
+
+.attackers-root .service-filter-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 0.7rem;
+  padding: 2px 10px;
+  letter-spacing: 1px;
+  border: 1px solid var(--violet);
+  color: var(--violet);
+  background: var(--violet-tint-10);
+  cursor: pointer;
+}
+
+/* Card grid — scoped to avoid colliding with global .attacker-card */
+.attackers-root .ak-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(340px, 1fr));
+  gap: 14px;
+  padding: 16px;
+}
+
+.attackers-root .ak-card {
+  background: var(--panel);
+  border: 1px solid var(--border);
+  padding: 16px;
+  cursor: pointer;
+  transition: transform 0.15s ease, box-shadow 0.15s ease, border-color 0.15s ease;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+.attackers-root .ak-card:hover {
+  transform: translateY(-2px);
+  border-color: var(--accent);
+  box-shadow: var(--accent-glow);
+}
+
+.attackers-root .ak-card .ak-top {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+.attackers-root .ak-card .ak-ip {
+  font-size: 1.05rem;
+  font-weight: 700;
+  color: var(--matrix);
+  font-variant-numeric: tabular-nums;
+  letter-spacing: 1px;
+  display: inline-flex;
+  align-items: baseline;
+  gap: 8px;
+}
+.attackers-root .ak-card .ak-cc {
+  font-size: 0.62rem;
+  letter-spacing: 2px;
+  padding: 1px 6px;
+  border: 1px solid var(--border);
+  color: var(--matrix);
+  opacity: 0.75;
+  font-weight: 600;
+}
+
+.attackers-root .ak-meta {
+  display: flex;
+  gap: 14px;
+  font-size: 0.72rem;
+  opacity: 0.7;
+}
+.attackers-root .ak-card .ak-asn {
+  font-size: 0.62rem;
+  letter-spacing: 1px;
+  padding: 1px 6px;
+  border: 1px solid var(--border);
+  color: var(--matrix);
+  opacity: 0.75;
+  font-weight: 600;
+  cursor: help;
+}
+
+.attackers-root .ak-stats {
+  display: flex;
+  gap: 14px;
+  font-size: 0.78rem;
+}
+.attackers-root .ak-stats .n { font-weight: 700; }
+.attackers-root .ak-stats .n.violet { color: var(--violet); }
+.attackers-root .ak-stats .n.matrix { color: var(--matrix); }
+.attackers-root .ak-stats .lbl { opacity: 0.55; font-size: 0.65rem; margin-right: 4px; letter-spacing: 1px; }
+
+.attackers-root .ak-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+}
+
+.attackers-root .ak-path {
+  font-size: 0.72rem;
+  opacity: 0.65;
+  word-break: break-all;
+}
+.attackers-root .ak-path .lbl { opacity: 0.5; margin-right: 6px; letter-spacing: 1px; font-size: 0.62rem; }
+
+.attackers-root .ak-lastcmd {
+  font-size: 0.7rem;
+  opacity: 0.6;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.attackers-root .ak-lastcmd .cmd { color: var(--matrix); }
+
+/* Activity chip */
+.attackers-root .activity-chip {
+  font-size: 0.62rem;
+  letter-spacing: 1.5px;
+  padding: 2px 8px;
+  border-radius: 3px;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  white-space: nowrap;
+}
+.attackers-root .activity-chip .dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+.attackers-root .activity-chip.active {
+  border: 1px solid var(--matrix);
+  color: var(--matrix);
+  background: var(--matrix-tint-10);
+}
+.attackers-root .activity-chip.active .dot {
+  background: var(--matrix);
+  box-shadow: 0 0 6px var(--matrix);
+  animation: decnet-pulse 1s infinite alternate;
+}
+.attackers-root .activity-chip.passive {
+  border: 1px solid rgba(238, 130, 238, 0.5);
+  color: var(--violet);
+  background: var(--violet-tint-10);
+}
+.attackers-root .activity-chip.passive .dot { background: var(--violet); }
+.attackers-root .activity-chip.inactive {
+  border: 1px solid var(--border);
+  color: rgba(0, 255, 65, 0.5);
+  background: transparent;
+}
+.attackers-root .activity-chip.inactive .dot { background: var(--border); }
+
+/* Empty / loading */
+.attackers-root .empty-state {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 10px;
+  padding: 50px 20px;
+  opacity: 0.45;
+}
+.attackers-root .empty-state .type-label { font-size: 0.7rem; letter-spacing: 2px; }
+
+/* Pagination — same as Bounty */
+.attackers-root .pager { display: flex; align-items: center; gap: 12px; font-size: 0.7rem; }
+.attackers-root .pager button {
+  padding: 4px;
+  border: 1px solid var(--border);
+  background: transparent;
+  color: var(--matrix);
+  display: flex;
+  cursor: pointer;
+}
+.attackers-root .pager button:disabled { opacity: 0.3; cursor: not-allowed; }
+.attackers-root .pager button:hover:not(:disabled) { border-color: var(--accent); }

@@ -1,7 +1,7 @@
 from pathlib import Path
 from decnet.services.base import BaseService
 
-TEMPLATES_DIR = Path(__file__).parent.parent.parent / "templates" / "rdp"
+TEMPLATES_DIR = Path(__file__).parent.parent / "templates" / "rdp"
 
 
 class RDPService(BaseService):
@@ -20,6 +20,11 @@ class RDPService(BaseService):
         }
         if log_target:
             fragment["environment"]["LOG_TARGET"] = log_target
+        # Opt into the CredSSP / NLA capture path. Off by default — basic
+        # X.224 cookie capture is sufficient for most attacker traffic and
+        # avoids the openssl cert-gen overhead at container start.
+        if service_cfg and service_cfg.get("nla"):
+            fragment["environment"]["RDP_ENABLE_NLA"] = "true"
         return fragment
 
     def dockerfile_context(self) -> Path | None:

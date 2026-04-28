@@ -1,5 +1,5 @@
 """
-Tests for templates/pop3/server.py
+Tests for decnet/templates/pop3/server.py
 
 Exercises the full POP3 state machine:
   AUTHORIZATION → TRANSACTION
@@ -17,13 +17,15 @@ import pytest
 
 # ── Helpers ───────────────────────────────────────────────────────────────────
 
-def _make_fake_decnet_logging() -> ModuleType:
-    mod = ModuleType("decnet_logging")
+def _make_fake_syslog_bridge() -> ModuleType:
+    mod = ModuleType("syslog_bridge")
     mod.syslog_line = MagicMock(return_value="")
     mod.write_syslog_file = MagicMock()
     mod.forward_syslog = MagicMock()
     mod.SEVERITY_WARNING = 4
     mod.SEVERITY_INFO = 6
+    mod.encode_secret = MagicMock(return_value={"secret_printable": "", "secret_b64": ""})
+    mod.classify_authorization = MagicMock(return_value=None)
     return mod
 
 
@@ -34,13 +36,13 @@ def _load_pop3():
         "IMAP_BANNER": "+OK [testhost] Dovecot ready.",
     }
     for key in list(sys.modules):
-        if key in ("pop3_server", "decnet_logging"):
+        if key in ("pop3_server", "syslog_bridge"):
             del sys.modules[key]
 
-    sys.modules["decnet_logging"] = _make_fake_decnet_logging()
+    sys.modules["syslog_bridge"] = _make_fake_syslog_bridge()
 
     spec = importlib.util.spec_from_file_location(
-        "pop3_server", "templates/pop3/server.py"
+        "pop3_server", "decnet/templates/pop3/server.py"
     )
     mod = importlib.util.module_from_spec(spec)
     with patch.dict("os.environ", env, clear=False):

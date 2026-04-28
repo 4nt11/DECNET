@@ -1,0 +1,341 @@
+/* Webhooks page — mirrors the .logs-root / .fleet-root / .swarm-root shape. */
+
+.webhooks-root {
+  display: flex;
+  flex-direction: column;
+  gap: 24px;
+}
+
+.webhooks-root .page-title-group {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.webhooks-root .page-header h1 {
+  font-size: 1.3rem;
+  letter-spacing: 4px;
+  font-weight: 700;
+  margin: 0;
+  color: var(--matrix);
+}
+
+.webhooks-root .page-sub {
+  font-size: 0.7rem;
+  opacity: 0.5;
+  letter-spacing: 1px;
+}
+
+.webhooks-root .page-header .actions {
+  display: flex;
+  gap: 10px;
+  align-items: center;
+}
+
+/* Canonical buttons (copy LiveLogs' scoped rules so theme/accent behaves). */
+.webhooks-root .btn {
+  cursor: pointer;
+  background: transparent;
+  border: 1px solid var(--matrix);
+  color: var(--matrix);
+  padding: 7px 14px;
+  font-family: inherit;
+  font-size: 0.78rem;
+  letter-spacing: 1.5px;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  transition: all 0.3s ease;
+}
+.webhooks-root .btn:hover {
+  background: var(--matrix);
+  color: #000;
+  box-shadow: var(--matrix-glow);
+}
+.webhooks-root .btn.violet { border-color: var(--violet); color: var(--violet); }
+.webhooks-root .btn.violet:hover { background: var(--violet); color: #000; box-shadow: var(--violet-glow); }
+.webhooks-root .btn.alert  { border-color: var(--alert, #ff4d4d); color: var(--alert, #ff4d4d); }
+.webhooks-root .btn.alert:hover  { background: var(--alert, #ff4d4d); color: #000; box-shadow: 0 0 10px rgba(255, 77, 77, 0.5); }
+.webhooks-root .btn.warn   { border-color: var(--warn, #e0a040); color: var(--warn, #e0a040); }
+.webhooks-root .btn.warn:hover   { background: var(--warn, #e0a040); color: #000; box-shadow: 0 0 10px rgba(224, 160, 64, 0.5); }
+.webhooks-root .btn.ghost { border-color: var(--border-color); color: var(--matrix); opacity: 0.7; }
+.webhooks-root .btn.ghost:hover { opacity: 1; border-color: var(--matrix); background: transparent; box-shadow: var(--matrix-glow); }
+.webhooks-root .btn:disabled { opacity: 0.3; cursor: not-allowed; }
+
+.webhooks-root .webhooks-error {
+  margin: 0;
+}
+
+.webhooks-root .webhooks-warning-banner {
+  background: rgba(224, 160, 64, 0.08);
+  border: 1px solid var(--warn, #e0a040);
+  color: var(--warn, #e0a040);
+  padding: 10px 14px;
+  font-size: 0.7rem;
+  letter-spacing: 1.5px;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+/* Table container — reuse the .logs-section shell from Dashboard.css. */
+
+.webhooks-root .webhooks-empty {
+  padding: 40px;
+  text-align: center;
+  opacity: 0.5;
+  font-size: 0.78rem;
+  letter-spacing: 1.5px;
+}
+
+.webhooks-root .webhooks-table-wrap {
+  overflow-x: auto;
+}
+
+.webhooks-root .webhooks-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.78rem;
+}
+
+.webhooks-root .webhooks-table thead {
+  font-size: 0.62rem;
+  letter-spacing: 1.5px;
+  opacity: 0.6;
+}
+
+.webhooks-root .webhooks-table th,
+.webhooks-root .webhooks-table td {
+  padding: 10px 14px;
+  text-align: left;
+  border-bottom: 1px solid rgba(48, 54, 61, 0.5);
+  vertical-align: middle;
+}
+
+.webhooks-root .webhooks-table tbody tr:hover {
+  background: rgba(0, 255, 65, 0.03);
+}
+
+.webhooks-root .webhooks-table .col-check   { width: 28px; }
+.webhooks-root .webhooks-table .col-actions { width: 180px; }
+
+.webhooks-root .action-btn.fire {
+  border-color: var(--violet);
+  color: var(--violet);
+  letter-spacing: 1.5px;
+}
+.webhooks-root .action-btn.fire:hover {
+  background: var(--violet);
+  color: #000;
+  box-shadow: var(--violet-glow);
+}
+
+.webhooks-root .wh-url-cell {
+  font-family: var(--font-mono);
+  max-width: 260px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* Chips — mirror the canonical chip spec from UI-Things.md. */
+
+.webhooks-root .wh-chip {
+  font-size: 0.66rem;
+  padding: 2px 7px;
+  border: 1px solid var(--accent-tint-30, rgba(0, 255, 65, 0.3));
+  background: var(--accent-tint-10, rgba(0, 255, 65, 0.1));
+  color: var(--accent);
+  letter-spacing: 0.5px;
+  font-family: var(--font-mono);
+  margin-right: 4px;
+  display: inline-block;
+}
+
+.webhooks-root .wh-chip.status-disabled {
+  border-color: var(--border-color);
+  color: var(--text-color);
+  background: transparent;
+  opacity: 0.6;
+}
+
+.webhooks-root .wh-chip.status-fail {
+  border-color: var(--alert, #ff4d4d);
+  background: rgba(255, 77, 77, 0.12);
+  color: var(--alert, #ff4d4d);
+}
+
+.webhooks-root .wh-chip.status-warn {
+  border-color: var(--warn, #e0a040);
+  background: rgba(224, 160, 64, 0.1);
+  color: var(--warn, #e0a040);
+}
+
+.webhooks-root .wh-actions {
+  display: flex;
+  gap: 6px;
+}
+
+/* Inline form row (create + edit). */
+
+.webhooks-root .wh-form-row td {
+  padding: 20px 20px;
+  background: rgba(0, 0, 0, 0.25);
+}
+
+.webhooks-root .wh-form-grid {
+  display: grid;
+  grid-template-columns: 160px 1fr;
+  gap: 14px 16px;
+  max-width: 920px;
+}
+
+.webhooks-root .wh-form-grid label {
+  font-size: 0.62rem;
+  letter-spacing: 1.5px;
+  opacity: 0.6;
+  align-self: center;
+  text-transform: uppercase;
+}
+
+.webhooks-root .wh-form-title {
+  grid-column: 1 / -1;
+  font-size: 0.7rem;
+  color: var(--violet);
+  letter-spacing: 2px;
+  opacity: 1;
+  margin: 0 0 4px 0;
+}
+
+.webhooks-root .wh-form-hint {
+  opacity: 0.5;
+  font-weight: normal;
+  letter-spacing: 0.5px;
+  text-transform: none;
+}
+
+.webhooks-root .wh-form-grid input[type="text"],
+.webhooks-root .wh-form-grid input[type="url"],
+.webhooks-root .wh-form-grid input[type="password"],
+.webhooks-root .wh-form-grid textarea {
+  background: #0d1117;
+  border: 1px solid var(--border-color);
+  color: var(--text-color);
+  padding: 8px 12px;
+  font-family: inherit;
+  font-size: 0.82rem;
+  width: 100%;
+  box-sizing: border-box;
+}
+
+.webhooks-root .wh-form-grid textarea {
+  min-height: 72px;
+  font-family: var(--font-mono);
+}
+
+.webhooks-root .wh-form-grid input:focus,
+.webhooks-root .wh-form-grid textarea:focus {
+  outline: none;
+  border-color: var(--accent);
+  box-shadow: var(--accent-glow, 0 0 10px rgba(0, 255, 65, 0.5));
+}
+
+.webhooks-root .wh-checkbox-group {
+  display: flex;
+  gap: 16px;
+  flex-wrap: wrap;
+  align-items: center;
+}
+
+.webhooks-root .wh-checkbox-group label {
+  font-size: 0.72rem;
+  letter-spacing: 1px;
+  opacity: 1;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  cursor: pointer;
+  text-transform: none;
+}
+
+.webhooks-root .wh-form-buttons {
+  grid-column: 1 / -1;
+  display: flex;
+  gap: 10px;
+  justify-content: flex-end;
+  padding-top: 10px;
+  border-top: 1px dashed var(--border-color);
+}
+
+/* Secret-modal — one-shot display after create. */
+
+.wh-secret-modal-backdrop {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.7);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 1000;
+}
+
+.wh-secret-modal {
+  background: var(--secondary-color);
+  border: 1px solid var(--violet);
+  box-shadow: 0 0 24px rgba(238, 130, 238, 0.4);
+  padding: 28px;
+  max-width: 560px;
+  width: 100%;
+  font-family: var(--font-mono);
+}
+
+.wh-secret-modal h3 {
+  margin: 0 0 12px 0;
+  color: var(--violet);
+  letter-spacing: 2px;
+  font-size: 0.9rem;
+}
+
+.wh-secret-modal .wh-secret-warn {
+  color: var(--warn, #e0a040);
+  font-size: 0.7rem;
+  letter-spacing: 1px;
+  margin-bottom: 16px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.wh-secret-modal .wh-secret-value {
+  background: #0d1117;
+  border: 1px solid var(--border-color);
+  padding: 10px 12px;
+  font-size: 0.85rem;
+  word-break: break-all;
+  margin-bottom: 16px;
+}
+
+.wh-secret-modal .wh-secret-actions {
+  display: flex;
+  gap: 10px;
+  justify-content: flex-end;
+}
+
+.wh-secret-modal .btn {
+  cursor: pointer;
+  background: transparent;
+  border: 1px solid var(--matrix);
+  color: var(--matrix);
+  padding: 7px 14px;
+  font-family: inherit;
+  font-size: 0.78rem;
+  letter-spacing: 1.5px;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  transition: all 0.3s ease;
+}
+.wh-secret-modal .btn.violet { border-color: var(--violet); color: var(--violet); }
+.wh-secret-modal .btn.violet:hover { background: var(--violet); color: #000; box-shadow: var(--violet-glow); }
+.wh-secret-modal .btn.ghost { border-color: var(--border-color); color: var(--matrix); opacity: 0.7; }
+.wh-secret-modal .btn.ghost:hover { opacity: 1; border-color: var(--matrix); background: transparent; box-shadow: var(--matrix-glow); }

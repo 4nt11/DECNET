@@ -1,0 +1,25 @@
+# Bounds for fixture 2 (vpn_hopping).
+#
+# Ground truth at campaign-level: 1 campaign of 5 observation rows.
+# Ground truth at identity-level: 1 identity of 5 observation rows.
+# A correct algorithm scores 1.0 across every metric on this fixture.
+#
+# Completeness is the load-bearing metric: a clusterer that fragments
+# the campaign by IP/ASN tanks completeness (the one true class is
+# split across many predicted clusters). The adversarial asn_clusterer
+# in the test file demonstrates this and the bound below rejects it.
+#
+# No true singletons in this fixture — singleton_recall is trivially
+# 1.0 (the metric returns 1.0 when truth has no singletons).
+#
+# Bounds are loose at v1; tighten as the algorithm matures. Loosening
+# any bound to make CI pass requires PR-comment justification (per
+# CAMPAIGN_CLUSTERING.md §2).
+adjusted_rand_index:
+  min: 1.0
+homogeneity:
+  min: 1.0
+completeness:
+  min: 1.0
+singleton_recall:
+  min: 1.0
