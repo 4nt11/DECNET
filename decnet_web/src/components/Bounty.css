@@ -1,0 +1,238 @@
+.bounty-root {
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+}
+
+/* Buttons scoped under root (mirrors DeckyFleet/LiveLogs pattern) */
+.bounty-root .btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 7px 14px;
+  font-family: inherit;
+  font-size: 0.78rem;
+  letter-spacing: 1.5px;
+  background: transparent;
+  border: 1px solid var(--matrix);
+  color: var(--matrix);
+  cursor: pointer;
+  transition: all 0.3s ease;
+}
+.bounty-root .btn:hover { background: var(--matrix); color: #000; box-shadow: var(--matrix-glow); }
+.bounty-root .btn.violet { border-color: var(--violet); color: var(--violet); }
+.bounty-root .btn.violet:hover { background: var(--violet); color: #000; box-shadow: var(--violet-glow); }
+.bounty-root .btn.ghost { border-color: var(--border); color: var(--matrix); opacity: 0.7; }
+.bounty-root .btn.ghost:hover { opacity: 1; border-color: var(--matrix); background: transparent; box-shadow: var(--matrix-glow); }
+.bounty-root .btn:disabled { opacity: 0.3; cursor: not-allowed; }
+
+/* Header controls */
+.bounty-root .controls-row {
+  display: flex;
+  gap: 12px;
+  align-items: stretch;
+}
+.bounty-root .controls-row .search-container { flex: 1; max-width: none; }
+
+/* Segmented type filter */
+.bounty-root .seg-group {
+  display: flex;
+  border: 1px solid var(--border);
+  background: var(--panel);
+}
+.bounty-root .seg-group button {
+  padding: 8px 14px;
+  font-size: 0.68rem;
+  letter-spacing: 1.5px;
+  border: none;
+  border-right: 1px solid var(--border);
+  background: transparent;
+  color: rgba(0, 255, 65, 0.6);
+  cursor: pointer;
+  font-family: inherit;
+}
+.bounty-root .seg-group button:last-child { border-right: none; }
+.bounty-root .seg-group button.active {
+  background: var(--violet-tint-10);
+  color: var(--violet);
+}
+.bounty-root .seg-group button:hover:not(.active) { color: var(--matrix); }
+
+/* Table row interactivity */
+.bounty-root .logs-table tr.clickable { cursor: pointer; }
+.bounty-root .logs-table tr.clickable:hover { background: rgba(238, 130, 238, 0.04); }
+.bounty-root .logs-table td .attacker-link {
+  text-decoration: underline dotted;
+  cursor: pointer;
+}
+.bounty-root .logs-table td .data-preview {
+  font-size: 0.74rem;
+  opacity: 0.7;
+  max-width: 400px;
+  display: block;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.bounty-root .logs-table td .cred-inline {
+  display: flex;
+  gap: 14px;
+  font-size: 0.8rem;
+}
+.bounty-root .logs-table td .cred-inline .k-small {
+  opacity: 0.6;
+  font-size: 0.65rem;
+  margin-right: 4px;
+}
+.bounty-root .logs-table td .cred-inline .matrix-text { color: var(--matrix); }
+
+/* Empty state */
+.bounty-root .empty-state {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  padding: 50px 20px;
+  opacity: 0.45;
+}
+.bounty-root .empty-state .type-label {
+  font-size: 0.7rem;
+  letter-spacing: 2px;
+}
+
+/* Pagination */
+.bounty-root .pager { display: flex; align-items: center; gap: 12px; font-size: 0.7rem; }
+.bounty-root .pager button {
+  padding: 4px;
+  border: 1px solid var(--border);
+  background: transparent;
+  color: var(--matrix);
+  display: flex;
+  cursor: pointer;
+}
+.bounty-root .pager button:disabled { opacity: 0.3; cursor: not-allowed; }
+.bounty-root .pager button:hover:not(:disabled) { border-color: var(--accent); }
+
+/* ── Drawer ────────────────────────────────────────────── */
+.bounty-drawer-backdrop {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.6);
+  display: flex;
+  justify-content: flex-end;
+  z-index: 1000;
+  animation: bd-fade 0.15s ease;
+}
+@keyframes bd-fade { from { opacity: 0; } to { opacity: 1; } }
+
+.bounty-drawer {
+  width: min(620px, 100%);
+  height: 100%;
+  background: var(--bg);
+  border-left: 1px solid var(--violet);
+  box-shadow: -12px 0 40px rgba(238, 130, 238, 0.1);
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  animation: bd-slide 0.2s ease;
+}
+@keyframes bd-slide { from { transform: translateX(30px); opacity: 0.6; } to { transform: none; opacity: 1; } }
+
+.bounty-drawer .bd-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 16px 20px;
+  border-bottom: 1px solid var(--border);
+}
+.bounty-drawer .bd-head h3 {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 0.9rem;
+  letter-spacing: 3px;
+  color: var(--violet);
+  margin: 0;
+}
+.bounty-drawer .close-btn {
+  background: transparent;
+  border: 1px solid var(--border);
+  color: var(--matrix);
+  display: flex;
+  padding: 4px;
+  cursor: pointer;
+}
+.bounty-drawer .close-btn:hover { border-color: var(--accent); }
+
+.bounty-drawer .bd-body {
+  padding: 20px;
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+}
+
+.bounty-drawer .kvs {
+  display: grid;
+  grid-template-columns: 130px 1fr;
+  gap: 10px 12px;
+  font-size: 0.8rem;
+}
+.bounty-drawer .kvs .k {
+  opacity: 0.55;
+  font-size: 0.7rem;
+  letter-spacing: 1.5px;
+}
+.bounty-drawer .kvs .v { word-break: break-all; }
+.bounty-drawer .kvs .attacker-link {
+  text-decoration: underline dotted;
+  cursor: pointer;
+  color: var(--matrix);
+}
+.bounty-drawer .violet-accent { color: var(--violet); }
+
+.bounty-drawer .type-label {
+  font-size: 0.68rem;
+  letter-spacing: 2px;
+  opacity: 0.6;
+  margin-bottom: 8px;
+}
+
+.bounty-drawer .code-block {
+  background: var(--panel);
+  border: 1px solid var(--border);
+  border-left: 2px solid var(--violet);
+  padding: 12px 14px;
+  font-family: var(--font-mono);
+  font-size: 0.78rem;
+  color: var(--matrix);
+  white-space: pre-wrap;
+  word-break: break-all;
+  margin: 0;
+  overflow-x: auto;
+}
+.bounty-drawer .code-block .ck { color: rgba(238, 130, 238, 0.9); }
+.bounty-drawer .code-block .cs { color: var(--matrix); }
+
+.bounty-drawer .bd-actions {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+/* Reuse .btn under drawer */
+.bounty-drawer .btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 7px 14px;
+  font-family: inherit;
+  font-size: 0.78rem;
+  letter-spacing: 1.5px;
+  background: transparent;
+  border: 1px solid var(--border);
+  color: var(--matrix);
+  cursor: pointer;
+  transition: all 0.3s ease;
+  opacity: 0.8;
+}
+.bounty-drawer .btn.ghost:hover { opacity: 1; border-color: var(--matrix); box-shadow: var(--matrix-glow); }

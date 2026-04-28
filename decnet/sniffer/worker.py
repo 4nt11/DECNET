@@ -11,12 +11,22 @@ The API never depends on this worker being alive.
 """
 
 import asyncio
+import contextlib
 import os
 import subprocess  # nosec B404 — needed for interface checks
 import threading
 from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
+from typing import Any, Callable
 
+from decnet.bus import topics as _topics
+from decnet.bus.base import BaseBus
+from decnet.bus.factory import get_bus
+from decnet.bus.publish import (
+    make_thread_safe_publisher,
+    run_control_listener_signal,
+    run_health_heartbeat,
+)
 from decnet.logging import get_logger
 from decnet.network import HOST_IPVLAN_IFACE, HOST_MACVLAN_IFACE
 from decnet.sniffer.fingerprint import SnifferEngine
@@ -41,6 +51,26 @@ def _load_ip_to_decky() -> dict[str, str]:
     return mapping
 
 
+def _make_decky_traffic_publisher(
+    bus: BaseBus,
+    loop: asyncio.AbstractEventLoop,
+) -> Callable[[str, str, dict[str, Any]], None]:
+    """Wrap :func:`make_thread_safe_publisher` with the decky-traffic topic.
+
+    The scapy sniff loop runs in a dedicated worker thread — this adapter
+    turns ``(decky_name, event_type, payload)`` calls from the engine into
+    a bus publish on ``decky.{name}.traffic`` without blocking the sniff
+    thread on the network round-trip.
+    """
+    raw = make_thread_safe_publisher(bus, loop)
+
+    def _publish(decky_name: str, event_type: str, payload: dict[str, Any]) -> None:
+        topic = _topics.decky(decky_name, _topics.DECKY_TRAFFIC)
+        raw(topic, payload, event_type)
+
+    return _publish
+
+
 def _interface_exists(iface: str) -> bool:
     """Check if a network interface exists on this host."""
     try:
@@ -59,6 +89,7 @@ def _sniff_loop(
     log_path: Path,
     json_path: Path,
     stop_event: threading.Event,
+    publish_fn: Callable[[str, str, dict[str, Any]], None] | None = None,
 ) -> None:
     """Blocking sniff loop. Runs in a dedicated thread via asyncio.to_thread."""
     try:
@@ -75,7 +106,9 @@ def _sniff_loop(
     def _write_fn(line: str) -> None:
         write_event(line, log_path, json_path)
 
-    engine = SnifferEngine(ip_to_decky=ip_map, write_fn=_write_fn)
+    engine = SnifferEngine(
+        ip_to_decky=ip_map, write_fn=_write_fn, publish_fn=publish_fn,
+    )
 
     # Periodically refresh IP map in a background daemon thread
     def _refresh_loop() -> None:
@@ -150,6 +183,34 @@ async def sniffer_worker(log_file: str) -> None:
 
         stop_event = threading.Event()
 
+        loop = asyncio.get_running_loop()
+
+        # Connect to the bus for decky.{id}.traffic fan-out.  Failure here
+        # is non-fatal: the sniffer still writes syslog, it just doesn't
+        # push notifications to downstream consumers.
+        bus: BaseBus | None = None
+        try:
+            candidate = get_bus(client_name="sniffer")
+            await candidate.connect()
+            bus = candidate
+        except Exception as exc:  # noqa: BLE001
+            logger.warning(
+                "sniffer: bus unavailable, running in publish-off mode: %s", exc,
+            )
+
+        publish_fn: Callable[[str, str, dict[str, Any]], None] | None = None
+        if bus is not None:
+            publish_fn = _make_decky_traffic_publisher(bus, loop)
+
+        # Workers panel: heartbeat + SIGTERM-based stop control.  The
+        # sniff loop is a blocking scapy thread, so an asyncio shutdown
+        # event can't reach it — translating the bus stop into SIGTERM
+        # routes through the existing CancelledError path below.
+        heartbeat_task = asyncio.create_task(run_health_heartbeat(bus, "sniffer"))
+        control_task = asyncio.create_task(
+            run_control_listener_signal(bus, "sniffer"),
+        )
+
         # Dedicated thread pool so the long-running sniff loop doesn't
         # occupy a slot in the default asyncio executor.
         sniffer_pool = ThreadPoolExecutor(
@@ -157,10 +218,9 @@ async def sniffer_worker(log_file: str) -> None:
         )
 
         try:
-            loop = asyncio.get_running_loop()
             await loop.run_in_executor(
                 sniffer_pool, _sniff_loop,
-                interface, log_path, json_path, stop_event,
+                interface, log_path, json_path, stop_event, publish_fn,
             )
         except asyncio.CancelledError:
             logger.info("sniffer: shutdown requested")
@@ -169,6 +229,13 @@ async def sniffer_worker(log_file: str) -> None:
             raise
         finally:
             sniffer_pool.shutdown(wait=False)
+            for t in (heartbeat_task, control_task):
+                t.cancel()
+                with contextlib.suppress(Exception, asyncio.CancelledError):
+                    await t
+            if bus is not None:
+                with contextlib.suppress(Exception):
+                    await bus.close()
 
     except asyncio.CancelledError:
         raise

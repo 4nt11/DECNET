@@ -100,6 +100,49 @@ async def test_client_health_roundtrip(tmp_path: pathlib.Path) -> None:
 
 
 @pytest.mark.asyncio
+async def test_fingerprint_pin_accepts_matching_cert(tmp_path: pathlib.Path) -> None:
+    """AgentClient with the correct expected fingerprint connects normally."""
+    port = _free_port()
+    server, thread, master_id = _start_agent(tmp_path, port)
+    try:
+        worker_cert_pem = (tmp_path / "agent" / "worker.crt").read_bytes()
+        expected = pki.fingerprint(worker_cert_pem)
+        host = {
+            "uuid": "h1",
+            "name": "worker-test",
+            "address": "127.0.0.1",
+            "agent_port": port,
+            "client_cert_fingerprint": expected,
+        }
+        async with swarm_client.AgentClient(host=host, identity=master_id) as agent:
+            assert await agent.health() == {"status": "ok"}
+    finally:
+        server.should_exit = True
+        thread.join(timeout=5)
+
+
+@pytest.mark.asyncio
+async def test_fingerprint_pin_rejects_mismatch(tmp_path: pathlib.Path) -> None:
+    """A wrong expected fingerprint must raise FingerprintMismatchError."""
+    port = _free_port()
+    server, thread, master_id = _start_agent(tmp_path, port)
+    try:
+        host = {
+            "uuid": "h1",
+            "name": "worker-test",
+            "address": "127.0.0.1",
+            "agent_port": port,
+            "client_cert_fingerprint": "0" * 64,
+        }
+        with pytest.raises(swarm_client.FingerprintMismatchError):
+            async with swarm_client.AgentClient(host=host, identity=master_id):
+                pass
+    finally:
+        server.should_exit = True
+        thread.join(timeout=5)
+
+
+@pytest.mark.asyncio
 async def test_impostor_client_cannot_connect(tmp_path: pathlib.Path) -> None:
     """A client whose cert was issued by a DIFFERENT CA must be rejected."""
     port = _free_port()

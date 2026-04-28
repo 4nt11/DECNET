@@ -1,0 +1,319 @@
+"""
+Database tables (SQLModel) and HTTP request/response shapes (Pydantic).
+
+Split into topical modules for readability, but every symbol is re-exported
+from this package so ``from decnet.web.db.models import X`` keeps working
+everywhere — no importer needs to know which submodule a class lives in.
+"""
+from ._base import (
+    NullableDatetime,
+    NullableString,
+    _BIG_TEXT,
+    _normalize_null,
+)
+from .common import (
+    MessageResponse,
+)
+from .canary import (
+    CanaryBlob,
+    CanaryBlobResponse,
+    CanaryBlobsResponse,
+    CanaryKind,
+    CanaryState,
+    CanaryToken,
+    CanaryTokenCreateRequest,
+    CanaryTokenResponse,
+    CanaryTokensResponse,
+    CanaryTrigger,
+    CanaryTriggerResponse,
+    CanaryTriggersResponse,
+)
+from .auth import (
+    AdminConfigResponse,
+    ChangePasswordRequest,
+    ConfigResponse,
+    CreateUserRequest,
+    DeploymentLimitRequest,
+    GlobalMutationIntervalRequest,
+    LoginRequest,
+    ResetUserPasswordRequest,
+    Token,
+    UpdateUserRoleRequest,
+    User,
+    UserResponse,
+)
+from .attackers import (
+    Attacker,
+    AttackerBehavior,
+    AttackerIdentity,
+    AttackersResponse,
+    SessionProfile,
+    SmtpTarget,
+)
+from .attacker_intel import (
+    AttackerIntel,
+)
+from .campaigns import (
+    Campaign,
+    CampaignsResponse,
+)
+from .deploy import (
+    DeployIniRequest,
+    DeployResponse,
+    MutateIntervalRequest,
+    PurgeResponse,
+)
+from .fleet import (
+    LOCAL_HOST_SENTINEL,
+    FleetDecky,
+)
+from .health import (
+    ComponentHealth,
+    HealthResponse,
+)
+from .orchestrator import (
+    OrchestratorEmail,
+    OrchestratorEmailsResponse,
+    OrchestratorEvent,
+    OrchestratorEventsResponse,
+)
+from .realism import (
+    RealismConfig,
+    SyntheticFile,
+    SyntheticFilesResponse,
+)
+from .logs import (
+    Bounty,
+    BountyResponse,
+    Credential,
+    CredentialReuse,
+    CredentialReuseResponse,
+    CredentialsResponse,
+    Log,
+    LogsResponse,
+    State,
+    StatsResponse,
+)
+from .swarm import (
+    DeckyShard,
+    DeckyShardView,
+    SwarmCheckResponse,
+    SwarmDeployRequest,
+    SwarmDeployResponse,
+    SwarmEnrolledBundle,
+    SwarmEnrollRequest,
+    SwarmHost,
+    SwarmHostHealth,
+    SwarmHostResult,
+    SwarmHostView,
+    SwarmTeardownRequest,
+    SwarmUpdaterBundle,
+)
+from .topology import (
+    LAN,
+    ArchetypeCatalogResponse,
+    ArchetypeEntry,
+    DeckyCreateRequest,
+    DeckyRow,
+    DeckyUpdateRequest,
+    DeployAcceptedResponse,
+    EdgeCreateRequest,
+    EdgeRow,
+    LANCreateRequest,
+    LANRow,
+    LANUpdateRequest,
+    MutationEnqueueRequest,
+    MutationEnqueueResponse,
+    MutationRow,
+    NextIPResponse,
+    NextSubnetResponse,
+    NotEditableResponse,
+    ReapReportResponse,
+    ServiceCatalogResponse,
+    Topology,
+    TopologyDecky,
+    TopologyDetail,
+    TopologyEdge,
+    TopologyGenerateRequest,
+    TopologyListResponse,
+    TopologyMutation,
+    TopologyStatusEvent,
+    TopologyStatusEventRow,
+    TopologySummary,
+    ValidationErrorResponse,
+    ValidationIssueResponse,
+    VersionConflictResponse,
+)
+from .updater import (
+    HostReleaseInfo,
+    HostReleasesResponse,
+    PushUpdateRequest,
+    PushUpdateResponse,
+    PushUpdateResult,
+    RollbackRequest,
+    RollbackResponse,
+)
+from .webhooks import (
+    SimpleEvent,
+    WebhookCreateRequest,
+    WebhookCreateResponse,
+    WebhookResponse,
+    WebhookSubscription,
+    WebhookTestResponse,
+    WebhookUpdateRequest,
+)
+from .workers import (
+    StartAllResponse,
+    StartFailure,
+    WorkerControlResponse,
+    WorkersResponse,
+    WorkerStatus,
+)
+
+__all__ = [
+    # _base
+    "NullableDatetime",
+    "NullableString",
+    "_BIG_TEXT",
+    "_normalize_null",
+    # common
+    "MessageResponse",
+    # canary
+    "CanaryBlob",
+    "CanaryBlobResponse",
+    "CanaryBlobsResponse",
+    "CanaryKind",
+    "CanaryState",
+    "CanaryToken",
+    "CanaryTokenCreateRequest",
+    "CanaryTokenResponse",
+    "CanaryTokensResponse",
+    "CanaryTrigger",
+    "CanaryTriggerResponse",
+    "CanaryTriggersResponse",
+    # auth
+    "AdminConfigResponse",
+    "ChangePasswordRequest",
+    "ConfigResponse",
+    "CreateUserRequest",
+    "DeploymentLimitRequest",
+    "GlobalMutationIntervalRequest",
+    "LoginRequest",
+    "ResetUserPasswordRequest",
+    "Token",
+    "UpdateUserRoleRequest",
+    "User",
+    "UserResponse",
+    # attackers
+    "Attacker",
+    "AttackerBehavior",
+    "AttackerIdentity",
+    "AttackerIntel",
+    "AttackersResponse",
+    "SessionProfile",
+    "SmtpTarget",
+    # campaigns
+    "Campaign",
+    "CampaignsResponse",
+    # deploy
+    "DeployIniRequest",
+    "DeployResponse",
+    "MutateIntervalRequest",
+    "PurgeResponse",
+    # fleet
+    "LOCAL_HOST_SENTINEL",
+    "FleetDecky",
+    # health
+    "ComponentHealth",
+    "HealthResponse",
+    # orchestrator
+    "OrchestratorEmail",
+    "OrchestratorEmailsResponse",
+    "OrchestratorEvent",
+    "OrchestratorEventsResponse",
+    # realism
+    "RealismConfig",
+    "SyntheticFile",
+    "SyntheticFilesResponse",
+    # logs
+    "Bounty",
+    "BountyResponse",
+    "Credential",
+    "CredentialReuse",
+    "CredentialReuseResponse",
+    "CredentialsResponse",
+    "Log",
+    "LogsResponse",
+    "State",
+    "StatsResponse",
+    # swarm
+    "DeckyShard",
+    "DeckyShardView",
+    "SwarmCheckResponse",
+    "SwarmDeployRequest",
+    "SwarmDeployResponse",
+    "SwarmEnrolledBundle",
+    "SwarmEnrollRequest",
+    "SwarmHost",
+    "SwarmHostHealth",
+    "SwarmHostResult",
+    "SwarmHostView",
+    "SwarmTeardownRequest",
+    "SwarmUpdaterBundle",
+    # topology
+    "LAN",
+    "ArchetypeCatalogResponse",
+    "ArchetypeEntry",
+    "DeckyCreateRequest",
+    "DeckyRow",
+    "DeckyUpdateRequest",
+    "DeployAcceptedResponse",
+    "EdgeCreateRequest",
+    "EdgeRow",
+    "LANCreateRequest",
+    "LANRow",
+    "LANUpdateRequest",
+    "MutationEnqueueRequest",
+    "MutationEnqueueResponse",
+    "MutationRow",
+    "NextIPResponse",
+    "NextSubnetResponse",
+    "NotEditableResponse",
+    "ReapReportResponse",
+    "ServiceCatalogResponse",
+    "Topology",
+    "TopologyDecky",
+    "TopologyDetail",
+    "TopologyEdge",
+    "TopologyGenerateRequest",
+    "TopologyListResponse",
+    "TopologyMutation",
+    "TopologyStatusEvent",
+    "TopologyStatusEventRow",
+    "TopologySummary",
+    "ValidationErrorResponse",
+    "ValidationIssueResponse",
+    "VersionConflictResponse",
+    # updater
+    "HostReleaseInfo",
+    "HostReleasesResponse",
+    "PushUpdateRequest",
+    "PushUpdateResponse",
+    "PushUpdateResult",
+    "RollbackRequest",
+    "RollbackResponse",
+    # webhooks
+    "SimpleEvent",
+    "WebhookCreateRequest",
+    "WebhookCreateResponse",
+    "WebhookResponse",
+    "WebhookSubscription",
+    "WebhookTestResponse",
+    "WebhookUpdateRequest",
+    # workers
+    "StartAllResponse",
+    "StartFailure",
+    "WorkerControlResponse",
+    "WorkersResponse",
+    "WorkerStatus",
+]

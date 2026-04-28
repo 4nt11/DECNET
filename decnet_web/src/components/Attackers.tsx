@@ -1,8 +1,11 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { useSearchParams, useNavigate } from 'react-router-dom';
-import { Crosshair, Search, ChevronLeft, ChevronRight, Filter } from 'lucide-react';
+import { Search, ChevronLeft, ChevronRight, Users } from '../icons';
 import api from '../utils/api';
+import EmptyState from './EmptyState/EmptyState';
+import { useFocusSearch } from '../hooks/useFocusSearch';
 import './Dashboard.css';
+import './Attackers.css';
 
 interface AttackerEntry {
   uuid: string;
@@ -20,7 +23,27 @@ interface AttackerEntry {
   credential_count: number;
   fingerprints: any[];
   commands: any[];
+  country_code: string | null;
+  country_source: string | null;
+  asn: number | null;
+  as_name: string | null;
+  asn_source: string | null;
   updated_at: string;
+}
+
+// Activity thresholds — tune here to adjust tier resolution.
+const ACTIVE_MIN_EVENTS = 50;
+const ACTIVE_MAX_AGE_MIN = 60;
+const PASSIVE_MIN_EVENTS = 5;
+const PASSIVE_MAX_AGE_HR = 24;
+
+type ActivityTier = 'active' | 'passive' | 'inactive';
+
+function deriveActivity(a: AttackerEntry): ActivityTier {
+  const ageMin = (Date.now() - new Date(a.last_seen).getTime()) / 60000;
+  if (a.event_count >= ACTIVE_MIN_EVENTS && ageMin <= ACTIVE_MAX_AGE_MIN) return 'active';
+  if (a.event_count >= PASSIVE_MIN_EVENTS && ageMin <= PASSIVE_MAX_AGE_HR * 60) return 'passive';
+  return 'inactive';
 }
 
 function timeAgo(dateStr: string): string {
@@ -46,6 +69,8 @@ const Attackers: React.FC = () => {
   const [total, setTotal] = useState(0);
   const [loading, setLoading] = useState(true);
   const [searchInput, setSearchInput] = useState(query);
+  const searchRef = useRef<HTMLInputElement | null>(null);
+  useFocusSearch(searchRef);
 
   const limit = 50;
 
@@ -56,7 +81,6 @@ const Attackers: React.FC = () => {
       let url = `/attackers?limit=${limit}&offset=${offset}&sort_by=${sortBy}`;
       if (query) url += `&search=${encodeURIComponent(query)}`;
       if (serviceFilter) url += `&service=${encodeURIComponent(serviceFilter)}`;
-
       const res = await api.get(url);
       setAttackers(res.data.data);
       setTotal(res.data.total);
@@ -67,9 +91,9 @@ const Attackers: React.FC = () => {
     }
   };
 
-  useEffect(() => {
-    fetchAttackers();
-  }, [query, sortBy, serviceFilter, page]);
+  useEffect(() => { fetchAttackers(); }, [query, sortBy, serviceFilter, page]);
+
+  useEffect(() => { setSearchInput(query); }, [query]);
 
   const _params = (overrides: Record<string, string> = {}) => {
     const base: Record<string, string> = { q: query, sort_by: sortBy, service: serviceFilter, page: '1' };
@@ -80,178 +104,161 @@ const Attackers: React.FC = () => {
     e.preventDefault();
     setSearchParams(_params({ q: searchInput }));
   };
+  const setPage = (p: number) => setSearchParams(_params({ page: p.toString() }));
+  const setSort = (s: string) => setSearchParams(_params({ sort_by: s }));
+  const clearService = () => setSearchParams(_params({ service: '' }));
 
-  const setPage = (p: number) => {
-    setSearchParams(_params({ page: p.toString() }));
-  };
+  const totalPages = Math.max(1, Math.ceil(total / limit));
 
-  const setSort = (s: string) => {
-    setSearchParams(_params({ sort_by: s }));
-  };
-
-  const clearService = () => {
-    setSearchParams(_params({ service: '' }));
-  };
-
-  const totalPages = Math.ceil(total / limit);
+  const activityCounts = attackers.reduce(
+    (acc, a) => { acc[deriveActivity(a)]++; return acc; },
+    { active: 0, passive: 0, inactive: 0 } as Record<ActivityTier, number>,
+  );
 
   return (
-    <div className="dashboard">
-      {/* Page Header */}
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: '16px' }}>
-          <Crosshair size={32} className="violet-accent" />
-          <h1 style={{ fontSize: '1.5rem', letterSpacing: '4px' }}>ATTACKER PROFILES</h1>
-        </div>
-
-        <div style={{ display: 'flex', gap: '16px', alignItems: 'center' }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: '8px', border: '1px solid var(--border-color)', padding: '4px 12px' }}>
-            <Filter size={16} className="dim" />
-            <select
-              value={sortBy}
-              onChange={(e) => setSort(e.target.value)}
-              style={{ background: 'transparent', border: 'none', color: 'inherit', fontSize: '0.8rem', outline: 'none' }}
-            >
-              <option value="recent">RECENT</option>
-              <option value="active">MOST ACTIVE</option>
-              <option value="traversals">TRAVERSALS</option>
-            </select>
-          </div>
-
-          <form onSubmit={handleSearch} style={{ display: 'flex', alignItems: 'center', border: '1px solid var(--border-color)', padding: '4px 12px' }}>
-            <Search size={18} style={{ opacity: 0.5, marginRight: '8px' }} />
-            <input
-              type="text"
-              placeholder="Search by IP..."
-              value={searchInput}
-              onChange={(e) => setSearchInput(e.target.value)}
-              style={{ background: 'transparent', border: 'none', padding: '4px', fontSize: '0.8rem', width: '200px' }}
-            />
-          </form>
+    <div className="attackers-root">
+      <div className="page-header">
+        <div className="page-title-group">
+          <h1>ATTACKERS</h1>
+          <span className="page-sub">
+            {total.toLocaleString()} UNIQUE SOURCES · {activityCounts.active} ACTIVE · {activityCounts.passive} PASSIVE · {activityCounts.inactive} INACTIVE
+          </span>
         </div>
       </div>
 
-      {/* Summary & Pagination */}
+      <form className="controls-row" onSubmit={handleSearch}>
+        <div className="search-container">
+          <Search size={14} className="search-icon" />
+          <input
+            ref={searchRef}
+            type="text"
+            placeholder="Search by IP..."
+            value={searchInput}
+            onChange={(e) => setSearchInput(e.target.value)}
+          />
+        </div>
+        <select className="sort-select" value={sortBy} onChange={(e) => setSort(e.target.value)}>
+          <option value="recent">RECENT</option>
+          <option value="active">MOST ACTIVE</option>
+          <option value="traversals">TRAVERSALS</option>
+        </select>
+      </form>
+
       <div className="logs-section">
-        <div className="section-header" style={{ justifyContent: 'space-between' }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
-            <span className="matrix-text" style={{ fontSize: '0.8rem' }}>{total} THREATS PROFILED</span>
+        <div className="section-header">
+          <div className="section-title">
+            <span>SOURCE INTEL</span>
             {serviceFilter && (
               <button
+                type="button"
+                className="service-filter-chip"
                 onClick={clearService}
-                style={{
-                  display: 'inline-flex', alignItems: 'center', gap: '6px',
-                  fontSize: '0.75rem', padding: '2px 10px', letterSpacing: '1px',
-                  border: '1px solid var(--accent-color)', color: 'var(--accent-color)',
-                  background: 'rgba(238, 130, 238, 0.1)', cursor: 'pointer',
-                }}
+                style={{ marginLeft: 12 }}
               >
-                {serviceFilter.toUpperCase()} &times;
+                {serviceFilter.toUpperCase()} ×
               </button>
             )}
           </div>
-
-          <div style={{ display: 'flex', alignItems: 'center', gap: '16px' }}>
-            <span className="dim" style={{ fontSize: '0.8rem' }}>
-              Page {page} of {totalPages || 1}
-            </span>
-            <div style={{ display: 'flex', gap: '8px' }}>
-              <button
-                disabled={page <= 1}
-                onClick={() => setPage(page - 1)}
-                style={{ padding: '4px', border: '1px solid var(--border-color)', opacity: page <= 1 ? 0.3 : 1 }}
-              >
-                <ChevronLeft size={16} />
+          <div className="section-actions">
+            <div className="pager">
+              <span className="dim">Page {page} of {totalPages}</span>
+              <button disabled={page <= 1} onClick={() => setPage(page - 1)} aria-label="Previous page">
+                <ChevronLeft size={14} />
               </button>
-              <button
-                disabled={page >= totalPages}
-                onClick={() => setPage(page + 1)}
-                style={{ padding: '4px', border: '1px solid var(--border-color)', opacity: page >= totalPages ? 0.3 : 1 }}
-              >
-                <ChevronRight size={16} />
+              <button disabled={page >= totalPages} onClick={() => setPage(page + 1)} aria-label="Next page">
+                <ChevronRight size={14} />
               </button>
             </div>
           </div>
         </div>
 
-        {/* Card Grid */}
         {loading ? (
-          <div style={{ textAlign: 'center', padding: '60px', opacity: 0.5, letterSpacing: '4px' }}>
-            SCANNING THREAT PROFILES...
-          </div>
+          <EmptyState icon={Users} title="SCANNING THREAT PROFILES…" />
         ) : attackers.length === 0 ? (
-          <div style={{ textAlign: 'center', padding: '60px', opacity: 0.5, letterSpacing: '4px' }}>
-            NO ACTIVE THREATS PROFILED YET
-          </div>
+          <EmptyState
+            icon={Users}
+            title="NO ACTIVE THREATS PROFILED YET"
+            hint="waiting on attacker traffic to correlate"
+          />
         ) : (
-          <div className="attacker-grid">
-            {attackers.map((a) => {
-              const lastCmd = a.commands.length > 0
-                ? a.commands[a.commands.length - 1]
-                : null;
-
+          <div className="ak-grid">
+            {attackers.map(a => {
+              const activity = deriveActivity(a);
+              const lastCmd = a.commands.length > 0 ? a.commands[a.commands.length - 1] : null;
               return (
                 <div
                   key={a.uuid}
-                  className="attacker-card"
+                  className="ak-card"
                   onClick={() => navigate(`/attackers/${a.uuid}`)}
                 >
-                  {/* Header row */}
-                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '12px' }}>
-                    <span className="matrix-text" style={{ fontSize: '1.1rem', fontWeight: 'bold' }}>{a.ip}</span>
-                    {a.is_traversal && (
-                      <span className="traversal-badge">TRAVERSAL</span>
-                    )}
+                  <div className="ak-top">
+                    <span className="ak-ip">
+                      {a.ip}
+                      {a.country_code && (
+                        <span
+                          className="ak-cc"
+                          title={`Origin: ${a.country_code}${a.country_source ? ` (${a.country_source})` : ''}`}
+                        >
+                          {a.country_code}
+                        </span>
+                      )}
+                    </span>
+                    <span className={`activity-chip ${activity}`}>
+                      <span className="dot" />
+                      {activity.toUpperCase()}
+                    </span>
                   </div>
 
-                  {/* Timestamps */}
-                  <div style={{ display: 'flex', gap: '16px', marginBottom: '8px', fontSize: '0.75rem' }}>
-                    <span className="dim">First: {new Date(a.first_seen).toLocaleDateString()}</span>
-                    <span className="dim">Last: {timeAgo(a.last_seen)}</span>
-                  </div>
-
-                  {/* Counts */}
-                  <div style={{ display: 'flex', gap: '16px', marginBottom: '10px', fontSize: '0.8rem' }}>
-                    <span>Events: <span className="matrix-text">{a.event_count}</span></span>
-                    <span>Bounties: <span className="violet-accent">{a.bounty_count}</span></span>
-                    <span>Creds: <span className="violet-accent">{a.credential_count}</span></span>
-                  </div>
-
-                  {/* Services */}
-                  <div style={{ display: 'flex', flexWrap: 'wrap', gap: '4px', marginBottom: '8px' }}>
-                    {a.services.map((svc) => (
+                  <div className="ak-meta">
+                    <span>First: {new Date(a.first_seen).toLocaleDateString()}</span>
+                    <span>Last: {timeAgo(a.last_seen)}</span>
+                    {a.asn != null && (
                       <span
-                        key={svc}
-                        className="service-badge"
-                        style={{ cursor: 'pointer' }}
-                        onClick={(e) => { e.stopPropagation(); setSearchParams(_params({ service: svc })); }}
+                        className="ak-asn"
+                        title={a.as_name ? `${a.as_name}${a.asn_source ? ` (${a.asn_source})` : ''}` : undefined}
                       >
-                        {svc.toUpperCase()}
+                        AS{a.asn}
                       </span>
-                    ))}
+                    )}
+                    {a.is_traversal && <span className="chip violet" style={{ fontSize: '0.6rem' }}>TRAVERSAL</span>}
                   </div>
 
-                  {/* Deckies / Traversal Path */}
+                  <div className="ak-stats">
+                    <span><span className="lbl">EVENTS</span><span className="n matrix">{a.event_count}</span></span>
+                    <span><span className="lbl">BOUNTIES</span><span className="n violet">{a.bounty_count}</span></span>
+                    <span><span className="lbl">CREDS</span><span className="n violet">{a.credential_count}</span></span>
+                  </div>
+
+                  {a.services.length > 0 && (
+                    <div className="ak-chips">
+                      {a.services.map(svc => (
+                        <span
+                          key={svc}
+                          className="chip dim-chip"
+                          style={{ cursor: 'pointer' }}
+                          onClick={(e) => { e.stopPropagation(); setSearchParams(_params({ service: svc })); }}
+                        >
+                          {svc.toUpperCase()}
+                        </span>
+                      ))}
+                    </div>
+                  )}
+
                   {a.traversal_path ? (
-                    <div style={{ fontSize: '0.75rem', marginBottom: '8px', opacity: 0.7 }}>
-                      Path: {a.traversal_path}
-                    </div>
+                    <div className="ak-path"><span className="lbl">PATH</span>{a.traversal_path}</div>
                   ) : a.deckies.length > 0 ? (
-                    <div style={{ fontSize: '0.75rem', marginBottom: '8px', opacity: 0.7 }}>
-                      Deckies: {a.deckies.join(', ')}
-                    </div>
+                    <div className="ak-path"><span className="lbl">DECKIES</span>{a.deckies.join(', ')}</div>
                   ) : null}
 
-                  {/* Commands & Fingerprints */}
-                  <div style={{ display: 'flex', gap: '16px', fontSize: '0.75rem', marginBottom: '6px' }}>
-                    <span>Cmds: <span className="matrix-text">{a.commands.length}</span></span>
-                    <span>Fingerprints: <span className="matrix-text">{a.fingerprints.length}</span></span>
+                  <div className="ak-stats">
+                    <span><span className="lbl">CMDS</span><span className="n matrix">{a.commands.length}</span></span>
+                    <span><span className="lbl">FPS</span><span className="n matrix">{a.fingerprints.length}</span></span>
                   </div>
 
-                  {/* Last command preview */}
                   {lastCmd && (
-                    <div style={{ fontSize: '0.7rem', opacity: 0.6, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                      Last cmd: <span className="matrix-text">{lastCmd.command}</span>
+                    <div className="ak-lastcmd">
+                      <span className="lbl" style={{ opacity: 0.5, marginRight: 6, fontSize: '0.62rem', letterSpacing: 1 }}>LAST</span>
+                      <span className="cmd">{lastCmd.command}</span>
                     </div>
                   )}
                 </div>

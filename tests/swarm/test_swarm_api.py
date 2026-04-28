@@ -464,7 +464,7 @@ def test_list_deckies_joins_host_identity(client: TestClient, repo) -> None:
             "services": ["smb", "ssh"], "state": "failed", "last_error": "boom",
         })
 
-    asyncio.get_event_loop().run_until_complete(_seed())
+    asyncio.run(_seed())
 
     rows = client.get("/swarm/deckies").json()
     assert len(rows) == 2

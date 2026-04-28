@@ -9,7 +9,13 @@ import os
 
 import pytest
 
-from tests.stress.conftest import run_locust, STRESS_USERS, STRESS_SPAWN_RATE, STRESS_DURATION
+from tests.stress.conftest import (
+    run_locust,
+    start_stress_server,
+    STRESS_USERS,
+    STRESS_SPAWN_RATE,
+    STRESS_DURATION,
+)
 
 
 # Assertion thresholds (overridable via env)
@@ -114,43 +120,35 @@ def test_stress_spike(stress_server):
 
 
 @pytest.mark.stress
-def test_stress_sustained(stress_server):
+def test_stress_sustained():
     """Sustained load: 200 users for 30s. Checks latency doesn't degrade >3x.
 
-    Runs two phases:
+    Runs two phases against independent uvicorns. Sharing a server between
+    phases leaks keep-alive connections from phase 1 into phase 2 and the
+    sustained run records 0 requests roughly two-thirds of the time.
     1. Warm-up (10s) to get baseline latency
     2. Sustained (30s) to check for degradation
     """
     sustained_users = int(os.environ.get("STRESS_SUSTAINED_USERS", "200"))
-
-    # Cap spawn rate at 100/s — locust itself warns above that and has been
-    # observed to record 0 requests when the spawn storm collides with a
-    # still-draining uvicorn from a prior phase.
     ramp = min(sustained_users, 100)
 
-    # Phase 1: warm-up baseline
-    env_warmup = run_locust(
-        host=stress_server,
-        users=sustained_users,
-        spawn_rate=ramp,
-        duration=10,
-    )
+    with start_stress_server() as warm_url:
+        env_warmup = run_locust(
+            host=warm_url,
+            users=sustained_users,
+            spawn_rate=ramp,
+            duration=10,
+        )
     baseline_avg = env_warmup.stats.total.avg_response_time
     _print_stats(env_warmup, f"SUSTAINED warm-up: {sustained_users} users, 10s")
 
-    # Let the server drain pending work before firing the second locust run;
-    # otherwise the first request in phase 2 can sit behind a queued backlog
-    # and the 30s window can finish with 0 recorded requests.
-    import time as _t
-    _t.sleep(5)
-
-    # Phase 2: sustained
-    env_sustained = run_locust(
-        host=stress_server,
-        users=sustained_users,
-        spawn_rate=ramp,
-        duration=30,
-    )
+    with start_stress_server() as sustained_url:
+        env_sustained = run_locust(
+            host=sustained_url,
+            users=sustained_users,
+            spawn_rate=ramp,
+            duration=30,
+        )
     sustained_avg = env_sustained.stats.total.avg_response_time
     _print_stats(env_sustained, f"SUSTAINED main: {sustained_users} users, 30s")
 

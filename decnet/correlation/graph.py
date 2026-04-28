@@ -8,8 +8,27 @@ by reading the unique decky sequence from the hop list.
 
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from datetime import datetime
+
+
+@dataclass
+class MutationMarker:
+    """A substrate transition that occurred during an attacker's traversal.
+
+    Emitted by the mutator (or deploy/teardown) and consumed by the
+    correlation engine so ``AttackerTraversal.to_dict()`` can interleave
+    substrate-change markers chronologically with attacker hops — an
+    interaction with ``decky-03@T5`` followed by a mutation at ``T6`` and
+    another interaction at ``T7`` is a substrate transition mid-session,
+    not a silent discontinuity.
+    """
+
+    timestamp: datetime
+    decky: str
+    old_services: list[str]
+    new_services: list[str]
+    trigger: str  # creation | retirement | scheduled | operator | …
 
 
 @dataclass
@@ -31,6 +50,10 @@ class AttackerTraversal:
 
     attacker_ip: str
     hops: list[TraversalHop]  # chronologically sorted
+    # Substrate-change markers on deckies this attacker touched, bounded
+    # by first_seen/last_seen.  Empty for legacy attacker-only ingest;
+    # populated once mutation events flow through the engine.
+    mutations_during: list[MutationMarker] = field(default_factory=list)
 
     @property
     def first_seen(self) -> datetime:
@@ -62,6 +85,35 @@ class AttackerTraversal:
         """Human-readable traversal path: decky-01 → decky-03 → decky-07"""
         return " → ".join(self.deckies)
 
+    def timeline(self) -> list[dict]:
+        """Chronologically interleaved hops and mutation markers.
+
+        Each entry carries a ``kind`` discriminant (``hop`` | ``mutation``)
+        so JSON consumers can render them distinctly.  Mutations of
+        deckies the attacker never touched are already filtered out at
+        the engine; here we just merge by timestamp.
+        """
+        merged: list[tuple[datetime, dict]] = []
+        for h in self.hops:
+            merged.append((h.timestamp, {
+                "kind": "hop",
+                "timestamp": h.timestamp.isoformat(),
+                "decky": h.decky,
+                "service": h.service,
+                "event_type": h.event_type,
+            }))
+        for m in self.mutations_during:
+            merged.append((m.timestamp, {
+                "kind": "mutation",
+                "timestamp": m.timestamp.isoformat(),
+                "decky": m.decky,
+                "old_services": m.old_services,
+                "new_services": m.new_services,
+                "trigger": m.trigger,
+            }))
+        merged.sort(key=lambda kv: kv[0])
+        return [entry for _, entry in merged]
+
     def to_dict(self) -> dict:
         return {
             "attacker_ip": self.attacker_ip,
@@ -81,4 +133,15 @@ class AttackerTraversal:
                 }
                 for h in self.hops
             ],
+            "mutations_during": [
+                {
+                    "timestamp": m.timestamp.isoformat(),
+                    "decky": m.decky,
+                    "old_services": m.old_services,
+                    "new_services": m.new_services,
+                    "trigger": m.trigger,
+                }
+                for m in self.mutations_during
+            ],
+            "timeline": self.timeline(),
         }

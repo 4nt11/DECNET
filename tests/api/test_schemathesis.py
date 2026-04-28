@@ -14,7 +14,6 @@ from schemathesis.specs.openapi.checks import (
     positive_data_acceptance,
     negative_data_rejection,
     missing_required_header,
-    unsupported_method,
     use_after_free,
     ensure_resource_availability,
     ignored_auth,
@@ -56,7 +55,15 @@ ALL_CHECKS = (
     positive_data_acceptance,
     negative_data_rejection,
     missing_required_header,
-    unsupported_method,
+    # `unsupported_method` is intentionally omitted: it expects 405 for
+    # any HTTP method not declared on a path, but FastAPI route tables
+    # frequently collide static (`/topologies/services`) and
+    # parameterized (`/topologies/{topology_id}`) siblings. A request
+    # with an undeclared method on the static path falls through to
+    # the parameterized route, where auth/RBAC fires first and returns
+    # 401/403. That ordering is deliberate — leaking 405-vs-401 would
+    # let unauthenticated callers enumerate which strings are valid
+    # topology UUIDs. The check is incompatible with that design.
     use_after_free,
     ensure_resource_availability,
 )
@@ -94,6 +101,12 @@ def start_automated_server() -> subprocess.Popen:
     env["DECNET_DEVELOPER"] = "true"
     env["DECNET_CONTRACT_TEST"] = "true"
     env["DECNET_JWT_SECRET"] = TEST_SECRET
+    # Schemathesis fires thousands of examples per endpoint; the login
+    # bucket (10/5min per IP) trips on the second example and turns
+    # every subsequent valid request into a RejectedPositiveData
+    # failure. Disable the limiter for the fuzz subprocess — same
+    # rationale as the load-testing knob in decnet/web/limiter.py.
+    env["DECNET_LIMITER_ENABLED"] = "false"
 
     log_dir = Path(__file__).parent.parent.parent / "logs"
     log_dir.mkdir(exist_ok=True)

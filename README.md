@@ -4,6 +4,8 @@ A honeypot deception network framework. Spin up a fleet of fake machines — cal
 
 Attackers probe the network, DECNET traps every interaction, and you watch from a safe, isolated logging stack.
 
+[![ko-fi](https://ko-fi.com/img/githubbutton_sm.svg)](https://ko-fi.com/C0C31YDLB5)
+
 ---
 
 ## Table of Contents

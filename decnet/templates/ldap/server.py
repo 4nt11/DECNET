@@ -7,11 +7,57 @@ invalidCredentials error. Logs all interactions as JSON.
 
 import asyncio
 import os
-from syslog_bridge import syslog_line, write_syslog_file, forward_syslog
+import re
+
+import instance_seed as _seed
+from syslog_bridge import (
+    encode_secret,
+    forward_syslog,
+    syslog_line,
+    write_syslog_file,
+)
 
 NODE_NAME = os.environ.get("NODE_NAME", "ldapserver")
 SERVICE_NAME   = "ldap"
 LOG_TARGET = os.environ.get("LOG_TARGET", "")
+
+# RFC 4514 distinguished-name grammar: DN is a sequence of comma-separated
+# RDNs like "cn=foo,ou=people,dc=example,dc=com". Each RDN is
+# attribute=value, attribute matches [A-Za-z][A-Za-z0-9-]*. We keep this
+# check loose on value contents (commas can be escaped etc.) but tight on
+# shape, so garbage like `"abc"` or `\x00\x00` gets rejected with
+# invalidDNSyntax (34) instead of invalidCredentials (49) — that's how a
+# real OpenLDAP replies.
+_RDN_RE = re.compile(r"^[A-Za-z][A-Za-z0-9-]*=.+$")
+
+
+def _is_valid_dn(dn: str) -> bool:
+    """True for empty (anonymous bind) or RFC 4514-shaped DN."""
+    if dn == "":
+        return True
+    if len(dn) > 1024:
+        return False
+    # Split on unescaped commas. Not perfect, but catches the obvious
+    # "not a DN" inputs (missing '=' in some RDN, empty segments, etc.).
+    parts: list[str] = []
+    buf = ""
+    escape = False
+    for ch in dn:
+        if escape:
+            buf += ch
+            escape = False
+            continue
+        if ch == "\\":
+            buf += ch
+            escape = True
+            continue
+        if ch == ",":
+            parts.append(buf)
+            buf = ""
+            continue
+        buf += ch
+    parts.append(buf)
+    return all(_RDN_RE.match(p.strip()) for p in parts)
 
 
 
@@ -75,12 +121,14 @@ def _parse_bind_request(msg: bytes):
         return "<parse_error>", "<parse_error>"
 
 
-def _bind_error_response(message_id: int) -> bytes:
-    # BindResponse: resultCode=49 (invalidCredentials), matchedDN="", errorMessage=""
-    result_code = bytes([0x0a, 0x01, 0x31])   # ENUMERATED 49
-    matched_dn = bytes([0x04, 0x00])           # empty OCTET STRING
-    error_msg  = bytes([0x04, 0x00])           # empty OCTET STRING
-    bind_resp_body = result_code + matched_dn + error_msg
+def _bind_error_response(message_id: int, result_code: int = 49, error_text: str = "") -> bytes:
+    """BindResponse with a configurable resultCode + diagnosticMessage.
+    49 = invalidCredentials, 34 = invalidDNSyntax, 53 = unwillingToPerform."""
+    err_bytes = error_text.encode()
+    result_enc = bytes([0x0a, 0x01, result_code & 0xff])
+    matched_dn = bytes([0x04, 0x00])
+    error_msg  = bytes([0x04, len(err_bytes)]) + err_bytes
+    bind_resp_body = result_enc + matched_dn + error_msg
     bind_resp = bytes([0x61, len(bind_resp_body)]) + bind_resp_body
 
     msg_id_enc = bytes([0x02, 0x01, message_id & 0xff])
@@ -130,8 +178,19 @@ class LDAPProtocol(asyncio.Protocol):
         except Exception:
             message_id = 1
         dn, password = _parse_bind_request(msg)
-        _log("bind", src=self._peer[0], dn=dn, password=password)
-        self._transport.write(_bind_error_response(message_id))
+        _log("bind", src=self._peer[0], dn=dn, principal=dn,
+             **encode_secret(password))
+        _seed.jitter_sync(10, 60)
+        if dn and not _is_valid_dn(dn):
+            # OpenLDAP returns invalidDNSyntax (34) for malformed DNs, with
+            # a diagnostic like: "invalid DN syntax". Matching that exactly
+            # keeps the decoy consistent with what a scanner expects.
+            self._transport.write(_bind_error_response(
+                message_id, result_code=34,
+                error_text="invalid DN"
+            ))
+        else:
+            self._transport.write(_bind_error_response(message_id))
 
     def connection_lost(self, exc):
         _log("disconnect", src=self._peer[0] if self._peer else "?")

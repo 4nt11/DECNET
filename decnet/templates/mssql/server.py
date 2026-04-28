@@ -6,39 +6,76 @@ a login failed error. Logs auth attempts as JSON.
 """
 
 import asyncio
+import base64
 import os
 import struct
+
+import instance_seed as _seed
 from syslog_bridge import syslog_line, write_syslog_file, forward_syslog
 
 NODE_NAME = os.environ.get("NODE_NAME", "dbserver")
 SERVICE_NAME   = "mssql"
 LOG_TARGET = os.environ.get("LOG_TARGET", "")
 
-_PRELOGIN_RESP = bytes([
-    0x04, 0x01, 0x00, 0x2f, 0x00, 0x00, 0x01, 0x00,  # TDS header type=4, status=1, len=47
-    # 0. VERSION option
-    0x00, 0x00, 0x1a, 0x00, 0x06,
-    # 1. ENCRYPTION option
-    0x01, 0x00, 0x20, 0x00, 0x01,
-    # 2. INSTOPT
-    0x02, 0x00, 0x21, 0x00, 0x01,
-    # 3. THREADID
-    0x03, 0x00, 0x22, 0x00, 0x04,
-    # 4. MARS
-    0x04, 0x00, 0x26, 0x00, 0x01,
-    # TERMINATOR
-    0xff,
-    # version data: 14.0.2000
-    0x0e, 0x00, 0x07, 0xd0, 0x00, 0x00,
-    # encryption: NOT_SUP
-    0x02,
-    # instopt
-    0x00,
-    # thread id
-    0x00, 0x00, 0x00, 0x00,
-    # mars
-    0x00,
-])
+# Real SQL Server release families. Pairing (major, minor, build) makes a
+# subsequent OSQL/sqlcmd version probe line up with what MS published.
+# Builds are taken from publicly documented latest-CU numbers.
+_MSSQL_RELEASES = [
+    # (name,            major, minor, build, subbuild)
+    ("SQL Server 2016", 13, 0, 6419, 0),
+    ("SQL Server 2017", 14, 0, 2000, 0),
+    ("SQL Server 2017", 14, 0, 3460, 0),
+    ("SQL Server 2019", 15, 0, 2000, 0),
+    ("SQL Server 2019", 15, 0, 4335, 1),
+    ("SQL Server 2022", 16, 0, 1000, 0),
+    ("SQL Server 2022", 16, 0, 4115, 2),
+]
+_MSSQL_NAME, _VER_MAJ, _VER_MIN, _VER_BUILD, _VER_SUB = _seed.pick(_MSSQL_RELEASES)
+
+
+def _build_prelogin_response() -> bytes:
+    """TDS PRELOGIN response. Version option carries
+    major(1) minor(1) build(2, network order) subbuild(2, network order)."""
+    version_data = (
+        bytes([_VER_MAJ & 0xff, _VER_MIN & 0xff])
+        + struct.pack(">H", _VER_BUILD & 0xffff)
+        + struct.pack(">H", _VER_SUB & 0xffff)
+    )
+    # Option directory + data. Offsets are from start of directory.
+    # Five options: VERSION, ENCRYPTION, INSTOPT, THREADID, MARS.
+    # Data fields, in order:
+    encryption = b"\x02"                 # NOT_SUP
+    instopt = b"\x00"
+    threadid = struct.pack("<I", _seed.rng.randint(100, 9000))
+    mars = b"\x00"
+
+    directory = b""
+    data = b""
+    # Directory header is 5 bytes per option + 1 terminator; compute offsets
+    # from end of terminator.
+    dir_size = 5 * 5 + 1
+    running_offset = dir_size
+
+    def add_option(token: int, chunk: bytes) -> None:
+        nonlocal directory, data, running_offset
+        directory += bytes([token]) + struct.pack(">H", running_offset) + struct.pack(">H", len(chunk))
+        data += chunk
+        running_offset += len(chunk)
+
+    add_option(0x00, version_data)
+    add_option(0x01, encryption)
+    add_option(0x02, instopt)
+    add_option(0x03, threadid)
+    add_option(0x04, mars)
+    directory += b"\xff"
+
+    payload = directory + data
+    total_len = 8 + len(payload)
+    header = struct.pack(">BBHBBBB", 0x04, 0x01, total_len, 0x00, 0x00, 0x01, 0x00)
+    return header + payload
+
+
+_PRELOGIN_RESP = _build_prelogin_response()
 
 
 
@@ -106,26 +143,63 @@ class MSSQLProtocol(asyncio.Protocol):
             self._transport.write(_PRELOGIN_RESP)
             self._prelogin_done = True
         elif pkt_type == 0x10:  # Login7
-            username = self._parse_login7_username(payload)
-            _log("auth", src=self._peer[0], username=username)
+            username, password = self._parse_login7_creds(payload)
+            extra: dict = {}
+            if password:
+                pw_bytes = password.encode("utf-8")
+                extra = {
+                    "principal": username,
+                    "secret_kind": "plaintext",
+                    "secret_printable": password,
+                    "secret_b64": base64.b64encode(pw_bytes).decode("ascii"),
+                }
+            _log("auth", src=self._peer[0], username=username, **extra)
             self._transport.write(_tds_error_packet("Login failed for user."))
             self._transport.close()
         else:
             _log("unknown_packet", src=self._peer[0], pkt_type=hex(pkt_type))
             self._transport.close()
 
-    def _parse_login7_username(self, payload: bytes) -> str:
+    @staticmethod
+    def _deobfuscate_login7_password(blob: bytes) -> str:
+        """MS-TDS Login7 password obfuscation: each byte was rotated-right
+        4 bits then XOR'd with 0xa5. Inverse is XOR 0xa5 then rotate-left
+        4 bits (== nibble swap). Plaintext-recoverable.
+
+        After deobfuscation the bytes are UTF-16-LE encoded characters."""
+        out = bytearray(len(blob))
+        for i, b in enumerate(blob):
+            x = b ^ 0xa5
+            out[i] = ((x & 0x0f) << 4) | ((x & 0xf0) >> 4)
+        return bytes(out).decode("utf-16-le", errors="replace")
+
+    def _parse_login7_creds(self, payload: bytes) -> tuple[str, str]:
+        """Login7 offset table starts at payload offset 36:
+
+            36-37 ibHostName  38-39 cchHostName
+            40-41 ibUserName  42-43 cchUserName
+            44-45 ibPassword  46-47 cchPassword
+
+        Both lengths are CHARACTER counts; multiply by 2 for byte length.
+        The password field is XOR/swap-obfuscated — see
+        :meth:`_deobfuscate_login7_password`. Plaintext-recoverable.
+        """
         try:
-            # Login7 layout: fixed header 36 bytes, then offsets
-            # Username offset at bytes 36-37, length at 38-39
-            if len(payload) < 40:
-                return "<short_packet>"
-            offset = struct.unpack("<H", payload[36:38])[0]
-            length = struct.unpack("<H", payload[38:40])[0]
-            username = payload[offset:offset + length * 2].decode("utf-16-le", errors="replace")
-            return username
+            if len(payload) < 48:
+                return "<short_packet>", ""
+            user_off, user_len = struct.unpack("<HH", payload[40:44])
+            pw_off, pw_len = struct.unpack("<HH", payload[44:48])
+            username = payload[user_off:user_off + user_len * 2].decode(
+                "utf-16-le", errors="replace"
+            )
+            password = ""
+            if pw_len:
+                password = self._deobfuscate_login7_password(
+                    payload[pw_off:pw_off + pw_len * 2]
+                )
+            return username, password
         except Exception:
-            return "<parse_error>"
+            return "<parse_error>", ""
 
     def connection_lost(self, exc):
         _log("disconnect", src=self._peer[0] if self._peer else "?")

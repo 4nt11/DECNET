@@ -133,9 +133,16 @@ def _parse_synack(resp: Any) -> dict[str, Any]:
     ttl = ip_layer.ttl
     df_bit = 1 if (ip_layer.flags & 0x2) else 0  # DF = bit 1
     ip_id = ip_layer.id
+    tos = int(getattr(ip_layer, "tos", 0))
+    dscp = (tos >> 2) & 0x3F
+    ecn = tos & 0x3
 
     # TCP fields
     window_size = tcp_layer.window
+    # Server ISN: single sample from one probe — not classified here, but
+    # exported so a downstream consumer correlating multiple probes against
+    # the same target can apply seq_class.classify_sequence().
+    server_isn = int(getattr(tcp_layer, "seq", 0))
 
     # Parse TCP options
     mss = 0
@@ -159,6 +166,10 @@ def _parse_synack(resp: Any) -> dict[str, Any]:
         "window_size": window_size,
         "df_bit": df_bit,
         "ip_id": ip_id,
+        "tos": tos,
+        "dscp": dscp,
+        "ecn": ecn,
+        "server_isn": server_isn,
         "mss": mss,
         "window_scale": window_scale,
         "sack_ok": sack_ok,
@@ -191,7 +202,8 @@ def _compute_fingerprint(fields: dict[str, Any]) -> tuple[str, str]:
     raw = (
         f"{fields['ttl']}:{fields['window_size']}:{fields['df_bit']}:"
         f"{fields['mss']}:{fields['window_scale']}:{fields['sack_ok']}:"
-        f"{fields['timestamp']}:{fields['options_order']}"
+        f"{fields['timestamp']}:{fields['options_order']}:"
+        f"{fields.get('dscp', 0)}:{fields.get('ecn', 0)}"
     )
     h = hashlib.sha256(raw.encode("utf-8")).hexdigest()[:32]
     return raw, h

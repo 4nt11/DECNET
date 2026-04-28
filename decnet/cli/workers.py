@@ -82,61 +82,216 @@ def register(app: typer.Typer) -> None:
 
         asyncio.run(_run())
 
-    @app.command(name="correlate")
-    def correlate(
-        log_file: Optional[str] = typer.Option(None, "--log-file", "-f", help="Path to DECNET syslog file to analyse"),
-        min_deckies: int = typer.Option(2, "--min-deckies", "-m", help="Minimum number of distinct deckies an IP must touch to be reported"),
-        output: str = typer.Option("table", "--output", "-o", help="Output format: table | json | syslog"),
-        emit_syslog: bool = typer.Option(False, "--emit-syslog", help="Also print traversal events as RFC 5424 lines (for SIEM piping)"),
-        daemon: bool = typer.Option(False, "--daemon", "-d", help="Detach to background as a daemon process"),
+    @app.command(name="enrich")
+    def enrich(
+        poll_interval_secs: float = typer.Option(
+            60.0, "--poll-interval", "-i",
+            help="Slow-tick fallback when the bus is idle or unavailable (seconds)",
+        ),
+        ttl_hours: int = typer.Option(
+            24, "--ttl-hours",
+            help="Cache lifetime per attacker IP — re-firings inside the window short-circuit before any HTTP egress",
+        ),
+        daemon: bool = typer.Option(
+            False, "--daemon", "-d",
+            help="Detach to background as a daemon process",
+        ),
     ) -> None:
-        """Analyse logs for cross-decky traversals and print the attacker movement graph."""
-        import sys
-        import json as _json
-        from pathlib import Path
-        from decnet.correlation.engine import CorrelationEngine
+        """Threat-intel enrichment worker — fan out per attacker IP across
+        configured providers (GreyNoise, AbuseIPDB, abuse.ch Feodo Tracker
+        + ThreatFox), cache the verdict in ``attacker_intel``, and publish
+        ``attacker.intel.enriched`` for SIEM-bound webhook consumers.
+        """
+        import asyncio
+        from decnet.intel.worker import run_intel_loop
+        from decnet.web.dependencies import repo
 
         if daemon:
-            log.info("correlate daemonizing log_file=%s", log_file)
+            log.info(
+                "enrich daemonizing poll=%s ttl_hours=%d",
+                poll_interval_secs, ttl_hours,
+            )
             _utils._daemonize()
 
-        engine = CorrelationEngine()
+        log.info(
+            "enrich command invoked poll=%s ttl_hours=%d",
+            poll_interval_secs, ttl_hours,
+        )
+        console.print(
+            f"[bold cyan]Intel enrichment starting[/] "
+            f"poll={poll_interval_secs}s ttl={ttl_hours}h"
+        )
+        console.print("[dim]Press Ctrl+C to stop[/]")
 
-        if log_file:
-            path = Path(log_file)
-            if not path.exists():
-                console.print(f"[red]Log file not found: {log_file}[/]")
-                raise typer.Exit(1)
-            engine.ingest_file(path)
-        elif not sys.stdin.isatty():
-            for line in sys.stdin:
-                engine.ingest(line)
-        else:
-            console.print("[red]Provide --log-file or pipe log data via stdin.[/]")
-            raise typer.Exit(1)
+        async def _run() -> None:
+            await repo.initialize()
+            await run_intel_loop(
+                repo,
+                poll_interval_secs=poll_interval_secs,
+                ttl_hours=ttl_hours,
+            )
 
-        traversals = engine.traversals(min_deckies)
+        try:
+            asyncio.run(_run())
+        except KeyboardInterrupt:
+            console.print("\n[yellow]Intel enrichment stopped.[/]")
 
-        if output == "json":
-            console.print_json(_json.dumps(engine.report_json(min_deckies), indent=2))
-        elif output == "syslog":
-            for line in engine.traversal_syslog_lines(min_deckies):
-                typer.echo(line)
-        else:
-            if not traversals:
-                console.print(
-                    f"[yellow]No traversals detected "
-                    f"(min_deckies={min_deckies}, events_indexed={engine.events_indexed}).[/]"
-                )
-            else:
-                console.print(engine.report_table(min_deckies))
-                console.print(
-                    f"[dim]Parsed {engine.lines_parsed} lines · "
-                    f"indexed {engine.events_indexed} events · "
-                    f"{len(engine.all_attackers())} unique IPs · "
-                    f"[bold]{len(traversals)}[/] traversal(s)[/]"
-                )
+    @app.command(name="reuse-correlate")
+    def reuse_correlate(
+        min_targets: int = typer.Option(
+            2, "--min-targets", "-m",
+            help="Minimum distinct (decky, service) targets a secret must hit before a CredentialReuse row is persisted",
+        ),
+        poll_interval_secs: float = typer.Option(
+            60.0, "--poll-interval", "-i",
+            help="Slow-tick fallback when the bus is idle or unavailable (seconds)",
+        ),
+        daemon: bool = typer.Option(
+            False, "--daemon", "-d",
+            help="Detach to background as a daemon process",
+        ),
+    ) -> None:
+        """Long-running credential-reuse correlator.
 
-        if emit_syslog:
-            for line in engine.traversal_syslog_lines(min_deckies):
-                typer.echo(line)
+        Watches the bus for ``credential.captured`` and ``attacker.observed``
+        events, re-runs the reuse pass on each wake, and publishes
+        ``credential.reuse.detected`` for every new or grown
+        ``CredentialReuse`` row.
+        """
+        import asyncio
+        from decnet.correlation.reuse_worker import run_reuse_loop
+        from decnet.web.dependencies import repo
+
+        if daemon:
+            log.info(
+                "reuse-correlate daemonizing min_targets=%d poll=%s",
+                min_targets, poll_interval_secs,
+            )
+            _utils._daemonize()
+
+        log.info(
+            "reuse-correlate command invoked min_targets=%d poll=%s",
+            min_targets, poll_interval_secs,
+        )
+        console.print(
+            f"[bold cyan]Reuse correlator starting[/] "
+            f"min_targets={min_targets} poll={poll_interval_secs}s"
+        )
+        console.print("[dim]Press Ctrl+C to stop[/]")
+
+        async def _run() -> None:
+            await repo.initialize()
+            await run_reuse_loop(
+                repo,
+                poll_interval_secs=poll_interval_secs,
+                min_targets=min_targets,
+            )
+
+        try:
+            asyncio.run(_run())
+        except KeyboardInterrupt:
+            console.print("\n[yellow]Reuse correlator stopped.[/]")
+
+    @app.command(name="clusterer")
+    def clusterer(
+        poll_interval_secs: float = typer.Option(
+            60.0, "--poll-interval", "-i",
+            help="Slow-tick fallback when the bus is idle or unavailable (seconds)",
+        ),
+        daemon: bool = typer.Option(
+            False, "--daemon", "-d",
+            help="Detach to background as a daemon process",
+        ),
+    ) -> None:
+        """Identity-resolution clusterer.
+
+        Bus-woken on ``attacker.observed`` and ``attacker.scored``;
+        builds a similarity graph over observations, runs
+        connected-components, writes ``attacker_identities`` rows, and
+        publishes ``identity.formed`` / ``identity.observation.linked``
+        / ``identity.merged`` / ``identity.unmerged``.
+        """
+        import asyncio
+        from decnet.cli.gating import _require_master_mode
+        from decnet.clustering.worker import run_clusterer_loop
+        from decnet.web.dependencies import repo
+
+        _require_master_mode("clusterer")
+
+        if daemon:
+            log.info("clusterer daemonizing poll=%s", poll_interval_secs)
+            _utils._daemonize()
+
+        log.info("clusterer command invoked poll=%s", poll_interval_secs)
+        console.print(
+            f"[bold cyan]Identity clusterer starting[/] "
+            f"poll={poll_interval_secs}s"
+        )
+        console.print("[dim]Press Ctrl+C to stop[/]")
+
+        async def _run() -> None:
+            await repo.initialize()
+            await run_clusterer_loop(
+                repo, poll_interval_secs=poll_interval_secs,
+            )
+
+        try:
+            asyncio.run(_run())
+        except KeyboardInterrupt:
+            console.print("\n[yellow]Identity clusterer stopped.[/]")
+
+    @app.command(name="campaign-clusterer")
+    def campaign_clusterer(
+        poll_interval_secs: float = typer.Option(
+            60.0, "--poll-interval", "-i",
+            help="Slow-tick fallback when the bus is idle or unavailable (seconds)",
+        ),
+        daemon: bool = typer.Option(
+            False, "--daemon", "-d",
+            help="Detach to background as a daemon process",
+        ),
+    ) -> None:
+        """Campaign clusterer — groups identities into operations.
+
+        Bus-woken on ``identity.>`` (any identity-layer change is
+        potential input); reads ``AttackerIdentity`` rows, runs
+        connected-components over the campaign-level similarity graph
+        (phase-handoff / shared-infra / temporal-overlap / cohort),
+        writes ``campaigns`` rows + sets ``attacker_identities.campaign_id``,
+        and publishes ``campaign.formed`` / ``campaign.identity.assigned``
+        / ``campaign.merged`` / ``campaign.unmerged`` plus the cross-family
+        ``identity.campaign.assigned`` so identity-side subscribers see
+        the badge update.
+        """
+        import asyncio
+        from decnet.cli.gating import _require_master_mode
+        from decnet.clustering.campaign.worker import (
+            run_campaign_clusterer_loop,
+        )
+        from decnet.web.dependencies import repo
+
+        _require_master_mode("campaign-clusterer")
+
+        if daemon:
+            log.info("campaign-clusterer daemonizing poll=%s", poll_interval_secs)
+            _utils._daemonize()
+
+        log.info(
+            "campaign-clusterer command invoked poll=%s", poll_interval_secs,
+        )
+        console.print(
+            f"[bold cyan]Campaign clusterer starting[/] "
+            f"poll={poll_interval_secs}s"
+        )
+        console.print("[dim]Press Ctrl+C to stop[/]")
+
+        async def _run() -> None:
+            await repo.initialize()
+            await run_campaign_clusterer_loop(
+                repo, poll_interval_secs=poll_interval_secs,
+            )
+
+        try:
+            asyncio.run(_run())
+        except KeyboardInterrupt:
+            console.print("\n[yellow]Campaign clusterer stopped.[/]")

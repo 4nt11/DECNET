@@ -12,10 +12,12 @@ from __future__ import annotations
 import hashlib
 import struct
 import time
+from collections import deque
 from typing import Any, Callable
 
 from decnet.prober.tcpfp import _extract_options_order
 from decnet.sniffer.p0f import guess_os, hop_distance, initial_ttl
+from decnet.sniffer.seq_class import classify_sequence
 from decnet.sniffer.syslog import SEVERITY_INFO, SEVERITY_WARNING, syslog_line
 from decnet.telemetry import traced as _traced, get_tracer as _get_tracer
 
@@ -51,6 +53,43 @@ _TCP_SYN: int = 0x02
 _TCP_ACK: int = 0x10
 _TCP_FIN: int = 0x01
 _TCP_RST: int = 0x04
+
+# Event types that should fan out on the service bus as ``decky.{id}.traffic``.
+# Intermediate parser artifacts (tls_client_hello, tls_certificate) are
+# intentionally excluded — tls_session covers the completed handshake and
+# tcp_flow_timing covers the flow summary; together they're the minimum
+# interesting signal for downstream consumers.
+_BUS_TRAFFIC_EVENTS: frozenset[str] = frozenset({
+    "tls_session",
+    "tcp_flow_timing",
+    "tcp_syn_fingerprint",
+    "ssh_client_banner",
+})
+
+
+def _parse_ssh_banner(data: bytes) -> str | None:
+    """
+    Return the attacker's SSH identification string (RFC 4253 §4.2) if
+    *data* begins with one, else None.
+
+    A valid banner starts with ``SSH-`` and terminates at the first CR or LF
+    within the 255-byte RFC-mandated window.  The returned string is decoded
+    as ASCII and stripped of the trailing CR/LF bytes.
+    """
+    if not data.startswith(b"SSH-"):
+        return None
+    end = -1
+    # RFC 4253: identification string (incl. CR LF) must not exceed 255 bytes.
+    for i, b in enumerate(data[:255]):
+        if b in (0x0D, 0x0A):  # CR or LF
+            end = i
+            break
+    if end < 5:  # "SSH-X" minimum
+        return None
+    try:
+        return data[:end].decode("ascii", errors="strict")
+    except UnicodeDecodeError:
+        return None
 
 
 # ─── TCP option extraction for passive fingerprinting ───────────────────────
@@ -692,15 +731,28 @@ class SnifferEngine:
         ip_to_decky: dict[str, str],
         write_fn: Callable[[str], None],
         dedup_ttl: float = 300.0,
+        publish_fn: Callable[[str, str, dict[str, Any]], None] | None = None,
     ):
         self._ip_to_decky = ip_to_decky
         self._write_fn = write_fn
         self._dedup_ttl = dedup_ttl
+        # Optional bus publish hook. Called *after* dedup + syslog write, so
+        # every syslog line we emit has a matching bus event and duplicate
+        # storms are already suppressed upstream.  Signature:
+        # ``publish_fn(decky_name, event_type, payload_dict)``.
+        self._publish_fn = publish_fn
 
         self._sessions: dict[tuple[str, int, str, int], dict[str, Any]] = {}
         self._session_ts: dict[tuple[str, int, str, int], float] = {}
         self._tcp_syn: dict[tuple[str, int, str, int], dict[str, Any]] = {}
         self._tcp_rtt: dict[tuple[str, int, str, int], dict[str, Any]] = {}
+
+        # Per-source-IP rolling samples for sequence-pattern classification.
+        # IP-ID and TCP ISN need multiple SYNs from the same attacker before
+        # we can label them random/incremental/zero/constant.
+        self._SEQ_SAMPLE_SIZE = 8
+        self._ipid_samples: dict[str, deque[int]] = {}
+        self._isn_samples: dict[str, deque[int]] = {}
 
         # Per-flow timing aggregator. Key: (src_ip, src_port, dst_ip, dst_port).
         # Flow direction is client→decky; reverse packets are associated back
@@ -748,9 +800,16 @@ class SnifferEngine:
         if event_type == "tls_certificate":
             return fields.get("subject_cn", "") + "|" + fields.get("issuer", "")
         if event_type == "tcp_syn_fingerprint":
-            # Dedupe per (OS signature, options layout). One event per unique
-            # stack profile from this attacker IP per dedup window.
-            return fields.get("os_guess", "") + "|" + fields.get("options_sig", "")
+            # Dedupe per (OS signature, options layout, sequence-pattern
+            # classification). Including ipid_class/isn_class lets each
+            # transition (unknown → random/incremental/zero/constant) emit
+            # exactly one fresh event as samples accumulate.
+            return (
+                fields.get("os_guess", "")
+                + "|" + fields.get("options_sig", "")
+                + "|" + fields.get("ipid_class", "")
+                + "|" + fields.get("isn_class", "")
+            )
         if event_type == "tcp_flow_timing":
             # Dedup per (attacker_ip, decky_port) — src_port is deliberately
             # excluded so a port scanner rotating source ports only produces
@@ -782,6 +841,15 @@ class SnifferEngine:
             return
         line = syslog_line(SERVICE_NAME, node_name, event_type, severity=severity, **fields)
         self._write_fn(line)
+        # Bus fan-out, fire-and-forget.  Only emit for traffic-summary event
+        # types — the ones that represent an observable decky interaction
+        # rather than an intermediate parser artifact.  Rate is naturally
+        # bounded by the dedup cache above.
+        if self._publish_fn is not None and event_type in _BUS_TRAFFIC_EVENTS:
+            try:
+                self._publish_fn(node_name, event_type, dict(fields))
+            except Exception:  # nosec B110 — bus must never break sniff thread
+                pass
 
     # ── Flow tracking (per-TCP-4-tuple timing + retransmits) ────────────────
 
@@ -979,6 +1047,18 @@ class SnifferEngine:
                     _span.set_attribute("attacker_ip", src_ip)
                     _span.set_attribute("dst_port", dst_port)
                     tcp_fp = _extract_tcp_fingerprint(list(tcp.options or []))
+
+                    ipid_buf = self._ipid_samples.setdefault(
+                        src_ip, deque(maxlen=self._SEQ_SAMPLE_SIZE)
+                    )
+                    ipid_buf.append(int(ip.id))
+                    ipid_class = classify_sequence(list(ipid_buf))
+
+                    isn_buf = self._isn_samples.setdefault(
+                        src_ip, deque(maxlen=self._SEQ_SAMPLE_SIZE)
+                    )
+                    isn_buf.append(int(tcp.seq))
+                    isn_class = classify_sequence(list(isn_buf))
                     os_label = guess_os(
                         ttl=ip.ttl,
                         window=int(tcp.window),
@@ -1004,6 +1084,13 @@ class SnifferEngine:
                         options_sig=tcp_fp["options_sig"],
                         has_sack=str(tcp_fp["sack_ok"]).lower(),
                         has_timestamps=str(tcp_fp["has_timestamps"]).lower(),
+                        tos=str(int(getattr(ip, "tos", 0))),
+                        dscp=str((int(getattr(ip, "tos", 0)) >> 2) & 0x3F),
+                        ecn=str(int(getattr(ip, "tos", 0)) & 0x3),
+                        ipid_class=ipid_class,
+                        ipid_samples=str(len(ipid_buf)),
+                        isn_class=isn_class,
+                        isn_samples=str(len(isn_buf)),
                         os_guess=os_label,
                     )
 
@@ -1026,6 +1113,29 @@ class SnifferEngine:
         payload = bytes(tcp.payload)
         if not payload:
             return
+
+        # SSH client banner (RFC 4253 §4.2): attacker→decky TCP/22, first
+        # application-data segment of the flow. Emit once per flow.
+        if (
+            dst_port == 22
+            and dst_ip in self._ip_to_decky
+            and direction_forward
+        ):
+            flow = self._flows.get(flow_key)
+            if flow is not None and not flow.get("ssh_banner_seen"):
+                banner = _parse_ssh_banner(payload)
+                if banner is not None:
+                    flow["ssh_banner_seen"] = True
+                    target_node = self._ip_to_decky[dst_ip]
+                    self._log(
+                        target_node,
+                        "ssh_client_banner",
+                        src_ip=src_ip,
+                        src_port=str(src_port),
+                        dst_ip=dst_ip,
+                        dst_port=str(dst_port),
+                        ssh_version=banner,
+                    )
 
         if payload[0] != _TLS_RECORD_HANDSHAKE:
             return

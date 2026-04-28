@@ -1,0 +1,432 @@
+/* Orchestrator — synthetic life-injection activity feed.
+ * Scoped under .orchestrator-root, mirrors the Bounty/DeckyFleet pattern. */
+
+.orchestrator-root { display: flex; flex-direction: column; gap: 20px; }
+
+/* Header */
+.orchestrator-root .page-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-end;
+  border-bottom: 1px solid var(--border);
+  padding-bottom: 16px;
+  gap: 24px;
+}
+.orchestrator-root .page-title-group { display: flex; flex-direction: column; gap: 6px; }
+.orchestrator-root .page-header h1 {
+  font-size: 1.3rem;
+  letter-spacing: 4px;
+  font-weight: 700;
+  margin: 0;
+  color: var(--matrix);
+}
+.orchestrator-root .page-sub { font-size: 0.7rem; opacity: 0.5; letter-spacing: 1px; }
+
+.orchestrator-root .dim { opacity: 0.5; }
+.orchestrator-root .violet-accent { color: var(--violet); }
+.orchestrator-root .matrix-text { color: var(--matrix); }
+.orchestrator-root .alert-text { color: var(--alert); }
+
+/* Header pills */
+.orchestrator-root .header-line {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+.orchestrator-root .status-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 3px 10px;
+  font-size: 0.65rem;
+  letter-spacing: 1.5px;
+  border: 1px solid var(--border);
+  background: var(--panel);
+  text-transform: uppercase;
+}
+.orchestrator-root .status-pill.live {
+  border-color: var(--matrix);
+  color: var(--matrix);
+  box-shadow: var(--matrix-glow);
+}
+.orchestrator-root .status-pill.live .dot {
+  background: var(--matrix);
+  box-shadow: 0 0 8px var(--matrix);
+  animation: orch-pulse 1.4s infinite alternate;
+}
+.orchestrator-root .status-pill.connecting { color: rgba(0, 255, 65, 0.55); }
+.orchestrator-root .status-pill.connecting .dot {
+  background: rgba(0, 255, 65, 0.55);
+  animation: orch-blink 1s infinite;
+}
+.orchestrator-root .status-pill.error {
+  border-color: var(--alert);
+  color: var(--alert);
+}
+.orchestrator-root .status-pill.error .dot { background: var(--alert); }
+.orchestrator-root .status-pill .dot {
+  display: inline-block;
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+}
+
+.orchestrator-root .failure-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 3px 10px;
+  font-size: 0.65rem;
+  letter-spacing: 1.5px;
+  border: 1px solid var(--alert);
+  color: var(--alert);
+  background: rgba(255, 65, 65, 0.06);
+  text-transform: uppercase;
+}
+
+/* Controls row */
+.orchestrator-root .controls-row {
+  display: flex;
+  gap: 12px;
+  align-items: center;
+}
+
+/* Segmented kind filter — mirrors DeckyFleet's fleet-filter-group */
+.orchestrator-root .seg-group {
+  display: flex;
+  border: 1px solid var(--border);
+  background: var(--panel);
+}
+.orchestrator-root .seg-group button {
+  padding: 8px 16px;
+  font-size: 0.68rem;
+  letter-spacing: 1.5px;
+  border: 0;
+  border-right: 1px solid var(--border);
+  background: transparent;
+  color: rgba(0, 255, 65, 0.6);
+  font-family: inherit;
+  cursor: pointer;
+  text-transform: uppercase;
+}
+.orchestrator-root .seg-group button:last-child { border-right: none; }
+.orchestrator-root .seg-group button.active {
+  background: var(--violet-tint-10);
+  color: var(--violet);
+}
+.orchestrator-root .seg-group button:hover:not(.active) { color: var(--matrix); }
+
+/* Pause toggle — neutral .btn flavour */
+.orchestrator-root .btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 7px 14px;
+  font-family: inherit;
+  font-size: 0.72rem;
+  letter-spacing: 1.5px;
+  background: transparent;
+  border: 1px solid var(--border);
+  color: var(--matrix);
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+.orchestrator-root .btn:hover { border-color: var(--matrix); box-shadow: var(--matrix-glow); }
+.orchestrator-root .btn.paused { border-color: var(--violet); color: var(--violet); }
+.orchestrator-root .btn.paused:hover { box-shadow: var(--violet-glow); }
+
+/* Section + table */
+.orchestrator-root .logs-section {
+  border: 1px solid var(--border);
+  background: var(--panel);
+}
+.orchestrator-root .section-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 10px 14px;
+  border-bottom: 1px solid var(--border);
+}
+.orchestrator-root .section-title {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 0.7rem;
+  letter-spacing: 1.5px;
+  opacity: 0.7;
+}
+
+/* Pagination */
+.orchestrator-root .pager { display: flex; align-items: center; gap: 12px; font-size: 0.7rem; }
+.orchestrator-root .pager button {
+  padding: 4px;
+  border: 1px solid var(--border);
+  background: transparent;
+  color: var(--matrix);
+  display: flex;
+  cursor: pointer;
+}
+.orchestrator-root .pager button:disabled { opacity: 0.3; cursor: not-allowed; }
+.orchestrator-root .pager button:hover:not(:disabled) { border-color: var(--accent); }
+
+/* Table */
+.orchestrator-root .logs-table-container { overflow-x: auto; }
+.orchestrator-root .logs-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.78rem;
+}
+.orchestrator-root .logs-table th {
+  text-align: left;
+  padding: 9px 14px;
+  font-size: 0.62rem;
+  letter-spacing: 1.5px;
+  opacity: 0.55;
+  border-bottom: 1px solid var(--border);
+}
+.orchestrator-root .logs-table td {
+  padding: 9px 14px;
+  border-bottom: 1px solid rgba(48, 54, 61, 0.4);
+  vertical-align: middle;
+}
+.orchestrator-root .logs-table tr:hover td { background: rgba(0, 255, 65, 0.025); }
+.orchestrator-root .logs-table tr.fail td {
+  background: rgba(255, 65, 65, 0.05);
+}
+.orchestrator-root .logs-table tr.fail:hover td { background: rgba(255, 65, 65, 0.08); }
+
+/* Live-prepended row tint — fades back to neutral after a moment via opacity. */
+.orchestrator-root .logs-table tr.fresh td {
+  background: rgba(238, 130, 238, 0.05);
+}
+
+/* Kind chip */
+.orchestrator-root .kind-chip {
+  display: inline-block;
+  padding: 2px 8px;
+  font-size: 0.62rem;
+  letter-spacing: 1.5px;
+  border: 1px solid var(--border);
+  text-transform: uppercase;
+}
+.orchestrator-root .kind-chip.traffic { border-color: var(--matrix); color: var(--matrix); }
+.orchestrator-root .kind-chip.file { border-color: var(--violet); color: var(--violet); }
+/* Emailgen rows — distinct accent so the eye separates LLM-driven mail
+   from SSH/file activity at a glance.  Falls back to --accent when the
+   theme doesn't define --amber. */
+.orchestrator-root .kind-chip.email { border-color: var(--amber, var(--accent)); color: var(--amber, var(--accent)); }
+
+/* OK indicator */
+.orchestrator-root .ok-yes { color: var(--matrix); font-weight: 700; }
+.orchestrator-root .ok-no { color: var(--alert); font-weight: 700; }
+
+/* Mono cells */
+.orchestrator-root .mono {
+  font-family: var(--font-mono);
+  font-size: 0.74rem;
+}
+.orchestrator-root .src-dst { font-family: var(--font-mono); font-size: 0.72rem; opacity: 0.7; }
+.orchestrator-root .arrow { opacity: 0.4; padding: 0 4px; }
+
+.orchestrator-root .payload-cell {
+  font-family: var(--font-mono);
+  font-size: 0.72rem;
+  opacity: 0.6;
+  max-width: 360px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* Empty state row */
+.orchestrator-root .empty-row td { padding: 0; }
+
+/* Animations */
+@keyframes orch-pulse { from { opacity: 0.5; } to { opacity: 1; } }
+@keyframes orch-blink { 0%, 100% { opacity: 1; } 50% { opacity: 0.3; } }
+
+/* ── Row interactivity ─────────────────────────────────── */
+.orchestrator-root .logs-table tr.clickable { cursor: pointer; }
+.orchestrator-root .logs-table tr.clickable:hover {
+  background: rgba(238, 130, 238, 0.04);
+}
+
+/* ── Inspector drawer ──────────────────────────────────── */
+.orchestrator-root .orchestrator-drawer-backdrop {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.6);
+  display: flex;
+  justify-content: flex-end;
+  z-index: 1000;
+  animation: od-fade 0.15s ease;
+}
+@keyframes od-fade { from { opacity: 0; } to { opacity: 1; } }
+
+.orchestrator-root .orchestrator-drawer {
+  width: min(620px, 100%);
+  height: 100%;
+  background: var(--bg);
+  border-left: 1px solid var(--violet);
+  box-shadow: -12px 0 40px rgba(238, 130, 238, 0.1);
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  animation: od-slide 0.2s ease;
+}
+@keyframes od-slide {
+  from { transform: translateX(30px); opacity: 0.6; }
+  to { transform: none; opacity: 1; }
+}
+
+.orchestrator-root .orchestrator-drawer .bd-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 16px 20px;
+  border-bottom: 1px solid var(--border);
+}
+.orchestrator-root .orchestrator-drawer .bd-head h3 {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 0.9rem;
+  letter-spacing: 3px;
+  color: var(--violet);
+  margin: 0;
+}
+.orchestrator-root .orchestrator-drawer .close-btn {
+  background: transparent;
+  border: 1px solid var(--border);
+  color: var(--matrix);
+  display: flex;
+  padding: 4px;
+  cursor: pointer;
+}
+.orchestrator-root .orchestrator-drawer .close-btn:hover { border-color: var(--violet); }
+
+.orchestrator-root .orchestrator-drawer .bd-body {
+  padding: 20px;
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+}
+
+.orchestrator-root .orchestrator-drawer .kvs {
+  display: grid;
+  grid-template-columns: 130px 1fr;
+  gap: 10px 12px;
+  font-size: 0.8rem;
+  align-items: center;
+}
+.orchestrator-root .orchestrator-drawer .kvs .k {
+  opacity: 0.55;
+  font-size: 0.7rem;
+  letter-spacing: 1.5px;
+  display: inline-flex;
+  align-items: center;
+}
+.orchestrator-root .orchestrator-drawer .kvs .v { word-break: break-all; }
+.orchestrator-root .orchestrator-drawer .kvs .v.mono {
+  font-family: var(--font-mono);
+  font-size: 0.78rem;
+}
+
+/* Source-tag chips disambiguate the opaque dst id: bare UUIDs come from
+   topology_deckies, "host_uuid:name" composites come from the fleet
+   (host_uuid="local") or SWARM shards. */
+.orchestrator-root .orchestrator-drawer .src-dst-cell {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+.orchestrator-root .orchestrator-drawer .src-dst-cell .hash-text {
+  font-family: var(--font-mono);
+  font-size: 0.74rem;
+  color: var(--matrix);
+}
+.orchestrator-root .orchestrator-drawer .chip.src-topology {
+  border-color: var(--matrix);
+  color: var(--matrix);
+}
+.orchestrator-root .orchestrator-drawer .chip.src-fleet {
+  border-color: var(--violet);
+  color: var(--violet);
+}
+.orchestrator-root .orchestrator-drawer .chip.src-shard {
+  border-color: #ffaa00;
+  color: #ffaa00;
+}
+
+.orchestrator-root .orchestrator-drawer .type-label {
+  font-size: 0.68rem;
+  letter-spacing: 2px;
+  opacity: 0.6;
+  margin-bottom: 8px;
+}
+
+.orchestrator-root .orchestrator-drawer .code-block {
+  background: var(--panel);
+  border: 1px solid var(--border);
+  border-left: 2px solid var(--violet);
+  padding: 12px 14px;
+  font-family: var(--font-mono);
+  font-size: 0.78rem;
+  color: var(--matrix);
+  white-space: pre-wrap;
+  word-break: break-all;
+  margin: 0;
+  overflow-x: auto;
+  max-height: 400px;
+  overflow-y: auto;
+}
+
+.orchestrator-root .orchestrator-drawer .hash-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.orchestrator-root .orchestrator-drawer .hash-row .hash-text {
+  font-family: var(--font-mono);
+  font-size: 0.72rem;
+  color: var(--matrix);
+  word-break: break-all;
+  flex: 1;
+}
+.orchestrator-root .orchestrator-drawer .icon-btn {
+  background: transparent;
+  border: 1px solid var(--border);
+  color: var(--matrix);
+  padding: 4px 6px;
+  display: inline-flex;
+  cursor: pointer;
+}
+.orchestrator-root .orchestrator-drawer .icon-btn:hover { border-color: var(--violet); }
+
+.orchestrator-root .orchestrator-drawer .bd-actions {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+.orchestrator-root .orchestrator-drawer .btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 7px 14px;
+  font-family: inherit;
+  font-size: 0.78rem;
+  letter-spacing: 1.5px;
+  background: transparent;
+  border: 1px solid var(--border);
+  color: var(--matrix);
+  cursor: pointer;
+  transition: all 0.3s ease;
+  opacity: 0.8;
+}
+.orchestrator-root .orchestrator-drawer .btn.ghost:hover {
+  opacity: 1;
+  border-color: var(--matrix);
+  box-shadow: var(--matrix-glow);
+}

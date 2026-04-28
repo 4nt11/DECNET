@@ -12,6 +12,7 @@ the connection on purpose (the updater re-execs itself mid-response).
 """
 from __future__ import annotations
 
+import hashlib
 import ssl
 from typing import Any, Optional
 
@@ -36,7 +37,12 @@ class UpdaterClient:
         address: Optional[str] = None,
         updater_port: int = 8766,
         identity: Optional[MasterIdentity] = None,
+        verify_hostname: Optional[bool] = None,
     ):
+        if verify_hostname is None:
+            from decnet.env import DECNET_VERIFY_HOSTNAME
+            verify_hostname = DECNET_VERIFY_HOSTNAME
+        self._verify_hostname = verify_hostname
         if host is not None:
             self._address = host["address"]
             self._host_name = host.get("name")
@@ -56,7 +62,7 @@ class UpdaterClient:
         )
         ctx.load_verify_locations(cafile=str(self._identity.ca_cert_path))
         ctx.verify_mode = ssl.CERT_REQUIRED
-        ctx.check_hostname = False
+        ctx.check_hostname = self._verify_hostname
         return httpx.AsyncClient(
             base_url=f"https://{self._address}:{self._port}",
             verify=ctx,
@@ -93,12 +99,13 @@ class UpdaterClient:
         """POST /update. Returns the Response so the caller can distinguish
         200 / 409 / 500 — each means something different.
         """
+        sha256 = hashlib.sha256(tarball).hexdigest()
         self._require().timeout = _TIMEOUT_UPDATE
         try:
             r = await self._require().post(
                 "/update",
                 files={"tarball": ("tree.tgz", tarball, "application/gzip")},
-                data={"sha": sha},
+                data={"sha": sha, "sha256": sha256},
             )
         finally:
             self._require().timeout = _TIMEOUT_CONTROL
@@ -109,12 +116,13 @@ class UpdaterClient:
         usually drops mid-response; that's not an error. Callers should then
         poll /health until the new SHA appears.
         """
+        sha256 = hashlib.sha256(tarball).hexdigest()
         self._require().timeout = _TIMEOUT_UPDATE
         try:
             r = await self._require().post(
                 "/update-self",
                 files={"tarball": ("tree.tgz", tarball, "application/gzip")},
-                data={"sha": sha, "confirm_self": "true"},
+                data={"sha": sha, "sha256": sha256, "confirm_self": "true"},
             )
         finally:
             self._require().timeout = _TIMEOUT_CONTROL

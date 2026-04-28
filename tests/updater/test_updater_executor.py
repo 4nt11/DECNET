@@ -96,6 +96,116 @@ def test_extract_happy_path(tmp_path: pathlib.Path) -> None:
     assert (out / "a" / "b.txt").read_text() == "hello"
 
 
+def _tarball_with_link(linkname: str, target: str, *, hard: bool = False) -> bytes:
+    buf = io.BytesIO()
+    with tarfile.open(fileobj=buf, mode="w:gz") as tar:
+        info = tarfile.TarInfo(name=linkname)
+        info.type = tarfile.LNKTYPE if hard else tarfile.SYMTYPE
+        info.linkname = target
+        tar.addfile(info)
+    return buf.getvalue()
+
+
+def test_extract_rejects_symlinks(tmp_path: pathlib.Path) -> None:
+    evil = _tarball_with_link("link.txt", "/etc/passwd")
+    with pytest.raises(ex.UpdateError, match="only regular files"):
+        ex.extract_tarball(evil, tmp_path / "out")
+
+
+def test_extract_rejects_hardlinks(tmp_path: pathlib.Path) -> None:
+    evil = _tarball_with_link("link.txt", "real.txt", hard=True)
+    with pytest.raises(ex.UpdateError, match="only regular files"):
+        ex.extract_tarball(evil, tmp_path / "out")
+
+
+def test_extract_rejects_device_nodes(tmp_path: pathlib.Path) -> None:
+    buf = io.BytesIO()
+    with tarfile.open(fileobj=buf, mode="w:gz") as tar:
+        info = tarfile.TarInfo(name="dev_null")
+        info.type = tarfile.CHRTYPE
+        info.devmajor = 1
+        info.devminor = 3
+        tar.addfile(info)
+    with pytest.raises(ex.UpdateError, match="only regular files"):
+        ex.extract_tarball(buf.getvalue(), tmp_path / "out")
+
+
+def test_extract_rejects_oversized_tarball(
+    tmp_path: pathlib.Path, monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    # Lower the cap rather than building a 256 MiB tarball in memory.
+    monkeypatch.setattr(ex, "MAX_TARBALL_UNCOMPRESSED_BYTES", 32)
+    big = _make_tarball({"big.txt": "x" * 64})
+    with pytest.raises(ex.UpdateError, match="exceeds size cap"):
+        ex.extract_tarball(big, tmp_path / "out")
+
+
+def test_extract_strips_setuid_bit(tmp_path: pathlib.Path) -> None:
+    buf = io.BytesIO()
+    payload = b"hello"
+    with tarfile.open(fileobj=buf, mode="w:gz") as tar:
+        info = tarfile.TarInfo(name="suid.bin")
+        info.size = len(payload)
+        info.mode = 0o4755  # setuid + rwxr-xr-x
+        tar.addfile(info, io.BytesIO(payload))
+    out = tmp_path / "out"
+    ex.extract_tarball(buf.getvalue(), out)
+    mode = (out / "suid.bin").stat().st_mode & 0o7777
+    assert mode & 0o4000 == 0, f"setuid bit should be stripped, got {oct(mode)}"
+
+
+# ----------------------------------------------------------- sha256 verify
+
+def test_run_update_rejects_sha256_mismatch(
+    monkeypatch: pytest.MonkeyPatch,
+    install_dir: pathlib.Path,
+    agent_dir: pathlib.Path,
+) -> None:
+    monkeypatch.setattr(ex, "_run_pip", lambda release: _PipOK())
+    monkeypatch.setattr(ex, "_stop_agent", lambda *a, **k: None)
+    monkeypatch.setattr(ex, "_spawn_agent", lambda *a, **k: 1)
+    monkeypatch.setattr(ex, "_probe_agent", lambda **_: (True, "ok"))
+    tb = _make_tarball({"marker.txt": "new"})
+    bad = "0" * 64
+    with pytest.raises(ex.UpdateError, match="sha256 mismatch"):
+        ex.run_update(
+            tb, sha="S", install_dir=install_dir, agent_dir=agent_dir,
+            expected_sha256=bad,
+        )
+    # Mismatch must abort before staging is left around.
+    assert not (install_dir / "releases" / "active.new").exists()
+
+
+def test_run_update_accepts_correct_sha256(
+    monkeypatch: pytest.MonkeyPatch,
+    install_dir: pathlib.Path,
+    agent_dir: pathlib.Path,
+) -> None:
+    import hashlib as _hl
+    monkeypatch.setattr(ex, "_run_pip", lambda release: _PipOK())
+    monkeypatch.setattr(ex, "_stop_agent", lambda *a, **k: None)
+    monkeypatch.setattr(ex, "_spawn_agent", lambda *a, **k: 1)
+    monkeypatch.setattr(ex, "_probe_agent", lambda **_: (True, "ok"))
+    tb = _make_tarball({"marker.txt": "new"})
+    digest = _hl.sha256(tb).hexdigest()
+    result = ex.run_update(
+        tb, sha="S", install_dir=install_dir, agent_dir=agent_dir,
+        expected_sha256=digest,
+    )
+    assert result["status"] == "updated"
+
+
+def test_run_update_rejects_malformed_sha256(
+    install_dir: pathlib.Path, agent_dir: pathlib.Path,
+) -> None:
+    tb = _make_tarball({"x.txt": "y"})
+    with pytest.raises(ex.UpdateError, match="not a 64-char hex"):
+        ex.run_update(
+            tb, sha="S", install_dir=install_dir, agent_dir=agent_dir,
+            expected_sha256="not-a-hex-digest",
+        )
+
+
 def test_clean_stale_staging(install_dir: pathlib.Path) -> None:
     staging = install_dir / "releases" / "active.new"
     staging.mkdir()

@@ -11,8 +11,19 @@ Banner advertises Dovecot so nmap fingerprints correctly.
 """
 
 import asyncio
+import email
+import email.policy
 import os
-from syslog_bridge import SEVERITY_WARNING, syslog_line, write_syslog_file, forward_syslog
+import time
+from email.utils import getaddresses
+from pathlib import Path
+from syslog_bridge import (
+    SEVERITY_WARNING,
+    encode_secret,
+    forward_syslog,
+    syslog_line,
+    write_syslog_file,
+)
 
 NODE_NAME   = os.environ.get("NODE_NAME", "mailserver")
 SERVICE_NAME = "imap"
@@ -25,10 +36,20 @@ VALID_USERS: dict[str, str] = {
     u: p for part in _RAW_USERS.split(",") if ":" in part for u, p in [part.split(":", 1)]
 }
 
-# DEBT-026: path to a JSON file with custom email definitions.
-# When set, _BAIT_EMAILS should be replaced/extended from that file.
-# Wiring (service_cfg["email_seed"] → compose_fragment → env var → here) is deferred.
-_EMAIL_SEED_PATH = os.environ.get("IMAP_EMAIL_SEED", "")  # stub — currently unused
+# Path to a directory of ``*.eml`` files that the orchestrator emailgen
+# worker drops into the container (``/var/spool/decnet-emails/`` by
+# convention).  When set AND the directory contains parseable EMLs,
+# they replace the hardcoded ``_BAIT_EMAILS`` fallback below — meaning
+# every mail an attacker reads is the LLM-generated, persona-driven,
+# language-aware version, not the static credential-stuffed bait list.
+# Empty / missing / unparseable: the fallback list still serves so a
+# fresh deployment is never silent.
+_EMAIL_SEED_PATH = os.environ.get("IMAP_EMAIL_SEED", "")
+# Re-scan the seed directory at most this often.  Cheap: walking a few
+# dozen .eml files is sub-millisecond, but caching keeps an attacker's
+# rapid LIST/FETCH burst from re-parsing the same files on every
+# command.  Mtime check still triggers a re-load on real changes.
+_SEED_RESCAN_INTERVAL = float(os.environ.get("IMAP_EMAIL_SEED_RESCAN", "5"))
 
 # ── Bait emails ───────────────────────────────────────────────────────────────
 # All 10 live in INBOX. UID == sequence number.
@@ -232,6 +253,119 @@ _BAIT_EMAILS: list[dict] = [
 
 _MAILBOXES = ["INBOX", "Sent", "Drafts", "Archive"]
 
+
+# ── Spool-backed email loader ─────────────────────────────────────────────────
+# When IMAP_EMAIL_SEED points at a directory of .eml files the
+# orchestrator emailgen worker has dropped into the container, parse
+# them on demand and serve them as the INBOX.  Cached between requests
+# with a short TTL + mtime check so a hot mailbox doesn't pay the parse
+# cost on every IMAP command.
+#
+# Failure modes (missing dir, unparseable EMLs, empty dir) all return
+# the hardcoded fallback rather than 0 messages — a silent INBOX is a
+# stronger tell than a slightly-stale one.
+
+_seed_cache: list[dict] | None = None
+_seed_cache_dir_mtime: float = 0.0
+_seed_cache_loaded_at: float = 0.0
+
+
+def _split_addr(value: str) -> tuple[str, str]:
+    """Return (display_name, email) from a header value, falling back to
+    the raw string when the parse fails.  Worker side; we don't need
+    real RFC 5322 — just enough to populate the IMAP envelope tuple."""
+    if not value:
+        return "", ""
+    pairs = getaddresses([value])
+    if not pairs:
+        return "", value
+    name, addr = pairs[0]
+    return (name or "").strip(), (addr or value).strip()
+
+
+def _eml_to_dict(path: Path, uid: int) -> dict | None:
+    """Parse one .eml into the dict shape the rest of this server uses.
+
+    Returns None when the file isn't parseable; callers skip + continue
+    so one corrupt EML does not kill the whole INBOX listing.
+    """
+    try:
+        raw = path.read_bytes()
+        msg = email.message_from_bytes(raw, policy=email.policy.compat32)
+    except Exception:  # noqa: BLE001
+        return None
+    from_name, from_addr = _split_addr(msg.get("From", ""))
+    _to_name, to_addr = _split_addr(msg.get("To", ""))
+    subject = (msg.get("Subject") or "").strip()
+    date = msg.get("Date") or ""
+    return {
+        "uid": uid,
+        "flags": [],     # never \Seen for spool emails — fresh delivery
+        "from_name": from_name or from_addr.split("@", 1)[0] if from_addr else "Unknown",
+        "from_addr": from_addr or "unknown@localhost",
+        "to_addr": to_addr or "unknown@localhost",
+        "subject": subject or "(no subject)",
+        "date": date,
+        # The body field carries the full RFC 822 message — headers + body.
+        # That mirrors how the hardcoded _BAIT_EMAILS entries are shaped.
+        "body": raw.decode("utf-8", errors="replace"),
+    }
+
+
+def _scan_seed_dir(path: Path) -> list[dict]:
+    """Walk *path* recursively, parse every ``*.eml``, sort by mtime."""
+    eml_paths: list[Path] = []
+    try:
+        for p in path.rglob("*.eml"):
+            if p.is_file():
+                eml_paths.append(p)
+    except OSError:
+        return []
+    eml_paths.sort(key=lambda p: p.stat().st_mtime)
+    out: list[dict] = []
+    for i, p in enumerate(eml_paths, start=1):
+        d = _eml_to_dict(p, uid=i)
+        if d is not None:
+            out.append(d)
+    return out
+
+
+def _get_emails() -> list[dict]:
+    """Return the active mailbox list.
+
+    Resolution order:
+    1. ``IMAP_EMAIL_SEED`` set + dir exists + at least one parseable EML
+       → that list (rescan-throttled).
+    2. Else → the hardcoded ``_BAIT_EMAILS`` fallback.
+    """
+    global _seed_cache, _seed_cache_dir_mtime, _seed_cache_loaded_at
+    if not _EMAIL_SEED_PATH:
+        return _BAIT_EMAILS
+    seed_dir = Path(_EMAIL_SEED_PATH)
+    try:
+        dir_stat = seed_dir.stat()
+    except OSError:
+        return _BAIT_EMAILS
+    now = time.monotonic()
+    fresh_enough = (
+        _seed_cache is not None
+        and (now - _seed_cache_loaded_at) < _SEED_RESCAN_INTERVAL
+        and dir_stat.st_mtime == _seed_cache_dir_mtime
+    )
+    if fresh_enough:
+        return _seed_cache or _BAIT_EMAILS
+    scanned = _scan_seed_dir(seed_dir)
+    if not scanned:
+        # Don't poison the cache with an empty list; a single early
+        # FETCH before emailgen has run would otherwise stick the
+        # mailbox at 0 for _SEED_RESCAN_INTERVAL seconds.
+        return _BAIT_EMAILS
+    _seed_cache = scanned
+    _seed_cache_dir_mtime = dir_stat.st_mtime
+    _seed_cache_loaded_at = now
+    return scanned
+
+
 # ── Logging ───────────────────────────────────────────────────────────────────
 
 def _log(event_type: str, severity: int = 6, **kwargs) -> None:
@@ -431,14 +565,15 @@ class IMAPProtocol(asyncio.Protocol):
         parts    = args.split(None, 1)
         username = parts[0].strip('"') if parts else ""
         password = parts[1].strip('"') if len(parts) > 1 else ""
+        _enc = encode_secret(password)
         if VALID_USERS.get(username) == password:
             self._state = "AUTHENTICATED"
-            _log("auth", src=self._peer[0], username=username, password=password,
-                 status="success")
+            _log("auth", src=self._peer[0], username=username, principal=username,
+                 outcome="success", **_enc)
             self._w(f"{tag} OK [CAPABILITY IMAP4rev1] Logged in\r\n")
         else:
-            _log("auth", src=self._peer[0], username=username, password=password,
-                 status="failed", severity=SEVERITY_WARNING)
+            _log("auth", src=self._peer[0], username=username, principal=username,
+                 outcome="failure", severity=SEVERITY_WARNING, **_enc)
             self._w(f"{tag} NO [AUTHENTICATIONFAILED] Authentication failed.\r\n")
 
     def _cmd_list(self, tag: str, cmd: str) -> None:
@@ -457,7 +592,8 @@ class IMAPProtocol(asyncio.Protocol):
         mailbox = parts[0].strip('"') if parts else "INBOX"
         attr_str = parts[1].strip("()").upper() if len(parts) > 1 else "MESSAGES"
 
-        counts = {"MESSAGES": 10, "RECENT": 0, "UNSEEN": 10} if mailbox == "INBOX" \
+        n = len(_get_emails()) if mailbox == "INBOX" else 0
+        counts = {"MESSAGES": n, "RECENT": 0, "UNSEEN": n} if mailbox == "INBOX" \
             else {"MESSAGES": 0, "RECENT": 0, "UNSEEN": 0}
 
         result_parts = []
@@ -472,7 +608,8 @@ class IMAPProtocol(asyncio.Protocol):
             self._w(f"{tag} BAD Not authenticated\r\n")
             return
         mailbox = args.strip('"')
-        total   = len(_BAIT_EMAILS) if mailbox == "INBOX" else 0
+        emails  = _get_emails()
+        total   = len(emails) if mailbox == "INBOX" else 0
         self._selected = mailbox
         self._state    = "SELECTED"
         self._w(f"* {total} EXISTS\r\n")
@@ -493,7 +630,8 @@ class IMAPProtocol(asyncio.Protocol):
         range_str = parts[0] if parts else "1:*"
         items_str = parts[1] if len(parts) > 1 else "FLAGS"
 
-        total    = len(_BAIT_EMAILS)
+        emails   = _get_emails()
+        total    = len(emails)
         indices  = _parse_seq_range(range_str, total)
         items    = _parse_fetch_items(items_str)
         # Ensure UID is included when using UID FETCH
@@ -502,14 +640,14 @@ class IMAPProtocol(asyncio.Protocol):
 
         for seq in indices:
             if 1 <= seq <= total:
-                self._transport.write(_build_fetch_response(seq, _BAIT_EMAILS[seq - 1], items))
+                self._transport.write(_build_fetch_response(seq, emails[seq - 1], items))
         self._w(f"{tag} OK FETCH completed\r\n")
 
     def _cmd_search(self, tag: str, uid_mode: bool = False) -> None:
         if self._state != "SELECTED":
             self._w(f"{tag} BAD Not in selected state\r\n")
             return
-        nums = " ".join(str(i) for i in range(1, len(_BAIT_EMAILS) + 1))
+        nums = " ".join(str(i) for i in range(1, len(_get_emails()) + 1))
         self._w(f"* SEARCH {nums}\r\n")
         self._w(f"{tag} OK SEARCH completed\r\n")
 

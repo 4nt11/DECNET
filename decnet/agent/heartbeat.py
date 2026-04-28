@@ -52,14 +52,26 @@ def _resolve_agent_dir() -> pathlib.Path:
 
 async def _tick(client: httpx.AsyncClient, url: str, host_uuid: str, agent_version: str) -> None:
     snap = await _exec.status()
-    resp = await client.post(
-        url,
-        json={
-            "host_uuid": host_uuid,
-            "agent_version": agent_version,
-            "status": snap,
-        },
-    )
+    body: dict = {
+        "host_uuid": host_uuid,
+        "agent_version": agent_version,
+        "status": snap,
+    }
+    # Best-effort: fold in applied-topology snapshot. Failures must never
+    # wedge the heartbeat loop — master will fall back to "no topology
+    # reported" which triggers a resync if it expected one.
+    try:
+        from decnet.agent import topology_ops as _topo_ops
+        from decnet.agent.topology_store import TopologyStore
+        store = TopologyStore(_resolve_agent_dir() / "topology.db")
+        try:
+            body["topology"] = _topo_ops.state(store)
+        finally:
+            store.close()
+    except Exception:
+        log.debug("heartbeat: topology state unavailable", exc_info=True)
+
+    resp = await client.post(url, json=body)
     # 403 / 404 are terminal-ish — we still keep looping because an
     # operator may re-enrol the host mid-session, but we log loudly so
     # prod ops can spot cert-pinning drift.

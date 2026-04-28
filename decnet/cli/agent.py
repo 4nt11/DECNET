@@ -29,7 +29,7 @@ def register(app: typer.Typer) -> None:
         with `decnet forwarder --daemon …`. Pass --no-forwarder to skip.
         """
         from decnet.agent import server as _agent_server
-        from decnet.env import DECNET_SWARM_MASTER_HOST, DECNET_INGEST_LOG_FILE
+        from decnet.env import DECNET_SWARM_MASTER_HOST, DECNET_AGENT_LOG_FILE
         from decnet.swarm import pki as _pki
 
         resolved_dir = _pathlib.Path(agent_dir) if agent_dir else _pki.DEFAULT_AGENT_DIR
@@ -44,7 +44,7 @@ def register(app: typer.Typer) -> None:
                 "--master-host", DECNET_SWARM_MASTER_HOST,
                 "--master-port", str(int(os.environ.get("DECNET_SWARM_SYSLOG_PORT", "6514"))),
                 "--agent-dir", str(resolved_dir),
-                "--log-file", str(DECNET_INGEST_LOG_FILE),
+                "--log-file", str(DECNET_AGENT_LOG_FILE),
                 "--daemon",
             ]
             try:

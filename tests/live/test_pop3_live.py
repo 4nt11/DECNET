@@ -55,4 +55,4 @@ class TestPOP3Live:
             pass
         lines += drain()
         matched = assert_rfc5424(lines, service="pop3", event_type="auth")
-        assert "failed" in matched, f"Expected auth failure in log. Got:\n{matched!r}"
+        assert "failure" in matched, f"Expected auth failure in log. Got:\n{matched!r}"

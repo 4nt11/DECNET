@@ -97,7 +97,7 @@ def assert_rfc5424(
 class _ServiceProcess:
     """Manages a live service subprocess and its stdout log queue."""
 
-    def __init__(self, service: str, port: int):
+    def __init__(self, service: str, port: int, extra_env: dict | None = None):
         template_dir = _TEMPLATES / service
         env = {
             **os.environ,
@@ -106,6 +106,8 @@ class _ServiceProcess:
             "PYTHONPATH": str(template_dir),
             "LOG_TARGET": "",
         }
+        if extra_env:
+            env.update(extra_env)
         self._proc = subprocess.Popen(
             [_PYTHON, str(template_dir / "server.py")],
             cwd=str(template_dir),
@@ -150,9 +152,9 @@ def live_service() -> Generator:
     """
     started: list[_ServiceProcess] = []
 
-    def _start(service: str) -> tuple[int, callable]:
+    def _start(service: str, env: dict | None = None) -> tuple[int, callable]:
         port = _free_port()
-        svc = _ServiceProcess(service, port)
+        svc = _ServiceProcess(service, port, extra_env=env)
         started.append(svc)
         if not _wait_for_port(port):
             svc.stop()

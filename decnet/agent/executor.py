@@ -132,7 +132,7 @@ if command -v docker >/dev/null 2>&1; then
 fi
 
 # Stop+disable every systemd unit the installer may have dropped.
-for unit in decnet-agent decnet-engine decnet-collector decnet-forwarder decnet-prober decnet-sniffer decnet-updater; do
+for unit in decnet-agent decnet-engine decnet-collector decnet-forwarder decnet-prober decnet-reconciler decnet-sniffer decnet-updater; do
     systemctl stop "$unit" 2>/dev/null
     systemctl disable "$unit" 2>/dev/null
 done

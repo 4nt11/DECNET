@@ -8,7 +8,12 @@ Authorization header and call metadata, then responds with 401 Unauthorized.
 import asyncio
 import os
 import re
-from syslog_bridge import syslog_line, write_syslog_file, forward_syslog
+from syslog_bridge import (
+    classify_authorization,
+    forward_syslog,
+    syslog_line,
+    write_syslog_file,
+)
 
 NODE_NAME = os.environ.get("NODE_NAME", "pbx")
 SERVICE_NAME   = "sip"
@@ -58,6 +63,13 @@ def _handle_message(data: bytes, src_addr) -> bytes | None:
         m = re.search(r'username="([^"]+)"', auth_header)
         username = m.group(1) if m else ""
 
+    # SIP Digest is the same shape as HTTP Digest (RFC 7616 derived from
+    # RFC 2617). classify_authorization handles it identically — emits
+    # secret_kind="http_digest_md5", which is correct: the cred is the
+    # MD5 hash response, regardless of whether it rode in over SIP or
+    # HTTP. Reuse-analytics correlates across both.
+    cred = classify_authorization(auth_header)
+
     _log(
         "request",
         src=src_addr[0],
@@ -67,6 +79,7 @@ def _handle_message(data: bytes, src_addr) -> bytes | None:
         to=headers.get("to", ""),
         username=username,
         auth=auth_header[:256],
+        **(cred or {}),
     )
 
     if method in ("REGISTER", "INVITE", "OPTIONS"):

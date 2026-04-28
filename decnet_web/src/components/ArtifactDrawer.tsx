@@ -1,6 +1,8 @@
-import React, { useState } from 'react';
-import { X, Download, AlertTriangle } from 'lucide-react';
+import React, { useEffect, useRef, useState } from 'react';
+import { X, Download, AlertTriangle } from '../icons';
 import api from '../utils/api';
+import { useEscapeKey } from '../hooks/useEscapeKey';
+import { useFocusTrap } from '../hooks/useFocusTrap';
 
 interface ArtifactDrawerProps {
   decky: string;
@@ -32,6 +34,15 @@ const Row: React.FC<{ label: string; value: React.ReactNode }> = ({ label, value
 );
 
 const ArtifactDrawer: React.FC<ArtifactDrawerProps> = ({ decky, storedAs, fields, onClose }) => {
+  const panelRef = useRef<HTMLDivElement | null>(null);
+  useEscapeKey(onClose, true);
+  useFocusTrap(panelRef, true);
+  useEffect(() => {
+    const prev = document.body.style.overflow;
+    document.body.style.overflow = 'hidden';
+    return () => { document.body.style.overflow = prev; };
+  }, []);
+
   const [downloading, setDownloading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const meta = decodeMeta(fields);
@@ -80,6 +91,9 @@ const ArtifactDrawer: React.FC<ArtifactDrawerProps> = ({ decky, storedAs, fields
       }}
     >
       <div
+        ref={panelRef}
+        role="dialog"
+        aria-modal="true"
         onClick={(e) => e.stopPropagation()}
         style={{
           width: 'min(620px, 100%)', height: '100%',

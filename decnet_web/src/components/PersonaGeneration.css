@@ -1,0 +1,107 @@
+/* Persona Generation — layered on top of DeckyFleet.css.
+   Only persona-specific bits live here: tone chips, info banner,
+   dirty pill, modal form inputs, empty state, mono helper. */
+
+.persona-gen-root .mono { font-family: var(--font-mono); }
+
+/* Info banner explaining scope (non-MazeNET) + showing pool path. */
+.persona-gen-root .info-banner {
+  background: rgba(255, 255, 255, 0.02);
+  border: 1px solid var(--border);
+  border-left: 3px solid var(--violet);
+  padding: 10px 14px;
+  font-size: 0.78rem;
+  line-height: 1.5;
+}
+.persona-gen-root .info-banner em { color: var(--matrix); font-style: normal; }
+.persona-gen-root .info-line { margin-top: 6px; font-size: 0.72rem; }
+
+.persona-gen-root .dirty-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 2px 10px;
+  border-radius: 999px;
+  background: rgba(245, 158, 11, 0.12);
+  color: var(--amber, #f59e0b);
+  font-size: 0.62rem;
+  letter-spacing: 1.4px;
+  text-transform: uppercase;
+  border: 1px solid var(--amber, #f59e0b);
+  width: fit-content;
+}
+
+/* Tone chips — keep palette differentiation from the original page. */
+.persona-gen-root .tone-chip {
+  display: inline-block;
+  padding: 1px 8px;
+  border: 1px solid var(--border);
+  font-size: 0.62rem;
+  letter-spacing: 1.5px;
+  text-transform: uppercase;
+}
+.persona-gen-root .tone-chip.tone-formal { border-color: var(--violet); color: var(--violet); }
+.persona-gen-root .tone-chip.tone-direct { border-color: var(--matrix); color: var(--matrix); }
+.persona-gen-root .tone-chip.tone-casual { border-color: var(--amber, #f59e0b); color: var(--amber, #f59e0b); }
+.persona-gen-root .tone-chip.tone-technical { border-color: var(--cyan, #22d3ee); color: var(--cyan, #22d3ee); }
+.persona-gen-root .tone-chip.tone-custom { border-color: var(--alert, #ef4444); color: var(--alert, #ef4444); text-transform: none; letter-spacing: 0.5px; }
+
+/* Card tweaks — wrap email if long. */
+.persona-card .decky-ip {
+  font-size: 0.65rem;
+  letter-spacing: 0.4px;
+  word-break: break-all;
+  max-width: 60%;
+  text-align: right;
+}
+
+/* Empty state inside the grid. */
+.fleet-root .fleet-empty {
+  grid-column: 1 / -1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 14px;
+  padding: 60px 24px;
+  border: 1px dashed var(--border);
+  background: rgba(0, 0, 0, 0.18);
+  text-align: center;
+  letter-spacing: 1.5px;
+  font-size: 0.78rem;
+}
+
+/* Modal form inputs — reuse the wizard's tweak-group / input language. */
+.persona-gen-root .grid-2,
+.modal .grid-2 {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 14px;
+}
+
+.modal .tweak-group {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.modal .tweak-group label {
+  font-size: 0.62rem;
+  letter-spacing: 1.5px;
+  color: var(--dim);
+  text-transform: uppercase;
+}
+.modal .input {
+  background: var(--bg-elev, rgba(0, 0, 0, 0.3));
+  border: 1px solid var(--border);
+  color: var(--text);
+  padding: 7px 10px;
+  font-family: inherit;
+  font-size: 0.8rem;
+  outline: none;
+  transition: border-color 0.15s;
+}
+.modal .input:focus {
+  border-color: var(--violet);
+  box-shadow: 0 0 0 1px var(--violet);
+}
+.modal select.input { cursor: pointer; }

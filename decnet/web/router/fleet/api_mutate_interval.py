@@ -3,7 +3,7 @@ from fastapi import APIRouter, Depends, HTTPException
 from decnet.telemetry import traced as _traced
 from decnet.config import DecnetConfig
 from decnet.web.dependencies import require_admin, repo
-from decnet.web.db.models import MutateIntervalRequest
+from decnet.web.db.models import MessageResponse, MutateIntervalRequest
 
 router = APIRouter()
 
@@ -17,6 +17,7 @@ def _parse_duration(s: str) -> int:
 
 
 @router.put("/deckies/{decky_name}/mutate-interval", tags=["Fleet Management"],
+    response_model=MessageResponse,
     responses={
         400: {"description": "Bad Request (e.g. malformed JSON)"},
         401: {"description": "Could not validate credentials"},

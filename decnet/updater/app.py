@@ -9,17 +9,59 @@ only — agent certs are rejected).
 """
 from __future__ import annotations
 
+import asyncio
+import contextlib
 import os as _os
 import pathlib
+from contextlib import asynccontextmanager
+from typing import Optional
 
 from fastapi import FastAPI, File, Form, HTTPException, UploadFile
 from pydantic import BaseModel
 
+from decnet.bus.factory import get_bus
+from decnet.bus.publish import run_health_heartbeat
 from decnet.logging import get_logger
 from decnet.swarm import pki
 from decnet.updater import executor as _exec
 
 log = get_logger("updater.app")
+
+
+_bus_heartbeat_task: Optional[asyncio.Task] = None
+
+
+@asynccontextmanager
+async def _lifespan(_app: FastAPI):
+    # Host-local bus heartbeat (system.updater.health).  Lets the agent
+    # and dashboard tell "updater's up" without hitting the HTTPS port.
+    # Bus-disabled path is a no-op loop; the updater serves requests
+    # either way.
+    bus = None
+    try:
+        bus = get_bus(client_name="updater")
+        await bus.connect()
+    except Exception as exc:  # noqa: BLE001
+        log.warning("updater: bus unavailable, skipping heartbeat: %s", exc)
+        bus = None
+
+    global _bus_heartbeat_task
+    _bus_heartbeat_task = asyncio.create_task(
+        run_health_heartbeat(bus, "updater"),
+        name="updater-bus-heartbeat",
+    )
+    try:
+        yield
+    finally:
+        if _bus_heartbeat_task is not None:
+            _bus_heartbeat_task.cancel()
+            with contextlib.suppress(asyncio.CancelledError, Exception):
+                await _bus_heartbeat_task
+            _bus_heartbeat_task = None
+        if bus is not None:
+            with contextlib.suppress(Exception):
+                await bus.close()
+
 
 app = FastAPI(
     title="DECNET Self-Updater",
@@ -27,6 +69,7 @@ app = FastAPI(
     docs_url=None,
     redoc_url=None,
     openapi_url=None,
+    lifespan=_lifespan,
 )
 
 
@@ -86,12 +129,14 @@ async def releases() -> dict:
 async def update(
     tarball: UploadFile = File(..., description="tar.gz of the working tree"),
     sha: str = Form("", description="git SHA of the tree for provenance"),
+    sha256: str = Form("", description="hex SHA-256 of the tarball bytes; verified before extract"),
 ) -> dict:
     body = await tarball.read()
     try:
         return _exec.run_update(
             body, sha=sha or None,
             install_dir=_Config.install_dir, agent_dir=_Config.agent_dir,
+            expected_sha256=sha256 or None,
         )
     except _exec.UpdateError as exc:
         status = 409 if exc.rolled_back else 500
@@ -105,6 +150,7 @@ async def update(
 async def update_self(
     tarball: UploadFile = File(...),
     sha: str = Form(""),
+    sha256: str = Form("", description="hex SHA-256 of the tarball bytes; verified before extract"),
     confirm_self: str = Form("", description="Must be 'true' to proceed"),
 ) -> dict:
     if confirm_self.lower() != "true":
@@ -117,6 +163,7 @@ async def update_self(
         return _exec.run_update_self(
             body, sha=sha or None,
             updater_install_dir=_Config.updater_install_dir,
+            expected_sha256=sha256 or None,
         )
     except _exec.UpdateError as exc:
         raise HTTPException(

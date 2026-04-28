@@ -1,0 +1,590 @@
+/* ── MazeNET canvas ─────────────────────────── */
+
+body.maze-fullscreen .sidebar,
+body.maze-fullscreen .topbar {
+  display: none !important;
+}
+body.maze-fullscreen .content-viewport {
+  padding: 16px 32px;
+}
+body.maze-fullscreen .maze-shell {
+  /* Full viewport minus content-viewport padding (16 top + 32 bottom) and header+gap. */
+  /* With flex:1 this stays correct because maze-page fills 100% of the new viewport. */
+}
+
+
+.maze-page {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  height: 100%;
+}
+
+.maze-page-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-end;
+  border-bottom: 1px solid var(--border);
+  padding-bottom: 16px;
+  gap: 24px;
+}
+.maze-page-header h1 { font-size: 1.3rem; letter-spacing: 4px; font-weight: 700; }
+.maze-page-sub { font-size: 0.7rem; opacity: 0.5; letter-spacing: 1px; }
+.maze-page-actions { display: flex; gap: 10px; align-items: center; }
+
+.maze-btn {
+  cursor: pointer;
+  background: transparent;
+  border: 1px solid var(--matrix);
+  color: var(--matrix);
+  padding: 7px 14px;
+  font-family: inherit;
+  font-size: 0.78rem;
+  letter-spacing: 1.5px;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  transition: all 0.3s;
+}
+.maze-btn:hover { background: var(--matrix); color: #000; box-shadow: var(--matrix-glow); }
+.maze-btn.ghost { border-color: var(--border); color: var(--matrix); opacity: 0.7; }
+.maze-btn.ghost:hover {
+  background: transparent; color: var(--matrix); opacity: 1;
+  border-color: var(--matrix); box-shadow: var(--matrix-glow);
+}
+.maze-btn:disabled { opacity: 0.3; cursor: not-allowed; }
+.maze-btn:disabled:hover { background: transparent; color: var(--matrix); box-shadow: none; }
+
+.maze-shell {
+  display: grid;
+  grid-template-columns: 240px 1fr 320px;
+  gap: 0;
+  flex: 1;
+  min-height: 0;
+  margin: 0 -32px -32px;
+  border-top: 1px solid var(--border);
+  transition: grid-template-columns 260ms cubic-bezier(0.4, 0, 0.2, 1);
+}
+.maze-palette,
+.maze-inspector {
+  transition: opacity 200ms ease, transform 260ms cubic-bezier(0.4, 0, 0.2, 1);
+  min-width: 0;
+}
+.maze-palette.collapsed,
+.maze-inspector.collapsed {
+  opacity: 0;
+  pointer-events: none;
+  overflow: hidden;
+}
+.maze-palette.collapsed { transform: translateX(-8px); }
+.maze-inspector.collapsed { transform: translateX(8px); }
+
+/* ── Palette ────────────────────────────────── */
+.maze-palette {
+  background: var(--panel);
+  border-right: 1px solid var(--border);
+  overflow-y: auto;
+  padding: 14px;
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+}
+.palette-group { display: flex; flex-direction: column; gap: 6px; }
+.palette-group > label {
+  font-size: 0.6rem; letter-spacing: 1.5px; opacity: 0.5; text-transform: uppercase;
+}
+.palette-item {
+  display: flex; align-items: center; gap: 10px;
+  padding: 8px 10px; border: 1px solid var(--border);
+  cursor: grab; transition: all 0.15s; font-size: 0.72rem;
+  color: var(--matrix); background: transparent;
+}
+.palette-item:hover {
+  border-color: var(--violet); color: var(--violet); background: var(--violet-tint-10);
+}
+.palette-item:active { cursor: grabbing; }
+.palette-item .chip-mini {
+  font-size: 0.68rem; padding: 2px 6px;
+  border: 1px solid var(--accent-tint-30);
+  background: var(--accent-tint-10);
+  color: var(--accent);
+  letter-spacing: 0.5px; margin-left: auto;
+  font-family: var(--font-mono); opacity: 1;
+}
+.palette-hint {
+  font-size: 0.62rem; opacity: 0.5; line-height: 1.6; letter-spacing: 0.5px;
+}
+.palette-subgroup { display: flex; flex-direction: column; gap: 4px; margin-top: 4px; }
+.palette-subgroup:first-child { margin-top: 0; }
+.palette-subgroup-label {
+  font-size: 0.55rem; letter-spacing: 1.5px; opacity: 0.4;
+  color: var(--violet); margin-top: 6px;
+}
+
+.violet-accent { color: var(--violet); }
+.alert-text { color: var(--alert); }
+.matrix-text { color: var(--matrix); }
+
+/* ── Canvas ─────────────────────────────────── */
+.maze-canvas-wrap {
+  position: relative; background: #000;
+  overflow: hidden; user-select: none;
+  height: 100%; min-height: 0;
+}
+.maze-pan-layer { position: absolute; inset: 0; will-change: transform; }
+.maze-grid-bg {
+  position: absolute; inset: 0;
+  pointer-events: none; opacity: 0.6; overflow: hidden; background: #000;
+}
+.maze-grid-bg svg { display: block; width: 100%; height: 100%; }
+.maze-svg { position: absolute; inset: 0; width: 100%; height: 100%; pointer-events: none; }
+.maze-nodes { position: absolute; inset: 0; }
+
+.maze-empty-hint {
+  position: absolute; inset: 0;
+  display: flex; align-items: center; justify-content: center;
+  pointer-events: none; font-size: 0.72rem; letter-spacing: 1.5px;
+  color: var(--fg-4); text-transform: uppercase;
+}
+
+/* ── Network box ────────────────────────────── */
+.maze-net-box {
+  position: absolute;
+  border: 1px dashed var(--border);
+  background: rgba(13, 17, 23, 0.6);
+  padding: 32px 16px 16px;
+  min-width: 220px; min-height: 140px;
+  transition: border-color 0.2s;
+  cursor: move;
+}
+.maze-net-box.selected {
+  border-color: var(--violet);
+  box-shadow: 0 0 0 1px var(--violet-tint-10) inset;
+}
+.maze-net-box.drop-target {
+  border-color: var(--matrix); background: var(--matrix-tint-5);
+}
+.maze-net-box.internet {
+  border-color: var(--alert); background: rgba(255, 65, 65, 0.04);
+}
+.maze-net-box.dmz {
+  border-color: var(--alert); background: rgba(255, 65, 65, 0.06);
+  border-style: dashed;
+}
+.maze-net-box.dmz .maze-net-box-head {
+  color: var(--alert); border-bottom-color: rgba(255, 65, 65, 0.45);
+}
+/* Deployed: topology is active/degraded — make it visually unmistakable.
+ * Subnet LANs glow matrix-green; DMZ stays hot red (and gets a stronger
+ * glow so you can tell it's live). */
+.maze-net-box.deployed {
+  border-style: solid;
+  border-color: var(--matrix);
+  background: rgba(0, 255, 65, 0.05);
+  box-shadow: 0 0 0 1px rgba(0, 255, 65, 0.25) inset, var(--matrix-glow);
+}
+.maze-net-box.deployed .maze-net-box-head {
+  color: var(--matrix); border-bottom-color: rgba(0, 255, 65, 0.45);
+}
+.maze-net-box.deployed.dmz {
+  border-color: var(--alert);
+  background: rgba(255, 65, 65, 0.09);
+  box-shadow: 0 0 0 1px rgba(255, 65, 65, 0.35) inset,
+              0 0 16px rgba(255, 65, 65, 0.5);
+}
+.maze-net-box.deployed.dmz .maze-net-box-head {
+  color: var(--alert); border-bottom-color: rgba(255, 65, 65, 0.55);
+}
+.maze-net-box.inactive {
+  opacity: 0.42; filter: grayscale(0.7); border-style: dotted;
+}
+.maze-net-box.inactive .maze-net-box-head { color: rgba(255, 255, 255, 0.5); }
+/* Optimistic placeholder for an enqueued LAN-add. Amber tint matches
+ * the REAP button voice — clearly "in-flight, not committed" without
+ * collapsing into the dimmed-out 'inactive' style which means the
+ * opposite (no traffic on a deployed LAN). */
+.maze-net-box.pending {
+  border-color: var(--warn, #e0a040);
+  background: rgba(224, 160, 64, 0.04);
+  border-style: dashed;
+  filter: none; opacity: 1;
+}
+.maze-net-box.pending .maze-net-box-head {
+  color: var(--warn, #e0a040);
+  border-bottom-color: rgba(224, 160, 64, 0.45);
+}
+.maze-net-box.pending .cidr { color: rgba(224, 160, 64, 0.7); }
+.maze-net-box-head {
+  position: absolute; top: 0; left: 0; right: 0;
+  padding: 6px 12px; border-bottom: 1px dashed var(--border);
+  display: flex; align-items: center; gap: 8px; justify-content: space-between;
+  font-size: 0.65rem; letter-spacing: 1.5px; opacity: 0.8;
+  background: rgba(13, 17, 23, 0.8); cursor: move;
+}
+.maze-net-box-head .cidr { opacity: 0.5; font-size: 0.6rem; letter-spacing: 1px; }
+.maze-net-box.internet .maze-net-box-head {
+  color: var(--alert); border-bottom-color: rgba(255, 65, 65, 0.4);
+}
+
+/* ── Network resize handles ─────────────────── */
+.net-resize { position: absolute; z-index: 2; }
+.net-resize-e  { top: 8px; bottom: 8px; right: -4px; width: 8px; cursor: ew-resize; }
+.net-resize-w  { top: 8px; bottom: 8px; left: -4px;  width: 8px; cursor: ew-resize; }
+.net-resize-s  { left: 8px; right: 8px; bottom: -4px; height: 8px; cursor: ns-resize; }
+.net-resize-n  { left: 8px; right: 8px; top: -4px;    height: 8px; cursor: ns-resize; }
+.net-resize-se { right: -5px; bottom: -5px; width: 12px; height: 12px; cursor: nwse-resize; }
+.net-resize-sw { left: -5px;  bottom: -5px; width: 12px; height: 12px; cursor: nesw-resize; }
+.net-resize-ne { right: -5px; top: -5px;    width: 12px; height: 12px; cursor: nesw-resize; }
+.net-resize-nw { left: -5px;  top: -5px;    width: 12px; height: 12px; cursor: nwse-resize; }
+.maze-net-box.selected .net-resize-se,
+.maze-net-box.selected .net-resize-sw,
+.maze-net-box.selected .net-resize-ne,
+.maze-net-box.selected .net-resize-nw { background: var(--violet); opacity: 0.5; }
+.maze-net-box:hover .net-resize-se,
+.maze-net-box:hover .net-resize-sw,
+.maze-net-box:hover .net-resize-ne,
+.maze-net-box:hover .net-resize-nw { background: var(--border); opacity: 0.8; }
+
+/* ── Decky/observed node card ──────────────── */
+.maze-node {
+  position: absolute; width: 140px;
+  background: var(--panel); border: 1px solid var(--border);
+  padding: 8px 10px; cursor: grab;
+  transition: border-color 0.15s, box-shadow 0.15s;
+  user-select: none; display: flex; flex-direction: column; gap: 4px;
+}
+.maze-node:hover { border-color: var(--matrix); box-shadow: var(--matrix-glow); z-index: 3; }
+.maze-node.selected { border-color: var(--violet); box-shadow: var(--violet-glow); z-index: 4; }
+.maze-node.hot { border-color: var(--alert); }
+.maze-node.hot::after {
+  content: ''; position: absolute; inset: -1px;
+  border: 1px solid var(--alert); opacity: 0.4;
+  pointer-events: none; animation: decnet-pulse 1s infinite alternate;
+}
+.maze-node.observed { border-style: dashed; }
+.maze-node.dragging { opacity: 0.8; z-index: 10; cursor: grabbing; }
+.maze-node.deployed {
+  border-color: var(--matrix);
+  box-shadow: var(--matrix-glow);
+  background: rgba(0, 255, 65, 0.04);
+}
+.maze-node.deployed .mn-head { color: var(--matrix); }
+.maze-node.deployed.dmz-gateway {
+  border-color: var(--alert);
+  box-shadow: 0 0 12px rgba(255, 65, 65, 0.55);
+  background: rgba(255, 65, 65, 0.06);
+}
+.maze-node.deployed.dmz-gateway .mn-head { color: var(--alert); }
+.maze-node .mn-head {
+  display: flex; align-items: center; gap: 6px;
+  font-size: 0.74rem; font-weight: 700; letter-spacing: 0.5px;
+}
+.maze-node .mn-sub { font-size: 0.62rem; opacity: 0.6; letter-spacing: 1px; }
+.maze-node .mn-services { display: flex; flex-wrap: wrap; gap: 3px; margin-top: 2px; }
+.maze-node .mn-services .service-tag {
+  font-size: 0.55rem; padding: 1px 5px; letter-spacing: 0.5px;
+  cursor: pointer; transition: all 0.12s;
+  border: 1px solid var(--violet); color: var(--violet); border-radius: 2px;
+  white-space: nowrap;
+}
+.maze-node .mn-services .service-tag:hover { background: var(--violet-tint-10); }
+.maze-node .mn-services .service-tag.hot { border-color: var(--alert); color: var(--alert); }
+.maze-node .mn-services .service-tag.service-selected {
+  background: var(--violet); color: #000; font-weight: 700;
+}
+.maze-node .mn-port {
+  position: absolute; width: 8px; height: 8px;
+  background: var(--panel); border: 1px solid var(--matrix);
+  top: 50%; transform: translateY(-50%);
+}
+.maze-node .mn-port.in  { left: -5px; }
+.maze-node .mn-port.out { right: -5px; cursor: crosshair; }
+.maze-node .mn-port:hover { background: var(--matrix); box-shadow: var(--matrix-glow); }
+
+/* ── Edges ──────────────────────────────────── */
+.maze-edge { stroke: var(--matrix); stroke-width: 1.5; fill: none; opacity: 0.5; }
+.maze-edge.active { opacity: 0.9; stroke: var(--violet); }
+.maze-edge.hot    { stroke: var(--alert); opacity: 0.9; }
+.maze-edge-dash   { stroke-dasharray: 4 3; animation: dash-flow 0.6s linear infinite; }
+@keyframes dash-flow { to { stroke-dashoffset: -14; } }
+.ghost-edge {
+  stroke: var(--violet); stroke-width: 1.5;
+  stroke-dasharray: 3 3; opacity: 0.7; fill: none;
+}
+
+/* ── Canvas overlays ────────────────────────── */
+.maze-toolbar { position: absolute; top: 12px; left: 12px; display: flex; gap: 8px; z-index: 5; }
+.maze-status {
+  position: absolute; bottom: 12px; left: 12px;
+  display: flex; gap: 12px; z-index: 5;
+  font-size: 0.62rem; opacity: 0.6; letter-spacing: 1px;
+  background: rgba(0, 0, 0, 0.6); padding: 6px 10px; border: 1px solid var(--border);
+}
+.maze-legend {
+  position: absolute; bottom: 12px; right: 12px; z-index: 5;
+  background: rgba(13, 17, 23, 0.85); border: 1px solid var(--border);
+  padding: 8px 10px; font-size: 0.6rem; letter-spacing: 1px;
+  display: flex; flex-direction: column; gap: 4px;
+}
+.maze-legend .lg-row { display: flex; align-items: center; gap: 6px; }
+.maze-legend .lg-swatch { width: 14px; height: 2px; background: var(--matrix); }
+.maze-legend .lg-swatch.alert    { background: var(--alert); box-shadow: 0 0 6px var(--alert); }
+.maze-legend .lg-swatch.violet   { background: var(--violet); box-shadow: 0 0 6px var(--violet); }
+.maze-legend .lg-swatch.matrix   { background: var(--matrix); }
+.maze-legend .lg-swatch.inactive {
+  background: transparent;
+  height: 0;
+  border-top: 1px dashed var(--border);
+}
+
+/* Status bar segments */
+.maze-status .status-seg { display: inline-flex; align-items: center; gap: 6px; white-space: nowrap; }
+.maze-status .status-seg.live   { color: var(--matrix); opacity: 0.9; }
+.maze-status .status-seg.dim    { opacity: 0.45; }
+
+/* Toolbar button sizing override */
+.maze-toolbar .maze-btn.small {
+  padding: 4px 10px; font-size: 0.62rem; letter-spacing: 1.5px;
+  background: rgba(0, 0, 0, 0.6);
+}
+
+/* NodeCard head icon alignment */
+.maze-node .mn-head .mn-head-icon { opacity: 0.8; flex-shrink: 0; }
+.maze-node .mn-head .mn-head-name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+/* ── Inspector ──────────────────────────────── */
+.maze-inspector {
+  background: var(--panel); border-left: 1px solid var(--border);
+  overflow-y: auto; padding: 0;
+  display: flex; flex-direction: column;
+}
+.maze-inspector-title {
+  display: flex; align-items: center; gap: 8px;
+  padding: 12px 14px; border-bottom: 1px solid var(--border);
+  font-size: 0.72rem; letter-spacing: 2px; font-weight: 700;
+  position: sticky; top: 0; background: var(--panel); z-index: 1; flex-shrink: 0;
+}
+.maze-inspector-body {
+  padding: 14px; display: flex; flex-direction: column; gap: 14px;
+}
+.inspector-empty {
+  opacity: 0.5; text-align: center;
+  padding: 30px 10px; font-size: 0.7rem; letter-spacing: 1px;
+}
+.maze-diff {
+  background: #000; border: 1px solid var(--border);
+  padding: 10px 12px; font-size: 0.68rem; line-height: 1.6;
+  white-space: pre; overflow-x: auto;
+}
+.maze-diff .add { color: var(--matrix); }
+.maze-diff .rem { color: var(--alert); }
+.maze-diff .ctx { opacity: 0.5; }
+
+.kvs {
+  display: grid; grid-template-columns: 140px 1fr;
+  gap: 8px 14px; font-size: 0.78rem;
+}
+.kvs .k {
+  opacity: 0.5; letter-spacing: 1px; font-size: 0.65rem;
+  text-transform: uppercase; align-self: center;
+}
+.kvs .v { color: var(--matrix); word-break: break-all; }
+
+/* ── Context menu ───────────────────────────── */
+.ctx-scrim { position: absolute; inset: 0; z-index: 30; }
+.ctx-menu {
+  position: fixed; z-index: 1000;
+  width: auto; border-radius: var(--radius-0, 0);
+  background: var(--panel); border: 1px solid var(--violet);
+  min-width: 200px;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.8), var(--violet-glow);
+  padding: 4px 0; font-family: var(--font-mono);
+}
+.ctx-header {
+  font-size: 0.58rem; letter-spacing: 2px; opacity: 0.5;
+  padding: 6px 12px 4px; border-bottom: 1px solid var(--border);
+  margin-bottom: 4px;
+}
+.ctx-title {
+  font-size: 0.58rem; letter-spacing: 2px; opacity: 0.5;
+  padding: 6px 12px 4px; border-bottom: 1px solid var(--border);
+  margin-bottom: 4px;
+}
+.ctx-item-wrap { position: relative; }
+.ctx-icon { display: inline-flex; width: 14px; align-items: center; justify-content: center; opacity: 0.8; }
+.ctx-label { flex: 1; }
+.ctx-chev { opacity: 0.6; }
+.ctx-item {
+  display: flex; align-items: center; gap: 8px; width: 100%;
+  padding: 7px 12px; font-size: 0.74rem; cursor: pointer; letter-spacing: 0.5px;
+  background: transparent; border: 0; color: var(--matrix); text-align: left;
+  font-family: inherit;
+}
+.ctx-item:disabled { opacity: 0.35; cursor: not-allowed; }
+.ctx-item:disabled:hover { background: transparent; color: inherit; }
+.ghost-edge.snap { stroke: var(--matrix); opacity: 0.9; }
+.ctx-item:hover { background: var(--violet-tint-10); color: var(--violet); }
+.ctx-item.danger { color: var(--alert); }
+.ctx-item.danger:hover { background: rgba(255, 65, 65, 0.12); }
+.ctx-item.disabled { opacity: 0.35; cursor: not-allowed; }
+.ctx-item.disabled:hover { background: transparent; color: inherit; }
+.ctx-divider { height: 1px; background: var(--border); margin: 4px 0; }
+.palette-ghost {
+  position: fixed; z-index: 2000; pointer-events: none;
+  padding: 4px 10px; font-family: var(--font-mono); font-size: 0.68rem;
+  letter-spacing: 1.5px; background: var(--panel);
+  border: 1px solid var(--violet); color: var(--violet);
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.6), var(--violet-glow);
+}
+.ctx-submenu {
+  position: absolute; left: 100%; top: 0;
+  background: var(--panel); border: 1px solid var(--violet);
+  min-width: 180px; padding: 4px 0;
+  max-height: 320px; overflow-y: auto;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.8);
+}
+
+/* ── Inspector: rich visual layout ──────────── */
+.inspector-type-label {
+  margin-left: auto;
+  font-size: 0.6rem;
+  letter-spacing: 1px;
+}
+.inspector-close-btn {
+  background: transparent;
+  border: 1px solid var(--border);
+  color: rgba(255, 255, 255, 0.5);
+  padding: 3px 5px;
+  cursor: pointer;
+  display: flex;
+  transition: all 0.15s;
+}
+.inspector-close-btn:hover { color: var(--alert); border-color: var(--alert); }
+
+.inspector-head {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding-bottom: 10px;
+  border-bottom: 1px solid var(--border);
+}
+.inspector-head-title { font-size: 0.9rem; font-weight: 700; }
+.inspector-head-chip { margin-left: auto; }
+
+.inspector-section-label { margin-bottom: 6px; }
+.type-label {
+  font-size: 0.6rem;
+  letter-spacing: 1.5px;
+  opacity: 0.6;
+  text-transform: uppercase;
+}
+
+.inspector-conn-row {
+  font-size: 0.7rem;
+  padding: 6px 0;
+  border-bottom: 1px dashed var(--border);
+  display: flex;
+  gap: 6px;
+  align-items: center;
+}
+.inspector-conn-chip { margin-left: auto; }
+
+.inspector-member-row {
+  font-size: 0.72rem;
+  padding: 5px 0;
+  display: flex;
+  gap: 6px;
+  align-items: center;
+  cursor: pointer;
+}
+.inspector-member-row:hover { color: var(--violet); }
+.inspector-member-arch { margin-left: auto; font-size: 0.6rem; }
+
+.inspector-empty-line {
+  font-size: 0.68rem;
+  padding: 4px 0;
+}
+
+.inspector-diff-block {
+  border-top: 1px solid var(--border);
+  padding-top: 12px;
+}
+
+.inspector-status-block { margin-top: 12px; }
+
+.dim { opacity: 0.5; }
+
+/* Status dots used in inspector head + member rows */
+.status-dot {
+  display: inline-block;
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  margin-right: 0;
+  flex-shrink: 0;
+}
+.status-dot.active   { background: var(--matrix); box-shadow: 0 0 8px var(--matrix); }
+.status-dot.idle     { background: #30363d; }
+.status-dot.hot      { background: var(--alert); box-shadow: 0 0 8px var(--alert);
+                       animation: decnet-pulse 1s infinite alternate; }
+.status-dot.mutating { background: var(--violet); animation: decnet-blink 1s infinite; }
+
+/* Chips — inline badges for archetypes, traffic, severity */
+.chip {
+  font-size: 0.65rem;
+  padding: 2px 8px;
+  border-radius: 4px;
+  border: 1px solid var(--matrix);
+  color: var(--matrix);
+  background: var(--matrix-tint-10);
+  letter-spacing: 1px;
+  white-space: nowrap;
+}
+.chip.violet   { border-color: var(--violet); color: var(--violet); background: var(--violet-tint-10); }
+.chip.matrix   { border-color: var(--matrix); color: var(--matrix); background: var(--matrix-tint-10); }
+.chip.alert    { border-color: var(--alert);  color: var(--alert);  background: var(--alert-tint-10); }
+.chip.dim-chip { border-color: var(--border); color: rgba(0, 255, 65, 0.6); background: transparent; }
+
+.chip-mini {
+  font-size: 0.55rem;
+  padding: 1px 5px;
+  border: 1px solid var(--border);
+  letter-spacing: 1px;
+  color: rgba(255, 255, 255, 0.55);
+}
+
+/* Inspector buttons */
+.maze-btn.small { padding: 5px 10px; font-size: 0.68rem; }
+.maze-btn.alert {
+  border-color: var(--alert);
+  color: var(--alert);
+  opacity: 0.85;
+}
+.maze-btn.alert:hover {
+  background: var(--alert);
+  color: #000;
+  box-shadow: 0 0 10px rgba(255, 65, 65, 0.5);
+  opacity: 1;
+}
+
+/* Service tag reuse for inspector "SERVICES" chip row */
+.inspector-service-row {
+  display: flex;
+  gap: 4px;
+  flex-wrap: wrap;
+}
+.maze-inspector .service-tag {
+  font-size: 0.6rem;
+  padding: 2px 6px;
+  letter-spacing: 0.5px;
+  border: 1px solid var(--violet);
+  color: var(--violet);
+  border-radius: 2px;
+}
+
+.dragging-from-palette {
+  position: fixed; pointer-events: none; z-index: 200;
+  background: var(--panel); border: 1px solid var(--violet);
+  padding: 6px 10px; font-size: 0.7rem; color: var(--violet);
+  box-shadow: var(--violet-glow);
+}

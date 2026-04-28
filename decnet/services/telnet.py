@@ -1,8 +1,10 @@
+import os
 from pathlib import Path
 
 from decnet.services.base import BaseService
 
 TEMPLATES_DIR = Path(__file__).parent.parent / "templates" / "telnet"
+ARTIFACTS_ROOT = os.environ.get("DECNET_ARTIFACTS_ROOT", "/var/lib/decnet/artifacts")
 
 
 class TelnetService(BaseService):
@@ -31,16 +33,25 @@ class TelnetService(BaseService):
         cfg = service_cfg or {}
         env: dict = {
             "TELNET_ROOT_PASSWORD": cfg.get("password", "admin"),
+            # NODE_NAME is the authoritative decky identifier for log
+            # attribution — matches the host path used for the artifacts
+            # bind mount below.
+            "NODE_NAME": decky_name,
         }
         if "hostname" in cfg:
             env["TELNET_HOSTNAME"] = cfg["hostname"]
 
+        # Quarantine mount symmetric to the SSH service — sessrec appends
+        # pty transcripts to /var/lib/systemd/coredump/transcripts/ inside
+        # the container, which the host sees under artifacts/<decky>/telnet/.
+        quarantine_host = f"{ARTIFACTS_ROOT}/{decky_name}/telnet"
         return {
             "build": {"context": str(TEMPLATES_DIR)},
             "container_name": f"{decky_name}-telnet",
             "restart": "unless-stopped",
             "cap_add": ["NET_BIND_SERVICE"],
             "environment": env,
+            "volumes": [f"{quarantine_host}:/var/lib/systemd/coredump:rw"],
         }
 
     def dockerfile_context(self) -> Path:

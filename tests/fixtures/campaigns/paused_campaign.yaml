@@ -1,0 +1,85 @@
+# Fixture 4 (paused_campaign) — see development/CAMPAIGN_CLUSTERING.md §2.
+#
+# One campaign that operates in two sprints with a multi-day silence
+# between them:
+#
+#   active days 1-2 (0-indexed [0, 1]) — Delivery, Exploitation
+#   silent days 3-5 (0-indexed [2, 3, 4]) — pause window
+#   active days 6-7 (0-indexed [5, 6]) — Discovery, Lateral Movement,
+#                                        Exfiltration
+#
+# Modeled as TWO DSL actors representing the same operator's two
+# operational windows. Both share JA3, HASSH, payload, and C2
+# callback — the stable signals a fingerprint-driven clusterer
+# resolves on. Their ``active_days`` differ so each operator-half
+# emits sessions in disjoint time ranges, which is what makes the
+# adversarial time-window clusterer fragment the campaign.
+#
+# Two-actor modeling caveat: the factory mints a separate
+# ``truth_identity_id`` per DSL actor by design (see IDENTITY_
+# RESOLUTION.md — identities are recovered from signals, not
+# declared in the DSL). This is a CAMPAIGN-LEVEL fixture only;
+# identity-level scoring is fixture 2's job. The bound floors below
+# apply at level=campaign.
+#
+# Pass condition: a fingerprint-driven clusterer must fold both
+# operational windows into one cluster (shared JA3 + HASSH +
+# payload). A clusterer that lets a multi-day quiet period split
+# the campaign fails the completeness floor.
+#
+# Adversarial condition: ``time_window_clusterer`` (union sessions
+# within ≤1 day of each other) is unable to bridge the 4-day silent
+# stretch and splits the campaign into "before pause" and "after
+# pause" clusters. Completeness collapses; the bound floor rejects
+# this clusterer.
+campaign:
+  id: paused-campaign-001
+  duration_days: 7
+  pause_windows:
+    - [2, 4]            # campaign-wide silence days 3-5 (0-indexed)
+  actors:
+    - id: ops-sprint-1
+      asn: 64520
+      ip_pool: sticky
+      ja3: "771,4865-4867-49195-49199-49196-49200-157,0-23-65281-10-11-35-16-5-13-18-51-45-43-27,29-24,0"
+      hassh: "paused-op-dddddddd-dddddddd-dddddddd"
+      hours_active_utc: [9, 10, 11, 12, 13, 14, 15, 16]
+      jitter_seconds: 60
+      active_days: [0, 1]
+    - id: ops-sprint-2
+      asn: 64520        # same ASN — operator stays on same egress
+      ip_pool: sticky
+      ja3: "771,4865-4867-49195-49199-49196-49200-157,0-23-65281-10-11-35-16-5-13-18-51-45-43-27,29-24,0"
+      hassh: "paused-op-dddddddd-dddddddd-dddddddd"
+      hours_active_utc: [9, 10, 11, 12, 13, 14, 15, 16]
+      jitter_seconds: 60
+      active_days: [5, 6]
+  phases:
+    - name: delivery
+      actor: ops-sprint-1
+      target_selector: { service: ssh, count: 2 }
+      dwell_seconds: 1
+    - name: exploitation
+      actor: ops-sprint-1
+      tool_signature:
+        payload_hash: "paused-op-stage1-payload"
+        c2_callback: "c2.paused-op.example"
+      target_selector: { service: ssh, count: 2 }
+      dwell_seconds: 5
+    - name: discovery
+      actor: ops-sprint-2
+      target_selector: { service: ssh, count: 2 }
+      dwell_seconds: 5
+    - name: lateral_movement
+      actor: ops-sprint-2
+      tool_signature:
+        payload_hash: "paused-op-stage1-payload"
+        c2_callback: "c2.paused-op.example"
+      target_selector: { service: ssh, count: 2 }
+      dwell_seconds: 5
+    - name: exfiltration
+      actor: ops-sprint-2
+      tool_signature:
+        c2_callback: "c2.paused-op.example"
+      target_selector: { service: ssh, count: 2 }
+      dwell_seconds: 5

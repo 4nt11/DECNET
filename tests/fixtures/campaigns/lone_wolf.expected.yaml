@@ -1,0 +1,17 @@
+# Bounds for fixture 3 (lone_wolf).
+#
+# Every actor in this fixture is a singleton (the wolf itself, plus
+# every background-noise scanner). A correct clusterer puts each in
+# its own cluster; that's a perfect score.
+#
+# Bounds are deliberately loose at first — we ratchet them up as the
+# algorithm matures. Loosening any bound to make CI pass requires
+# justification in the PR description (per CAMPAIGN_CLUSTERING.md §2).
+adjusted_rand_index:
+  min: 1.0
+homogeneity:
+  min: 1.0
+completeness:
+  min: 1.0
+singleton_recall:
+  min: 1.0

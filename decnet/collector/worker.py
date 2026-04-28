@@ -7,6 +7,7 @@ The ingester tails the .json file; rsyslog can consume the .log file independent
 """
 
 import asyncio
+import contextlib
 import json
 import os
 import re
@@ -15,10 +16,22 @@ import time
 from concurrent.futures import ThreadPoolExecutor
 from datetime import datetime
 from pathlib import Path
-from typing import Any, Optional
+from typing import Any, Callable, Optional
 
+from decnet.bus import topics as _topics
+from decnet.bus.factory import get_bus
+from decnet.bus.publish import (
+    make_thread_safe_publisher,
+    run_control_listener_signal,
+    run_health_heartbeat,
+)
 from decnet.logging import get_logger
 from decnet.telemetry import traced as _traced, get_tracer as _get_tracer, inject_context as _inject_ctx
+
+# Collector publish signature: ``publish_fn(parsed_event_dict)``.  Callable
+# from the container-stream threads; the worker wraps it around a thread-safe
+# bus publisher that marshals onto the asyncio loop.
+CollectorPublishFn = Callable[[dict[str, Any]], None]
 
 logger = get_logger("collector")
 
@@ -127,6 +140,22 @@ _IP_FIELDS = ("src_ip", "src", "client_ip", "remote_ip", "remote_addr", "target_
 # as one unit; we only care about IP-shaped fields here anyway.
 _MSG_KV_RE = re.compile(r'(\w+)=(\S+)')
 
+# Native sshd / pam syslog lines arrive without an SD block and without
+# key=value pairs. The remote address shows up as free prose:
+#   "Failed password for root from 1.2.3.4 port 42772 ssh2"
+#   "Connection from 1.2.3.4 port 42772 on 10.0.0.2 port 22"
+#   "pam_unix(sshd:auth): authentication failure; … rhost=1.2.3.4 user=root"
+# Anchored patterns first so we never confuse the attacker with the
+# local listener IP ("on 10.0.0.2"). Bare IP scan is the last resort.
+_IPV4 = r"\d{1,3}(?:\.\d{1,3}){3}"
+_IPV6 = r"[0-9a-fA-F:]+:[0-9a-fA-F:]+"
+_IP = rf"(?:{_IPV4}|{_IPV6})"
+_MSG_IP_ANCHORED_RE = re.compile(
+    rf"\b(?:from|rhost[:=]|client[:=]|src[:=])\s*({_IP})",
+    re.IGNORECASE,
+)
+_MSG_IP_BARE_RE = re.compile(rf"\b({_IPV4})\b")
+
 
 def parse_rfc5424(line: str) -> Optional[dict[str, Any]]:
     """
@@ -173,6 +202,19 @@ def parse_rfc5424(line: str) -> Optional[dict[str, Any]]:
                 attacker_ip = v
                 break
 
+    # Final fallback for native syslog producers that emit free-form prose
+    # (notably sshd and pam_unix routed via rsyslog without the relay@55555
+    # SD wrapper). Prefer anchored matches so the local listener address in
+    # "Connection from X port Y on Z port 22" never wins over X.
+    if attacker_ip == "Unknown" and msg:
+        anchored = _MSG_IP_ANCHORED_RE.search(msg)
+        if anchored:
+            attacker_ip = anchored.group(1)
+        else:
+            bare = _MSG_IP_BARE_RE.search(msg)
+            if bare:
+                attacker_ip = bare.group(1)
+
     try:
         ts_formatted = datetime.fromisoformat(ts_raw).strftime("%Y-%m-%d %H:%M:%S")
     except ValueError:
@@ -210,14 +252,67 @@ def _load_service_container_names() -> set[str]:
     return names
 
 
+_TOPOLOGY_SERVICE_LABEL = "decnet.topology.service"
+_FLEET_SERVICE_LABEL = "decnet.fleet.service"
+
+
+def _has_decnet_service_label(labels: Optional[dict]) -> bool:
+    """Recognize both fleet (``decnet.fleet.service``, set by
+    ``decnet/composer.py``) and MazeNET topology (``decnet.topology.service``,
+    set by ``decnet/topology/compose.py``) containers.
+
+    Label-based detection is the canonical path: it's stateless and avoids
+    the race between ``docker compose up`` and the ``decnet-state.json``
+    write that previously caused freshly-deployed fleet containers to be
+    silently dropped by the docker-events watcher.
+    """
+    if not labels:
+        return False
+    return (
+        labels.get(_TOPOLOGY_SERVICE_LABEL) == "true"
+        or labels.get(_FLEET_SERVICE_LABEL) == "true"
+    )
+
+
 def is_service_container(container) -> bool:
-    """Return True if this Docker container is a known DECNET service container."""
-    name = (container if isinstance(container, str) else container.name).lstrip("/")
+    """Return True if this Docker container is a known DECNET service container.
+
+    Label-based detection is preferred (works for both fleet and MazeNET
+    topology containers without touching decnet-state.json). The
+    state-file name match remains as a fallback so containers built from
+    older composes — which predate the ``decnet.fleet.service`` label —
+    are still picked up.
+    """
+    if isinstance(container, str):
+        return container.lstrip("/") in _load_service_container_names()
+    labels: Optional[dict] = None
+    attrs = getattr(container, "attrs", None)
+    if isinstance(attrs, dict):
+        labels = (attrs.get("Config") or {}).get("Labels")
+    if labels is None:
+        labels = getattr(container, "labels", None)
+    if _has_decnet_service_label(labels):
+        return True
+    # Fallback: legacy containers without labels still match by name.
+    name = container.name.lstrip("/")
     return name in _load_service_container_names()
 
 
 def is_service_event(attrs: dict) -> bool:
-    """Return True if a Docker start event is for a known DECNET service container."""
+    """Return True if a Docker start event is for a known DECNET service container.
+
+    Docker start-event attrs flatten every container label alongside the
+    ``name``/``image`` keys — no separate ``labels`` sub-dict — so label
+    detection happens directly on ``attrs``.
+
+    Prefer the label path because it's race-free with respect to the
+    ``decnet-state.json`` write that ``decnet deploy`` performs around
+    ``docker compose up``: a freshly-started container's start event can
+    arrive before the state file has been updated, and the legacy
+    name-based fallback would then drop the event.
+    """
+    if _has_decnet_service_label(attrs):
+        return True
     name = attrs.get("name", "").lstrip("/")
     return name in _load_service_container_names()
 
@@ -244,7 +339,12 @@ def _reopen_if_needed(path: Path, fh: Optional[Any]) -> Any:
 
 
 @_traced("collector.stream_container")
-def _stream_container(container_id: str, log_path: Path, json_path: Path) -> None:
+def _stream_container(
+    container_id: str,
+    log_path: Path,
+    json_path: Path,
+    publish_fn: CollectorPublishFn | None = None,
+) -> None:
     """Stream logs from one container and append to the host log files."""
     import docker  # type: ignore[import]
 
@@ -279,6 +379,13 @@ def _stream_container(container_id: str, log_path: Path, json_path: Path) -> Non
                             jf = _reopen_if_needed(json_path, jf)
                             jf.write(json.dumps(parsed) + "\n")
                             jf.flush()
+                            if publish_fn is not None:
+                                try:
+                                    publish_fn(parsed)
+                                except Exception as exc:
+                                    logger.debug(
+                                        "collector: bus publish failed: %s", exc,
+                                    )
                     else:
                         logger.debug(
                             "collector: rate-limited decky=%s service=%s type=%s attacker=%s",
@@ -296,6 +403,41 @@ def _stream_container(container_id: str, log_path: Path, json_path: Path) -> Non
                     fh.close()
                 except Exception:  # nosec B110 — best-effort file handle cleanup
                     pass
+
+
+# ─── Bus plumbing ─────────────────────────────────────────────────────────────
+
+def _make_system_log_publisher(
+    bus: Any, loop: asyncio.AbstractEventLoop,
+) -> CollectorPublishFn:
+    """Factory: returns a ``publish_fn(parsed)`` for use by stream threads.
+
+    When *bus* is ``None`` the returned callable is a no-op, so the stream
+    thread can call it unconditionally.  Otherwise each call is marshalled
+    onto *loop* (the asyncio event loop that owns the bus socket) via
+    ``make_thread_safe_publisher``.
+    """
+    raw_publish = make_thread_safe_publisher(bus, loop) if bus is not None else None
+    if raw_publish is None:
+        return lambda _parsed: None
+
+    topic = _topics.system(_topics.SYSTEM_LOG)
+
+    def _publish(parsed: dict[str, Any]) -> None:
+        event_type = parsed.get("event_type", "")
+        raw_publish(
+            topic,
+            {
+                "decky": parsed.get("decky", ""),
+                "service": parsed.get("service", ""),
+                "event_type": event_type,
+                "attacker_ip": parsed.get("attacker_ip", "Unknown"),
+                "timestamp": parsed.get("timestamp", ""),
+            },
+            event_type,
+        )
+
+    return _publish
 
 
 # ─── Async collector ──────────────────────────────────────────────────────────
@@ -317,6 +459,38 @@ async def log_collector_worker(log_file: str) -> None:
     active: dict[str, asyncio.Task[None]] = {}
     loop = asyncio.get_running_loop()
 
+    # Optional bus wiring — per-line system.log publish.  Fan-in from many
+    # container-stream threads is handled by make_thread_safe_publisher,
+    # which marshals each publish onto this loop.
+    bus = None
+    try:
+        bus = get_bus(client_name="collector")
+        await bus.connect()
+    except Exception as exc:
+        logger.warning("collector: bus unavailable, continuing without publish: %s", exc)
+        bus = None
+
+    _publish_log = _make_system_log_publisher(bus, loop)
+
+    # Workers panel health heartbeat + bus-driven stop control.  The
+    # heartbeat beacons on system.collector.health every 30s; the
+    # control listener translates a bus stop intent into a SIGTERM to
+    # this process (collector's main loop is a blocking thread pool, so
+    # self-signalling is cleaner than threading a shutdown event).
+    heartbeat_task = asyncio.create_task(run_health_heartbeat(bus, "collector"))
+    control_task = asyncio.create_task(run_control_listener_signal(bus, "collector"))
+
+    # Periodic re-scan of running containers. Belt to the event-watcher's
+    # suspenders: if dockerd or the SDK ever drops a start event during a
+    # reconnect window (the retry loop in ``_watch_events`` covers the
+    # restart itself, but events fired *during* the gap are lost), this
+    # loop picks up the orphan within ``RECONCILE_INTERVAL_S``. Also
+    # prunes finished futures so ``active`` doesn't accumulate over the
+    # agent's lifetime as topology mutations churn containers.
+    _reconcile_interval_s = float(
+        os.environ.get("DECNET_COLLECTOR_RECONCILE_S", "30")
+    )
+
     # Dedicated thread pool so long-running container log streams don't
     # saturate the default asyncio executor and starve short-lived
     # to_thread() calls elsewhere (e.g. load_state in the web API).
@@ -329,7 +503,7 @@ async def log_collector_worker(log_file: str) -> None:
             active[container_id] = asyncio.ensure_future(
                 loop.run_in_executor(
                     collector_pool, _stream_container,
-                    container_id, log_path, json_path,
+                    container_id, log_path, json_path, _publish_log,
                 ),
                 loop=loop,
             )
@@ -339,20 +513,73 @@ async def log_collector_worker(log_file: str) -> None:
         logger.info("collector started log_path=%s", log_path)
         client = docker.from_env()
 
+        async def _reconcile_loop() -> None:
+            while True:
+                try:
+                    await asyncio.sleep(_reconcile_interval_s)
+                    # Drop done futures so the dict's bounded by the
+                    # current container count, not lifetime churn.
+                    for cid in [c for c, t in active.items() if t.done()]:
+                        active.pop(cid, None)
+                    containers = await loop.run_in_executor(
+                        collector_pool,
+                        lambda: list(client.containers.list()),
+                    )
+                    for container in containers:
+                        if container.id in active:
+                            continue
+                        if is_service_container(container):
+                            _spawn(container.id, container.name.lstrip("/"))
+                except asyncio.CancelledError:
+                    raise
+                except Exception as exc:  # noqa: BLE001 — keep loop alive across SDK transients
+                    logger.warning("collector: reconcile pass failed: %s", exc)
+
+        reconcile_task = asyncio.create_task(_reconcile_loop())
+
         for container in client.containers.list():
             if is_service_container(container):
                 _spawn(container.id, container.name.lstrip("/"))
 
         def _watch_events() -> None:
-            for event in client.events(
-                decode=True,
-                filters={"type": "container", "event": "start"},
-            ):
-                attrs = event.get("Actor", {}).get("Attributes", {})
-                cid  = event.get("id", "")
-                name = attrs.get("name", "")
-                if cid and is_service_event(attrs):
-                    loop.call_soon_threadsafe(_spawn, cid, name)
+            # The dockerd event stream is the fast path for picking up
+            # newly-started service containers. It can break in two ways:
+            # (a) dockerd restart / reload severs the long-poll, (b) the
+            # SDK's JSON-stream decoder occasionally raises on a partial
+            # frame. Both used to make this thread return cleanly, leaving
+            # the collector "running" with no event subscription — future
+            # container starts were silently dropped until an operator
+            # restarted the unit. Retry with exponential backoff (cap at
+            # 30s, matching the heartbeat cadence) so dockerd hiccups are
+            # invisible to the operator. The reconcile loop is the safety
+            # net for any events lost during the reconnect window.
+            backoff = 1.0
+            while True:
+                try:
+                    for event in client.events(
+                        decode=True,
+                        filters={"type": "container", "event": "start"},
+                    ):
+                        attrs = event.get("Actor", {}).get("Attributes", {})
+                        cid  = event.get("id", "")
+                        name = attrs.get("name", "")
+                        if cid and is_service_event(attrs):
+                            loop.call_soon_threadsafe(_spawn, cid, name)
+                    # Clean iterator exhaustion: real dockerd doesn't
+                    # close the stream voluntarily, so this only
+                    # happens in tests with mocked iterators or in
+                    # genuinely unrecoverable daemon states. Either
+                    # way, returning lets the worker shut down
+                    # cleanly — the reconciler is the safety net for
+                    # productive cases.
+                    return
+                except Exception as exc:  # noqa: BLE001 — SDK leaks bare Exceptions on stream-decode errors
+                    logger.warning(
+                        "collector: event stream broke (%s: %s); reconnecting in %.1fs",
+                        type(exc).__name__, exc, backoff,
+                    )
+                    time.sleep(backoff)
+                    backoff = min(backoff * 2, 30.0)
 
         await loop.run_in_executor(collector_pool, _watch_events)
 
@@ -366,3 +593,15 @@ async def log_collector_worker(log_file: str) -> None:
         logger.error("collector error: %s", exc)
     finally:
         collector_pool.shutdown(wait=False)
+        # `reconcile_task` may not exist if startup failed before
+        # `client = docker.from_env()` returned; tolerate that.
+        _maintenance_tasks = [heartbeat_task, control_task]
+        if "reconcile_task" in locals():
+            _maintenance_tasks.append(reconcile_task)
+        for t in _maintenance_tasks:
+            t.cancel()
+            with contextlib.suppress(Exception, asyncio.CancelledError):
+                await t
+        if bus is not None:
+            with contextlib.suppress(Exception):
+                await bus.close()

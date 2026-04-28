@@ -9,7 +9,7 @@ from decnet.engine import deploy as _deploy
 from decnet.ini_loader import load_ini_from_string
 from decnet.network import detect_interface, detect_subnet, get_host_ip
 from decnet.web.dependencies import require_admin, repo
-from decnet.web.db.models import DeployIniRequest
+from decnet.web.db.models import DeployIniRequest, DeployResponse
 from decnet.web.router.swarm.api_deploy_swarm import dispatch_decnet_config
 
 log = get_logger("api")
@@ -20,6 +20,7 @@ router = APIRouter()
 @router.post(
     "/deckies/deploy",
     tags=["Fleet Management"],
+    response_model=DeployResponse,
     responses={
         400: {"description": "Bad Request (e.g. malformed JSON)"},
         401: {"description": "Could not validate credentials"},
@@ -159,6 +160,11 @@ async def api_deploy_deckies(req: DeployIniRequest, admin: dict = Depends(requir
         }
 
     # Unihost path — docker-compose on the master itself.
+    # NB: the JSON state file (decnet-state.json) and fleet_deckies DB rows
+    # are both written *inside* _deploy(config) — engine.deployer is the
+    # single shared sink for every fleet-creation path (CLI deploy, this
+    # unihost API path, and per-worker SWARM agent deploys).  Do not
+    # duplicate save_state / fleet upserts here.
     try:
         if os.environ.get("DECNET_CONTRACT_TEST") != "true":
             _deploy(config)

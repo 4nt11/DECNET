@@ -35,16 +35,32 @@ class MySQLRepository(SQLModelRepository):
     async def _migrate_attackers_table(self) -> None:
         """Drop the legacy (pre-UUID) ``attackers`` table if it exists without a ``uuid`` column.
 
-        MySQL exposes column metadata via ``information_schema.COLUMNS``.
-        ``DATABASE()`` scopes the lookup to the currently connected schema.
+        Also adds the GeoIP columns (``country_code``, ``country_source``)
+        to existing tables that predate them. MySQL exposes column
+        metadata via ``information_schema.COLUMNS``; ``DATABASE()`` scopes
+        the lookup to the currently connected schema.
         """
         async with self.engine.begin() as conn:
             rows = (await conn.execute(text(
                 "SELECT COLUMN_NAME FROM information_schema.COLUMNS "
                 "WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'attackers'"
             ))).fetchall()
-            if rows and not any(r[0] == "uuid" for r in rows):
+            if not rows:
+                return  # table absent; create_all() handles it.
+            if not any(r[0] == "uuid" for r in rows):
                 await conn.execute(text("DROP TABLE attackers"))
+                return
+            existing_cols = {r[0] for r in rows}
+            if "country_code" not in existing_cols:
+                await conn.execute(text(
+                    "ALTER TABLE attackers "
+                    "ADD COLUMN country_code VARCHAR(2) NULL, "
+                    "ADD INDEX ix_attackers_country_code (country_code)"
+                ))
+            if "country_source" not in existing_cols:
+                await conn.execute(text(
+                    "ALTER TABLE attackers ADD COLUMN country_source VARCHAR(16) NULL"
+                ))
 
     async def _migrate_column_types(self) -> None:
         """Upgrade TEXT → MEDIUMTEXT for columns that accumulate large JSON blobs.
@@ -80,6 +96,35 @@ class MySQLRepository(SQLModelRepository):
                         f"ALTER TABLE `{table_name}` MODIFY COLUMN `{col_name}` {spec}"
                     ))
 
+    async def _migrate_session_profile_table(self) -> None:
+        """Add DEBT-036 keystroke-dynamics columns (start-of-action latency,
+        three-bucket pause histogram, top-bigrams JSON) to existing tables.
+
+        MySQL's ``ALTER TABLE ADD COLUMN`` fails if the column already
+        exists, so gate on ``information_schema.COLUMNS`` to stay
+        idempotent.
+        """
+        async with self.engine.begin() as conn:
+            rows = (await conn.execute(text(
+                "SELECT COLUMN_NAME FROM information_schema.COLUMNS "
+                "WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'session_profile'"
+            ))).fetchall()
+            if not rows:
+                return
+            existing_cols = {r[0] for r in rows}
+            additions = [
+                ("kd_top_bigrams", "TEXT NULL"),
+                ("kd_start_of_action_latency", "DOUBLE NULL"),
+                ("kd_pause_hist_burst", "INT NULL"),
+                ("kd_pause_hist_think", "INT NULL"),
+                ("kd_pause_hist_distracted", "INT NULL"),
+            ]
+            for col_name, col_spec in additions:
+                if col_name not in existing_cols:
+                    await conn.execute(text(
+                        f"ALTER TABLE session_profile ADD COLUMN {col_name} {col_spec}"
+                    ))
+
     async def initialize(self) -> None:
         """Create tables and run all MySQL-specific migrations.
 
@@ -92,6 +137,7 @@ class MySQLRepository(SQLModelRepository):
             await lock_conn.execute(text("SELECT GET_LOCK('decnet_schema_init', 30)"))
             try:
                 await self._migrate_attackers_table()
+                await self._migrate_session_profile_table()
                 await self._migrate_column_types()
                 async with self.engine.begin() as conn:
                     await conn.run_sync(SQLModel.metadata.create_all)

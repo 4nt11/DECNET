@@ -1,27 +1,127 @@
 @import url('https://fonts.googleapis.com/css2?family=Ubuntu+Mono:ital,wght@0,400;0,700;1,400;1,700&display=swap');
 
 :root {
-  --background-color: #000000;
-  --text-color: #00ff41;
-  --accent-color: #ee82ee;
-  --secondary-color: #0d1117;
-  --border-color: #30363d;
-  --matrix-green-glow: 0 0 10px rgba(0, 255, 65, 0.5);
-  --violet-glow: 0 0 10px rgba(238, 130, 238, 0.5);
+  /* ── Brand ─────────────────────────────────────── */
+  --bg:              #000000;
+  --matrix:          #00ff41;
+  --violet:          #ee82ee;
+  --panel:           #0d1117;
+  --border:          #30363d;
+  --alert:           #ff4141;
+
+  /* Back-compat names used across the codebase */
+  --background-color: var(--bg);
+  --text-color:       var(--matrix);
+  --accent-color:     var(--violet);
+  --secondary-color:  var(--panel);
+  --border-color:     var(--border);
+
+  /* ── Foreground opacities ──────────────────────── */
+  --fg-1: var(--matrix);
+  --fg-2: rgba(0, 255, 65, 0.80);
+  --fg-3: rgba(0, 255, 65, 0.60);
+  --fg-4: rgba(0, 255, 65, 0.40);
+
+  /* ── Tinted surfaces ───────────────────────────── */
+  --matrix-tint-5:   rgba(0, 255, 65, 0.05);
+  --matrix-tint-10:  rgba(0, 255, 65, 0.10);
+  --matrix-tint-30:  rgba(0, 255, 65, 0.30);
+  --violet-tint-10:  rgba(238, 130, 238, 0.10);
+  --alert-tint-10:   rgba(255, 65, 65, 0.10);
+
+  /* ── Glows ─────────────────────────────────────── */
+  --matrix-glow:       0 0 10px rgba(0, 255, 65, 0.5);
+  --matrix-green-glow: var(--matrix-glow);   /* back-compat */
+  --violet-glow:       0 0 10px rgba(238, 130, 238, 0.5);
+  --matrix-glow-lg:    0 0 20px rgba(0, 255, 65, 0.4);
+  --shadow-panel:      0 0 20px rgba(0, 0, 0, 0.5);
+
+  /* ── Grid texture ──────────────────────────────── */
+  --grid-line: rgba(0, 255, 65, 0.05);
+  --grid-size: 20px;
+
+  /* ── Type ──────────────────────────────────────── */
+  --font-mono: 'Ubuntu Mono', 'SF Mono', Menlo, Consolas, monospace;
+
+  --fs-micro:   0.6rem;
+  --fs-mini:    0.7rem;
+  --fs-tiny:    0.75rem;
+  --fs-small:   0.8rem;
+  --fs-body:    0.85rem;
+  --fs-ui:      0.9rem;
+  --fs-base:    1rem;
+  --fs-head:    1.2rem;
+  --fs-page:    1.5rem;
+  --fs-hero:    1.8rem;
+  --fs-display: 2.5rem;
+
+  --lh-default: 1.5;
+
+  --ls-tight:   0;
+  --ls-label:   1px;
+  --ls-nav:     2px;
+  --ls-title:   4px;
+  --ls-brand:   10px;
+
+  /* ── Spacing ───────────────────────────────────── */
+  --space-1:  4px;
+  --space-2:  8px;
+  --space-3:  12px;
+  --space-4:  16px;
+  --space-5:  20px;
+  --space-6:  24px;
+  --space-8:  32px;
+  --space-10: 40px;
+
+  /* ── Radii ─────────────────────────────────────── */
+  --radius-0: 0;
+  --radius-1: 2px;
+  --radius-2: 4px;
+  --radius-pill: 999px;
+
+  /* ── Layout ────────────────────────────────────── */
+  --sidebar-open:    240px;
+  --sidebar-closed:   70px;
+  --topbar-h:         64px;
+
+  /* ── Motion ────────────────────────────────────── */
+  --ease: cubic-bezier(0.4, 0, 0.2, 1);
+  --dur-quick: 0.2s;
+  --dur-base:  0.3s;
+  --dur-slow:  1s;
+
+  --blink-dur: 2s;
+  --pulse-dur: 1s;
+  --spin-dur:  1.5s;
+
+  /* ── Accent swap (matrix default) ──────────────── */
+  --accent:         var(--matrix);
+  --accent-tint-10: var(--matrix-tint-10);
+  --accent-tint-30: var(--matrix-tint-30);
+  --accent-glow:    var(--matrix-glow);
 }
 
-* {
+html[data-accent="violet"] {
+  --accent:         var(--violet);
+  --accent-tint-10: var(--violet-tint-10);
+  --accent-tint-30: rgba(238, 130, 238, 0.30);
+  --accent-glow:    var(--violet-glow);
+}
+
+*, *::before, *::after {
   box-sizing: border-box;
   margin: 0;
   padding: 0;
 }
 
 body {
-  font-family: 'Ubuntu Mono', monospace;
-  background-color: var(--background-color);
-  color: var(--text-color);
-  line-height: 1.5;
+  font-family: var(--font-mono);
+  background-color: var(--bg);
+  color: var(--matrix);
+  line-height: var(--lh-default);
   overflow-x: hidden;
+  -webkit-font-smoothing: antialiased;
+  text-rendering: geometricPrecision;
 }
 
 input, button, textarea, select {
@@ -31,45 +131,92 @@ input, button, textarea, select {
 button {
   cursor: pointer;
   background: transparent;
-  border: 1px solid var(--text-color);
-  color: var(--text-color);
-  padding: 8px 16px;
+  border: 1px solid var(--matrix);
+  color: var(--matrix);
+  padding: 7px 14px;
+  font-family: inherit;
+  font-size: 0.78rem;
+  letter-spacing: 1.5px;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
   transition: all 0.3s ease;
 }
 
 button:hover {
-  background: var(--text-color);
-  color: var(--background-color);
-  box-shadow: var(--matrix-green-glow);
+  background: var(--matrix);
+  color: var(--bg);
+  box-shadow: var(--matrix-glow);
 }
 
+button:disabled {
+  opacity: 0.3;
+  cursor: not-allowed;
+}
+
+/* Shared .btn variants (unscoped) */
+.btn.violet { border-color: var(--violet); color: var(--violet); }
+.btn.violet:hover { background: var(--violet); color: #000; box-shadow: var(--violet-glow); }
+.btn.alert { border-color: var(--alert); color: var(--alert); }
+.btn.alert:hover { background: var(--alert); color: #000; box-shadow: 0 0 10px rgba(255, 65, 65, 0.5); }
+.btn.ghost { border-color: var(--border); color: var(--matrix); opacity: 0.7; }
+.btn.ghost:hover {
+  background: transparent; color: var(--matrix); opacity: 1;
+  border-color: var(--matrix); box-shadow: var(--matrix-glow);
+}
+.btn.small { padding: 4px 10px; font-size: 0.68rem; }
+
 input {
-  background: #0d1117;
-  border: 1px solid var(--border-color);
-  color: var(--text-color);
+  background: var(--panel);
+  border: 1px solid var(--border);
+  color: var(--matrix);
   padding: 8px 12px;
 }
 
 input:focus {
   outline: none;
-  border-color: var(--text-color);
-  box-shadow: var(--matrix-green-glow);
+  border-color: var(--matrix);
+  box-shadow: var(--matrix-glow);
 }
 
-/* Custom scrollbar */
-::-webkit-scrollbar {
-  width: 8px;
+/* ── Primitive animations ──────────────────────── */
+@keyframes decnet-blink {
+  0%, 100% { opacity: 1; text-shadow: var(--matrix-glow); }
+  50%      { opacity: 0.5; }
+}
+@keyframes decnet-pulse {
+  from { opacity: 0.5; }
+  to   { opacity: 1;   }
+}
+@keyframes decnet-spin {
+  from { transform: rotate(0deg); }
+  to   { transform: rotate(360deg); }
 }
 
-::-webkit-scrollbar-track {
-  background: var(--background-color);
+.fx-blink { animation: decnet-blink var(--blink-dur) infinite; }
+.fx-pulse { animation: decnet-pulse var(--pulse-dur) infinite alternate; }
+.fx-spin  { animation: decnet-spin  var(--spin-dur)  linear infinite; }
+
+.fx-matrix-text { color: var(--matrix); }
+.fx-violet-text { color: var(--violet); filter: drop-shadow(var(--violet-glow)); }
+.fx-matrix-glow { text-shadow: var(--matrix-glow); }
+.fx-dim { opacity: 0.5; }
+
+.bg-scangrid {
+  background-color: var(--bg);
+  background-image:
+    linear-gradient(var(--grid-line) 1px, transparent 1px),
+    linear-gradient(90deg, var(--grid-line) 1px, transparent 1px);
+  background-size: var(--grid-size) var(--grid-size);
 }
 
-::-webkit-scrollbar-thumb {
-  background: var(--secondary-color);
-  border: 1px solid var(--border-color);
+/* ── Scrollbar ─────────────────────────────────── */
+* {
+  scrollbar-width: thin;
+  scrollbar-color: var(--accent) transparent;
 }
-
-::-webkit-scrollbar-thumb:hover {
-  background: var(--border-color);
-}
+::-webkit-scrollbar              { width: 4px; height: 4px; }
+::-webkit-scrollbar-track        { background: transparent; }
+::-webkit-scrollbar-thumb        { background: var(--accent); border: none; border-radius: 2px; opacity: 0.6; }
+::-webkit-scrollbar-thumb:hover  { background: var(--accent); opacity: 1; }
+::-webkit-scrollbar-corner       { background: transparent; }

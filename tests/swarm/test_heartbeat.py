@@ -167,7 +167,7 @@ def test_heartbeat_happy_path_primary_extraction(
         assert s["archetype"] == "generic"
         assert s["service_config"] == {"ssh": {"port": 22}}
 
-    asyncio.get_event_loop().run_until_complete(_verify())
+    asyncio.run(_verify())
 
 
 def test_heartbeat_fallback_extraction_path_also_accepted(
@@ -241,7 +241,7 @@ def test_heartbeat_decommissioned_host_returns_404(
         ok = await repo.delete_swarm_host(host["host_uuid"])
         assert ok
 
-    asyncio.get_event_loop().run_until_complete(_delete())
+    asyncio.run(_delete())
 
     _pin_fingerprint(monkeypatch, fp)
     resp = client.post(
@@ -272,7 +272,7 @@ def test_heartbeat_deployed_false_bumps_host_but_writes_no_shards(
         shards = await repo.list_decky_shards(host["host_uuid"])
         assert shards == []
 
-    asyncio.get_event_loop().run_until_complete(_verify())
+    asyncio.run(_verify())
 
 
 def test_heartbeat_decky_missing_from_runtime_is_degraded(
@@ -297,4 +297,4 @@ def test_heartbeat_decky_missing_from_runtime_is_degraded(
         assert by["decky-01"]["state"] == "running"
         assert by["decky-02"]["state"] == "degraded"
 
-    asyncio.get_event_loop().run_until_complete(_verify())
+    asyncio.run(_verify())

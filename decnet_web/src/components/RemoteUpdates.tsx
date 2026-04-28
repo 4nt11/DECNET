@@ -1,10 +1,11 @@
 import React, { useEffect, useState } from 'react';
 import api from '../utils/api';
+import EmptyState from './EmptyState/EmptyState';
 import './Dashboard.css';
 import {
   Upload, RefreshCw, RotateCcw, Package, AlertTriangle, CheckCircle,
   Wifi, WifiOff, Server,
-} from 'lucide-react';
+} from '../icons';
 
 interface HostRelease {
   host_uuid: string;
@@ -165,29 +166,21 @@ const RemoteUpdates: React.FC = () => {
   }
 
   return (
-    <div className="dashboard">
-      <div
-        className="section-header"
-        style={{
-          display: 'flex', justifyContent: 'space-between', alignItems: 'center',
-          border: '1px solid var(--border-color)', backgroundColor: 'var(--secondary-color)',
-          marginBottom: '24px',
-        }}
-      >
-        <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
-          <Package size={20} />
-          <h2 style={{ margin: 0 }}>REMOTE UPDATES — WORKER FLEET</h2>
+    <div className="dashboard swarm-root">
+      <div className="page-header">
+        <div className="page-title-group">
+          <h1><Package size={18} /> REMOTE UPDATES</h1>
+          <span className="page-sub">
+            push updater bundles to enrolled workers · {hosts.length} WORKER{hosts.length === 1 ? '' : 'S'}
+          </span>
         </div>
         <button
           onClick={() => setShowFleetModal(true)}
           disabled={fleetBusy || hosts.length === 0}
-          style={{
-            display: 'flex', alignItems: 'center', gap: '8px',
-            border: '1px solid var(--accent-color)', color: 'var(--accent-color)',
-          }}
+          className="control-btn primary"
         >
           {fleetBusy ? <RefreshCw size={14} className="spin" /> : <Upload size={14} />}
-          {fleetBusy ? 'PUSHING...' : 'PUSH TO ALL'}
+          {fleetBusy ? 'PUSHING…' : 'PUSH TO ALL'}
         </button>
       </div>
 
@@ -222,11 +215,11 @@ const RemoteUpdates: React.FC = () => {
       )}
 
       {hosts.length === 0 ? (
-        <div style={{ padding: '24px', color: 'var(--dim-color)' }}>
-          <Server size={16} style={{ verticalAlign: 'middle', marginRight: '8px' }} />
-          No workers with an updater bundle are enrolled. Run{' '}
-          <code>decnet swarm enroll --host &lt;name&gt; --updater</code> to add one.
-        </div>
+        <EmptyState
+          icon={Server}
+          title="NO UPDATER-ENABLED WORKERS"
+          hint="run `decnet swarm enroll --host <name> --updater` to add one"
+        />
       ) : (
         <div style={{ display: 'grid', gap: '16px' }}>
           {hosts.map((h) => {

@@ -25,6 +25,8 @@ def _make_fake_syslog_bridge() -> ModuleType:
     mod.forward_syslog = MagicMock()
     mod.SEVERITY_WARNING = 4
     mod.SEVERITY_INFO = 6
+    mod.encode_secret = MagicMock(return_value={"secret_printable": "", "secret_b64": ""})
+    mod.classify_authorization = MagicMock(return_value=None)
     return mod
 
 

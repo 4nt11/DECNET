@@ -12,15 +12,48 @@ import json
 import os
 import random
 import struct
-from syslog_bridge import syslog_line, write_syslog_file, forward_syslog
+
+import instance_seed as _seed
+from syslog_bridge import (
+    encode_secret,
+    forward_syslog,
+    syslog_line,
+    write_syslog_file,
+)
 
 NODE_NAME = os.environ.get("NODE_NAME", "mqtt-broker")
 SERVICE_NAME   = "mqtt"
 LOG_TARGET = os.environ.get("LOG_TARGET", "")
 PORT = int(os.environ.get("PORT", "1883"))
-MQTT_ACCEPT_ALL = os.environ.get("MQTT_ACCEPT_ALL", "1") == "1"
-MQTT_PERSONA = os.environ.get("MQTT_PERSONA", "water_plant")
+
+# Default to auth-required. A broker that accepts literally anyone with any
+# client_id / username was realistic for devices on a flat OT LAN pre-2018,
+# but in 2024+ it's a tell. Operators who *want* the anonymous-broker decoy
+# still set MQTT_ACCEPT_ALL=1 explicitly.
+MQTT_ACCEPT_ALL = os.environ.get("MQTT_ACCEPT_ALL", "0") == "1"
+# Optional cred list (user:pass comma-separated). If set, only those combos
+# succeed even when ACCEPT_ALL is off — lets operators plant credential bait.
+_MQTT_CREDS: set[tuple[str, str]] = set()
+for combo in os.environ.get("MQTT_CREDS", "").split(","):
+    combo = combo.strip()
+    if ":" in combo:
+        u, _, p = combo.partition(":")
+        _MQTT_CREDS.add((u, p))
+
+_PERSONA_CHOICES = ["water_plant", "building_hvac", "solar_farm", "factory_line"]
+MQTT_PERSONA = os.environ.get("MQTT_PERSONA") or _seed.pick(_PERSONA_CHOICES)
 MQTT_CUSTOM_TOPICS = os.environ.get("MQTT_CUSTOM_TOPICS", "")
+
+# Fleet-diverse broker ID. Real mosquitto versions in the wild right now.
+_BROKER_VERSION = os.environ.get("MQTT_BROKER_VERSION") or _seed.pick([
+    "mosquitto version 1.6.9",
+    "mosquitto version 2.0.11",
+    "mosquitto version 2.0.15",
+    "mosquitto version 2.0.17",
+    "mosquitto version 2.0.18",
+    "HiveMQ CE 2024.4",
+    "EMQX 5.3.2",
+])
 
 _CONNACK_ACCEPTED = b"\x20\x02\x00\x00"
 _CONNACK_NOT_AUTH = b"\x20\x02\x00\x05"
@@ -133,27 +166,45 @@ def _generate_topics() -> dict:
             _log("config_error", severity=4, error=str(e))
 
     if MQTT_PERSONA == "water_plant":
+        site = _seed.pick(["north", "south", "east", "west", "plant-a", "plant-b"])
         topics.update({
-            "plant/water/tank1/level": f"{random.uniform(60.0, 80.0):.1f}",
-            "plant/water/tank1/pressure": f"{random.uniform(2.5, 3.0):.2f}",
-            "plant/water/pump1/status": "RUNNING",
-            "plant/water/pump1/rpm": f"{int(random.uniform(1400, 1450))}",
-            "plant/water/pump2/status": "STANDBY",
-            "plant/water/chlorine/dosing": f"{random.uniform(1.1, 1.3):.1f}",
-            "plant/water/chlorine/residual": f"{random.uniform(0.7, 0.9):.1f}",
-            "plant/water/valve/inlet/state": "OPEN",
-            "plant/water/valve/drain/state": "CLOSED",
-            "plant/alarm/high_pressure": "0",
-            "plant/alarm/low_chlorine": "0",
-            "plant/alarm/pump_fault": "0",
-            "plant/$SYS/broker/version": "Mosquitto 2.0.15",
-            "plant/$SYS/broker/uptime": "2847392",
+            f"{site}/water/tank1/level": f"{random.uniform(60.0, 80.0):.1f}",
+            f"{site}/water/tank1/pressure": f"{random.uniform(2.5, 3.0):.2f}",
+            f"{site}/water/pump1/status": "RUNNING",
+            f"{site}/water/pump1/rpm": f"{int(random.uniform(1400, 1450))}",
+            f"{site}/water/pump2/status": "STANDBY",
+            f"{site}/water/chlorine/dosing": f"{random.uniform(1.1, 1.3):.1f}",
+            f"{site}/water/chlorine/residual": f"{random.uniform(0.7, 0.9):.1f}",
+            f"{site}/water/valve/inlet/state": "OPEN",
+            f"{site}/water/valve/drain/state": "CLOSED",
+            f"{site}/alarm/high_pressure": "0",
+            f"{site}/alarm/low_chlorine": "0",
+            f"{site}/alarm/pump_fault": "0",
         })
-    elif not topics:
+    elif MQTT_PERSONA == "building_hvac":
+        floor = _seed.rng.randint(1, 12)
+        for i in range(_seed.rng.randint(4, 10)):
+            topics[f"bldg/floor{floor}/zone{i}/temp"] = f"{random.uniform(20.0, 24.5):.1f}"
+            topics[f"bldg/floor{floor}/zone{i}/setpoint"] = f"{random.uniform(21.0, 23.0):.1f}"
+        topics[f"bldg/floor{floor}/ahu/status"] = _seed.pick(["RUNNING", "RUNNING", "IDLE"])
+    elif MQTT_PERSONA == "solar_farm":
+        for arr in range(1, _seed.rng.randint(4, 9)):
+            topics[f"solar/array{arr}/power_kw"] = f"{random.uniform(40.0, 180.0):.1f}"
+            topics[f"solar/array{arr}/irradiance"] = f"{random.uniform(500, 950):.0f}"
+    elif MQTT_PERSONA == "factory_line":
+        line = _seed.pick(["A", "B", "C"])
+        for m in range(1, _seed.rng.randint(3, 7)):
+            topics[f"line{line}/machine{m}/state"] = _seed.pick(["RUN", "RUN", "IDLE", "FAULT"])
+            topics[f"line{line}/machine{m}/cycle_count"] = str(_seed.rng.randint(1000, 999_999))
+    if not topics:
         topics = {
             "device/status": "online",
-            "device/uptime": "3600"
+            "device/uptime": str(_seed.uptime_seconds()),
         }
+    # $SYS keys match every real broker.
+    topics["$SYS/broker/version"] = _BROKER_VERSION
+    topics["$SYS/broker/uptime"] = f"{_seed.uptime_seconds()} seconds"
+    topics["$SYS/broker/clients/connected"] = str(_seed.rng.randint(2, 24))
     return topics
 
 
@@ -210,8 +261,24 @@ class MQTTProtocol(asyncio.Protocol):
 
             if pkt_type == 1:  # CONNECT
                 info = _parse_connect(payload)
-                _log("auth", **info)
-                if MQTT_ACCEPT_ALL:
+                # Migrate auth event to the universal credential SD shape
+                # so the ingester's native branch picks up the row. The
+                # legacy username/password keys are intentionally NOT
+                # forwarded — encode_secret() supplies secret_printable
+                # and secret_b64 in their place.
+                _user = info.get("username", "")
+                _password = info.get("password", "")
+                _passthrough = {k: v for k, v in info.items()
+                                if k not in ("username", "password")}
+                _log("auth", username=_user, principal=_user,
+                     **encode_secret(_password), **_passthrough)
+                # Decide connection: accept-all > cred list > deny.
+                cred = (info.get("username", ""), info.get("password", ""))
+                accepted = (
+                    MQTT_ACCEPT_ALL
+                    or (cred in _MQTT_CREDS if _MQTT_CREDS else False)
+                )
+                if accepted:
                     self._auth = True
                     self._transport.write(_CONNACK_ACCEPTED)
                 else:

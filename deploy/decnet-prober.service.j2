@@ -1,0 +1,39 @@
+[Unit]
+Description=DECNET Prober (active realism / attacker fingerprint probes)
+Documentation=https://git.resacachile.cl/anti/DECNET/wiki/Workers#prober
+After=network-online.target decnet-bus.service
+Wants=network-online.target decnet-bus.service
+
+[Service]
+Type=simple
+User={{ user }}
+Group={{ group }}
+WorkingDirectory={{ install_dir }}
+EnvironmentFile=-{{ install_dir }}/.env.local
+Environment=DECNET_SYSTEM_LOGS=/var/log/decnet/decnet.prober.log
+ExecStart={{ venv_dir }}/bin/decnet probe
+StandardOutput=append:/var/log/decnet/decnet.prober.log
+StandardError=append:/var/log/decnet/decnet.prober.log
+
+# TCP connect probes only — no raw sockets required.
+CapabilityBoundingSet=
+AmbientCapabilities=
+
+# Security Hardening
+NoNewPrivileges=yes
+ProtectSystem=full
+ProtectHome=read-only
+PrivateTmp=yes
+ProtectKernelTunables=yes
+ProtectKernelModules=yes
+ProtectControlGroups=yes
+RestrictSUIDSGID=yes
+LockPersonality=yes
+ReadWritePaths={{ install_dir }} /var/log/decnet
+
+Restart=on-failure
+RestartSec=5
+TimeoutStopSec=15
+
+[Install]
+WantedBy=multi-user.target

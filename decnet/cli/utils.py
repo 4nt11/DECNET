@@ -134,6 +134,46 @@ def _service_registry(log_file: str) -> list[tuple[str, callable, list[str]]]:
     ]
 
 
+def _systemd_units(pattern: str = "decnet-*.service") -> list[dict] | None:
+    """Return state of every systemd unit matching *pattern*, or ``None``
+    when systemctl is unavailable (non-systemd host, container lab,
+    PATH-stripped env, user-manager unreachable).
+
+    Output shape mirrors ``systemctl list-units --output=json``: each
+    dict has ``unit``, ``load``, ``active``, ``sub``, ``description``.
+    Empty list = systemd works but no matching units are loaded (fresh
+    host that never ran ``decnet init``).
+    """
+    import json  # local import — avoids paying it on every CLI startup
+    import shutil
+
+    if not shutil.which("systemctl"):
+        return None
+    try:
+        proc = subprocess.run(  # nosec B603 B607 — fixed argv, no shell
+            [
+                "systemctl", "list-units",
+                "--type=service", "--all",
+                "--no-legend", "--no-pager",
+                "--output=json",
+                pattern,
+            ],
+            capture_output=True,
+            text=True,
+            timeout=5,
+            check=False,
+        )
+    except (OSError, subprocess.SubprocessError):
+        return None
+    if proc.returncode != 0:
+        return None
+    try:
+        data = json.loads(proc.stdout or "[]")
+    except json.JSONDecodeError:
+        return None
+    return data if isinstance(data, list) else None
+
+
 def _kill_all_services() -> None:
     """Find and kill all running DECNET microservice processes."""
     registry = _service_registry(str(DECNET_INGEST_LOG_FILE))

@@ -1,4 +1,17 @@
 ARG BASE_IMAGE=debian:bookworm-slim
+
+# ── Stage 1: build the static auth-helper credential-capture binary ──────────
+# Compiled against musl so the resulting binary is fully static — runs on
+# any glibc/musl Linux without a libc version match. Stripped at link
+# time via -s so `file /usr/sbin/auth-helper` reports a generic ELF.
+FROM debian:bookworm-slim AS auth-helper-build
+RUN apt-get update && apt-get install -y --no-install-recommends musl-tools \
+    && rm -rf /var/lib/apt/lists/*
+COPY auth-helper/auth-helper.c /tmp/auth-helper.c
+RUN musl-gcc -static -O2 -s -Wall -Wextra \
+    -o /auth-helper /tmp/auth-helper.c
+
+# ── Stage 2: the actual SSH decky image ──────────────────────────────────────
 FROM ${BASE_IMAGE}
 
 RUN apt-get update && apt-get install -y --no-install-recommends \
@@ -39,9 +52,19 @@ RUN sed -i \
 # /proc/1/fd/1 is the container-stdout fd Docker attached — writing there
 # surfaces lines in `docker logs` without needing a named pipe + relay cat
 # (which would be readable AND writable by any root-in-container process).
+#
+# Filter: drop sshd's native chatter ("Failed password", "Connection from",
+# "Connection closed by …") and the pam_unix lines emitted from sshd's PAM
+# stack (programname is inherited from the calling process, so pam_unix(sshd:*)
+# lines arrive as programname=sshd). These add no signal — our auth-helper
+# writes structured login_attempt events directly to /proc/1/fd/1 and
+# capture.sh emits sessions via `logger -t systemd-journal`. sudo / login /
+# su pam_unix lines are NOT dropped (different programname), so privilege
+# escalation telemetry still flows.
 RUN printf '%s\n' \
     '# auth + user events → container stdout as RFC 5424' \
     '$template RFC5424fmt,"<%PRI%>1 %TIMESTAMP:::date-rfc3339% %HOSTNAME% %APP-NAME% %PROCID% %MSGID% %STRUCTURED-DATA% %msg%\n"' \
+    ':programname, isequal, "sshd" stop' \
     'auth,authpriv.*  /proc/1/fd/1;RFC5424fmt' \
     'user.*           /proc/1/fd/1;RFC5424fmt' \
     > /etc/rsyslog.d/50-journal-forward.conf
@@ -56,6 +79,17 @@ RUN sed -i \
     -e 's|^\$PrivDropToUser|#$PrivDropToUser|' \
     -e 's|^\$PrivDropToGroup|#$PrivDropToGroup|' \
     /etc/rsyslog.conf
+
+# auth-helper: drop the static binary into /usr/sbin and wire pam_exec
+# into the sshd PAM stack so every password attempt (success or fail) is
+# captured before pam_unix runs. `optional` so a malfunctioning helper
+# never blocks auth — fail-open is correct: missed creds are recoverable,
+# a borked honeypot is not. expose_authtok writes the password to the
+# helper's stdin, NUL-terminated.
+COPY --from=auth-helper-build /auth-helper /usr/sbin/auth-helper
+RUN chmod 755 /usr/sbin/auth-helper && \
+    sed -i '1i auth optional pam_exec.so expose_authtok stdout /usr/sbin/auth-helper' \
+        /etc/pam.d/sshd
 
 # Sudo: log to syslog (auth facility) AND a local file with full I/O capture
 RUN echo 'Defaults logfile="/var/log/sudo.log"' >> /etc/sudoers && \
@@ -90,18 +124,25 @@ RUN mkdir -p /root/projects /root/backups /var/www/html && \
 # `.py` file under /opt and no `journal-relay` script under /usr/libexec/udev.
 COPY entrypoint.sh capture.sh syslog_bridge.py emit_capture.py \
      argv_zap.c _build_stealth.py /tmp/build/
+COPY sessrec/ /tmp/build/sessrec/
 
 # argv_zap is compiled into a shared object disguised as a multiarch
-# udev-companion library (sits next to real libudev.so.1). gcc is installed
-# only for this build step and purged in the same layer.
+# udev-companion library (sits next to real libudev.so.1). sessrec is built
+# as /usr/libexec/login-session, installed as root's login shell so every
+# interactive SSH session is pty-recorded. gcc is installed only for this
+# build step and purged in the same layer.
 RUN set -eu \
     && apt-get update \
-    && apt-get install -y --no-install-recommends gcc libc6-dev \
-    && mkdir -p /usr/lib/x86_64-linux-gnu /usr/libexec/udev \
+    && apt-get install -y --no-install-recommends gcc libc6-dev make \
+    && mkdir -p /usr/lib/x86_64-linux-gnu /usr/libexec/udev /usr/libexec \
     && gcc -O2 -fPIC -shared \
         -o /usr/lib/x86_64-linux-gnu/libudev-shared.so.1 \
         /tmp/build/argv_zap.c -ldl \
-    && apt-get purge -y gcc libc6-dev \
+    && make -C /tmp/build/sessrec install PREFIX=/usr/libexec \
+    && grep -q '^/usr/libexec/login-session$' /etc/shells \
+        || echo '/usr/libexec/login-session' >> /etc/shells \
+    && sed -i 's|^root:\([^:]*\):\([^:]*\):\([^:]*\):\([^:]*\):\([^:]*\):.*$|root:\1:\2:\3:\4:\5:/usr/libexec/login-session|' /etc/passwd \
+    && apt-get purge -y gcc libc6-dev make \
     && apt-get autoremove -y \
     && rm -rf /var/lib/apt/lists/* \
     && ln -sf /usr/bin/inotifywait /usr/libexec/udev/kmsg-watch \

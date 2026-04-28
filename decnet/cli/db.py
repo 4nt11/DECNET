@@ -8,19 +8,29 @@ from rich.table import Table
 from .utils import console, log
 
 
-_DB_RESET_TABLES: tuple[str, ...] = (
-    # Order matters for DROP TABLE: child FKs first.
-    # - attacker_behavior FK-references attackers.
-    # - decky_shards FK-references swarm_hosts.
-    "attacker_behavior",
-    "attackers",
-    "logs",
-    "bounty",
-    "state",
-    "users",
-    "decky_shards",
-    "swarm_hosts",
-)
+def _decnet_tables() -> tuple[str, ...]:
+    """Every DECNET-managed table, ordered child-first for DROP safety.
+
+    Source is ``SQLModel.metadata.sorted_tables`` — the same registry that
+    drives ``create_all`` — so adding a new model automatically enrolls
+    its table in ``db-reset`` with no manual step. (Previous hardcoded
+    list drifted multiple times; ``webhook_subscriptions`` /
+    ``session_profile`` / ``smtp_targets`` all got missed.)
+
+    ``sorted_tables`` returns parent-first (topological order that makes
+    ``CREATE`` safe). For ``DROP`` we need the reverse: children first,
+    so FK constraints drop before their parents. ``SET FOREIGN_KEY_CHECKS
+    = 0`` below makes this order-insensitive for MySQL, but the reverse
+    order keeps the code honest for any backend that doesn't support
+    disabling the FK check.
+    """
+    from sqlmodel import SQLModel
+    # Importing the models package registers every table on SQLModel.metadata.
+    import decnet.web.db.models  # noqa: F401
+
+    return tuple(
+        t.name for t in reversed(SQLModel.metadata.sorted_tables)
+    )
 
 
 async def _db_reset_mysql_async(dsn: str, mode: str, confirm: bool) -> None:
@@ -32,10 +42,11 @@ async def _db_reset_mysql_async(dsn: str, mode: str, confirm: bool) -> None:
 
     db_name = urlparse(dsn).path.lstrip("/") or "(default)"
     engine = create_async_engine(dsn)
+    tables = _decnet_tables()
     try:
         rows: dict[str, int] = {}
         async with engine.connect() as conn:
-            for tbl in _DB_RESET_TABLES:
+            for tbl in tables:
                 try:
                     result = await conn.execute(text(f"SELECT COUNT(*) FROM `{tbl}`"))  # nosec B608
                     rows[tbl] = result.scalar() or 0
@@ -58,7 +69,7 @@ async def _db_reset_mysql_async(dsn: str, mode: str, confirm: bool) -> None:
 
         async with engine.begin() as conn:
             await conn.execute(text("SET FOREIGN_KEY_CHECKS = 0"))
-            for tbl in _DB_RESET_TABLES:
+            for tbl in tables:
                 if rows.get(tbl, -1) < 0:
                     continue
                 if mode == "truncate":

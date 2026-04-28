@@ -21,18 +21,27 @@ import typer
 from . import (
     agent,
     api,
+    bus,
+    canary,
     db,
     deploy,
     forwarder,
+    geoip,
+    init,
     inventory,
     lifecycle,
     listener,
+    orchestrator,
     profiler,
+    realism,
+    reconciler,
     sniffer,
     swarm,
     swarmctl,
+    topology,
     updater,
     web,
+    webhook,
     workers,
 )
 from .gating import _gate_commands_by_mode
@@ -49,7 +58,8 @@ for _mod in (
     api, swarmctl, agent, updater, listener, forwarder,
     swarm,
     deploy, lifecycle, workers, inventory,
-    web, profiler, sniffer, db,
+    web, profiler, orchestrator, realism, reconciler, sniffer, db,
+    topology, bus, geoip, init, webhook, canary,
 ):
     _mod.register(app)
 
