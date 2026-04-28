@@ -104,6 +104,8 @@ const fpTypeLabel: Record<string, string> = {
   ja4l: 'LATENCY (JA4L)',
   tls_resumption: 'SESSION RESUMPTION',
   tls_certificate: 'CERTIFICATE',
+  tls_certificate_active: 'CERTIFICATE (ACTIVE PROBE)',
+  tls_certificate_passive: 'CERTIFICATE',
   http_useragent: 'HTTP USER-AGENT',
   http_quirks: 'HTTP HEADER QUIRKS',
   spoofed_source: 'SPOOFED SOURCE IP',
@@ -118,6 +120,8 @@ const fpTypeIcon: Record<string, React.ReactNode> = {
   ja4l: <Clock size={14} />,
   tls_resumption: <Wifi size={14} />,
   tls_certificate: <FileKey size={14} />,
+  tls_certificate_active: <FileKey size={14} />,
+  tls_certificate_passive: <FileKey size={14} />,
   http_useragent: <Shield size={14} />,
   http_quirks: <Fingerprint size={14} />,
   spoofed_source: <Crosshair size={14} />,
@@ -250,6 +254,22 @@ const FpCertificate: React.FC<{ p: any }> = ({ p }) => (
         {(typeof p.sans === 'string' ? p.sans.split(',') : p.sans).map((san: string) => (
           <Tag key={san}>{san.trim()}</Tag>
         ))}
+      </div>
+    )}
+    {p.cert_sha256 && (
+      <div>
+        <span className="dim" style={{ fontSize: '0.7rem' }}>SHA-256: </span>
+        <span style={{ fontSize: '0.75rem', fontFamily: 'monospace' }} title={p.cert_sha256}>
+          {p.cert_sha256.slice(0, 16)}…{p.cert_sha256.slice(-8)}
+        </span>
+      </div>
+    )}
+    {p.target_ip && (
+      <div>
+        <span className="dim" style={{ fontSize: '0.7rem' }}>FROM: </span>
+        <span style={{ fontSize: '0.75rem', fontFamily: 'monospace' }}>
+          {p.target_ip}{p.target_port ? `:${p.target_port}` : ''}
+        </span>
       </div>
     )}
   </div>
@@ -506,7 +526,10 @@ const FingerprintGroup: React.FC<{ fpType: string; items: any[] }> = ({ fpType, 
             case 'ja3': return <FpTlsHashes key={i} p={p} />;
             case 'ja4l': return <FpLatency key={i} p={p} />;
             case 'tls_resumption': return <FpResumption key={i} p={p} />;
-            case 'tls_certificate': return <FpCertificate key={i} p={p} />;
+            case 'tls_certificate':
+            case 'tls_certificate_active':
+            case 'tls_certificate_passive':
+              return <FpCertificate key={i} p={p} />;
             case 'jarm': return <FpJarm key={i} p={p} />;
             case 'hassh_server': return <FpHassh key={i} p={p} />;
             case 'tcpfp': return <FpTcpStack key={i} p={p} />;
@@ -1805,18 +1828,24 @@ const AttackerDetail: React.FC = () => {
             })
           : attacker.fingerprints;
 
-        // Group fingerprints by type
+        // Group fingerprints by type. tls_certificate is split on the
+        // presence of target_ip — prober payloads carry it, sniffer
+        // payloads do not — so each source ends up under the right
+        // active/passive bucket below.
         const groups: Record<string, any[]> = {};
         filteredFps.forEach((fp) => {
           const p = getPayload(fp);
-          const fpType: string = p.fingerprint_type || 'unknown';
+          let fpType: string = p.fingerprint_type || 'unknown';
+          if (fpType === 'tls_certificate') {
+            fpType = p.target_ip ? 'tls_certificate_active' : 'tls_certificate_passive';
+          }
           if (!groups[fpType]) groups[fpType] = [];
           groups[fpType].push(fp);
         });
 
         // Active probes first, then passive, then unknown
-        const activeTypes = ['jarm', 'hassh_server', 'tcpfp'];
-        const passiveTypes = ['ja3', 'ja4l', 'tls_resumption', 'tls_certificate', 'http_useragent', 'http_quirks', 'spoofed_source', 'vnc_client_version'];
+        const activeTypes = ['jarm', 'hassh_server', 'tcpfp', 'tls_certificate_active'];
+        const passiveTypes = ['ja3', 'ja4l', 'tls_resumption', 'tls_certificate_passive', 'http_useragent', 'http_quirks', 'spoofed_source', 'vnc_client_version'];
         const knownTypes = [...activeTypes, ...passiveTypes];
         const unknownTypes = Object.keys(groups).filter((t) => !knownTypes.includes(t));
 
