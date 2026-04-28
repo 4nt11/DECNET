@@ -14,7 +14,6 @@ from schemathesis.specs.openapi.checks import (
     positive_data_acceptance,
     negative_data_rejection,
     missing_required_header,
-    unsupported_method,
     use_after_free,
     ensure_resource_availability,
     ignored_auth,
@@ -56,7 +55,15 @@ ALL_CHECKS = (
     positive_data_acceptance,
     negative_data_rejection,
     missing_required_header,
-    unsupported_method,
+    # `unsupported_method` is intentionally omitted: it expects 405 for
+    # any HTTP method not declared on a path, but FastAPI route tables
+    # frequently collide static (`/topologies/services`) and
+    # parameterized (`/topologies/{topology_id}`) siblings. A request
+    # with an undeclared method on the static path falls through to
+    # the parameterized route, where auth/RBAC fires first and returns
+    # 401/403. That ordering is deliberate — leaking 405-vs-401 would
+    # let unauthenticated callers enumerate which strings are valid
+    # topology UUIDs. The check is incompatible with that design.
     use_after_free,
     ensure_resource_availability,
 )
