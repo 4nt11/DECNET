@@ -16,6 +16,7 @@ worker degrades gracefully while unrelated workers remain unaffected.
 """
 
 import asyncio
+import contextlib
 import json
 import os
 import time
@@ -68,8 +69,12 @@ class TestCollectorIsolation:
             with patch("decnet.config.load_state", return_value=None):
                 task = asyncio.create_task(log_collector_worker("/tmp/decnet-test-collector.log"))
                 await asyncio.sleep(0.1)
-                assert task.done()
-                assert task.exception() is None
+                # Collector now retries on event-stream errors instead of
+                # exiting; it should still be running (i.e. surviving) here.
+                assert not task.done()
+                task.cancel()
+                with contextlib.suppress(asyncio.CancelledError):
+                    await task
 
     def test_collector_container_filter_with_unknown_containers(self):
         """is_service_container must reject containers not in state."""

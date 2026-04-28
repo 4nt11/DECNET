@@ -342,6 +342,7 @@ class TestProbeCycleTCPFP:
             "ttl": 64, "window_size": 65535, "df_bit": 1,
             "mss": 1460, "window_scale": 7, "sack_ok": 1,
             "timestamp": 1, "options_order": "M,N,W,N,N,T,S,E",
+            "tos": 0, "dscp": 0, "ecn": 0, "server_isn": 0,
         }
         log_path = tmp_path / "decnet.log"
         json_path = tmp_path / "decnet.json"
@@ -368,6 +369,7 @@ class TestProbeCycleTCPFP:
             "ttl": 128, "window_size": 8192, "df_bit": 1,
             "mss": 1460, "window_scale": 8, "sack_ok": 1,
             "timestamp": 0, "options_order": "M,N,W,N,N,S",
+            "tos": 0, "dscp": 0, "ecn": 0, "server_isn": 0,
         }
         log_path = tmp_path / "decnet.log"
         json_path = tmp_path / "decnet.json"

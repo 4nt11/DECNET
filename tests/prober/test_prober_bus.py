@@ -114,6 +114,10 @@ def test_tcpfp_phase_invokes_publish_fn_on_success(monkeypatch, tmp_path: Path) 
             "sack_ok": True,
             "timestamp": True,
             "options_order": "mss,sack,ts,nop,wscale",
+            "tos": 0,
+            "dscp": 0,
+            "ecn": 0,
+            "server_isn": 0,
         },
     )
 

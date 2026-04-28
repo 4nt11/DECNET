@@ -137,29 +137,31 @@ class TestCollectorLiveIsolation:
     """Real collector behaviour against the actual Docker daemon."""
 
     async def test_collector_finds_no_deckies_without_state(self, tmp_path):
-        """With no deckies in state, collector's container scan finds nothing.
+        """With no deckies in state and no DECNET labels, the scan rejects
+        every container.
 
-        We avoid calling the full worker because client.events() blocks
-        the thread indefinitely — instead we test the scan logic directly
-        against the real Docker daemon.
+        is_service_container has two acceptance paths:
+          1. label-based (decnet.fleet.service / decnet.topology.service)
+          2. name match against decnet-state.json
+
+        With state empty AND labels absent, both paths must reject.  We
+        feed synthetic container objects (no real Docker call) so the
+        result is independent of whatever fleet may already be running on
+        the host — which would otherwise satisfy path (1).
         """
-        import docker
         import decnet.config as cfg
+        from unittest.mock import MagicMock
 
         original_state = cfg.STATE_FILE
         try:
             cfg.STATE_FILE = tmp_path / "empty-state.json"
 
-            # Real Docker client, real container list — but no state means
-            # is_service_container rejects everything.
-            client = docker.from_env()
-            matched = [c for c in client.containers.list() if is_service_container(c)]
-            client.close()
+            unlabeled = MagicMock()
+            unlabeled.name = "some-random-container"
+            unlabeled.attrs = {"Config": {"Labels": {}}}
+            unlabeled.labels = {}
 
-            assert matched == [], (
-                f"Expected no matching containers without state, got: "
-                f"{[c.name for c in matched]}"
-            )
+            assert is_service_container(unlabeled) is False
         finally:
             cfg.STATE_FILE = original_state
 
