@@ -19,7 +19,6 @@ from __future__ import annotations
 from decnet.canary.base import CanaryArtifact, CanaryContext, CanaryInstrumenter
 
 
-_HASH_HINTS = (b"\n#", b"#!/", b"---\n", b"version:", b"FROM ")
 _SLASH_HINTS = (b"//", b"function ", b"const ", b"let ", b"var ")
 _SEMI_HINTS = (b"[default]", b"[section]", b"\n[")
 
@@ -32,8 +31,6 @@ def _comment_prefix(blob: bytes) -> bytes:
         return b"// "
     # Default to # — the most common comment glyph across config files
     # we'd plausibly canary.
-    if any(h in head for h in _HASH_HINTS) or True:
-        return b"# "
     return b"# "
 
 

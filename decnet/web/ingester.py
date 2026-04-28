@@ -131,7 +131,7 @@ async def _run_loop(
                         time.monotonic() - _batch_started >= _max_wait_s
                     ):
                         _flushed = len(_batch)
-                        _position = await _flush_batch(repo, _batch, _position, _bus)
+                        _position = await _flush_batch(repo, _batch, _bus)
                         _batch.clear()
                         _batch_started = time.monotonic()
                         await _publish_batch(_bus, _flushed, _position)
@@ -139,7 +139,7 @@ async def _run_loop(
             # Flush any remainder collected before EOF / partial-line break.
             if _batch:
                 _flushed = len(_batch)
-                _position = await _flush_batch(repo, _batch, _position, _bus)
+                _position = await _flush_batch(repo, _batch, _bus)
                 await _publish_batch(_bus, _flushed, _position)
 
         except Exception as _e:
@@ -174,7 +174,6 @@ async def _publish_batch(bus: Any, flushed: int, position: int) -> None:
 async def _flush_batch(
     repo: BaseRepository,
     batch: list[tuple[dict[str, Any], int]],
-    current_position: int,
     bus: Any = None,
 ) -> int:
     """Commit a batch of log rows and return the new file position.
@@ -182,8 +181,8 @@ async def _flush_batch(
     If the enclosing task is being cancelled, bail out without touching
     the DB — the session factory may already be disposed during lifespan
     teardown, and awaiting it would stall the worker.  The un-flushed
-    lines stay uncommitted; the next startup re-reads them from
-    ``current_position``.
+    lines stay uncommitted; the next startup re-reads them from the
+    last persisted position.
     """
     _task = asyncio.current_task()
     if _task is not None and _task.cancelling():
