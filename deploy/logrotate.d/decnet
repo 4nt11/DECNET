@@ -1,0 +1,28 @@
+# /etc/logrotate.d/decnet — installed by `decnet init`.
+#
+# Without this, /var/log/decnet/ grows unbounded — the syslog listener writes
+# every forwarded worker line, the collector tails every container's stdout,
+# and a noisy attacker (or an active probe storm) can fill the disk in hours.
+# Bound to 7 daily rotations + size cap so a single bad day doesn't run away.
+#
+# Files we rotate:
+#   - decnet.log:  master ingest sink (DECNET_INGEST_LOG_FILE).
+#   - agent.log:   per-worker collector sink (DECNET_AGENT_LOG_FILE).
+#   - *.log:       any other component sink under /var/log/decnet/.
+#
+# `copytruncate` is required: the ingester / forwarder hold the file open via
+# Python and would otherwise keep writing to the deleted inode after rotation.
+# `notifempty` avoids spurious .1 files on quiet hosts.
+
+/var/log/decnet/*.log {
+    daily
+    rotate 7
+    maxsize 100M
+    copytruncate
+    missingok
+    notifempty
+    compress
+    delaycompress
+    su decnet decnet
+    create 0640 decnet decnet
+}

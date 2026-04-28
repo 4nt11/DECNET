@@ -493,6 +493,27 @@ def _install_tmpfiles(
     return result
 
 
+def _install_logrotate(
+    deploy: Path, logrotate_dir: Path, *, force: bool, dry_run: bool
+) -> str:
+    """Drop the logrotate config into ``/etc/logrotate.d/decnet``.
+
+    The ingester / forwarder hold the log files open via Python, so the
+    config uses ``copytruncate`` rather than rename+create. Without this
+    rule, /var/log/decnet/ grows without bound and a single noisy day of
+    attacker traffic fills the disk on a small VPS. Best-effort: a host
+    without logrotate installed (rare on systemd distros) still boots
+    fine — the operator just needs to wire their own rotation.
+    """
+    src = deploy / "logrotate.d" / "decnet"
+    if not src.is_file():
+        raise RuntimeError(f"missing logrotate config at {src}")
+    return _copy_if_changed(
+        src, logrotate_dir / src.name,
+        mode=0o644, force=force, dry_run=dry_run,
+    )
+
+
 def register(app: typer.Typer) -> None:
     @app.command(name="init")
     def init_cmd(
@@ -595,6 +616,7 @@ def register(app: typer.Typer) -> None:
         systemd_dir = pfx / "etc/systemd/system"
         polkit_dir = pfx / "etc/polkit-1/rules.d"
         tmpfiles_dir = pfx / "etc/tmpfiles.d"
+        logrotate_dir = pfx / "etc/logrotate.d"
         etc_decnet = pfx / "etc/decnet"
 
         if deinit:
@@ -624,6 +646,13 @@ def register(app: typer.Typer) -> None:
                 "remove tmpfiles.d entry",
                 lambda: _remove_file(
                     tmpfiles_dir / "decnet.conf",
+                    dry_run=dry_run,
+                ),
+            )
+            _step(
+                "remove logrotate config",
+                lambda: _remove_file(
+                    logrotate_dir / "decnet",
                     dry_run=dry_run,
                 ),
             )
@@ -773,6 +802,12 @@ def register(app: typer.Typer) -> None:
             "install tmpfiles.d entry",
             lambda: _install_tmpfiles(
                 deploy, tmpfiles_dir, force=force, dry_run=dry_run,
+            ),
+        )
+        _step(
+            "install logrotate config",
+            lambda: _install_logrotate(
+                deploy, logrotate_dir, force=force, dry_run=dry_run,
             ),
         )
         _step(

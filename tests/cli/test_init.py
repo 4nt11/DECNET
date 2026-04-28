@@ -81,6 +81,10 @@ def _seed_deploy(monkeypatch: Any, tmp_path: Path) -> Path:
         '// rule for {{ group }}\n'
     )
     (deploy / "tmpfiles.d" / "decnet.conf").write_text("d /run/decnet\n")
+    (deploy / "logrotate.d").mkdir()
+    (deploy / "logrotate.d" / "decnet").write_text(
+        "/var/log/decnet/*.log {\n    daily\n    rotate 7\n    copytruncate\n}\n"
+    )
     monkeypatch.setattr(_init, "_deploy_root", lambda: deploy)
     return deploy
 
@@ -166,6 +170,25 @@ def test_unit_files_are_installed_then_idempotent(
     )
     assert r2.exit_code == 0, r2.output
     assert "unit files up to date" in r2.output
+
+
+def test_init_installs_logrotate_config(
+    monkeypatch: Any, tmp_path: Path, subprocess_calls: List[List[str]],
+    no_missing_tools: None, present_user_and_group: None,
+) -> None:
+    """`decnet init` must drop /etc/logrotate.d/decnet so /var/log/decnet/
+    can't fill the disk on a noisy honeypot day."""
+    _seed_deploy(monkeypatch, tmp_path)
+    prefix = tmp_path / "root"
+    r = runner.invoke(app, ["init", "--no-start", "--prefix", str(prefix)])
+    assert r.exit_code == 0, r.output
+    cfg = prefix / "etc/logrotate.d/decnet"
+    assert cfg.is_file(), "logrotate config should be installed"
+    body = cfg.read_text()
+    assert "copytruncate" in body, (
+        "must use copytruncate; ingester holds the file open and won't "
+        "reopen on a rename rotation"
+    )
 
 
 def test_init_writes_decnet_ini_not_config_ini(
@@ -354,6 +377,9 @@ def _seed_installed_state(prefix: Path) -> None:
     tmpfiles = prefix / "etc/tmpfiles.d"
     tmpfiles.mkdir(parents=True)
     (tmpfiles / "decnet.conf").write_text("d /run/decnet\n")
+    logrotate = prefix / "etc/logrotate.d"
+    logrotate.mkdir(parents=True)
+    (logrotate / "decnet").write_text("/var/log/decnet/*.log {}\n")
     etc_decnet = prefix / "etc/decnet"
     etc_decnet.mkdir(parents=True)
     (etc_decnet / "decnet.ini").write_text("[decnet]\n")
@@ -382,6 +408,7 @@ def test_deinit_removes_units_polkit_tmpfiles_and_preserves_data(
     assert not (prefix / "etc/systemd/system/decnet.target").exists()
     assert not (prefix / "etc/polkit-1/rules.d/50-decnet-workers.rules").exists()
     assert not (prefix / "etc/tmpfiles.d/decnet.conf").exists()
+    assert not (prefix / "etc/logrotate.d/decnet").exists()
     assert not (prefix / "etc/decnet").exists()
     assert not (prefix / "opt/decnet").exists()
 
