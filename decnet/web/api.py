@@ -24,6 +24,7 @@ from decnet.env import (
     DECNET_INGEST_LOG_FILE,
     DECNET_PROFILE_DIR,
     DECNET_PROFILE_REQUESTS,
+    validate_public_binding,
 )
 from decnet.logging import get_logger
 from decnet.web.dependencies import repo
@@ -68,6 +69,11 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
             "Raise it with: ulimit -n 65536 (session) or LimitNOFILE=65536 (systemd)",
             soft,
         )
+
+    # Refuse to come up with a footgun config on a public binding (loopback
+    # CORS origin while bound to 0.0.0.0, plaintext canary base, etc.).
+    # Raises ValueError with an actionable message; uvicorn surfaces it.
+    validate_public_binding()
 
     log.info("API startup initialising database")
     for attempt in range(1, 6):

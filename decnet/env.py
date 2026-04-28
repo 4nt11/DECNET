@@ -174,6 +174,101 @@ _cors_raw: str = os.environ.get("DECNET_CORS_ORIGINS", _cors_default)
 DECNET_CORS_ORIGINS: list[str] = [o.strip() for o in _cors_raw.split(",") if o.strip()]
 
 
+# Master→worker mTLS hostname verification. Off by default because legacy
+# enrollments were issued certs with operator-supplied SAN lists that may
+# not match the URL the master uses to connect; set to "true" on a fresh
+# production deploy where you control enrollment to get TLS hostname checks
+# on top of CA + fingerprint pinning.
+DECNET_VERIFY_HOSTNAME: bool = (
+    os.environ.get("DECNET_VERIFY_HOSTNAME", "false").lower() == "true"
+)
+
+
+_LOOPBACK_HOSTS = {"localhost", "127.0.0.1", "::1"}
+_WILDCARD_BIND_HOSTS = {"0.0.0.0", "::"}  # nosec B104 — comparison only
+
+
+def _origin_host(origin: str) -> str:
+    """Pull the bare hostname out of a CORS origin (``http(s)://host:port``).
+
+    Returns the full origin lowercased if the URL can't be parsed — the
+    caller treats unrecognised origins as non-loopback, which is the safer
+    default for a public-binding check.
+    """
+    from urllib.parse import urlparse
+
+    try:
+        parsed = urlparse(origin)
+        host = (parsed.hostname or "").lower()
+        return host or origin.strip().lower()
+    except (ValueError, AttributeError):
+        return origin.strip().lower()
+
+
+def validate_public_binding() -> None:
+    """Refuse to start the master API/web with a footgun config.
+
+    Three checks, all gated on the API binding being non-loopback (i.e.
+    actually exposed to the network):
+
+    * If CORS allow-list still contains a loopback origin, fail. The most
+      common shape of this bug is operator flips ``DECNET_API_HOST=0.0.0.0``
+      to "make it work" and forgets to update ``DECNET_CORS_ORIGINS`` —
+      the dashboard then either can't talk to the API at all, or worse,
+      they wildcard CORS to paper over it.
+
+    * If the canary HTTP base is plaintext (``http://``) and the canary
+      host isn't loopback, fail. Canary tokens phone home on trigger;
+      plaintext over the public internet leaks the token to anyone on
+      the path.
+
+    * If the rate limiter is globally disabled, log loudly. Don't fail —
+      operators sometimes want this for benchmarking — but never let it
+      slip past unmentioned on a public binding.
+
+    Called from the FastAPI lifespan so it surfaces at startup, not on
+    first request. Skipped automatically when running under pytest so
+    the test suite doesn't have to set five env vars per fixture.
+    """
+    if any(k.startswith("PYTEST") for k in os.environ):
+        return
+    if DECNET_API_HOST in _LOOPBACK_HOSTS:
+        return  # not exposed; nothing to validate
+
+    bind_label = "DECNET_API_HOST" if DECNET_API_HOST in _WILDCARD_BIND_HOSTS else "DECNET_API_HOST"
+    loopback_origins = [o for o in DECNET_CORS_ORIGINS if _origin_host(o) in _LOOPBACK_HOSTS]
+    if loopback_origins:
+        raise ValueError(
+            f"{bind_label}={DECNET_API_HOST!r} exposes the API to the network, "
+            f"but DECNET_CORS_ORIGINS still contains loopback origin(s) "
+            f"{loopback_origins!r}. Set DECNET_CORS_ORIGINS to the public "
+            f"dashboard URL(s) before starting (e.g. "
+            f"DECNET_CORS_ORIGINS=https://dashboard.example.com)."
+        )
+
+    canary_base = os.environ.get("DECNET_CANARY_HTTP_BASE", "").strip()
+    if canary_base and canary_base.lower().startswith("http://"):
+        host = _origin_host(canary_base)
+        if host and host not in _LOOPBACK_HOSTS:
+            raise ValueError(
+                f"DECNET_CANARY_HTTP_BASE={canary_base!r} is plaintext HTTP and "
+                f"points at a non-loopback host. Canary triggers carry secrets "
+                f"that must not cross the public internet in cleartext — use "
+                f"https:// or front the canary endpoint with a TLS proxy."
+            )
+
+    limiter_enabled = os.environ.get("DECNET_LIMITER_ENABLED", "true").lower() != "false"
+    if not limiter_enabled:
+        # Late import to avoid a circular dependency through decnet.logging.
+        from decnet.logging import get_logger
+        get_logger("env").critical(
+            "DECNET_LIMITER_ENABLED=false on a public binding (%s=%s). "
+            "Login + write endpoints have no rate limiting — only run this "
+            "way for benchmarking or behind an external rate-limiting proxy.",
+            bind_label, DECNET_API_HOST,
+        )
+
+
 def __getattr__(name: str) -> str:
     """Lazy resolution for secrets only the master web/api process needs."""
     if name == "DECNET_JWT_SECRET":

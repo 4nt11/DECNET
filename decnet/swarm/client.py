@@ -106,15 +106,20 @@ class AgentClient:
         address: Optional[str] = None,
         agent_port: Optional[int] = None,
         identity: Optional[MasterIdentity] = None,
-        verify_hostname: bool = False,
+        verify_hostname: Optional[bool] = None,
     ):
         """Either pass a SwarmHost dict, or explicit address/port.
 
-        ``verify_hostname`` stays False by default because the worker's
-        cert SAN is populated from the operator-supplied address list, not
-        from modern TLS hostname-verification semantics.  The mTLS client
-        cert + CA pinning are what authenticate the peer.
+        ``verify_hostname`` defers to ``DECNET_VERIFY_HOSTNAME`` when the
+        caller doesn't pass an explicit value — production deploys flip
+        the env var on so the worker's cert SAN must match the address
+        the master connects to, on top of the existing CA + fingerprint
+        pin. Defaults to False so dev/test enrollments with mismatched
+        SANs keep working unchanged.
         """
+        if verify_hostname is None:
+            from decnet.env import DECNET_VERIFY_HOSTNAME
+            verify_hostname = DECNET_VERIFY_HOSTNAME
         if host is not None:
             self._address = host["address"]
             self._port = int(host.get("agent_port") or 8765)
