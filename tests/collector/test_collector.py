@@ -602,6 +602,20 @@ class TestIngestRateLimiter:
             assert _should_ingest(self._event(event_type="login_attempt")) is True
             assert _should_ingest(self._event(event_type="request")) is True
 
+    def test_native_sshd_logs_dropped(self):
+        # sshd's "Failed password / Accepted password" prose duplicates the
+        # auth-helper's structured event_type=auth_attempt and is unwanted.
+        assert _should_ingest(self._event(service="sshd", event_type="-")) is False
+
+    def test_pam_and_other_unix_noise_dropped(self):
+        for noisy in ("pam_unix", "sudo", "CRON", "systemd", "kernel", "rsyslogd"):
+            assert _should_ingest(self._event(service=noisy)) is False, noisy
+
+    def test_decnet_services_pass(self):
+        # Real DECNET emitters keep flowing — service ∈ {ssh, http, bash, …}.
+        for ok in ("ssh", "http", "ftp", "bash", "auth-helper", "sessrec", "mutator"):
+            assert _should_ingest(self._event(service=ok, event_type="login_attempt")) is True, ok
+
     def test_first_connect_passes(self):
         assert _should_ingest(self._event()) is True
 

@@ -75,6 +75,21 @@ _RL_EVENT_TYPES: frozenset[str] = frozenset(
 )
 _RL_MAX_ENTRIES: int = 10_000
 
+# APP-NAMEs we never want to see in the ingestion stream — native unix
+# daemons that share a container with a DECNET service. Their logs are
+# noise: sshd's "Failed password for root from X" duplicates the
+# auth-helper's structured `auth_attempt` event, pam_unix repeats it
+# again, and CRON/systemd/etc. say nothing about attacker behavior.
+# Override or extend with DECNET_COLLECTOR_DROP_APPS (comma list).
+_DROP_APPS: frozenset[str] = frozenset(
+    a.strip()
+    for a in os.environ.get(
+        "DECNET_COLLECTOR_DROP_APPS",
+        "sshd,pam_unix,sudo,su,CRON,cron,systemd,kernel,rsyslogd,dbus-daemon",
+    ).split(",")
+    if a.strip()
+)
+
 _rl_lock: threading.Lock = threading.Lock()
 _rl_last: dict[tuple[str, str, str, str], float] = {}
 
@@ -82,10 +97,11 @@ _rl_last: dict[tuple[str, str, str, str], float] = {}
 def _should_ingest(parsed: dict[str, Any]) -> bool:
     """
     Return True if this parsed event should be written to the JSON ingestion
-    stream. Rate-limited connection-lifecycle events return False when another
-    event with the same (attacker_ip, decky, service, event_type) was emitted
-    inside the dedup window.
+    stream. Drops native unix daemon noise (sshd, pam_unix, …) outright;
+    rate-limits connection-lifecycle events within a dedup window.
     """
+    if parsed.get("service", "") in _DROP_APPS:
+        return False
     event_type = parsed.get("event_type", "")
     if _RL_WINDOW_SEC <= 0.0 or event_type not in _RL_EVENT_TYPES:
         return True

