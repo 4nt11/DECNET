@@ -75,6 +75,25 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
     # Raises ValueError with an actionable message; uvicorn surfaces it.
     validate_public_binding()
 
+    # Defence-in-depth on top of the CLI mode gating. Typer hides master-only
+    # commands when DECNET_MODE=agent, but a misconfigured systemd unit or
+    # a direct `python -m uvicorn decnet.web.api:app` call would bypass that.
+    # This raises before any worker / DB / bus comes up.
+    _mode = os.environ.get("DECNET_MODE", "master").lower()
+    _disallow = os.environ.get("DECNET_DISALLOW_MASTER", "true").lower() == "true"
+    if _mode == "agent" and _disallow:
+        raise RuntimeError(
+            "decnet.web.api refuses to start with DECNET_MODE=agent. "
+            "The master API is master-only; agents run `decnet agent` instead. "
+            "If this host genuinely plays both roles, set DECNET_DISALLOW_MASTER=false."
+        )
+
+    # Resolve DECNET_JWT_SECRET eagerly so a missing/insecure secret fails
+    # at boot rather than on the first request that hits an auth-gated
+    # endpoint. The lazy-load shape stays useful for non-master CLIs.
+    from decnet import env as _env
+    _ = _env.DECNET_JWT_SECRET  # raises ValueError on missing/bad
+
     log.info("API startup initialising database")
     for attempt in range(1, 6):
         try:
