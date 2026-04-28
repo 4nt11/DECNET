@@ -220,6 +220,12 @@ def parse_rfc5424(line: str) -> Optional[dict[str, Any]]:
     except ValueError:
         ts_formatted = ts_raw
 
+    # Free-form bash PROMPT_COMMAND lines (MSGID=NIL, body starts with
+    # "CMD ") get event_type rewritten to "command". `fields` stays empty
+    # so the frontend's msg-based pill rendering doesn't double up.
+    if event_type == "-" and msg.startswith("CMD "):
+        event_type = "command"
+
     return {
         "timestamp": ts_formatted,
         "decky": decky,
