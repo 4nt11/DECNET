@@ -568,6 +568,52 @@ async def _extract_bounty(
             },
         })
 
+    # 12. Captured file drops + stored mail. The `file_captured` event
+    # comes from inotifywait quarantines on SSH deckies; `message_stored`
+    # comes from the SMTP template's DATA-commit handler. Both are
+    # already what AttackerDetail's artifacts/mail tabs read; mirroring
+    # them into the Bounty table makes the global Vault page show them
+    # alongside credentials and fingerprints. Dedup on (bounty_type,
+    # attacker_ip, payload); sha256 in the payload guarantees per-drop
+    # uniqueness so repeat captures don't multiply rows.
+    _evt = log_data.get("event_type")
+    if _evt == "file_captured" and _fields.get("stored_as"):
+        await repo.add_bounty({
+            "decky": log_data.get("decky"),
+            "service": log_data.get("service"),
+            "attacker_ip": log_data.get("attacker_ip"),
+            "bounty_type": "artifact",
+            "payload": {
+                "kind": "file",
+                "stored_as": _fields.get("stored_as"),
+                "sha256": _fields.get("sha256"),
+                "size": _fields.get("size"),
+                "orig_path": _fields.get("orig_path"),
+                "attribution": _fields.get("attribution"),
+                "writer_comm": _fields.get("writer_comm"),
+            },
+        })
+    elif _evt == "message_stored" and _fields.get("stored_as"):
+        await repo.add_bounty({
+            "decky": log_data.get("decky"),
+            "service": log_data.get("service"),
+            "attacker_ip": log_data.get("attacker_ip"),
+            "bounty_type": "artifact",
+            "payload": {
+                "kind": "mail",
+                "stored_as": _fields.get("stored_as"),
+                "sha256": _fields.get("sha256"),
+                "size": _fields.get("size"),
+                "subject": _fields.get("subject"),
+                "from_hdr": _fields.get("from_hdr"),
+                "to_hdr": _fields.get("to_hdr"),
+                "mail_from": _fields.get("mail_from"),
+                "rcpt_to": _fields.get("rcpt_to"),
+                "attachment_count": _fields.get("attachment_count"),
+                "content_type": _fields.get("content_type"),
+            },
+        })
+
 
 # ─── IP-leak detection (XFF / Forwarded / X-Real-IP / CDN variants) ──────────
 

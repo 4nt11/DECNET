@@ -2,7 +2,7 @@ import React, { useEffect, useRef, useState } from 'react';
 import { useSearchParams, useNavigate } from 'react-router-dom';
 import {
   Archive, Search, ChevronLeft, ChevronRight, Filter, Key, Package, ChevronRight as ChevR,
-  Target,
+  Target, FileText, Mail,
 } from '../icons';
 import api from '../utils/api';
 import BountyInspector from './BountyInspector';
@@ -95,13 +95,23 @@ const Bounty: React.FC = () => {
   const credCount = bounties.filter(b => b.bounty_type === 'credential').length;
   const payCount = bounties.filter(b => b.bounty_type === 'payload').length;
   const fpCount = bounties.filter(b => b.bounty_type === 'fingerprint').length;
+  const artCount = bounties.filter(b => b.bounty_type === 'artifact').length;
 
   const SEGMENTS: [string, string][] = [
     ['', 'ALL'],
     ['credential', 'CREDENTIALS'],
     ['payload', 'PAYLOADS'],
+    ['artifact', 'ARTIFACTS'],
     ['fingerprint', 'FINGERPRINTS'],
   ];
+
+  const formatBytes = (n: any): string => {
+    const v = typeof n === 'string' ? parseInt(n, 10) : n;
+    if (!Number.isFinite(v) || v < 0) return '';
+    if (v < 1024) return `${v} B`;
+    if (v < 1024 * 1024) return `${(v / 1024).toFixed(1)} KB`;
+    return `${(v / (1024 * 1024)).toFixed(1)} MB`;
+  };
 
   return (
     <div className="bounty-root">
@@ -112,7 +122,7 @@ const Bounty: React.FC = () => {
             <h1>BOUNTY VAULT</h1>
           </div>
           <span className="page-sub">
-            {total.toLocaleString()} ARTIFACTS · {credCount} CREDENTIALS · {payCount} PAYLOADS · {fpCount} FINGERPRINTS
+            {total.toLocaleString()} BOUNTIES · {credCount} CREDENTIALS · {payCount} PAYLOADS · {artCount} ARTIFACTS · {fpCount} FINGERPRINTS
           </span>
         </div>
       </div>
@@ -178,7 +188,9 @@ const Bounty: React.FC = () => {
               {bounties.length > 0 ? bounties.map(b => {
                 const isCred = b.bounty_type === 'credential';
                 const isFp = b.bounty_type === 'fingerprint';
-                const Icon = isCred ? Key : Package;
+                const isArt = b.bounty_type === 'artifact';
+                const isMail = isArt && b.payload?.kind === 'mail';
+                const Icon = isCred ? Key : isMail ? Mail : isArt ? FileText : Package;
                 return (
                   <tr key={b.id} className="clickable" onClick={() => setSelected(b)}>
                     <td className="dim" style={{ fontSize: '0.72rem', whiteSpace: 'nowrap' }}>
@@ -211,6 +223,29 @@ const Bounty: React.FC = () => {
                         </div>
                       ) : isFp ? (
                         <FingerprintPreview payload={b.payload} />
+                      ) : isMail ? (
+                        <span className="data-preview">
+                          <span className="matrix-text">{b.payload?.subject || '(no subject)'}</span>
+                          {b.payload?.mail_from && (
+                            <span className="dim" style={{ marginLeft: 8 }}>from {b.payload.mail_from}</span>
+                          )}
+                          {b.payload?.attachment_count > 0 && (
+                            <span className="dim" style={{ marginLeft: 8 }}>· {b.payload.attachment_count} attach</span>
+                          )}
+                          {b.payload?.size != null && (
+                            <span className="dim" style={{ marginLeft: 8 }}>· {formatBytes(b.payload.size)}</span>
+                          )}
+                        </span>
+                      ) : isArt ? (
+                        <span className="data-preview">
+                          <span className="matrix-text">{b.payload?.orig_path || b.payload?.stored_as || '—'}</span>
+                          {b.payload?.size != null && (
+                            <span className="dim" style={{ marginLeft: 8 }}>{formatBytes(b.payload.size)}</span>
+                          )}
+                          {b.payload?.attribution && (
+                            <span className="dim" style={{ marginLeft: 8 }}>· via {b.payload.attribution}</span>
+                          )}
+                        </span>
                       ) : (
                         <span className="data-preview">
                           {b.payload?.query || b.payload?.body || b.payload?.command || JSON.stringify(b.payload)}
