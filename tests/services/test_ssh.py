@@ -143,6 +143,23 @@ def test_dockerfile_rsyslog_conf_created():
     assert "RFC5424fmt" in df
 
 
+def test_dockerfile_drops_sshd_native_chatter():
+    """sshd's native syslog (`Failed password`, `Connection from`, …) and
+    the pam_unix lines emitted from sshd's PAM stack add no signal — the
+    auth-helper writes structured login_attempt events out-of-band. The
+    rsyslog config must drop them via a `:programname, isequal, "sshd" stop`
+    rule that comes BEFORE the forwarding actions. sudo / login pam_unix
+    lines must still flow (different programname)."""
+    df = _dockerfile_text()
+    stop_rule = ':programname, isequal, "sshd" stop'
+    assert stop_rule in df, "sshd drop rule missing from rsyslog config"
+    # Order matters: stop must precede the forwarding actions inside the
+    # same printf block, otherwise rsyslog forwards before evaluating it.
+    stop_idx = df.index(stop_rule)
+    fwd_idx = df.index("auth,authpriv.*  /proc/1/fd/1;RFC5424fmt")
+    assert stop_idx < fwd_idx, "stop rule must come before forwarding action"
+
+
 def test_dockerfile_sudoers_syslog():
     df = _dockerfile_text()
     assert "syslog=auth" in df

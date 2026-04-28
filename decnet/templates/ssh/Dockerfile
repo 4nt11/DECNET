@@ -52,9 +52,19 @@ RUN sed -i \
 # /proc/1/fd/1 is the container-stdout fd Docker attached — writing there
 # surfaces lines in `docker logs` without needing a named pipe + relay cat
 # (which would be readable AND writable by any root-in-container process).
+#
+# Filter: drop sshd's native chatter ("Failed password", "Connection from",
+# "Connection closed by …") and the pam_unix lines emitted from sshd's PAM
+# stack (programname is inherited from the calling process, so pam_unix(sshd:*)
+# lines arrive as programname=sshd). These add no signal — our auth-helper
+# writes structured login_attempt events directly to /proc/1/fd/1 and
+# capture.sh emits sessions via `logger -t systemd-journal`. sudo / login /
+# su pam_unix lines are NOT dropped (different programname), so privilege
+# escalation telemetry still flows.
 RUN printf '%s\n' \
     '# auth + user events → container stdout as RFC 5424' \
     '$template RFC5424fmt,"<%PRI%>1 %TIMESTAMP:::date-rfc3339% %HOSTNAME% %APP-NAME% %PROCID% %MSGID% %STRUCTURED-DATA% %msg%\n"' \
+    ':programname, isequal, "sshd" stop' \
     'auth,authpriv.*  /proc/1/fd/1;RFC5424fmt' \
     'user.*           /proc/1/fd/1;RFC5424fmt' \
     > /etc/rsyslog.d/50-journal-forward.conf
