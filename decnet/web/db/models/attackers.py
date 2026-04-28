@@ -154,6 +154,14 @@ class AttackerIdentity(SQLModel, table=True):
     hassh_hashes: Optional[str] = Field(
         default=None, sa_column=Column("hassh_hashes", Text, nullable=True)
     )
+    # JSON list[str] — SHA-256 fingerprints of leaf certs presented by
+    # attacker-run TLS servers, captured by the active prober alongside
+    # JARM. Same federation-gossip rationale as ja3_hashes/hassh_hashes:
+    # a self-signed cert reused across C2 nodes is an instant cluster-link
+    # signal, and TEXT keeps MySQL indexable via prefix length.
+    tls_cert_sha256: Optional[str] = Field(
+        default=None, sa_column=Column("tls_cert_sha256", Text, nullable=True)
+    )
     # Payload SimHash list — 64-bit ints serialized as hex strings.
     # SimHashes are Hamming-comparable, which is the entire reason
     # they're a list (not a set).

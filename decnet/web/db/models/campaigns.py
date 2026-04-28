@@ -53,6 +53,9 @@ class Campaign(SQLModel, table=True):
     hassh_hashes: Optional[str] = Field(
         default=None, sa_column=Column("hassh_hashes", Text, nullable=True)
     )
+    tls_cert_sha256: Optional[str] = Field(
+        default=None, sa_column=Column("tls_cert_sha256", Text, nullable=True)
+    )
     payload_simhashes: Optional[str] = Field(
         default=None, sa_column=Column("payload_simhashes", Text, nullable=True)
     )

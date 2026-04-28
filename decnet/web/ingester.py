@@ -499,6 +499,30 @@ async def _extract_bounty(
             },
         })
 
+    # 9b. TLS certificate from active prober (sibling of the JARM probe;
+    # captured by a follow-up ssl.wrap_socket() against attacker-run TLS
+    # servers). Disjoint from clause 8 above which is the sniffer path.
+    _prober_subject_cn = _fields.get("subject_cn")
+    if _prober_subject_cn and log_data.get("service") == "prober":
+        await repo.add_bounty({
+            "decky": log_data.get("decky"),
+            "service": "prober",
+            "attacker_ip": _fields.get("target_ip", "Unknown"),
+            "bounty_type": "fingerprint",
+            "payload": {
+                "fingerprint_type": "tls_certificate",
+                "subject_cn": _prober_subject_cn,
+                "issuer": _fields.get("issuer"),
+                "self_signed": _fields.get("self_signed"),
+                "not_before": _fields.get("not_before"),
+                "not_after": _fields.get("not_after"),
+                "sans": _fields.get("sans"),
+                "cert_sha256": _fields.get("cert_sha256"),
+                "target_ip": _fields.get("target_ip"),
+                "target_port": _fields.get("target_port"),
+            },
+        })
+
     # 10. HASSHServer fingerprint from active prober
     _hassh = _fields.get("hassh_server_hash")
     if _hassh and log_data.get("service") == "prober":
