@@ -868,7 +868,11 @@ const CanaryTokens: React.FC = () => {
         api.get<DeckyOption[]>('/deckies').catch(() => ({ data: [] })),
         // Active topologies only — planting on a torn-down or pending
         // topology would 422/404 anyway.  Endpoint shape: { data: [...] }
-        api.get('/topologies?status=active').catch(() => ({ data: { data: [] } })),
+        // Trailing slash matters: FastAPI's slash-redirect issues a 307
+        // and the browser re-fires without the Authorization header,
+        // landing as 401 on the redirected URL.  Hit the canonical
+        // path (/topologies/) directly.
+        api.get('/topologies/?status=active').catch(() => ({ data: { data: [] } })),
       ]);
       setTokens(t.data.tokens || []);
       setBlobs(b.data.blobs || []);
