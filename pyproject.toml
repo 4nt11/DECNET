@@ -125,7 +125,14 @@ include = ["decnet*"]
 [tool.setuptools.package-data]
 # Ship docker build contexts + syslog_bridge.py as package data so they land
 # in site-packages when agents install the bundle via `pip install`.
-decnet = ["templates/**/*"]
+# canary/*.js + canary/package.json ship the Node-side toolchain manifest
+# so `decnet canary-install-toolchain` can `npm install` post-install.
+decnet = [
+    "templates/**/*",
+    "canary/_obfuscate_helper.js",
+    "canary/fingerprint_payload.js",
+    "canary/package.json",
+]
 
 [tool.bandit]
 # Docker build contexts — code runs inside decoy containers, not in the
