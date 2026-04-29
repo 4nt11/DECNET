@@ -25,6 +25,7 @@ import { useTopologyStream, type TopologyStreamEvent } from './useTopologyStream
 import { ARCHETYPES as DEFAULT_ARCHETYPES } from './data';
 import { useToast } from '../Toasts/useToast';
 import { useServiceRegistry } from '../../hooks/useServiceRegistry';
+import AddServiceConfigModal from '../AddServiceConfigModal';
 
 /* Short unique suffix for default names — avoids the DB uniqueness
  * constraint regardless of delete/re-add sequencing on the client. */
@@ -116,14 +117,39 @@ const MazeNET: React.FC = () => {
      cross-tab. */
   const serviceRegistry = useServiceRegistry();
 
-  const liveAddService = useCallback(async (nodeName: string, slug: string) => {
+  const liveAddService = useCallback(async (
+    nodeName: string,
+    slug: string,
+    config: Record<string, unknown> = {},
+  ) => {
     const { data } = await axios.post<{ services: string[] }>(
       `/topologies/${encodeURIComponent(topologyId)}/deckies/${encodeURIComponent(nodeName)}/services`,
-      { name: slug },
+      { name: slug, config },
     );
     setNodes((p) => p.map((x) => x.kind === 'decky' && x.name === nodeName
       ? { ...x, services: data.services } : x));
   }, [topologyId]);
+
+  // Pending add for the schema-driven config modal — both the palette
+  // drag-drop and the Inspector ADD SERVICE picker funnel through here so
+  // operators get the same "configure on first up" flow either way.
+  const [pendingAddSvc, setPendingAddSvc] = useState<{ deckyName: string; slug: string } | null>(null);
+
+  const requestAddService = useCallback((nodeName: string, slug: string) => {
+    setPendingAddSvc({ deckyName: nodeName, slug });
+  }, []);
+
+  const confirmAddService = useCallback(async (
+    nodeName: string, slug: string, cfg: Record<string, unknown>,
+  ) => {
+    try {
+      await liveAddService(nodeName, slug, cfg);
+      setPendingAddSvc(null);
+    } catch (err) {
+      flashErr(err, 'add service failed');
+      throw err;
+    }
+  }, [liveAddService, flashErr]);
 
   const liveRemoveService = useCallback(async (nodeName: string, slug: string) => {
     const { data } = await axios.delete<{ services: string[] }>(
@@ -273,16 +299,13 @@ const MazeNET: React.FC = () => {
         // For active/degraded topologies, route through the live W3
         // endpoint — the design-time mutator queue would silently
         // enqueue and the dropped chip would never visibly land
-        // (resulting in the "no way to APPLY" feedback).  liveAddService
-        // returns the post-mutation services list and patches local
-        // state so the chip appears immediately.
+        // (resulting in the "no way to APPLY" feedback).  Funnel through
+        // requestAddService so the schema-driven config modal pops if
+        // the service has any user-tunable fields; empty-schema services
+        // auto-confirm and short-circuit, keeping drag fluency.
         const live = topoStatus === 'active' || topoStatus === 'degraded';
         if (live) {
-          try {
-            await liveAddService(target.name, drag.slug);
-          } catch (err) {
-            flashErr(err, 'add service failed');
-          }
+          requestAddService(target.name, drag.slug);
           return;
         }
         const nextServices = [...target.services, drag.slug];
@@ -297,7 +320,7 @@ const MazeNET: React.FC = () => {
         }
       }
     },
-    [api, archetypes, editor, flashErr, nets, nodes, topologyId, topoStatus, liveAddService],
+    [api, archetypes, editor, flashErr, nets, nodes, topologyId, topoStatus, requestAddService],
   );
 
   /* ── Cross-net reparent via node drag (detach + attach edge) ─── */
@@ -900,7 +923,7 @@ const MazeNET: React.FC = () => {
           onDeleteEdge={removeEdge}
           onRemoveService={removeServiceFromNode}
           availableServices={serviceRegistry.perDecky}
-          onLiveAddService={liveAddService}
+          onLiveAddService={requestAddService}
           onLiveRemoveService={liveRemoveService}
           onToggleGateway={toggleGateway}
           onAddDecky={(netId) => {
@@ -917,6 +940,11 @@ const MazeNET: React.FC = () => {
           className={inspectorOpen ? '' : 'collapsed'}
         />
       </div>
+      <AddServiceConfigModal
+        pending={pendingAddSvc}
+        onCancel={() => setPendingAddSvc(null)}
+        onConfirm={confirmAddService}
+      />
     </div>
   );
 };

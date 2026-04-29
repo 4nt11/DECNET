@@ -51,8 +51,14 @@ class DeckyServiceAddRequest(BaseModel):
     and must NOT be ``fleet_singleton`` — those run once fleet-wide,
     not per-decky.  Validation happens server-side in the engine layer
     and surfaces as 422.
+
+    ``config`` carries optional initial per-service config (same shape as
+    DeckyServiceConfigRequest.config) so the freshly-added container
+    comes up with the operator's env from the start, no follow-up Apply
+    needed.  Empty dict = build with defaults.
     """
     name: str = PydanticField(..., min_length=1)
+    config: dict[str, Any] = PydanticField(default_factory=dict)
 
 
 class DeckyServicesResponse(BaseModel):

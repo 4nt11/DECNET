@@ -61,7 +61,7 @@ def _map_mutation_error(exc: ServiceMutationError) -> HTTPException:
     "/deckies/{decky_name}/services",
     response_model=DeckyServicesResponse,
     responses={
-        400: {"description": "Malformed request body"},
+        400: {"description": "Malformed request body or initial config rejected by service schema"},
         401: {"description": "Could not validate credentials"},
         403: {"description": "Insufficient permissions"},
         404: {"description": "Decky not found"},
@@ -78,7 +78,10 @@ async def api_fleet_add_service(
         services = await add_service(
             repo, decky_kind="fleet",
             decky_name=decky_name, service_name=req.name,
+            config=req.config,
         )
+    except ConfigValidationError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
     except ServiceMutationError as exc:
         raise _map_mutation_error(exc) from exc
     return DeckyServicesResponse(decky_name=decky_name, services=services)
@@ -197,7 +200,7 @@ async def api_fleet_remove_service(
     "/{topology_id}/deckies/{decky_name}/services",
     response_model=DeckyServicesResponse,
     responses={
-        400: {"description": "Malformed request body"},
+        400: {"description": "Malformed request body or initial config rejected by service schema"},
         401: {"description": "Could not validate credentials"},
         403: {"description": "Insufficient permissions"},
         404: {"description": "Topology or decky not found"},
@@ -215,7 +218,10 @@ async def api_topology_add_service(
         services = await add_service(
             repo, decky_kind="topology", topology_id=topology_id,
             decky_name=decky_name, service_name=req.name,
+            config=req.config,
         )
+    except ConfigValidationError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
     except ServiceMutationError as exc:
         raise _map_mutation_error(exc) from exc
     return DeckyServicesResponse(

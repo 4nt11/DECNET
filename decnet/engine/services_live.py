@@ -166,6 +166,7 @@ async def _add_topology_service(
     topology_id: str,
     decky_name: str,
     service_name: str,
+    initial_config: dict | None = None,
 ) -> list[str]:
     decky = await _topology_decky(repo, topology_id, decky_name)
     services: list[str] = list(decky.get("services") or [])
@@ -174,7 +175,17 @@ async def _add_topology_service(
             f"service {service_name!r} already on decky {decky_name!r}"
         )
     services.append(service_name)
-    await repo.update_topology_decky(decky["uuid"], {"services": services})
+    update: dict[str, Any] = {"services": services}
+    # If the caller supplied initial config, fold it into decky_config
+    # BEFORE compose regen so the first ``up`` materialises the env on
+    # the new container — no follow-up apply needed.
+    if initial_config:
+        cfg_blob = dict(decky.get("decky_config") or {})
+        sc = dict(cfg_blob.get("service_config") or {})
+        sc[service_name] = initial_config
+        cfg_blob["service_config"] = sc
+        update["decky_config"] = cfg_blob
+    await repo.update_topology_decky(decky["uuid"], update)
 
     compose_path = await _rerender_topology_compose(repo, topology_id)
     target = f"{decky_name}-{service_name}"
@@ -260,7 +271,10 @@ async def _persist_fleet_change(
 
 
 async def _add_fleet_service(
-    repo: BaseRepository, decky_name: str, service_name: str,
+    repo: BaseRepository,
+    decky_name: str,
+    service_name: str,
+    initial_config: dict | None = None,
 ) -> list[str]:
     config, compose_path = _fleet_state_or_raise()
     decky = _fleet_find_decky(config, decky_name)
@@ -270,6 +284,12 @@ async def _add_fleet_service(
             f"service {service_name!r} already on decky {decky_name!r}"
         )
     services.append(service_name)
+    if initial_config:
+        # Same path as _update_fleet_service_config: stash the validated
+        # cfg on the decky model so the compose write picks it up.
+        sc = dict(getattr(decky, "service_config", None) or {})
+        sc[service_name] = initial_config
+        decky.service_config = sc
     await _persist_fleet_change(repo, decky, services, compose_path)
     target = f"{decky_name}-{service_name}"
     await anyio.to_thread.run_sync(
@@ -313,17 +333,24 @@ async def add_service(
     decky_name: str,
     service_name: str,
     topology_id: Optional[str] = None,
+    config: dict | None = None,
 ) -> list[str]:
     """Add *service_name* to a deployed decky.
 
     Validates the service registry (rejects unknown / fleet_singleton
-    names), persists the change, regenerates the compose file, runs
+    names) and the optional ``config`` against the service's schema,
+    persists the change, regenerates the compose file, runs
     ``up -d --no-deps --build <decky>-<service>`` in a worker thread,
     and publishes ``decky.<name>.service.added`` on the bus.
 
+    ``config`` is the same dict shape PUT/POST .../config accepts; it's
+    coerced via ``BaseService.validate_cfg`` before any state write so
+    a 400-class failure leaves zero side-effects.
+
     Returns the post-mutation services list.
     """
-    _validate_service_for_per_decky(service_name)
+    svc = _validate_service_for_per_decky(service_name)
+    initial_config = svc.validate_cfg(config) if config else {}
     if decky_kind == "topology":
         if not topology_id:
             raise ServiceMutationError(
@@ -331,9 +358,13 @@ async def add_service(
             )
         services = await _add_topology_service(
             repo, topology_id, decky_name, service_name,
+            initial_config=initial_config,
         )
     elif decky_kind == "fleet":
-        services = await _add_fleet_service(repo, decky_name, service_name)
+        services = await _add_fleet_service(
+            repo, decky_name, service_name,
+            initial_config=initial_config,
+        )
     else:  # pragma: no cover — Literal narrows
         raise ServiceMutationError(f"unknown decky_kind {decky_kind!r}")
 

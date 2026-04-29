@@ -7,10 +7,21 @@ hydrator run for real so the persistence path is exercised end-to-end.
 from __future__ import annotations
 
 import json
-from typing import AsyncIterator
+from typing import Any, AsyncIterator
 
 import pytest
 import pytest_asyncio
+
+
+async def _get_topology_decky(repo, decky_uuid: str) -> dict[str, Any]:
+    """Helper: list and pick the one matching uuid (no per-uuid getter on the repo)."""
+    # Iterate all topologies' deckies — fine for tests with one row.
+    topologies = await repo.list_topologies()
+    for t in topologies:
+        for d in await repo.list_topology_deckies(t["id"]):
+            if d.get("uuid") == decky_uuid:
+                return d
+    raise AssertionError(f"decky {decky_uuid!r} not found in any topology")
 
 from decnet.bus.fake import FakeBus
 from decnet.engine import services_live
@@ -43,7 +54,7 @@ async def topology_with_decky(repo: SQLiteRepository) -> dict:
     topo_id = await repo.create_topology({
         "name": "test-topo", "description": "",
     })
-    decky_uuid = await repo.create_topology_decky({
+    decky_uuid = await repo.add_topology_decky({
         "topology_id": topo_id,
         "name": "web1",
         "ip": "10.0.0.5",
@@ -85,13 +96,13 @@ async def test_topology_add_service_persists_and_runs_compose_up(
         "up", "-d", "--no-deps", "--build", "web1-ssh",
     )
     # Persisted to the DB.
-    row = await repo.get_topology_decky(topology_with_decky["decky_uuid"])
+    row = await _get_topology_decky(repo, topology_with_decky["decky_uuid"])
     persisted_services = json.loads(row["services"]) if isinstance(row["services"], str) else row["services"]
     assert "ssh" in persisted_services
     # Bus event published.
     import asyncio
     event = await asyncio.wait_for(sub.__anext__(), timeout=1.0)
-    assert event.topic == "decky.web1.service.added"
+    assert event.topic == "decky.web1.service_added"
     assert event.payload["service_name"] == "ssh"
     assert event.payload["topology_id"] == topology_with_decky["topology_id"]
 
@@ -176,6 +187,105 @@ async def test_topology_remove_service_rejects_when_absent(
             topology_id=topology_with_decky["topology_id"],
             decky_name="web1", service_name="ssh",  # not on
         )
+
+
+# ---------------- topology add with initial config ------------------------
+
+
+@pytest.mark.asyncio
+async def test_topology_add_service_with_initial_config_persists_to_decky_config(
+    repo: SQLiteRepository, topology_with_decky: dict, fake_bus: FakeBus,
+    monkeypatch, tmp_path,
+) -> None:
+    monkeypatch.setattr(services_live, "_compose", lambda *a, **kw: None)
+    monkeypatch.setattr(
+        services_live, "_topology_compose_path",
+        lambda topo_id: tmp_path / f"compose-{topo_id[:8]}.yml",
+    )
+    await services_live.add_service(
+        repo, decky_kind="topology",
+        topology_id=topology_with_decky["topology_id"],
+        decky_name="web1", service_name="ssh",
+        config={"password": "hunter2", "hostname": "mail-01"},
+    )
+    row = await _get_topology_decky(repo, topology_with_decky["decky_uuid"])
+    cfg_blob = json.loads(row["decky_config"]) if isinstance(row["decky_config"], str) else row["decky_config"]
+    assert cfg_blob.get("service_config", {}).get("ssh") == {
+        "password": "hunter2", "hostname": "mail-01",
+    }
+
+
+@pytest.mark.asyncio
+async def test_topology_add_service_with_invalid_config_aborts_before_persist(
+    repo: SQLiteRepository, topology_with_decky: dict, fake_bus: FakeBus,
+    monkeypatch, tmp_path,
+) -> None:
+    """Bad cfg → ConfigValidationError, no DB write, no compose call."""
+    from decnet.services.base import ConfigValidationError
+
+    captured: list = []
+    monkeypatch.setattr(services_live, "_compose", lambda *a, **kw: captured.append(a))
+    monkeypatch.setattr(
+        services_live, "_topology_compose_path",
+        lambda topo_id: tmp_path / f"compose-{topo_id[:8]}.yml",
+    )
+    with pytest.raises(ConfigValidationError):
+        await services_live.add_service(
+            repo, decky_kind="topology",
+            topology_id=topology_with_decky["topology_id"],
+            decky_name="web1", service_name="rdp",
+            config={"nla": "not-a-bool"},
+        )
+    # Ensure no compose ran and the services list wasn't appended to.
+    assert captured == []
+    row = await _get_topology_decky(repo, topology_with_decky["decky_uuid"])
+    persisted = json.loads(row["services"]) if isinstance(row["services"], str) else row["services"]
+    assert "rdp" not in persisted
+
+
+@pytest.mark.asyncio
+async def test_topology_add_service_empty_config_is_back_compat(
+    repo: SQLiteRepository, topology_with_decky: dict, fake_bus: FakeBus,
+    monkeypatch, tmp_path,
+) -> None:
+    """No `config` arg / empty dict still adds the service — old callers safe."""
+    monkeypatch.setattr(services_live, "_compose", lambda *a, **kw: None)
+    monkeypatch.setattr(
+        services_live, "_topology_compose_path",
+        lambda topo_id: tmp_path / f"compose-{topo_id[:8]}.yml",
+    )
+    services = await services_live.add_service(
+        repo, decky_kind="topology",
+        topology_id=topology_with_decky["topology_id"],
+        decky_name="web1", service_name="ssh",
+    )
+    assert services == ["http", "ssh"]
+    row = await _get_topology_decky(repo, topology_with_decky["decky_uuid"])
+    cfg_blob = json.loads(row["decky_config"]) if isinstance(row["decky_config"], str) else row["decky_config"]
+    # No service_config key written when config is empty.
+    assert "ssh" not in (cfg_blob.get("service_config") or {})
+
+
+@pytest.mark.asyncio
+async def test_topology_add_service_drops_unknown_config_keys(
+    repo: SQLiteRepository, topology_with_decky: dict, fake_bus: FakeBus,
+    monkeypatch, tmp_path,
+) -> None:
+    """validate_cfg drops unknown keys — they must not leak into decky_config."""
+    monkeypatch.setattr(services_live, "_compose", lambda *a, **kw: None)
+    monkeypatch.setattr(
+        services_live, "_topology_compose_path",
+        lambda topo_id: tmp_path / f"compose-{topo_id[:8]}.yml",
+    )
+    await services_live.add_service(
+        repo, decky_kind="topology",
+        topology_id=topology_with_decky["topology_id"],
+        decky_name="web1", service_name="ssh",
+        config={"password": "hunter2", "wat": "nope"},
+    )
+    row = await _get_topology_decky(repo, topology_with_decky["decky_uuid"])
+    cfg_blob = json.loads(row["decky_config"]) if isinstance(row["decky_config"], str) else row["decky_config"]
+    assert cfg_blob["service_config"]["ssh"] == {"password": "hunter2"}
 
 
 # ---------------- service registry validation -----------------------------

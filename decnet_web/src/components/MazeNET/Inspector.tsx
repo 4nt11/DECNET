@@ -34,7 +34,10 @@ interface Props {
   // topologyStatus (active/degraded → live, pending/anything else →
   // design-time only).  Wiring these props from MazeNET.tsx is the
   // single switch that turns chips into live controls.
-  onLiveAddService?: (nodeName: string, slug: string) => Promise<void>;
+  /** Trigger the schema-driven add-service flow.  Synchronous: opens
+   *  the AddServiceConfigModal at the page level (or auto-confirms if
+   *  the service has no schema fields).  Errors surface inside the modal. */
+  onLiveAddService?: (nodeName: string, slug: string) => void;
   onLiveRemoveService?: (nodeName: string, slug: string) => Promise<void>;
   /** Per-decky-eligible service slugs, fetched via useServiceRegistry. */
   availableServices?: string[];
@@ -202,21 +205,15 @@ const Inspector: React.FC<Props> = ({
                     <button
                       type="button"
                       disabled={!addSlug || busy === addSlug}
-                      onClick={async () => {
+                      onClick={() => {
                         if (!addSlug) return;
                         setOpError(null);
-                        setBusy(addSlug);
-                        try {
-                          await onLiveAddService!(node.name, addSlug);
-                          setAddOpen(false);
-                          setAddSlug('');
-                        } catch (err) {
-                          const msg = (err as { response?: { data?: { detail?: string } } })?.response?.data?.detail
-                            ?? 'Add failed.';
-                          setOpError(msg);
-                        } finally {
-                          setBusy(null);
-                        }
+                        // Fire-and-forget: opens the schema-driven config
+                        // modal at the page level (or auto-confirms for
+                        // schema-less services). Errors surface in the modal.
+                        onLiveAddService!(node.name, addSlug);
+                        setAddOpen(false);
+                        setAddSlug('');
                       }}
                       style={{
                         padding: '4px 10px', fontSize: '0.7rem',

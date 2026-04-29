@@ -9,6 +9,7 @@ import { useToast } from './Toasts/useToast';
 import Modal from './Modal/Modal';
 import { useServiceRegistry } from '../hooks/useServiceRegistry';
 import ServiceConfigForm from './ServiceConfigForm';
+import AddServiceConfigModal from './AddServiceConfigModal';
 import ServiceConfigFields, {
   type FormState as SvcFormState,
   type ServiceConfigFieldDTO as SvcFieldDTO,
@@ -164,6 +165,9 @@ const DeckyCard: React.FC<DeckyCardProps> = ({
   const [busy, setBusy] = useState<string | null>(null);
   const [opError, setOpError] = useState<string | null>(null);
   const [openCfgSvc, setOpenCfgSvc] = useState<string | null>(null);
+  // Pending add — when non-null, AddServiceConfigModal is mounted and
+  // will either auto-fire onConfirm (no schema fields) or show the form.
+  const [pendingAdd, setPendingAdd] = useState<{ deckyName: string; slug: string } | null>(null);
 
   const removeService = async (slug: string) => {
     setOpError(null);
@@ -182,22 +186,30 @@ const DeckyCard: React.FC<DeckyCardProps> = ({
     }
   };
 
-  const addService = async () => {
+  const beginAdd = () => {
     if (!addSlug) return;
     setOpError(null);
-    setBusy(addSlug);
+    setPendingAdd({ deckyName: decky.name, slug: addSlug });
+  };
+
+  const confirmAdd = async (deckyName: string, slug: string, cfg: Record<string, unknown>) => {
+    setBusy(slug);
     try {
       const { data } = await api.post<{ services: string[] }>(
-        `/deckies/${encodeURIComponent(decky.name)}/services`,
-        { name: addSlug },
+        `/deckies/${encodeURIComponent(deckyName)}/services`,
+        { name: slug, config: cfg },
       );
-      onServicesChanged(decky.name, data.services);
+      onServicesChanged(deckyName, data.services);
+      setPendingAdd(null);
       setAddOpen(false);
       setAddSlug('');
     } catch (err) {
+      // Re-raise so the modal can surface the error in its own status row.
+      // Also mirror onto opError for the inline picker case.
       const msg = (err as { response?: { data?: { detail?: string } } })?.response?.data?.detail
         ?? 'Add failed.';
       setOpError(msg);
+      throw err;
     } finally {
       setBusy(null);
     }
@@ -343,7 +355,7 @@ const DeckyCard: React.FC<DeckyCardProps> = ({
             <button
               type="button"
               disabled={!addSlug || busy === addSlug}
-              onClick={addService}
+              onClick={beginAdd}
               className="btn violet small"
             >
               {busy === addSlug ? 'ADDING' : 'ADD'}
@@ -409,6 +421,11 @@ const DeckyCard: React.FC<DeckyCardProps> = ({
           )}
         </div>
       </div>
+      <AddServiceConfigModal
+        pending={pendingAdd}
+        onCancel={() => setPendingAdd(null)}
+        onConfirm={confirmAdd}
+      />
     </div>
   );
 };
