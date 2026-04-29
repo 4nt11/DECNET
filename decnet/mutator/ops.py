@@ -798,24 +798,81 @@ async def apply_update_decky(
         ``patch``         — dict merged into existing ``decky_config``.
         ``services``      — replacement top-level services list.
         ``x``,``y``       — layout coords.
+        ``force``         — opt-in for destructive recreates (currently
+                            required when ``forwards_l3`` flips on a
+                            live topology — see below).
+
+    Live materialisation strategy:
+
+    * **services changed** → diff old vs new; ``compose up -d`` for
+      added, ``compose stop`` + ``rm -f`` for removed.  Mirrors the
+      direct API path (services_live) without coupling.
+    * **forwards_l3 flipped** → port publishing changes, which docker
+      can only apply at container-create time.  Requires recreating
+      the base — destructive (kills in-container state, drops active
+      sessions).  Gated on ``payload['force'] is True``; otherwise we
+      raise ``MutationError`` so a half-thinking operator doesn't
+      stomp a live decky.
+    * **only coords (x/y)** → DB-only.  No docker work.
     """
     hydrated = await _hydrated(repo, topology_id)
     decky = _decky_by_name(hydrated, payload["decky"])
     if decky is None:
         raise MutationError(f"decky {payload['decky']!r} not found")
+
+    # Capture pre-state so we can compute the diff after the DB write.
+    old_services = list(decky.get("services") or [])
+    old_cfg = decky.get("decky_config") or {}
+    old_forwards_l3 = bool(old_cfg.get("forwards_l3", False))
+
     patch: dict[str, Any] = {}
+    new_decky_config = old_cfg
     if payload.get("patch"):
-        merged = dict(decky["decky_config"])
-        merged.update(payload["patch"])
-        patch["decky_config"] = merged
+        new_decky_config = {**old_cfg, **payload["patch"]}
+        patch["decky_config"] = new_decky_config
+    new_services = old_services
     if "services" in payload:
-        patch["services"] = list(payload["services"])
+        new_services = list(payload["services"])
+        patch["services"] = new_services
     for key in ("x", "y"):
         if key in payload:
             patch[key] = payload[key]
     if not patch:
         return
+
+    new_forwards_l3 = bool(new_decky_config.get("forwards_l3", False))
+    forwards_l3_flipped = new_forwards_l3 != old_forwards_l3
+
+    # Pre-check the destructive flip BEFORE any DB write, so a refused
+    # mutation leaves zero side-effects.
+    is_live = (await _live_topology_or_none(repo, topology_id)) is not None
+    if is_live and forwards_l3_flipped and not bool(payload.get("force")):
+        raise MutationError(
+            f"forwards_l3 flip on live decky "
+            f"{decky['decky_config']['name']!r} requires force=true; "
+            "this will recreate the base container and drop in-container state"
+        )
+
     await repo.update_topology_decky(decky["uuid"], patch)
+
+    # Materialisation — only when the topology is actually live.
+    # _live_topology_or_none was already called above; calling the
+    # individual helpers re-checks (cheap) so they stay self-contained.
+    decky_name = decky["decky_config"]["name"]
+    added = sorted(set(new_services) - set(old_services))
+    removed = sorted(set(old_services) - set(new_services))
+    if added or removed:
+        await _materialise_decky_services_diff(
+            repo, topology_id, decky_name, added, removed,
+        )
+    if forwards_l3_flipped:
+        # force was checked above; reaching here means the operator
+        # opted in.  recreate_base re-renders compose first so the
+        # rebuilt base picks up the new `ports:` block.
+        await _materialise_decky_recreate_base(
+            repo, topology_id, decky_name,
+        )
+
     await _assert_valid_after(repo, topology_id)
 
 
