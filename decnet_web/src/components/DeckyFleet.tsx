@@ -1,12 +1,13 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import {
   Cpu, Database, Globe, Monitor, Network, PlusCircle, PowerOff,
-  RefreshCw, Server, Shield, Terminal,
+  RefreshCw, Server, Shield, Terminal, Plus, X,
 } from '../icons';
 import api from '../utils/api';
 import { ARCHETYPES as FALLBACK_ARCHETYPES, DEFAULT_SERVICES } from './MazeNET/data';
 import { useToast } from './Toasts/useToast';
 import Modal from './Modal/Modal';
+import { useServiceRegistry } from '../hooks/useServiceRegistry';
 import './DeckyFleet.css';
 
 // ─── Types ────────────────────────────────────────────────────────────────
@@ -130,16 +131,70 @@ interface DeckyCardProps {
   onIntervalChange: (name: string, current: number | null) => void;
   onInspect: (d: Decky) => void;
   innerRef?: React.Ref<HTMLDivElement>;
+  /** Per-decky-eligible service slugs from useServiceRegistry. */
+  availableServices: string[];
+  /** Called after a successful live add/remove so the parent can
+   * optimistically apply the response's services list. */
+  onServicesChanged: (deckyName: string, services: string[]) => void;
 }
 
 const DeckyCard: React.FC<DeckyCardProps> = ({
-  decky, mutating, isAdmin, armed, tdBusy, onForce, onTeardown, onIntervalChange, onInspect, innerRef,
+  decky, mutating, isAdmin, armed, tdBusy, onForce, onTeardown, onIntervalChange, onInspect,
+  innerRef, availableServices, onServicesChanged,
 }) => {
   const dot = _dotFor(decky);
   const hits = _hitsFor(decky);
   const hot = dot === 'hot';
   const dotClass = mutating ? 'mutating' : dot;
   const tdKey = decky.swarm ? `td:${decky.swarm.host_uuid}:${decky.name}` : '';
+
+  // Live service mutation is local-only (admin, non-swarm).  Swarm
+  // deckies live on a remote agent — the W3 path runs docker compose
+  // locally and won't reach the agent's containers (same gap as the
+  // canary planter has for agent-pinned topologies; out of scope here).
+  const liveServicesEnabled = isAdmin && !decky.swarm;
+  const [addOpen, setAddOpen] = useState(false);
+  const [addSlug, setAddSlug] = useState('');
+  const [busy, setBusy] = useState<string | null>(null);
+  const [opError, setOpError] = useState<string | null>(null);
+
+  const removeService = async (slug: string) => {
+    setOpError(null);
+    setBusy(slug);
+    try {
+      const { data } = await api.delete<{ services: string[] }>(
+        `/deckies/${encodeURIComponent(decky.name)}/services/${encodeURIComponent(slug)}`,
+      );
+      onServicesChanged(decky.name, data.services);
+    } catch (err) {
+      const msg = (err as { response?: { data?: { detail?: string } } })?.response?.data?.detail
+        ?? 'Remove failed.';
+      setOpError(msg);
+    } finally {
+      setBusy(null);
+    }
+  };
+
+  const addService = async () => {
+    if (!addSlug) return;
+    setOpError(null);
+    setBusy(addSlug);
+    try {
+      const { data } = await api.post<{ services: string[] }>(
+        `/deckies/${encodeURIComponent(decky.name)}/services`,
+        { name: addSlug },
+      );
+      onServicesChanged(decky.name, data.services);
+      setAddOpen(false);
+      setAddSlug('');
+    } catch (err) {
+      const msg = (err as { response?: { data?: { detail?: string } } })?.response?.data?.detail
+        ?? 'Add failed.';
+      setOpError(msg);
+    } finally {
+      setBusy(null);
+    }
+  };
 
   return (
     <div
@@ -212,8 +267,78 @@ const DeckyCard: React.FC<DeckyCardProps> = ({
       <div>
         <div className="type-label" style={{ marginBottom: 6 }}>EXPOSED</div>
         <div className="decky-services">
-          {decky.services.map((s) => <span key={s} className="service-tag">{s}</span>)}
+          {decky.services.map((s) => (
+            <span key={s} className="service-tag" style={{ display: 'inline-flex', alignItems: 'center', gap: 4 }}>
+              <span>{s}</span>
+              {liveServicesEnabled && (
+                <button
+                  type="button"
+                  title={`Remove ${s}`}
+                  disabled={busy === s}
+                  onClick={(e) => { e.stopPropagation(); removeService(s); }}
+                  style={{
+                    background: 'transparent', border: 'none', padding: 0,
+                    color: 'inherit', cursor: busy === s ? 'wait' : 'pointer',
+                    opacity: busy === s ? 0.4 : 0.7, lineHeight: 1,
+                  }}
+                >
+                  <X size={9} />
+                </button>
+              )}
+            </span>
+          ))}
+          {liveServicesEnabled && !addOpen && (
+            <button
+              type="button"
+              className="service-tag"
+              onClick={(e) => { e.stopPropagation(); setAddOpen(true); setAddSlug(''); }}
+              style={{ cursor: 'pointer', borderStyle: 'dashed' }}
+              title="Add service (live)"
+            >
+              <Plus size={10} /> ADD
+            </button>
+          )}
         </div>
+        {liveServicesEnabled && addOpen && (
+          <div
+            onClick={(e) => e.stopPropagation()}
+            style={{ display: 'flex', gap: 6, marginTop: 6, alignItems: 'center' }}
+          >
+            <select
+              value={addSlug}
+              onChange={(e) => setAddSlug(e.target.value)}
+              style={{
+                flex: 1, fontSize: '0.75rem', padding: '4px 6px',
+                background: 'rgba(255,255,255,0.04)',
+                border: '1px solid var(--border-color, #30363d)',
+                color: 'var(--text-color)',
+              }}
+            >
+              <option value="">— pick a service —</option>
+              {availableServices
+                .filter((s) => !decky.services.includes(s))
+                .map((s) => <option key={s} value={s}>{s}</option>)}
+            </select>
+            <button
+              type="button"
+              disabled={!addSlug || busy === addSlug}
+              onClick={addService}
+              className="btn violet small"
+            >
+              {busy === addSlug ? 'ADDING' : 'ADD'}
+            </button>
+            <button
+              type="button"
+              onClick={() => { setAddOpen(false); setAddSlug(''); }}
+              className="btn small"
+            >
+              CANCEL
+            </button>
+          </div>
+        )}
+        {opError && (
+          <div className="alert-text" style={{ fontSize: '0.7rem', marginTop: 6 }}>{opError}</div>
+        )}
       </div>
 
       <div className="decky-footer">
@@ -744,6 +869,7 @@ interface FleetProps {
 
 const DeckyFleet: React.FC<FleetProps> = ({ searchQuery = '' }) => {
   const { push } = useToast();
+  const serviceRegistry = useServiceRegistry();
   const [deckies, setDeckies] = useState<Decky[]>([]);
   const [loading, setLoading] = useState(true);
   const [mutating, setMutating] = useState<string | null>(null);
@@ -1082,6 +1208,12 @@ const DeckyFleet: React.FC<FleetProps> = ({ searchQuery = '' }) => {
               innerRef={(el: HTMLDivElement | null) => {
                 if (el) cardRefs.current.set(d.name, el);
                 else cardRefs.current.delete(d.name);
+              }}
+              availableServices={serviceRegistry.perDecky}
+              onServicesChanged={(name, services) => {
+                setDeckies((prev) => prev.map((row) =>
+                  row.name === name ? { ...row, services } : row,
+                ));
               }}
             />
           ))
