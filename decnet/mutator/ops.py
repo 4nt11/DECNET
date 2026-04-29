@@ -758,7 +758,15 @@ async def apply_remove_decky(
     decky = _decky_by_name(hydrated, payload["decky"])
     if decky is None:
         raise MutationError(f"decky {payload['decky']!r} not found")
+    decky_name = decky["decky_config"]["name"]
+    services_list = list(decky.get("services") or [])
     await repo.delete_topology_decky(decky["uuid"])
+    # Live materialisation: stop + rm -f the decky's containers.  We
+    # capture decky_name + services BEFORE the delete so the helper
+    # has the targets even though the row is gone.
+    await _materialise_decky_remove(
+        repo, topology_id, decky_name, services_list,
+    )
     await _assert_valid_after(repo, topology_id)
 
 
