@@ -704,6 +704,16 @@ async def apply_attach_decky(
             "forwards_l3": forwards_l3,
         }
     )
+    # Live materialisation: SDK network.connect on the base container.
+    # Service containers share the base's netns via network_mode:
+    # service:<base>, so they inherit the new interface — only the base
+    # needs the connect.
+    await _materialise_decky_connect(
+        repo, topology_id,
+        decky_name=decky["decky_config"]["name"],
+        lan_name=lan["name"],
+        ipv4_address=ip,
+    )
     await _assert_valid_after(repo, topology_id)
 
 
