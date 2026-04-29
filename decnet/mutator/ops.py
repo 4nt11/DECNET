@@ -98,6 +98,94 @@ def _decky_by_name(hydrated: dict[str, Any], name: str) -> Optional[dict]:
     )
 
 
+async def _materialise_lan_change(
+    repo: Any,
+    topology_id: str,
+    *,
+    created: Optional[tuple[str, str, bool]] = None,
+    removed: Optional[str] = None,
+) -> None:
+    """Create or remove the docker bridge for a live LAN op + re-render compose.
+
+    Called from ``apply_add_lan`` / ``apply_remove_lan`` after the DB
+    write lands.  Skips when:
+
+    * the topology is not active/degraded (a pending topology gets its
+      networks created at deploy time),
+    * the topology is pinned to a swarm agent (cross-host materialisation
+      isn't implemented; the agent's apply_topology RPC re-renders the
+      whole compose at next push),
+    * the docker SDK / networking primitive raises (logged, not
+      re-raised — the DB row is the source of truth).
+    """
+    topology = await repo.get_topology(topology_id)
+    if topology is None:
+        return
+    status = topology.get("status")
+    if status not in ("active", "degraded"):
+        return
+    if topology.get("target_host_uuid"):
+        _log.info(
+            "live LAN op skipped (agent-pinned topology=%s); next agent push will reconcile",
+            topology_id,
+        )
+        return
+
+    # Lazy imports — these pull in docker.py / network.py which both
+    # require the docker SDK; keeping them out of module-import keeps
+    # the mutator usable in test environments that stub docker.
+    import docker
+    from decnet.engine.deployer import _topology_compose_path
+    from decnet.network import create_bridge_network, remove_bridge_network
+    from decnet.topology.compose import _network_name, write_topology_compose
+
+    client = docker.from_env()
+    try:
+        if created is not None:
+            name, subnet, is_dmz = created
+            net_name = _network_name(topology_id, name)
+            try:
+                create_bridge_network(
+                    client, net_name, subnet, internal=not is_dmz,
+                )
+            except Exception as exc:  # noqa: BLE001
+                _log.error(
+                    "live add_lan: bridge create failed topology=%s lan=%s subnet=%s: %s",
+                    topology_id, name, subnet, exc,
+                )
+                # Don't re-raise — the DB row is the source of truth.
+                # Operator can retry by removing + re-adding the LAN.
+        if removed is not None:
+            net_name = _network_name(topology_id, removed)
+            try:
+                remove_bridge_network(client, net_name)
+            except Exception as exc:  # noqa: BLE001
+                _log.warning(
+                    "live remove_lan: bridge remove failed topology=%s lan=%s: %s",
+                    topology_id, removed, exc,
+                )
+
+        # Re-render compose so the file on disk matches the DB.  Even
+        # when the bridge create above failed, a future redeploy will
+        # try to bring the network back from the compose definition.
+        hydrated = await hydrate(repo, topology_id)
+        if hydrated is not None:
+            try:
+                write_topology_compose(
+                    hydrated, _topology_compose_path(topology_id),
+                )
+            except Exception as exc:  # noqa: BLE001
+                _log.warning(
+                    "live LAN op: compose re-render failed topology=%s: %s",
+                    topology_id, exc,
+                )
+    except Exception as exc:  # noqa: BLE001 — outer net for any docker SDK failure
+        _log.error(
+            "live LAN materialisation crashed topology=%s: %s",
+            topology_id, exc,
+        )
+
+
 # ------------------------------------------------------------------- ops
 
 
@@ -131,6 +219,16 @@ async def apply_add_lan(
             "y": payload.get("y"),
         }
     )
+
+    # Live materialisation: when the topology is active/degraded, create
+    # the docker bridge network now and re-render the per-topology
+    # compose file so subsequent ``apply_add_decky`` writes a coherent
+    # services map.  Pending topologies skip this — the next deploy
+    # creates everything from scratch.  Agent-pinned topologies also
+    # skip; live editing on agents is its own routing problem.
+    await _materialise_lan_change(
+        repo, topology_id, created=(name, subnet, is_dmz),
+    )
     await _assert_valid_after(repo, topology_id)
 
 
@@ -150,7 +248,13 @@ async def apply_remove_lan(
                 f"LAN {lan['name']!r} is the home LAN of decky "
                 f"{d['decky_config']['name']!r}; remove the decky first"
             )
+    lan_name = lan["name"]
     await repo.delete_lan(lan["id"])
+
+    # Live materialisation symmetric to apply_add_lan: tear down the
+    # docker bridge and re-render compose so a future redeploy doesn't
+    # try to wire deckies into a network that no longer exists.
+    await _materialise_lan_change(repo, topology_id, removed=lan_name)
     await _assert_valid_after(repo, topology_id)
 
 
