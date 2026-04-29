@@ -353,6 +353,133 @@ async def add_service(
     return services
 
 
+async def update_service_config(
+    repo: BaseRepository,
+    *,
+    decky_kind: DeckyKind,
+    decky_name: str,
+    service_name: str,
+    cfg: dict,
+    apply: bool = False,
+    topology_id: Optional[str] = None,
+) -> dict:
+    """Persist ``cfg`` as the new ``service_config[service_name]`` for a decky.
+
+    The submitted dict is validated against the service's
+    ``config_schema`` (unknown keys dropped, types coerced) BEFORE any
+    DB write, so a 400-class failure leaves zero side-effects.
+
+    ``apply=False`` (Save):  only the DB row + compose file are updated.
+                             The running container keeps its old env.
+    ``apply=True``  (Apply): same persistence, then a force-recreate of
+                             ``<decky>-<service>`` so the container picks
+                             up the new env.  Destructive: drops any
+                             in-container session state on that service.
+
+    Returns the post-mutation validated cfg.
+    """
+    svc = _validate_service_for_per_decky(service_name)
+    validated = svc.validate_cfg(cfg)
+    if decky_kind == "topology":
+        if not topology_id:
+            raise ServiceMutationError(
+                "decky_kind=topology requires topology_id",
+            )
+        await _update_topology_service_config(
+            repo, topology_id, decky_name, service_name, validated, apply=apply,
+        )
+    elif decky_kind == "fleet":
+        await _update_fleet_service_config(
+            repo, decky_name, service_name, validated, apply=apply,
+        )
+    else:  # pragma: no cover
+        raise ServiceMutationError(f"unknown decky_kind {decky_kind!r}")
+
+    await _publish(
+        topics.decky(decky_name, topics.DECKY_SERVICE_CONFIG_CHANGED),
+        {
+            "decky_name": decky_name,
+            "service_name": service_name,
+            "topology_id": topology_id,
+            "service_config": validated,
+            "recreated": bool(apply),
+        },
+    )
+    log.info(
+        "services_live.update_config decky=%s topology=%s service=%s apply=%s",
+        decky_name, topology_id, service_name, apply,
+    )
+    return validated
+
+
+async def _update_topology_service_config(
+    repo: BaseRepository,
+    topology_id: str,
+    decky_name: str,
+    service_name: str,
+    validated: dict,
+    *,
+    apply: bool,
+) -> None:
+    decky = await _topology_decky(repo, topology_id, decky_name)
+    if service_name not in (decky.get("services") or []):
+        raise ServiceMutationError(
+            f"service {service_name!r} not on decky {decky_name!r}"
+        )
+    cfg_blob = dict(decky.get("decky_config") or {})
+    sc = dict(cfg_blob.get("service_config") or {})
+    sc[service_name] = validated
+    cfg_blob["service_config"] = sc
+    await repo.update_topology_decky(decky["uuid"], {"decky_config": cfg_blob})
+    compose_path = await _rerender_topology_compose(repo, topology_id)
+    if apply:
+        target = f"{decky_name}-{service_name}"
+        await anyio.to_thread.run_sync(
+            lambda: _compose(
+                "up", "-d", "--no-deps", "--force-recreate", "--build", target,
+                compose_file=compose_path,
+            ),
+        )
+
+
+async def _update_fleet_service_config(
+    repo: BaseRepository,
+    decky_name: str,
+    service_name: str,
+    validated: dict,
+    *,
+    apply: bool,
+) -> None:
+    config, compose_path = _fleet_state_or_raise()
+    decky = _fleet_find_decky(config, decky_name)
+    if service_name not in (decky.services or []):
+        raise ServiceMutationError(
+            f"service {service_name!r} not on decky {decky_name!r}"
+        )
+    sc = dict(getattr(decky, "service_config", None) or {})
+    sc[service_name] = validated
+    decky.service_config = sc
+    _save_state(config, compose_path)
+    _write_compose(config, compose_path)
+    from decnet.web.db.models import LOCAL_HOST_SENTINEL
+    await repo.upsert_fleet_decky({
+        "host_uuid": getattr(decky, "host_uuid", None) or LOCAL_HOST_SENTINEL,
+        "name": decky.name,
+        "services": list(decky.services or []),
+        "decky_config": decky.model_dump(mode="json"),
+        "decky_ip": decky.ip,
+        "state": "running",
+    })
+    if apply:
+        target = f"{decky_name}-{service_name}"
+        await anyio.to_thread.run_sync(
+            lambda: _compose(
+                "up", "-d", "--no-deps", "--force-recreate", "--build", target,
+                compose_file=compose_path,
+            ),
+        )
+
+
 async def remove_service(
     repo: BaseRepository,
     *,

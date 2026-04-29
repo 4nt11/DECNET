@@ -67,7 +67,11 @@ from .decky import (
     DeckyFileDeleteRequest,
     DeckyFileDropRequest,
     DeckyServiceAddRequest,
+    DeckyServiceConfigRequest,
+    DeckyServiceConfigResponse,
     DeckyServicesResponse,
+    ServiceConfigFieldDTO,
+    ServiceSchemaResponse,
 )
 from .fleet import (
     LOCAL_HOST_SENTINEL,
@@ -231,8 +235,12 @@ __all__ = [
     "DeckyFileDeleteRequest",
     "DeckyFileDropRequest",
     "DeckyServiceAddRequest",
+    "DeckyServiceConfigRequest",
+    "DeckyServiceConfigResponse",
     "DeckyServicesResponse",
     "FleetDecky",
+    "ServiceConfigFieldDTO",
+    "ServiceSchemaResponse",
     # health
     "ComponentHealth",
     "HealthResponse",

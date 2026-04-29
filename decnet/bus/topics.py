@@ -90,6 +90,12 @@ DECKY_MUTATION = "mutation"
 # off these without waiting for the next decnet-state.json snapshot.
 DECKY_SERVICE_ADDED = "service_added"
 DECKY_SERVICE_REMOVED = "service_removed"
+# Per-service config change (the schema-driven Inspector form).  Payload
+# carries ``decky_name``, ``service_name``, optional ``topology_id``,
+# ``service_config`` (the new validated dict), and ``recreated`` — true
+# when the operator hit Apply (container was force-recreated to pick up
+# the new env), false when they only hit Save (DB-only).
+DECKY_SERVICE_CONFIG_CHANGED = "service_config_changed"
 
 # Attacker event types (second token under the ``attacker`` root).  First
 # sighting, session boundary transitions, and score-threshold crossings

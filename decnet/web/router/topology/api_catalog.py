@@ -22,6 +22,8 @@ from decnet.web.db.models import (
     NextIPResponse,
     NextSubnetResponse,
     ServiceCatalogResponse,
+    ServiceConfigFieldDTO,
+    ServiceSchemaResponse,
 )
 from decnet.web.dependencies import repo, require_viewer
 
@@ -49,6 +51,40 @@ async def api_list_services(
         fleet_singletons=[
             name for name, svc in registry.items() if svc.fleet_singleton
         ],
+    )
+
+
+@router.get(
+    "/services/{service_name}/schema",
+    tags=["MazeNET Topologies"],
+    response_model=ServiceSchemaResponse,
+    responses={
+        401: {"description": "Missing or invalid credentials"},
+        403: {"description": "Insufficient permissions"},
+        404: {"description": "Unknown service"},
+    },
+)
+@_traced("api.topology.catalog.service_schema")
+async def api_service_schema(
+    service_name: str,
+    _viewer: dict = Depends(require_viewer),
+) -> ServiceSchemaResponse:
+    """Return the declarative config schema for one service.
+
+    Drives the schema-driven Inspector form on both Fleet and MazeNET.
+    Empty ``fields`` means the service has no customizable knobs yet —
+    the form renders a "No customizable fields" placeholder.
+    """
+    from decnet.services.registry import get_service
+    try:
+        svc = get_service(service_name)
+    except KeyError:
+        raise HTTPException(status_code=404, detail=f"Unknown service: {service_name!r}")
+    return ServiceSchemaResponse(
+        name=svc.name,
+        ports=list(svc.ports),
+        fleet_singleton=bool(svc.fleet_singleton),
+        fields=[ServiceConfigFieldDTO(**f.to_json()) for f in svc.config_schema],
     )
 
 

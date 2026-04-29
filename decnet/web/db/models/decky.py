@@ -8,7 +8,7 @@ under ``decnet.web.db.models``.
 """
 from __future__ import annotations
 
-from typing import Optional
+from typing import Any, Optional
 
 from pydantic import BaseModel, Field as PydanticField, field_validator
 
@@ -63,6 +63,48 @@ class DeckyServicesResponse(BaseModel):
     decky_name: str
     topology_id: Optional[str] = None
     services: list[str]
+
+
+class ServiceConfigFieldDTO(BaseModel):
+    """Serialized form of ``decnet.services.base.ServiceConfigField``.
+
+    The Inspector form (Fleet + MazeNET) renders inputs from this metadata.
+    """
+    key: str
+    label: str
+    type: str
+    default: Optional[Any] = None
+    secret: bool = False
+    help: Optional[str] = None
+    enum: Optional[list[str]] = None
+    placeholder: Optional[str] = None
+
+
+class ServiceSchemaResponse(BaseModel):
+    """Per-service config schema returned by GET /services/{name}/schema."""
+    name: str
+    ports: list[int]
+    fleet_singleton: bool = False
+    fields: list[ServiceConfigFieldDTO] = PydanticField(default_factory=list)
+
+
+class DeckyServiceConfigRequest(BaseModel):
+    """Body for PUT/POST per-service config endpoints.
+
+    The dict is validated against the service's ``config_schema``
+    server-side: unknown keys are silently dropped, declared keys are
+    coerced to their declared type, and out-of-range values raise 400.
+    """
+    config: dict[str, Any] = PydanticField(default_factory=dict)
+
+
+class DeckyServiceConfigResponse(BaseModel):
+    """Post-validation config + apply state for the form to re-sync from."""
+    decky_name: str
+    service_name: str
+    topology_id: Optional[str] = None
+    config: dict[str, Any] = PydanticField(default_factory=dict)
+    recreated: bool = False
 
 
 class DeckyFileDeleteRequest(BaseModel):
