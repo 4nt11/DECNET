@@ -12,6 +12,7 @@ from decnet.topology.persistence import hydrate, persist
 from decnet.topology.status import TopologyStatus
 from decnet.topology.validate import (
     ValidationError,
+    check_gateway_homed_in_dmz,
     errors,
     validate,
 )
@@ -176,3 +177,85 @@ async def test_deploy_aborts_on_validation_error(repo, tmp_path, monkeypatch):
 
     topo = await repo.get_topology(tid)
     assert topo["status"] == TopologyStatus.PENDING
+
+
+# --------------------------------------------------------------------- gateway-in-dmz
+
+
+def _make_hydrated(*, dmz_id="dmz-id", internal_id="int-id") -> dict:
+    """Tiny hand-rolled hydrated dict for hermetic check_* unit tests."""
+    return {
+        "topology": {"id": "t", "status": "pending"},
+        "lans": [
+            {"id": dmz_id, "name": "dmz", "subnet": "10.0.0.0/24", "is_dmz": True},
+            {"id": internal_id, "name": "internal", "subnet": "10.0.1.0/24", "is_dmz": False},
+        ],
+        "deckies": [],
+        "edges": [],
+    }
+
+
+def test_check_gateway_homed_in_dmz_passes_when_gateway_is_in_dmz() -> None:
+    h = _make_hydrated()
+    h["deckies"].append({
+        "uuid": "d1", "name": "gw",
+        "decky_config": {"name": "gw", "forwards_l3": True},
+        "services": ["ssh"],
+    })
+    h["edges"].append({
+        "decky_uuid": "d1", "lan_id": "dmz-id",
+        "is_bridge": False, "forwards_l3": True,
+    })
+    assert check_gateway_homed_in_dmz(h) == []
+
+
+def test_check_gateway_homed_in_dmz_fails_when_gateway_is_internal() -> None:
+    h = _make_hydrated()
+    h["deckies"].append({
+        "uuid": "d1", "name": "gw",
+        "decky_config": {"name": "gw", "forwards_l3": True},
+        "services": ["ssh"],
+    })
+    # Home edge points at the internal LAN, not the DMZ.
+    h["edges"].append({
+        "decky_uuid": "d1", "lan_id": "int-id",
+        "is_bridge": False, "forwards_l3": True,
+    })
+    issues = check_gateway_homed_in_dmz(h)
+    assert len(issues) == 1
+    assert issues[0].code == "GATEWAY_NOT_IN_DMZ"
+
+
+def test_check_gateway_homed_in_dmz_ignores_non_gateway_deckies() -> None:
+    h = _make_hydrated()
+    h["deckies"].append({
+        "uuid": "d1", "name": "web",
+        "decky_config": {"name": "web"},  # forwards_l3 absent
+        "services": ["ssh"],
+    })
+    h["edges"].append({
+        "decky_uuid": "d1", "lan_id": "int-id",
+        "is_bridge": False,
+    })
+    assert check_gateway_homed_in_dmz(h) == []
+
+
+def test_check_gateway_homed_in_dmz_uses_non_bridge_edge_as_home() -> None:
+    """Multi-homed gateway: home is the non-bridge edge, not the bridge edge."""
+    h = _make_hydrated()
+    h["deckies"].append({
+        "uuid": "d1", "name": "gw",
+        "decky_config": {"name": "gw", "forwards_l3": True},
+        "services": ["ssh"],
+    })
+    # Bridge edge first (would be picked by a naive 'first edge' rule).
+    h["edges"].append({
+        "decky_uuid": "d1", "lan_id": "int-id",
+        "is_bridge": True, "forwards_l3": False,
+    })
+    h["edges"].append({
+        "decky_uuid": "d1", "lan_id": "dmz-id",
+        "is_bridge": False, "forwards_l3": True,
+    })
+    # Home is the DMZ via the non-bridge edge → no issue.
+    assert check_gateway_homed_in_dmz(h) == []

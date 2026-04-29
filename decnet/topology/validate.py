@@ -283,6 +283,68 @@ def check_service_config_shape(h: dict[str, Any]) -> list[ValidationIssue]:
     return issues
 
 
+def check_gateway_homed_in_dmz(h: dict[str, Any]) -> list[ValidationIssue]:
+    """Gateway deckies must live in a DMZ LAN.
+
+    ``forwards_l3=True`` triggers host-port publishing in the compose
+    generator (see :mod:`decnet.topology.compose`); a gateway sitting
+    on an internal LAN would publish ports on the host without anyone
+    on the right side of the perimeter able to reach the service
+    legitimately.  The semantic is "this decky is the front door" —
+    only meaningful when the LAN is the DMZ.
+
+    Errors out the validator so the live ``forwards_l3`` flip path
+    catches this before recreating the base.
+    """
+    if not h.get("deckies"):
+        return []
+
+    lans_by_id = {lan["id"]: lan for lan in h["lans"]}
+    dmz_lan_ids = {
+        lan["id"] for lan in h["lans"] if lan.get("is_dmz")
+    }
+    dmz_lan_names = {
+        lan["name"] for lan in h["lans"] if lan.get("is_dmz")
+    }
+
+    # Home-LAN selection mirrors the frontend hydration: prefer the
+    # non-bridge edge.  Falls back to the first edge if no
+    # is_bridge flag is set (legacy rows).
+    home_lan_for: dict[str, str] = {}  # decky_uuid → lan_id
+    for e in h["edges"]:
+        if e.get("is_bridge") is False and e["decky_uuid"] not in home_lan_for:
+            home_lan_for[e["decky_uuid"]] = e["lan_id"]
+    for e in h["edges"]:
+        if e["decky_uuid"] in home_lan_for:
+            continue
+        home_lan_for[e["decky_uuid"]] = e["lan_id"]
+
+    issues: list[ValidationIssue] = []
+    for d in h["deckies"]:
+        cfg = d.get("decky_config") or {}
+        if not cfg.get("forwards_l3"):
+            continue
+        home_lan_id = home_lan_for.get(d["uuid"])
+        if home_lan_id is None or home_lan_id not in dmz_lan_ids:
+            home_lan_name = (
+                lans_by_id.get(home_lan_id, {}).get("name")
+                if home_lan_id
+                else "(no home LAN)"
+            )
+            allowed = ", ".join(sorted(dmz_lan_names)) or "(no DMZ defined)"
+            issues.append(
+                ValidationIssue(
+                    "error",
+                    "GATEWAY_NOT_IN_DMZ",
+                    f"gateway decky {d['name']!r} is on LAN "
+                    f"{home_lan_name!r}; gateways must home in a DMZ "
+                    f"LAN ({allowed})",
+                    target={"decky": d["name"], "lan": home_lan_name},
+                )
+            )
+    return issues
+
+
 def check_no_host_port_collision(h: dict[str, Any]) -> list[ValidationIssue]:
     """Flag gateway service ports that are already bound on the host.
 
@@ -342,6 +404,23 @@ _RULES: list[Callable[[dict[str, Any]], list[ValidationIssue]]] = [
     check_services_known,
     check_service_config_shape,
 ]
+# NOTE: ``check_gateway_homed_in_dmz`` is intentionally NOT in _RULES.
+# The codebase uses ``forwards_l3=True`` for two distinct semantics:
+#
+#   1. Generic L3 forwarding (internal bridge deckies: enable
+#      net.ipv4.ip_forward so the decky can route between its multi-home
+#      LANs).  The generator writes this on internal bridges via
+#      ``bridge_forward_probability``; those bridges legitimately home
+#      in non-DMZ LANs.
+#   2. DMZ gateway (host-port publisher: the decky exposes its services
+#      on the host's public IP).  Only meaningful when the home LAN is
+#      the DMZ.
+#
+# Standing validation can't enforce DMZ-homing without breaking case 1.
+# Instead, the rule fires only on the explicit user-driven flip path
+# (apply_update_decky setting forwards_l3 from False → True), where the
+# operator's intent is unambiguously "make this a gateway".  Generator
+# output and bridge-decky paths bypass this check.
 
 
 def validate(hydrated: dict[str, Any]) -> list[ValidationIssue]:

@@ -847,6 +847,39 @@ async def apply_update_decky(
     new_forwards_l3 = bool(new_decky_config.get("forwards_l3", False))
     forwards_l3_flipped = new_forwards_l3 != old_forwards_l3
 
+    # Promotion path: refuse to flip a non-DMZ decky to gateway.  The
+    # 'gateway' semantic specifically means 'host-port publisher facing
+    # the DMZ' — running it on an internal LAN publishes ports the
+    # outside world can't reach and shadows the host's port space.
+    # Generic L3-bridge forwards_l3 (internal multi-homing) is set by
+    # the generator/attach paths, not by this op, so this check only
+    # fires when the operator explicitly toggles the flag.
+    if forwards_l3_flipped and new_forwards_l3:
+        # Re-derive the home LAN from the edges; same logic as
+        # check_gateway_homed_in_dmz.
+        decky_uuid = decky["uuid"]
+        home_lan_id: Optional[str] = None
+        for e in hydrated["edges"]:
+            if e["decky_uuid"] == decky_uuid and e.get("is_bridge") is False:
+                home_lan_id = e["lan_id"]
+                break
+        if home_lan_id is None:
+            for e in hydrated["edges"]:
+                if e["decky_uuid"] == decky_uuid:
+                    home_lan_id = e["lan_id"]
+                    break
+        home_lan = next(
+            (lan for lan in hydrated["lans"] if lan["id"] == home_lan_id),
+            None,
+        )
+        if home_lan is None or not home_lan.get("is_dmz"):
+            home_name = home_lan["name"] if home_lan else "(unknown)"
+            raise MutationError(
+                f"cannot promote decky {decky['decky_config']['name']!r} "
+                f"to gateway: home LAN {home_name!r} is not a DMZ. "
+                "Move the decky to the DMZ first, or pick a different decky."
+            )
+
     # Pre-check the destructive flip BEFORE any DB write, so a refused
     # mutation leaves zero side-effects.
     is_live = (await _live_topology_or_none(repo, topology_id)) is not None

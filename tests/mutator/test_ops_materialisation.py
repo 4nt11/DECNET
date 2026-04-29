@@ -277,6 +277,9 @@ async def test_update_decky_forwards_l3_flip_with_force_recreates_base(
 ):
     tid = await _make_active(repo)
     deckies = await repo.list_topology_deckies(tid)
+    # _make_active produces a single-LAN topology where that LAN is the
+    # DMZ; both deckies home there, so promoting deckies[0] to gateway
+    # is valid (passes the DMZ-homing guard).
     target = deckies[0]
     target_name = target["decky_config"]["name"]
 
@@ -293,6 +296,35 @@ async def test_update_decky_forwards_l3_flip_with_force_recreates_base(
             found = True
             break
     assert found, "expected force-recreate up against the base"
+
+
+@pytest.mark.anyio
+async def test_update_decky_refuses_gateway_promotion_on_non_dmz_lan(
+    repo, stubs,
+):
+    """Promoting a decky homed on an internal LAN to gateway must fail."""
+    tid = await _make_active(repo)
+    # Add an internal LAN + a decky homed there.
+    from decnet.mutator.ops import apply_add_lan, apply_add_decky
+    await apply_add_lan(repo, tid, {
+        "name": "internal", "subnet": "10.99.0.0/24", "is_dmz": False,
+    })
+    await apply_add_decky(repo, tid, {
+        "name": "internalbox", "lan": "internal", "services": ["ssh"],
+    })
+    stubs["compose_with_retry"].reset_mock()
+
+    with pytest.raises(MutationError, match="not a DMZ"):
+        await apply_update_decky(repo, tid, {
+            "decky": "internalbox",
+            "patch": {"forwards_l3": True},
+            "force": True,
+        })
+
+    # No recreate should have fired — refused mutations leave zero
+    # side-effects.
+    for call in stubs["compose_with_retry"].call_args_list:
+        assert "--force-recreate" not in call.args
 
 
 # ---------------- apply_update_lan -------------------------------------
