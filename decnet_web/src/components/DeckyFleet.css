@@ -127,6 +127,20 @@
 }
 .decky-hits { font-variant-numeric: tabular-nums; }
 
+/* Info banner — used in the deploy wizard and elsewhere a small
+   contextual note belongs.  Page-unscoped so it works inside the
+   Modal portal; PersonaGeneration.css scopes its own copy under
+   .persona-gen-root, which doesn't match the modal's DOM location. */
+.info-banner {
+  background: rgba(255, 255, 255, 0.02);
+  border: 1px solid var(--border);
+  border-left: 3px solid var(--violet);
+  padding: 10px 14px;
+  font-size: 0.78rem;
+  line-height: 1.5;
+}
+.info-banner em { color: var(--matrix); font-style: normal; }
+
 /* Status dots */
 .status-dot {
   display: inline-block;
