@@ -303,11 +303,44 @@ def remove_bridge_network(client: docker.DockerClient, name: str) -> None:
 # Host-side macvlan interface (hairpin fix)
 # ---------------------------------------------------------------------------
 
-def _require_root() -> None:
-    if os.geteuid() != 0:
-        raise PermissionError(
-            "MACVLAN host-side interface setup requires root. Run with sudo."
-        )
+# Linux capability bit positions — see capabilities(7).
+_CAP_NET_ADMIN = 12
+
+
+def _has_cap_net_admin() -> bool:
+    """True if the current process holds CAP_NET_ADMIN in its effective set.
+
+    Reads ``/proc/self/status`` rather than calling ``capget(2)`` so we
+    don't need a libcap dependency.  ``CapEff`` is a 64-bit hex bitmask;
+    bit 12 is CAP_NET_ADMIN.
+    """
+    try:
+        with open("/proc/self/status", "r") as fh:
+            for line in fh:
+                if line.startswith("CapEff:"):
+                    bits = int(line.split()[1], 16)
+                    return bool(bits & (1 << _CAP_NET_ADMIN))
+    except OSError:
+        pass
+    return False
+
+
+def _require_net_admin() -> None:
+    """Reject early if the process can't run ``ip link add ... macvlan``.
+
+    CAP_NET_ADMIN is what the kernel actually checks for netlink RTM_NEWLINK
+    of a macvlan/ipvlan slave; euid==0 is sufficient (it grants every cap)
+    but not necessary.  Prefer the cap check so the systemd unit's
+    ``AmbientCapabilities=CAP_NET_ADMIN`` is honoured without forcing the
+    whole API to run as root.
+    """
+    if os.geteuid() == 0 or _has_cap_net_admin():
+        return
+    raise PermissionError(
+        "MACVLAN host-side interface setup needs CAP_NET_ADMIN. "
+        "Either run as root or grant the cap (systemd: "
+        "AmbientCapabilities=CAP_NET_ADMIN)."
+    )
 
 
 def setup_host_macvlan(interface: str, host_macvlan_ip: str, decky_ip_range: str) -> None:
@@ -317,7 +350,7 @@ def setup_host_macvlan(interface: str, host_macvlan_ip: str, decky_ip_range: str
     host-helper first: the two drivers can share a parent NIC on paper but
     leaving the opposite helper in place is just cruft after a driver swap.
     """
-    _require_root()
+    _require_net_admin()
 
     _run(["ip", "link", "del", HOST_IPVLAN_IFACE], check=False)
 
@@ -332,7 +365,7 @@ def setup_host_macvlan(interface: str, host_macvlan_ip: str, decky_ip_range: str
 
 
 def teardown_host_macvlan(decky_ip_range: str) -> None:
-    _require_root()
+    _require_net_admin()
     _run(["ip", "route", "del", decky_ip_range, "dev", HOST_MACVLAN_IFACE], check=False)
     _run(["ip", "link", "del", HOST_MACVLAN_IFACE], check=False)
 
@@ -344,7 +377,7 @@ def setup_host_ipvlan(interface: str, host_ipvlan_ip: str, decky_ip_range: str) 
     host-helper first so a prior macvlan deploy doesn't leave its slave
     dangling on the parent NIC after the driver swap.
     """
-    _require_root()
+    _require_net_admin()
 
     _run(["ip", "link", "del", HOST_MACVLAN_IFACE], check=False)
 
@@ -358,7 +391,7 @@ def setup_host_ipvlan(interface: str, host_ipvlan_ip: str, decky_ip_range: str) 
 
 
 def teardown_host_ipvlan(decky_ip_range: str) -> None:
-    _require_root()
+    _require_net_admin()
     _run(["ip", "route", "del", decky_ip_range, "dev", HOST_IPVLAN_IFACE], check=False)
     _run(["ip", "link", "del", HOST_IPVLAN_IFACE], check=False)
 
