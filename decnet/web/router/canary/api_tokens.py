@@ -66,26 +66,20 @@ async def _resolve_topology_target(
 ) -> str:
     """Validate (topology_id, decky_name) and return the docker container.
 
-    404 if the topology doesn't exist; 422 if the named decky isn't in it.
-    Hoisted into ``decky_io/resolve.py`` in workstream 2 so the file-drop
-    endpoint can share it; for now it's local to the canary router.
+    Delegates to :func:`decnet.decky_io.resolve_decky_container` and
+    translates its ``LookupError`` into HTTP 404/422 — 404 when the
+    topology itself is missing, 422 when the named decky isn't in it.
     """
-    from decnet.topology.persistence import hydrate
-    hydrated = await hydrate(repo, topology_id)
-    if hydrated is None:
-        raise HTTPException(status_code=404, detail="topology not found")
-    for decky in hydrated["deckies"]:
-        cfg = decky.get("decky_config") or {}
-        name = cfg.get("name") or decky.get("name")
-        if name == decky_name:
-            services = decky.get("services") or []
-            return planter.resolve_topology_container(
-                topology_id, decky_name, services,
-            )
-    raise HTTPException(
-        status_code=422,
-        detail=f"decky {decky_name!r} is not in topology {topology_id!r}",
-    )
+    from decnet.decky_io import resolve_decky_container
+    try:
+        return await resolve_decky_container(
+            repo, decky_name, topology_id=topology_id,
+        )
+    except LookupError as exc:
+        msg = str(exc)
+        if "topology" in msg and "not found" in msg:
+            raise HTTPException(status_code=404, detail=msg) from exc
+        raise HTTPException(status_code=422, detail=msg) from exc
 
 
 def _trigger_row_to_response(row: dict[str, Any]) -> CanaryTriggerResponse:

@@ -63,6 +63,10 @@ from .deploy import (
     MutateIntervalRequest,
     PurgeResponse,
 )
+from .decky import (
+    DeckyFileDeleteRequest,
+    DeckyFileDropRequest,
+)
 from .fleet import (
     LOCAL_HOST_SENTINEL,
     FleetDecky,
@@ -222,6 +226,8 @@ __all__ = [
     "PurgeResponse",
     # fleet
     "LOCAL_HOST_SENTINEL",
+    "DeckyFileDeleteRequest",
+    "DeckyFileDropRequest",
     "FleetDecky",
     # health
     "ComponentHealth",

@@ -115,9 +115,9 @@ async def test_plant_argv_and_base64_round_trip(repo: SQLiteRepository, fake_bus
     assert stdin_seen[0] == base64.b64encode(art.content)
     assert "base64 -d > /home/admin/.aws/credentials" in script
     assert base64.b64encode(art.content).decode() not in script
-    # touch -d @<mtime> with negative offset → an int strictly less than now.
-    m = re.search(r"touch -d @(\d+) ", script)
-    assert m and int(m.group(1)) > 0
+    # touch -d 'YYYY-MM-DD HH:MM:SS UTC' — backdated via mtime_offset.
+    m = re.search(r"touch -d '(\d{4}-\d{2}-\d{2}) ", script)
+    assert m
     # State transitioned to planted.
     row = await repo.get_canary_token("tok-1")
     assert row["state"] == "planted" and row["last_error"] is None

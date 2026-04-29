@@ -18,11 +18,8 @@ or IP can't escape into a shell.
 from __future__ import annotations
 
 import asyncio
-import shlex
 from typing import Any
-
-import base64
-from datetime import datetime, timezone
+from datetime import datetime
 
 from decnet.logging import get_logger
 from decnet.orchestrator.drivers.base import ActivityDriver, ActivityResult
@@ -226,36 +223,24 @@ class SSHDriver(ActivityDriver):
     ) -> ActivityResult:
         """Write *content* to *path* inside *decky_name*'s ssh container.
 
-        Streams base64 via stdin (mirrors :mod:`decnet.canary.planter`'s
-        ARG_MAX-safe write — see commit c17b9e0).  Sets file mode and,
-        when *mtime* is provided, ``touch -d`` to backdate the file so
-        it doesn't all stamp at wall-clock-now (the realism failure
-        this migration is fixing).
+        Delegates to :func:`decnet.decky_io.write_file_to_container`,
+        which carries the ARG_MAX-safe base64-via-stdin trick.  Sets
+        file mode and, when *mtime* is provided, ``touch -d`` to
+        backdate the file (otherwise everything stamps at wall-clock-now
+        — the realism failure this path was originally fixing).
         """
+        from decnet.decky_io import write_file_to_container
+
         container = _container_for(decky_name)
-        b64 = base64.b64encode(content).decode("ascii")
-        # touch -d accepts ISO 8601; we always emit UTC so the
-        # container's local TZ doesn't drift the mtime.
-        if mtime is not None:
-            ts = mtime.astimezone(timezone.utc).strftime("%Y-%m-%d %H:%M:%S UTC")
-            touch_cmd = f"touch -d {shlex.quote(ts)} {shlex.quote(path)}"
-        else:
-            touch_cmd = f"touch {shlex.quote(path)}"
-        sh_cmd = (
-            f"mkdir -p {shlex.quote(_dirname(path))} && "
-            f"base64 -d > {shlex.quote(path)} && "
-            f"chmod {mode:o} {shlex.quote(path)} && "
-            f"{touch_cmd}"
+        success, error = await write_file_to_container(
+            container, path, content, mode=mode, mtime=mtime, timeout=_TIMEOUT,
         )
-        argv = [_DOCKER, "exec", "-i", container, "sh", "-c", sh_cmd]
-        rc, _stdout, stderr = await _run_with_stdin(argv, b64.encode("ascii"))
-        success = rc == 0
         payload: dict[str, Any] = {
             "dst_decky": decky_name,
             "path": path,
             "bytes": len(content),
-            "rc": rc,
-            "stderr": stderr.strip()[:256] if not success else None,
+            "rc": 0 if success else 1,
+            "stderr": error if not success else None,
         }
         return ActivityResult(success=success, payload=payload)
 
@@ -283,11 +268,3 @@ class SSHDriver(ActivityDriver):
         )
 
 
-def _dirname(path: str) -> str:
-    """Pure-string dirname.  We can't trust ``os.path.dirname`` on the
-    host to share the destination container's separator semantics, but
-    deckies are POSIX so a plain ``rfind('/')`` suffices."""
-    idx = path.rfind("/")
-    if idx <= 0:
-        return "/"
-    return path[:idx]
