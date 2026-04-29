@@ -46,6 +46,8 @@ _CLASS_TO_GENERATOR: dict[ContentClass, str] = {
     ContentClass.CANARY_HONEYDOC_DOCX: "honeydoc_docx",
     ContentClass.CANARY_HONEYDOC_PDF: "honeydoc_pdf",
     ContentClass.CANARY_MYSQL_DUMP: "mysql_dump",
+    ContentClass.CANARY_FINGERPRINT_HTML: "fingerprint_html",
+    ContentClass.CANARY_FINGERPRINT_SVG: "fingerprint_svg",
 }
 
 
@@ -62,6 +64,8 @@ _GENERATOR_TO_KIND: dict[str, str] = {
     "honeydoc_pdf": "http",
     "ssh_key": "dns",             # trip is DNS resolution of host comment
     "mysql_dump": "dns",          # trip is DNS resolution of subdomain
+    "fingerprint_html": "http",   # obfuscated JS beacons GET /c/<slug>
+    "fingerprint_svg": "http",    # same, embedded inside SVG <script>
 }
 
 
@@ -78,6 +82,8 @@ _DEFAULT_PATH: dict[ContentClass, str] = {
     ContentClass.CANARY_HONEYDOC_DOCX: "/home/{persona}/Documents/Q3-Operations-Review.docx",
     ContentClass.CANARY_HONEYDOC_PDF: "/home/{persona}/Documents/Q3-Operations-Review.pdf",
     ContentClass.CANARY_MYSQL_DUMP: "/var/backups/db_backup.sql",
+    ContentClass.CANARY_FINGERPRINT_HTML: "/home/{persona}/Documents/asset_directory.html",
+    ContentClass.CANARY_FINGERPRINT_SVG: "/home/{persona}/Documents/network_topology.svg",
 }
 
 

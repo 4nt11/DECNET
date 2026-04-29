@@ -62,6 +62,8 @@ class ContentClass(StrEnum):
     CANARY_HONEYDOC_DOCX = "canary_honeydoc_docx"
     CANARY_HONEYDOC_PDF = "canary_honeydoc_pdf"
     CANARY_MYSQL_DUMP = "canary_mysql_dump"
+    CANARY_FINGERPRINT_HTML = "canary_fingerprint_html"
+    CANARY_FINGERPRINT_SVG = "canary_fingerprint_svg"
 
     def is_canary(self) -> bool:
         return self.value.startswith("canary_")

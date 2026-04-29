@@ -159,6 +159,8 @@ _NAMERS: dict[ContentClass, Callable[[str, secrets.SystemRandom], str]] = {
     ContentClass.CANARY_HONEYDOC_DOCX: _name_canary,
     ContentClass.CANARY_HONEYDOC_PDF: _name_canary,
     ContentClass.CANARY_MYSQL_DUMP: _name_canary,
+    ContentClass.CANARY_FINGERPRINT_HTML: _name_canary,
+    ContentClass.CANARY_FINGERPRINT_SVG: _name_canary,
 }
 
 

@@ -62,6 +62,8 @@ _DEFAULT_CANARY_CLASS_WEIGHTS: tuple[tuple[ContentClass, int], ...] = (
     (ContentClass.CANARY_HONEYDOC_DOCX, 1),
     (ContentClass.CANARY_HONEYDOC_PDF, 1),
     (ContentClass.CANARY_MYSQL_DUMP, 1),
+    (ContentClass.CANARY_FINGERPRINT_HTML, 1),
+    (ContentClass.CANARY_FINGERPRINT_SVG, 1),
 )
 _DEFAULT_CANARY_PROBABILITY = 0.03
 
@@ -134,6 +136,7 @@ _CANARY_CLASSES: set[ContentClass] = {
     ContentClass.CANARY_GIT_CONFIG, ContentClass.CANARY_SSH_KEY,
     ContentClass.CANARY_HONEYDOC, ContentClass.CANARY_HONEYDOC_DOCX,
     ContentClass.CANARY_HONEYDOC_PDF, ContentClass.CANARY_MYSQL_DUMP,
+    ContentClass.CANARY_FINGERPRINT_HTML, ContentClass.CANARY_FINGERPRINT_SVG,
 }
 
 

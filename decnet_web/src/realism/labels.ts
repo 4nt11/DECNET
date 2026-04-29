@@ -26,6 +26,8 @@ const LABELS: Record<string, string> = {
   canary_honeydoc_docx: 'Canary · DOCX Honeydoc',
   canary_honeydoc_pdf: 'Canary · PDF Honeydoc',
   canary_mysql_dump: 'Canary · MySQL Dump',
+  canary_fingerprint_html: 'Canary · Fingerprint HTML',
+  canary_fingerprint_svg: 'Canary · Fingerprint SVG',
 };
 
 export function contentClassLabel(value: string): string {

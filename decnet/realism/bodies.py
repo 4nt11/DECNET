@@ -213,6 +213,8 @@ _BODIES: dict[ContentClass, Callable[[str, secrets.SystemRandom], str]] = {
     ContentClass.CANARY_HONEYDOC_DOCX: _body_canary,
     ContentClass.CANARY_HONEYDOC_PDF: _body_canary,
     ContentClass.CANARY_MYSQL_DUMP: _body_canary,
+    ContentClass.CANARY_FINGERPRINT_HTML: _body_canary,
+    ContentClass.CANARY_FINGERPRINT_SVG: _body_canary,
 }
 
 

@@ -45,6 +45,8 @@ const DEFAULTS: ConfigPayload = {
     { content_class: 'canary_honeydoc_docx', weight: 1 },
     { content_class: 'canary_honeydoc_pdf', weight: 1 },
     { content_class: 'canary_mysql_dump', weight: 1 },
+    { content_class: 'canary_fingerprint_html', weight: 1 },
+    { content_class: 'canary_fingerprint_svg', weight: 1 },
   ],
   canary_probability: 0.03,
 };

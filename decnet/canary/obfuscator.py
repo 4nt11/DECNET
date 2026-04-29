@@ -24,7 +24,7 @@ from __future__ import annotations
 import hashlib
 import json
 import os
-import subprocess
+import subprocess  # nosec B404 — Node helper exec is the whole point
 from pathlib import Path
 from typing import Any
 
@@ -103,7 +103,7 @@ def obfuscate(code: str, *, callback_token: str) -> str:
     options = _config_from_seed(seed)
     payload = json.dumps({"code": code, "options": options})
     try:
-        proc = subprocess.run(
+        proc = subprocess.run(  # nosec B603 — argv-form, no shell, fixed helper path; payload is JSON on stdin, not in argv
             [_NODE_BIN, str(_HELPER)],
             input=payload, capture_output=True, text=True,
             timeout=_TIMEOUT_S, check=False,

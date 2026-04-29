@@ -52,6 +52,7 @@ const CONTENT_CLASSES = [
   'canary_aws_creds', 'canary_env_file', 'canary_git_config',
   'canary_ssh_key', 'canary_honeydoc', 'canary_honeydoc_docx',
   'canary_honeydoc_pdf', 'canary_mysql_dump',
+  'canary_fingerprint_html', 'canary_fingerprint_svg',
 ] as const;
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
