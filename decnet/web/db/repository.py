@@ -787,17 +787,29 @@ class BaseRepository(ABC):
     # -------------------- pre-deploy (pending-only) mutations --------------------
 
     async def delete_lan(
-        self, lan_id: str, *, expected_version: Optional[int] = None
+        self,
+        lan_id: str,
+        *,
+        expected_version: Optional[int] = None,
+        enforce_pending: bool = True,
     ) -> None:
         raise NotImplementedError
 
     async def delete_topology_decky(
-        self, decky_uuid: str, *, expected_version: Optional[int] = None
+        self,
+        decky_uuid: str,
+        *,
+        expected_version: Optional[int] = None,
+        enforce_pending: bool = True,
     ) -> None:
         raise NotImplementedError
 
     async def delete_topology_edge(
-        self, edge_id: str, *, expected_version: Optional[int] = None
+        self,
+        edge_id: str,
+        *,
+        expected_version: Optional[int] = None,
+        enforce_pending: bool = True,
     ) -> None:
         raise NotImplementedError
 

@@ -558,7 +558,11 @@ async def apply_remove_lan(
                 f"{d['decky_config']['name']!r}; remove the decky first"
             )
     lan_name = lan["name"]
-    await repo.delete_lan(lan["id"])
+    # enforce_pending=False: the mutator queue is the live-editing
+    # surface, gated on topology status by us before we got here.  The
+    # repo's pending-only guard is for HTTP CRUD callers that mustn't
+    # bypass it.
+    await repo.delete_lan(lan["id"], enforce_pending=False)
 
     # Live materialisation symmetric to apply_add_lan: tear down the
     # docker bridge and re-render compose so a future redeploy doesn't
@@ -757,7 +761,7 @@ async def apply_detach_decky(
     await repo.update_topology_decky(
         decky["uuid"], {"decky_config": new_cfg}
     )
-    await repo.delete_topology_edge(edge["id"])
+    await repo.delete_topology_edge(edge["id"], enforce_pending=False)
     # Live materialisation: SDK network.disconnect on the base
     # container.  Service containers automatically lose visibility into
     # the LAN because they share the base's netns.
@@ -778,7 +782,7 @@ async def apply_remove_decky(
         raise MutationError(f"decky {payload['decky']!r} not found")
     decky_name = decky["decky_config"]["name"]
     services_list = list(decky.get("services") or [])
-    await repo.delete_topology_decky(decky["uuid"])
+    await repo.delete_topology_decky(decky["uuid"], enforce_pending=False)
     # Live materialisation: stop + rm -f the decky's containers.  We
     # capture decky_name + services BEFORE the delete so the helper
     # has the targets even though the row is gone.

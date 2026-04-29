@@ -61,12 +61,18 @@ class LansMixin:
         lan_id: str,
         *,
         expected_version: Optional[int] = None,
+        enforce_pending: bool = True,
     ) -> None:
-        """Cascade-delete a LAN from a pending topology.
+        """Cascade-delete a LAN.
 
         Rejects if any decky declares this LAN as its home (i.e. has a
         non-bridge edge to it — the only LAN that decky lives in).  The
         caller must delete or reassign the home-deckies first.
+
+        ``enforce_pending=True`` by default keeps the HTTP CRUD guard
+        intact; the mutator's ``apply_remove_lan`` opts out (it has
+        already gated on topology status and the live-LAN docker
+        materialisation runs after).
         """
         from decnet.topology.status import TopologyNotEditable  # noqa: F401
 
@@ -75,7 +81,8 @@ class LansMixin:
             lan = result.scalar_one_or_none()
             if lan is None:
                 return
-            await self._assert_pending(session, lan.topology_id)
+            if enforce_pending:
+                await self._assert_pending(session, lan.topology_id)
 
             # Home-decky check: any decky whose only edge lands here?
             edges_result = await session.execute(

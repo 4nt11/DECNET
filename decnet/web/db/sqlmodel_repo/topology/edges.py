@@ -33,7 +33,12 @@ class TopologyEdgesMixin:
         edge_id: str,
         *,
         expected_version: Optional[int] = None,
+        enforce_pending: bool = True,
     ) -> None:
+        """Delete one edge.  ``enforce_pending=True`` by default — the
+        mutator's ``apply_detach_decky`` opts out, same rationale as
+        ``delete_topology_decky``.
+        """
         async with self._session() as session:
             result = await session.execute(
                 select(TopologyEdge).where(TopologyEdge.id == edge_id)
@@ -41,7 +46,8 @@ class TopologyEdgesMixin:
             edge = result.scalar_one_or_none()
             if edge is None:
                 return
-            await self._assert_pending(session, edge.topology_id)
+            if enforce_pending:
+                await self._assert_pending(session, edge.topology_id)
             if expected_version is not None:
                 await self._check_and_bump_version(
                     session, edge.topology_id, expected_version
