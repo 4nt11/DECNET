@@ -954,6 +954,18 @@ async def deploy_topology(repo, topology_id: str, *, dry_run: bool = False) -> N
     await transition_status(repo, topology_id, TopologyStatus.ACTIVE)
     log.info("topology %s deployed n_lans=%d", topology_id, len(lans))
 
+    # Best-effort canary baseline seed across every decky in the
+    # topology.  Same resilience contract as the fleet path: failures
+    # surface as state=failed token rows, never abort the deploy.
+    try:
+        from decnet.canary import planter as _canary_planter
+        await _canary_planter.seed_baseline_topology(repo, topology_id)
+    except Exception as exc:  # noqa: BLE001
+        log.warning(
+            "canary baseline seed failed (best-effort) topology=%s err=%s",
+            topology_id, exc,
+        )
+
 
 @_traced("engine.teardown_topology")
 async def teardown_topology(repo, topology_id: str) -> None:

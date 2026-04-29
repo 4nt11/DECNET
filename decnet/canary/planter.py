@@ -52,6 +52,21 @@ def _container_for(decky_name: str) -> str:
     return f"{decky_name}{_SSH_CONTAINER_SUFFIX}"
 
 
+def resolve_topology_container(
+    topology_id: str, decky_name: str, services: Iterable[str],
+) -> str:
+    """Container name to docker-exec into for a MazeNET decky.
+
+    The ssh service container (when present) wins because it carries the
+    most realistic filesystem layout — same rationale as the fleet path.
+    Otherwise we target the base container, whose name is set by
+    :func:`decnet.topology.compose._container_name`.
+    """
+    if "ssh" in set(services):
+        return f"{decky_name}{_SSH_CONTAINER_SUFFIX}"
+    return f"decnet_t_{topology_id[:8]}_{decky_name}"
+
+
 def _dirname(path: str) -> str:
     idx = path.rfind("/")
     if idx <= 0:
@@ -139,6 +154,7 @@ async def plant(
     repo: Optional[BaseRepository] = None,
     publish: bool = True,
     bus: Optional[BaseBus] = None,
+    container: Optional[str] = None,
 ) -> tuple[bool, Optional[str]]:
     """Write *artifact* into the decky's ssh container.
 
@@ -158,9 +174,10 @@ async def plant(
         return False, err
 
     sh_cmd, stdin_payload = _build_plant_command(artifact)
+    target_container = container or _container_for(decky_name)
     # ``-i`` keeps stdin attached so base64 -d inside the container can
     # consume the encoded payload streamed from the host.
-    argv = [_DOCKER, "exec", "-i", _container_for(decky_name), "sh", "-c", sh_cmd]
+    argv = [_DOCKER, "exec", "-i", target_container, "sh", "-c", sh_cmd]
     rc, _stdout, stderr = await _run(argv, stdin_bytes=stdin_payload)
     success = rc == 0
     error = None if success else (stderr.strip()[:256] or f"rc={rc}")
@@ -196,6 +213,7 @@ async def revoke(
     repo: Optional[BaseRepository] = None,
     publish: bool = True,
     bus: Optional[BaseBus] = None,
+    container: Optional[str] = None,
 ) -> tuple[bool, Optional[str]]:
     """Best-effort unlink + state transition + bus publish.
 
@@ -204,7 +222,8 @@ async def revoke(
     already missing); only docker / container-down errors return False.
     """
     sh_cmd = f"rm -f {shlex.quote(placement_path)}"
-    argv = [_DOCKER, "exec", _container_for(decky_name), "sh", "-c", sh_cmd]
+    target_container = container or _container_for(decky_name)
+    argv = [_DOCKER, "exec", target_container, "sh", "-c", sh_cmd]
     rc, _stdout, stderr = await _run(argv)
     success = rc == 0
     error = None if success else (stderr.strip()[:256] or f"rc={rc}")
@@ -250,6 +269,7 @@ async def seed_baseline(
     persona: str = "linux",
     created_by: str = "system",
     bus: Optional[BaseBus] = None,
+    container: Optional[str] = None,
 ) -> list[dict[str, Any]]:
     """Plant the configured baseline canary set on one decky.
 
@@ -293,9 +313,59 @@ async def seed_baseline(
         await plant(
             decky_name, artifact,
             token_uuid=token_uuid, repo=repo, publish=True, bus=bus,
+            container=container,
         )
         out.append({
             "token_uuid": token_uuid, "generator": gen_name, "kind": kind,
             "callback_token": slug, "placement_path": artifact.path,
         })
+    return out
+
+
+async def seed_baseline_topology(
+    repo: BaseRepository,
+    topology_id: str,
+    *,
+    created_by: str = "system",
+    bus: Optional[BaseBus] = None,
+) -> list[dict[str, Any]]:
+    """Plant baseline canaries on every decky in a MazeNET topology.
+
+    Mirrors :func:`seed_baseline` for the topology path. Container name
+    resolution uses :func:`resolve_topology_container` since topology
+    deckies may not have an ssh service — in that case we target the
+    base container instead.
+
+    Best-effort: failures on any single decky are logged inside
+    :func:`plant`; the deploy hook treats the return value as
+    informational. Returns a flat list of per-token dicts (with an added
+    ``decky_name`` key) across all deckies.
+    """
+    from decnet.topology.persistence import hydrate
+
+    hydrated = await hydrate(repo, topology_id)
+    if hydrated is None:
+        log.warning(
+            "canary.seed_baseline_topology: topology %s not found", topology_id,
+        )
+        return []
+
+    out: list[dict[str, Any]] = []
+    for decky in hydrated["deckies"]:
+        cfg = decky.get("decky_config") or {}
+        decky_name = cfg.get("name") or decky.get("name")
+        if not decky_name:
+            continue
+        services = decky.get("services") or []
+        container = resolve_topology_container(topology_id, decky_name, services)
+        # MazeNET deckies don't carry an OS persona today; default to
+        # linux (every base image we ship is Linux).
+        rows = await seed_baseline(
+            decky_name, repo,
+            persona="linux", created_by=created_by, bus=bus,
+            container=container,
+        )
+        for r in rows:
+            r["decky_name"] = decky_name
+            out.append(r)
     return out
