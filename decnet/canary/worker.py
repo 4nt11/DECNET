@@ -339,6 +339,22 @@ async def _record_hit(
     except Exception as e:  # noqa: BLE001 — best effort
         log.warning("canary.triggered publish failed slug=%s err=%s", slug, e)
 
+    # Auto-deregister fingerprint canaries after the first valid fingerprint
+    # is collected. Slug goes dark; the stealth posture means the attacker
+    # sees the same 200 + GIF on the next hit — nothing reveals the revocation.
+    # Guard: only fingerprint tokens have a non-NULL fingerprint_nonce; plain
+    # http/dns canaries are NOT auto-revoked.
+    if parsed_fp is not None and token.get("fingerprint_nonce") is not None:
+        try:
+            await repo.update_canary_token_state(token["uuid"], "revoked")
+            await bus.publish(
+                topics.canary(token["uuid"], topics.CANARY_REVOKED),
+                {"token_id": token["uuid"], "trigger_id": trigger_id,
+                 "reason": "fingerprint_collected"},
+            )
+        except Exception as e:  # noqa: BLE001 — trigger row already landed; best effort
+            log.warning("canary.deregister failed token=%s err=%s", token["uuid"], e)
+
 
 # ---------------------------- DNS surface --------------------------------
 

@@ -110,7 +110,8 @@ class CanaryMixin:
         async with self._session() as session:
             result = await session.execute(
                 select(CanaryToken).where(
-                    CanaryToken.callback_token == callback_token
+                    CanaryToken.callback_token == callback_token,
+                    CanaryToken.state == "planted",
                 )
             )
             row = result.scalar_one_or_none()

@@ -256,6 +256,9 @@ async def test_fp_valid_nonce_persists(repo: SQLiteRepository, bus: FakeBus) -> 
     headers = json.loads(triggers[0]["raw_headers"])
     assert "_fp" in headers
     assert "_fp_invalid_nonce" not in headers
+    # Valid fingerprint → token auto-revoked.
+    tok = await repo.get_canary_token("tok-n1")
+    assert tok["state"] == "revoked"
 
 
 @pytest.mark.asyncio
@@ -365,6 +368,51 @@ async def test_fp_rate_limited_on_excess_submissions(
     assert "_fp" in oldest_headers
 
     _worker._fp_rate_buckets.clear()
+
+
+@pytest.mark.asyncio
+async def test_fp_deregisters_slug_after_valid_hit(
+    repo: SQLiteRepository, bus: FakeBus,
+) -> None:
+    """After a valid fingerprint beacon the slug goes dark — second hit records nothing."""
+    import json
+
+    blob, _ = _make_fp_blob("slug-DEREG1")
+    await repo.create_canary_token({
+        "uuid": "tok-dereg1", "kind": "http", "decky_name": "web1",
+        "generator": "fingerprint_html", "placement_path": "/x",
+        "callback_token": "slug-DEREG1", "secret_seed": "s", "created_by": "u1",
+        "fingerprint_nonce": "deadbeef01234567",
+    })
+    app = _build_app(repo, bus)
+    with TestClient(app) as client:
+        # First hit — valid FP, deregisters slug.
+        client.get(f"/c/slug-DEREG1?d={blob}&k=deadbeef01234567")
+        # Second hit — slug is revoked, stealth 200 but nothing persisted.
+        client.get(f"/c/slug-DEREG1?d={blob}&k=deadbeef01234567")
+    triggers = await repo.list_canary_triggers("tok-dereg1")
+    assert len(triggers) == 1  # only the first hit landed
+
+
+@pytest.mark.asyncio
+async def test_plain_http_canary_not_deregistered(
+    repo: SQLiteRepository, bus: FakeBus,
+) -> None:
+    """Plain HTTP canaries (no fingerprint_nonce) are NOT auto-revoked on a hit."""
+    await repo.create_canary_token({
+        "uuid": "tok-plain1", "kind": "http", "decky_name": "web1",
+        "generator": "env_file", "placement_path": "/x",
+        "callback_token": "slug-PLAIN1", "secret_seed": "s", "created_by": "u1",
+        # fingerprint_nonce intentionally absent / NULL
+    })
+    app = _build_app(repo, bus)
+    with TestClient(app) as client:
+        client.get("/c/slug-PLAIN1")
+        client.get("/c/slug-PLAIN1")
+    triggers = await repo.list_canary_triggers("tok-plain1")
+    assert len(triggers) == 2  # both hits recorded — no deregistration
+    tok = await repo.get_canary_token("tok-plain1")
+    assert tok["state"] == "planted"
 
 
 @pytest.mark.asyncio
