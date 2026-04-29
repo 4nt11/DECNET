@@ -122,6 +122,7 @@ class CanaryMixin:
         decky_name: Optional[str] = None,
         state: Optional[str] = None,
         kind: Optional[str] = None,
+        topology_id: Optional[str] = None,
     ) -> list[dict[str, Any]]:
         async with self._session() as session:
             stmt = select(CanaryToken)
@@ -131,6 +132,8 @@ class CanaryMixin:
                 stmt = stmt.where(CanaryToken.state == state)
             if kind is not None:
                 stmt = stmt.where(CanaryToken.kind == kind)
+            if topology_id is not None:
+                stmt = stmt.where(CanaryToken.topology_id == topology_id)
             stmt = stmt.order_by(desc(CanaryToken.placed_at))
             result = await session.execute(stmt)
             return [r.model_dump(mode="json") for r in result.scalars().all()]

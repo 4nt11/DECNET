@@ -936,6 +936,7 @@ class BaseRepository(ABC):
         decky_name: Optional[str] = None,
         state: Optional[str] = None,
         kind: Optional[str] = None,
+        topology_id: Optional[str] = None,
     ) -> list[dict[str, Any]]:
         raise NotImplementedError
 

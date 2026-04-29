@@ -61,6 +61,33 @@ def _row_to_response(row: dict[str, Any]) -> CanaryTokenResponse:
     return CanaryTokenResponse(**row)
 
 
+async def _resolve_topology_target(
+    topology_id: str, decky_name: str,
+) -> str:
+    """Validate (topology_id, decky_name) and return the docker container.
+
+    404 if the topology doesn't exist; 422 if the named decky isn't in it.
+    Hoisted into ``decky_io/resolve.py`` in workstream 2 so the file-drop
+    endpoint can share it; for now it's local to the canary router.
+    """
+    from decnet.topology.persistence import hydrate
+    hydrated = await hydrate(repo, topology_id)
+    if hydrated is None:
+        raise HTTPException(status_code=404, detail="topology not found")
+    for decky in hydrated["deckies"]:
+        cfg = decky.get("decky_config") or {}
+        name = cfg.get("name") or decky.get("name")
+        if name == decky_name:
+            services = decky.get("services") or []
+            return planter.resolve_topology_container(
+                topology_id, decky_name, services,
+            )
+    raise HTTPException(
+        status_code=422,
+        detail=f"decky {decky_name!r} is not in topology {topology_id!r}",
+    )
+
+
 def _trigger_row_to_response(row: dict[str, Any]) -> CanaryTriggerResponse:
     # Decode raw_headers JSON for the response shape.
     headers = row.get("raw_headers") or "{}"
@@ -105,6 +132,14 @@ async def api_create_token(
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e)) from e
 
+    # Resolve the docker container before any expensive work — surfacing
+    # 404/422 here keeps a typo from minting a half-baked token row.
+    container: str | None = None
+    if req.topology_id:
+        container = await _resolve_topology_target(
+            req.topology_id, req.decky_name,
+        )
+
     slug = token_urlsafe(16)
     ctx = CanaryContext(
         callback_token=slug, http_base=_http_base(), dns_zone=_dns_zone(),
@@ -145,6 +180,7 @@ async def api_create_token(
         "uuid": token_uuid,
         "kind": kind,
         "decky_name": req.decky_name,
+        "topology_id": req.topology_id,
         "blob_uuid": req.blob_uuid,
         "instrumenter": instrumenter_name,
         "generator": req.generator,
@@ -154,7 +190,10 @@ async def api_create_token(
         "created_by": admin.get("uuid", "unknown"),
         "state": "planted",
     })
-    await planter.plant(req.decky_name, artifact, token_uuid=token_uuid, repo=repo)
+    await planter.plant(
+        req.decky_name, artifact,
+        token_uuid=token_uuid, repo=repo, container=container,
+    )
     row = await repo.get_canary_token(token_uuid)
     return _row_to_response(row)
 
@@ -173,10 +212,12 @@ async def api_list_tokens(
     decky_name: str | None = Query(default=None),
     state: str | None = Query(default=None),
     kind: str | None = Query(default=None),
+    topology_id: str | None = Query(default=None),
     viewer: dict = Depends(require_viewer),
 ) -> CanaryTokensResponse:
     rows = await repo.list_canary_tokens(
         decky_name=decky_name, state=state, kind=kind,
+        topology_id=topology_id,
     )
     return CanaryTokensResponse(
         tokens=[_row_to_response(r) for r in rows],
@@ -311,8 +352,21 @@ async def api_revoke_token(
     row = await repo.get_canary_token(uuid)
     if row is None:
         raise HTTPException(status_code=404, detail="token not found")
+    # Re-resolve the container at revoke time: the topology may have
+    # been redeployed since placement.  If it's gone entirely we fall
+    # through to the planter's fleet default — the call will fail
+    # best-effort and the row still flips to revoked.
+    container: str | None = None
+    topology_id = row.get("topology_id")
+    if topology_id:
+        try:
+            container = await _resolve_topology_target(
+                topology_id, row["decky_name"],
+            )
+        except HTTPException:
+            container = None
     await planter.revoke(
         row["decky_name"], row["placement_path"],
-        token_uuid=uuid, repo=repo,
+        token_uuid=uuid, repo=repo, container=container,
     )
     return MessageResponse(message="ok")
