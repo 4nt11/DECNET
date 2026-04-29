@@ -102,38 +102,65 @@ async def api_topology_events(
                     yield ": keepalive\n\n"
                 return
 
-            sub = bus.subscribe(f"{_topics.TOPOLOGY}.{topology_id}.>")
-            try:
+            # Two subscriptions, merged through an asyncio.Queue:
+            #
+            #   topology.<id>.>  — lifecycle (status, mutation.*).
+            #   decky.>          — per-decky events, filtered to this
+            #                      topology by the event's payload.
+            #
+            # Decky events carry ``topology_id`` in their payload (see
+            # decnet.engine.services_live._publish); we discard ones
+            # that don't belong to this stream so a fleet decky sharing
+            # a name with a topology decky doesn't leak across.
+            topo_sub = bus.subscribe(f"{_topics.TOPOLOGY}.{topology_id}.>")
+            decky_sub = bus.subscribe(f"{_topics.DECKY}.>")
+            queue: asyncio.Queue = asyncio.Queue(maxsize=256)
+
+            async def _pump(sub, *, only_topology: bool = False) -> None:
                 async with sub:
-                    sub_iter = sub.__aiter__()
-                    while True:
-                        if await request.is_disconnected():
-                            break
-                        next_task = asyncio.ensure_future(sub_iter.__anext__())
+                    async for ev in sub:
+                        if only_topology:
+                            payload = ev.payload or {}
+                            if payload.get("topology_id") != topology_id:
+                                continue
                         try:
-                            event = await asyncio.wait_for(next_task, timeout=_KEEPALIVE_SECS)
-                        except asyncio.TimeoutError:
-                            next_task.cancel()
-                            yield ": keepalive\n\n"
-                            continue
-                        except StopAsyncIteration:
-                            break
-                        # Map the bus event onto an SSE ``event:`` name that
-                        # the frontend can switch on without parsing topics.
-                        yield _format_sse(
-                            _sse_name_for(event.topic),
-                            {
-                                "topic": event.topic,
-                                "type": event.type,
-                                "ts": event.ts,
-                                "payload": event.payload,
-                            },
+                            queue.put_nowait(ev)
+                        except asyncio.QueueFull:
+                            # Drop on overflow rather than backpressuring
+                            # the bus; the snapshot + reconnect path will
+                            # cover any gap a slow consumer creates.
+                            pass
+
+            topo_task = asyncio.create_task(_pump(topo_sub))
+            decky_task = asyncio.create_task(_pump(decky_sub, only_topology=True))
+            try:
+                while True:
+                    if await request.is_disconnected():
+                        break
+                    try:
+                        event = await asyncio.wait_for(
+                            queue.get(), timeout=_KEEPALIVE_SECS,
                         )
+                    except asyncio.TimeoutError:
+                        yield ": keepalive\n\n"
+                        continue
+                    yield _format_sse(
+                        _sse_name_for(event.topic),
+                        {
+                            "topic": event.topic,
+                            "type": event.type,
+                            "ts": event.ts,
+                            "payload": event.payload,
+                        },
+                    )
             except asyncio.CancelledError:
                 pass
             except Exception:
                 log.exception("topology events stream crashed topology_id=%s", topology_id)
                 yield _format_sse("error", {"message": "Stream interrupted"})
+            finally:
+                topo_task.cancel()
+                decky_task.cancel()
 
     return StreamingResponse(
         generator(),
@@ -148,10 +175,20 @@ async def api_topology_events(
 def _sse_name_for(topic: str) -> str:
     """Derive an SSE ``event:`` name from a bus topic.
 
-    ``topology.<id>.mutation.applied`` → ``mutation.applied``
-    ``topology.<id>.status``           → ``status``
+    ``topology.<id>.mutation.applied``        → ``mutation.applied``
+    ``topology.<id>.status``                  → ``status``
+    ``decky.<name>.service.added``            → ``decky.service.added``
+    ``decky.<name>.service.removed``          → ``decky.service.removed``
     Anything else is passed through unchanged so future topic families
     don't silently collapse onto a generic bucket.
     """
     parts = topic.split(".", 2)
-    return parts[2] if len(parts) >= 3 else topic
+    if len(parts) < 3:
+        return topic
+    head, _ident, tail = parts
+    # Decky events: keep the ``decky.`` prefix so the frontend
+    # discriminates them from topology-lifecycle events that happen to
+    # share an event name (e.g. ``status``).
+    if head == _topics.DECKY:
+        return f"{_topics.DECKY}.{tail}"
+    return tail

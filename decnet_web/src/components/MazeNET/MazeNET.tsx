@@ -650,6 +650,22 @@ const MazeNET: React.FC = () => {
       || event.name === 'status') {
       refetch();
     }
+    // Live service mutations from another tab / admin: optimistically
+    // patch local state so the chip set reflects shape without a full
+    // re-hydrate.  The post-mutation services list lives on the
+    // payload; same shape the actor's POST/DELETE response carries.
+    if (event.name === 'decky.service.added'
+      || event.name === 'decky.service.removed') {
+      const p = event.payload ?? {};
+      const deckyName = typeof p.decky_name === 'string' ? p.decky_name : null;
+      const services = Array.isArray(p.services) ? p.services as string[] : null;
+      if (deckyName && services) {
+        setNodes((prev) => prev.map((n) => n.kind === 'decky' && n.name === deckyName
+          ? { ...n, services } : n));
+        setStreamLive(true);
+        setLastEventAt(new Date());
+      }
+    }
   }, [refetch]);
   const onStreamError = useCallback(() => { setStreamLive(false); }, []);
   useTopologyStream({
