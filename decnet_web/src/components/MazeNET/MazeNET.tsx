@@ -17,6 +17,7 @@ import { DEFAULT_SERVICES } from './data';
 import type { Archetype, ServiceDef } from './data';
 import type { Net, MazeNode, Edge, DeckyNode } from './types';
 import { useMazeApi } from './useMazeApi';
+import type { DeckyRow } from './useMazeApi';
 import { useTopologyEditor } from './useTopologyEditor';
 import { useMazeInteraction, type PaletteDrag } from './useMazeInteraction';
 import { useLayoutPersistor } from './useMazeLayoutStore';
@@ -131,6 +132,39 @@ const MazeNET: React.FC = () => {
     setNodes((p) => p.map((x) => x.kind === 'decky' && x.name === nodeName
       ? { ...x, services: data.services } : x));
   }, [topologyId]);
+
+  /* forwards_l3 toggle.  Active topologies require the destructive
+     base-recreate path on the backend, gated by force: true; the
+     Inspector is responsible for confirming with the user before this
+     fires. */
+  const toggleGateway = useCallback(async (nodeId: string, nextValue: boolean) => {
+    const node = nodes.find((n) => n.id === nodeId);
+    if (!node || node.kind !== 'decky') return;
+    const live = topoStatus === 'active' || topoStatus === 'degraded';
+    const r = await editor.updateDecky(
+      topologyId, nodeId, node.name,
+      { decky_config: { ...(node.decky_config ?? {}), forwards_l3: nextValue } } as Partial<DeckyRow>,
+      live ? { force: true } : undefined,
+    );
+    // Optimistic local update — pending path returns 'applied'
+    // synchronously; active path returns 'enqueued' and the
+    // mutation.applied SSE will refetch shortly.  Either way, paint
+    // the change immediately so the toggle feels responsive.
+    setNodes((prev) => prev.map((n) =>
+      n.id === nodeId && n.kind === 'decky'
+        ? {
+          ...n,
+          decky_config: { ...(n.decky_config ?? {}), forwards_l3: nextValue },
+        }
+        : n,
+    ));
+    if (r.kind === 'enqueued') {
+      pushToast({
+        tone: 'violet',
+        text: `Gateway ${nextValue ? 'promotion' : 'demotion'} queued — base recreate in flight.`,
+      });
+    }
+  }, [editor, nodes, pushToast, topoStatus, topologyId]);
 
   /* ── Palette drop — create LANs / deckies / services via REST ─── */
   const onPaletteDrop = useCallback(
@@ -867,6 +901,7 @@ const MazeNET: React.FC = () => {
           availableServices={serviceRegistry.perDecky}
           onLiveAddService={liveAddService}
           onLiveRemoveService={liveRemoveService}
+          onToggleGateway={toggleGateway}
           onAddDecky={(netId) => {
             const net = nets.find((n) => n.id === netId);
             if (!net) return;

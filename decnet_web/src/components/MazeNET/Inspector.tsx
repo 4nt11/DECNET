@@ -34,6 +34,11 @@ interface Props {
   onLiveRemoveService?: (nodeName: string, slug: string) => Promise<void>;
   /** Per-decky-eligible service slugs, fetched via useServiceRegistry. */
   availableServices?: string[];
+  /** Toggle ``forwards_l3`` (gateway) on the selected decky.  When the
+   *  topology is active/degraded the caller is responsible for the
+   *  destructive-recreate confirm dialog and the ``force: true`` submit
+   *  — this prop just relays the user's intent. */
+  onToggleGateway?: (nodeId: string, nextValue: boolean) => Promise<void>;
   onAddDecky?: (netId: string) => void;
   setSelection?: (sel: Selection) => void;
   pendingChanges?: number;
@@ -44,6 +49,7 @@ const Inspector: React.FC<Props> = ({
   selection, nets, nodes, edges, topologyStatus, onClose,
   onDeleteNet, onDeleteNode, onDeleteEdge, onRemoveService,
   onLiveAddService, onLiveRemoveService, availableServices = [],
+  onToggleGateway,
   onAddDecky, setSelection,
   pendingChanges = 0,
   className = '',
@@ -257,6 +263,50 @@ const Inspector: React.FC<Props> = ({
                 <div className="dim inspector-empty-line">NO EDGES</div>
               )}
             </div>
+            {onToggleGateway && !isObserved && (
+              <button
+                type="button"
+                className={`maze-btn small ${isGateway ? 'alert' : ''}`}
+                disabled={busy === '__gateway__'}
+                title={
+                  isGateway
+                    ? 'Demote this decky from gateway (forwards_l3=false)'
+                    : 'Promote this decky to gateway (forwards_l3=true)'
+                }
+                onClick={async () => {
+                  const next = !isGateway;
+                  // forwards_l3 flip on a deployed topology recreates
+                  // the base container — destructive.  Confirm before
+                  // hitting the API; the caller (MazeNET.tsx) submits
+                  // with force: true on active topologies.
+                  const live = topologyStatus === 'active' || topologyStatus === 'degraded';
+                  if (live) {
+                    const ok = window.confirm(
+                      `${next ? 'Promote' : 'Demote'} ${node.name} ${next ? 'to' : 'from'} gateway?\n\n` +
+                      'This recreates the base container to apply the new port-publishing config. ' +
+                      'In-container state is lost; active sessions to it drop.',
+                    );
+                    if (!ok) return;
+                  }
+                  setOpError(null);
+                  setBusy('__gateway__');
+                  try {
+                    await onToggleGateway(node.id, next);
+                  } catch (err) {
+                    const msg = (err as { response?: { data?: { detail?: string } } })?.response?.data?.detail
+                      ?? 'Gateway toggle failed.';
+                    setOpError(msg);
+                  } finally {
+                    setBusy(null);
+                  }
+                }}
+              >
+                <Shield size={12} />
+                {busy === '__gateway__'
+                  ? (isGateway ? 'DEMOTING…' : 'PROMOTING…')
+                  : (isGateway ? 'DEMOTE GATEWAY' : 'PROMOTE TO GATEWAY')}
+              </button>
+            )}
             {onDeleteNode && (
               <button
                 type="button"
