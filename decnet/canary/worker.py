@@ -26,9 +26,12 @@ crashes loudly rather than masking failures.
 from __future__ import annotations
 
 import asyncio
+import base64
+import binascii
+import json
 import os
 from datetime import datetime, timezone
-from typing import Optional
+from typing import Any, Optional
 
 from fastapi import FastAPI, Request, Response
 
@@ -104,6 +107,10 @@ def _build_app(repo: BaseRepository, bus: BaseBus) -> FastAPI:
 
     @app.get("/c/{slug}")
     async def callback(slug: str, request: Request) -> Response:
+        merged_headers = dict(request.headers)
+        fp_meta = _extract_fingerprint(request.query_params)
+        if fp_meta:
+            merged_headers.update(fp_meta)
         await _record_hit(
             repo, bus,
             slug=slug,
@@ -111,7 +118,7 @@ def _build_app(repo: BaseRepository, bus: BaseBus) -> FastAPI:
             user_agent=request.headers.get("user-agent"),
             request_path=str(request.url.path),
             dns_qname=None,
-            raw_headers=dict(request.headers),
+            raw_headers=merged_headers,
         )
         # Always 200 with a tiny image so the attacker's client sees
         # a "success" — same return regardless of whether the slug is
@@ -127,6 +134,70 @@ def _build_app(repo: BaseRepository, bus: BaseBus) -> FastAPI:
         return Response(status_code=404)
 
     return app
+
+
+# Per-chunk size cap.  Real fingerprints fit in one ~3KB GET; honest
+# overflow is handled via chunking (s/i/n + d).  Anything larger than
+# this on a single request is junk, so we drop it instead of letting an
+# attacker inflate a trigger row indefinitely.
+_FP_CHUNK_MAX = 8 * 1024
+
+
+def _extract_fingerprint(qp: Any) -> dict[str, Any]:
+    """Decode the fingerprint-payload query params into reserved keys.
+
+    The obfuscated browser payload may send three shapes on ``GET /c/<slug>``:
+
+    * ``?o=1`` — bare-open beacon, fired before fingerprinting starts.
+    * ``?d=<b64url-json>`` — single-shot fingerprint dump.
+    * ``?s=<sid>&i=<idx>&n=<total>&d=<b64url-chunk>`` — chunked dump,
+      one request per chunk; the reassembler joins by ``s`` and ``i``.
+
+    Returns a flat dict whose keys are namespaced under a ``_fp`` prefix
+    so they can't collide with real HTTP header names when merged into
+    ``raw_headers``. Unknown / malformed input returns ``{}`` — we
+    never raise; the trigger row records the hit either way.
+    """
+    out: dict[str, Any] = {}
+    if not qp:
+        return out
+    o = qp.get("o") if hasattr(qp, "get") else None
+    if o:
+        out["_fp_open"] = "1"
+    d = qp.get("d") if hasattr(qp, "get") else None
+    if not d:
+        return out
+    if len(d) > _FP_CHUNK_MAX:
+        out["_fp_oversize"] = "1"
+        return out
+
+    sid = qp.get("s")
+    idx = qp.get("i")
+    total = qp.get("n")
+    if sid and idx and total:
+        # Chunked payload: keep raw base64url + metadata; reassembly is
+        # a downstream concern (a later worker pass will join chunks
+        # by ``_fp_sid`` and decode the concatenation).
+        out["_fp_sid"] = sid
+        out["_fp_idx"] = idx
+        out["_fp_total"] = total
+        out["_fp_chunk"] = d
+        return out
+
+    # Single-shot: decode now so the API consumer sees a structured
+    # dict rather than a long opaque base64 blob.
+    try:
+        padded = d + "=" * (-len(d) % 4)
+        raw = base64.urlsafe_b64decode(padded.encode("ascii"))
+        parsed = json.loads(raw.decode("utf-8"))
+    except (binascii.Error, ValueError, UnicodeDecodeError):
+        out["_fp_decode_error"] = "1"
+        return out
+    if isinstance(parsed, dict):
+        out["_fp"] = parsed
+    else:
+        out["_fp_decode_error"] = "1"
+    return out
 
 
 def _client_ip(request: Request) -> str:
