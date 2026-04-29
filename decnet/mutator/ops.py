@@ -186,6 +186,69 @@ async def _materialise_lan_change(
         )
 
 
+def _is_buildx_wedge(exc: BaseException) -> bool:
+    """True when *exc* looks like the buildx EROFS wedge.
+
+    We consult both the structured CalledProcessError.stderr and the
+    str(exc) form because ``_compose_with_retry`` raises a synthetic
+    CalledProcessError whose ``stderr`` contains the recovery hint
+    (which preserves the wedge signatures verbatim).
+    """
+    from decnet.engine.deployer import (
+        _BUILDX_EROFS_SIGNATURE, _BUILDX_WEDGE_SIGNATURE,
+    )
+    stderr = ""
+    if hasattr(exc, "stderr") and exc.stderr:
+        stderr = str(exc.stderr)
+    haystack = (stderr + " " + str(exc)).lower()
+    return (
+        _BUILDX_WEDGE_SIGNATURE in haystack
+        and _BUILDX_EROFS_SIGNATURE in haystack
+    )
+
+
+async def _compose_up_with_buildkit_fallback(
+    *args: str, compose_file, label: str,
+) -> None:
+    """Run ``compose up`` and auto-fall-back to the legacy builder on wedge.
+
+    The buildx activity dir occasionally lands on a read-only mount —
+    happens enough on operator dev boxes that we don't want a single
+    wedge to abort a live decky-add.  When _compose_with_retry raises
+    with the EROFS-wedge signatures, we retry once with
+    ``DOCKER_BUILDKIT=0`` set.  The legacy (non-buildx) builder doesn't
+    use the activity dir and isn't affected.
+
+    *label* is a human-readable identifier used only in log lines so an
+    operator can grep the fall-back back to the originating op.
+    """
+    import anyio
+    from decnet.engine.deployer import _compose_with_retry
+    try:
+        await anyio.to_thread.run_sync(
+            lambda: _compose_with_retry(*args, compose_file=compose_file),
+        )
+        return
+    except Exception as exc:  # noqa: BLE001
+        if not _is_buildx_wedge(exc):
+            raise
+        _log.warning(
+            "%s: buildx wedge detected; retrying with DOCKER_BUILDKIT=0 "
+            "(legacy builder).  Recover the buildx state at your leisure: "
+            "rm -rf ~/.docker/buildx/activity && "
+            "docker buildx create --name decnet-builder --use --bootstrap",
+            label,
+        )
+    # Outside the except so the second attempt's traceback isn't
+    # nested under the first failure if it also blows up.
+    await anyio.to_thread.run_sync(
+        lambda: _compose_with_retry(
+            *args, compose_file=compose_file,
+            env={"DOCKER_BUILDKIT": "0"},
+        ),
+    )
+
+
 def _decky_targets(decky_name: str, services: list[str]) -> list[str]:
     """Compose service names for one decky: base + each per-decky service.
 
@@ -273,20 +336,15 @@ async def _materialise_decky_spawn(
     """
     if await _live_topology_or_none(repo, topology_id) is None:
         return
-    import anyio
-    from decnet.engine.deployer import (
-        _compose_with_retry,
-        _topology_compose_path,
-    )
+    from decnet.engine.deployer import _topology_compose_path
     await _rerender_compose(repo, topology_id)
     targets = _decky_targets(decky_name, services)
     compose_path = _topology_compose_path(topology_id)
     try:
-        await anyio.to_thread.run_sync(
-            lambda: _compose_with_retry(
-                "up", "-d", "--no-deps", "--build", *targets,
-                compose_file=compose_path,
-            ),
+        await _compose_up_with_buildkit_fallback(
+            "up", "-d", "--no-deps", "--build", *targets,
+            compose_file=compose_path,
+            label=f"live add_decky topology={topology_id} decky={decky_name}",
         )
     except Exception as exc:  # noqa: BLE001
         _log.error(
@@ -429,19 +487,17 @@ async def _materialise_decky_services_diff(
     if await _live_topology_or_none(repo, topology_id) is None:
         return
     import anyio
-    from decnet.engine.deployer import (
-        _compose, _compose_with_retry, _topology_compose_path,
-    )
+    from decnet.engine.deployer import _compose, _topology_compose_path
+
     await _rerender_compose(repo, topology_id)
     compose_path = _topology_compose_path(topology_id)
     add_targets = _decky_targets(decky_name, list(added))[1:]  # drop the base
     if add_targets:
         try:
-            await anyio.to_thread.run_sync(
-                lambda: _compose_with_retry(
-                    "up", "-d", "--no-deps", "--build", *add_targets,
-                    compose_file=compose_path,
-                ),
+            await _compose_up_with_buildkit_fallback(
+                "up", "-d", "--no-deps", "--build", *add_targets,
+                compose_file=compose_path,
+                label=f"live update_decky add topology={topology_id} decky={decky_name}",
             )
         except Exception as exc:  # noqa: BLE001
             _log.error(

@@ -299,6 +299,55 @@ async def test_update_decky_forwards_l3_flip_with_force_recreates_base(
 
 
 @pytest.mark.anyio
+async def test_add_decky_falls_back_to_legacy_builder_on_buildx_wedge(
+    repo, monkeypatch, tmp_path,
+):
+    """When the first compose up hits the buildx EROFS wedge, the
+    helper retries once with DOCKER_BUILDKIT=0 (legacy builder)."""
+    import subprocess
+    from decnet.engine import deployer as _deployer
+    from decnet.topology import compose as _compose_mod
+
+    tid = await _make_active(repo)
+    lans = await repo.list_lans_for_topology(tid)
+    home_lan = lans[0]["name"]
+
+    calls: list[dict] = []
+
+    def fake_compose_with_retry(*args, compose_file=None, env=None, **_):
+        calls.append({"args": args, "env": env})
+        # First call: simulate the wedge.  Second: succeed.
+        if len(calls) == 1:
+            raise subprocess.CalledProcessError(
+                returncode=1,
+                cmd=["docker", "compose", *args],
+                output="",
+                stderr=(
+                    "failed to update builder last activity time: open "
+                    "/home/anti/.docker/buildx/activity/.tmp-X: "
+                    "read-only file system"
+                ),
+            )
+
+    monkeypatch.setattr(_deployer, "_compose_with_retry", fake_compose_with_retry)
+    monkeypatch.setattr(_deployer, "_compose", lambda *a, **k: None)
+    monkeypatch.setattr(
+        _deployer, "_topology_compose_path",
+        lambda topo_id: tmp_path / f"compose-{topo_id[:8]}.yml",
+    )
+    monkeypatch.setattr(_compose_mod, "write_topology_compose", lambda *a, **k: None)
+
+    await apply_add_decky(repo, tid, {
+        "name": "wedgey", "lan": home_lan, "services": ["ssh"],
+    })
+
+    # Two attempts total; the second carries DOCKER_BUILDKIT=0.
+    assert len(calls) == 2
+    assert calls[0]["env"] is None
+    assert calls[1]["env"] == {"DOCKER_BUILDKIT": "0"}
+
+
+@pytest.mark.anyio
 async def test_update_decky_refuses_gateway_promotion_on_non_dmz_lan(
     repo, stubs,
 ):
