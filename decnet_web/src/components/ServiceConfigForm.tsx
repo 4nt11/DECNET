@@ -70,6 +70,9 @@ const ServiceConfigForm: React.FC<Props> = ({
   const [busy, setBusy] = useState<'save' | 'apply' | null>(null);
   const [revealed, setRevealed] = useState<Record<string, boolean>>({});
 
+  // Fetch schema only when the slug changes. currentConfig is a fresh
+  // object literal from the parent on every render — depending on it
+  // here would re-fetch the schema on every render.
   useEffect(() => {
     let cancelled = false;
     setSchema(null);
@@ -78,16 +81,25 @@ const ServiceConfigForm: React.FC<Props> = ({
       .then(({ data }) => {
         if (cancelled) return;
         setSchema(data);
-        const init = buildInitial(data.fields, currentConfig ?? {});
-        setForm(init);
-        setInitial(init);
       })
       .catch((err) => {
         if (cancelled) return;
         setLoadErr(fmtError(err, 'Schema load failed.'));
       });
     return () => { cancelled = true; };
-  }, [serviceSlug, currentConfig]);
+  }, [serviceSlug]);
+
+  // Seed form values from currentConfig once the schema is in hand.
+  // Keyed on JSON of the current cfg so a real change reseeds, but a
+  // referentially-new-but-equal object doesn't.
+  const seedKey = useMemo(() => JSON.stringify(currentConfig ?? {}), [currentConfig]);
+  useEffect(() => {
+    if (!schema) return;
+    const init = buildInitial(schema.fields, currentConfig ?? {});
+    setForm(init);
+    setInitial(init);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [schema, seedKey]);
 
   const dirty = useMemo(() => {
     const keys = new Set([...Object.keys(form), ...Object.keys(initial)]);
