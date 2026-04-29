@@ -141,6 +141,45 @@
 }
 .info-banner em { color: var(--matrix); font-style: normal; }
 
+/* Per-service config accordion in the deploy wizard's CONFIGURATION
+   step.  Each block is one service slug; clicking the toggle reveals
+   the schema-driven fields rendered by ServiceConfigFields. */
+.wizard-svc-list { display: flex; flex-direction: column; gap: 6px; }
+.wizard-svc-block { border: 1px solid var(--border); }
+.wizard-svc-toggle {
+  display: flex; align-items: center; gap: 8px;
+  width: 100%;
+  padding: 8px 12px;
+  background: rgba(255, 255, 255, 0.02);
+  border: none;
+  color: inherit;
+  font-family: var(--font-mono);
+  font-size: 0.75rem;
+  letter-spacing: 1px;
+  text-transform: uppercase;
+  cursor: pointer;
+  text-align: left;
+}
+.wizard-svc-toggle:hover { background: rgba(255, 255, 255, 0.05); }
+.wizard-svc-toggle.open { border-bottom: 1px solid var(--border); }
+.wizard-svc-caret { color: var(--violet); width: 10px; }
+.wizard-svc-name { color: var(--matrix); flex: 1; }
+.wizard-svc-badge {
+  font-size: 0.6rem;
+  letter-spacing: 1px;
+  color: var(--violet);
+  border: 1px solid var(--violet);
+  padding: 1px 6px;
+  border-radius: 999px;
+}
+.wizard-svc-fields {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 12px;
+  background: rgba(0, 0, 0, 0.25);
+}
+
 /* Status dots */
 .status-dot {
   display: inline-block;
