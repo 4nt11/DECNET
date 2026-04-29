@@ -88,8 +88,8 @@ DECKY_MUTATION = "mutation"
 # ``topology_id``, and ``services`` (the post-mutation list).  Consumers
 # that watch substrate shape (correlator, dashboard, profiler) reconcile
 # off these without waiting for the next decnet-state.json snapshot.
-DECKY_SERVICE_ADDED = "service.added"
-DECKY_SERVICE_REMOVED = "service.removed"
+DECKY_SERVICE_ADDED = "service_added"
+DECKY_SERVICE_REMOVED = "service_removed"
 
 # Attacker event types (second token under the ``attacker`` root).  First
 # sighting, session boundary transitions, and score-threshold crossings

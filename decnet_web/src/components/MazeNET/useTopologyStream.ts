@@ -21,8 +21,8 @@ export type TopologyStreamEventName =
   // server.  The payload carries decky_name + service_name + the
   // post-mutation services list, so a second tab can reconcile shape
   // without a refetch.
-  | 'decky.service.added'
-  | 'decky.service.removed';
+  | 'decky.service_added'
+  | 'decky.service_removed';
 
 export interface TopologyStreamEvent {
   name: TopologyStreamEventName | string;
@@ -46,8 +46,8 @@ const NAMED_EVENTS: TopologyStreamEventName[] = [
   'mutation.applied',
   'mutation.failed',
   'status',
-  'decky.service.added',
-  'decky.service.removed',
+  'decky.service_added',
+  'decky.service_removed',
 ];
 
 export function useTopologyStream({

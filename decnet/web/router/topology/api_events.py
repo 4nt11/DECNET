@@ -177,10 +177,15 @@ def _sse_name_for(topic: str) -> str:
 
     ``topology.<id>.mutation.applied``        → ``mutation.applied``
     ``topology.<id>.status``                  → ``status``
-    ``decky.<name>.service.added``            → ``decky.service.added``
-    ``decky.<name>.service.removed``          → ``decky.service.removed``
+    ``decky.<name>.service_added``            → ``decky.service_added``
+    ``decky.<name>.service_removed``          → ``decky.service_removed``
     Anything else is passed through unchanged so future topic families
     don't silently collapse onto a generic bucket.
+
+    Bus topic segments are NATS-style tokens — no dots inside a segment
+    — which is why the leaf is ``service_added`` (underscore) here and
+    on the wire, not ``service.added``.  The frontend's
+    ``useTopologyStream`` listens on the underscore form too.
     """
     parts = topic.split(".", 2)
     if len(parts) < 3:

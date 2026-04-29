@@ -679,8 +679,8 @@ const MazeNET: React.FC = () => {
     // patch local state so the chip set reflects shape without a full
     // re-hydrate.  The post-mutation services list lives on the
     // payload; same shape the actor's POST/DELETE response carries.
-    if (event.name === 'decky.service.added'
-      || event.name === 'decky.service.removed') {
+    if (event.name === 'decky.service_added'
+      || event.name === 'decky.service_removed') {
       const p = event.payload ?? {};
       const deckyName = typeof p.decky_name === 'string' ? p.decky_name : null;
       const services = Array.isArray(p.services) ? p.services as string[] : null;
