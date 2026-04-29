@@ -127,6 +127,61 @@
 }
 .decky-hits { font-variant-numeric: tabular-nums; }
 
+/* Schema-driven per-service config form (shared with MazeNET Inspector). */
+.service-config-form {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  margin-top: 8px;
+  padding: 10px;
+  border: 1px dashed var(--border);
+  border-radius: 2px;
+}
+.svc-cfg-row { display: flex; flex-direction: column; gap: 4px; }
+.svc-cfg-label {
+  font-size: 0.62rem;
+  letter-spacing: 1px;
+  text-transform: uppercase;
+  opacity: 0.7;
+}
+.svc-cfg-secret-tag { font-size: 0.55rem; opacity: 0.6; letter-spacing: 1px; }
+.svc-cfg-input {
+  flex: 1;
+  font-size: 0.72rem;
+  padding: 4px 6px;
+  background: rgba(255, 255, 255, 0.04);
+  border: 1px solid var(--border);
+  color: inherit;
+  font-family: inherit;
+}
+.svc-cfg-input:focus { outline: 1px solid var(--violet); }
+.svc-cfg-pw-wrap { display: flex; gap: 6px; align-items: stretch; }
+.svc-cfg-help { font-size: 0.62rem; opacity: 0.55; }
+.svc-cfg-actions {
+  display: flex;
+  gap: 6px;
+  align-items: center;
+  justify-content: flex-end;
+  margin-top: 4px;
+}
+.svc-cfg-dirty-tag {
+  font-size: 0.6rem;
+  letter-spacing: 1px;
+  color: var(--violet);
+  margin-right: auto;
+}
+.svc-cfg-toggle-btn {
+  background: transparent;
+  border: none;
+  color: inherit;
+  cursor: pointer;
+  font-size: 0.62rem;
+  letter-spacing: 1px;
+  opacity: 0.7;
+  padding: 0;
+}
+.svc-cfg-toggle-btn:hover { opacity: 1; }
+
 /* Status dots */
 .status-dot {
   display: inline-block;

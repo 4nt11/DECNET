@@ -8,6 +8,7 @@ import { ARCHETYPES as FALLBACK_ARCHETYPES, DEFAULT_SERVICES } from './MazeNET/d
 import { useToast } from './Toasts/useToast';
 import Modal from './Modal/Modal';
 import { useServiceRegistry } from '../hooks/useServiceRegistry';
+import ServiceConfigForm from './ServiceConfigForm';
 import './DeckyFleet.css';
 
 // ─── Types ────────────────────────────────────────────────────────────────
@@ -157,6 +158,7 @@ const DeckyCard: React.FC<DeckyCardProps> = ({
   const [addSlug, setAddSlug] = useState('');
   const [busy, setBusy] = useState<string | null>(null);
   const [opError, setOpError] = useState<string | null>(null);
+  const [openCfgSvc, setOpenCfgSvc] = useState<string | null>(null);
 
   const removeService = async (slug: string) => {
     setOpError(null);
@@ -269,7 +271,21 @@ const DeckyCard: React.FC<DeckyCardProps> = ({
         <div className="decky-services">
           {decky.services.map((s) => (
             <span key={s} className="service-tag" style={{ display: 'inline-flex', alignItems: 'center', gap: 4 }}>
-              <span>{s}</span>
+              {liveServicesEnabled ? (
+                <button
+                  type="button"
+                  className="svc-cfg-toggle-btn"
+                  title={`Configure ${s}`}
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    setOpenCfgSvc((cur) => (cur === s ? null : s));
+                  }}
+                >
+                  {s}
+                </button>
+              ) : (
+                <span>{s}</span>
+              )}
               {liveServicesEnabled && (
                 <button
                   type="button"
@@ -338,6 +354,16 @@ const DeckyCard: React.FC<DeckyCardProps> = ({
         )}
         {opError && (
           <div className="alert-text" style={{ fontSize: '0.7rem', marginTop: 6 }}>{opError}</div>
+        )}
+        {liveServicesEnabled && openCfgSvc && decky.services.includes(openCfgSvc) && (
+          <div onClick={(e) => e.stopPropagation()}>
+            <ServiceConfigForm
+              key={`${decky.name}:${openCfgSvc}`}
+              deckyName={decky.name}
+              serviceSlug={openCfgSvc}
+              currentConfig={decky.service_config?.[openCfgSvc] ?? {}}
+            />
+          </div>
         )}
       </div>
 

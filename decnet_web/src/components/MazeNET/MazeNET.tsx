@@ -892,6 +892,7 @@ const MazeNET: React.FC = () => {
           nets={nets}
           nodes={nodes}
           edges={edges}
+          topologyId={topologyId || undefined}
           topologyStatus={topoStatus}
           onClose={() => setInspectorOpen(false)}
           onDeleteNet={removeNet}

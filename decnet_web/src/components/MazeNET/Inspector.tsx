@@ -5,6 +5,7 @@ import {
 } from '../../icons';
 import type { Net, MazeNode, Edge } from './types';
 import { DEFAULT_SERVICES } from './data';
+import ServiceConfigForm from '../ServiceConfigForm';
 
 export type Selection =
   | { type: 'net'; id: string }
@@ -18,6 +19,9 @@ interface Props {
   nets: Net[];
   nodes: MazeNode[];
   edges: Edge[];
+  /** Topology ID (MazeNET-only) — required for the schema-driven service
+   *  config form to hit the per-topology REST path. Omit for fleet. */
+  topologyId?: string;
   topologyStatus?: string;
   onClose?: () => void;
   onDeleteNet?: (id: string) => void;
@@ -46,7 +50,7 @@ interface Props {
 }
 
 const Inspector: React.FC<Props> = ({
-  selection, nets, nodes, edges, topologyStatus, onClose,
+  selection, nets, nodes, edges, topologyId, topologyStatus, onClose,
   onDeleteNet, onDeleteNode, onDeleteEdge, onRemoveService,
   onLiveAddService, onLiveRemoveService, availableServices = [],
   onToggleGateway,
@@ -440,6 +444,18 @@ const Inspector: React.FC<Props> = ({
               <div className="k">SUBNET</div>
               <div className="v">{serviceParentNet?.label ?? '—'}</div>
             </div>
+            {topologyId && serviceParent && serviceParent.kind !== 'observed' && (
+              <ServiceConfigForm
+                key={`${serviceParent.name}:${serviceSel.id}`}
+                deckyName={serviceParent.name}
+                serviceSlug={serviceSel.id}
+                topologyId={topologyId}
+                currentConfig={
+                  ((serviceParent.decky_config as { service_config?: Record<string, Record<string, unknown>> } | undefined)
+                    ?.service_config?.[serviceSel.id]) ?? {}
+                }
+              />
+            )}
             {onRemoveService && serviceParent && serviceParent.kind !== 'observed' && (
               <button
                 type="button"
