@@ -707,18 +707,10 @@ const DeployWizard: React.FC<DeployWizardProps> = ({
                 </div>
               </div>
 
-              <div className="tweak-group">
-                <label>PER-SERVICE OVERRIDES (k=v, one per line)</label>
-                <textarea
-                  className="input"
-                  rows={3}
-                  placeholder={'ssh.banner=OpenSSH_8.9p1\nhttp.server_name=nginx/1.24'}
-                  disabled
-                  style={{ resize: 'vertical', fontFamily: 'var(--font-mono)', opacity: 0.55 }}
-                />
-                <div className="dim" style={{ fontSize: '0.62rem', letterSpacing: '1px' }}>
-                  (placeholder — per-service configuration lands in a follow-up)
-                </div>
+              <div className="info-banner" style={{ fontSize: '0.7rem', lineHeight: 1.5 }}>
+                Per-service config (passwords, banners, response codes, TLS material…)
+                is set after deployment in the Inspector: click a service tag on the
+                deployed decky to open its schema-driven form.
               </div>
 
               <div className="code-block">
@@ -781,10 +773,12 @@ const DeployWizard: React.FC<DeployWizardProps> = ({
                 {log.length === 0 && !deploying && (
                   <>
                     <span className="comment"># decnet deploy \</span>{'\n'}
-                    <span className="key">  --archetype</span>{' '}
-                    <span className="str">
-                      {pickMode === 'archetype' ? (archetype?.slug ?? '—') : 'custom'}
-                    </span>{' \\'}{'\n'}
+                    {pickMode === 'archetype' && archetype && (
+                      <>
+                        <span className="key">  --archetype</span>{' '}
+                        <span className="str">{archetype.slug}</span>{' \\'}{'\n'}
+                      </>
+                    )}
                     <span className="key">  --count</span>{' '}
                     <span className="str">{count}</span>{' \\'}{'\n'}
                     <span className="key">  --prefix</span>{' '}
