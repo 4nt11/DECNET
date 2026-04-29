@@ -1,6 +1,6 @@
 import json
 from pathlib import Path
-from decnet.services.base import BaseService
+from decnet.services.base import BaseService, ServiceConfigField
 
 TEMPLATES_DIR = Path(__file__).parent.parent / "templates" / "https"
 
@@ -9,6 +9,57 @@ class HTTPSService(BaseService):
     name = "https"
     ports = [443]
     default_image = "build"
+
+    config_schema = [
+        ServiceConfigField(
+            key="server_header",
+            label="Server header",
+            type="string",
+            placeholder="nginx/1.18.0",
+        ),
+        ServiceConfigField(
+            key="response_code",
+            label="Default response code",
+            type="int",
+            default=200,
+        ),
+        ServiceConfigField(
+            key="fake_app",
+            label="Fake application",
+            type="enum",
+            enum=["none", "wordpress", "phpmyadmin", "tomcat", "jenkins"],
+            default="none",
+        ),
+        ServiceConfigField(
+            key="extra_headers",
+            label="Extra headers (JSON or raw)",
+            type="textarea",
+        ),
+        ServiceConfigField(
+            key="custom_body",
+            label="Custom response body",
+            type="textarea",
+        ),
+        ServiceConfigField(
+            key="tls_cn",
+            label="TLS certificate CN",
+            type="string",
+            placeholder="mail.corp.local",
+            help="Common Name baked into the self-signed cert if no cert/key provided.",
+        ),
+        ServiceConfigField(
+            key="tls_cert",
+            label="TLS certificate (PEM)",
+            type="textarea",
+            secret=True,
+        ),
+        ServiceConfigField(
+            key="tls_key",
+            label="TLS private key (PEM)",
+            type="textarea",
+            secret=True,
+        ),
+    ]
 
     def compose_fragment(
         self,

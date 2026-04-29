@@ -1,7 +1,7 @@
 import os
 from pathlib import Path
 
-from decnet.services.base import BaseService
+from decnet.services.base import BaseService, ServiceConfigField
 
 TEMPLATES_DIR = Path(__file__).parent.parent / "templates" / "ssh"
 ARTIFACTS_ROOT = os.environ.get("DECNET_ARTIFACTS_ROOT", "/var/lib/decnet/artifacts")
@@ -24,6 +24,27 @@ class SSHService(BaseService):
     name = "ssh"
     ports = [22]
     default_image = "build"
+
+    config_schema = [
+        ServiceConfigField(
+            key="password",
+            label="Root password",
+            type="password",
+            default="admin",
+            secret=True,
+            help="Plaintext root password for the in-container sshd.",
+        ),
+        ServiceConfigField(
+            key="hostname",
+            label="Container hostname",
+            type="string",
+            help=(
+                "Cosmetic override for the SSH banner/PS1 — keeps the decoy "
+                "looking heterogeneous. Decky identity (NODE_NAME) is unaffected."
+            ),
+            placeholder="e.g. mail-01.corp.local",
+        ),
+    ]
 
     def compose_fragment(
         self,
