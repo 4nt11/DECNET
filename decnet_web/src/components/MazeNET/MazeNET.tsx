@@ -109,6 +109,29 @@ const MazeNET: React.FC = () => {
     setTimeout(() => setActionErr(null), 4000);
   }, []);
 
+  /* ── Live service mutation (W3 endpoints) — hoisted above palette
+     drop so onPaletteDrop's deps can reference it without hitting the
+     const TDZ.  Optimistic local update; SSE forwarder reconciles
+     cross-tab. */
+  const serviceRegistry = useServiceRegistry();
+
+  const liveAddService = useCallback(async (nodeName: string, slug: string) => {
+    const { data } = await axios.post<{ services: string[] }>(
+      `/topologies/${encodeURIComponent(topologyId)}/deckies/${encodeURIComponent(nodeName)}/services`,
+      { name: slug },
+    );
+    setNodes((p) => p.map((x) => x.kind === 'decky' && x.name === nodeName
+      ? { ...x, services: data.services } : x));
+  }, [topologyId]);
+
+  const liveRemoveService = useCallback(async (nodeName: string, slug: string) => {
+    const { data } = await axios.delete<{ services: string[] }>(
+      `/topologies/${encodeURIComponent(topologyId)}/deckies/${encodeURIComponent(nodeName)}/services/${encodeURIComponent(slug)}`,
+    );
+    setNodes((p) => p.map((x) => x.kind === 'decky' && x.name === nodeName
+      ? { ...x, services: data.services } : x));
+  }, [topologyId]);
+
   /* ── Palette drop — create LANs / deckies / services via REST ─── */
   const onPaletteDrop = useCallback(
     async (drag: PaletteDrag, world: { x: number; y: number }, overNetId: string | null, overNodeId: string | null) => {
@@ -213,6 +236,21 @@ const MazeNET: React.FC = () => {
         const target = nodes.find((n) => n.id === overNodeId);
         if (!target || target.kind !== 'decky') return;
         if (target.services.includes(drag.slug)) return;
+        // For active/degraded topologies, route through the live W3
+        // endpoint — the design-time mutator queue would silently
+        // enqueue and the dropped chip would never visibly land
+        // (resulting in the "no way to APPLY" feedback).  liveAddService
+        // returns the post-mutation services list and patches local
+        // state so the chip appears immediately.
+        const live = topoStatus === 'active' || topoStatus === 'degraded';
+        if (live) {
+          try {
+            await liveAddService(target.name, drag.slug);
+          } catch (err) {
+            flashErr(err, 'add service failed');
+          }
+          return;
+        }
         const nextServices = [...target.services, drag.slug];
         try {
           const r = await editor.updateDecky(topologyId, overNodeId, target.name, { services: nextServices });
@@ -225,7 +263,7 @@ const MazeNET: React.FC = () => {
         }
       }
     },
-    [api, archetypes, editor, flashErr, nets, nodes, topologyId],
+    [api, archetypes, editor, flashErr, nets, nodes, topologyId, topoStatus, liveAddService],
   );
 
   /* ── Cross-net reparent via node drag (detach + attach edge) ─── */
@@ -403,6 +441,20 @@ const MazeNET: React.FC = () => {
   const removeServiceFromNode = async (id: string, slug: string) => {
     const n = nodes.find((x) => x.id === id);
     if (!n || n.kind !== 'decky' || !n.services.includes(slug)) return;
+    // Same routing rule as the palette drop: active/degraded topologies
+    // hit the live W3 endpoint so the chip disappears immediately and
+    // the container stops; pending topologies queue through the
+    // design-time mutator.
+    const live = topoStatus === 'active' || topoStatus === 'degraded';
+    if (live) {
+      try {
+        await liveRemoveService(n.name, slug);
+        setSelection(null);
+      } catch (err) {
+        flashErr(err, 'remove service failed');
+      }
+      return;
+    }
     const nextServices = n.services.filter((s) => s !== slug);
     try {
       const r = await editor.updateDecky(topologyId, id, n.name, { services: nextServices });
@@ -428,33 +480,6 @@ const MazeNET: React.FC = () => {
       flashErr(err, 'add service failed');
     }
   };
-
-  /* Live service add/remove — talks to the W3 endpoints directly,
-     bypassing the design-time mutation queue.  Used when topology
-     status is active/degraded; the Inspector switches between this
-     and the design-time path based on the topologyStatus prop.
-
-     Optimistic local update is fine: the W3 endpoint returns the
-     post-mutation services list, and the SSE forwarder (commit C-sse)
-     reconciles cross-tab. */
-  const serviceRegistry = useServiceRegistry();
-
-  const liveAddService = useCallback(async (nodeName: string, slug: string) => {
-    const { data } = await axios.post<{ services: string[] }>(
-      `/topologies/${encodeURIComponent(topologyId)}/deckies/${encodeURIComponent(nodeName)}/services`,
-      { name: slug },
-    );
-    setNodes((p) => p.map((x) => x.kind === 'decky' && x.name === nodeName
-      ? { ...x, services: data.services } : x));
-  }, [topologyId]);
-
-  const liveRemoveService = useCallback(async (nodeName: string, slug: string) => {
-    const { data } = await axios.delete<{ services: string[] }>(
-      `/topologies/${encodeURIComponent(topologyId)}/deckies/${encodeURIComponent(nodeName)}/services/${encodeURIComponent(slug)}`,
-    );
-    setNodes((p) => p.map((x) => x.kind === 'decky' && x.name === nodeName
-      ? { ...x, services: data.services } : x));
-  }, [topologyId]);
 
   /* Force-mutate is a no-op against a pending topology (no live containers).
    * Keep the menu item disabled for now; real hook lands with live-editing polish. */
