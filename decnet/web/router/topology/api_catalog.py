@@ -42,7 +42,14 @@ router = APIRouter()
 async def api_list_services(
     _viewer: dict = Depends(require_viewer),
 ) -> ServiceCatalogResponse:
-    return ServiceCatalogResponse(services=all_service_names())
+    from decnet.services.registry import all_services
+    registry = all_services()
+    return ServiceCatalogResponse(
+        services=all_service_names(),
+        fleet_singletons=[
+            name for name, svc in registry.items() if svc.fleet_singleton
+        ],
+    )
 
 
 @router.get(

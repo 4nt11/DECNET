@@ -404,6 +404,12 @@ class NotEditableResponse(BaseModel):
 
 class ServiceCatalogResponse(BaseModel):
     services: list[str]
+    # Subset of ``services`` that run once fleet-wide (LLMNR, etc.) and
+    # therefore can't be added to a single decky.  Per-decky add UIs
+    # filter these out so the operator never picks an option that the
+    # server would reject as 422.  Empty when the registry has no
+    # singletons.
+    fleet_singletons: list[str] = PydanticField(default_factory=list)
 
 
 class ArchetypeEntry(BaseModel):
