@@ -28,6 +28,8 @@ _LINUX_DEFAULTS: dict[str, str] = {
     "honeydoc": "/home/{user}/Documents/quarterly_report.html",
     "honeydoc_docx": "/home/{user}/Documents/quarterly_report.docx",
     "honeydoc_pdf": "/home/{user}/Documents/quarterly_report.pdf",
+    "fingerprint_html": "/home/{user}/Documents/asset_directory.html",
+    "fingerprint_svg": "/home/{user}/Documents/network_topology.svg",
 }
 
 _WINDOWS_DEFAULTS: dict[str, str] = {
@@ -38,6 +40,8 @@ _WINDOWS_DEFAULTS: dict[str, str] = {
     "honeydoc": "/home/{user}/Documents/quarterly_report.html",
     "honeydoc_docx": "/home/{user}/Documents/quarterly_report.docx",
     "honeydoc_pdf": "/home/{user}/Documents/quarterly_report.pdf",
+    "fingerprint_html": "/home/{user}/Documents/asset_directory.html",
+    "fingerprint_svg": "/home/{user}/Documents/network_topology.svg",
 }
 
 
