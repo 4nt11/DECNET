@@ -1,6 +1,7 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import api from '../utils/api';
 import { useToast } from './Toasts/useToast';
+import './ServiceConfigForm.css';
 
 export interface ServiceConfigFieldDTO {
   key: string;
@@ -170,14 +171,14 @@ const ServiceConfigForm: React.FC<Props> = ({
   };
 
   if (loadErr) {
-    return <div className="alert-text" style={{ fontSize: '0.7rem' }}>{loadErr}</div>;
+    return <div className="svc-cfg-status alert-text">{loadErr}</div>;
   }
   if (!schema) {
-    return <div className="dim" style={{ fontSize: '0.7rem' }}>Loading schema…</div>;
+    return <div className="svc-cfg-status">Loading schema…</div>;
   }
   if (schema.fields.length === 0) {
     return (
-      <div className="dim" style={{ fontSize: '0.7rem', fontStyle: 'italic' }}>
+      <div className="svc-cfg-status">
         No customizable fields for {schema.name}.
       </div>
     );
@@ -236,7 +237,7 @@ const ServiceConfigForm: React.FC<Props> = ({
                 />
                 <button
                   type="button"
-                  className="btn small"
+                  className="svc-cfg-pw-toggle"
                   onClick={() => setRevealed((s) => ({ ...s, [f.key]: !s[f.key] }))}
                 >
                   {revealed[f.key] ? 'HIDE' : 'SHOW'}
@@ -260,10 +261,10 @@ const ServiceConfigForm: React.FC<Props> = ({
         );
       })}
       <div className="svc-cfg-actions">
-        {dirty && <span className="dim svc-cfg-dirty-tag">UNSAVED</span>}
+        {dirty && <span className="svc-cfg-dirty-tag">UNSAVED</span>}
         <button
           type="button"
-          className="btn small"
+          className="svc-cfg-btn"
           disabled={!dirty || !!busy}
           onClick={save}
         >
@@ -271,7 +272,7 @@ const ServiceConfigForm: React.FC<Props> = ({
         </button>
         <button
           type="button"
-          className="btn violet small"
+          className="svc-cfg-btn violet"
           disabled={!!busy}
           onClick={apply}
           title="Persist + force-recreate the service container."
