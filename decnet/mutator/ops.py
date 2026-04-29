@@ -482,7 +482,22 @@ async def apply_update_decky(
 async def apply_update_lan(
     repo: Any, topology_id: str, payload: dict[str, Any]
 ) -> None:
-    """Update LAN fields — subnet, is_dmz, coords, rename."""
+    """Update LAN fields — subnet, is_dmz, coords, rename.
+
+    Guard rail: ``subnet`` and ``is_dmz`` are pinned at deploy time.
+    Live deckies bind to the bridge with IPs allocated from the old
+    subnet (and ``is_dmz`` flips swap the bridge's ``internal=False``
+    flag, which docker can't change on a network with active
+    containers).  Reject those mutations on active/degraded topologies
+    rather than rewriting the DB into an incoherent state.
+
+    Coord-only updates (``x``/``y``) are layout-only; let them through
+    unconditionally.  Renames pass through too — the bridge's docker
+    name is keyed off ``_network_name(topology_id, lan_name)``, so a
+    rename would also need a rebuild — but rename isn't currently a
+    code path on active topologies; if the operator hits it we still
+    write the row and let the next deploy reconcile.
+    """
     hydrated = await _hydrated(repo, topology_id)
     lan = _lan_by_name(hydrated, payload["name"])
     if lan is None:
@@ -493,6 +508,17 @@ async def apply_update_lan(
             fields[key] = payload[key]
     if not fields:
         return
+
+    topology = await repo.get_topology(topology_id)
+    is_live = bool(topology) and topology.get("status") in ("active", "degraded")
+    if is_live:
+        hostile = {"subnet", "is_dmz"} & fields.keys()
+        if hostile:
+            raise MutationError(
+                f"cannot change {sorted(hostile)} on a deployed LAN; "
+                f"teardown + redeploy required"
+            )
+
     await repo.update_lan(lan["id"], fields)
     await _assert_valid_after(repo, topology_id)
 
