@@ -48,6 +48,7 @@ from decnet.web.db.sqlmodel_repo.orchestrator import OrchestratorMixin
 from decnet.web.db.sqlmodel_repo.realism import RealismMixin
 from decnet.web.db.sqlmodel_repo.swarm import SwarmMixin
 from decnet.web.db.sqlmodel_repo.topology import TopologyMixin
+from decnet.web.db.sqlmodel_repo.tarpit import TarpitMixin
 from decnet.web.db.sqlmodel_repo.webhooks import WebhooksMixin
 
 
@@ -66,6 +67,7 @@ class SQLModelRepository(
     OrchestratorMixin,
     RealismMixin,
     SwarmMixin,
+    TarpitMixin,
     TopologyMixin,
     WebhooksMixin,
     BaseRepository,

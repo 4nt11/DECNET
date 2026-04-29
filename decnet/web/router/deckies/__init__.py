@@ -18,6 +18,7 @@ from .api_services import (
     fleet_services_router,
     topology_services_router,
 )
+from .api_tarpit import router as tarpit_router
 
 deckies_router = APIRouter()
 deckies_router.include_router(file_drop_router)
@@ -27,5 +28,6 @@ deckies_router.include_router(fleet_services_router)
 # umbrella because the *operation* (add/remove a service on a deployed
 # decky) is identical; only the addressing scheme differs.
 deckies_router.include_router(topology_services_router)
+deckies_router.include_router(tarpit_router)
 
 __all__ = ["deckies_router"]

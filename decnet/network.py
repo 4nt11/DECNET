@@ -411,3 +411,47 @@ def ips_to_range(ips: list[str]) -> str:
         strict=False,
     )
     return str(network)
+
+
+# ---------------------------------------------------------------------------
+# Container veth resolution (for tc netem tarpit)
+# ---------------------------------------------------------------------------
+
+def get_container_pid(container_name: str) -> int:
+    """Return the PID of a running container's init process."""
+    client = docker.from_env()
+    try:
+        container = client.containers.get(container_name)
+    except docker.errors.NotFound:
+        raise LookupError(f"container {container_name!r} not found")
+    pid = container.attrs["State"]["Pid"]
+    if not pid:
+        raise LookupError(f"container {container_name!r} is not running (PID=0)")
+    return pid
+
+
+def get_container_veth(container_name: str) -> str:
+    """Return the host veth interface name paired to container_name's eth0.
+
+    Reads /sys/class/net/eth0/iflink from inside the container to get the
+    peer interface index, then matches it against ``ip link show`` on the host.
+    Requires no nsenter and no elevated privileges beyond what Docker exec grants.
+    """
+    result = _run(
+        ["docker", "exec", container_name, "cat", "/sys/class/net/eth0/iflink"],
+        check=False,
+    )
+    if result.returncode != 0:
+        raise LookupError(
+            f"container {container_name!r} not reachable: {result.stderr.strip()}"
+        )
+    peer_index = result.stdout.strip()
+    links = _run(["ip", "link", "show"])
+    for line in links.stdout.splitlines():
+        if line.startswith(f"{peer_index}:"):
+            # Format: "42: veth3a4b5c@if41: <BROADCAST,...>"
+            iface = line.split(":")[1].strip().split("@")[0]
+            return iface
+    raise LookupError(
+        f"no host veth found for container {container_name!r} (peer ifindex {peer_index})"
+    )

@@ -179,6 +179,12 @@ from .workers import (
     WorkersResponse,
     WorkerStatus,
 )
+from .tarpit import (
+    TarpitEnableRequest,
+    TarpitRule,
+    TarpitRuleResponse,
+    TarpitStatusResponse,
+)
 
 __all__ = [
     # _base
@@ -334,4 +340,9 @@ __all__ = [
     "WorkerControlResponse",
     "WorkersResponse",
     "WorkerStatus",
+    # tarpit
+    "TarpitEnableRequest",
+    "TarpitRule",
+    "TarpitRuleResponse",
+    "TarpitStatusResponse",
 ]
