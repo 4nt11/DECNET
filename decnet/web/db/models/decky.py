@@ -44,6 +44,27 @@ class DeckyFileDropRequest(BaseModel):
         return v
 
 
+class DeckyServiceAddRequest(BaseModel):
+    """Add a single service to an already-deployed decky.
+
+    The service must be registered (see :mod:`decnet.services.registry`)
+    and must NOT be ``fleet_singleton`` — those run once fleet-wide,
+    not per-decky.  Validation happens server-side in the engine layer
+    and surfaces as 422.
+    """
+    name: str = PydanticField(..., min_length=1)
+
+
+class DeckyServicesResponse(BaseModel):
+    """Post-mutation services list, returned by the live add/remove API.
+
+    Lets the dashboard reflect the new shape without a follow-up GET.
+    """
+    decky_name: str
+    topology_id: Optional[str] = None
+    services: list[str]
+
+
 class DeckyFileDeleteRequest(BaseModel):
     """Best-effort ``rm -f`` of an absolute path inside a decky container."""
     decky_name: str = PydanticField(..., min_length=1)

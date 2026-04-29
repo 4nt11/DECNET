@@ -83,6 +83,13 @@ DECKY_MUTATE_REQUEST = "mutate_request"
 # syslog sidechannel too) to interleave substrate-change markers into
 # attacker traversals.
 DECKY_MUTATION = "mutation"
+# Per-service add/remove on a deployed decky (live; no full redeploy).
+# Payload carries ``decky_name``, ``service_name``, optional
+# ``topology_id``, and ``services`` (the post-mutation list).  Consumers
+# that watch substrate shape (correlator, dashboard, profiler) reconcile
+# off these without waiting for the next decnet-state.json snapshot.
+DECKY_SERVICE_ADDED = "service.added"
+DECKY_SERVICE_REMOVED = "service.removed"
 
 # Attacker event types (second token under the ``attacker`` root).  First
 # sighting, session boundary transitions, and score-threshold crossings
