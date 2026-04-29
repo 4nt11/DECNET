@@ -437,11 +437,20 @@ const PLACEHOLDER_LINES = (
   `[OK]   ${count} deckies online — fleet size now ${fleetSize + count}`,
 ];
 
+// UTF-8-safe base64 encode (btoa alone breaks on non-ASCII).
+const _b64encodeUtf8 = (s: string): string => {
+  const bytes = new TextEncoder().encode(s);
+  let bin = '';
+  for (let i = 0; i < bytes.length; i++) bin += String.fromCharCode(bytes[i]);
+  return btoa(bin);
+};
+
 const _buildIni = (
   prefix: string, count: number, fleetSize: number,
   mode: PickMode, archetype: Archetype | null, services: string[],
   mutate: boolean, mutateEvery: number,
   serviceConfigs: Record<string, Record<string, unknown>>,
+  serviceSchemas: Record<string, SvcFieldDTO[]>,
 ): string => {
   const lines: string[] = [];
   for (let i = 0; i < count; i++) {
@@ -461,14 +470,19 @@ const _buildIni = (
   for (const svc of services) {
     const cfg = serviceConfigs[svc];
     if (!cfg || Object.keys(cfg).length === 0) continue;
+    const fieldTypes: Record<string, SvcFieldDTO['type']> = {};
+    for (const f of serviceSchemas[svc] ?? []) fieldTypes[f.key] = f.type;
     lines.push(`[${prefix}.${svc}]`);
     for (const [k, v] of Object.entries(cfg)) {
-      // INI values can't carry literal newlines; collapse multi-line
-      // values (PEM textareas etc.) to \n escapes.  Single-line values
-      // are unaffected; multi-line consumers must re-expand.
-      const serialised = typeof v === 'string'
-        ? v.replace(/\r?\n/g, '\\n')
-        : String(v);
+      // textarea values may contain newlines that ConfigParser can't carry
+      // on a single line; wrap them in `b64:` so validate_cfg decodes back
+      // to the original UTF-8 string. Other types are emitted raw.
+      let serialised: string;
+      if (fieldTypes[k] === 'textarea' && typeof v === 'string') {
+        serialised = `b64:${_b64encodeUtf8(v)}`;
+      } else {
+        serialised = typeof v === 'string' ? v : String(v);
+      }
       lines.push(`${k}=${serialised}`);
     }
     lines.push('');
@@ -596,7 +610,7 @@ const DeployWizard: React.FC<DeployWizardProps> = ({
       : selectedServices;
     const ini = _buildIni(
       prefix, count, fleetSize, pickMode, archetype, servicesForIni,
-      mutate, mutateEvery, rolled,
+      mutate, mutateEvery, rolled, serviceSchemas,
     );
     try {
       const res = await api.post<{ failures?: { name: string; reason: string }[] }>(

@@ -1,5 +1,5 @@
 from pathlib import Path
-from decnet.services.base import BaseService
+from decnet.services.base import BaseService, ServiceConfigField
 
 TEMPLATES_DIR = Path(__file__).parent.parent / "templates" / "redis"
 
@@ -8,6 +8,23 @@ class RedisService(BaseService):
     name = "redis"
     ports = [6379]
     default_image = "build"
+
+    config_schema = [
+        ServiceConfigField(
+            key="version",
+            label="Advertised Redis version",
+            type="string",
+            placeholder="7.2.4",
+            help="Reported by INFO server -> redis_version.",
+        ),
+        ServiceConfigField(
+            key="os_string",
+            label="Advertised OS string",
+            type="string",
+            placeholder="Linux 5.15.0 x86_64",
+            help="Reported by INFO server -> os.",
+        ),
+    ]
 
     def compose_fragment(
         self,

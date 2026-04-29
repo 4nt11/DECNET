@@ -1,7 +1,15 @@
+import base64
+import binascii
 from abc import ABC, abstractmethod
 from dataclasses import asdict, dataclass
 from pathlib import Path
 from typing import Any, Literal
+
+# Sentinel prefix used by the deploy wizard to ship multi-line textarea values
+# through ConfigParser without relying on its multi-line continuation syntax.
+# Plain raw values without the prefix are accepted as-is so direct API
+# submitters (PUT /…/services/{svc}/config) keep working with raw strings.
+TEXTAREA_B64_PREFIX = "b64:"
 
 FieldType = Literal["string", "password", "int", "bool", "textarea", "enum"]
 
@@ -105,8 +113,18 @@ class BaseService(ABC):
 
 def _coerce(spec: ServiceConfigField, raw: Any) -> Any:
     t = spec.type
-    if t in ("string", "password", "textarea"):
+    if t in ("string", "password"):
         return str(raw)
+    if t == "textarea":
+        s = str(raw)
+        if s.startswith(TEXTAREA_B64_PREFIX):
+            try:
+                return base64.b64decode(s[len(TEXTAREA_B64_PREFIX):], validate=True).decode("utf-8")
+            except (binascii.Error, UnicodeDecodeError) as e:
+                raise ConfigValidationError(
+                    f"{spec.key}: malformed {TEXTAREA_B64_PREFIX} payload"
+                ) from e
+        return s
     if t == "int":
         try:
             return int(raw)

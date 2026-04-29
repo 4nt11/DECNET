@@ -1,5 +1,7 @@
 """Schema-driven service config: descriptors, validation, compose round-trip."""
 
+import base64
+
 import pytest
 
 from decnet.services.base import (
@@ -9,7 +11,13 @@ from decnet.services.base import (
 )
 from decnet.services.http import HTTPService
 from decnet.services.https import HTTPSService
+from decnet.services.mysql import MySQLService
+from decnet.services.rdp import RDPService
+from decnet.services.redis import RedisService
+from decnet.services.smtp import SMTPService
+from decnet.services.smtp_relay import SMTPRelayService
 from decnet.services.ssh import SSHService
+from decnet.services.telnet import TelnetService
 
 
 class _Dummy(BaseService):
@@ -130,3 +138,122 @@ def test_https_schema_includes_tls_fields():
     assert {"tls_cn", "tls_cert", "tls_key"} <= keys
     secrets = {f.key for f in HTTPSService.config_schema if f.secret}
     assert {"tls_cert", "tls_key"} <= secrets
+
+
+# --- Schemas added in this batch --------------------------------------------
+
+
+def test_telnet_schema_keys_match_compose_reads():
+    assert {f.key for f in TelnetService.config_schema} == {"password", "hostname"}
+
+
+def test_telnet_compose_round_trip():
+    svc = TelnetService()
+    cfg = svc.validate_cfg({"password": "hunter2", "hostname": "mail-01"})
+    frag = svc.compose_fragment("decky-test", service_cfg=cfg)
+    env = frag["environment"]
+    assert env["TELNET_ROOT_PASSWORD"] == "hunter2"
+    assert env["TELNET_HOSTNAME"] == "mail-01"
+
+
+def test_rdp_schema_matches_and_bool_coerces():
+    assert {f.key for f in RDPService.config_schema} == {"nla"}
+    svc = RDPService()
+    cfg = svc.validate_cfg({"nla": "true"})
+    assert cfg == {"nla": True}
+    frag = svc.compose_fragment("decky-test", service_cfg=cfg)
+    assert frag["environment"]["RDP_ENABLE_NLA"] == "true"
+
+
+def test_rdp_nla_off_drops_env_var():
+    svc = RDPService()
+    cfg = svc.validate_cfg({"nla": "false"})
+    frag = svc.compose_fragment("decky-test", service_cfg=cfg)
+    assert "RDP_ENABLE_NLA" not in frag["environment"]
+
+
+def test_mysql_schema_and_round_trip():
+    assert {f.key for f in MySQLService.config_schema} == {"version"}
+    svc = MySQLService()
+    cfg = svc.validate_cfg({"version": "8.0.36"})
+    frag = svc.compose_fragment("decky-test", service_cfg=cfg)
+    assert frag["environment"]["MYSQL_VERSION"] == "8.0.36"
+
+
+def test_redis_schema_and_round_trip():
+    assert {f.key for f in RedisService.config_schema} == {"version", "os_string"}
+    svc = RedisService()
+    cfg = svc.validate_cfg({"version": "7.2.4", "os_string": "Linux 5.15.0 x86_64"})
+    frag = svc.compose_fragment("decky-test", service_cfg=cfg)
+    assert frag["environment"]["REDIS_VERSION"] == "7.2.4"
+    assert frag["environment"]["REDIS_OS"] == "Linux 5.15.0 x86_64"
+
+
+def test_smtp_schema_and_round_trip():
+    assert {f.key for f in SMTPService.config_schema} == {"banner", "mta"}
+    svc = SMTPService()
+    cfg = svc.validate_cfg({"banner": "mail.corp ESMTP", "mta": "exim"})
+    frag = svc.compose_fragment("decky-test", service_cfg=cfg)
+    assert frag["environment"]["SMTP_BANNER"] == "mail.corp ESMTP"
+    assert frag["environment"]["SMTP_MTA"] == "exim"
+
+
+def test_smtp_mta_enum_rejects_unknown():
+    with pytest.raises(ConfigValidationError):
+        SMTPService().validate_cfg({"mta": "qmail"})
+
+
+def test_smtp_relay_schema_matches_smtp():
+    assert (
+        {f.key for f in SMTPRelayService.config_schema}
+        == {f.key for f in SMTPService.config_schema}
+    )
+    svc = SMTPRelayService()
+    frag = svc.compose_fragment(
+        "decky-test", service_cfg=svc.validate_cfg({"banner": "x", "mta": "postfix"})
+    )
+    assert frag["environment"]["SMTP_OPEN_RELAY"] == "1"
+    assert frag["environment"]["SMTP_BANNER"] == "x"
+
+
+# --- Textarea base64 transport ----------------------------------------------
+
+
+def _b64(s: str) -> str:
+    return "b64:" + base64.b64encode(s.encode("utf-8")).decode("ascii")
+
+
+def test_textarea_b64_decoded():
+    cfg = _Dummy().validate_cfg({"body": _b64("line1\nline2\nline3")})
+    assert cfg == {"body": "line1\nline2\nline3"}
+
+
+def test_textarea_b64_malformed_rejected():
+    with pytest.raises(ConfigValidationError):
+        _Dummy().validate_cfg({"body": "b64:not-valid-base64!!"})
+
+
+def test_textarea_plain_passthrough_for_api_callers():
+    # Direct API submitters don't base64-wrap; raw multi-line strings
+    # must pass through unchanged.
+    cfg = _Dummy().validate_cfg({"body": "raw\nstuff"})
+    assert cfg == {"body": "raw\nstuff"}
+
+
+def test_https_pem_round_trip_through_b64():
+    pem = (
+        "-----BEGIN CERTIFICATE-----\n"
+        "MIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEAxxx\n"
+        "-----END CERTIFICATE-----\n"
+    )
+    svc = HTTPSService()
+    cfg = svc.validate_cfg({"tls_cert": _b64(pem)})
+    assert cfg["tls_cert"] == pem  # newlines restored
+    frag = svc.compose_fragment("decky-test", service_cfg=cfg)
+    assert frag["environment"]["TLS_CERT"] == pem
+
+
+def test_textarea_b64_handles_utf8():
+    s = "héllo\nwörld\n☃"
+    cfg = _Dummy().validate_cfg({"body": _b64(s)})
+    assert cfg == {"body": s}

@@ -16,6 +16,7 @@ class SnifferService(BaseService):
     name = "sniffer"
     ports: list[int] = []
     default_image = "build"
+    # config_schema: no user-tunable fields yet — TODO add when compose_fragment grows cfg reads
     fleet_singleton = True
 
     def compose_fragment(

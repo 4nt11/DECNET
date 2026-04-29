@@ -8,6 +8,7 @@ class MongoDBService(BaseService):
     name = "mongodb"
     ports = [27017]
     default_image = "build"
+    # config_schema: no user-tunable fields yet — TODO add when compose_fragment grows cfg reads
 
     def compose_fragment(self, decky_name: str, log_target: str | None = None, service_cfg: dict | None = None) -> dict:
         fragment: dict = {
