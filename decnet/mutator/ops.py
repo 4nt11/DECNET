@@ -758,6 +758,14 @@ async def apply_detach_decky(
         decky["uuid"], {"decky_config": new_cfg}
     )
     await repo.delete_topology_edge(edge["id"])
+    # Live materialisation: SDK network.disconnect on the base
+    # container.  Service containers automatically lose visibility into
+    # the LAN because they share the base's netns.
+    await _materialise_decky_disconnect(
+        repo, topology_id,
+        decky_name=decky["decky_config"]["name"],
+        lan_name=lan["name"],
+    )
     await _assert_valid_after(repo, topology_id)
 
 
