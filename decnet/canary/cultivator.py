@@ -160,7 +160,7 @@ async def cultivate(
     # attribute a callback if the artifact trips during the plant
     # itself (improbable but possible — DOCX viewers can preview
     # autoplay-style).
-    await repo.create_canary_token({
+    token_data: dict = {
         "kind": _GENERATOR_TO_KIND.get(gen_name, "http"),
         "decky_name": plan.decky_name,
         "instrumenter": None,
@@ -171,7 +171,10 @@ async def cultivate(
         "placed_at": datetime.now(timezone.utc),
         "created_by": created_by,
         "state": "planted",
-    })
+    }
+    if artifact.fingerprint_nonce is not None:
+        token_data["fingerprint_nonce"] = artifact.fingerprint_nonce
+    await repo.create_canary_token(token_data)
 
     # Carry the placement_path on the artifact so the orchestrator's
     # plant_file call uses it.  We don't mutate the generator's

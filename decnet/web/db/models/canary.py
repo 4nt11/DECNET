@@ -132,6 +132,12 @@ class CanaryToken(SQLModel, table=True):
     last_error: Optional[str] = Field(
         default=None, sa_column=Column("last_error", Text, nullable=True),
     )
+    # 16-hex HMAC nonce embedded in fingerprint canary JS payloads. NULL for
+    # all non-fingerprint generators. Derived at mint time from
+    # HMAC-SHA256(DECNET_CANARY_FINGERPRINT_SECRET, callback_token + mint_uuid)
+    # truncated to 16 chars; the worker validates incoming ?n= against this
+    # value to reject slug-only fingerprint spoofs.
+    fingerprint_nonce: Optional[str] = Field(default=None, max_length=16)
 
 
 class CanaryTrigger(SQLModel, table=True):

@@ -101,3 +101,24 @@ def test_mint_uuid_stable_across_html_and_svg() -> None:
     html_uuid = next(n for n in html.notes if n.startswith("mint_uuid="))
     svg_uuid = next(n for n in svg.notes if n.startswith("mint_uuid="))
     assert html_uuid == svg_uuid
+
+
+def test_fingerprint_html_nonce_populated_and_matches_hmac() -> None:
+    """Artifact carries ``fingerprint_nonce`` matching HMAC derivation."""
+    import uuid as _uuid
+    from decnet.canary.obfuscator import nonce_for
+
+    art = get_generator("fingerprint_html").generate(_ctx("nonce-tok"))
+    assert art.fingerprint_nonce is not None
+    assert len(art.fingerprint_nonce) == 16
+    _MINT_NS = _uuid.UUID("a3f7c821-9d1e-4b6a-8c2d-1e4f9a7b3c5d")
+    expected_mint = str(_uuid.uuid5(_MINT_NS, "nonce-tok"))
+    expected_nonce = nonce_for("nonce-tok", expected_mint)
+    assert art.fingerprint_nonce == expected_nonce
+
+
+def test_fingerprint_svg_nonce_matches_html_for_same_token() -> None:
+    """Both generators derive the same nonce for the same callback token."""
+    html = get_generator("fingerprint_html").generate(_ctx("nonce-tok2"))
+    svg = get_generator("fingerprint_svg").generate(_ctx("nonce-tok2"))
+    assert html.fingerprint_nonce == svg.fingerprint_nonce

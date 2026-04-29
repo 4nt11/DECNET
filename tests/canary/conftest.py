@@ -9,9 +9,27 @@ both accept a stripped-down skeleton with just ``[Content_Types].xml``,
 from __future__ import annotations
 
 import io
+import os
 import zipfile
 
 import pytest
+
+
+@pytest.fixture(autouse=True, scope="session")
+def _canary_fingerprint_secret():
+    """Ensure DECNET_CANARY_FINGERPRINT_SECRET is set for all canary tests.
+
+    Fingerprint generators call nonce_for() which raises if the env var
+    is unset. A test-only sentinel value is fine — it just needs to exist.
+    """
+    key = "DECNET_CANARY_FINGERPRINT_SECRET"
+    prev = os.environ.get(key)
+    os.environ.setdefault(key, "test-secret-for-canary-tests-only")
+    yield
+    if prev is None:
+        os.environ.pop(key, None)
+    else:
+        os.environ[key] = prev
 
 
 _DOCX_CONTENT_TYPES = (

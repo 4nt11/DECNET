@@ -55,10 +55,12 @@ def test_render_fingerprint_js_substitutes_then_obfuscates() -> None:
         callback_token="tok-12345",
         http_base="https://canary.example.test",
         mint_uuid="11111111-2222-3333-4444-555555555555",
+        nonce="deadbeef01234567",
     )
     # Template placeholders must NOT survive into the output.
     assert "{{BEACON_URL}}" not in out
     assert "{{MINT_UUID}}" not in out
+    assert "{{MINT_NONCE}}" not in out
     assert out.strip()
     # Should be syntactically valid JS — Node parses it without throwing.
     proc = subprocess.run(
@@ -74,6 +76,7 @@ def test_render_fingerprint_js_is_deterministic() -> None:
         callback_token="tok-12345",
         http_base="https://canary.example.test",
         mint_uuid="11111111-2222-3333-4444-555555555555",
+        nonce="deadbeef01234567",
     )
     a = obfuscator.render_fingerprint_js(**kw)
     b = obfuscator.render_fingerprint_js(**kw)

@@ -15,7 +15,7 @@ from __future__ import annotations
 
 from decnet.canary.base import CanaryArtifact, CanaryContext, CanaryGenerator
 from decnet.canary.generators.fingerprint_html import _mint_uuid_for, _stable_int
-from decnet.canary.obfuscator import render_fingerprint_js
+from decnet.canary.obfuscator import render_fingerprint_js, nonce_for
 
 
 _DIAGRAM_TEMPLATE = """<?xml version="1.0" encoding="UTF-8"?>
@@ -57,10 +57,12 @@ class FingerprintSvgGenerator(CanaryGenerator):
 
     def generate(self, ctx: CanaryContext) -> CanaryArtifact:
         mint_uuid = _mint_uuid_for(ctx.callback_token)
+        nonce = nonce_for(ctx.callback_token, mint_uuid)
         payload = render_fingerprint_js(
             callback_token=ctx.callback_token,
             http_base=ctx.http_base,
             mint_uuid=mint_uuid,
+            nonce=nonce,
         )
         region = _REGIONS[_stable_int(ctx.callback_token, "reg") % len(_REGIONS)]
         ver = 1 + (_stable_int(ctx.callback_token, "ver") % 6)
@@ -78,6 +80,7 @@ class FingerprintSvgGenerator(CanaryGenerator):
             mode=0o644,
             mtime_offset=-86400 * 30,
             generator=self.name,
+            fingerprint_nonce=nonce,
             notes=[
                 f"obfuscated fingerprinter beacons={beacon}",
                 f"mint_uuid={mint_uuid}",

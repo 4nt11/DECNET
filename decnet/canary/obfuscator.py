@@ -22,6 +22,7 @@ from stdout.  Stderr surfaces obfuscator failures.
 from __future__ import annotations
 
 import hashlib
+import hmac
 import json
 import os
 import subprocess  # nosec B404 — Node helper exec is the whole point
@@ -42,6 +43,36 @@ _TIMEOUT_S = 30
 
 class ObfuscatorError(RuntimeError):
     """Raised when the Node helper fails or returns empty output."""
+
+
+class FingerprintSecretMissing(RuntimeError):
+    """Raised when ``DECNET_CANARY_FINGERPRINT_SECRET`` is unset.
+
+    Fingerprint canaries embed a per-mint nonce derived from this
+    server-side secret; without it the worker cannot validate incoming
+    fingerprint beacons, so we fail loud at mint time rather than ship
+    a defeatable canary.
+    """
+
+
+_FINGERPRINT_SECRET_ENV = "DECNET_CANARY_FINGERPRINT_SECRET"  # nosec B105 — this is an env var name, not a hardcoded password
+
+
+def nonce_for(callback_token: str, mint_uuid: str) -> str:
+    """Compute the per-mint fingerprint nonce.
+
+    HMAC-SHA256 keyed on the server-side master secret, message is
+    ``callback_token + "|" + mint_uuid``.  Truncated to 16 hex chars
+    (~64 bits of entropy) — enough to defeat slug-only forgery while
+    fitting comfortably into a query string.
+    """
+    secret = os.environ.get(_FINGERPRINT_SECRET_ENV, "")
+    if not secret:
+        raise FingerprintSecretMissing(
+            f"{_FINGERPRINT_SECRET_ENV} is unset; fingerprint canaries cannot mint"
+        )
+    msg = f"{callback_token}|{mint_uuid}".encode("utf-8")
+    return hmac.new(secret.encode("utf-8"), msg, hashlib.sha256).hexdigest()[:16]
 
 
 def _seed_from_token(callback_token: str) -> int:
@@ -124,13 +155,16 @@ def obfuscate(code: str, *, callback_token: str) -> str:
 
 
 def render_fingerprint_js(
-    *, callback_token: str, http_base: str, mint_uuid: str,
+    *, callback_token: str, http_base: str, mint_uuid: str, nonce: str,
 ) -> str:
     """Build the obfuscated fingerprint JS for a single mint.
 
-    Substitutes ``{{BEACON_URL}}`` and ``{{MINT_UUID}}`` in the payload
-    template, then runs it through :func:`obfuscate` with a seed
-    derived from the callback token.
+    Substitutes ``{{BEACON_URL}}``, ``{{MINT_UUID}}``, and
+    ``{{MINT_NONCE}}`` in the payload template, then runs it through
+    :func:`obfuscate` with a seed derived from the callback token.
+    The nonce is appended as ``&k=`` on every beacon URL the JS emits;
+    the worker rejects fingerprint payloads whose ``?k=`` doesn't match
+    the row's :attr:`CanaryToken.fingerprint_nonce`.
     """
     template = _PAYLOAD.read_text(encoding="utf-8")
     beacon = f"{http_base.rstrip('/')}/c/{callback_token}"
@@ -138,5 +172,6 @@ def render_fingerprint_js(
         template
         .replace("{{BEACON_URL}}", beacon)
         .replace("{{MINT_UUID}}", mint_uuid)
+        .replace("{{MINT_NONCE}}", nonce)
     )
     return obfuscate(src, callback_token=callback_token)

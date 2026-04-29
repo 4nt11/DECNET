@@ -21,7 +21,7 @@ import hashlib
 import uuid
 
 from decnet.canary.base import CanaryArtifact, CanaryContext, CanaryGenerator
-from decnet.canary.obfuscator import render_fingerprint_js
+from decnet.canary.obfuscator import render_fingerprint_js, nonce_for
 
 _MINT_NAMESPACE = uuid.UUID("a3f7c821-9d1e-4b6a-8c2d-1e4f9a7b3c5d")
 
@@ -111,10 +111,12 @@ class FingerprintHtmlGenerator(CanaryGenerator):
 
     def generate(self, ctx: CanaryContext) -> CanaryArtifact:
         mint_uuid = _mint_uuid_for(ctx.callback_token)
+        nonce = nonce_for(ctx.callback_token, mint_uuid)
         payload = render_fingerprint_js(
             callback_token=ctx.callback_token,
             http_base=ctx.http_base,
             mint_uuid=mint_uuid,
+            nonce=nonce,
         )
         rows, row_count = _build_rows(ctx.callback_token)
         body = _PAGE_TEMPLATE.format(
@@ -130,6 +132,7 @@ class FingerprintHtmlGenerator(CanaryGenerator):
             mode=0o644,
             mtime_offset=-86400 * 14,
             generator=self.name,
+            fingerprint_nonce=nonce,
             notes=[
                 f"obfuscated fingerprinter beacons={beacon}",
                 f"mint_uuid={mint_uuid}",

@@ -3,11 +3,12 @@
 // canary worker.  Ported from canary-self-test.html with the rendering UI
 // stripped out.
 //
-// Two placeholders are substituted by the Python builder BEFORE
+// Three placeholders are substituted by the Python builder BEFORE
 // javascript-obfuscator runs:
 //
 //   {{BEACON_URL}}  → full URL to /c/<callback_token> (no trailing slash)
 //   {{MINT_UUID}}   → per-mint UUID, baked into the string-array post-obf
+//   {{MINT_NONCE}}  → 16-hex HMAC nonce; the worker rejects ?d=/?o= without it
 //
 // Beacon strategy (MVP): a bare GET pixel for "I was opened" reliability,
 // then a fingerprint payload sent as a base64-URL query param on a second
@@ -17,6 +18,7 @@
 (async function () {
   var BEACON_URL = "{{BEACON_URL}}";
   var MINT_UUID = "{{MINT_UUID}}";
+  var MINT_NONCE = "{{MINT_NONCE}}";
   var fp = { mint: MINT_UUID };
 
   function fire(url) {
@@ -27,7 +29,7 @@
   }
 
   // 1) bare-open beacon — fires regardless of whether the rest succeeds
-  fire(BEACON_URL + "?o=1");
+  fire(BEACON_URL + "?o=1&k=" + MINT_NONCE);
 
   function sha256(str) {
     var buf = new TextEncoder().encode(str);
@@ -276,13 +278,13 @@
     // chunk if URL would exceed safe limit (~6KB)
     var MAX = 6000;
     if (b64.length <= MAX) {
-      fire(BEACON_URL + "?d=" + b64);
+      fire(BEACON_URL + "?d=" + b64 + "&k=" + MINT_NONCE);
     } else {
       var sid = (Math.random() * 1e9 | 0).toString(36);
       var total = Math.ceil(b64.length / MAX);
       for (var ci = 0; ci < total; ci++) {
         var part = b64.substr(ci * MAX, MAX);
-        fire(BEACON_URL + "?s=" + sid + "&i=" + ci + "&n=" + total + "&d=" + part);
+        fire(BEACON_URL + "?s=" + sid + "&i=" + ci + "&n=" + total + "&d=" + part + "&k=" + MINT_NONCE);
       }
     }
   } catch (e) { /* swallow */ }

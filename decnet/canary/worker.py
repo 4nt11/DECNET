@@ -30,6 +30,8 @@ import base64
 import binascii
 import json
 import os
+import time
+import uuid
 from datetime import datetime, timezone
 from typing import Any, Optional
 
@@ -51,6 +53,41 @@ log = get_logger("canary.worker")
 _TRANSPARENT_GIF = bytes.fromhex(
     "47494638396101000100800100000000ffffff21f90401000001002c00000000010001000002024401003b"
 )
+
+
+# Namespace used by fingerprint generators to derive mint UUID.
+# Must stay in sync with fingerprint_html._MINT_NAMESPACE.
+_MINT_NAMESPACE = uuid.UUID("a3f7c821-9d1e-4b6a-8c2d-1e4f9a7b3c5d")
+
+# In-memory per-(token_uuid, src_ip) rate limiter for fingerprint persists.
+# Maps (token_uuid, src_ip) -> list of monotonic timestamps.
+# Not shared across worker restarts or processes — acceptable for MVP.
+_FP_RATE_WINDOW_S = 60
+_FP_RATE_LIMIT = 30
+_fp_rate_buckets: dict[tuple[str, str], list[float]] = {}
+
+
+def _fp_rate_allowed(token_uuid: str, src_ip: str) -> bool:
+    key = (token_uuid, src_ip)
+    now = time.monotonic()
+    cutoff = now - _FP_RATE_WINDOW_S
+    bucket = _fp_rate_buckets.get(key, [])
+    bucket = [t for t in bucket if t > cutoff]
+    if len(bucket) >= _FP_RATE_LIMIT:
+        _fp_rate_buckets[key] = bucket
+        return False
+    bucket.append(now)
+    _fp_rate_buckets[key] = bucket
+    return True
+
+
+def _is_valid_fp_shape(fp: dict) -> bool:
+    """Layer B — structural sanity check on a decoded fingerprint blob."""
+    if not isinstance(fp.get("mint"), str) or not fp["mint"]:
+        return False
+    known_keys = {"nav", "scr", "tz", "cv", "gl", "au", "ft", "rtc"}
+    present = sum(1 for k in known_keys if isinstance(fp.get(k), dict))
+    return present >= 3
 
 
 def _http_base() -> str:
@@ -107,8 +144,9 @@ def _build_app(repo: BaseRepository, bus: BaseBus) -> FastAPI:
 
     @app.get("/c/{slug}")
     async def callback(slug: str, request: Request) -> Response:
+        raw_nonce = request.query_params.get("k")
+        fp_meta, parsed_fp = _extract_fingerprint(request.query_params)
         merged_headers = dict(request.headers)
-        fp_meta = _extract_fingerprint(request.query_params)
         if fp_meta:
             merged_headers.update(fp_meta)
         await _record_hit(
@@ -119,6 +157,8 @@ def _build_app(repo: BaseRepository, bus: BaseBus) -> FastAPI:
             request_path=str(request.url.path),
             dns_qname=None,
             raw_headers=merged_headers,
+            parsed_fp=parsed_fp,
+            raw_nonce=raw_nonce,
         )
         # Always 200 with a tiny image so the attacker's client sees
         # a "success" — same return regardless of whether the slug is
@@ -143,61 +183,58 @@ def _build_app(repo: BaseRepository, bus: BaseBus) -> FastAPI:
 _FP_CHUNK_MAX = 8 * 1024
 
 
-def _extract_fingerprint(qp: Any) -> dict[str, Any]:
-    """Decode the fingerprint-payload query params into reserved keys.
+def _extract_fingerprint(qp: Any) -> tuple[dict[str, Any], Optional[dict]]:
+    """Decode fingerprint-payload query params into (meta_dict, parsed_fp).
 
     The obfuscated browser payload may send three shapes on ``GET /c/<slug>``:
 
     * ``?o=1`` — bare-open beacon, fired before fingerprinting starts.
     * ``?d=<b64url-json>`` — single-shot fingerprint dump.
-    * ``?s=<sid>&i=<idx>&n=<total>&d=<b64url-chunk>`` — chunked dump,
-      one request per chunk; the reassembler joins by ``s`` and ``i``.
+    * ``?s=<sid>&i=<idx>&n=<total>&d=<b64url-chunk>`` — chunked dump.
 
-    Returns a flat dict whose keys are namespaced under a ``_fp`` prefix
-    so they can't collide with real HTTP header names when merged into
-    ``raw_headers``. Unknown / malformed input returns ``{}`` — we
-    never raise; the trigger row records the hit either way.
+    Returns a tuple of:
+    - ``meta`` — flat dict with ``_fp_*`` keys to merge into raw_headers.
+    - ``parsed_fp`` — the decoded fingerprint dict for validation, or ``None``
+      when there's no ``?d=`` or decoding fails.
     """
     out: dict[str, Any] = {}
+    parsed_fp: Optional[dict] = None
     if not qp:
-        return out
+        return out, parsed_fp
     o = qp.get("o") if hasattr(qp, "get") else None
     if o:
         out["_fp_open"] = "1"
     d = qp.get("d") if hasattr(qp, "get") else None
     if not d:
-        return out
+        return out, parsed_fp
     if len(d) > _FP_CHUNK_MAX:
         out["_fp_oversize"] = "1"
-        return out
+        return out, parsed_fp
 
     sid = qp.get("s")
     idx = qp.get("i")
     total = qp.get("n")
     if sid and idx and total:
-        # Chunked payload: keep raw base64url + metadata; reassembly is
-        # a downstream concern (a later worker pass will join chunks
-        # by ``_fp_sid`` and decode the concatenation).
         out["_fp_sid"] = sid
         out["_fp_idx"] = idx
         out["_fp_total"] = total
         out["_fp_chunk"] = d
-        return out
+        return out, parsed_fp
 
-    # Single-shot: decode now so the API consumer sees a structured
-    # dict rather than a long opaque base64 blob.
+    # Single-shot: decode and pass back as parsed_fp; validation runs in
+    # _record_hit after token lookup so we have the stored nonce at hand.
     try:
         padded = d + "=" * (-len(d) % 4)
         raw = base64.urlsafe_b64decode(padded.encode("ascii"))
         parsed = json.loads(raw.decode("utf-8"))
     except (binascii.Error, ValueError, UnicodeDecodeError):
         out["_fp_decode_error"] = "1"
-        return out
+        return out, parsed_fp
     if isinstance(parsed, dict):
-        out["_fp"] = parsed
+        parsed_fp = parsed
     else:
         out["_fp_decode_error"] = "1"
-    return out
+    return out, parsed_fp
 
 
 def _client_ip(request: Request) -> str:
@@ -225,16 +262,58 @@ async def _record_hit(
     request_path: Optional[str],
     dns_qname: Optional[str],
     raw_headers: Optional[dict],
+    parsed_fp: Optional[dict] = None,
+    raw_nonce: Optional[str] = None,
 ) -> None:
     """Resolve slug -> token, persist a trigger, publish on the bus.
 
     Unknown slugs are silently swallowed: returning the same response
     for known and unknown slugs is the stealth posture, and persisting
     every random scan would clutter the DB.
+
+    When *parsed_fp* is present (single-shot fingerprint decode succeeded),
+    it is validated through four layers before being merged into raw_headers:
+    A) nonce match against CanaryToken.fingerprint_nonce,
+    B) structural shape check,
+    C) mint UUID consistency,
+    D) per-(token, IP) rate limit.
+    Each failure drops the structured ``_fp`` and sets a ``_fp_*_invalid`` flag.
+    The trigger row always lands regardless — the GET hit is itself forensic.
     """
     token = await repo.get_canary_token_by_slug(slug)
     if token is None:
         return
+
+    final_headers: dict[str, Any] = dict(raw_headers or {})
+
+    if parsed_fp is not None:
+        stored_nonce: Optional[str] = token.get("fingerprint_nonce")
+
+        # Layer A — nonce
+        if stored_nonce is not None and raw_nonce != stored_nonce:
+            final_headers["_fp_invalid_nonce"] = "1"
+            parsed_fp = None
+
+        # Layer B — shape (only when nonce passed or no nonce enforced)
+        if parsed_fp is not None and not _is_valid_fp_shape(parsed_fp):
+            final_headers["_fp_invalid_shape"] = "1"
+            parsed_fp = None
+
+        # Layer C — mint UUID consistency
+        if parsed_fp is not None:
+            expected_mint = str(uuid.uuid5(_MINT_NAMESPACE, slug))
+            if parsed_fp.get("mint") != expected_mint:
+                final_headers["_fp_invalid_mint"] = "1"
+                parsed_fp = None
+
+        # Layer D — rate limit
+        if parsed_fp is not None and not _fp_rate_allowed(token["uuid"], src_ip):
+            final_headers["_fp_rate_limited"] = "1"
+            parsed_fp = None
+
+        if parsed_fp is not None:
+            final_headers["_fp"] = parsed_fp
+
     trigger_id = await repo.record_canary_trigger({
         "token_uuid": token["uuid"],
         "occurred_at": datetime.now(timezone.utc),
@@ -242,7 +321,7 @@ async def _record_hit(
         "user_agent": user_agent,
         "request_path": request_path,
         "dns_qname": dns_qname,
-        "raw_headers": raw_headers or {},
+        "raw_headers": final_headers,
     })
     try:
         await bus.publish(

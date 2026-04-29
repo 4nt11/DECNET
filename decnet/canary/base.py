@@ -100,6 +100,12 @@ class CanaryArtifact:
     planting.  Never leaked to the attacker-facing surface.
     """
 
+    fingerprint_nonce: Optional[str] = None
+    """Per-mint HMAC nonce for fingerprint canaries; ``None`` for everything
+    else.  Cultivator reads this and persists it on ``CanaryToken.fingerprint_nonce``
+    so the worker can validate incoming ``?k=`` params.
+    """
+
 
 class CanaryGenerator(ABC):
     """Produces a fake artifact from scratch."""

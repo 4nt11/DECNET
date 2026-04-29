@@ -112,16 +112,24 @@ async def test_xff_is_honored(repo: SQLiteRepository, bus: FakeBus) -> None:
 async def test_fingerprint_query_param_decoded_into_raw_headers(
     repo: SQLiteRepository, bus: FakeBus,
 ) -> None:
-    """``?d=<b64url(json)>`` is decoded into raw_headers["_fp"] as a dict."""
+    """``?d=<b64url(json)>`` is decoded into raw_headers["_fp"] when valid."""
     import base64
     import json
+    import uuid as _uuid
 
+    _MINT_NS = _uuid.UUID("a3f7c821-9d1e-4b6a-8c2d-1e4f9a7b3c5d")
+    mint_id = str(_uuid.uuid5(_MINT_NS, "slug-FP1"))
     await repo.create_canary_token({
         "uuid": "tok-fp1", "kind": "http", "decky_name": "web1",
         "generator": "fingerprint_html", "placement_path": "/x",
         "callback_token": "slug-FP1", "secret_seed": "s", "created_by": "u1",
     })
-    fp = {"mint": "abc-123", "nav": {"ua": "Test/1.0"}, "id": "h" * 64}
+    # Token has no fingerprint_nonce → Layer A skipped; must satisfy B + C.
+    fp = {
+        "mint": mint_id,
+        "nav": {"ua": "Test/1.0"}, "scr": {"w": 1920}, "tz": {"z": "UTC"},
+        "id": "h" * 64,
+    }
     blob = base64.urlsafe_b64encode(json.dumps(fp).encode()).rstrip(b"=").decode()
     app = _build_app(repo, bus)
     with TestClient(app) as client:
@@ -210,6 +218,153 @@ async def test_oversize_fingerprint_dropped(
     headers = json.loads(triggers[0]["raw_headers"])
     assert headers["_fp_oversize"] == "1"
     assert "_fp" not in headers
+
+
+def _make_fp_blob(slug: str, extra_keys: int = 3) -> tuple[str, str]:
+    """Return (b64url_blob, mint_uuid) for a fingerprint matching *slug*."""
+    import base64
+    import json
+    import uuid as _uuid
+
+    _MINT_NS = _uuid.UUID("a3f7c821-9d1e-4b6a-8c2d-1e4f9a7b3c5d")
+    mint_id = str(_uuid.uuid5(_MINT_NS, slug))
+    base_keys = ["nav", "scr", "tz", "cv", "gl"]
+    fp: dict = {"mint": mint_id}
+    for k in base_keys[:extra_keys]:
+        fp[k] = {"ok": True}
+    fp["id"] = "a" * 64
+    blob = base64.urlsafe_b64encode(json.dumps(fp).encode()).rstrip(b"=").decode()
+    return blob, mint_id
+
+
+@pytest.mark.asyncio
+async def test_fp_valid_nonce_persists(repo: SQLiteRepository, bus: FakeBus) -> None:
+    """Valid nonce + valid shape + correct mint UUID → ``_fp`` is persisted."""
+    import json
+
+    blob, _ = _make_fp_blob("slug-NONCE1")
+    await repo.create_canary_token({
+        "uuid": "tok-n1", "kind": "http", "decky_name": "web1",
+        "generator": "fingerprint_html", "placement_path": "/x",
+        "callback_token": "slug-NONCE1", "secret_seed": "s", "created_by": "u1",
+        "fingerprint_nonce": "deadbeef01234567",
+    })
+    app = _build_app(repo, bus)
+    with TestClient(app) as client:
+        client.get(f"/c/slug-NONCE1?d={blob}&k=deadbeef01234567")
+    triggers = await repo.list_canary_triggers("tok-n1")
+    headers = json.loads(triggers[0]["raw_headers"])
+    assert "_fp" in headers
+    assert "_fp_invalid_nonce" not in headers
+
+
+@pytest.mark.asyncio
+async def test_fp_invalid_nonce_rejected(repo: SQLiteRepository, bus: FakeBus) -> None:
+    """Wrong ``?k=`` value → ``_fp_invalid_nonce=1``, no ``_fp``."""
+    import json
+
+    blob, _ = _make_fp_blob("slug-NONCE2")
+    await repo.create_canary_token({
+        "uuid": "tok-n2", "kind": "http", "decky_name": "web1",
+        "generator": "fingerprint_html", "placement_path": "/x",
+        "callback_token": "slug-NONCE2", "secret_seed": "s", "created_by": "u1",
+        "fingerprint_nonce": "deadbeef01234567",
+    })
+    app = _build_app(repo, bus)
+    with TestClient(app) as client:
+        client.get(f"/c/slug-NONCE2?d={blob}&k=wrongnonce000000")
+    triggers = await repo.list_canary_triggers("tok-n2")
+    headers = json.loads(triggers[0]["raw_headers"])
+    assert headers["_fp_invalid_nonce"] == "1"
+    assert "_fp" not in headers
+
+
+@pytest.mark.asyncio
+async def test_fp_invalid_shape_rejected(repo: SQLiteRepository, bus: FakeBus) -> None:
+    """Fewer than 3 known dict keys → ``_fp_invalid_shape=1``, no ``_fp``."""
+    import base64
+    import json
+    import uuid as _uuid
+
+    _MINT_NS = _uuid.UUID("a3f7c821-9d1e-4b6a-8c2d-1e4f9a7b3c5d")
+    mint_id = str(_uuid.uuid5(_MINT_NS, "slug-SHAPE1"))
+    fp = {"mint": mint_id, "nav": {"ua": "x"}}  # only 1 known dict key
+    blob = base64.urlsafe_b64encode(json.dumps(fp).encode()).rstrip(b"=").decode()
+    await repo.create_canary_token({
+        "uuid": "tok-sh1", "kind": "http", "decky_name": "web1",
+        "generator": "fingerprint_html", "placement_path": "/x",
+        "callback_token": "slug-SHAPE1", "secret_seed": "s", "created_by": "u1",
+    })
+    app = _build_app(repo, bus)
+    with TestClient(app) as client:
+        client.get(f"/c/slug-SHAPE1?d={blob}")
+    triggers = await repo.list_canary_triggers("tok-sh1")
+    headers = json.loads(triggers[0]["raw_headers"])
+    assert headers["_fp_invalid_shape"] == "1"
+    assert "_fp" not in headers
+
+
+@pytest.mark.asyncio
+async def test_fp_invalid_mint_rejected(repo: SQLiteRepository, bus: FakeBus) -> None:
+    """Wrong mint UUID in payload → ``_fp_invalid_mint=1``, no ``_fp``."""
+    import base64
+    import json
+
+    fp = {
+        "mint": "wrong-uuid-entirely",
+        "nav": {"x": 1}, "scr": {"x": 1}, "tz": {"x": 1},
+        "id": "a" * 64,
+    }
+    blob = base64.urlsafe_b64encode(json.dumps(fp).encode()).rstrip(b"=").decode()
+    await repo.create_canary_token({
+        "uuid": "tok-mint1", "kind": "http", "decky_name": "web1",
+        "generator": "fingerprint_html", "placement_path": "/x",
+        "callback_token": "slug-MINT1", "secret_seed": "s", "created_by": "u1",
+    })
+    app = _build_app(repo, bus)
+    with TestClient(app) as client:
+        client.get(f"/c/slug-MINT1?d={blob}")
+    triggers = await repo.list_canary_triggers("tok-mint1")
+    headers = json.loads(triggers[0]["raw_headers"])
+    assert headers["_fp_invalid_mint"] == "1"
+    assert "_fp" not in headers
+
+
+@pytest.mark.asyncio
+async def test_fp_rate_limited_on_excess_submissions(
+    repo: SQLiteRepository, bus: FakeBus,
+) -> None:
+    """31st rapid-fire submission → ``_fp_rate_limited=1``, no ``_fp``."""
+    import json
+    import decnet.canary.worker as _worker
+
+    # Reset the rate bucket so other tests don't bleed in.
+    _worker._fp_rate_buckets.clear()
+
+    blob, _ = _make_fp_blob("slug-RATE1")
+    await repo.create_canary_token({
+        "uuid": "tok-rate1", "kind": "http", "decky_name": "web1",
+        "generator": "fingerprint_html", "placement_path": "/x",
+        "callback_token": "slug-RATE1", "secret_seed": "s", "created_by": "u1",
+    })
+    app = _build_app(repo, bus)
+    with TestClient(app) as client:
+        for _ in range(31):
+            client.get(
+                f"/c/slug-RATE1?d={blob}",
+                headers={"X-Forwarded-For": "1.2.3.4"},
+            )
+    triggers = await repo.list_canary_triggers("tok-rate1")
+    # list_canary_triggers orders DESC (newest first) — index 0 is the 31st hit.
+    newest_headers = json.loads(triggers[0]["raw_headers"])
+    assert newest_headers["_fp_rate_limited"] == "1"
+    assert "_fp" not in newest_headers
+    # Oldest (30th or earlier) should be clean.
+    oldest_headers = json.loads(triggers[-1]["raw_headers"])
+    assert "_fp_rate_limited" not in oldest_headers
+    assert "_fp" in oldest_headers
+
+    _worker._fp_rate_buckets.clear()
 
 
 @pytest.mark.asyncio
