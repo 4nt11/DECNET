@@ -3,6 +3,7 @@ Deploy, teardown, and status via Docker SDK + subprocess docker compose.
 """
 
 import asyncio
+import json
 import shutil
 import subprocess  # nosec B404
 import time
@@ -161,6 +162,48 @@ def _sync_sessrec_sources(config: DecnetConfig) -> None:
                 dest = dest_dir / src.name
                 if not dest.exists() or dest.read_bytes() != src.read_bytes():
                     shutil.copy2(src, dest)
+
+
+def _compose_ps(compose_file: Path) -> list[dict[str, object]]:
+    """Return ``docker compose ps`` rows for *compose_file* as parsed JSON.
+
+    Used for post-deploy verification: ``compose up -d`` returns 0 the
+    moment containers are *started*, but a service that crashes on boot
+    (port collision, bad image, missing dependency) only shows up here.
+    Returns an empty list when compose has nothing to report (and on
+    parse failure — caller treats that as 'unverifiable, don't gate').
+    """
+    cmd = [
+        "docker", "compose", "-p", "decnet", "-f", str(compose_file),
+        "ps", "--all", "--format", "json",
+    ]
+    try:
+        result = subprocess.run(  # nosec B603
+            cmd, capture_output=True, text=True, check=False,
+        )
+    except FileNotFoundError:
+        return []
+    if result.returncode != 0:
+        return []
+    rows: list[dict[str, object]] = []
+    # ``docker compose ps --format json`` emits one JSON object per line
+    # (newline-delimited), not a JSON array.  Parse line-by-line so a
+    # single bad line doesn't poison the whole result.
+    for line in (result.stdout or "").splitlines():
+        line = line.strip()
+        if not line:
+            continue
+        try:
+            obj = json.loads(line)
+        except json.JSONDecodeError:
+            continue
+        if isinstance(obj, dict):
+            rows.append(obj)
+        elif isinstance(obj, list):
+            for item in obj:
+                if isinstance(item, dict):
+                    rows.append(item)
+    return rows
 
 
 def _compose(*args: str, compose_file: Path = COMPOSE_FILE, env: dict | None = None) -> None:
@@ -951,8 +994,41 @@ async def deploy_topology(repo, topology_id: str, *, dry_run: bool = False) -> N
         )
         raise
 
-    await transition_status(repo, topology_id, TopologyStatus.ACTIVE)
-    log.info("topology %s deployed n_lans=%d", topology_id, len(lans))
+    # Post-deploy verification: ``compose up -d`` returns 0 the moment
+    # containers are *started*, so a service that crashes on boot
+    # (port bind failure, bad image, missing dependency) leaves the
+    # topology row sitting at ACTIVE while half the substrate is dead.
+    # Sample compose ps once and downgrade to DEGRADED if any expected
+    # container isn't running — operators see real state instead of an
+    # optimistic flag.
+    ps_rows = await anyio.to_thread.run_sync(
+        lambda: _compose_ps(compose_path),
+    )
+    bad: list[str] = []
+    for row in ps_rows:
+        state = str(row.get("State", "")).lower()
+        if state and state != "running":
+            name = str(row.get("Name") or row.get("Service") or "?")
+            exit_code = row.get("ExitCode")
+            bad.append(
+                f"{name}={state}"
+                + (f" (exit={exit_code})" if exit_code not in (None, 0, "") else "")
+            )
+
+    if bad:
+        reason = "post-deploy check: " + ", ".join(bad[:8]) + (
+            f" and {len(bad) - 8} more" if len(bad) > 8 else ""
+        )
+        await transition_status(
+            repo, topology_id, TopologyStatus.DEGRADED, reason=reason,
+        )
+        log.warning(
+            "topology %s deployed but %d container(s) unhealthy: %s",
+            topology_id, len(bad), reason,
+        )
+    else:
+        await transition_status(repo, topology_id, TopologyStatus.ACTIVE)
+        log.info("topology %s deployed n_lans=%d", topology_id, len(lans))
 
     # Best-effort canary baseline seed across every decky in the
     # topology.  Same resilience contract as the fleet path: failures
