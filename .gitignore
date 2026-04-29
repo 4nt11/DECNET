@@ -51,3 +51,9 @@ schem
 
 # pydeps-style dependency graph dumps from local analysis runs.
 deps.txt
+
+# Node modules vendored under decnet/canary/ for the obfuscator helper.
+# The package.json is the source of truth; modules are reinstalled at
+# build/deploy time.
+node_modules/
+package-lock.json
