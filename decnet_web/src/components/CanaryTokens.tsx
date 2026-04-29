@@ -66,19 +66,69 @@ interface DeckyOption {
   ip?: string;
 }
 
+interface TopologyOption {
+  id: string;
+  name: string;
+  status: string;
+}
+
+type Scope = 'fleet' | 'topology';
+
 interface CreateModalProps {
   blobs: BlobRow[];
   deckies: DeckyOption[];
+  topologies: TopologyOption[];
   onClose: () => void;
   onCreated: (token: CanaryTokenRow) => void;
 }
 
-const CreateModal: React.FC<CreateModalProps> = ({ blobs, deckies, onClose, onCreated }) => {
+const CreateModal: React.FC<CreateModalProps> = ({ blobs, deckies, topologies, onClose, onCreated }) => {
   const panelRef = useRef<HTMLDivElement | null>(null);
   useEscapeKey(onClose, true);
   useFocusTrap(panelRef, true);
 
+  const [scope, setScope] = useState<Scope>('fleet');
+  const [topologyId, setTopologyId] = useState<string>(topologies[0]?.id ?? '');
+  const [topoDeckies, setTopoDeckies] = useState<DeckyOption[]>([]);
+  const [topoLoading, setTopoLoading] = useState(false);
+
+  // When scope flips to topology (or topology selection changes) we
+  // hydrate the chosen topology's decky list — different shape than the
+  // /deckies endpoint, so the picker must repopulate.
+  useEffect(() => {
+    if (scope !== 'topology' || !topologyId) {
+      setTopoDeckies([]);
+      return;
+    }
+    let cancelled = false;
+    setTopoLoading(true);
+    api.get(`/topologies/${encodeURIComponent(topologyId)}`)
+      .then((res) => {
+        if (cancelled) return;
+        const list: DeckyOption[] = (res.data?.deckies ?? []).map(
+          (d: { name: string; ip?: string }) => ({ name: d.name, ip: d.ip }),
+        );
+        setTopoDeckies(list);
+      })
+      .catch(() => { if (!cancelled) setTopoDeckies([]); })
+      .finally(() => { if (!cancelled) setTopoLoading(false); });
+    return () => { cancelled = true; };
+  }, [scope, topologyId]);
+
+  const activeDeckies = scope === 'topology' ? topoDeckies : deckies;
   const [decky, setDecky] = useState(deckies[0]?.name ?? '');
+
+  // Reset the decky selection when the active list changes — otherwise
+  // a fleet decky name lingers as a stale value when the user flips to
+  // a topology that doesn't have that decky.
+  useEffect(() => {
+    if (activeDeckies.length === 0) {
+      setDecky('');
+    } else if (!activeDeckies.some((d) => d.name === decky)) {
+      setDecky(activeDeckies[0].name);
+    }
+  }, [activeDeckies]); // eslint-disable-line react-hooks/exhaustive-deps
+
   const [kind, setKind] = useState<'http' | 'dns' | 'aws_passive'>('http');
   const [path, setPath] = useState('/home/admin/.aws/credentials');
   const [source, setSource] = useState<'generator' | 'blob'>('generator');
@@ -89,6 +139,7 @@ const CreateModal: React.FC<CreateModalProps> = ({ blobs, deckies, onClose, onCr
 
   const handleSubmit = async () => {
     setError(null);
+    if (scope === 'topology' && !topologyId) return setError('Pick a topology.');
     if (!decky.trim()) return setError('Pick a decky.');
     if (!path.trim().startsWith('/')) return setError('placement_path must be absolute.');
     if (source === 'blob' && !blobUuid) return setError('Pick a blob or switch to Generator.');
@@ -99,6 +150,7 @@ const CreateModal: React.FC<CreateModalProps> = ({ blobs, deckies, onClose, onCr
         kind,
         placement_path: path.trim(),
       };
+      if (scope === 'topology') body.topology_id = topologyId;
       if (source === 'generator') body.generator = generator;
       else body.blob_uuid = blobUuid;
       const res = await api.post('/canary/tokens', body);
@@ -138,10 +190,58 @@ const CreateModal: React.FC<CreateModalProps> = ({ blobs, deckies, onClose, onCr
           </button>
         </div>
 
+        <div style={{ display: 'flex', gap: '8px', marginBottom: '12px' }}>
+          {(['fleet', 'topology'] as const).map((s) => (
+            <button
+              key={s}
+              type="button"
+              onClick={() => setScope(s)}
+              style={{
+                flex: 1,
+                padding: '8px',
+                background: scope === s ? 'var(--accent-color, #00ff88)' : 'transparent',
+                color: scope === s ? 'var(--bg-color, #0d1117)' : 'var(--text-color)',
+                border: '1px solid var(--border-color, #30363d)',
+                cursor: 'pointer', fontSize: '0.8rem', textTransform: 'uppercase', letterSpacing: '0.05em',
+              }}
+            >
+              {s === 'fleet' ? 'Fleet' : 'MazeNET topology'}
+            </button>
+          ))}
+        </div>
+
+        {scope === 'topology' && (
+          <Field label="Topology">
+            {topologies.length === 0 ? (
+              <div style={{ fontSize: '0.8rem', opacity: 0.6, padding: '8px 0' }}>
+                No active topologies. Deploy one from MazeNET first.
+              </div>
+            ) : (
+              <select
+                value={topologyId}
+                onChange={(e) => setTopologyId(e.target.value)}
+                style={INPUT_STYLE}
+              >
+                {topologies.map((t) => (
+                  <option key={t.id} value={t.id}>
+                    {t.name} ({t.status})
+                  </option>
+                ))}
+              </select>
+            )}
+          </Field>
+        )}
+
         <Field label="Decky">
-          {deckies.length === 0 ? (
+          {topoLoading ? (
             <div style={{ fontSize: '0.8rem', opacity: 0.6, padding: '8px 0' }}>
-              No deckies running. Deploy a fleet first.
+              loading topology deckies…
+            </div>
+          ) : activeDeckies.length === 0 ? (
+            <div style={{ fontSize: '0.8rem', opacity: 0.6, padding: '8px 0' }}>
+              {scope === 'topology'
+                ? 'This topology has no deckies.'
+                : 'No fleet deckies running. Deploy a fleet first.'}
             </div>
           ) : (
             <select
@@ -150,7 +250,7 @@ const CreateModal: React.FC<CreateModalProps> = ({ blobs, deckies, onClose, onCr
               autoFocus
               style={INPUT_STYLE}
             >
-              {deckies.map((d) => (
+              {activeDeckies.map((d) => (
                 <option key={d.name} value={d.name}>
                   {d.name}{d.ip ? ` (${d.ip})` : ''}
                 </option>
@@ -391,11 +491,13 @@ const CanaryTokens: React.FC = () => {
   const [tokens, setTokens] = useState<CanaryTokenRow[]>([]);
   const [blobs, setBlobs] = useState<BlobRow[]>([]);
   const [deckies, setDeckies] = useState<DeckyOption[]>([]);
+  const [topologies, setTopologies] = useState<TopologyOption[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [tab, setTab] = useState<'tokens' | 'blobs'>('tokens');
   const [filter, setFilter] = useState('');
   const [stateFilter, setStateFilter] = useState<'all' | 'planted' | 'revoked' | 'failed'>('all');
+  const [scopeFilter, setScopeFilter] = useState<'all' | 'fleet' | 'topology'>('all');
 
   const [showCreate, setShowCreate] = useState(false);
   const [showUpload, setShowUpload] = useState(false);
@@ -405,14 +507,20 @@ const CanaryTokens: React.FC = () => {
     setLoading(true);
     setError(null);
     try {
-      const [t, b, d] = await Promise.all([
+      const [t, b, d, topos] = await Promise.all([
         api.get('/canary/tokens'),
         api.get('/canary/blobs').catch(() => ({ data: { blobs: [] } })), // viewers can't list blobs
         api.get<DeckyOption[]>('/deckies').catch(() => ({ data: [] })),
+        // Active topologies only — planting on a torn-down or pending
+        // topology would 422/404 anyway.  Endpoint shape: { data: [...] }
+        api.get('/topologies?status=active').catch(() => ({ data: { data: [] } })),
       ]);
       setTokens(t.data.tokens || []);
       setBlobs(b.data.blobs || []);
       setDeckies(Array.isArray(d.data) ? d.data : []);
+      const topoRows: Array<{ id: string; name: string; status: string }> =
+        topos.data?.data ?? [];
+      setTopologies(topoRows.map((r) => ({ id: r.id, name: r.name, status: r.status })));
     } catch (err) {
       setError(extractError(err, 'Failed to load canary tokens.'));
     } finally {
@@ -437,6 +545,8 @@ const CanaryTokens: React.FC = () => {
   const visibleTokens = useMemo(() => {
     return tokens.filter((t) => {
       if (stateFilter !== 'all' && t.state !== stateFilter) return false;
+      if (scopeFilter === 'fleet' && t.topology_id) return false;
+      if (scopeFilter === 'topology' && !t.topology_id) return false;
       if (!filter) return true;
       const f = filter.toLowerCase();
       return (
@@ -444,10 +554,11 @@ const CanaryTokens: React.FC = () => {
         t.placement_path.toLowerCase().includes(f) ||
         t.callback_token.toLowerCase().includes(f) ||
         (t.generator || '').toLowerCase().includes(f) ||
-        (t.instrumenter || '').toLowerCase().includes(f)
+        (t.instrumenter || '').toLowerCase().includes(f) ||
+        (t.topology_id || '').toLowerCase().includes(f)
       );
     });
-  }, [tokens, filter, stateFilter]);
+  }, [tokens, filter, stateFilter, scopeFilter]);
 
   const counts = useMemo(() => {
     const c = { planted: 0, revoked: 0, failed: 0, hits: 0 };
@@ -535,6 +646,15 @@ const CanaryTokens: React.FC = () => {
               <option value="revoked">revoked</option>
               <option value="failed">failed</option>
             </select>
+            <select
+              value={scopeFilter}
+              onChange={(e) => setScopeFilter(e.target.value as typeof scopeFilter)}
+              style={{ ...INPUT_STYLE, marginBottom: 0, width: 'auto' }}
+            >
+              <option value="all">all scopes</option>
+              <option value="fleet">fleet only</option>
+              <option value="topology">topology only</option>
+            </select>
           </div>
 
           {loading && <div style={{ opacity: 0.6 }}>loading…</div>}
@@ -553,7 +673,7 @@ const CanaryTokens: React.FC = () => {
                 onClick={() => setDrawerToken(t)}
                 style={{
                   display: 'grid',
-                  gridTemplateColumns: '110px 140px 1fr 100px 110px 80px',
+                  gridTemplateColumns: '110px 80px 140px 1fr 100px 110px 80px',
                   alignItems: 'center', gap: '12px',
                   padding: '10px 14px',
                   border: '1px solid var(--border-color, #30363d)',
@@ -569,6 +689,19 @@ const CanaryTokens: React.FC = () => {
                   fontSize: '0.7rem', letterSpacing: '0.05em',
                 }}>
                   ● {t.state.toUpperCase()}
+                </span>
+                <span
+                  title={t.topology_id ? `topology ${t.topology_id}` : 'fleet'}
+                  style={{
+                    fontSize: '0.65rem', letterSpacing: '0.05em',
+                    padding: '2px 6px',
+                    border: `1px solid ${t.topology_id ? 'var(--accent-color, #00ff88)' : 'var(--dim-color)'}`,
+                    color: t.topology_id ? 'var(--accent-color, #00ff88)' : 'var(--dim-color)',
+                    textAlign: 'center',
+                    textTransform: 'uppercase',
+                  }}
+                >
+                  {t.topology_id ? 'topology' : 'fleet'}
                 </span>
                 <span style={{ fontFamily: 'monospace' }}>{t.decky_name}</span>
                 <span style={{ fontFamily: 'monospace', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
@@ -640,6 +773,7 @@ const CanaryTokens: React.FC = () => {
         <CreateModal
           blobs={blobs}
           deckies={deckies}
+          topologies={topologies}
           onClose={() => setShowCreate(false)}
           onCreated={(t) => {
             setTokens((prev) => [t, ...prev]);
