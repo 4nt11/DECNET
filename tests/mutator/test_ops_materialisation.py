@@ -131,6 +131,23 @@ async def test_add_decky_spawns_base_and_service_containers(repo, stubs):
 
 
 @pytest.mark.anyio
+async def test_add_decky_flips_state_to_running_after_spawn(repo, stubs):
+    """Without this the dashboard's ACTIVE DECKIES count reads 0/N."""
+    tid = await _make_active(repo)
+    lans = await repo.list_lans_for_topology(tid)
+    home_lan = lans[0]["name"]
+
+    await apply_add_decky(repo, tid, {
+        "name": "newrunner",
+        "lan": home_lan,
+        "services": [],
+    })
+    rows = await repo.list_topology_deckies(tid)
+    new = next(r for r in rows if r["name"] == "newrunner")
+    assert new["state"] == "running"
+
+
+@pytest.mark.anyio
 async def test_add_decky_skips_materialisation_when_pending(repo, stubs):
     """Pending topology gets DB write only — deploy_topology will spawn."""
     plan = generate(_cfg())

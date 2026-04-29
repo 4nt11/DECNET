@@ -1005,14 +1005,45 @@ async def deploy_topology(repo, topology_id: str, *, dry_run: bool = False) -> N
         lambda: _compose_ps(compose_path),
     )
     bad: list[str] = []
+    # Build the per-decky state map.  The base container's compose
+    # service name == decky name, which is what we cache on the
+    # TopologyDecky row.  Service containers (named ``<decky>-<svc>``)
+    # don't gate the decky's state — service-level failures are visible
+    # in compose ps separately and don't downgrade the decky as a whole.
+    decky_state_by_name: dict[str, str] = {}
     for row in ps_rows:
         state = str(row.get("State", "")).lower()
+        service_name = str(row.get("Service") or "")
+        if service_name and "-" not in service_name:
+            # Plain decky base; cache its docker state.
+            decky_state_by_name[service_name] = state or "unknown"
         if state and state != "running":
             name = str(row.get("Name") or row.get("Service") or "?")
             exit_code = row.get("ExitCode")
             bad.append(
                 f"{name}={state}"
                 + (f" (exit={exit_code})" if exit_code not in (None, 0, "") else "")
+            )
+
+    # Reconcile each TopologyDecky.state from compose's view.  Without
+    # this, the row stays at the default 'pending' forever and the
+    # dashboard's ACTIVE DECKIES count reads 0/N even when everything's
+    # actually up.
+    for decky in hydrated["deckies"]:
+        cfg = decky.get("decky_config") or {}
+        decky_name = cfg.get("name") or decky.get("name")
+        if not decky_name:
+            continue
+        ds = decky_state_by_name.get(decky_name, "unknown")
+        new_state = "running" if ds == "running" else "failed"
+        try:
+            await repo.update_topology_decky(
+                decky["uuid"], {"state": new_state},
+            )
+        except Exception as exc:  # noqa: BLE001
+            log.warning(
+                "post-deploy state reconcile failed topology=%s decky=%s: %s",
+                topology_id, decky_name, exc,
             )
 
     if bad:

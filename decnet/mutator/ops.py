@@ -326,16 +326,18 @@ async def _rerender_compose(repo: Any, topology_id: str) -> None:
 
 async def _materialise_decky_spawn(
     repo: Any, topology_id: str, decky_name: str, services: list[str],
-) -> None:
+) -> bool:
     """compose up -d --no-deps --build for one decky (base + services).
 
-    Re-renders compose first so the file lists the new decky.  No-op
-    when the topology isn't eligible for live materialisation (see
-    :func:`_live_topology_or_none`).  Best-effort: docker failure is
-    logged, not re-raised — DB row is the source of truth.
+    Re-renders compose first so the file lists the new decky.  Returns
+    True when compose-up reported success, False otherwise (or when
+    the topology isn't eligible for live materialisation — pending
+    topologies skip and return False so the caller doesn't flip the
+    state to ``running`` based on a no-op).  Best-effort: docker
+    failure is logged, not re-raised — DB row is the source of truth.
     """
     if await _live_topology_or_none(repo, topology_id) is None:
-        return
+        return False
     from decnet.engine.deployer import _topology_compose_path
     await _rerender_compose(repo, topology_id)
     targets = _decky_targets(decky_name, services)
@@ -346,11 +348,13 @@ async def _materialise_decky_spawn(
             compose_file=compose_path,
             label=f"live add_decky topology={topology_id} decky={decky_name}",
         )
+        return True
     except Exception as exc:  # noqa: BLE001
         _log.error(
             "live add_decky: compose up failed topology=%s decky=%s: %s",
             topology_id, decky_name, exc,
         )
+        return False
 
 
 async def _materialise_decky_remove(
@@ -700,7 +704,22 @@ async def apply_add_decky(
     # Live materialisation: spawn the new decky's containers without
     # touching siblings.  Skips on pending / agent-pinned topologies —
     # see _live_topology_or_none.
-    await _materialise_decky_spawn(repo, topology_id, name, services_list)
+    spawned = await _materialise_decky_spawn(
+        repo, topology_id, name, services_list,
+    )
+    # Flip the row's state to 'running' on success so the dashboard's
+    # ACTIVE DECKIES count reflects reality.  Without this the row
+    # stays at the default 'pending' forever; the deployer's full
+    # post-deploy reconcile only runs on a fresh deploy_topology.
+    if spawned:
+        try:
+            await repo.update_topology_decky(decky_uuid, {"state": "running"})
+        except Exception as exc:  # noqa: BLE001
+            _log.warning(
+                "live add_decky: state flip to running failed "
+                "topology=%s decky=%s: %s",
+                topology_id, name, exc,
+            )
     await _assert_valid_after(repo, topology_id)
 
 
