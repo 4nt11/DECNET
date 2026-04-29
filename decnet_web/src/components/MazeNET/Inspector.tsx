@@ -184,7 +184,7 @@ const Inspector: React.FC<Props> = ({
                     >
                       <option value="">— pick a service —</option>
                       {availableServices
-                        .filter((s) => !node.services.includes(s))
+                        .filter((s) => !(node.services as readonly string[]).includes(s))
                         .map((s) => (
                           <option key={s} value={s}>{s}</option>
                         ))}
