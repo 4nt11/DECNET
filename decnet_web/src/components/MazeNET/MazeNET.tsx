@@ -23,6 +23,7 @@ import { useLayoutPersistor } from './useMazeLayoutStore';
 import { useTopologyStream, type TopologyStreamEvent } from './useTopologyStream';
 import { ARCHETYPES as DEFAULT_ARCHETYPES } from './data';
 import { useToast } from '../Toasts/useToast';
+import { useServiceRegistry } from '../../hooks/useServiceRegistry';
 
 /* Short unique suffix for default names — avoids the DB uniqueness
  * constraint regardless of delete/re-add sequencing on the client. */
@@ -428,6 +429,33 @@ const MazeNET: React.FC = () => {
     }
   };
 
+  /* Live service add/remove — talks to the W3 endpoints directly,
+     bypassing the design-time mutation queue.  Used when topology
+     status is active/degraded; the Inspector switches between this
+     and the design-time path based on the topologyStatus prop.
+
+     Optimistic local update is fine: the W3 endpoint returns the
+     post-mutation services list, and the SSE forwarder (commit C-sse)
+     reconciles cross-tab. */
+  const serviceRegistry = useServiceRegistry();
+
+  const liveAddService = useCallback(async (nodeName: string, slug: string) => {
+    const { data } = await axios.post<{ services: string[] }>(
+      `/topologies/${encodeURIComponent(topologyId)}/deckies/${encodeURIComponent(nodeName)}/services`,
+      { name: slug },
+    );
+    setNodes((p) => p.map((x) => x.kind === 'decky' && x.name === nodeName
+      ? { ...x, services: data.services } : x));
+  }, [topologyId]);
+
+  const liveRemoveService = useCallback(async (nodeName: string, slug: string) => {
+    const { data } = await axios.delete<{ services: string[] }>(
+      `/topologies/${encodeURIComponent(topologyId)}/deckies/${encodeURIComponent(nodeName)}/services/${encodeURIComponent(slug)}`,
+    );
+    setNodes((p) => p.map((x) => x.kind === 'decky' && x.name === nodeName
+      ? { ...x, services: data.services } : x));
+  }, [topologyId]);
+
   /* Force-mutate is a no-op against a pending topology (no live containers).
    * Keep the menu item disabled for now; real hook lands with live-editing polish. */
   const forceMutate = (_id: string) => {
@@ -795,6 +823,9 @@ const MazeNET: React.FC = () => {
           onDeleteNode={removeNode}
           onDeleteEdge={removeEdge}
           onRemoveService={removeServiceFromNode}
+          availableServices={serviceRegistry.perDecky}
+          onLiveAddService={liveAddService}
+          onLiveRemoveService={liveRemoveService}
           onAddDecky={(netId) => {
             const net = nets.find((n) => n.id === netId);
             if (!net) return;

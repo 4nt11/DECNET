@@ -1,4 +1,4 @@
-import React, { useMemo } from 'react';
+import React, { useMemo, useState } from 'react';
 import {
   ArrowLeft, ArrowRight, Crosshair, Globe, GitMerge, MousePointer2, Plus,
   Server, Trash2, X, Shield,
@@ -24,6 +24,16 @@ interface Props {
   onDeleteNode?: (id: string) => void;
   onDeleteEdge?: (id: string) => void;
   onRemoveService?: (nodeId: string, slug: string) => void;
+  // Live (post-deploy) service mutation, hitting W3 endpoints directly.
+  // Distinct from onRemoveService which queues a design-time graph
+  // mutation.  Both can coexist; the inspector picks based on
+  // topologyStatus (active/degraded → live, pending/anything else →
+  // design-time only).  Wiring these props from MazeNET.tsx is the
+  // single switch that turns chips into live controls.
+  onLiveAddService?: (nodeName: string, slug: string) => Promise<void>;
+  onLiveRemoveService?: (nodeName: string, slug: string) => Promise<void>;
+  /** Per-decky-eligible service slugs, fetched via useServiceRegistry. */
+  availableServices?: string[];
   onAddDecky?: (netId: string) => void;
   setSelection?: (sel: Selection) => void;
   pendingChanges?: number;
@@ -32,10 +42,20 @@ interface Props {
 
 const Inspector: React.FC<Props> = ({
   selection, nets, nodes, edges, topologyStatus, onClose,
-  onDeleteNet, onDeleteNode, onDeleteEdge, onRemoveService, onAddDecky, setSelection,
+  onDeleteNet, onDeleteNode, onDeleteEdge, onRemoveService,
+  onLiveAddService, onLiveRemoveService, availableServices = [],
+  onAddDecky, setSelection,
   pendingChanges = 0,
   className = '',
 }) => {
+  const liveOpsEnabled =
+    !!onLiveAddService &&
+    !!onLiveRemoveService &&
+    (topologyStatus === 'active' || topologyStatus === 'degraded');
+  const [addOpen, setAddOpen] = useState(false);
+  const [addSlug, setAddSlug] = useState('');
+  const [busy, setBusy] = useState<string | null>(null);  // slug currently mutating
+  const [opError, setOpError] = useState<string | null>(null);
   const net  = selection?.type === 'net'  ? nets.find((n) => n.id === selection.id)  : undefined;
   const node = selection?.type === 'node' ? nodes.find((n) => n.id === selection.id) : undefined;
   const edge = selection?.type === 'edge' ? edges.find((e) => e.id === selection.id) : undefined;
@@ -107,9 +127,116 @@ const Inspector: React.FC<Props> = ({
                 <div className="inspector-service-row">
                   {node.services.length === 0 && <span className="dim">—</span>}
                   {node.services.map((s) => (
-                    <span key={s} className="service-tag">{s}</span>
+                    <span key={s} className="service-tag" style={{ display: 'inline-flex', alignItems: 'center', gap: 4 }}>
+                      <span>{s}</span>
+                      {liveOpsEnabled && node.kind !== 'observed' && (
+                        <button
+                          type="button"
+                          title={`Remove ${s} (live)`}
+                          disabled={busy === s}
+                          onClick={async () => {
+                            setOpError(null);
+                            setBusy(s);
+                            try {
+                              await onLiveRemoveService!(node.name, s);
+                            } catch (err) {
+                              const msg = (err as { response?: { data?: { detail?: string } } })?.response?.data?.detail
+                                ?? 'Remove failed.';
+                              setOpError(msg);
+                            } finally {
+                              setBusy(null);
+                            }
+                          }}
+                          style={{
+                            background: 'transparent', border: 'none', padding: 0,
+                            color: 'inherit', cursor: busy === s ? 'wait' : 'pointer',
+                            opacity: busy === s ? 0.4 : 0.7, lineHeight: 1,
+                          }}
+                        >
+                          <X size={9} />
+                        </button>
+                      )}
+                    </span>
                   ))}
+                  {liveOpsEnabled && node.kind !== 'observed' && !addOpen && (
+                    <button
+                      type="button"
+                      className="service-tag"
+                      onClick={() => { setAddOpen(true); setAddSlug(''); }}
+                      style={{ cursor: 'pointer', borderStyle: 'dashed' }}
+                      title="Add service (live)"
+                    >
+                      <Plus size={10} /> ADD
+                    </button>
+                  )}
                 </div>
+                {liveOpsEnabled && addOpen && (
+                  <div style={{ display: 'flex', gap: 6, marginTop: 6, alignItems: 'center' }}>
+                    <select
+                      value={addSlug}
+                      onChange={(e) => setAddSlug(e.target.value)}
+                      style={{
+                        flex: 1, fontSize: '0.75rem', padding: '4px 6px',
+                        background: 'rgba(255,255,255,0.04)',
+                        border: '1px solid var(--border-color, #30363d)',
+                        color: 'var(--text-color)',
+                      }}
+                    >
+                      <option value="">— pick a service —</option>
+                      {availableServices
+                        .filter((s) => !node.services.includes(s))
+                        .map((s) => (
+                          <option key={s} value={s}>{s}</option>
+                        ))}
+                    </select>
+                    <button
+                      type="button"
+                      disabled={!addSlug || busy === addSlug}
+                      onClick={async () => {
+                        if (!addSlug) return;
+                        setOpError(null);
+                        setBusy(addSlug);
+                        try {
+                          await onLiveAddService!(node.name, addSlug);
+                          setAddOpen(false);
+                          setAddSlug('');
+                        } catch (err) {
+                          const msg = (err as { response?: { data?: { detail?: string } } })?.response?.data?.detail
+                            ?? 'Add failed.';
+                          setOpError(msg);
+                        } finally {
+                          setBusy(null);
+                        }
+                      }}
+                      style={{
+                        padding: '4px 10px', fontSize: '0.7rem',
+                        border: '1px solid var(--accent-color, #00ff88)',
+                        background: 'var(--accent-color, #00ff88)',
+                        color: 'var(--bg-color, #0d1117)',
+                        cursor: busy === addSlug ? 'wait' : 'pointer',
+                        opacity: !addSlug || busy === addSlug ? 0.5 : 1,
+                        textTransform: 'uppercase',
+                      }}
+                    >
+                      ADD
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => { setAddOpen(false); setAddSlug(''); }}
+                      style={{
+                        padding: '4px 10px', fontSize: '0.7rem',
+                        border: '1px solid var(--dim-color)',
+                        background: 'transparent', color: 'var(--dim-color)',
+                        cursor: 'pointer', textTransform: 'uppercase',
+                      }}
+                    >
+                      CANCEL
+                    </button>
+                  </div>
+                )}
+                {opError && (
+                  <div style={{ color: '#ff5555', fontSize: '0.7rem', marginTop: 6 }}>{opError}</div>
+                )}
               </div>
             </div>
             <div>
