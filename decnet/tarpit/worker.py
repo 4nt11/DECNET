@@ -19,6 +19,7 @@ import socket
 from datetime import datetime, timezone
 from typing import Any, Optional
 
+from decnet.decky_io.resolve import resolve_decky_container
 from decnet.logging import get_logger
 from decnet.network import get_container_pid
 from decnet.web.db.repository import BaseRepository
@@ -144,10 +145,26 @@ async def _tick(
     current: set[tuple[str, str, int]] = set()
 
     for rule in rules:
-        decky_name: str = rule["decky_name"]
+        db_key: str = rule["decky_name"]
         ports: list[int] = rule["ports"]
+
+        # Topology deckies are stored as "t:{topology_id}:{decky_name}".
+        # Resolve the real container name before asking Docker for its PID.
+        if db_key.startswith("t:"):
+            _, topology_id, decky_name = db_key.split(":", 2)
+            try:
+                container = await resolve_decky_container(
+                    repo, decky_name, topology_id=topology_id,
+                )
+            except LookupError as exc:
+                log.debug("tarpit watcher: %s", exc)
+                continue
+        else:
+            decky_name = db_key
+            container = db_key
+
         try:
-            pid = await asyncio.to_thread(get_container_pid, decky_name)
+            pid = await asyncio.to_thread(get_container_pid, container)
         except LookupError as exc:
             log.debug("tarpit watcher: %s", exc)
             continue
