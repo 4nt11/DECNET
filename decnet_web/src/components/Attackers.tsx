@@ -63,6 +63,8 @@ const Attackers: React.FC = () => {
   const query = searchParams.get('q') || '';
   const sortBy = searchParams.get('sort_by') || 'recent';
   const serviceFilter = searchParams.get('service') || '';
+  const activityFilter = searchParams.get('activity') || '';
+  const countryFilter = searchParams.get('country') || '';
   const page = parseInt(searchParams.get('page') || '1');
 
   const [attackers, setAttackers] = useState<AttackerEntry[]>([]);
@@ -96,7 +98,10 @@ const Attackers: React.FC = () => {
   useEffect(() => { setSearchInput(query); }, [query]);
 
   const _params = (overrides: Record<string, string> = {}) => {
-    const base: Record<string, string> = { q: query, sort_by: sortBy, service: serviceFilter, page: '1' };
+    const base: Record<string, string> = {
+      q: query, sort_by: sortBy, service: serviceFilter,
+      activity: activityFilter, country: countryFilter, page: '1',
+    };
     return Object.fromEntries(Object.entries({ ...base, ...overrides }).filter(([, v]) => v !== ''));
   };
 
@@ -107,6 +112,8 @@ const Attackers: React.FC = () => {
   const setPage = (p: number) => setSearchParams(_params({ page: p.toString() }));
   const setSort = (s: string) => setSearchParams(_params({ sort_by: s }));
   const clearService = () => setSearchParams(_params({ service: '' }));
+  const setActivity = (a: string) => setSearchParams(_params({ activity: activityFilter === a ? '' : a }));
+  const setCountry = (c: string) => setSearchParams(_params({ country: countryFilter === c ? '' : c }));
 
   const totalPages = Math.max(1, Math.ceil(total / limit));
 
@@ -114,6 +121,14 @@ const Attackers: React.FC = () => {
     (acc, a) => { acc[deriveActivity(a)]++; return acc; },
     { active: 0, passive: 0, inactive: 0 } as Record<ActivityTier, number>,
   );
+
+  const countries = [...new Set(attackers.map(a => a.country_code).filter(Boolean))].sort() as string[];
+
+  const visibleAttackers = attackers.filter(a => {
+    if (activityFilter && deriveActivity(a) !== activityFilter) return false;
+    if (countryFilter && a.country_code !== countryFilter) return false;
+    return true;
+  });
 
   return (
     <div className="attackers-root">
@@ -132,7 +147,7 @@ const Attackers: React.FC = () => {
           <input
             ref={searchRef}
             type="text"
-            placeholder="Search by IP..."
+            placeholder="Search IP, ASN, country, org…"
             value={searchInput}
             onChange={(e) => setSearchInput(e.target.value)}
           />
@@ -143,6 +158,43 @@ const Attackers: React.FC = () => {
           <option value="traversals">TRAVERSALS</option>
         </select>
       </form>
+
+      <div className="ak-filter-row">
+        {(['active', 'passive', 'inactive'] as ActivityTier[]).map(tier => (
+          <button
+            key={tier}
+            type="button"
+            className={`chip ${activityFilter === tier ? (tier === 'active' ? 'alert-chip' : tier === 'passive' ? 'violet' : 'matrix') : 'dim-chip'}`}
+            style={{ cursor: 'pointer' }}
+            onClick={() => setActivity(tier)}
+          >
+            <span className={`dot status-dot ${tier === 'active' ? 'hot' : tier === 'passive' ? 'warn' : ''}`} style={{ marginRight: 4 }} />
+            {tier.toUpperCase()} {activityCounts[tier] > 0 ? activityCounts[tier] : ''}
+          </button>
+        ))}
+        {countries.length > 0 && <span className="dim" style={{ fontSize: '0.65rem', letterSpacing: 1, opacity: 0.4, alignSelf: 'center' }}>|</span>}
+        {countries.map(cc => (
+          <button
+            key={cc}
+            type="button"
+            className={`chip ${countryFilter === cc ? 'violet' : 'dim-chip'}`}
+            style={{ cursor: 'pointer' }}
+            onClick={() => setCountry(cc)}
+          >
+            {cc}
+          </button>
+        ))}
+        {(activityFilter || countryFilter || serviceFilter) && (
+          <button
+            type="button"
+            className="chip dim-chip"
+            style={{ cursor: 'pointer', opacity: 0.6 }}
+            onClick={() => setSearchParams(_params({ activity: '', country: '', service: '' }))}
+          >
+            CLEAR ×
+          </button>
+        )}
+      </div>
 
       <div className="logs-section">
         <div className="section-header">
@@ -182,7 +234,7 @@ const Attackers: React.FC = () => {
           />
         ) : (
           <div className="ak-grid">
-            {attackers.map(a => {
+            {visibleAttackers.map(a => {
               const activity = deriveActivity(a);
               const lastCmd = a.commands.length > 0 ? a.commands[a.commands.length - 1] : null;
               return (

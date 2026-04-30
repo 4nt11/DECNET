@@ -266,7 +266,8 @@
 
 .dash-grid > .logs-section .logs-table-container {
   flex: 1;
-  max-height: none;
+  max-height: 420px;
+  overflow-y: auto;
 }
 
 .dash-side {
@@ -278,6 +279,13 @@
 
 .dash-side > .logs-section {
   flex: 1;
+  min-height: 0;
+  overflow: hidden;
+}
+
+.dash-side > .logs-section .panel-body {
+  max-height: 260px;
+  overflow-y: auto;
 }
 
 /* Attacker/siege rows */

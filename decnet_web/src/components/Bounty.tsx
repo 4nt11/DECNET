@@ -1,4 +1,4 @@
-import React, { useEffect, useRef, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { useSearchParams, useNavigate } from 'react-router-dom';
 import {
   Archive, Search, ChevronLeft, ChevronRight, Filter, Key, Package, ChevronRight as ChevR,
@@ -61,6 +61,8 @@ const Bounty: React.FC = () => {
   const searchRef = useRef<HTMLInputElement | null>(null);
   useFocusSearch(searchRef);
   const [selected, setSelected] = useState<BountyEntry | null>(null);
+  const [sortCol, setSortCol] = useState<string>('');
+  const [sortDir, setSortDir] = useState<'asc' | 'desc'>('asc');
 
   const limit = 50;
 
@@ -96,6 +98,41 @@ const Bounty: React.FC = () => {
   const payCount = bounties.filter(b => b.bounty_type === 'payload').length;
   const fpCount = bounties.filter(b => b.bounty_type === 'fingerprint').length;
   const artCount = bounties.filter(b => b.bounty_type === 'artifact').length;
+
+  const handleSortCol = (col: string) => {
+    if (sortCol === col) {
+      if (sortDir === 'asc') setSortDir('desc');
+      else { setSortCol(''); setSortDir('asc'); }
+    } else {
+      setSortCol(col);
+      setSortDir('asc');
+    }
+  };
+
+  const sortedBounties = useMemo(() => {
+    if (!sortCol) return bounties;
+    return [...bounties].sort((a, b) => {
+      let av: string | number = '';
+      let bv: string | number = '';
+      if (sortCol === 'time') { av = a.timestamp; bv = b.timestamp; }
+      else if (sortCol === 'decky') { av = a.decky; bv = b.decky; }
+      else if (sortCol === 'svc') { av = a.service; bv = b.service; }
+      else if (sortCol === 'attacker') { av = a.attacker_ip; bv = b.attacker_ip; }
+      else if (sortCol === 'type') { av = a.bounty_type; bv = b.bounty_type; }
+      const cmp = String(av).localeCompare(String(bv));
+      return sortDir === 'asc' ? cmp : -cmp;
+    });
+  }, [bounties, sortCol, sortDir]);
+
+  const SortTh: React.FC<{ col: string; children: React.ReactNode }> = ({ col, children }) => (
+    <th
+      style={{ cursor: 'pointer', userSelect: 'none', whiteSpace: 'nowrap' }}
+      onClick={() => handleSortCol(col)}
+    >
+      {children}
+      {sortCol === col ? (sortDir === 'asc' ? ' ▲' : ' ▼') : ''}
+    </th>
+  );
 
   const SEGMENTS: [string, string][] = [
     ['', 'ALL'],
@@ -175,17 +212,17 @@ const Bounty: React.FC = () => {
           <table className="logs-table">
             <thead>
               <tr>
-                <th>TIME</th>
-                <th>DECKY</th>
-                <th>SVC</th>
-                <th>ATTACKER</th>
-                <th>TYPE</th>
+                <SortTh col="time">TIME</SortTh>
+                <SortTh col="decky">DECKY</SortTh>
+                <SortTh col="svc">SVC</SortTh>
+                <SortTh col="attacker">ATTACKER</SortTh>
+                <SortTh col="type">TYPE</SortTh>
                 <th>DATA</th>
                 <th></th>
               </tr>
             </thead>
             <tbody>
-              {bounties.length > 0 ? bounties.map(b => {
+              {sortedBounties.length > 0 ? sortedBounties.map(b => {
                 const isCred = b.bounty_type === 'credential';
                 const isFp = b.bounty_type === 'fingerprint';
                 const isArt = b.bounty_type === 'artifact';

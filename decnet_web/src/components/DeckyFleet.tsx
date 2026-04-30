@@ -3,6 +3,7 @@ import {
   Cpu, Database, Globe, Monitor, Network, PlusCircle, PowerOff,
   RefreshCw, Server, Shield, Terminal, Plus, X,
 } from '../icons';
+import { useEscapeKey } from '../hooks/useEscapeKey';
 import api from '../utils/api';
 import { ARCHETYPES as FALLBACK_ARCHETYPES, DEFAULT_SERVICES } from './MazeNET/data';
 import { useToast } from './Toasts/useToast';
@@ -123,6 +124,124 @@ const _stateColor = (state: string): string => {
     case 'teardown_failed': return 'var(--alert)';
     default: return 'var(--border)';
   }
+};
+
+// ─── Decky inspect panel ─────────────────────────────────────────────────
+
+interface DeckyInspectPanelProps {
+  decky: Decky;
+  onClose: () => void;
+}
+
+const DeckyInspectPanel: React.FC<DeckyInspectPanelProps> = ({ decky, onClose }) => {
+  useEscapeKey(onClose, true);
+  const status = _dotFor(decky);
+
+  useEffect(() => {
+    const prev = document.body.style.overflow;
+    document.body.style.overflow = 'hidden';
+    return () => { document.body.style.overflow = prev; };
+  }, []);
+
+  const fmtDate = (ts: number | string | null | undefined) => {
+    if (!ts) return '—';
+    const d = typeof ts === 'number' ? new Date(ts * 1000) : new Date(ts);
+    return isNaN(d.getTime()) ? String(ts) : d.toLocaleString();
+  };
+
+  return (
+    <div
+      onClick={onClose}
+      style={{
+        position: 'fixed', inset: 0,
+        backgroundColor: 'rgba(0,0,0,0.55)',
+        display: 'flex', justifyContent: 'flex-end',
+        zIndex: 1200,
+      }}
+    >
+      <div
+        onClick={(e) => e.stopPropagation()}
+        style={{
+          width: 360,
+          background: 'var(--secondary-color)',
+          borderLeft: '1px solid var(--border)',
+          display: 'flex', flexDirection: 'column',
+          height: '100%',
+          overflowY: 'auto',
+        }}
+      >
+        <div style={{
+          display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+          padding: '16px 20px',
+          borderBottom: '1px solid var(--border)',
+          gap: 12,
+        }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+            <span className={`status-dot ${status}`} />
+            <span style={{ fontWeight: 700, letterSpacing: 3, fontSize: '0.95rem', color: 'var(--matrix)' }}>
+              {decky.name}
+            </span>
+          </div>
+          <button
+            onClick={onClose}
+            style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--dim-color)', padding: 4 }}
+          >
+            <X size={16} />
+          </button>
+        </div>
+
+        <div style={{ padding: '16px 20px', display: 'flex', flexDirection: 'column', gap: 14 }}>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+            {[
+              ['IP', decky.ip],
+              ['HOSTNAME', decky.hostname],
+              ['DISTRO', decky.distro],
+              ['ARCHETYPE', decky.archetype],
+              ['LAST MUTATED', fmtDate(decky.last_mutated)],
+              ['MUTATE INTERVAL', decky.mutate_interval != null ? `${decky.mutate_interval}s` : '—'],
+            ].map(([label, val]) => val ? (
+              <div key={label} style={{ display: 'flex', gap: 10, fontSize: '0.78rem' }}>
+                <span style={{ minWidth: 130, opacity: 0.45, letterSpacing: 1 }}>{label}</span>
+                <span style={{ color: 'var(--matrix)', wordBreak: 'break-all' }}>{val}</span>
+              </div>
+            ) : null)}
+          </div>
+
+          {decky.services.length > 0 && (
+            <div>
+              <div style={{ fontSize: '0.65rem', opacity: 0.45, letterSpacing: 1.5, marginBottom: 8 }}>SERVICES</div>
+              <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
+                {decky.services.map(svc => (
+                  <span key={svc} className="chip violet" style={{ fontSize: '0.65rem' }}>{svc}</span>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {decky.swarm && (
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 8, paddingTop: 8, borderTop: '1px solid var(--border)' }}>
+              <div style={{ fontSize: '0.65rem', opacity: 0.45, letterSpacing: 1.5, marginBottom: 2 }}>SWARM</div>
+              {[
+                ['HOST', decky.swarm.host_name],
+                ['ADDRESS', decky.swarm.host_address],
+                ['STATE', decky.swarm.state],
+                ['LAST SEEN', fmtDate(decky.swarm.last_seen)],
+                ['ERROR', decky.swarm.last_error],
+              ].map(([label, val]) => val ? (
+                <div key={label} style={{ display: 'flex', gap: 10, fontSize: '0.78rem' }}>
+                  <span style={{ minWidth: 130, opacity: 0.45, letterSpacing: 1 }}>{label}</span>
+                  <span style={{
+                    color: label === 'STATE' ? _stateColor(val) : label === 'ERROR' ? 'var(--alert)' : 'var(--matrix)',
+                    wordBreak: 'break-all',
+                  }}>{val}</span>
+                </div>
+              ) : null)}
+            </div>
+          )}
+        </div>
+      </div>
+    </div>
+  );
 };
 
 // ─── Decky card ───────────────────────────────────────────────────────────
@@ -1180,6 +1299,7 @@ const DeckyFleet: React.FC<FleetProps> = ({ searchQuery = '' }) => {
   const [archetypes, setArchetypes] = useState<Archetype[]>(FALLBACK_ARCHETYPES);
   const [localSearch, setLocalSearch] = useState<string>('');
   const [intervalEditor, setIntervalEditor] = useState<{ name: string; current: number | null } | null>(null);
+  const [selectedDecky, setSelectedDecky] = useState<Decky | null>(null);
   const cardRefs = useRef<Map<string, HTMLDivElement>>(new Map());
 
   const lastSearchPropRef = useRef<string>(searchQuery);
@@ -1362,9 +1482,7 @@ const DeckyFleet: React.FC<FleetProps> = ({ searchQuery = '' }) => {
   };
 
   const handleInspect = (d: Decky) => {
-    window.dispatchEvent(new CustomEvent('decnet:cmd', {
-      detail: { id: 'filter-decky', payload: d.name },
-    }));
+    setSelectedDecky(d);
   };
 
   useEffect(() => {
@@ -1393,16 +1511,6 @@ const DeckyFleet: React.FC<FleetProps> = ({ searchQuery = '' }) => {
       if (detail.id === 'mutate-all') {
         void handleMutateAll();
         return;
-      }
-      if (detail.id === 'filter-decky' && typeof detail.payload === 'string') {
-        const name = detail.payload;
-        setLocalSearch(name);
-        push({ text: `FILTERING · ${name.toUpperCase()}`, tone: 'violet', icon: 'crosshair' });
-        // Defer so React renders filtered grid first.
-        window.setTimeout(() => {
-          const el = cardRefs.current.get(name);
-          if (el) el.scrollIntoView({ block: 'center', behavior: 'smooth' });
-        }, 80);
       }
     };
     window.addEventListener('decnet:cmd', onCmd);
@@ -1549,6 +1657,13 @@ const DeckyFleet: React.FC<FleetProps> = ({ searchQuery = '' }) => {
         onClose={() => setIntervalEditor(null)}
         onSave={handleIntervalSave}
       />
+
+      {selectedDecky && (
+        <DeckyInspectPanel
+          decky={selectedDecky}
+          onClose={() => setSelectedDecky(null)}
+        />
+      )}
     </div>
   );
 };

@@ -46,6 +46,8 @@ const Credentials: React.FC = () => {
   const [selectedCred, setSelectedCred] = useState<CredentialEntry | null>(null);
   const [selectedReuse, setSelectedReuse] = useState<CredentialReuseRow | null>(null);
   const [refreshTick, setRefreshTick] = useState(0);
+  const [sortCol, setSortCol] = useState<string>('');
+  const [sortDir, setSortDir] = useState<'asc' | 'desc'>('asc');
 
   // ── Fetch credentials (CREDS tab + always for badge totals)
   useEffect(() => {
@@ -138,6 +140,45 @@ const Credentials: React.FC = () => {
 
   const plaintextCount = creds.filter(c => c.secret_kind === 'plaintext').length;
   const hashedCount = creds.length - plaintextCount;
+
+  const handleSortCol = (col: string) => {
+    if (sortCol === col) {
+      if (sortDir === 'asc') setSortDir('desc');
+      else { setSortCol(''); setSortDir('asc'); }
+    } else {
+      setSortCol(col);
+      setSortDir('asc');
+    }
+  };
+
+  const sortedCreds = useMemo(() => {
+    if (!sortCol) return creds;
+    return [...creds].sort((a, b) => {
+      let av: string | number = '';
+      let bv: string | number = '';
+      if (sortCol === 'seen') { av = a.last_seen; bv = b.last_seen; }
+      else if (sortCol === 'decky') { av = a.decky_name; bv = b.decky_name; }
+      else if (sortCol === 'svc') { av = a.service; bv = b.service; }
+      else if (sortCol === 'attacker') { av = a.attacker_ip; bv = b.attacker_ip; }
+      else if (sortCol === 'principal') { av = a.principal ?? ''; bv = b.principal ?? ''; }
+      else if (sortCol === 'kind') { av = a.secret_kind; bv = b.secret_kind; }
+      else if (sortCol === 'hits') { av = a.attempt_count; bv = b.attempt_count; }
+      const cmp = typeof av === 'number' && typeof bv === 'number'
+        ? av - bv
+        : String(av).localeCompare(String(bv));
+      return sortDir === 'asc' ? cmp : -cmp;
+    });
+  }, [creds, sortCol, sortDir]);
+
+  const SortTh: React.FC<{ col: string; children: React.ReactNode }> = ({ col, children }) => (
+    <th
+      style={{ cursor: 'pointer', userSelect: 'none', whiteSpace: 'nowrap' }}
+      onClick={() => handleSortCol(col)}
+    >
+      {children}
+      {sortCol === col ? (sortDir === 'asc' ? ' ▲' : ' ▼') : ''}
+    </th>
+  );
 
   const openReuseFromCred = async (key: string) => {
     const hit = reuseMap.get(key);
@@ -248,20 +289,20 @@ const Credentials: React.FC = () => {
             <table className="logs-table">
               <thead>
                 <tr>
-                  <th>LAST SEEN</th>
-                  <th>DECKY</th>
-                  <th>SVC</th>
-                  <th>ATTACKER</th>
-                  <th>PRINCIPAL</th>
+                  <SortTh col="seen">LAST SEEN</SortTh>
+                  <SortTh col="decky">DECKY</SortTh>
+                  <SortTh col="svc">SVC</SortTh>
+                  <SortTh col="attacker">ATTACKER</SortTh>
+                  <SortTh col="principal">PRINCIPAL</SortTh>
                   <th>SECRET</th>
-                  <th>KIND</th>
-                  <th>HITS</th>
+                  <SortTh col="kind">KIND</SortTh>
+                  <SortTh col="hits">HITS</SortTh>
                   <th>REUSE</th>
                   <th></th>
                 </tr>
               </thead>
               <tbody>
-                {creds.length > 0 ? creds.map(c => {
+                {sortedCreds.length > 0 ? sortedCreds.map(c => {
                   const isPlain = c.secret_kind === 'plaintext';
                   const secretText = isPlain
                     ? (c.secret_printable ?? '—')
