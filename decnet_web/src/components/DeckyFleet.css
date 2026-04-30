@@ -127,6 +127,78 @@
 }
 .decky-hits { font-variant-numeric: tabular-nums; }
 
+/* Tarpit three-dot menu */
+.tarpit-menu-wrap {
+  position: relative;
+  display: inline-flex;
+}
+.tarpit-menu-btn {
+  font-size: 1rem;
+  line-height: 1;
+  padding: 2px 8px;
+  border-color: var(--border);
+  color: var(--text-dim, rgba(255,255,255,0.5));
+  letter-spacing: 0;
+}
+.tarpit-menu-btn:hover {
+  border-color: var(--alert);
+  color: var(--alert);
+  background: transparent;
+  box-shadow: none;
+}
+.tarpit-dropdown {
+  position: absolute;
+  bottom: calc(100% + 4px);
+  right: 0;
+  z-index: 120;
+  background: var(--bg, #0d1117);
+  border: 1px solid var(--border);
+  box-shadow: 0 4px 16px rgba(0,0,0,0.6);
+  min-width: 160px;
+  display: flex;
+  flex-direction: column;
+}
+.tarpit-dropdown-item {
+  background: transparent;
+  border: none;
+  padding: 8px 14px;
+  font-size: 0.72rem;
+  font-family: inherit;
+  letter-spacing: 1px;
+  color: var(--matrix);
+  text-align: left;
+  cursor: pointer;
+  border-bottom: 1px solid var(--border);
+}
+.tarpit-dropdown-item:last-child { border-bottom: none; }
+.tarpit-dropdown-item:hover { background: rgba(57,255,20,0.08); }
+.tarpit-dropdown-item.alert { color: var(--alert); }
+.tarpit-dropdown-item.alert:hover { background: rgba(255,65,65,0.08); }
+
+/* Tarpit enable form — rendered below the card footer */
+.tarpit-form {
+  margin-top: 8px;
+  padding: 10px;
+  border: 1px solid var(--alert);
+  background: rgba(255,65,65,0.04);
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  font-size: 0.72rem;
+}
+.tarpit-form-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.tarpit-form input.input {
+  font-size: 0.72rem;
+  padding: 4px 6px;
+  background: rgba(255,255,255,0.04);
+  border: 1px solid var(--border);
+  color: var(--text-color);
+}
+
 /* Info banner — used in the deploy wizard and elsewhere a small
    contextual note belongs.  Page-unscoped so it works inside the
    Modal portal; PersonaGeneration.css scopes its own copy under

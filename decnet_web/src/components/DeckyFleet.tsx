@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   Cpu, Database, Globe, Monitor, Network, PlusCircle, PowerOff,
   RefreshCw, Server, Shield, Terminal, Plus, X,
@@ -143,11 +143,13 @@ interface DeckyCardProps {
   /** Called after a successful live add/remove so the parent can
    * optimistically apply the response's services list. */
   onServicesChanged: (deckyName: string, services: string[]) => void;
+  /** Called after a tarpit enable/disable with success or error text. */
+  onTarpitResult: (deckyName: string, ok: boolean, message: string) => void;
 }
 
 const DeckyCard: React.FC<DeckyCardProps> = ({
   decky, mutating, isAdmin, armed, tdBusy, onForce, onTeardown, onIntervalChange, onInspect,
-  innerRef, availableServices, onServicesChanged,
+  innerRef, availableServices, onServicesChanged, onTarpitResult,
 }) => {
   const dot = _dotFor(decky);
   const hits = _hitsFor(decky);
@@ -168,6 +170,62 @@ const DeckyCard: React.FC<DeckyCardProps> = ({
   // Pending add — when non-null, AddServiceConfigModal is mounted and
   // will either auto-fire onConfirm (no schema fields) or show the form.
   const [pendingAdd, setPendingAdd] = useState<{ deckyName: string; slug: string } | null>(null);
+
+  // Tarpit controls — admin + non-swarm only (same gate as liveServicesEnabled)
+  const [tarpitMenuOpen, setTarpitMenuOpen] = useState(false);
+  const [tarpitFormOpen, setTarpitFormOpen] = useState(false);
+  const [tarpitBusy, setTarpitBusy] = useState(false);
+  const [tarpitPorts, setTarpitPorts] = useState('22');
+  const [tarpitDelayMs, setTarpitDelayMs] = useState(30000);
+  const tarpitMenuRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (!tarpitMenuOpen) return;
+    const handler = (e: MouseEvent) => {
+      if (tarpitMenuRef.current && !tarpitMenuRef.current.contains(e.target as Node)) {
+        setTarpitMenuOpen(false);
+      }
+    };
+    document.addEventListener('mousedown', handler);
+    return () => document.removeEventListener('mousedown', handler);
+  }, [tarpitMenuOpen]);
+
+  const enableTarpit = useCallback(async () => {
+    const ports = tarpitPorts
+      .split(',')
+      .map((p) => parseInt(p.trim(), 10))
+      .filter((p) => !isNaN(p) && p > 0 && p <= 65535);
+    if (ports.length === 0) return;
+    setTarpitBusy(true);
+    try {
+      await api.post(`/deckies/${encodeURIComponent(decky.name)}/tarpit`, {
+        ports,
+        delay_ms: tarpitDelayMs,
+      });
+      setTarpitFormOpen(false);
+      setTarpitMenuOpen(false);
+      onTarpitResult(decky.name, true, `TARPIT ON · ${decky.name.toUpperCase()} · ${ports.join(',')} / ${tarpitDelayMs}ms`);
+    } catch (err) {
+      const msg = (err as { response?: { data?: { detail?: string } } })?.response?.data?.detail ?? 'Tarpit enable failed';
+      onTarpitResult(decky.name, false, msg);
+    } finally {
+      setTarpitBusy(false);
+    }
+  }, [decky.name, tarpitPorts, tarpitDelayMs, onTarpitResult]);
+
+  const disableTarpit = useCallback(async () => {
+    setTarpitBusy(true);
+    setTarpitMenuOpen(false);
+    try {
+      await api.delete(`/deckies/${encodeURIComponent(decky.name)}/tarpit`);
+      onTarpitResult(decky.name, true, `TARPIT OFF · ${decky.name.toUpperCase()}`);
+    } catch (err) {
+      const msg = (err as { response?: { data?: { detail?: string } } })?.response?.data?.detail ?? 'Tarpit disable failed';
+      onTarpitResult(decky.name, false, msg);
+    } finally {
+      setTarpitBusy(false);
+    }
+  }, [decky.name, onTarpitResult]);
 
   const removeService = async (slug: string) => {
     setOpError(null);
@@ -394,7 +452,7 @@ const DeckyCard: React.FC<DeckyCardProps> = ({
             {hits}
           </span>
         </span>
-        <div style={{ display: 'flex', gap: 6 }}>
+        <div style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
           {!decky.swarm && isAdmin && (
             <button
               className="btn violet small"
@@ -419,8 +477,95 @@ const DeckyCard: React.FC<DeckyCardProps> = ({
                 : armed === tdKey ? 'CONFIRM' : 'TEARDOWN'}
             </button>
           )}
+          {liveServicesEnabled && (
+            <div className="tarpit-menu-wrap" ref={tarpitMenuRef}>
+              <button
+                type="button"
+                className="btn small tarpit-menu-btn"
+                title="Tarpit controls"
+                disabled={tarpitBusy}
+                onClick={() => {
+                  setTarpitMenuOpen((o) => !o);
+                  setTarpitFormOpen(false);
+                }}
+              >
+                {tarpitBusy ? '…' : '⋮'}
+              </button>
+              {tarpitMenuOpen && (
+                <div className="tarpit-dropdown">
+                  <button
+                    type="button"
+                    className="tarpit-dropdown-item"
+                    onClick={() => {
+                      setTarpitMenuOpen(false);
+                      setTarpitFormOpen(true);
+                    }}
+                  >
+                    ENABLE TARPIT
+                  </button>
+                  <button
+                    type="button"
+                    className="tarpit-dropdown-item alert"
+                    onClick={() => void disableTarpit()}
+                  >
+                    DISABLE TARPIT
+                  </button>
+                </div>
+              )}
+            </div>
+          )}
         </div>
       </div>
+
+      {liveServicesEnabled && tarpitFormOpen && (
+        <div
+          className="tarpit-form"
+          onClick={(e) => e.stopPropagation()}
+        >
+          <div className="tarpit-form-row">
+            <label className="type-label" style={{ minWidth: 70 }}>PORTS</label>
+            <input
+              className="input"
+              value={tarpitPorts}
+              placeholder="22,80,443"
+              onChange={(e) => setTarpitPorts(e.target.value)}
+              style={{ flex: 1 }}
+            />
+          </div>
+          <div className="tarpit-form-row">
+            <label className="type-label" style={{ minWidth: 70 }}>DELAY</label>
+            <input
+              type="range"
+              min={100}
+              max={60000}
+              step={100}
+              value={tarpitDelayMs}
+              onChange={(e) => setTarpitDelayMs(parseInt(e.target.value, 10))}
+              style={{ flex: 1 }}
+            />
+            <span className="dim" style={{ fontSize: '0.7rem', minWidth: 52, textAlign: 'right' }}>
+              {tarpitDelayMs >= 1000 ? `${(tarpitDelayMs / 1000).toFixed(1)}s` : `${tarpitDelayMs}ms`}
+            </span>
+          </div>
+          <div style={{ display: 'flex', gap: 6, justifyContent: 'flex-end', marginTop: 4 }}>
+            <button
+              type="button"
+              className="btn small"
+              onClick={() => setTarpitFormOpen(false)}
+            >
+              CANCEL
+            </button>
+            <button
+              type="button"
+              className="btn alert small"
+              disabled={tarpitBusy || !tarpitPorts.trim()}
+              onClick={() => void enableTarpit()}
+            >
+              {tarpitBusy ? 'APPLYING…' : 'APPLY'}
+            </button>
+          </div>
+        </div>
+      )}
       <AddServiceConfigModal
         pending={pendingAdd}
         onCancel={() => setPendingAdd(null)}
@@ -1367,6 +1512,13 @@ const DeckyFleet: React.FC<FleetProps> = ({ searchQuery = '' }) => {
                 setDeckies((prev) => prev.map((row) =>
                   row.name === name ? { ...row, services } : row,
                 ));
+              }}
+              onTarpitResult={(_name, ok, message) => {
+                push({
+                  text: message,
+                  tone: ok ? 'matrix' : 'alert',
+                  icon: ok ? 'shield' : 'alert-triangle',
+                });
               }}
             />
           ))
