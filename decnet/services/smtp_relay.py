@@ -34,6 +34,39 @@ class SMTPRelayService(BaseService):
             default="postfix",
             help="Shapes EHLO capability list and error wording.",
         ),
+        ServiceConfigField(
+            key="upstream_host",
+            label="Upstream relay host",
+            type="string",
+            placeholder="smtp.sendgrid.net",
+            help="Real SMTP relay used to forward probe emails. Leave blank to disable forwarding.",
+        ),
+        ServiceConfigField(
+            key="upstream_port",
+            label="Upstream relay port",
+            type="int",
+            default=25,
+            help="Port on the upstream relay (25 or 587).",
+        ),
+        ServiceConfigField(
+            key="upstream_user",
+            label="Upstream relay username",
+            type="string",
+            help="AUTH username for the upstream relay (optional).",
+        ),
+        ServiceConfigField(
+            key="upstream_pass",
+            label="Upstream relay password",
+            type="string",
+            help="AUTH password for the upstream relay (optional).",
+        ),
+        ServiceConfigField(
+            key="probe_limit",
+            label="Probe forward limit",
+            type="int",
+            default=1,
+            help="Number of emails per source IP to actually deliver upstream. All subsequent emails are silently quarantined.",
+        ),
     ]
 
     def compose_fragment(
@@ -62,6 +95,16 @@ class SMTPRelayService(BaseService):
             fragment["environment"]["SMTP_BANNER"] = cfg["banner"]
         if "mta" in cfg:
             fragment["environment"]["SMTP_MTA"] = cfg["mta"]
+        if "upstream_host" in cfg:
+            fragment["environment"]["SMTP_UPSTREAM_HOST"] = cfg["upstream_host"]
+        if "upstream_port" in cfg:
+            fragment["environment"]["SMTP_UPSTREAM_PORT"] = str(cfg["upstream_port"])
+        if "upstream_user" in cfg:
+            fragment["environment"]["SMTP_UPSTREAM_USER"] = cfg["upstream_user"]
+        if "upstream_pass" in cfg:
+            fragment["environment"]["SMTP_UPSTREAM_PASS"] = cfg["upstream_pass"]
+        if "probe_limit" in cfg:
+            fragment["environment"]["SMTP_PROBE_LIMIT"] = str(cfg["probe_limit"])
         return fragment
 
     def dockerfile_context(self) -> Path:

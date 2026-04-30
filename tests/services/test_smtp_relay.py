@@ -28,6 +28,34 @@ def test_smtp_relay_dockerfile_context():
     assert ctx.is_dir()
 
 
+def test_smtp_relay_upstream_cfg():
+    svc = SMTPRelayService()
+    fragment = svc.compose_fragment(
+        "test-decky",
+        service_cfg={
+            "upstream_host": "smtp.sendgrid.net",
+            "upstream_port": 587,
+            "upstream_user": "apikey",
+            "upstream_pass": "SG.secret",
+            "probe_limit": 2,
+        },
+    )
+    env = fragment["environment"]
+    assert env["SMTP_UPSTREAM_HOST"] == "smtp.sendgrid.net"
+    assert env["SMTP_UPSTREAM_PORT"] == "587"
+    assert env["SMTP_UPSTREAM_USER"] == "apikey"
+    assert env["SMTP_UPSTREAM_PASS"] == "SG.secret"
+    assert env["SMTP_PROBE_LIMIT"] == "2"
+
+
+def test_smtp_relay_upstream_not_set_by_default():
+    svc = SMTPRelayService()
+    fragment = svc.compose_fragment("test-decky")
+    env = fragment["environment"]
+    assert "SMTP_UPSTREAM_HOST" not in env
+    assert "SMTP_PROBE_LIMIT" not in env
+
+
 def test_smtp_relay_quarantine_bind_mount():
     """Full-message capture: each decky gets its own host quarantine dir
     bind-mounted into the container, and the in-container path is exposed
