@@ -260,7 +260,8 @@
   display: grid;
   grid-template-columns: 2fr 1fr;
   gap: 16px;
-  height: 480px;
+  flex: 1;
+  min-height: 0;
 }
 
 .dash-grid > .logs-section {
@@ -281,6 +282,7 @@
   flex-direction: column;
   gap: 16px;
   min-height: 0;
+  height: 100%;
 }
 
 .dash-side > .logs-section {
