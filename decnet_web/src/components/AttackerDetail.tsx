@@ -1479,7 +1479,7 @@ const AttackerDetail: React.FC = () => {
   }
 
   return (
-    <div className="dashboard">
+    <div className="dashboard page-scroll">
       {/* Back Button */}
       <button onClick={() => navigate('/attackers')} className="back-button">
         <ArrowLeft size={18} />
@@ -2059,6 +2059,7 @@ const AttackerDetail: React.FC = () => {
                   <th>DECKY</th>
                   <th>SUBJECT</th>
                   <th>FROM</th>
+                  <th>DATE (attacker)</th>
                   <th>SIZE</th>
                   <th></th>
                 </tr>
@@ -2078,7 +2079,10 @@ const AttackerDetail: React.FC = () => {
                         {fields.subject || '—'}
                       </td>
                       <td className="matrix-text" style={{ fontFamily: 'monospace', wordBreak: 'break-all' }}>
-                        {fields.from_addr || fields.mail_from || '—'}
+                        {fields.from_hdr || fields.from_addr || fields.mail_from || '—'}
+                      </td>
+                      <td className="matrix-text" style={{ fontFamily: 'monospace', whiteSpace: 'nowrap', fontSize: '0.75rem' }}>
+                        {fields.date_hdr || '—'}
                       </td>
                       <td className="matrix-text" style={{ fontFamily: 'monospace' }}>
                         {fields.size ? `${fields.size} B` : '—'}

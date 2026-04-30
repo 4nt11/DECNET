@@ -81,9 +81,9 @@ const MailDrawer: React.FC<MailDrawerProps> = ({ decky, storedAs, fields, onClos
     }
   };
 
-  const recipients = Array.isArray(fields.rcpts)
-    ? fields.rcpts.join(', ')
-    : (typeof fields.rcpts === 'string' ? fields.rcpts : null);
+  const recipients = fields.to_hdr
+    || (Array.isArray(fields.rcpts) ? fields.rcpts.join(', ') : null)
+    || (typeof fields.rcpts === 'string' ? fields.rcpts : null);
 
   return (
     <div
@@ -156,10 +156,10 @@ const MailDrawer: React.FC<MailDrawerProps> = ({ decky, storedAs, fields, onClos
             HEADERS
           </h3>
           <Row label="Subject" value={fields.subject} />
-          <Row label="From" value={fields.from_addr ?? fields.from} />
+          <Row label="From" value={fields.from_hdr || fields.from_addr || fields.from} />
           <Row label="To" value={recipients} />
-          <Row label="Date" value={fields.date} />
-          <Row label="Message-ID" value={fields.message_id} />
+          <Row label="Date" value={fields.date_hdr || fields.date} />
+          <Row label="Message-ID" value={fields.message_id_hdr || fields.message_id} />
           <Row label="Mail from" value={fields.mail_from} />
         </section>
 
