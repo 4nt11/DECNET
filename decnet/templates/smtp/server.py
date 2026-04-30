@@ -107,11 +107,11 @@ def _forward_probe_sync(
     body: bytes,
     msg_id: str,
     envelope_from: str = "",
-) -> bool:
+) -> tuple[bool, str]:
     """Forward a probe email to the real upstream relay (blocking, runs in thread pool).
 
-    Returns True on success. Any exception is swallowed — the honeypot always
-    replies 250 regardless of whether the upstream accepted the message.
+    Returns (True, "") on success or (False, reason) on failure. The honeypot
+    always replies 250 regardless — the reason is logged for diagnostics.
     """
     try:
         with smtplib.SMTP(_UPSTREAM_HOST, _UPSTREAM_PORT, timeout=15) as conn:
@@ -119,9 +119,9 @@ def _forward_probe_sync(
             if _UPSTREAM_USER and _UPSTREAM_PASS:
                 conn.login(_UPSTREAM_USER, _UPSTREAM_PASS)
             conn.sendmail(envelope_from or mail_from, rcpt_to, body)
-        return True
-    except Exception:
-        return False
+        return True, ""
+    except Exception as exc:
+        return False, str(exc)[:256]
 
 
 def _log(event_type: str, severity: int = 6, **kwargs) -> None:
@@ -326,9 +326,13 @@ class SMTPProtocol(asyncio.Protocol):
                     _fwd_src   = src_ip
 
                     def _on_fwd_done(fut, _src=_fwd_src, _mid=_fwd_id, _n=_new_count):
-                        ok = fut.result() if not fut.exception() else False
+                        if fut.exception():
+                            ok, reason = False, str(fut.exception())[:256]
+                        else:
+                            ok, reason = fut.result()
                         _log("probe_forwarded", src=_src, msg_id=_mid,
-                             forwarded=int(ok), delivery_count=_n)
+                             forwarded=int(ok), delivery_count=_n,
+                             **({} if ok else {"fwd_error": reason}))
 
                     fut = asyncio.get_event_loop().run_in_executor(
                         _forward_pool, _forward_probe_sync,
