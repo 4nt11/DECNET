@@ -1,7 +1,7 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { useParams } from 'react-router-dom';
 import {
-  Mail, Plus, Pencil, Trash2, Check, AlertTriangle, Upload, Download,
+  Mail, Plus, Pencil, Trash2, Check, AlertTriangle, Upload, Download, Sparkles,
 } from '../icons';
 import api from '../utils/api';
 import { useToast } from './Toasts/useToast';
@@ -736,7 +736,10 @@ const PersonaGeneration: React.FC<PersonaGenerationProps> = ({ topologyId }) => 
     <div className="fleet-root persona-gen-root">
       <div className="page-header">
         <div className="page-title-group">
-          <h1>{isTopology ? 'TOPOLOGY PERSONAS' : 'PERSONA GENERATION'}</h1>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+            <Sparkles size={22} className="violet-accent" />
+            <h1>{isTopology ? 'TOPOLOGY PERSONAS' : 'PERSONA GENERATION'}</h1>
+          </div>
           <span className="page-sub">
             {personas.length} PERSONA{personas.length === 1 ? '' : 'S'} · {llmHeavyCount} LLM-HEAVY
             {isTopology

@@ -182,7 +182,10 @@ const LiveLogs: React.FC = () => {
     <div className="logs-root">
       <div className="page-header">
         <div className="page-title-group">
-          <h1>LOGS</h1>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+            <Terminal size={22} className="violet-accent" />
+            <h1>LOGS</h1>
+          </div>
           <span className="page-sub">
             {filteredLogs.length.toLocaleString()} SHOWN · {totalLogs.toLocaleString()} MATCHES · STREAM {streaming ? 'LIVE' : 'PAUSED'}
           </span>

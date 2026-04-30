@@ -1,6 +1,6 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import {
-  Plus, Upload, X, AlertTriangle, Search,
+  Plus, Upload, X, AlertTriangle, Search, Target,
 } from '../icons';
 import api from '../utils/api';
 import { useEscapeKey } from '../hooks/useEscapeKey';
@@ -948,7 +948,10 @@ const CanaryTokens: React.FC = () => {
     <div className="fleet-root canary-tokens-root" style={{ padding: '24px', color: 'var(--text-color)' }}>
       <div className="page-header">
         <div className="page-title-group">
-          <h1>CANARY TOKENS</h1>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+            <Target size={22} className="violet-accent" />
+            <h1>CANARY TOKENS</h1>
+          </div>
           <span className="page-sub">
             {tokens.length} TOKEN{tokens.length === 1 ? '' : 'S'} · {counts.planted} PLANTED · {counts.hits} TOTAL HIT{counts.hits === 1 ? '' : 'S'} · {blobs.length} UPLOADED BLOB{blobs.length === 1 ? '' : 'S'}
           </span>

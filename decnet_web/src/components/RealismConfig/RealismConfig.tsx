@@ -1,7 +1,7 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import api from '../../utils/api';
 import { useToast } from '../Toasts/useToast';
-import { Save, RotateCcw, AlertTriangle } from '../../icons';
+import { Save, RotateCcw, AlertTriangle, Sliders } from '../../icons';
 import { contentClassLabel, isCanaryClass } from '../../realism/labels';
 // Reuse the DeckyFleet shell (page-header / btn / fleet-* / dim / mono) and
 // the persona-page tweaks (info-banner, .input) so the realism config panel
@@ -168,7 +168,10 @@ const RealismConfig: React.FC = () => {
     <div className="fleet-root realism-config-root">
       <div className="page-header">
         <div className="page-title-group">
-          <h1>REALISM CONFIG</h1>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+            <Sliders size={22} className="violet-accent" />
+            <h1>REALISM CONFIG</h1>
+          </div>
           <span className="page-sub">
             USER {totals.user} · SYSTEM {totals.system} · CANARY {totals.canary} ·
             {' '}CANARY PROB {(config.canary_probability * 100).toFixed(1)}%

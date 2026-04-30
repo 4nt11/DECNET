@@ -1553,7 +1553,10 @@ const DeckyFleet: React.FC<FleetProps> = ({ searchQuery = '' }) => {
     <div className="fleet-root">
       <div className="page-header">
         <div className="page-title-group">
-          <h1>DECOY FLEET</h1>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+            <Server size={22} className="violet-accent" />
+            <h1>DECOY FLEET</h1>
+          </div>
           <span className="page-sub">
             {deckies.length} DECKIES DEPLOYED · {counts.active + counts.hot} ACTIVE · {counts.hot} UNDER SIEGE
             {deployMode && (

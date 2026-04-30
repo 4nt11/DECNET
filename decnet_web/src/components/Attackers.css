@@ -7,19 +7,51 @@
 .ak-filter-row {
   display: flex;
   flex-wrap: wrap;
-  gap: 6px;
+  gap: 8px;
   align-items: center;
 }
 
-.ak-filter-row .chip {
-  cursor: pointer;
-  transition: opacity 0.15s;
+.attackers-root .seg-group {
+  display: flex;
+  border: 1px solid var(--border);
+  background: var(--panel);
 }
 
-.ak-filter-row button {
+.attackers-root .seg-group button {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 7px 12px;
+  font-size: 0.68rem;
+  letter-spacing: 1.5px;
+  border: none;
+  border-right: 1px solid var(--border);
+  background: transparent;
+  color: rgba(0, 255, 65, 0.5);
+  cursor: pointer;
   font-family: inherit;
-  font-size: inherit;
 }
+
+.attackers-root .seg-group button:last-child { border-right: none; }
+
+.attackers-root .seg-group button.active {
+  background: var(--violet-tint-10);
+  color: var(--violet);
+}
+
+.attackers-root .seg-group button:hover:not(.active) { color: var(--matrix); }
+
+.ak-dot {
+  display: inline-block;
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+
+.ak-dot-active  { background: var(--alert); box-shadow: 0 0 5px var(--alert); }
+.ak-dot-passive { background: #ffaa00; }
+.ak-dot-inactive { background: rgba(0, 255, 65, 0.3); }
 
 .attackers-root .controls-row {
   display: flex;

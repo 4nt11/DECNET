@@ -72,7 +72,8 @@ const Bounty: React.FC = () => {
       const offset = (page - 1) * limit;
       let url = `/bounty?limit=${limit}&offset=${offset}`;
       if (query) url += `&search=${encodeURIComponent(query)}`;
-      if (typeFilter) url += `&bounty_type=${typeFilter}`;
+      const apiType = typeFilter === 'mail' ? 'artifact' : typeFilter;
+      if (apiType) url += `&bounty_type=${apiType}`;
       const res = await api.get(url);
       setBounties(res.data.data);
       setTotal(res.data.total);
@@ -94,10 +95,9 @@ const Bounty: React.FC = () => {
 
   const totalPages = Math.max(1, Math.ceil(total / limit));
 
-  const credCount = bounties.filter(b => b.bounty_type === 'credential').length;
-  const payCount = bounties.filter(b => b.bounty_type === 'payload').length;
   const fpCount = bounties.filter(b => b.bounty_type === 'fingerprint').length;
-  const artCount = bounties.filter(b => b.bounty_type === 'artifact').length;
+  const artCount = bounties.filter(b => b.bounty_type === 'artifact' && b.payload?.kind !== 'mail').length;
+  const mailCount = bounties.filter(b => b.bounty_type === 'artifact' && b.payload?.kind === 'mail').length;
 
   const handleSortCol = (col: string) => {
     if (sortCol === col) {
@@ -109,9 +109,14 @@ const Bounty: React.FC = () => {
     }
   };
 
+  const filteredBounties = useMemo(() => {
+    if (typeFilter !== 'mail') return bounties;
+    return bounties.filter(b => b.bounty_type === 'artifact' && b.payload?.kind === 'mail');
+  }, [bounties, typeFilter]);
+
   const sortedBounties = useMemo(() => {
-    if (!sortCol) return bounties;
-    return [...bounties].sort((a, b) => {
+    if (!sortCol) return filteredBounties;
+    return [...filteredBounties].sort((a, b) => {
       let av: string | number = '';
       let bv: string | number = '';
       if (sortCol === 'time') { av = a.timestamp; bv = b.timestamp; }
@@ -122,7 +127,7 @@ const Bounty: React.FC = () => {
       const cmp = String(av).localeCompare(String(bv));
       return sortDir === 'asc' ? cmp : -cmp;
     });
-  }, [bounties, sortCol, sortDir]);
+  }, [filteredBounties, sortCol, sortDir]);
 
   const SortTh: React.FC<{ col: string; children: React.ReactNode }> = ({ col, children }) => (
     <th
@@ -136,10 +141,9 @@ const Bounty: React.FC = () => {
 
   const SEGMENTS: [string, string][] = [
     ['', 'ALL'],
-    ['credential', 'CREDENTIALS'],
-    ['payload', 'PAYLOADS'],
     ['artifact', 'ARTIFACTS'],
     ['fingerprint', 'FINGERPRINTS'],
+    ['mail', 'EMAIL'],
   ];
 
   const formatBytes = (n: any): string => {
@@ -159,7 +163,7 @@ const Bounty: React.FC = () => {
             <h1>BOUNTY VAULT</h1>
           </div>
           <span className="page-sub">
-            {total.toLocaleString()} BOUNTIES · {credCount} CREDENTIALS · {payCount} PAYLOADS · {artCount} ARTIFACTS · {fpCount} FINGERPRINTS
+            {total.toLocaleString()} BOUNTIES · {artCount} ARTIFACTS · {fpCount} FINGERPRINTS · {mailCount} EMAIL
           </span>
         </div>
       </div>

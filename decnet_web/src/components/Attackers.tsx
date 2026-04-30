@@ -134,7 +134,10 @@ const Attackers: React.FC = () => {
     <div className="attackers-root">
       <div className="page-header">
         <div className="page-title-group">
-          <h1>ATTACKERS</h1>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+            <Users size={22} className="violet-accent" />
+            <h1>ATTACKERS</h1>
+          </div>
           <span className="page-sub">
             {total.toLocaleString()} UNIQUE SOURCES · {activityCounts.active} ACTIVE · {activityCounts.passive} PASSIVE · {activityCounts.inactive} INACTIVE
           </span>
@@ -160,39 +163,35 @@ const Attackers: React.FC = () => {
       </form>
 
       <div className="ak-filter-row">
-        {(['active', 'passive', 'inactive'] as ActivityTier[]).map(tier => (
-          <button
-            key={tier}
-            type="button"
-            className={`chip ${activityFilter === tier ? (tier === 'active' ? 'alert-chip' : tier === 'passive' ? 'violet' : 'matrix') : 'dim-chip'}`}
-            style={{ cursor: 'pointer' }}
-            onClick={() => setActivity(tier)}
-          >
-            <span className={`dot status-dot ${tier === 'active' ? 'hot' : tier === 'passive' ? 'warn' : ''}`} style={{ marginRight: 4 }} />
-            {tier.toUpperCase()} {activityCounts[tier] > 0 ? activityCounts[tier] : ''}
+        <div className="seg-group" role="tablist">
+          <button type="button" className={!activityFilter ? 'active' : ''} onClick={() => setActivity('')}>
+            ALL
           </button>
-        ))}
-        {countries.length > 0 && <span className="dim" style={{ fontSize: '0.65rem', letterSpacing: 1, opacity: 0.4, alignSelf: 'center' }}>|</span>}
-        {countries.map(cc => (
-          <button
-            key={cc}
-            type="button"
-            className={`chip ${countryFilter === cc ? 'violet' : 'dim-chip'}`}
-            style={{ cursor: 'pointer' }}
-            onClick={() => setCountry(cc)}
-          >
-            {cc}
-          </button>
-        ))}
-        {(activityFilter || countryFilter || serviceFilter) && (
-          <button
-            type="button"
-            className="chip dim-chip"
-            style={{ cursor: 'pointer', opacity: 0.6 }}
-            onClick={() => setSearchParams(_params({ activity: '', country: '', service: '' }))}
-          >
-            CLEAR ×
-          </button>
+          {(['active', 'passive', 'inactive'] as ActivityTier[]).map(tier => (
+            <button
+              key={tier}
+              type="button"
+              className={activityFilter === tier ? 'active' : ''}
+              onClick={() => setActivity(tier)}
+            >
+              <span className={`ak-dot ak-dot-${tier}`} />
+              {tier.toUpperCase()}{activityCounts[tier] > 0 ? ` ${activityCounts[tier]}` : ''}
+            </button>
+          ))}
+        </div>
+        {countries.length > 0 && (
+          <div className="seg-group" role="tablist">
+            {countries.map(cc => (
+              <button
+                key={cc}
+                type="button"
+                className={countryFilter === cc ? 'active' : ''}
+                onClick={() => setCountry(cc)}
+              >
+                {cc}
+              </button>
+            ))}
+          </div>
         )}
       </div>
 
