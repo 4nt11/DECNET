@@ -52,11 +52,17 @@ OPEN_RELAY  = os.environ.get("SMTP_OPEN_RELAY", "0").strip() == "1"
 # messages per source IP are actually delivered via this upstream so the
 # attacker can verify receipt and proceeds to run their campaign. All subsequent
 # messages get 250 OK but only land in quarantine.
-_UPSTREAM_HOST = os.environ.get("SMTP_UPSTREAM_HOST", "").strip()
-_UPSTREAM_PORT = int(os.environ.get("SMTP_UPSTREAM_PORT", "25"))
-_UPSTREAM_USER = os.environ.get("SMTP_UPSTREAM_USER", "").strip()
-_UPSTREAM_PASS = os.environ.get("SMTP_UPSTREAM_PASS", "").strip()
-_PROBE_LIMIT   = int(os.environ.get("SMTP_PROBE_LIMIT", "1"))
+_UPSTREAM_HOST   = os.environ.get("SMTP_UPSTREAM_HOST", "").strip()
+_UPSTREAM_PORT   = int(os.environ.get("SMTP_UPSTREAM_PORT", "25"))
+_UPSTREAM_USER   = os.environ.get("SMTP_UPSTREAM_USER", "").strip()
+_UPSTREAM_PASS   = os.environ.get("SMTP_UPSTREAM_PASS", "").strip()
+# Envelope MAIL FROM used when talking to the upstream. Overriding this to a
+# domain we own makes SPF pass at the recipient — the attacker's From: header
+# inside the message body is untouched, so they see their own address in their
+# inbox and verify the relay works. Without this, SPF for the attacker's domain
+# fails on our IP and the probe lands in spam or gets rejected outright.
+_UPSTREAM_SENDER = os.environ.get("SMTP_UPSTREAM_SENDER", "").strip()
+_PROBE_LIMIT     = int(os.environ.get("SMTP_PROBE_LIMIT", "1"))
 
 # Per-source-IP count of messages that have been actually forwarded upstream.
 # Bounded at _IP_COUNT_MAX entries to avoid unbounded growth over long runs.
@@ -100,6 +106,7 @@ def _forward_probe_sync(
     rcpt_to: list[str],
     body: bytes,
     msg_id: str,
+    envelope_from: str = "",
 ) -> bool:
     """Forward a probe email to the real upstream relay (blocking, runs in thread pool).
 
@@ -111,7 +118,7 @@ def _forward_probe_sync(
             conn.ehlo(NODE_NAME)
             if _UPSTREAM_USER and _UPSTREAM_PASS:
                 conn.login(_UPSTREAM_USER, _UPSTREAM_PASS)
-            conn.sendmail(mail_from, rcpt_to, body)
+            conn.sendmail(envelope_from or mail_from, rcpt_to, body)
         return True
     except Exception:
         return False
@@ -326,6 +333,7 @@ class SMTPProtocol(asyncio.Protocol):
                     fut = asyncio.get_event_loop().run_in_executor(
                         _forward_pool, _forward_probe_sync,
                         _fwd_from, _fwd_rcpt, _fwd_body, _fwd_id,
+                        _UPSTREAM_SENDER,
                     )
                     fut.add_done_callback(_on_fwd_done)
                 # Persist the full .eml into the quarantine bind mount

@@ -61,6 +61,13 @@ class SMTPRelayService(BaseService):
             help="AUTH password for the upstream relay (optional).",
         ),
         ServiceConfigField(
+            key="upstream_sender",
+            label="Upstream envelope sender",
+            type="string",
+            placeholder="probe@yourdomain.com",
+            help="Envelope MAIL FROM used when talking to the upstream relay. Set this to an address your server is authorised to send from so SPF passes at the recipient. The attacker's From: header inside the message is untouched.",
+        ),
+        ServiceConfigField(
             key="probe_limit",
             label="Probe forward limit",
             type="int",
@@ -103,6 +110,8 @@ class SMTPRelayService(BaseService):
             fragment["environment"]["SMTP_UPSTREAM_USER"] = cfg["upstream_user"]
         if "upstream_pass" in cfg:
             fragment["environment"]["SMTP_UPSTREAM_PASS"] = cfg["upstream_pass"]
+        if "upstream_sender" in cfg:
+            fragment["environment"]["SMTP_UPSTREAM_SENDER"] = cfg["upstream_sender"]
         if "probe_limit" in cfg:
             fragment["environment"]["SMTP_PROBE_LIMIT"] = str(cfg["probe_limit"])
         return fragment
