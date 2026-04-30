@@ -73,20 +73,24 @@ async def export_attackers(
     """
     rows = await repo.get_all_attackers_for_export()
     observations = [_shape_observation(r) for r in rows]
-    payload = {
+    def _dump(obj: object) -> str:
+        return json.dumps(obj, default=str, ensure_ascii=False, separators=(',', ':'))
+
+    meta = _dump({
         "export_metadata": {
             "source": _SOURCE,
             "version": _SCHEMA_VERSION,
             "exported_at": datetime.now(timezone.utc).isoformat().replace("+00:00", "Z"),
             "total_records": len(observations),
             "schema_version": _SCHEMA_VERSION,
-        },
-        "observations": observations,
-    }
+        }
+    })
+    obs_lines = ",\n".join(_dump(o) for o in observations)
+    content = f'{meta[:-1]},"observations":[\n{obs_lines}\n]}}'
     ts = datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%SZ")
     filename = f"decnet-export-{ts}.json"
     return Response(
-        content=json.dumps(payload, default=str, ensure_ascii=False, indent=2),
+        content=content,
         media_type="application/json",
         headers={"Content-Disposition": f'attachment; filename="{filename}"'},
     )
