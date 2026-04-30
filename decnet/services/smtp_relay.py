@@ -91,6 +91,7 @@ class SMTPRelayService(BaseService):
             "cap_add": ["NET_BIND_SERVICE"],
             "environment": {
                 "NODE_NAME": decky_name,
+                "SMTP_SERVICE_NAME": "smtp_relay",
                 "SMTP_OPEN_RELAY": "1",
                 "SMTP_QUARANTINE_DIR": _IN_CONTAINER_QUARANTINE,
             },

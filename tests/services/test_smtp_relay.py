@@ -10,6 +10,7 @@ def test_smtp_relay_compose_fragment():
 
     assert fragment["container_name"] == "test-decky-smtp_relay"
     assert fragment["environment"]["SMTP_OPEN_RELAY"] == "1"
+    assert fragment["environment"]["SMTP_SERVICE_NAME"] == "smtp_relay"
     assert fragment["environment"]["LOG_TARGET"] == "log-server"
 
 def test_smtp_relay_custom_cfg():

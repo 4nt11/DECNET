@@ -25,9 +25,7 @@ import json
 import os
 import random as _rand
 import re
-import smtplib
 import time
-from concurrent.futures import ThreadPoolExecutor
 from datetime import datetime, timezone
 from email import message_from_bytes
 from email.header import decode_header, make_header
@@ -43,32 +41,10 @@ from syslog_bridge import (
 )
 
 NODE_NAME   = os.environ.get("NODE_NAME", "mailserver")
-SERVICE_NAME = "smtp"
+SERVICE_NAME = os.environ.get("SMTP_SERVICE_NAME", "smtp")
 LOG_TARGET  = os.environ.get("LOG_TARGET", "")
 PORT        = int(os.environ.get("PORT", "25"))
 OPEN_RELAY  = os.environ.get("SMTP_OPEN_RELAY", "0").strip() == "1"
-
-# Upstream relay for probe forwarding. When set, the first SMTP_PROBE_LIMIT
-# messages per source IP are actually delivered via this upstream so the
-# attacker can verify receipt and proceeds to run their campaign. All subsequent
-# messages get 250 OK but only land in quarantine.
-_UPSTREAM_HOST   = os.environ.get("SMTP_UPSTREAM_HOST", "").strip()
-_UPSTREAM_PORT   = int(os.environ.get("SMTP_UPSTREAM_PORT", "25"))
-_UPSTREAM_USER   = os.environ.get("SMTP_UPSTREAM_USER", "").strip()
-_UPSTREAM_PASS   = os.environ.get("SMTP_UPSTREAM_PASS", "").strip()
-# Envelope MAIL FROM used when talking to the upstream. Overriding this to a
-# domain we own makes SPF pass at the recipient — the attacker's From: header
-# inside the message body is untouched, so they see their own address in their
-# inbox and verify the relay works. Without this, SPF for the attacker's domain
-# fails on our IP and the probe lands in spam or gets rejected outright.
-_UPSTREAM_SENDER = os.environ.get("SMTP_UPSTREAM_SENDER", "").strip()
-_PROBE_LIMIT     = int(os.environ.get("SMTP_PROBE_LIMIT", "1"))
-
-# Per-source-IP count of messages that have been actually forwarded upstream.
-# Bounded at _IP_COUNT_MAX entries to avoid unbounded growth over long runs.
-_ip_delivery_count: dict[str, int] = {}
-_IP_COUNT_MAX = 20_000
-_forward_pool = ThreadPoolExecutor(max_workers=4, thread_name_prefix="smtp-fwd")
 
 # In open-relay mode, optionally restrict which creds succeed. Blank means
 # "accept anything". Format: "user1,user2,..." — any name not in the list
@@ -99,29 +75,6 @@ _MAX_BODY_BYTES = int(os.environ.get("SMTP_MAX_BODY_BYTES", "10485760"))
 # like 0/O, 1/I, so scanners that know Postfix's alphabet are satisfied).
 _QUEUE_CHARS = "BCDFGHJKLMNPQRSTVWXYZ23456789"
 _Q_BASE = len(_QUEUE_CHARS)
-
-
-def _forward_probe_sync(
-    mail_from: str,
-    rcpt_to: list[str],
-    body: bytes,
-    msg_id: str,
-    envelope_from: str = "",
-) -> tuple[bool, str]:
-    """Forward a probe email to the real upstream relay (blocking, runs in thread pool).
-
-    Returns (True, "") on success or (False, reason) on failure. The honeypot
-    always replies 250 regardless — the reason is logged for diagnostics.
-    """
-    try:
-        with smtplib.SMTP(_UPSTREAM_HOST, _UPSTREAM_PORT, timeout=15) as conn:
-            conn.ehlo(NODE_NAME)
-            if _UPSTREAM_USER and _UPSTREAM_PASS:
-                conn.login(_UPSTREAM_USER, _UPSTREAM_PASS)
-            conn.sendmail(envelope_from or mail_from, rcpt_to, body)
-        return True, ""
-    except Exception as exc:
-        return False, str(exc)[:256]
 
 
 def _log(event_type: str, severity: int = 6, **kwargs) -> None:
@@ -307,39 +260,6 @@ class SMTPProtocol(asyncio.Protocol):
                      body_bytes=len(body),
                      truncated=int(self._data_truncated),
                      msg_id=msg_id)
-                # Forward the probe email upstream so the attacker can verify
-                # receipt from their own inbox and proceeds to run their
-                # campaign. Only the first SMTP_PROBE_LIMIT messages per
-                # source IP are forwarded; the rest get 250 OK but only land
-                # in quarantine — the attacker never notices.
-                src_ip = self._peer[0]
-                delivery_count = _ip_delivery_count.get(src_ip, 0)
-                if _UPSTREAM_HOST and delivery_count < _PROBE_LIMIT:
-                    if len(_ip_delivery_count) >= _IP_COUNT_MAX:
-                        _ip_delivery_count.clear()
-                    _ip_delivery_count[src_ip] = delivery_count + 1
-                    _new_count = delivery_count + 1
-                    _fwd_from  = self._mail_from
-                    _fwd_rcpt  = list(self._rcpt_to)
-                    _fwd_body  = body
-                    _fwd_id    = msg_id
-                    _fwd_src   = src_ip
-
-                    def _on_fwd_done(fut, _src=_fwd_src, _mid=_fwd_id, _n=_new_count):
-                        if fut.exception():
-                            ok, reason = False, str(fut.exception())[:256]
-                        else:
-                            ok, reason = fut.result()
-                        _log("probe_forwarded", src=_src, msg_id=_mid,
-                             forwarded=int(ok), delivery_count=_n,
-                             **({} if ok else {"fwd_error": reason}))
-
-                    fut = asyncio.get_event_loop().run_in_executor(
-                        _forward_pool, _forward_probe_sync,
-                        _fwd_from, _fwd_rcpt, _fwd_body, _fwd_id,
-                        _UPSTREAM_SENDER,
-                    )
-                    fut.add_done_callback(_on_fwd_done)
                 # Persist the full .eml into the quarantine bind mount
                 # (if configured) and emit a richer event so the collector
                 # can index attachments + headers. This is the hook the
