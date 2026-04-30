@@ -28,7 +28,10 @@ def test_smtp_relay_dockerfile_context():
     assert ctx.is_dir()
 
 
-def test_smtp_relay_upstream_cfg():
+def test_smtp_relay_upstream_cfg_not_in_container_env():
+    """Upstream relay config is stored in decky_config and consumed by the
+    realism worker — it must NOT be injected into the container environment
+    (credentials don't belong in container env vars)."""
     svc = SMTPRelayService()
     fragment = svc.compose_fragment(
         "test-decky",
@@ -41,18 +44,10 @@ def test_smtp_relay_upstream_cfg():
         },
     )
     env = fragment["environment"]
-    assert env["SMTP_UPSTREAM_HOST"] == "smtp.sendgrid.net"
-    assert env["SMTP_UPSTREAM_PORT"] == "587"
-    assert env["SMTP_UPSTREAM_USER"] == "apikey"
-    assert env["SMTP_UPSTREAM_PASS"] == "SG.secret"
-    assert env["SMTP_PROBE_LIMIT"] == "2"
-
-
-def test_smtp_relay_upstream_not_set_by_default():
-    svc = SMTPRelayService()
-    fragment = svc.compose_fragment("test-decky")
-    env = fragment["environment"]
     assert "SMTP_UPSTREAM_HOST" not in env
+    assert "SMTP_UPSTREAM_PORT" not in env
+    assert "SMTP_UPSTREAM_USER" not in env
+    assert "SMTP_UPSTREAM_PASS" not in env
     assert "SMTP_PROBE_LIMIT" not in env
 
 

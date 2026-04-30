@@ -54,6 +54,7 @@ SYSTEM = "system"
 CREDENTIAL = "credential"
 ORCHESTRATOR = "orchestrator"
 CANARY = "canary"
+SMTP = "smtp"
 
 
 # ─── Leaf event-type constants (the last segment of each topic) ──────────────
@@ -392,6 +393,16 @@ def system_control(worker: str) -> str:
     """
     _reject_tokens(worker)
     return f"{SYSTEM}.{worker}.{SYSTEM_CONTROL}"
+
+
+def smtp(event_type: str) -> str:
+    """Build ``smtp.<event_type>``.
+
+    *event_type* may contain dots (e.g. ``probe.pending``).
+    """
+    if not event_type:
+        raise ValueError("smtp topic requires a non-empty event_type")
+    return f"{SMTP}.{event_type}"
 
 
 def _reject_tokens(*parts: str) -> None:

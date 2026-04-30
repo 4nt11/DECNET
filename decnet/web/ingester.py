@@ -613,21 +613,32 @@ async def _extract_bounty(
                 "content_type": _fields.get("content_type"),
             },
         })
-    elif _evt == "probe_forwarded":
-        # Record whether the upstream relay accepted the probe. forwarded=1
-        # means the attacker's test email actually landed in their inbox;
-        # forwarded=0 means the upstream refused (attacker still got 250).
-        await repo.add_bounty({
-            "decky": log_data.get("decky"),
-            "service": log_data.get("service"),
-            "attacker_ip": log_data.get("attacker_ip"),
-            "bounty_type": "probe_relay",
-            "payload": {
-                "msg_id": _fields.get("msg_id"),
-                "forwarded": _fields.get("forwarded") == "1",
-                "delivery_count": _fields.get("delivery_count"),
+        # Signal the realism worker to forward this as a probe if it's the
+        # first message from this IP on an smtp_relay decky. The worker has
+        # real internet access (the container is on MACVLAN and doesn't).
+        if log_data.get("service") == "smtp_relay":
+            await _publish_probe_pending(log_data, _fields)
+
+
+async def _publish_probe_pending(log_data: dict, fields: dict) -> None:
+    try:
+        bus = get_bus(client_name="ingester-probe")
+        await bus.connect()
+        await publish_safely(
+            bus,
+            _topics.smtp("probe.pending"),
+            {
+                "decky":       log_data.get("decky"),
+                "attacker_ip": log_data.get("attacker_ip"),
+                "stored_as":   fields.get("stored_as"),
+                "mail_from":   fields.get("mail_from"),
+                "rcpt_to":     fields.get("rcpt_to"),
             },
-        })
+            event_type="probe.pending",
+        )
+        await bus.close()
+    except Exception as exc:  # noqa: BLE001
+        logger.debug("probe pending publish failed: %s", exc)
 
 
 # ─── IP-leak detection (XFF / Forwarded / X-Real-IP / CDN variants) ──────────

@@ -137,3 +137,15 @@ class BountiesMixin:
                     pass
                 grouped[item.attacker_ip].append(d)
             return dict(grouped)
+
+    async def count_probe_relays(self, attacker_ip: str, decky: str) -> int:
+        """Return how many probe_relay bounties exist for this (attacker_ip, decky) pair."""
+        async with self._session() as session:
+            result = await session.execute(
+                select(func.count()).select_from(Bounty).where(
+                    Bounty.attacker_ip == attacker_ip,
+                    Bounty.decky == decky,
+                    Bounty.bounty_type == "probe_relay",
+                )
+            )
+            return result.scalar() or 0

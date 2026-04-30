@@ -59,6 +59,16 @@ class FleetMixin:
             )
             await session.commit()
 
+    async def get_fleet_decky_by_name(self, name: str) -> dict[str, Any] | None:
+        async with self._session() as session:
+            result = await session.execute(
+                select(FleetDecky).where(FleetDecky.name == name)
+            )
+            row = result.scalar_one_or_none()
+            if row is None:
+                return None
+            return _deserialize_json_fields(row.model_dump(mode="json"), ("services", "decky_config"))
+
     async def list_fleet_deckies(
         self, *, host_uuid: Optional[str] = None,
     ) -> list[dict[str, Any]]:

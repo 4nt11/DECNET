@@ -102,18 +102,6 @@ class SMTPRelayService(BaseService):
             fragment["environment"]["SMTP_BANNER"] = cfg["banner"]
         if "mta" in cfg:
             fragment["environment"]["SMTP_MTA"] = cfg["mta"]
-        if "upstream_host" in cfg:
-            fragment["environment"]["SMTP_UPSTREAM_HOST"] = cfg["upstream_host"]
-        if "upstream_port" in cfg:
-            fragment["environment"]["SMTP_UPSTREAM_PORT"] = str(cfg["upstream_port"])
-        if "upstream_user" in cfg:
-            fragment["environment"]["SMTP_UPSTREAM_USER"] = cfg["upstream_user"]
-        if "upstream_pass" in cfg:
-            fragment["environment"]["SMTP_UPSTREAM_PASS"] = cfg["upstream_pass"]
-        if "upstream_sender" in cfg:
-            fragment["environment"]["SMTP_UPSTREAM_SENDER"] = cfg["upstream_sender"]
-        if "probe_limit" in cfg:
-            fragment["environment"]["SMTP_PROBE_LIMIT"] = str(cfg["probe_limit"])
         return fragment
 
     def dockerfile_context(self) -> Path:
