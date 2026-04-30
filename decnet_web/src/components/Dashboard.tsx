@@ -1,7 +1,7 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import './Dashboard.css';
-import { Shield, Users, Activity, Clock, Paperclip, Crosshair, Flame, Archive, ShieldOff, Server } from '../icons';
+import { Shield, Users, Activity, Clock, Paperclip, Crosshair, Flame, Archive, ShieldOff, Server, LayoutDashboard } from '../icons';
 import { parseEventBody } from '../utils/parseEventBody';
 import ArtifactDrawer from './ArtifactDrawer';
 import EmptyState from './EmptyState/EmptyState';
@@ -223,7 +223,10 @@ const Dashboard: React.FC<DashboardProps> = ({ searchQuery }) => {
     <div className="dashboard">
       <div className="page-header">
         <div className="page-title-group">
-          <h1>DASHBOARD</h1>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+            <LayoutDashboard size={22} className="violet-accent" />
+            <h1>DASHBOARD</h1>
+          </div>
           <span className="page-sub">SECTOR · {sector} · LIVE</span>
         </div>
         <div className="section-actions">

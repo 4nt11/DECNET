@@ -260,13 +260,14 @@
   display: grid;
   grid-template-columns: 2fr 1fr;
   gap: 16px;
-  flex: 1;
-  min-height: 0;
+  height: 480px;
 }
 
 .dash-grid > .logs-section {
-  max-height: 480px;
   overflow: hidden;
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
 }
 
 .dash-grid > .logs-section .logs-table-container {
@@ -286,7 +287,6 @@
   flex: 1;
   min-height: 0;
   overflow: hidden;
-  max-height: 300px;
 }
 
 .dash-side > .logs-section .panel-body {
