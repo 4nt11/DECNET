@@ -50,6 +50,9 @@ def forward_probe(
     try:
         with smtplib.SMTP(upstream_host, upstream_port, timeout=15) as conn:
             conn.ehlo()
+            if conn.has_extn("STARTTLS"):
+                conn.starttls()
+                conn.ehlo()
             if upstream_user and upstream_pass:
                 conn.login(upstream_user, upstream_pass)
             conn.sendmail(envelope_from, rcpt_to, body)
