@@ -89,6 +89,7 @@ const Dashboard: React.FC<DashboardProps> = ({ searchQuery }) => {
   const lastStatsRef = useRef<{ total: number; uniq: number; bounties: number } | null>(null);
   const eventSourceRef = useRef<EventSource | null>(null);
   const reconnectTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const logsContainerRef = useRef<HTMLDivElement | null>(null);
 
   useEffect(() => {
     const connect = () => {
@@ -134,6 +135,11 @@ const Dashboard: React.FC<DashboardProps> = ({ searchQuery }) => {
       if (eventSourceRef.current) eventSourceRef.current.close();
     };
   }, [searchQuery]);
+
+  // Keep the live feed scrolled to the top so the sticky thead never floats.
+  useEffect(() => {
+    if (logsContainerRef.current) logsContainerRef.current.scrollTop = 0;
+  }, [logs]);
 
   // Tick once a second so the 5-min rolling window stays accurate even
   // when logs haven't arrived.
@@ -312,7 +318,7 @@ const Dashboard: React.FC<DashboardProps> = ({ searchQuery }) => {
               <span>{logs.length} RECENT</span>
             </div>
           </div>
-          <div className="logs-table-container">
+          <div className="logs-table-container" ref={logsContainerRef}>
             <table className="logs-table">
               <thead>
                 <tr>
