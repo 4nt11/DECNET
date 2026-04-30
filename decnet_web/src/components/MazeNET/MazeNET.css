@@ -588,3 +588,43 @@ body.maze-fullscreen .maze-shell {
   padding: 6px 10px; font-size: 0.7rem; color: var(--violet);
   box-shadow: var(--violet-glow);
 }
+
+/* Tarpit controls in the Inspector node panel */
+.inspector-tarpit-wrap {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding-top: 8px;
+  border-top: 1px solid var(--border);
+}
+.inspector-tarpit-row {
+  display: flex;
+  gap: 6px;
+}
+.inspector-tarpit-form {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 8px;
+  background: rgba(255, 65, 65, 0.04);
+  border: 1px solid rgba(255, 65, 65, 0.3);
+}
+.inspector-tarpit-field {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.maze-input {
+  font-size: 0.72rem;
+  padding: 4px 6px;
+  background: rgba(255, 255, 255, 0.04);
+  border: 1px solid var(--border);
+  color: var(--text-color, #e0e0e0);
+  font-family: inherit;
+  width: 100%;
+  box-sizing: border-box;
+}
+.maze-btn.active {
+  background: rgba(57, 255, 20, 0.1);
+  border-color: var(--matrix);
+}

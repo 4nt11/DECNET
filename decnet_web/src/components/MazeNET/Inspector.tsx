@@ -1,4 +1,4 @@
-import React, { useMemo, useState } from 'react';
+import React, { useMemo, useRef, useEffect, useState } from 'react';
 import {
   ArrowLeft, ArrowRight, Crosshair, Globe, GitMerge, MousePointer2, Plus,
   Server, Trash2, X, Shield,
@@ -46,6 +46,9 @@ interface Props {
    *  destructive-recreate confirm dialog and the ``force: true`` submit
    *  — this prop just relays the user's intent. */
   onToggleGateway?: (nodeId: string, nextValue: boolean) => Promise<void>;
+  /** Tarpit controls — only shown when topology is active/degraded and node is a deployed decky. */
+  onLiveTarpitEnable?: (nodeName: string, ports: number[], delayMs: number) => Promise<void>;
+  onLiveTarpitDisable?: (nodeName: string) => Promise<void>;
   onAddDecky?: (netId: string) => void;
   setSelection?: (sel: Selection) => void;
   pendingChanges?: number;
@@ -57,6 +60,7 @@ const Inspector: React.FC<Props> = ({
   onDeleteNet, onDeleteNode, onDeleteEdge, onRemoveService,
   onLiveAddService, onLiveRemoveService, availableServices = [],
   onToggleGateway,
+  onLiveTarpitEnable, onLiveTarpitDisable,
   onAddDecky, setSelection,
   pendingChanges = 0,
   className = '',
@@ -69,6 +73,22 @@ const Inspector: React.FC<Props> = ({
   const [addSlug, setAddSlug] = useState('');
   const [busy, setBusy] = useState<string | null>(null);  // slug currently mutating
   const [opError, setOpError] = useState<string | null>(null);
+
+  // Tarpit state — local form, fires parent callbacks
+  const [tarpitOpen, setTarpitOpen] = useState(false);
+  const [tarpitPorts, setTarpitPorts] = useState('22');
+  const [tarpitDelay, setTarpitDelay] = useState(30000);
+  const tarpitEnabled = liveOpsEnabled && !!onLiveTarpitEnable && !!onLiveTarpitDisable;
+
+  // Close tarpit form when selection changes
+  const prevNodeId = useRef<string | undefined>(undefined);
+  useEffect(() => {
+    const nodeId = selection?.type === 'node' ? selection.id : undefined;
+    if (nodeId !== prevNodeId.current) {
+      prevNodeId.current = nodeId;
+      setTarpitOpen(false);
+    }
+  }, [selection]);
   const net  = selection?.type === 'net'  ? nets.find((n) => n.id === selection.id)  : undefined;
   const node = selection?.type === 'node' ? nodes.find((n) => n.id === selection.id) : undefined;
   const edge = selection?.type === 'edge' ? edges.find((e) => e.id === selection.id) : undefined;
@@ -307,6 +327,98 @@ const Inspector: React.FC<Props> = ({
                   ? (isGateway ? 'DEMOTING…' : 'PROMOTING…')
                   : (isGateway ? 'DEMOTE GATEWAY' : 'PROMOTE TO GATEWAY')}
               </button>
+            )}
+            {tarpitEnabled && !isObserved && (
+              <div className="inspector-tarpit-wrap">
+                <div className="inspector-tarpit-row">
+                  <button
+                    type="button"
+                    className={`maze-btn small ${tarpitOpen ? 'active' : ''}`}
+                    disabled={busy === '__tarpit__'}
+                    onClick={() => setTarpitOpen((o) => !o)}
+                    title="Configure tc netem tarpit on this decky"
+                  >
+                    <Shield size={12} />
+                    {tarpitOpen ? 'CANCEL' : 'TARPIT'}
+                  </button>
+                  <button
+                    type="button"
+                    className="maze-btn alert small"
+                    disabled={busy === '__tarpit__'}
+                    title="Remove active tarpit rule"
+                    onClick={async () => {
+                      setOpError(null);
+                      setBusy('__tarpit__');
+                      try {
+                        await onLiveTarpitDisable!(node.name);
+                      } catch (err) {
+                        const msg = (err as { response?: { data?: { detail?: string } } })
+                          ?.response?.data?.detail ?? 'Tarpit disable failed.';
+                        setOpError(msg);
+                      } finally {
+                        setBusy(null);
+                      }
+                    }}
+                  >
+                    {busy === '__tarpit__' ? '…' : 'DISABLE'}
+                  </button>
+                </div>
+                {tarpitOpen && (
+                  <div className="inspector-tarpit-form">
+                    <div className="inspector-tarpit-field">
+                      <label className="type-label">PORTS</label>
+                      <input
+                        className="maze-input"
+                        value={tarpitPorts}
+                        placeholder="22,80,443"
+                        onChange={(e) => setTarpitPorts(e.target.value)}
+                      />
+                    </div>
+                    <div className="inspector-tarpit-field">
+                      <label className="type-label">
+                        DELAY · {tarpitDelay >= 1000
+                          ? `${(tarpitDelay / 1000).toFixed(0)}s`
+                          : `${tarpitDelay}ms`}
+                      </label>
+                      <input
+                        type="range"
+                        min={100}
+                        max={60000}
+                        step={100}
+                        value={tarpitDelay}
+                        onChange={(e) => setTarpitDelay(parseInt(e.target.value, 10))}
+                        style={{ width: '100%' }}
+                      />
+                    </div>
+                    <button
+                      type="button"
+                      className="maze-btn alert small"
+                      disabled={busy === '__tarpit__' || !tarpitPorts.trim()}
+                      onClick={async () => {
+                        const ports = tarpitPorts
+                          .split(',')
+                          .map((p) => parseInt(p.trim(), 10))
+                          .filter((p) => !isNaN(p) && p > 0 && p <= 65535);
+                        if (!ports.length) return;
+                        setOpError(null);
+                        setBusy('__tarpit__');
+                        try {
+                          await onLiveTarpitEnable!(node.name, ports, tarpitDelay);
+                          setTarpitOpen(false);
+                        } catch (err) {
+                          const msg = (err as { response?: { data?: { detail?: string } } })
+                            ?.response?.data?.detail ?? 'Tarpit enable failed.';
+                          setOpError(msg);
+                        } finally {
+                          setBusy(null);
+                        }
+                      }}
+                    >
+                      {busy === '__tarpit__' ? 'APPLYING…' : 'APPLY TARPIT'}
+                    </button>
+                  </div>
+                )}
+              </div>
             )}
             {onDeleteNode && (
               <button

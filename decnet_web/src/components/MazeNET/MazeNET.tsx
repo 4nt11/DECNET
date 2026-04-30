@@ -926,6 +926,19 @@ const MazeNET: React.FC = () => {
           onLiveAddService={requestAddService}
           onLiveRemoveService={liveRemoveService}
           onToggleGateway={toggleGateway}
+          onLiveTarpitEnable={async (nodeName, ports, delayMs) => {
+            await axios.post(
+              `/topologies/${encodeURIComponent(topologyId)}/deckies/${encodeURIComponent(nodeName)}/tarpit`,
+              { ports, delay_ms: delayMs },
+            );
+            pushToast({ text: `TARPIT ON · ${nodeName.toUpperCase()} · ${ports.join(',')} / ${delayMs >= 1000 ? `${delayMs / 1000}s` : `${delayMs}ms`}`, tone: 'matrix', icon: 'shield' });
+          }}
+          onLiveTarpitDisable={async (nodeName) => {
+            await axios.delete(
+              `/topologies/${encodeURIComponent(topologyId)}/deckies/${encodeURIComponent(nodeName)}/tarpit`,
+            );
+            pushToast({ text: `TARPIT OFF · ${nodeName.toUpperCase()}`, tone: 'matrix', icon: 'shield' });
+          }}
           onAddDecky={(netId) => {
             const net = nets.find((n) => n.id === netId);
             if (!net) return;
