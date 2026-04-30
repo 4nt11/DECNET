@@ -41,6 +41,10 @@ INTERACTION_EVENT_TYPES: frozenset[str] = frozenset({
     "rcpt_to",
     "rcpt_denied",
     "message_accepted",
+    # probe_forwarded fires when we actually relay the test email upstream
+    # so the attacker can verify receipt. forwarded=1 means the upstream
+    # accepted it; forwarded=0 means it failed (but the attacker still got 250).
+    "probe_forwarded",
     # File / payload activity
     "file_captured",
     "upload",

@@ -613,6 +613,21 @@ async def _extract_bounty(
                 "content_type": _fields.get("content_type"),
             },
         })
+    elif _evt == "probe_forwarded":
+        # Record whether the upstream relay accepted the probe. forwarded=1
+        # means the attacker's test email actually landed in their inbox;
+        # forwarded=0 means the upstream refused (attacker still got 250).
+        await repo.add_bounty({
+            "decky": log_data.get("decky"),
+            "service": log_data.get("service"),
+            "attacker_ip": log_data.get("attacker_ip"),
+            "bounty_type": "probe_relay",
+            "payload": {
+                "msg_id": _fields.get("msg_id"),
+                "forwarded": _fields.get("forwarded") == "1",
+                "delivery_count": _fields.get("delivery_count"),
+            },
+        })
 
 
 # ─── IP-leak detection (XFF / Forwarded / X-Real-IP / CDN variants) ──────────
