@@ -21,6 +21,7 @@ are documented in ``wiki-checkout/Service-Bus.md``.
 """
 from __future__ import annotations
 
+import subprocess  # nosec B404
 from pathlib import Path
 from typing import Any, Literal, Optional
 
@@ -602,6 +603,16 @@ async def _update_fleet_service_config(
             await _redispatch_fleet_shard(repo, swarm_host_uuid)
         else:
             target = f"{decky_name}-{service_name}"
+            # Docker Compose tracks the previous container by ID. If that
+            # container was already removed (or renamed during a prior failed
+            # deploy), --force-recreate fails with "No such container". Pre-
+            # remove by name so Compose starts from a clean slate.
+            await anyio.to_thread.run_sync(
+                lambda: subprocess.run(  # nosec B603 B607
+                    ["docker", "rm", "-f", target],
+                    capture_output=True,
+                ),
+            )
             await anyio.to_thread.run_sync(
                 lambda: _compose(
                     "up", "-d", "--no-deps", "--force-recreate", "--build", target,
