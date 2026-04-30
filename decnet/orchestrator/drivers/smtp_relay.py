@@ -8,11 +8,25 @@ Called by the realism worker's smtp probe listener, not the main tick loop.
 """
 from __future__ import annotations
 
+import email
 import smtplib
 from pathlib import Path
 from typing import Any
 
 _ARTIFACTS_ROOT_DEFAULT = "/var/lib/decnet/artifacts"
+
+
+def _ensure_from_header(body: bytes, mail_from: str) -> bytes:
+    """Return body with a From: header added if one is absent."""
+    try:
+        msg = email.message_from_bytes(body)
+    except Exception:
+        return body
+    if msg["From"]:
+        return body
+    # Prepend the header before the existing content.
+    header_line = f"From: {mail_from}\r\n".encode()
+    return header_line + body
 
 
 def forward_probe(
@@ -46,6 +60,11 @@ def forward_probe(
     upstream_user  = (svc_cfg.get("upstream_user") or "").strip()
     upstream_pass  = (svc_cfg.get("upstream_pass") or "").strip()
     envelope_from  = (svc_cfg.get("upstream_sender") or "").strip() or mail_from
+
+    # Ensure the message has a From: header so mail clients show the attacker's
+    # address rather than falling back to the envelope sender (upstream_sender).
+    # Minimal relay-test scripts often omit headers entirely.
+    body = _ensure_from_header(body, mail_from)
 
     try:
         with smtplib.SMTP(upstream_host, upstream_port, timeout=15) as conn:
