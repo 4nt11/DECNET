@@ -11,9 +11,9 @@ import json
 import uuid as _uuid
 from typing import Any, List, Optional
 
-from sqlalchemy import desc, func, select
+from sqlalchemy import desc, func, outerjoin, select
 
-from decnet.web.db.models import Attacker
+from decnet.web.db.models import Attacker, AttackerIntel
 
 
 class AttackersCoreMixin:
@@ -80,6 +80,41 @@ class AttackersCoreMixin:
                 self._deserialize_attacker(a.model_dump(mode="json"))
                 for a in result.scalars().all()
             ]
+
+    async def get_all_attackers_for_export(self) -> list[dict[str, Any]]:
+        """Return every attacker row left-joined with its intel row.
+
+        Used exclusively by the export endpoint — no pagination, ordered by
+        last_seen desc so the file reads newest-first.
+        """
+        stmt = (
+            select(Attacker, AttackerIntel)
+            .select_from(
+                outerjoin(Attacker, AttackerIntel, Attacker.uuid == AttackerIntel.attacker_uuid)
+            )
+            .order_by(desc(Attacker.last_seen))
+        )
+        async with self._session() as session:
+            rows = (await session.execute(stmt)).all()
+
+        _intel_raw_keys = ("greynoise_raw", "abuseipdb_raw", "feodo_raw", "threatfox_raw")
+        result = []
+        for attacker, intel in rows:
+            d = self._deserialize_attacker(attacker.model_dump(mode="json"))
+            if intel is not None:
+                intel_d = intel.model_dump(mode="json")
+                for key in _intel_raw_keys:
+                    raw = intel_d.get(key)
+                    if isinstance(raw, str):
+                        try:
+                            intel_d[key] = json.loads(raw)
+                        except (json.JSONDecodeError, TypeError):
+                            pass
+                d["threat_intel"] = intel_d
+            else:
+                d["threat_intel"] = None
+            result.append(d)
+        return result
 
     async def get_total_attackers(
         self, search: Optional[str] = None, service: Optional[str] = None

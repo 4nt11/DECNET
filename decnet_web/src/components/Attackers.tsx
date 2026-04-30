@@ -1,6 +1,6 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { useSearchParams, useNavigate } from 'react-router-dom';
-import { Search, ChevronLeft, ChevronRight, Users } from '../icons';
+import { Search, ChevronLeft, ChevronRight, Users, Download } from '../icons';
 import api from '../utils/api';
 import EmptyState from './EmptyState/EmptyState';
 import { useFocusSearch } from '../hooks/useFocusSearch';
@@ -117,6 +117,23 @@ const Attackers: React.FC = () => {
 
   const totalPages = Math.max(1, Math.ceil(total / limit));
 
+  const handleExport = async () => {
+    try {
+      const res = await api.get('/attackers/export', { responseType: 'blob' });
+      const disposition: string = res.headers['content-disposition'] || '';
+      const match = disposition.match(/filename="([^"]+)"/);
+      const filename = match ? match[1] : 'decnet-export.json';
+      const url = URL.createObjectURL(new Blob([res.data], { type: 'application/json' }));
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = filename;
+      a.click();
+      URL.revokeObjectURL(url);
+    } catch (err) {
+      console.error('Export failed', err);
+    }
+  };
+
   const activityCounts = attackers.reduce(
     (acc, a) => { acc[deriveActivity(a)]++; return acc; },
     { active: 0, passive: 0, inactive: 0 } as Record<ActivityTier, number>,
@@ -211,6 +228,16 @@ const Attackers: React.FC = () => {
             )}
           </div>
           <div className="section-actions">
+            <button
+              type="button"
+              className="btn btn-ghost"
+              onClick={handleExport}
+              title="Export all threat data as JSON"
+              style={{ display: 'flex', alignItems: 'center', gap: 6 }}
+            >
+              <Download size={13} />
+              EXPORT
+            </button>
             <div className="pager">
               <span className="dim">Page {page} of {totalPages}</span>
               <button disabled={page <= 1} onClick={() => setPage(page - 1)} aria-label="Previous page">
