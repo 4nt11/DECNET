@@ -265,7 +265,7 @@
 }
 
 .dash-grid > .logs-section {
-  overflow: hidden;
+  overflow: clip;
   display: flex;
   flex-direction: column;
   min-height: 0;
@@ -288,7 +288,7 @@
 .dash-side > .logs-section {
   flex: 1;
   min-height: 0;
-  overflow: hidden;
+  overflow: clip;
 }
 
 .dash-side > .logs-section .panel-body {
