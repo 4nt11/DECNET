@@ -63,6 +63,7 @@ class TopologyStore:
         # The agent is single-process, so there's no real contention —
         # sqlite's own connection lock is enough.
         self._conn = sqlite3.connect(str(db_path), check_same_thread=False)
+        self._conn.row_factory = sqlite3.Row
         self._conn.execute(
             "CREATE TABLE IF NOT EXISTS applied_topology ("
             " topology_id TEXT PRIMARY KEY,"
@@ -84,11 +85,11 @@ class TopologyStore:
         if row is None:
             return None
         return AppliedRow(
-            topology_id=row[0],
-            applied_version_hash=row[1],
-            hydrated=json.loads(row[2]),
-            applied_at=int(row[3]),
-            last_error=row[4],
+            topology_id=row["topology_id"],
+            applied_version_hash=row["applied_version_hash"],
+            hydrated=json.loads(row["hydrated_blob_json"]),
+            applied_at=int(row["applied_at"]),
+            last_error=row["last_error"],
         )
 
     # ---------------------------------------------------------------- writes
