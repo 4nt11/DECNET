@@ -120,11 +120,19 @@ def load(*, language_default: str = "en") -> list[EmailPersona]:
         logger.warning("realism global pool: read failed path=%s: %s", path, exc)
         return []
 
+    # Re-stat after the read so the stored mtime reflects what we actually
+    # parsed — a file change between the initial stat and read would otherwise
+    # cache a stale mtime and suppress the next reload.
+    try:
+        st2 = path.stat()
+    except OSError:
+        st2 = st
+
     parsed = parse_personas(raw, language_default=language_default)
     with _lock:
         _cache = parsed
         _cache_path = path
-        _cache_mtime = st.st_mtime
+        _cache_mtime = st2.st_mtime
     if parsed:
         logger.info(
             "realism global pool: loaded %d personas from %s", len(parsed), path,
