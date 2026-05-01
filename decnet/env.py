@@ -91,7 +91,7 @@ DECNET_API_PORT: int = _port("DECNET_API_PORT", 8000)
 # DECNET_JWT_SECRET is resolved lazily via module __getattr__ so that agent /
 # updater / swarmctl subcommands (which never touch auth) can start without
 # the master's JWT secret being present in the environment.
-DECNET_INGEST_LOG_FILE: str | None = os.environ.get("DECNET_INGEST_LOG_FILE", "/var/log/decnet/decnet.log")
+DECNET_INGEST_LOG_FILE: str = os.environ.get("DECNET_INGEST_LOG_FILE", "/var/log/decnet/decnet.log")
 
 # Agent-side RFC 5424 sink written by decnet.collector.worker when run on
 # a SWARM worker.  The forwarder tails this file and ships lines over

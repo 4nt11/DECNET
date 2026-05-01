@@ -128,8 +128,6 @@ async def reconcile_once(
     container_states = await asyncio.to_thread(
         _collect_container_states, docker_client_factory,
     )
-    docker_known = container_states is not None
-
     json_names = {d.name for d in json_deckies}
 
     # 1. INSERT: present in JSON, absent from DB.
@@ -138,7 +136,7 @@ async def reconcile_once(
             continue
         new_state = (
             _aggregate_decky_state(d.name, list(d.services), container_states)
-            if docker_known else "running"
+            if container_states is not None else "running"
         )
         row_host = d.host_uuid or host_uuid
         await repo.upsert_fleet_decky({
@@ -168,7 +166,7 @@ async def reconcile_once(
             )
 
     # 3. STATE: present in both, docker says something fresh.
-    if docker_known:
+    if container_states is not None:
         for d in json_deckies:
             existing = db_by_name.get(d.name)
             if existing is None:

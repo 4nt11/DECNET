@@ -136,10 +136,12 @@ async def cultivate(
         )
 
     callback_token = _new_callback_token()
+    http_base_str: str = http_base or os.environ.get("DECNET_CANARY_HTTP_BASE") or ""
+    dns_zone_str: str = dns_zone or os.environ.get("DECNET_CANARY_DNS_ZONE") or ""
     ctx = CanaryContext(
         callback_token=callback_token,
-        http_base=http_base or os.environ.get("DECNET_CANARY_HTTP_BASE", ""),
-        dns_zone=dns_zone or os.environ.get("DECNET_CANARY_DNS_ZONE", ""),
+        http_base=http_base_str,
+        dns_zone=dns_zone_str,
         persona="linux",  # all our deckies are POSIX in MVP
     )
     generator = get_generator(gen_name)

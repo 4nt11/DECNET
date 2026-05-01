@@ -41,13 +41,13 @@ def build_mysql_url(
     Component args override env vars. Password is percent-encoded so special
     characters (``@``, ``:``, ``/``…) don't break URL parsing.
     """
-    host = host or os.environ.get("DECNET_DB_HOST", "localhost")
-    port = port or int(os.environ.get("DECNET_DB_PORT", "3306"))
-    database = database or os.environ.get("DECNET_DB_NAME", "decnet")
-    user = user or os.environ.get("DECNET_DB_USER", "decnet")
+    host = host or os.environ.get("DECNET_DB_HOST") or "localhost"
+    port = port or int(os.environ.get("DECNET_DB_PORT") or "3306")
+    database = database or os.environ.get("DECNET_DB_NAME") or "decnet"
+    user = user or os.environ.get("DECNET_DB_USER") or "decnet"
 
     if password is None:
-        password = os.environ.get("DECNET_DB_PASSWORD", "")
+        password = os.environ.get("DECNET_DB_PASSWORD") or ""
 
     # Allow empty passwords during tests (pytest sets PYTEST_* env vars).
     # Outside tests, an empty MySQL password is almost never intentional.
