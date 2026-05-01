@@ -2374,6 +2374,8 @@ unrelated events.
 **E.1.11 — RuleStore contract**
 (`decnet/ttp/store/{base.py, factory.py, impl/}`)
 
+**Status:** ✅ done.
+
 - `class RuleState` frozen dataclass: state literal
   ("enabled" | "disabled" | "clipped"), `confidence_max`,
   `expires_at`, `reason`, `set_by`, `set_at`. Default constructor
