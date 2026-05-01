@@ -2360,6 +2360,8 @@ unrelated events.
 
 **E.1.10 — Repository contract** (`decnet/web/db/sqlmodel_repo/ttp.py`)
 
+**Status:** ✅ done.
+
 - `async def insert_tags(rows: list[TTPTag]) -> int` — bulk upsert
   with `INSERT OR IGNORE` semantics for idempotency.
 - `async def list_techniques_by_identity(uuid: str) -> list[...]`.
