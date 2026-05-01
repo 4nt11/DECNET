@@ -2538,6 +2538,8 @@ lands; PII rule §6 type assertion is GREEN today).
 
 **E.2.3 — Bus topic naming tests** (`tests/bus/test_ttp_topics.py`)
 
+**Status:** ✅ done.
+
 - All TTP_* constants match the documented names exactly.
 - `matches("ttp.>", TTP_TAGGED)` is True (subscription wildcards
   work as documented).
