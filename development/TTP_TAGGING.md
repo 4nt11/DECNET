@@ -2561,6 +2561,12 @@ lands; PII rule §6 type assertion is GREEN today).
 
 **E.2.5 — RuleEngine behavior** (`tests/ttp/test_rule_engine.py`)
 
+**Status:** ✅ done (empty/unknown-kind, schema-level malformed
+YAML, and rule_version-collision UUID distinctness are GREEN; the
+store-level malformed-YAML hook + engine-level multi-emit fan-out +
+engine-level version-collision fan-out are parked behind
+`xfail(strict=True)` until E.3.5 lands).
+
 - Empty rules directory compiles to an empty list (the worker can
   start with no rules).
 - A malformed YAML file raises at `compile()`, NOT at `evaluate()`
