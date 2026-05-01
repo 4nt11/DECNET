@@ -121,15 +121,58 @@ def span_exporter(
 # ── Eval span hierarchy (xfail until E.3.7) ─────────────────────────
 
 
-@pytest.mark.xfail(
-    strict=True,
-    reason="impl phase E.3.7 — RuleEngine.evaluate() emits no spans "
-    "today; ttp.eval span lands with the engine impl",
-)
-def test_eval_emits_top_level_span(span_exporter: tuple[InMemorySpanExporter, TracerProvider]) -> None:
+def test_eval_emits_top_level_span(
+    span_exporter: tuple[InMemorySpanExporter, TracerProvider],
+) -> None:
     """``evaluate()`` produces a ``ttp.eval`` span with
     ``attacker_uuid`` and ``identity_uuid`` attributes."""
-    pytest.fail("ttp.eval span not yet emitted")
+    import asyncio
+
+    from decnet.ttp.base import TaggerEvent
+    from decnet.ttp.impl.rule_engine import CompiledRule, RuleEngine
+    from decnet.ttp.store.base import RuleState
+
+    class _Stub:
+        async def load_compiled(self):  # pragma: no cover
+            return []
+
+        async def get_state(self, _):  # pragma: no cover
+            return RuleState()
+
+        async def set_state(self, *_a, **_kw):  # pragma: no cover
+            return None
+
+        def subscribe_changes(self):  # pragma: no cover
+            async def _g():
+                if False:
+                    yield None
+            return _g()
+
+    exporter, _ = span_exporter
+    rule = CompiledRule(
+        rule_id="R0001",
+        rule_version=1,
+        name="r",
+        applies_to=frozenset({"command"}),
+        match_spec={"pattern": "hydra"},
+        emits=(("T1110", None, "TA0006", 0.85),),
+        evidence_fields=(),
+        state=RuleState(),
+    )
+    eng = RuleEngine(store=_Stub())
+    eng._by_kind = {"command": [rule]}
+    event = TaggerEvent(
+        source_kind="command", source_id="src1",
+        attacker_uuid="ATT_X", identity_uuid="IDY_Y",
+        session_id=None, decky_id=None,
+        payload={"command_text": "hydra"},
+    )
+    asyncio.run(eng.evaluate(event))
+    eval_spans = [s for s in exporter.get_finished_spans() if s.name == "ttp.eval"]
+    assert eval_spans
+    attrs = dict(eval_spans[0].attributes or {})
+    assert attrs.get("attacker_uuid") == "ATT_X"
+    assert attrs.get("identity_uuid") == "IDY_Y"
 
 
 @pytest.mark.xfail(
@@ -143,17 +186,59 @@ def test_lifter_child_spans_emitted(span_exporter: tuple[InMemorySpanExporter, T
     pytest.fail("per-lifter spans not yet emitted")
 
 
-@pytest.mark.xfail(
-    strict=True,
-    reason="impl phase E.3.7 — ttp.rule.fire spans with rule_id + "
-    "technique_id land with the engine impl",
-)
 def test_rule_fire_spans_carry_rule_and_technique_attrs(
     span_exporter: tuple[InMemorySpanExporter, TracerProvider],
 ) -> None:
     """Each matched rule produces a ``ttp.rule.fire`` span with
     ``rule_id`` and ``technique_id`` attributes set."""
-    pytest.fail("ttp.rule.fire spans not yet emitted")
+    import asyncio
+
+    from decnet.ttp.base import TaggerEvent
+    from decnet.ttp.impl.rule_engine import CompiledRule, RuleEngine
+    from decnet.ttp.store.base import RuleState
+
+    class _Stub:
+        async def load_compiled(self):  # pragma: no cover
+            return []
+
+        async def get_state(self, _):  # pragma: no cover
+            return RuleState()
+
+        async def set_state(self, *_a, **_kw):  # pragma: no cover
+            return None
+
+        def subscribe_changes(self):  # pragma: no cover
+            async def _g():
+                if False:
+                    yield None
+            return _g()
+
+    exporter, _ = span_exporter
+    rule = CompiledRule(
+        rule_id="R_FIRE",
+        rule_version=1,
+        name="r",
+        applies_to=frozenset({"command"}),
+        match_spec={"pattern": "hydra"},
+        emits=(("T1110", None, "TA0006", 0.85),),
+        evidence_fields=(),
+        state=RuleState(),
+    )
+    eng = RuleEngine(store=_Stub())
+    eng._by_kind = {"command": [rule]}
+    asyncio.run(eng.evaluate(TaggerEvent(
+        source_kind="command", source_id="s",
+        attacker_uuid="a", identity_uuid=None,
+        session_id=None, decky_id=None,
+        payload={"command_text": "hydra"},
+    )))
+    fire_spans = [
+        s for s in exporter.get_finished_spans() if s.name == "ttp.rule.fire"
+    ]
+    assert fire_spans
+    attrs = dict(fire_spans[0].attributes or {})
+    assert attrs.get("rule_id") == "R_FIRE"
+    assert attrs.get("technique_id") == "T1110"
 
 
 # ── set_state span hierarchy (xfail until E.3.5/E.3.6) ──────────────

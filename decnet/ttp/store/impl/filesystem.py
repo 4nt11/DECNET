@@ -41,7 +41,8 @@ from __future__ import annotations
 import asyncio
 import re
 import sys
-from collections.abc import AsyncIterator
+from collections.abc import AsyncIterator, Iterator
+from contextlib import contextmanager
 from dataclasses import replace
 from datetime import datetime, timezone
 from pathlib import Path
@@ -64,11 +65,30 @@ if TYPE_CHECKING:
 _log = get_logger("ttp.store.filesystem")
 
 
-def _tracer() -> Any:
+@contextmanager
+def _span(name: str, **attrs: Any) -> Iterator[Any]:
+    """Span context manager gated on ``DECNET_DEVELOPER_TRACING``.
+
+    When tracing is off, yields ``None`` after a single attribute
+    lookup — matches the project's ``@traced`` / ``wrap_repository``
+    pattern of zero per-call overhead in the disabled case. When on,
+    opens an OTEL span via the (late-bound) tracer and applies
+    *attrs* defensively.
+    """
+    if not _telemetry._ENABLED:
+        yield None
+        return
     # Late binding: tests monkeypatch ``decnet.telemetry.get_tracer``
-    # at fixture setup; capturing the tracer at import time would freeze
-    # the no-op tracer into the module forever.
-    return _telemetry.get_tracer("ttp.store")
+    # at fixture setup; capturing the tracer at import time would
+    # freeze the no-op tracer into the module forever.
+    tracer = _telemetry.get_tracer("ttp.store")
+    with tracer.start_as_current_span(name) as span:
+        for key, value in attrs.items():
+            try:
+                span.set_attribute(key, value)
+            except (TypeError, ValueError):
+                continue
+        yield span
 
 
 # ── Filename allowlist ──────────────────────────────────────────────
@@ -110,20 +130,6 @@ def _utcnow() -> datetime:
     return datetime.now(tz=timezone.utc)
 
 
-def _safe_set_attrs(span: Any, **attrs: Any) -> None:
-    """Best-effort attribute setter on either real OTEL or no-op span."""
-    setter = getattr(span, "set_attribute", None)
-    if setter is None:
-        return
-    for key, value in attrs.items():
-        try:
-            setter(key, value)
-        except (TypeError, ValueError):
-            # OTEL rejects un-serializable types; not load-bearing for
-            # store correctness. Skip the attribute, keep the span.
-            continue
-
-
 def _is_expired(state: RuleState, now: datetime) -> bool:
     if state.expires_at is None:
         return False
@@ -136,19 +142,36 @@ def _is_expired(state: RuleState, now: datetime) -> bool:
 def _compile_one(parsed: RuleSchema, state: RuleState) -> CompiledRule:
     """Translate a validated :class:`RuleSchema` into a :class:`CompiledRule`.
 
+    Each ``emits`` entry contributes a 4-tuple
+    ``(technique_id, sub_technique_id, tactic, confidence)`` —
+    consumed by :class:`RuleEngine` when fanning a single match into
+    one tag per technique. Missing tactic / confidence in the YAML is
+    a deploy-time error: a tag without a tactic can't render in the
+    Navigator export, and a missing confidence has no sane default.
     The match spec is passed through verbatim — the engine owns
-    interpretation of operator keys (``pattern``, ``contains``, …); the
-    store only validates structural shape.
+    interpretation of operator keys (``pattern``, ``contains``, …).
     """
-    emits: list[tuple[str, str | None]] = []
+    emits: list[tuple[str, str | None, str, float]] = []
     for entry in parsed.emits:
         tid = entry.get("technique_id")
         if not tid:
             raise ValueError(
                 f"rule {parsed.rule_id}: every emits entry needs technique_id",
             )
-        sub = entry.get("sub_technique_id") or None
-        emits.append((tid, sub))
+        sub_raw = entry.get("sub_technique_id")
+        sub = sub_raw if sub_raw else None
+        tactic = entry.get("tactic")
+        if not tactic:
+            raise ValueError(
+                f"rule {parsed.rule_id}: emit for {tid} needs a tactic",
+            )
+        confidence_raw = entry.get("confidence")
+        if confidence_raw is None:
+            raise ValueError(
+                f"rule {parsed.rule_id}: emit for {tid} needs a confidence",
+            )
+        confidence = float(confidence_raw)
+        emits.append((str(tid), sub, str(tactic), confidence))
     return CompiledRule(
         rule_id=parsed.rule_id,
         rule_version=parsed.rule_version,
@@ -330,22 +353,17 @@ class FilesystemRuleStore(RuleStore):
         # Operational state changes are NOT a tolerated-absence path.
         # Failures here MUST raise rather than silently drop — the
         # E.2.14b conformance test pins this.
-        with _tracer().start_as_current_span("ttp.rule.state.change") as span:
-            # Defensive set_attribute: real OTEL spans accept str/int/etc;
-            # the no-op tracer's _NoOpSpan ignores attributes silently. A
-            # caller-side wrapper keeps both paths green without leaking
-            # tracer-shape knowledge into the store.
-            _safe_set_attrs(
-                span,
-                rule_id=rule_id,
-                state=state.state,
-                set_by=set_by,
-            )
+        with _span(
+            "ttp.rule.state.change",
+            rule_id=rule_id,
+            state=state.state,
+            set_by=set_by,
+        ):
             stamped = replace(state, set_by=set_by, set_at=_utcnow())
-            with _tracer().start_as_current_span("ttp.store.write_state"):
+            with _span("ttp.store.write_state"):
                 self._state[rule_id] = stamped
                 self._restamp_compiled(rule_id, stamped)
-            with _tracer().start_as_current_span("ttp.rule.publish"):
+            with _span("ttp.rule.publish"):
                 await self._emit_change(
                     RuleChange("state", rule_id, stamped),
                     bus_topic=_topics.ttp_rule_state(rule_id),

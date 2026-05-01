@@ -51,7 +51,9 @@ applies_to: [command]
 match:
   pattern: 'hydra'
 emits:
-  - technique_id: T1110
+  - tactic: TA0006
+    technique_id: T1110
+    confidence: 0.85
 """
 
 
@@ -114,7 +116,7 @@ async def test_load_compiled_corpus_identical_across_backends(
         assert isinstance(c, CompiledRule)
         assert c.state == RuleState()
         assert c.applies_to == frozenset({"command"})
-        assert c.emits == (("T1110", None),)
+        assert c.emits == (("T1110", None, "TA0006", 0.85),)
 
 
 async def test_set_state_isolates_rules(rule_store: RuleStore) -> None:

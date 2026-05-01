@@ -127,7 +127,7 @@ async def test_filesystem_to_db_sync_populates_ttp_rule(
         name="brute force ssh",
         applies_to=frozenset({"command"}),
         match_spec={"pattern": "hydra"},
-        emits=(("T1110", None),),
+        emits=(("T1110", None, "TA0006", 0.85),),
         evidence_fields=("matched_tokens",),
         state=RuleState(),
     )
@@ -151,7 +151,7 @@ async def test_filesystem_to_db_sync_populates_ttp_rule(
     loaded = await db_store.load_compiled()
     assert len(loaded) == 1
     assert loaded[0].rule_id == "R0001"
-    assert loaded[0].emits == (("T1110", None),)
+    assert loaded[0].emits == (("T1110", None, "TA0006", 0.85),)
 
 
 @pytest.mark.skipif(
@@ -186,7 +186,9 @@ applies_to: [command]
 match:
   pattern: 'whoami'
 emits:
-  - technique_id: T1033
+  - tactic: TA0007
+    technique_id: T1033
+    confidence: 0.85
 """,
                 encoding="utf-8",
             )

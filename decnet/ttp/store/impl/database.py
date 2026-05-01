@@ -37,7 +37,8 @@ The master-side filesystem→DB sync helper is
 from __future__ import annotations
 
 import asyncio
-from collections.abc import AsyncIterator
+from collections.abc import AsyncIterator, Iterator
+from contextlib import contextmanager
 from dataclasses import replace
 from datetime import datetime, timezone
 from typing import TYPE_CHECKING, Any, Final
@@ -64,8 +65,26 @@ if TYPE_CHECKING:
 _log = get_logger("ttp.store.database")
 
 
-def _tracer() -> Any:
-    return _telemetry.get_tracer("ttp.store")
+@contextmanager
+def _span(name: str, **attrs: Any) -> Iterator[Any]:
+    """Span context manager gated on ``DECNET_DEVELOPER_TRACING``.
+
+    Mirrors the helper in :mod:`decnet.ttp.store.impl.filesystem`: zero
+    per-call overhead when tracing is off, late-bound tracer when on
+    (so ``test_tracing.py``'s monkeypatch of
+    :func:`decnet.telemetry.get_tracer` reaches us).
+    """
+    if not _telemetry._ENABLED:
+        yield None
+        return
+    tracer = _telemetry.get_tracer("ttp.store")
+    with tracer.start_as_current_span(name) as span:
+        for key, value in attrs.items():
+            try:
+                span.set_attribute(key, value)
+            except (TypeError, ValueError):
+                continue
+        yield span
 
 
 def _utcnow() -> datetime:
@@ -100,27 +119,35 @@ def _row_to_state(row: TTPRuleState) -> RuleState:
     )
 
 
-def _safe_set_attrs(span: Any, **attrs: Any) -> None:
-    setter = getattr(span, "set_attribute", None)
-    if setter is None:
-        return
-    for key, value in attrs.items():
-        try:
-            setter(key, value)
-        except (TypeError, ValueError):
-            continue
-
-
 def _compile_one(parsed: RuleSchema, state: RuleState) -> CompiledRule:
-    emits: list[tuple[str, str | None]] = []
+    """Mirror of :func:`decnet.ttp.store.impl.filesystem._compile_one`.
+
+    Same 4-tuple emits shape so a rule round-trips identically through
+    either backend. Kept as a sibling rather than imported from the FS
+    module to avoid dragging the asyncinotify import onto non-Linux
+    hosts that only use the database backend.
+    """
+    emits: list[tuple[str, str | None, str, float]] = []
     for entry in parsed.emits:
         tid = entry.get("technique_id")
         if not tid:
             raise ValueError(
                 f"rule {parsed.rule_id}: every emits entry needs technique_id",
             )
-        sub = entry.get("sub_technique_id") or None
-        emits.append((tid, sub))
+        sub_raw = entry.get("sub_technique_id")
+        sub = sub_raw if sub_raw else None
+        tactic = entry.get("tactic")
+        if not tactic:
+            raise ValueError(
+                f"rule {parsed.rule_id}: emit for {tid} needs a tactic",
+            )
+        confidence_raw = entry.get("confidence")
+        if confidence_raw is None:
+            raise ValueError(
+                f"rule {parsed.rule_id}: emit for {tid} needs a confidence",
+            )
+        confidence = float(confidence_raw)
+        emits.append((str(tid), sub, str(tactic), confidence))
     return CompiledRule(
         rule_id=parsed.rule_id,
         rule_version=parsed.rule_version,
@@ -146,9 +173,13 @@ def _yaml_to_compiled(yaml_text: str, state: RuleState) -> CompiledRule:
 def _compiled_to_yaml(compiled: CompiledRule) -> str:
     """Serialize a :class:`CompiledRule` back to a YAML rule body for
     master-side filesystem→DB sync. Mirrors :class:`RuleSchema`."""
-    emits: list[dict[str, str]] = []
-    for technique_id, sub in compiled.emits:
-        entry: dict[str, str] = {"technique_id": technique_id}
+    emits: list[dict[str, Any]] = []
+    for technique_id, sub, tactic, confidence in compiled.emits:
+        entry: dict[str, Any] = {
+            "technique_id": technique_id,
+            "tactic": tactic,
+            "confidence": confidence,
+        }
         if sub:
             entry["sub_technique_id"] = sub
         emits.append(entry)
@@ -275,17 +306,16 @@ class DatabaseRuleStore(RuleStore):
         state: RuleState,
         set_by: str,
     ) -> None:
-        with _tracer().start_as_current_span("ttp.rule.state.change") as span:
-            _safe_set_attrs(
-                span,
-                rule_id=rule_id,
-                state=state.state,
-                set_by=set_by,
-            )
+        with _span(
+            "ttp.rule.state.change",
+            rule_id=rule_id,
+            state=state.state,
+            set_by=set_by,
+        ):
             stamped = replace(state, set_by=set_by, set_at=_utcnow())
-            with _tracer().start_as_current_span("ttp.store.write_state"):
+            with _span("ttp.store.write_state"):
                 await self._upsert_state_row(rule_id, stamped)
-            with _tracer().start_as_current_span("ttp.rule.publish"):
+            with _span("ttp.rule.publish"):
                 await self._emit_change(
                     RuleChange("state", rule_id, stamped),
                     bus_topic=_topics.ttp_rule_state(rule_id),

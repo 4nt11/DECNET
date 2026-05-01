@@ -48,7 +48,9 @@ applies_to: [command]
 match:
   pattern: 'hydra'
 emits:
-  - technique_id: T1110
+  - tactic: TA0006
+    technique_id: T1110
+    confidence: 0.85
 evidence_fields: [matched_tokens]
 """
 
@@ -190,7 +192,7 @@ def test_compiled_rule_is_frozen() -> None:
         name="test",
         applies_to=frozenset({"attacker_command"}),
         match_spec={},
-        emits=(("T1110", None),),
+        emits=(("T1110", None, "TA0006", 0.85),),
         evidence_fields=(),
         state=RuleState(),
     )

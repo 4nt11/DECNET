@@ -152,34 +152,111 @@ def test_uuid_is_deterministic_replay_safe(
 # ── Engine fan-out (xfail until E.3.7) ──────────────────────────────
 
 
-@pytest.mark.xfail(
-    strict=True,
-    reason="impl phase E.3.7 — RuleEngine.evaluate() empty body returns "
-    "[]; engine-level fan-out lands with the engine impl",
-)
 def test_engine_emits_n_times_m_rows() -> None:
     """End-to-end: a synthetic event matched by 3 rules each emitting
     2 techniques produces 6 tag rows from ``RuleEngine.evaluate()``.
-
-    Today the engine returns ``[]`` so this assertion xfails. Flips
-    to GREEN at E.3.7 when the engine's dispatch + match + emit logic
-    lands.
     """
-    pytest.fail("RuleEngine.evaluate() fan-out not yet implemented")
+    import asyncio
+
+    from decnet.ttp.base import TaggerEvent
+    from decnet.ttp.impl.rule_engine import CompiledRule, RuleEngine
+    from decnet.ttp.store.base import RuleState
+
+    class _Stub:
+        async def load_compiled(self):  # pragma: no cover
+            return []
+
+        async def get_state(self, _):  # pragma: no cover
+            return RuleState()
+
+        async def set_state(self, *_a, **_kw):  # pragma: no cover
+            return None
+
+        def subscribe_changes(self):  # pragma: no cover
+            async def _g():
+                if False:
+                    yield None
+            return _g()
+
+    rules = [
+        CompiledRule(
+            rule_id=f"R000{i}",
+            rule_version=1,
+            name=f"r{i}",
+            applies_to=frozenset({"command"}),
+            match_spec={"pattern": "hydra"},
+            emits=(
+                (f"T{1000 + 2 * i}", None, "TA0006", 0.85),
+                (f"T{1001 + 2 * i}", None, "TA0006", 0.80),
+            ),
+            evidence_fields=(),
+            state=RuleState(),
+        )
+        for i in range(3)
+    ]
+    eng = RuleEngine(store=_Stub())
+    eng._by_kind = {"command": rules}
+    event = TaggerEvent(
+        source_kind="command",
+        source_id="src1",
+        attacker_uuid="att1",
+        identity_uuid=None,
+        session_id=None,
+        decky_id=None,
+        payload={"command_text": "hydra -l root ssh://1.2.3.4"},
+    )
+    out = asyncio.run(eng.evaluate(event))
+    assert len(out) == 6
 
 
-@pytest.mark.xfail(
-    strict=True,
-    reason="impl phase E.3.7 — re-running evaluate() on the same event "
-    "must produce zero NEW rows (idempotent UUID at engine level)",
-)
 def test_engine_replay_produces_no_new_rows() -> None:
     """Idempotency at the engine level: ``evaluate(e)`` followed by
     ``evaluate(e)`` again yields tag rows with identical UUIDs, so
     the downstream ``insert_tags`` no-ops the second batch.
-
-    Pure ``compute_tag_uuid`` determinism is already covered by
-    :func:`test_uuid_is_deterministic_replay_safe`; this test pins
-    the engine wiring around it.
     """
-    pytest.fail("RuleEngine replay-safety wiring not yet implemented")
+    import asyncio
+
+    from decnet.ttp.base import TaggerEvent
+    from decnet.ttp.impl.rule_engine import CompiledRule, RuleEngine
+    from decnet.ttp.store.base import RuleState
+
+    class _Stub:
+        async def load_compiled(self):  # pragma: no cover
+            return []
+
+        async def get_state(self, _):  # pragma: no cover
+            return RuleState()
+
+        async def set_state(self, *_a, **_kw):  # pragma: no cover
+            return None
+
+        def subscribe_changes(self):  # pragma: no cover
+            async def _g():
+                if False:
+                    yield None
+            return _g()
+
+    rule = CompiledRule(
+        rule_id="R0001",
+        rule_version=1,
+        name="r",
+        applies_to=frozenset({"command"}),
+        match_spec={"pattern": "hydra"},
+        emits=(("T1110", None, "TA0006", 0.85),),
+        evidence_fields=(),
+        state=RuleState(),
+    )
+    eng = RuleEngine(store=_Stub())
+    eng._by_kind = {"command": [rule]}
+    event = TaggerEvent(
+        source_kind="command",
+        source_id="src1",
+        attacker_uuid="att1",
+        identity_uuid=None,
+        session_id=None,
+        decky_id=None,
+        payload={"command_text": "hydra -l root ssh://1.2.3.4"},
+    )
+    out1 = asyncio.run(eng.evaluate(event))
+    out2 = asyncio.run(eng.evaluate(event))
+    assert {t.uuid for t in out1} == {t.uuid for t in out2}

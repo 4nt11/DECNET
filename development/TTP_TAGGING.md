@@ -2954,7 +2954,16 @@ Order:
 7. **RuleEngine** — implement engine consuming from `RuleStore`.
    Atomic per-rule swap on `RuleChange`. State applied
    after-parsing via `RuleState` join. `test_rule_engine.py`
-   green.
+   green. ✅ done. `CompiledRule.emits` extended to a 4-tuple
+   `(technique_id, sub_technique_id, tactic, confidence)` per emit;
+   the engine fans one match into N `TTPTag` rows. Match operator is
+   `pattern` (regex) for v0; per-source-kind default field
+   (`command_text` / `raw_url` / `subject` / …) overridable via
+   `match.field`. Disabled rules skipped; clipped state caps
+   confidence; `expires_at` re-checked at evaluate as
+   defense-in-depth. Tracing helper `_span(name, **attrs)` short-
+   circuits on `decnet.telemetry._ENABLED`, matching `@traced` /
+   `wrap_repository` zero-overhead-when-disabled pattern.
 8. **Rule pack v0** — write the YAML files for `R0001`–`R0058`
    at `./rules/ttp/`. Each rule lands with its precision-target
    test per Appendix C in the same commit. The corpus for

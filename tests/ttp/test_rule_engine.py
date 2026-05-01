@@ -44,24 +44,52 @@ def _ev() -> TaggerEvent:
 
 
 class _StubStore:
-    """Minimal duck-typed RuleStore for contract-phase construction."""
+    """Minimal duck-typed RuleStore for engine construction in tests.
+
+    Provides the subset of the ABC the engine touches at construction
+    time. Tests that drive ``evaluate()`` populate ``eng._by_kind``
+    directly rather than going through ``watch_store()``; the
+    ``load_compiled`` / ``subscribe_changes`` stubs are only here so a
+    test that DOES want to drive the watch loop can opt in.
+    """
+
+    async def load_compiled(self) -> list[CompiledRule]:  # pragma: no cover
+        return []
+
+    async def get_state(self, _rule_id: str):  # pragma: no cover
+        from decnet.ttp.store.base import RuleState
+        return RuleState()
+
+    async def set_state(self, *_a: Any, **_kw: Any) -> None:  # pragma: no cover
+        return None
+
+    def subscribe_changes(self):  # pragma: no cover
+        async def _gen():
+            if False:
+                yield None
+        return _gen()
 
 
 def _make_compiled_rule(
     *,
     rule_id: str = "R0001",
     rule_version: int = 1,
-    emits: tuple[tuple[str, str | None], ...] = (("T1110", None),),
+    emits: tuple[tuple[str, str | None, str, float], ...] = (
+        ("T1110", None, "TA0006", 0.85),
+    ),
+    match_spec: dict[str, Any] | None = None,
 ) -> CompiledRule:
+    from decnet.ttp.store.base import RuleState  # noqa: PLC0415
+
     return CompiledRule(
         rule_id=rule_id,
         rule_version=rule_version,
         name="test rule",
         applies_to=frozenset({"command"}),
-        match_spec={"contains": "hydra"},
+        match_spec=match_spec or {"pattern": "hydra"},
         emits=emits,
         evidence_fields=("matched_tokens",),
-        state=object(),  # RuleState lands in E.1.11; opaque here
+        state=RuleState(),
     )
 
 
@@ -84,15 +112,17 @@ def test_compiled_rule_is_immutable() -> None:
     # NamedTuple gives us field-level immutability — the atomic-swap
     # property (E.2.14b) requires that a rule in the dispatch index
     # cannot be mutated in place; replacement is the only legal edit.
+    from decnet.ttp.store.base import RuleState  # noqa: PLC0415
+
     cr = CompiledRule(
         rule_id="R0001",
         rule_version=1,
         name="brute",
         applies_to=frozenset({"command"}),
         match_spec={},
-        emits=(("T1110", None),),
+        emits=(("T1110", None, "TA0006", 0.85),),
         evidence_fields=("matched_tokens",),
-        state=object(),
+        state=RuleState(),
     )
     with pytest.raises(AttributeError):
         cr.rule_id = "R9999"  # type: ignore[misc]
@@ -109,15 +139,28 @@ def test_rule_engine_init_signature_takes_store() -> None:
     assert list(sig.parameters)[1] == "store"
 
 
-def test_evaluate_returns_empty_list_in_contract_phase() -> None:
-    eng = RuleEngine(store=_StubStore()) 
+def test_evaluate_returns_empty_list_for_unknown_source_kind() -> None:
+    eng = RuleEngine(store=_StubStore())
     out = asyncio.run(eng.evaluate(_ev()))
     assert out == []
 
 
-def test_watch_store_returns_none_and_does_not_raise() -> None:
-    eng = RuleEngine(store=_StubStore()) 
-    assert asyncio.run(eng.watch_store()) is None
+def test_watch_store_drains_and_can_be_cancelled() -> None:
+    """``watch_store()`` blocks on ``subscribe_changes`` after loading
+    the empty corpus. Test that it can be cancelled cleanly — the
+    worker bootstrap (E.3.14) cancels it during shutdown."""
+    eng = RuleEngine(store=_StubStore())
+
+    async def _drive() -> None:
+        task = asyncio.create_task(eng.watch_store())
+        await asyncio.sleep(0.05)
+        task.cancel()
+        try:
+            await task
+        except asyncio.CancelledError:
+            pass
+
+    asyncio.run(_drive())
 
 
 def test_rule_schema_has_documented_fields() -> None:
@@ -208,21 +251,22 @@ def test_e25_evaluate_unknown_source_kind_returns_empty() -> None:
     assert asyncio.run(eng.evaluate(weird)) == []
 
 
-@pytest.mark.xfail(
-    strict=True,
-    reason="impl phase E.3.5: evaluate() does not yet fan out emits",
-)
 def test_e25_one_rule_multiple_emits_produces_multiple_tags() -> None:
     """One matching rule with N entries in ``emits`` must produce N
     tag rows from a single event. The "one event maps to many
     techniques" property enforced at engine level."""
-    eng = RuleEngine(store=_StubStore()) 
+    eng = RuleEngine(store=_StubStore())
     rule = _make_compiled_rule(
         rule_id="R_MULTI",
-        emits=(("T1110", None), ("T1078", None), ("T1059", "001")),
+        emits=(
+            ("T1110", None, "TA0006", 0.85),
+            ("T1078", None, "TA0001", 0.80),
+            ("T1059", "001", "TA0002", 0.90),
+        ),
     )
     eng._by_kind = {"command": [rule]}
-    out = asyncio.run(eng.evaluate(_ev()))
+    event = _ev()._replace(payload={"command_text": "hydra -l root ssh://1.2.3.4"})
+    out = asyncio.run(eng.evaluate(event))
     assert len(out) == 3
     techs = {(t.technique_id, t.sub_technique_id) for t in out}
     assert techs == {("T1110", None), ("T1078", None), ("T1059", "001")}
@@ -253,19 +297,16 @@ def test_e25_rule_version_collision_yields_distinct_tag_uuids() -> None:
     assert u_v1 != u_v2
 
 
-@pytest.mark.xfail(
-    strict=True,
-    reason="impl phase E.3.5: evaluate() does not yet emit tags",
-)
 def test_e25_rule_version_collision_via_engine_yields_distinct_tag_uuids() -> None:
     """Same property as above, but driven through the engine: two
     CompiledRule instances differing only in rule_version produce two
     rows whose ``uuid`` columns differ."""
-    eng = RuleEngine(store=_StubStore()) 
+    eng = RuleEngine(store=_StubStore())
     r1 = _make_compiled_rule(rule_id="R_VER", rule_version=1)
     r2 = _make_compiled_rule(rule_id="R_VER", rule_version=2)
     eng._by_kind = {"command": [r1, r2]}
-    out = asyncio.run(eng.evaluate(_ev()))
+    event = _ev()._replace(payload={"command_text": "hydra -l root ssh://1.2.3.4"})
+    out = asyncio.run(eng.evaluate(event))
     assert len(out) == 2
     uuids = {t.uuid for t in out}
     assert len(uuids) == 2
