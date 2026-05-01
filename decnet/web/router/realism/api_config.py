@@ -16,8 +16,8 @@ waiting for the orchestrator's next refresh tick.
 """
 from __future__ import annotations
 
+import asyncio
 import json
-import threading
 from typing import Any
 
 from fastapi import APIRouter, Depends, HTTPException
@@ -32,7 +32,7 @@ log = get_logger("api.realism.config")
 
 _CONFIG_KEY = "weights"
 _hydrated = False
-_hydrate_lock = threading.Lock()
+_hydrate_lock = asyncio.Lock()
 
 
 @router.get(
@@ -56,7 +56,7 @@ async def get_config(
     """
     global _hydrated
     if not _hydrated:
-        with _hydrate_lock:
+        async with _hydrate_lock:
             if not _hydrated:
                 row = await repo.get_realism_config(_CONFIG_KEY)
                 if row is not None:
