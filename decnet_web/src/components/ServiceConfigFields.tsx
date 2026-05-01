@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useState } from 'react';
-import api from '../utils/api';
+import api, { type ApiError } from '../utils/api';
 import './ServiceConfigForm.css';
 
 export interface ServiceConfigFieldDTO {
@@ -57,7 +57,7 @@ export function compactPayload(
 }
 
 export const fmtSchemaError = (err: unknown, fallback: string): string =>
-  (err as { response?: { data?: { detail?: string } } })?.response?.data?.detail
+  (err as ApiError)?.response?.data?.detail
   ?? fallback;
 
 interface Props {

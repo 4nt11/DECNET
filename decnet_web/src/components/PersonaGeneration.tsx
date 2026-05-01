@@ -3,7 +3,7 @@ import { useParams } from 'react-router-dom';
 import {
   Mail, Plus, Pencil, Trash2, Check, AlertTriangle, Upload, Download, Sparkles,
 } from '../icons';
-import api from '../utils/api';
+import api, { type ApiError } from '../utils/api';
 import { useToast } from './Toasts/useToast';
 import Modal from './Modal/Modal';
 import './DeckyFleet.css';
@@ -53,10 +53,7 @@ const LATENCIES: ReplyLatency[] = ['fast', 'normal', 'slow'];
 type FilterKey = 'all' | Tone;
 
 function extractErrorDetail(err: unknown, fallback: string): string {
-  const e = err as {
-    response?: { status?: number; data?: { detail?: string } };
-    message?: string;
-  };
+  const e = err as ApiError;
   if (e?.response?.data?.detail) return e.response.data.detail;
   if (e?.response?.status === 403) return 'Insufficient permissions (admin only)';
   if (e?.response?.status === 401) return 'Session expired — please log in again';

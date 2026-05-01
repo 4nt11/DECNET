@@ -2,7 +2,7 @@ import React, { useEffect, useMemo, useRef, useState } from 'react';
 import {
   Plus, Upload, X, AlertTriangle, Search, Target,
 } from '../icons';
-import api from '../utils/api';
+import api, { type ApiError } from '../utils/api';
 import { useEscapeKey } from '../hooks/useEscapeKey';
 import { useFocusTrap } from '../hooks/useFocusTrap';
 import CanaryTokenDrawer from './CanaryTokenDrawer';
@@ -32,7 +32,7 @@ const KIND_OPTIONS: Array<{ value: 'http' | 'dns' | 'aws_passive'; label: string
 ];
 
 function extractError(err: unknown, fallback: string): string {
-  const e = err as { response?: { status?: number; data?: { detail?: string } } };
+  const e = err as ApiError;
   if (e?.response?.data?.detail) return e.response.data.detail;
   if (e?.response?.status === 403) return 'Insufficient permissions (admin only).';
   if (e?.response?.status === 401) return 'Session expired — please log in again.';

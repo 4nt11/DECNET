@@ -1,5 +1,5 @@
 import React, { useEffect, useRef, useState } from 'react';
-import api from '../utils/api';
+import api, { type ApiError } from '../utils/api';
 import EmptyState from './EmptyState/EmptyState';
 import Modal from './Modal/Modal';
 import './Dashboard.css';
@@ -108,7 +108,7 @@ const EnrollmentWizard: React.FC<EnrollmentWizardProps> = ({ open, onClose, onEn
       setResult(res.data);
       onEnrolled();
     } catch (err: unknown) {
-      const e = err as { response?: { data?: { detail?: string } } };
+      const e = err as ApiError;
       setError(e?.response?.data?.detail || 'Enrollment bundle creation failed');
     } finally {
       setSubmitting(false);

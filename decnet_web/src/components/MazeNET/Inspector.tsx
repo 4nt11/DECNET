@@ -6,6 +6,7 @@ import {
 import type { Net, MazeNode, Edge } from './types';
 import { DEFAULT_SERVICES } from './data';
 import ServiceConfigForm from '../ServiceConfigForm';
+import type { ApiError } from '../../utils/api';
 
 export type Selection =
   | { type: 'net'; id: string }
@@ -173,7 +174,7 @@ const Inspector: React.FC<Props> = ({
                             try {
                               await onLiveRemoveService!(node.name, s);
                             } catch (err) {
-                              const msg = (err as { response?: { data?: { detail?: string } } })?.response?.data?.detail
+                              const msg = (err as ApiError)?.response?.data?.detail
                                 ?? 'Remove failed.';
                               setOpError(msg);
                             } finally {
@@ -314,7 +315,7 @@ const Inspector: React.FC<Props> = ({
                   try {
                     await onToggleGateway(node.id, next);
                   } catch (err) {
-                    const msg = (err as { response?: { data?: { detail?: string } } })?.response?.data?.detail
+                    const msg = (err as ApiError)?.response?.data?.detail
                       ?? 'Gateway toggle failed.';
                     setOpError(msg);
                   } finally {
@@ -352,7 +353,7 @@ const Inspector: React.FC<Props> = ({
                       try {
                         await onLiveTarpitDisable!(node.name);
                       } catch (err) {
-                        const msg = (err as { response?: { data?: { detail?: string } } })
+                        const msg = (err as ApiError)
                           ?.response?.data?.detail ?? 'Tarpit disable failed.';
                         setOpError(msg);
                       } finally {
@@ -406,7 +407,7 @@ const Inspector: React.FC<Props> = ({
                           await onLiveTarpitEnable!(node.name, ports, tarpitDelay);
                           setTarpitOpen(false);
                         } catch (err) {
-                          const msg = (err as { response?: { data?: { detail?: string } } })
+                          const msg = (err as ApiError)
                             ?.response?.data?.detail ?? 'Tarpit enable failed.';
                           setOpError(msg);
                         } finally {

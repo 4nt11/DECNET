@@ -4,7 +4,7 @@ import {
   RefreshCw, Server, Shield, Terminal, Plus, X,
 } from '../icons';
 import { useEscapeKey } from '../hooks/useEscapeKey';
-import api from '../utils/api';
+import api, { type ApiError } from '../utils/api';
 import { ARCHETYPES as FALLBACK_ARCHETYPES, DEFAULT_SERVICES } from './MazeNET/data';
 import { useToast } from './Toasts/useToast';
 import Modal from './Modal/Modal';
@@ -325,7 +325,7 @@ const DeckyCard: React.FC<DeckyCardProps> = ({
       setTarpitMenuOpen(false);
       onTarpitResult(decky.name, true, `TARPIT ON · ${decky.name.toUpperCase()} · ${ports.join(',')} / ${tarpitDelayMs}ms`);
     } catch (err) {
-      const msg = (err as { response?: { data?: { detail?: string } } })?.response?.data?.detail ?? 'Tarpit enable failed';
+      const msg = (err as ApiError)?.response?.data?.detail ?? 'Tarpit enable failed';
       onTarpitResult(decky.name, false, msg);
     } finally {
       setTarpitBusy(false);
@@ -339,7 +339,7 @@ const DeckyCard: React.FC<DeckyCardProps> = ({
       await api.delete(`/deckies/${encodeURIComponent(decky.name)}/tarpit`);
       onTarpitResult(decky.name, true, `TARPIT OFF · ${decky.name.toUpperCase()}`);
     } catch (err) {
-      const msg = (err as { response?: { data?: { detail?: string } } })?.response?.data?.detail ?? 'Tarpit disable failed';
+      const msg = (err as ApiError)?.response?.data?.detail ?? 'Tarpit disable failed';
       onTarpitResult(decky.name, false, msg);
     } finally {
       setTarpitBusy(false);
@@ -355,7 +355,7 @@ const DeckyCard: React.FC<DeckyCardProps> = ({
       );
       onServicesChanged(decky.name, data.services);
     } catch (err) {
-      const msg = (err as { response?: { data?: { detail?: string } } })?.response?.data?.detail
+      const msg = (err as ApiError)?.response?.data?.detail
         ?? 'Remove failed.';
       setOpError(msg);
     } finally {
@@ -383,7 +383,7 @@ const DeckyCard: React.FC<DeckyCardProps> = ({
     } catch (err) {
       // Re-raise so the modal can surface the error in its own status row.
       // Also mirror onto opError for the inline picker case.
-      const msg = (err as { response?: { data?: { detail?: string } } })?.response?.data?.detail
+      const msg = (err as ApiError)?.response?.data?.detail
         ?? 'Add failed.';
       setOpError(msg);
       throw err;
@@ -1466,7 +1466,7 @@ const DeckyFleet: React.FC<FleetProps> = ({ searchQuery = '' }) => {
       await fetchDeckies(deployMode?.mode);
       push({ text: `TORN DOWN · ${d.name.toUpperCase()}`, tone: 'matrix', icon: 'check-circle' });
     } catch (err: unknown) {
-      const e = err as { response?: { data?: { detail?: string } } };
+      const e = err as ApiError;
       push({
         text: `TEARDOWN FAILED · ${e?.response?.data?.detail || d.name}`,
         tone: 'alert',
