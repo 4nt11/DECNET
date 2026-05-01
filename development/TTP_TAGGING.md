@@ -2599,6 +2599,8 @@ until E.3.6).
 
 **E.2.7 — Static decoupling lint** (`tests/ttp/test_decoupling.py`)
 
+**Status:** ✅ done.
+
 - Walk every module under `decnet/ttp/` (AST-parse, no runtime
   import). Assert no module imports from `decnet.intel.{abuseipdb,
   greynoise, feodo, threatfox}` — only `decnet.web.db.models` is
