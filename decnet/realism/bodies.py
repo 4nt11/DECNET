@@ -208,6 +208,9 @@ _BODIES: dict[ContentClass, Callable[[str, secrets.SystemRandom], str]] = {
     ContentClass.LOG_DAEMON: _body_log_daemon,
     ContentClass.CACHE_TMP: _body_cache_tmp,
     ContentClass.EMAIL: _body_email,
+    # All canary classes share one placeholder — content-class discriminant is the
+    # "what"; the real payload (token slug, DNS hook URL) is injected by the canary
+    # cultivator. Do not replace with distinct generators without updating cultivator.
     ContentClass.CANARY_AWS_CREDS: _body_canary,
     ContentClass.CANARY_ENV_FILE: _body_canary,
     ContentClass.CANARY_GIT_CONFIG: _body_canary,
