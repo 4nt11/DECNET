@@ -1,14 +1,25 @@
 """MazeNET topology tables + the REST DTOs that wrap them."""
+import json
 from datetime import datetime, timezone
 from typing import Annotated, Any, Literal, Optional
 from uuid import uuid4
 
 from pydantic import BaseModel, BeforeValidator, ConfigDict, Field as PydanticField
-from sqlalchemy import Column, Index, Text, UniqueConstraint
+from sqlalchemy import Column, Index, String, Text, UniqueConstraint
 from sqlmodel import Field, SQLModel
 
 from ._base import _BIG_TEXT
 
+_MUTATION_OPS = Literal[
+    "add_lan",
+    "remove_lan",
+    "add_decky",
+    "attach_decky",
+    "detach_decky",
+    "remove_decky",
+    "update_decky",
+    "update_lan",
+]
 
 # --- MazeNET tables ---
 # Nested deception topologies: an arbitrary-depth DAG of LANs connected by
@@ -19,7 +30,9 @@ class Topology(SQLModel, table=True):
     __tablename__ = "topologies"
     id: str = Field(default_factory=lambda: str(uuid4()), primary_key=True)
     name: str = Field(index=True, unique=True)
-    mode: str = Field(default="unihost")  # unihost|agent
+    mode: Literal["unihost", "agent"] = Field(
+        default="unihost", sa_column=Column("mode", String, nullable=False, default="unihost")
+    )
     # When ``mode == "agent"``, pins this topology to a specific enrolled
     # worker.  ``None`` for unihost topologies (master-local deploy).
     target_host_uuid: Optional[str] = Field(
@@ -29,9 +42,12 @@ class Topology(SQLModel, table=True):
     config_snapshot: str = Field(
         sa_column=Column("config_snapshot", _BIG_TEXT, nullable=False, default="{}")
     )
-    status: str = Field(
-        default="pending", index=True
-    )  # pending|deploying|active|degraded|failed|tearing_down|torn_down
+    status: Literal[
+        "pending", "deploying", "active", "degraded", "failed", "tearing_down", "torn_down"
+    ] = Field(
+        default="pending",
+        sa_column=Column("status", String, nullable=False, default="pending", index=True),
+    )
     status_changed_at: datetime = Field(
         default_factory=lambda: datetime.now(timezone.utc)
     )
@@ -101,10 +117,12 @@ class TopologyDecky(SQLModel, table=True):
         default=None, sa_column=Column("decky_config", _BIG_TEXT, nullable=True)
     )
     ip: Optional[str] = Field(default=None)
-    # Same vocabulary as DeckyShard.state to keep dashboard rendering uniform.
-    state: str = Field(
-        default="pending", index=True
-    )  # pending|running|failed|torn_down|degraded|tearing_down|teardown_failed
+    state: Literal[
+        "pending", "running", "failed", "torn_down", "degraded", "tearing_down", "teardown_failed"
+    ] = Field(
+        default="pending",
+        sa_column=Column("state", String, nullable=False, default="pending", index=True),
+    )
     last_error: Optional[str] = Field(
         default=None, sa_column=Column("last_error", Text, nullable=True)
     )
@@ -168,15 +186,14 @@ class TopologyMutation(SQLModel, table=True):
     )
     id: str = Field(default_factory=lambda: str(uuid4()), primary_key=True)
     topology_id: str = Field(foreign_key="topologies.id", index=True)
-    # add_lan|remove_lan|add_decky|attach_decky|detach_decky|
-    # remove_decky|update_decky|update_lan
-    op: str = Field(index=True)
-    # JSON-serialised op payload (keys depend on ``op``).
+    op: _MUTATION_OPS = Field(sa_column=Column("op", String, nullable=False, index=True))
     payload: str = Field(
         sa_column=Column("payload", _BIG_TEXT, nullable=False, default="{}")
     )
-    # pending|applying|applied|failed
-    state: str = Field(default="pending", index=True)
+    state: Literal["pending", "applying", "applied", "failed"] = Field(
+        default="pending",
+        sa_column=Column("state", String, nullable=False, default="pending", index=True),
+    )
     requested_at: datetime = Field(
         default_factory=lambda: datetime.now(timezone.utc), index=True
     )
@@ -332,18 +349,6 @@ class EdgeCreateRequest(BaseModel):
     expected_version: Optional[int] = None
 
 
-_MUTATION_OPS = Literal[
-    "add_lan",
-    "remove_lan",
-    "add_decky",
-    "attach_decky",
-    "detach_decky",
-    "remove_decky",
-    "update_decky",
-    "update_lan",
-]
-
-
 class MutationEnqueueRequest(BaseModel):
     op: _MUTATION_OPS
     payload: dict[str, Any] = PydanticField(default_factory=dict)
@@ -353,8 +358,7 @@ class MutationEnqueueRequest(BaseModel):
 def _decode_json_payload(v: Any) -> Any:
     """Accept either a dict or a JSON-encoded string for mutation payloads."""
     if isinstance(v, str):
-        import json as _json
-        return _json.loads(v) if v else {}
+        return json.loads(v) if v else {}
     return v
 
 
@@ -365,7 +369,7 @@ class MutationRow(BaseModel):
     model_config = ConfigDict(extra="ignore")
     id: str
     topology_id: str
-    op: str
+    op: _MUTATION_OPS
     payload: _MutationPayload = PydanticField(default_factory=dict)
     state: str
     requested_at: datetime
