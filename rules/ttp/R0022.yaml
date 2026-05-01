@@ -1,0 +1,21 @@
+rule_id: R0022
+rule_version: 1
+name: ldap_account_discovery
+description: |
+  ldapsearch / BloodHound CLI / ADExplorer — LDAP-based account
+  and trust enumeration.
+applies_to:
+  - command
+match:
+  field: command_text
+  pattern: '(?i)\b(?:ldapsearch|bloodhound-?python|sharphound|adexplorer)\b'
+emits:
+  - tactic: TA0007
+    technique_id: T1087
+    sub_technique_id: T1087.002
+    confidence: 0.9
+  - tactic: TA0007
+    technique_id: T1482
+    confidence: 0.85
+evidence_fields:
+  - command_text

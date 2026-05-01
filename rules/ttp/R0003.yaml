@@ -1,0 +1,19 @@
+rule_id: R0003
+rule_version: 1
+name: password_spraying
+description: |
+  Same password tried across many accounts (identity-rollup).
+  IdentityLifter (E.3.13).
+applies_to:
+  - identity
+match:
+  kind: lifter:password_spraying
+  account_threshold: 3
+emits:
+  - tactic: TA0006
+    technique_id: T1110
+    sub_technique_id: T1110.003
+    confidence: 0.9
+evidence_fields:
+  - shared_password_hash
+  - account_count

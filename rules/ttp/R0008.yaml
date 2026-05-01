@@ -1,0 +1,18 @@
+rule_id: R0008
+rule_version: 1
+name: log4j_jndi
+description: |
+  Log4j JNDI injection — ${jndi:ldap://...} pattern in any header
+  or URL component.
+applies_to:
+  - http_request
+match:
+  field: raw_url
+  pattern: '\$\{(?:jndi|\${[^}]*}):(?:ldap|ldaps|rmi|dns|http)s?://'
+emits:
+  - tactic: TA0001
+    technique_id: T1190
+    confidence: 0.95
+evidence_fields:
+  - raw_url
+  - headers

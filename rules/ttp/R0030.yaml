@@ -1,0 +1,27 @@
+rule_id: R0030
+rule_version: 1
+name: jarm_hassh_c2_fingerprint
+description: |
+  JARM/HASSH fingerprint match against the known-C2 catalogue.
+  Sniffer-side; populated as an enrichment, then the lifter
+  emits this rule's tag. v0 RuleEngine cannot interpret the
+  fingerprint blob.
+applies_to:
+  - session
+match:
+  kind: lifter:c2_fingerprint
+  catalogues:
+    - jarm
+    - hassh
+emits:
+  - tactic: TA0011
+    technique_id: T1071
+    confidence: 0.85
+  - tactic: TA0011
+    technique_id: T1071
+    sub_technique_id: T1071.001
+    confidence: 0.9
+evidence_fields:
+  - jarm
+  - hassh
+  - matched_framework

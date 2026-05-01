@@ -1,0 +1,16 @@
+rule_id: R0021
+rule_version: 1
+name: network_connections_discovery
+description: |
+  netstat / ss / lsof -i — active connection enumeration.
+applies_to:
+  - command
+match:
+  field: command_text
+  pattern: '\b(?:netstat\s+-\w+|ss\s+-\w+|lsof\s+-i\b)'
+emits:
+  - tactic: TA0007
+    technique_id: T1049
+    confidence: 0.75
+evidence_fields:
+  - command_text

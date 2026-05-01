@@ -1,0 +1,24 @@
+rule_id: R0007
+rule_version: 1
+name: sqlmap_user_agent
+description: |
+  sqlmap's default User-Agent header. Triggers on the raw URL
+  payload because the v0 engine's http_request default field is
+  raw_url; we override to user_agent. Same matcher catches nikto,
+  nmap-scripts, and other auto-tooling that brands itself in UA.
+applies_to:
+  - http_request
+match:
+  field: user_agent
+  pattern: '(?i)\b(sqlmap|nikto|w3af|acunetix|nessus|openvas|wpscan|dirbuster)\b'
+emits:
+  - tactic: TA0001
+    technique_id: T1190
+    confidence: 0.9
+  - tactic: TA0043
+    technique_id: T1595
+    sub_technique_id: T1595.002
+    confidence: 0.9
+evidence_fields:
+  - user_agent
+  - raw_url

@@ -1,0 +1,20 @@
+rule_id: R0001
+rule_version: 1
+name: generic_auth_brute
+description: |
+  Repeated failed auth across services/accounts. Cross-event;
+  emitted by the BehavioralLifter (E.3.9) — v0 RuleEngine cannot
+  count.
+applies_to:
+  - auth_attempt
+match:
+  kind: lifter:auth_brute_generic
+  fail_threshold: 5
+  window_minutes: 5
+emits:
+  - tactic: TA0006
+    technique_id: T1110
+    confidence: 0.85
+evidence_fields:
+  - fail_count
+  - service

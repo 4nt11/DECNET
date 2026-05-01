@@ -1,0 +1,18 @@
+rule_id: R0019
+rule_version: 1
+name: user_discovery
+description: |
+  whoami / id / w / who / last / users — current-user / logged-in
+  user enumeration. Word-boundary anchored at start so a substring
+  inside a longer command doesn't trip.
+applies_to:
+  - command
+match:
+  field: command_text
+  pattern: '^(?:\s*sudo\s+)?(?:whoami|id|w|who|users|last)(?:\s|$)'
+emits:
+  - tactic: TA0007
+    technique_id: T1033
+    confidence: 0.7
+evidence_fields:
+  - command_text

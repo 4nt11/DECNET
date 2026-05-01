@@ -1,0 +1,18 @@
+rule_id: R0014
+rule_version: 1
+name: etc_shadow_read
+description: |
+  Read of /etc/shadow — credential-dumping primitive, requires
+  root, much higher signal than passwd.
+applies_to:
+  - command
+match:
+  field: command_text
+  pattern: '\b(cat|less|more|head|tail|nl|grep|sudo\s+cat)\s+(?:[^|;]*\s)?/etc/shadow\b'
+emits:
+  - tactic: TA0006
+    technique_id: T1003
+    sub_technique_id: T1003.008
+    confidence: 0.95
+evidence_fields:
+  - command_text

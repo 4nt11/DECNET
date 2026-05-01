@@ -1,0 +1,18 @@
+rule_id: R0004
+rule_version: 1
+name: credential_stuffing
+description: |
+  Reused credential signal — CredentialLifter (E.3.13) consumes
+  CredentialReuse rows.
+applies_to:
+  - credential
+match:
+  kind: lifter:credential_reuse
+emits:
+  - tactic: TA0006
+    technique_id: T1110
+    sub_technique_id: T1110.004
+    confidence: 0.9
+evidence_fields:
+  - credential_hash
+  - reuse_count

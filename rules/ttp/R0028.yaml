@@ -1,0 +1,18 @@
+rule_id: R0028
+rule_version: 1
+name: clear_command_history
+description: |
+  history -c / -cw, unset HISTFILE, redirect /dev/null over
+  ~/.bash_history.
+applies_to:
+  - command
+match:
+  field: command_text
+  pattern: '(?i)\bhistory\s+-c\w*\b|\bunset\s+HISTFILE\b|>\s*~?/?\.bash_history\b|export\s+HISTFILE=/dev/null'
+emits:
+  - tactic: TA0005
+    technique_id: T1070
+    sub_technique_id: T1070.003
+    confidence: 0.9
+evidence_fields:
+  - command_text

@@ -1,0 +1,19 @@
+rule_id: R0010
+rule_version: 1
+name: unix_shell_exec
+description: |
+  Reverse shell or shell-execution patterns: bash -i, /dev/tcp/,
+  nc -e, sh -c with exec primitives. Tight enough to skip plain
+  scripts; the broader T1059 catch is R0011.
+applies_to:
+  - command
+match:
+  field: command_text
+  pattern: '(?i)(?:bash\s+-i|/dev/tcp/|/dev/udp/|nc\s+-e\s|/bin/sh\s+-c\b|/bin/bash\s+-c\b)'
+emits:
+  - tactic: TA0002
+    technique_id: T1059
+    sub_technique_id: T1059.004
+    confidence: 0.9
+evidence_fields:
+  - command_text

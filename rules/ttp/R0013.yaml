@@ -1,0 +1,17 @@
+rule_id: R0013
+rule_version: 1
+name: etc_passwd_read
+description: |
+  cat / less / more / head / tail of /etc/passwd — classic
+  post-foothold discovery primitive.
+applies_to:
+  - command
+match:
+  field: command_text
+  pattern: '\b(cat|less|more|head|tail|nl|grep)\s+(?:[^|;]*\s)?/etc/passwd\b'
+emits:
+  - tactic: TA0007
+    technique_id: T1083
+    confidence: 0.85
+evidence_fields:
+  - command_text

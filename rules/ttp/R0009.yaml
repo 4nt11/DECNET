@@ -1,0 +1,17 @@
+rule_id: R0009
+rule_version: 1
+name: path_traversal
+description: |
+  Classic ../ traversal in URL path or query. Catches both raw and
+  URL-encoded forms (%2e%2e/, %2E%2E%2F).
+applies_to:
+  - http_request
+match:
+  field: raw_url
+  pattern: '(?i)(?:\.\./|%2e%2e/|\.\.%2f|%2e%2e%2f){2,}'
+emits:
+  - tactic: TA0001
+    technique_id: T1190
+    confidence: 0.85
+evidence_fields:
+  - raw_url

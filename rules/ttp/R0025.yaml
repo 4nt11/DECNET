@@ -1,0 +1,18 @@
+rule_id: R0025
+rule_version: 1
+name: cron_persistence
+description: |
+  Cron-based persistence: crontab -e, writes to /etc/cron.* or
+  /var/spool/cron/.
+applies_to:
+  - command
+match:
+  field: command_text
+  pattern: '\bcrontab\s+-e\b|>>?\s*/etc/cron\.\w+/|>>?\s*/var/spool/cron/'
+emits:
+  - tactic: TA0003
+    technique_id: T1053
+    sub_technique_id: T1053.003
+    confidence: 0.9
+evidence_fields:
+  - command_text

@@ -32,7 +32,7 @@ from decnet.ttp.impl.rule_engine import CompiledRule, RuleEngine
 from decnet.ttp.store.base import RuleState
 from decnet.ttp.store.impl.filesystem import _parse_and_compile
 
-_RULES_DIR = Path(__file__).resolve().parents[2] / "rules" / "ttp"
+_RULES_DIR = Path(__file__).resolve().parents[3] / "rules" / "ttp"
 _CORPUS_DIR = Path(__file__).resolve().parent / "corpus"
 
 
@@ -102,7 +102,7 @@ def compiled_rules() -> list[CompiledRule]:
     return _load_compiled_rules()
 
 
-@pytest_asyncio.fixture
+@pytest_asyncio.fixture(scope="module")
 async def precision_engine(
     compiled_rules: list[CompiledRule],
 ) -> RuleEngine:
@@ -167,11 +167,19 @@ def corpus_loader() -> Callable[[str], list[CorpusRow]]:
 
 
 def make_event(row: CorpusRow, source_id: str = "src") -> TaggerEvent:
-    """Materialise a :class:`CorpusRow` into a :class:`TaggerEvent`."""
+    """Materialise a :class:`CorpusRow` into a :class:`TaggerEvent`.
+
+    Sets a deterministic ``attacker_uuid`` derived from the row label so
+    the downstream ``TTPTag`` constructor's "at least one of
+    attacker_uuid/identity_uuid" invariant is satisfied. The corpus
+    rows themselves don't carry attacker identity — they're per-payload
+    fixtures, not per-attacker — so this synthesis is purely a test
+    plumbing concern.
+    """
     return TaggerEvent(
         source_kind=row.source_kind,
         source_id=source_id,
-        attacker_uuid=None,
+        attacker_uuid=f"corpus-{row.label}",
         identity_uuid=None,
         session_id=None,
         decky_id=None,

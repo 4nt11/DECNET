@@ -1,0 +1,20 @@
+rule_id: R0002
+rule_version: 1
+name: password_guessing
+description: |
+  Multiple passwords tried against a single account in a window.
+  Cross-event; BehavioralLifter (E.3.9).
+applies_to:
+  - auth_attempt
+match:
+  kind: lifter:password_guessing
+  pw_threshold: 5
+  window_minutes: 5
+emits:
+  - tactic: TA0006
+    technique_id: T1110
+    sub_technique_id: T1110.001
+    confidence: 0.85
+evidence_fields:
+  - username
+  - password_count
