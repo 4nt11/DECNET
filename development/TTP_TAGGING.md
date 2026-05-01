@@ -2495,6 +2495,10 @@ time / xfail-flip at impl time" discipline above applies to
 
 **E.2.1b — Evidence shape contract** (`tests/ttp/test_evidence_shape.py`)
 
+**Status:** ✅ done (positive case + negative TypeError-propagation
+case parked behind `xfail(strict=True)` until E.3.x lifter impl
+lands; PII rule §6 type assertion is GREEN today).
+
 - For each lifter, parametrize over a synthetic event matched by
   one of its rules. Assert the `evidence` dict on the emitted tag
   is structurally compatible with the corresponding `TypedDict`
