@@ -5,6 +5,12 @@
   height: 100%;
 }
 
+/* Detail/scroll pages: grow with content instead of locking to viewport */
+.dashboard.page-scroll {
+  height: auto;
+  min-height: 0;
+}
+
 /* Page header */
 .page-header {
   display: flex;
@@ -275,6 +281,7 @@
   flex: 1;
   overflow-y: auto;
   min-height: 0;
+  max-height: none;
 }
 
 .dash-side {

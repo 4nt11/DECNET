@@ -224,23 +224,6 @@ const Credentials: React.FC = () => {
         </div>
       </div>
 
-      <div className="seg-group" role="tablist" style={{ marginBottom: 12 }}>
-        <button
-          type="button"
-          className={tab === 'creds' ? 'active' : ''}
-          onClick={() => setTab('creds')}
-        >
-          CREDS
-        </button>
-        <button
-          type="button"
-          className={tab === 'reuse' ? 'active' : ''}
-          onClick={() => setTab('reuse')}
-        >
-          REUSE
-        </button>
-      </div>
-
       {tab === 'creds' && (
         <form className="controls-row" onSubmit={handleSearch}>
           <div className="search-container">
@@ -274,6 +257,23 @@ const Credentials: React.FC = () => {
           </div>
         </form>
       )}
+
+      <div className="seg-group" role="tablist" style={{ marginBottom: 12 }}>
+        <button
+          type="button"
+          className={tab === 'creds' ? 'active' : ''}
+          onClick={() => setTab('creds')}
+        >
+          CREDS
+        </button>
+        <button
+          type="button"
+          className={tab === 'reuse' ? 'active' : ''}
+          onClick={() => setTab('reuse')}
+        >
+          REUSE
+        </button>
+      </div>
 
       <div className="logs-section">
         <div className="section-header">

@@ -1,7 +1,7 @@
 .attackers-root {
   display: flex;
   flex-direction: column;
-  gap: 16px;
+  gap: 20px;
 }
 
 .ak-filter-row {

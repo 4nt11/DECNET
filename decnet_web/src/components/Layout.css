@@ -348,6 +348,6 @@
 }
 
 /* Dashboard fills the viewport without scrolling — panels scroll internally */
-.content-viewport:has(> .dashboard) {
+.content-viewport:has(> .dashboard > .dash-grid) {
   overflow: hidden;
 }
