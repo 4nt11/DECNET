@@ -2519,6 +2519,8 @@ lands; PII rule §6 type assertion is GREEN today).
 
 **E.2.2 — Idempotency + replay-safety property tests** (`tests/ttp/test_idempotency.py`)
 
+**Status:** ✅ done.
+
 - Hypothesis property: for any valid input tuple, `compute_tag_uuid`
   returns the same string twice in a row. Determinism.
 - Distinct input tuples produce distinct UUIDs (collision resistance
