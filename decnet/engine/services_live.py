@@ -149,10 +149,17 @@ DeckyKind = Literal["fleet", "topology"]
 
 
 class ServiceMutationError(ValueError):
-    """Raised for caller-correctable failures (unknown service, idempotency
-    violation, missing decky).  The API layer maps subclasses / message
-    contents to 4xx codes; everything else surfaces as 500.
+    """Raised for caller-correctable failures.  The API layer dispatches on
+    subclass to produce 4xx codes; base class maps to 422.
     """
+
+
+class ServiceNotFoundError(ServiceMutationError):
+    """Decky or topology does not exist → 404."""
+
+
+class ServiceConflictError(ServiceMutationError):
+    """Idempotency violation (already on / not on) → 409."""
 
 
 def _validate_service_for_per_decky(name: str) -> BaseService:
@@ -192,13 +199,13 @@ async def _topology_decky(
 ) -> dict[str, Any]:
     hydrated = await hydrate(repo, topology_id)
     if hydrated is None:
-        raise ServiceMutationError(f"topology {topology_id!r} not found")
+        raise ServiceNotFoundError(f"topology {topology_id!r} not found")
     for d in hydrated["deckies"]:
         cfg = d.get("decky_config") or {}
         name = cfg.get("name") or d.get("name")
         if name == decky_name:
             return d
-    raise ServiceMutationError(
+    raise ServiceNotFoundError(
         f"decky {decky_name!r} is not in topology {topology_id!r}"
     )
 
@@ -214,7 +221,7 @@ async def _rerender_topology_compose(
     """
     hydrated = await hydrate(repo, topology_id)
     if hydrated is None:  # pragma: no cover — narrow race
-        raise ServiceMutationError(
+        raise ServiceNotFoundError(
             f"topology {topology_id!r} disappeared mid-mutation"
         )
     path = _topology_compose_path(topology_id)
@@ -232,7 +239,7 @@ async def _add_topology_service(
     decky = await _topology_decky(repo, topology_id, decky_name)
     services: list[str] = list(decky.get("services") or [])
     if service_name in services:
-        raise ServiceMutationError(
+        raise ServiceConflictError(
             f"service {service_name!r} already on decky {decky_name!r}"
         )
     services.append(service_name)
@@ -282,7 +289,7 @@ async def _remove_topology_service(
     decky = await _topology_decky(repo, topology_id, decky_name)
     services: list[str] = list(decky.get("services") or [])
     if service_name not in services:
-        raise ServiceMutationError(
+        raise ServiceConflictError(
             f"service {service_name!r} not on decky {decky_name!r}"
         )
     services = [s for s in services if s != service_name]
@@ -324,7 +331,7 @@ def _fleet_find_decky(config: Any, decky_name: str) -> Any:
     for d in config.deckies:
         if d.name == decky_name:
             return d
-    raise ServiceMutationError(f"fleet decky {decky_name!r} not found")
+    raise ServiceNotFoundError(f"fleet decky {decky_name!r} not found")
 
 
 async def _persist_fleet_change(
@@ -359,7 +366,7 @@ async def _add_fleet_service(
     decky = _fleet_find_decky(config, decky_name)
     services: list[str] = list(decky.services or [])
     if service_name in services:
-        raise ServiceMutationError(
+        raise ServiceConflictError(
             f"service {service_name!r} already on decky {decky_name!r}"
         )
     services.append(service_name)
@@ -393,7 +400,7 @@ async def _remove_fleet_service(
     decky = _fleet_find_decky(config, decky_name)
     services: list[str] = list(decky.services or [])
     if service_name not in services:
-        raise ServiceMutationError(
+        raise ServiceConflictError(
             f"service {service_name!r} not on decky {decky_name!r}"
         )
     services = [s for s in services if s != service_name]
@@ -547,7 +554,7 @@ async def _update_topology_service_config(
 ) -> None:
     decky = await _topology_decky(repo, topology_id, decky_name)
     if service_name not in (decky.get("services") or []):
-        raise ServiceMutationError(
+        raise ServiceConflictError(
             f"service {service_name!r} not on decky {decky_name!r}"
         )
     cfg_blob = dict(decky.get("decky_config") or {})
@@ -580,7 +587,7 @@ async def _update_fleet_service_config(
     config, compose_path = _fleet_state_or_raise()
     decky = _fleet_find_decky(config, decky_name)
     if service_name not in (decky.services or []):
-        raise ServiceMutationError(
+        raise ServiceConflictError(
             f"service {service_name!r} not on decky {decky_name!r}"
         )
     sc = dict(getattr(decky, "service_config", None) or {})

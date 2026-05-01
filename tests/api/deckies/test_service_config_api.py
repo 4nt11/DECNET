@@ -9,7 +9,7 @@ import httpx
 import pytest
 
 from decnet.engine import services_live
-from decnet.engine.services_live import ServiceMutationError
+from decnet.engine.services_live import ServiceConflictError, ServiceMutationError
 from decnet.services.base import ConfigValidationError
 
 _FLEET = "/api/v1/deckies"
@@ -98,7 +98,7 @@ async def test_fleet_apply_config_triggers_recreate(
         json={"config": {"password": "hunter2"}},
         headers=_hdr(auth_token),
     )
-    assert res.status_code == 200
+    assert res.status_code == 201
     assert res.json()["recreated"] is True
     assert seen["apply"] is True
 
@@ -127,7 +127,7 @@ async def test_put_config_409_when_service_not_on_decky(
     client: httpx.AsyncClient, auth_token: str, monkeypatch
 ) -> None:
     async def _fake(*a, **kw):
-        raise ServiceMutationError("service 'ssh' not on decky 'web1'")
+        raise ServiceConflictError("service 'ssh' not on decky 'web1'")
 
     monkeypatch.setattr(
         "decnet.web.router.deckies.api_services.update_service_config", _fake,

@@ -14,7 +14,11 @@ from __future__ import annotations
 import httpx
 import pytest
 
-from decnet.engine.services_live import ServiceMutationError
+from decnet.engine.services_live import (
+    ServiceConflictError,
+    ServiceMutationError,
+    ServiceNotFoundError,
+)
 from decnet.web.router.deckies import api_services
 
 
@@ -43,7 +47,7 @@ async def test_fleet_add_service_returns_post_mutation_list(
         json={"name": "ssh"},
         headers=_hdr(auth_token),
     )
-    assert res.status_code == 200, res.text
+    assert res.status_code == 201, res.text
     body = res.json()
     assert body["decky_name"] == "web1"
     assert body["services"] == ["http", "ssh"]
@@ -70,7 +74,7 @@ async def test_fleet_add_service_409_already_present(
     client: httpx.AsyncClient, auth_token: str, monkeypatch
 ) -> None:
     async def _fake_add(*a, **kw):
-        raise ServiceMutationError("service 'ssh' already on decky 'web1'")
+        raise ServiceConflictError("service 'ssh' already on decky 'web1'")
     monkeypatch.setattr(api_services, "add_service", _fake_add)
     res = await client.post(
         f"{_FLEET_BASE}/web1/services",
@@ -100,7 +104,7 @@ async def test_fleet_remove_service_404_decky_missing(
     client: httpx.AsyncClient, auth_token: str, monkeypatch
 ) -> None:
     async def _fake_remove(*a, **kw):
-        raise ServiceMutationError("fleet decky 'ghost' not found")
+        raise ServiceNotFoundError("fleet decky 'ghost' not found")
     monkeypatch.setattr(api_services, "remove_service", _fake_remove)
     res = await client.delete(
         f"{_FLEET_BASE}/ghost/services/ssh",
@@ -126,7 +130,7 @@ async def test_topology_add_service_returns_post_mutation_list(
         json={"name": "ssh"},
         headers=_hdr(auth_token),
     )
-    assert res.status_code == 200, res.text
+    assert res.status_code == 201, res.text
     body = res.json()
     assert body["decky_name"] == "web1"
     assert body["topology_id"] == "abc123"

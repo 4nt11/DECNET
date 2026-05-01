@@ -16,7 +16,9 @@ from __future__ import annotations
 from fastapi import APIRouter, Depends, HTTPException, Path
 
 from decnet.engine.services_live import (
+    ServiceConflictError,
     ServiceMutationError,
+    ServiceNotFoundError,
     add_service,
     remove_service,
     update_service_config,
@@ -39,18 +41,10 @@ topology_services_router = APIRouter(prefix="/topologies", tags=["Deckies"])
 
 
 def _map_mutation_error(exc: ServiceMutationError) -> HTTPException:
-    """Translate engine-layer errors into 4xx codes.
-
-    Three cases the API reasonably distinguishes:
-
-    * ``not found`` (decky / topology missing) → 404
-    * ``already on`` / ``not on`` (idempotency violation) → 409
-    * everything else (unknown service, fleet_singleton) → 422
-    """
     msg = str(exc)
-    if "not found" in msg:
+    if isinstance(exc, ServiceNotFoundError):
         return HTTPException(status_code=404, detail=msg)
-    if "already on" in msg or "not on" in msg:
+    if isinstance(exc, ServiceConflictError):
         return HTTPException(status_code=409, detail=msg)
     return HTTPException(status_code=422, detail=msg)
 
@@ -59,6 +53,7 @@ def _map_mutation_error(exc: ServiceMutationError) -> HTTPException:
 
 @fleet_services_router.post(
     "/deckies/{decky_name}/services",
+    status_code=201,
     response_model=DeckyServicesResponse,
     responses={
         400: {"description": "Malformed request body or initial config rejected by service schema"},
@@ -143,6 +138,7 @@ async def api_fleet_put_service_config(
 
 @fleet_services_router.post(
     "/deckies/{decky_name}/services/{service_name}/apply",
+    status_code=201,
     response_model=DeckyServiceConfigResponse,
     responses={
         400: {"description": "Config rejected by service schema"},
@@ -198,6 +194,7 @@ async def api_fleet_remove_service(
 
 @topology_services_router.post(
     "/{topology_id}/deckies/{decky_name}/services",
+    status_code=201,
     response_model=DeckyServicesResponse,
     responses={
         400: {"description": "Malformed request body or initial config rejected by service schema"},
@@ -260,6 +257,7 @@ async def api_topology_put_service_config(
 
 @topology_services_router.post(
     "/{topology_id}/deckies/{decky_name}/services/{service_name}/apply",
+    status_code=201,
     response_model=DeckyServiceConfigResponse,
     responses={
         400: {"description": "Config rejected by service schema"},
