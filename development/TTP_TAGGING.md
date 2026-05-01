@@ -2582,6 +2582,11 @@ engine-level version-collision fan-out are parked behind
 
 **E.2.6 — "Tolerates absence" per-lifter** (`tests/ttp/test_lifter_absence.py`)
 
+**Status:** ✅ done (six lifters parametrized over empty-join
+events return ``[]`` with no ERROR records; intel_lifter null-shape
+matrix is GREEN; "all populated → emits" trip-wire is xfail-strict
+until E.3.6).
+
 - For each lifter (behavioral, intel, email, canary_fingerprint,
   identity, credential): given an event whose required join is
   empty (no `AttackerIntel` row, no `SessionProfile` row, no
