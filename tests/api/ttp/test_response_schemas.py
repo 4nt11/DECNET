@@ -42,10 +42,6 @@ def test_placeholder_golden_is_stable() -> None:
     )
 
 
-@pytest.mark.xfail(
-    strict=True,
-    reason="impl phase E.3.8: TTP router not yet contributing to OpenAPI",
-)
 def test_openapi_includes_ttp_paths() -> None:
     """Every documented TTP endpoint must appear in the live OpenAPI
     schema once the router lands. Pinned as a strict-xfail so the

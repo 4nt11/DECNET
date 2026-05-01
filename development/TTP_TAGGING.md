@@ -2344,6 +2344,8 @@ unrelated events.
 
 **E.1.9 — API contract** (`decnet/web/router/ttp/`)
 
+**Status:** ✅ done.
+
 - Six FastAPI router files matching the API surface above:
   `api_get_techniques.py`, `api_get_by_identity.py`,
   `api_get_by_attacker.py`, `api_get_by_campaign.py`,

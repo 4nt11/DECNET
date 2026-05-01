@@ -186,13 +186,21 @@ from .tarpit import (
     TarpitStatusResponse,
 )
 from .ttp import (
+    CampaignTechniqueRow,
     CanaryFingerprintEvidence,
     CommandEvidence,
     EmailEvidence,
+    IdentityTechniqueRow,
     IntelEvidence,
+    NavigatorLayer,
+    NavigatorTechnique,
+    RuleCatalogueRow,
+    RuleStateRequest,
+    RuleStateResponse,
     TTPRule,
     TTPRuleState,
     TTPTag,
+    TechniqueRollupRow,
     compute_tag_uuid,
 )
 
@@ -356,12 +364,20 @@ __all__ = [
     "TarpitRuleResponse",
     "TarpitStatusResponse",
     # ttp
+    "CampaignTechniqueRow",
     "CanaryFingerprintEvidence",
     "CommandEvidence",
     "EmailEvidence",
+    "IdentityTechniqueRow",
     "IntelEvidence",
+    "NavigatorLayer",
+    "NavigatorTechnique",
+    "RuleCatalogueRow",
+    "RuleStateRequest",
+    "RuleStateResponse",
     "TTPRule",
     "TTPRuleState",
     "TTPTag",
+    "TechniqueRollupRow",
     "compute_tag_uuid",
 ]

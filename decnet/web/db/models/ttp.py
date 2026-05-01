@@ -10,6 +10,7 @@ import uuid as _uuid
 from datetime import datetime, timezone
 from typing import Any, Literal, Optional, TypedDict
 
+from pydantic import BaseModel
 from sqlalchemy import JSON, CheckConstraint, Column, Index
 from sqlmodel import Field, SQLModel
 
@@ -235,3 +236,117 @@ class TTPRuleState(SQLModel, table=True):
     set_at: datetime = Field(
         default_factory=lambda: datetime.now(timezone.utc),
     )
+
+
+# ── API response models (Pydantic) ──────────────────────────────────
+# Routed by `decnet/web/router/ttp/`. Per the project's "all models in
+# models.py" rule these live here alongside the SQLModel tables, not
+# in a sibling schemas.py. Empty-list returns at contract phase are
+# typed against these models so the OpenAPI shape is stable from day
+# one. See TTP_TAGGING.md §E.1.9.
+
+class TechniqueRollupRow(BaseModel):
+    """One row of /api/v1/ttp/techniques — distinct technique observed
+    across the fleet with a count and a most-recent-seen timestamp."""
+
+    technique_id: str
+    sub_technique_id: Optional[str] = None
+    tactic: str
+    count: int
+    last_seen: datetime
+
+
+class IdentityTechniqueRow(BaseModel):
+    """One row of the by-identity / by-attacker / by-session endpoints —
+    a distinct (technique, sub_technique) tuple within the requested
+    scope, with an aggregate count and first/last-seen timestamps."""
+
+    technique_id: str
+    sub_technique_id: Optional[str] = None
+    tactic: str
+    count: int
+    first_seen: datetime
+    last_seen: datetime
+    confidence_max: float
+
+
+class CampaignTechniqueRow(BaseModel):
+    """One row of /api/v1/ttp/by-campaign/{uuid} — a technique observed
+    across at least one Identity rolled up into the campaign."""
+
+    technique_id: str
+    sub_technique_id: Optional[str] = None
+    tactic: str
+    count: int
+    identity_count: int
+    last_seen: datetime
+
+
+class RuleCatalogueRow(BaseModel):
+    """One row of /api/v1/ttp/rules — a rule definition + its current
+    operational state. The operator-facing rule list."""
+
+    rule_id: str
+    rule_version: int
+    name: str
+    description: str
+    state: Literal["enabled", "disabled", "clipped"]
+    confidence_max: Optional[float] = None
+    expires_at: Optional[datetime] = None
+    reason: Optional[str] = None
+    set_by: Optional[str] = None
+    set_at: Optional[datetime] = None
+
+
+class RuleStateRequest(BaseModel):
+    """POST /api/v1/ttp/rules/{rule_id}/state body — admin operator
+    sets disable / clip / TTL on a rule. Pre-v1: schema is the public
+    contract; downward changes require an OpenAPI version bump."""
+
+    state: Literal["enabled", "disabled", "clipped"]
+    confidence_max: Optional[float] = None
+    expires_at: Optional[datetime] = None
+    reason: Optional[str] = None
+
+
+class RuleStateResponse(BaseModel):
+    """Response for POST/DELETE /api/v1/ttp/rules/{rule_id}/state and
+    the per-rule entry of GET /rules. Mirrors :class:`TTPRuleState`."""
+
+    rule_id: str
+    state: Literal["enabled", "disabled", "clipped"]
+    confidence_max: Optional[float] = None
+    expires_at: Optional[datetime] = None
+    reason: Optional[str] = None
+    set_by: Optional[str] = None
+    set_at: Optional[datetime] = None
+
+
+class NavigatorTechnique(BaseModel):
+    """Per-technique entry of the MITRE ATT&CK Navigator JSON layer."""
+
+    techniqueID: str
+    score: int
+    color: str = ""
+    comment: str = ""
+    enabled: bool = True
+
+
+class NavigatorLayer(BaseModel):
+    """MITRE ATT&CK Navigator JSON layer envelope. Empty-but-valid at
+    contract phase: a SOC analyst pasting this JSON into the official
+    Navigator sees the file load cleanly with no highlighted
+    techniques. See TTP_TAGGING.md §"UI surface — Empty state".
+    """
+
+    name: str = "DECNET TTP coverage"
+    versions: dict[str, str] = Field(
+        default_factory=lambda: {
+            "attack": "15",
+            "navigator": "5.1.0",
+            "layer": "4.5",
+        }
+    )
+    domain: str = "enterprise-attack"
+    description: str = ""
+    techniques: list[NavigatorTechnique] = Field(default_factory=list)

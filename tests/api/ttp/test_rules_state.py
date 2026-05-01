@@ -5,8 +5,9 @@ disable/clip/TTL knobs. Per the project's "no client-side role
 checks" rule, the assertions here all hit the server and inspect
 the response — never a feature flag, never a route table.
 
-Today the router does not exist; every assertion is
-``xfail(strict=True)`` and trips when E.3.8 wires it.
+The router landed at E.1.9 with the admin guard on POST/DELETE; the
+assertions exercise the auth + body-validation contract directly.
+Persistence (state actually surviving a roundtrip) lands in E.3.
 """
 from __future__ import annotations
 
@@ -29,10 +30,6 @@ def _path() -> str:
 # ─── POST /rules/{rule_id}/state ─────────────────────────────────────────────
 
 
-@pytest.mark.xfail(
-    strict=True,
-    reason="impl phase E.3.8: TTP router not yet mounted",
-)
 @pytest.mark.asyncio
 async def test_post_state_without_jwt_is_401(
     client: httpx.AsyncClient,
@@ -41,10 +38,6 @@ async def test_post_state_without_jwt_is_401(
     assert res.status_code == 401, res.text
 
 
-@pytest.mark.xfail(
-    strict=True,
-    reason="impl phase E.3.8: TTP router not yet mounted",
-)
 @pytest.mark.asyncio
 async def test_post_state_non_admin_is_403_server_side(
     client: httpx.AsyncClient, viewer_token: str,
@@ -59,10 +52,6 @@ async def test_post_state_non_admin_is_403_server_side(
     assert res.status_code == 403, res.text
 
 
-@pytest.mark.xfail(
-    strict=True,
-    reason="impl phase E.3.8: TTP router not yet mounted",
-)
 @pytest.mark.asyncio
 async def test_post_state_admin_is_200(
     client: httpx.AsyncClient, auth_token: str,
@@ -73,10 +62,6 @@ async def test_post_state_admin_is_200(
     assert res.status_code == 200, res.text
 
 
-@pytest.mark.xfail(
-    strict=True,
-    reason="impl phase E.3.8: TTP router not yet mounted",
-)
 @pytest.mark.asyncio
 async def test_post_state_malformed_body_is_400(
     client: httpx.AsyncClient, auth_token: str,
@@ -98,10 +83,6 @@ async def test_post_state_malformed_body_is_400(
 # ─── DELETE /rules/{rule_id}/state ───────────────────────────────────────────
 
 
-@pytest.mark.xfail(
-    strict=True,
-    reason="impl phase E.3.8: TTP router not yet mounted",
-)
 @pytest.mark.asyncio
 async def test_delete_state_without_jwt_is_401(
     client: httpx.AsyncClient,
@@ -110,10 +91,6 @@ async def test_delete_state_without_jwt_is_401(
     assert res.status_code == 401, res.text
 
 
-@pytest.mark.xfail(
-    strict=True,
-    reason="impl phase E.3.8: TTP router not yet mounted",
-)
 @pytest.mark.asyncio
 async def test_delete_state_non_admin_is_403_server_side(
     client: httpx.AsyncClient, viewer_token: str,
@@ -122,10 +99,6 @@ async def test_delete_state_non_admin_is_403_server_side(
     assert res.status_code == 403, res.text
 
 
-@pytest.mark.xfail(
-    strict=True,
-    reason="impl phase E.3.8: TTP router not yet mounted",
-)
 @pytest.mark.asyncio
 async def test_delete_state_admin_is_204_or_200(
     client: httpx.AsyncClient, auth_token: str,

@@ -1,15 +1,10 @@
 """E.2.8 — GET endpoint shape + auth contract for /api/v1/ttp/*.
 
-Today no TTP router is mounted under :mod:`decnet.web.api`; every
-assertion that the documented endpoint exists (200 with a JWT, 401
-without) lives behind ``@pytest.mark.xfail(strict=True)`` so this
-suite is GREEN today and trips the day E.3.8 wires the router.
-
-The router-presence sanity test is the only assertion that compiles
-GREEN today: it asserts that AT LEAST ONE of the documented paths
-returns something OTHER than 404 (i.e. the router exists). It is
-xfail-strict — when the router lands, the marker flips and the suite
-exercises the rest of the contract.
+The TTP router landed at E.1.9 (contract phase) returning typed
+empty values. Every documented GET endpoint is now exercised: 200
+with a JWT, 401 without. Repo-backed data lands at E.3 implementation
+phase; this suite stays green across that transition because the
+shape contract is stable from E.1.9 forward.
 """
 from __future__ import annotations
 
@@ -58,10 +53,6 @@ _GET_ENDPOINTS: list[str] = [
 
 
 @pytest.mark.parametrize("path", _GET_ENDPOINTS)
-@pytest.mark.xfail(
-    strict=True,
-    reason="impl phase E.3.8: TTP router not yet mounted",
-)
 @pytest.mark.asyncio
 async def test_get_returns_200_with_jwt(
     client: httpx.AsyncClient, auth_token: str, path: str,
@@ -77,10 +68,6 @@ async def test_get_returns_200_with_jwt(
 
 
 @pytest.mark.parametrize("path", _GET_ENDPOINTS)
-@pytest.mark.xfail(
-    strict=True,
-    reason="impl phase E.3.8: TTP router not yet mounted",
-)
 @pytest.mark.asyncio
 async def test_get_returns_401_without_jwt(
     client: httpx.AsyncClient, path: str,
@@ -95,10 +82,6 @@ async def test_get_returns_401_without_jwt(
 # ─── Router-presence sanity ──────────────────────────────────────────────────
 
 
-@pytest.mark.xfail(
-    strict=True,
-    reason="impl phase E.3.8: /api/v1/ttp router not yet mounted",
-)
 @pytest.mark.asyncio
 async def test_ttp_router_is_mounted(
     client: httpx.AsyncClient, auth_token: str,

@@ -53,6 +53,13 @@ from .topology import topology_router
 from .canary import canary_router
 from .deckies import deckies_router
 from .webhooks import webhooks_router
+from .ttp.api_get_techniques import router as ttp_techniques_router
+from .ttp.api_get_by_identity import router as ttp_by_identity_router
+from .ttp.api_get_by_attacker import router as ttp_by_attacker_router
+from .ttp.api_get_by_campaign import router as ttp_by_campaign_router
+from .ttp.api_get_by_session import router as ttp_by_session_router
+from .ttp.api_get_rules import router as ttp_rules_router
+from .ttp.api_export_navigator import router as ttp_navigator_router
 
 api_router = APIRouter(
     # Every route under /api/v1 is auth-guarded (either by an explicit
@@ -163,3 +170,14 @@ api_router.include_router(deckies_router)
 
 # External webhook subscriptions (SIEM/SOAR egress)
 api_router.include_router(webhooks_router)
+
+# TTP Tagging — see development/TTP_TAGGING.md. Contract phase: every
+# handler returns the typed empty value; impl phase wires the repo
+# and rule engine.
+api_router.include_router(ttp_techniques_router)
+api_router.include_router(ttp_by_identity_router)
+api_router.include_router(ttp_by_attacker_router)
+api_router.include_router(ttp_by_campaign_router)
+api_router.include_router(ttp_by_session_router)
+api_router.include_router(ttp_rules_router)
+api_router.include_router(ttp_navigator_router)
