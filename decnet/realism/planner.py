@@ -86,12 +86,15 @@ def _serialize_weights(
 
 def _parse_weights(
     raw: Any, allowed: set[ContentClass],
-) -> tuple[tuple[ContentClass, int], ...]:
+) -> tuple[tuple[tuple[ContentClass, int], ...], list[str]]:
     """Parse ``[{"content_class": "...", "weight": N}, ...]`` into the
-    planner's internal tuple shape. Drops entries whose ``content_class``
-    isn't in *allowed* (defends against an operator pasting in a canary
-    class on the user list, which would skew sampling without the
-    canary-probability gate).
+    planner's internal tuple shape.
+
+    Returns ``(weights, dropped)`` where *dropped* is the list of
+    ``content_class`` values that were valid enum members but not in
+    *allowed* (e.g. a canary class pasted onto the user list). Callers
+    surface *dropped* in the API response so the operator can see the
+    entry didn't land without having to re-read the config.
 
     Raises ``ValueError`` on structural problems (non-list, non-int
     weight, negative weight, empty result) so the API can return 400.
@@ -99,6 +102,7 @@ def _parse_weights(
     if not isinstance(raw, list):
         raise ValueError("weights must be a list")
     out: list[tuple[ContentClass, int]] = []
+    dropped: list[str] = []
     for entry in raw:
         if not isinstance(entry, dict):
             raise ValueError("each weight entry must be an object")
@@ -113,18 +117,14 @@ def _parse_weights(
         except (ValueError, TypeError):
             raise ValueError(f"unknown content_class: {cls_name!r}")
         if cls not in allowed:
-            # Silently drop — a class that doesn't belong on this list
-            # (e.g. a canary class on the user list) is operator error,
-            # but we don't want to fail the whole save over one stray
-            # entry. The roundtrip in current_payload() will show the
-            # operator their entry didn't land.
+            dropped.append(cls.value)
             continue
         out.append((cls, weight))
     if not out:
         raise ValueError("weights list resolved to zero valid entries")
     if sum(w for _, w in out) <= 0:
         raise ValueError("weights must sum to a positive number")
-    return tuple(out)
+    return tuple(out), dropped
 
 
 _USER_CLASSES: set[ContentClass] = {
@@ -154,15 +154,21 @@ def current_payload() -> dict[str, Any]:
     }
 
 
-def apply_payload(payload: dict[str, Any]) -> None:
+def apply_payload(payload: dict[str, Any]) -> list[str]:
     """Override the planner's live globals from a wire payload.
 
     Validates structurally and rebinds module-level names atomically
     per field — partial failures don't leave the planner in a torn
     state because validation happens before any rebind.
 
+    Returns the list of ``content_class`` values that were dropped
+    because they didn't belong on their target list (e.g. a canary
+    class on the user list). Callers should surface this in the API
+    response so operators know their entry didn't land.
+
     Unknown fields are ignored (forward-compat); fields not present
-    leave the corresponding global untouched."""
+    leave the corresponding global untouched.
+    """
     global _USER_CLASS_WEIGHTS, _SYSTEM_CLASS_WEIGHTS
     global _CANARY_CLASS_WEIGHTS, _CANARY_PROBABILITY
 
@@ -170,17 +176,21 @@ def apply_payload(payload: dict[str, Any]) -> None:
     new_system = _SYSTEM_CLASS_WEIGHTS
     new_canary = _CANARY_CLASS_WEIGHTS
     new_prob = _CANARY_PROBABILITY
+    all_dropped: list[str] = []
 
     if "user_class_weights" in payload:
-        new_user = _parse_weights(payload["user_class_weights"], _USER_CLASSES)
+        new_user, dropped = _parse_weights(payload["user_class_weights"], _USER_CLASSES)
+        all_dropped.extend(dropped)
     if "system_class_weights" in payload:
-        new_system = _parse_weights(
+        new_system, dropped = _parse_weights(
             payload["system_class_weights"], _SYSTEM_CLASSES,
         )
+        all_dropped.extend(dropped)
     if "canary_class_weights" in payload:
-        new_canary = _parse_weights(
+        new_canary, dropped = _parse_weights(
             payload["canary_class_weights"], _CANARY_CLASSES,
         )
+        all_dropped.extend(dropped)
     if "canary_probability" in payload:
         prob = payload["canary_probability"]
         if not isinstance(prob, (int, float)) or not (0.0 <= prob <= 1.0):
@@ -192,6 +202,8 @@ def apply_payload(payload: dict[str, Any]) -> None:
         _SYSTEM_CLASS_WEIGHTS = new_system
         _CANARY_CLASS_WEIGHTS = new_canary
         _CANARY_PROBABILITY = new_prob
+
+    return all_dropped
 
 
 def reset_to_defaults() -> None:

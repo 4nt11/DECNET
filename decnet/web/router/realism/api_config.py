@@ -104,7 +104,7 @@ async def put_config(
         raise HTTPException(status_code=400, detail="body must be an object")
 
     try:
-        planner.apply_payload(body)
+        dropped = planner.apply_payload(body)
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
 
@@ -120,4 +120,7 @@ async def put_config(
         user.get("username", user.get("uuid")),
         snapshot["canary_probability"],
     )
-    return snapshot
+    response: dict[str, Any] = dict(snapshot)
+    if dropped:
+        response["dropped_entries"] = dropped
+    return response
