@@ -74,6 +74,7 @@ _CONFIG_PLACEHOLDER = """\
 # master-host = 10.0.0.1
 # syslog-port = 6514
 # swarmctl-port = 8770
+# swarmctl-host = 127.0.0.1
 
 # [logging]
 # system-log = /var/log/decnet/decnet.system.log

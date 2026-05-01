@@ -16,8 +16,16 @@ from .utils import console, log
 def register(app: typer.Typer) -> None:
     @app.command()
     def swarmctl(
-        port: int = typer.Option(8770, "--port", help="Port for the swarm controller"),
-        host: str = typer.Option("127.0.0.1", "--host", help="Bind address for the swarm controller"),
+        port: int = typer.Option(
+            8770, "--port",
+            envvar="DECNET_SWARMCTL_PORT",
+            help="Port for the swarm controller. Defaults to [swarm] swarmctl-port from /etc/decnet/decnet.ini, else 8770.",
+        ),
+        host: str = typer.Option(
+            "127.0.0.1", "--host",
+            envvar="DECNET_SWARMCTL_HOST",
+            help="Bind address for the swarm controller. Defaults to [swarm] swarmctl-host from /etc/decnet/decnet.ini, else 127.0.0.1.",
+        ),
         daemon: bool = typer.Option(False, "--daemon", "-d", help="Detach to background as a daemon process"),
         no_listener: bool = typer.Option(False, "--no-listener", help="Do not auto-spawn the syslog-TLS listener alongside swarmctl"),
         tls: bool = typer.Option(False, "--tls", help="Serve over HTTPS with mTLS (required for cross-host worker heartbeats)"),
