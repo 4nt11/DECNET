@@ -2651,6 +2651,15 @@ edit of `tests/api/ttp/schemas/endpoints.placeholder.json`).
 
 **E.2.9 — UKC bridge bijection tests** (`tests/clustering/test_ukc_bridge.py`)
 
+**Status:** ✅ done. The full inverse claim (every observable phase
+round-trips) is overstated — `EXPLOITATION`, `PIVOTING`, and
+`OBJECTIVES` are observable but UKC-only concepts that ATT&CK lacks
+matching tactics for. The test pins them as observable-but-lossy
+alongside the pre-target lossy phases via a single
+`_LOSSY_INVERSE_REFERENCE` table; round-trip is asserted only over
+`OBSERVABLE_PHASES − _LOSSY_INVERSE_REFERENCE`. All assertions GREEN
+today; no xfail.
+
 - Every tactic key in `ATTACK_TACTIC_TO_UKC` is a valid
   TA-prefixed string.
 - Every value is a member of `UKCPhase`.
@@ -2663,6 +2672,13 @@ edit of `tests/api/ttp/schemas/endpoints.placeholder.json`).
 
 **E.2.10 — Confidence model tests** (`tests/ttp/test_confidence.py`)
 
+**Status:** ✅ done. Pure-arithmetic adjustment property
+(`confidence × multiplier ≤ base` for `multiplier ∈ [0, 1]`) +
+known-input table + floor-constant pinning + invalid-multiplier
+guard GREEN today via Hypothesis. `insert_tags`-side drop-below-0.3
+xfail-gated behind E.3.3; AbuseIPDB-30 worked-example xfail-gated
+behind E.3.10.
+
 - `confidence × multiplier` never raises the value above the rule's
   base (downward-only adjustment property).
 - A computed confidence below 0.3 is dropped — `insert_tags()`
@@ -2672,6 +2688,13 @@ edit of `tests/api/ttp/schemas/endpoints.placeholder.json`).
 
 **E.2.11 — Multi-mapping property tests** (`tests/ttp/test_multi_mapping.py`)
 
+**Status:** ✅ done. UUID-distinctness property over N×M cartesian
+product GREEN today (exercised via `compute_tag_uuid` directly +
+Hypothesis). One-rule / two-techniques worked example pinned as a
+fixture. Engine-level fan-out and engine-replay-safety
+xfail-gated behind E.3.7 (`RuleEngine.evaluate` returns `[]` from
+its empty body).
+
 - Hypothesis: given a synthetic event matched by N rules each
   emitting M techniques, the engine produces exactly N×M tag rows
   (with idempotent UUIDs so a re-run produces zero new rows).
@@ -2679,6 +2702,14 @@ edit of `tests/api/ttp/schemas/endpoints.placeholder.json`).
   (worked example pinned as a fixture).
 
 **E.2.12 — Bus integration** (`tests/ttp/test_worker_bus.py`)
+
+**Status:** ✅ done. `_TOPICS` frozenset equality against the
+documented set + module-level constant pinning + every-pattern
+self-match (or wildcard-extension match) + `run_ttp_worker_loop`
+async-signature surface GREEN today. Worker→engine wiring,
+loop-prevention invariant, attacker.enriched/email.received
+catch-up asymmetry, subscription-introspection xfail-gated behind
+E.3.14.
 
 - Subscribed topics from `_TOPICS` constant match the documented
   set exactly.
@@ -2704,6 +2735,15 @@ edit of `tests/api/ttp/schemas/endpoints.placeholder.json`).
 
 **E.2.13 — Repository tests** (`tests/web/db/test_ttp_repo.py`)
 
+**Status:** ✅ done. The `db_backends` fixture didn't exist at the
+time of this commit — it lands here under `tests/web/db/conftest.py`
+parametrizing SQLite (always) + MySQL (gated on
+`DECNET_TEST_MYSQL_URL` env var per project memory: skip heavy
+suites in dev). Mixin-method async-coroutine introspection +
+mixin-presence-on-repo GREEN today; `insert_tags` idempotency,
+identity-rollup projection, attacker-rollup exclusion of
+NULL-attacker tags xfail-gated behind E.3.3.
+
 - Per dual-DB-backend project convention: every repo test runs
   against both SQLite and MySQL. Use the existing `db_backends`
   parametrize fixture.
@@ -2714,6 +2754,20 @@ edit of `tests/api/ttp/schemas/endpoints.placeholder.json`).
   null `attacker_uuid` correctly.
 
 **E.2.14a — Observability** (`tests/ttp/test_tracing.py`)
+
+**Status:** ✅ done. Per-test `InMemorySpanExporter` + fresh
+`TracerProvider` (OTEL forbids overriding the global once set, so
+no global mutation). Session-scoped autouse fixture in
+`tests/ttp/conftest.py` sets `DECNET_DEVELOPER_TRACING=true` and
+forces `decnet.telemetry._ENABLED = True` so the no-op tracer
+doesn't silently swallow spans. The `span_exporter` fixture also
+monkeypatches `decnet.telemetry.get_tracer` so production code
+under test lands spans in the in-memory exporter. The whole module
+skips when the configured Jaeger / OTLP endpoint
+(`DECNET_OTEL_ENDPOINT`, default `localhost:4317`) is not reachable
+— tracing tests need an observability backend or they have nothing
+meaningful to assert. Span-emission assertions xfail-gated behind
+E.3.5/E.3.6/E.3.7/E.3.9–E.3.13.
 
 OTEL spans are not optional decoration; they're a stated design
 property. Tests pin the span hierarchy:
@@ -2734,6 +2788,33 @@ property. Tests pin the span hierarchy:
   bytes / fingerprint blobs.
 
 **E.2.14b — RuleStore conformance** (`tests/ttp/store/test_*.py`)
+
+**Status:** ✅ done. Three test files under `tests/ttp/store/`:
+
+* `test_conformance.py` — cross-backend assertions parametrized via
+  the `rule_store` fixture in `conftest.py`. `get_state` default
+  for unknown rule_id is GREEN on `FilesystemRuleStore` (the
+  in-memory cache returns `RuleState()` for empty lookup); the
+  `DatabaseRuleStore` parametrization xfails until E.3.6. Other
+  conformance assertions (`load_compiled` corpus equality,
+  `set_state` isolation/round-trip, `subscribe_changes` per-rule
+  fan-out, `expires_at` auto-revert, `set_state` failure
+  semantics) xfail-gated behind E.3.5/E.3.6.
+* `test_filesystem.py` — Linux-only (skipped wholesale on macOS /
+  Windows). Inotify mask + canonical kernel values + 9
+  scratch-filename rejections + 4 valid-filename acceptances +
+  fullmatch-anchor pinning + tmp_path construction +
+  `CompiledRule` immutability GREEN today. Doc references
+  `dataclasses.FrozenInstanceError` for the immutability smoke
+  signal but the actual implementation uses NamedTuple, which
+  raises `AttributeError` on assignment — the test pins
+  `AttributeError` and the test docstring calls out the
+  divergence. Per-save-style + filter-ordering + atomic-swap
+  concurrency xfail-gated behind E.3.5.
+* `test_database.py` — class-level surface (no platform guard, all
+  ABC methods concrete, async coroutines) GREEN today;
+  `ttp_rule_state` writes + filesystem→DB sync xfail-gated
+  behind E.3.6.
 
 The crucial property: both backends satisfy the **same** ABC
 contract observably. Tests are parametrized over
