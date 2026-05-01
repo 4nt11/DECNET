@@ -120,4 +120,4 @@ async def api_create_blank_topology(
     row = await repo.get_topology(topology_id)
     if row is None:  # pragma: no cover — create then vanish
         raise HTTPException(status_code=500, detail="topology insert vanished")
-    return TopologySummary(**row)
+    return row
