@@ -17,6 +17,7 @@ waiting for the orchestrator's next refresh tick.
 from __future__ import annotations
 
 import json
+import threading
 from typing import Any
 
 from fastapi import APIRouter, Depends, HTTPException
@@ -30,6 +31,8 @@ router = APIRouter()
 log = get_logger("api.realism.config")
 
 _CONFIG_KEY = "weights"
+_hydrated = False
+_hydrate_lock = threading.Lock()
 
 
 @router.get(
@@ -51,20 +54,22 @@ async def get_config(
     restart the ``realism_config`` row is loaded into this process the
     first time GET is called; subsequent reads are local.
     """
-    # Lazy hydration — first call after restart pulls from DB so the
-    # admin sees what the orchestrator is actually using, not the
-    # baked-in defaults.
-    row = await repo.get_realism_config(_CONFIG_KEY)
-    if row is not None:
-        try:
-            stored = json.loads(row.get("value") or "{}")
-            if isinstance(stored, dict):
-                planner.apply_payload(stored)
-        except (json.JSONDecodeError, ValueError) as exc:
-            log.warning(
-                "api.realism.get_config: stored payload invalid, "
-                "serving defaults: %s", exc,
-            )
+    global _hydrated
+    if not _hydrated:
+        with _hydrate_lock:
+            if not _hydrated:
+                row = await repo.get_realism_config(_CONFIG_KEY)
+                if row is not None:
+                    try:
+                        stored = json.loads(row.get("value") or "{}")
+                        if isinstance(stored, dict):
+                            planner.apply_payload(stored)
+                    except (json.JSONDecodeError, ValueError) as exc:
+                        log.warning(
+                            "api.realism.get_config: stored payload invalid, "
+                            "serving defaults: %s", exc,
+                        )
+                _hydrated = True
     return planner.current_payload()
 
 
@@ -94,6 +99,7 @@ async def put_config(
     Validation: any structural failure raises 400 *before* the rebind,
     so the live config never goes torn.
     """
+    global _hydrated
     if not isinstance(body, dict):
         raise HTTPException(status_code=400, detail="body must be an object")
 
@@ -101,6 +107,8 @@ async def put_config(
         planner.apply_payload(body)
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+    _hydrated = True
 
     # Persist what the planner now reflects (keeps DB in sync with the
     # in-memory state — partial bodies merge into prior config).

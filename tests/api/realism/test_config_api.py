@@ -12,8 +12,11 @@ from decnet.realism import planner
 
 @pytest.fixture(autouse=True)
 def _reset_planner():
+    import decnet.web.router.realism.api_config as _api_config
+    _api_config._hydrated = False
     yield
     planner.reset_to_defaults()
+    _api_config._hydrated = False
 
 
 @pytest.mark.asyncio
