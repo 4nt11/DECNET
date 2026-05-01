@@ -514,7 +514,7 @@ async def _materialise_decky_services_diff(
             break
         try:
             await anyio.to_thread.run_sync(
-                lambda args=args: _compose(*args, *rm_targets, compose_file=compose_path),
+                lambda args=args: _compose(*args, *rm_targets, compose_file=compose_path),  # type: ignore[misc]
             )
         except Exception as exc:  # noqa: BLE001
             _log.warning(

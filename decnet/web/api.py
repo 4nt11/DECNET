@@ -11,7 +11,7 @@ from typing import Any, AsyncGenerator, Optional
 
 from fastapi import FastAPI, Request, status
 from fastapi.exceptions import RequestValidationError
-from fastapi.responses import ORJSONResponse
+from fastapi.responses import ORJSONResponse, Response
 from pydantic import ValidationError
 from fastapi.middleware.cors import CORSMiddleware
 
@@ -226,7 +226,7 @@ app: FastAPI = FastAPI(
 )
 
 app.state.limiter = limiter
-app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
+app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)  # type: ignore[arg-type]
 app.add_middleware(SlowAPIMiddleware)
 
 app.add_middleware(
@@ -267,7 +267,7 @@ app.include_router(api_router, prefix="/api/v1")
 
 
 @app.exception_handler(RequestValidationError)
-async def validation_exception_handler(request: Request, exc: RequestValidationError) -> ORJSONResponse:
+async def validation_exception_handler(request: Request, exc: RequestValidationError) -> Response:
     """
     Handle validation errors with targeted status codes to satisfy contract tests.
     Tiered Prioritization:

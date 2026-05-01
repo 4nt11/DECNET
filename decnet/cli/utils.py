@@ -11,7 +11,7 @@ import signal
 import subprocess  # nosec B404
 import sys
 from pathlib import Path
-from typing import Optional
+from typing import Any, Callable, Optional
 
 import typer
 from rich.console import Console
@@ -96,7 +96,7 @@ def _is_running(match_fn) -> int | None:
     return None
 
 
-def _service_registry(log_file: str) -> list[tuple[str, callable, list[str]]]:
+def _service_registry(log_file: str) -> list[tuple[str, Callable[..., Any], list[str]]]:
     """Return the microservice registry for health-check and relaunch.
 
     On agents these run as systemd units invoking /usr/local/bin/decnet,
@@ -195,7 +195,7 @@ _DEFAULT_SWARMCTL_URL = "http://127.0.0.1:8770"
 
 
 def _swarmctl_base_url(url: Optional[str]) -> str:
-    return url or os.environ.get("DECNET_SWARMCTL_URL", _DEFAULT_SWARMCTL_URL)
+    return url or os.environ.get("DECNET_SWARMCTL_URL") or _DEFAULT_SWARMCTL_URL
 
 
 def _http_request(method: str, url: str, *, json_body: Optional[dict] = None, timeout: float = 30.0):

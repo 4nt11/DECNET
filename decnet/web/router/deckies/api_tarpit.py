@@ -114,7 +114,7 @@ def _get_active_connections(pid: int, ports: list[int]) -> list[dict]:
 )
 async def api_enable_tarpit(
     decky_name: str = Path(..., pattern=_DECKY_RE),
-    req: TarpitEnableRequest = ...,
+    req: TarpitEnableRequest = ...,  # type: ignore[assignment]
     admin: dict = Depends(require_admin),
 ) -> MessageResponse:
     try:

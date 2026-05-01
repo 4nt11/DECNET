@@ -18,9 +18,9 @@ async def _get_topology_decky(repo, decky_uuid: str) -> dict[str, Any]:
     # Iterate all topologies' deckies — fine for tests with one row.
     topologies = await repo.list_topologies()
     for t in topologies:
-        for d in await repo.list_topology_deckies(t["id"]):
-            if d.get("uuid") == decky_uuid:
-                return d
+        for d in await repo.list_topology_deckies(t.id):
+            if d.uuid == decky_uuid:
+                return d.model_dump()
     raise AssertionError(f"decky {decky_uuid!r} not found in any topology")
 
 from decnet.bus.fake import FakeBus

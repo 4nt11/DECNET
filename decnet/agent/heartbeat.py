@@ -121,7 +121,7 @@ def start() -> Optional[asyncio.Task]:
         return None
 
     try:
-        from decnet import __version__ as _v
+        from decnet import __version__ as _v  # type: ignore[attr-defined]
         agent_version = _v
     except Exception:
         agent_version = "unknown"

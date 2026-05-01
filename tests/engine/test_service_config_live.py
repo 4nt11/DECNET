@@ -80,8 +80,8 @@ async def test_update_persists_validated_cfg_no_recreate_on_save(
     rows = await repo.list_topology_deckies(
         topology_with_ssh_decky["topology_id"]
     )
-    row = next(r for r in rows if r["uuid"] == topology_with_ssh_decky["decky_uuid"])
-    cfg_blob = row["decky_config"]
+    row = next(r for r in rows if r.uuid == topology_with_ssh_decky["decky_uuid"])
+    cfg_blob = row.decky_config
     if isinstance(cfg_blob, str):
         cfg_blob = json.loads(cfg_blob)
     assert cfg_blob["service_config"]["ssh"] == {"password": "hunter2"}

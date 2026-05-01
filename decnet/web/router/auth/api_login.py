@@ -39,7 +39,7 @@ router = APIRouter()
     },
 )
 @limiter.limit("10/5 minutes", key_func=login_ip_key)
-@limiter.limit("10/5 minutes", key_func=login_username_key)
+@limiter.limit("10/5 minutes", key_func=login_username_key)  # type: ignore[arg-type]
 @_traced("api.login")
 async def login(request: Request, payload: LoginRequest) -> dict[str, Any]:
     _user: Optional[dict[str, Any]] = await get_user_by_username_cached(payload.username)

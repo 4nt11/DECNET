@@ -80,7 +80,7 @@ async def _get_attacker_uuid(repo: BaseRepository, ip: str) -> Optional[str]:
         from sqlalchemy import select
         async with repo._session() as session:  # type: ignore[attr-defined]
             result = await session.execute(
-                select(Attacker).where(Attacker.ip == ip)
+                select(Attacker).where(Attacker.ip == ip)  # type: ignore[arg-type]
             )
             row = result.scalar_one_or_none()
             return row.uuid if row else None

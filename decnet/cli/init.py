@@ -602,7 +602,7 @@ def register(app: typer.Typer) -> None:
         # (Path("/").  / "/opt/decnet" == Path("/opt/decnet"), dropping pfx).
         _install_rel = install_dir.lstrip("/")
 
-        required_tools = ("systemctl",) if deinit else (
+        required_tools: tuple[str, ...] = ("systemctl",) if deinit else (
             "systemctl", "useradd", "groupadd", "systemd-tmpfiles",
         )
         if deinit:
@@ -659,7 +659,7 @@ def register(app: typer.Typer) -> None:
             )
             _step(
                 "systemctl daemon-reload",
-                lambda: (_run(["systemctl", "daemon-reload"], dry_run=dry_run), "ok")[1],
+                lambda: (_run(["systemctl", "daemon-reload"], dry_run=dry_run), "ok")[1],  # type: ignore[func-returns-value]
             )
             _step(
                 f"remove {etc_decnet / 'decnet.ini'}",
@@ -776,7 +776,7 @@ def register(app: typer.Typer) -> None:
         for path, mode, d_owner, d_group in dirs:
             _step(
                 f"ensure dir {path}",
-                lambda p=path, m=mode, o=d_owner, g=d_group:
+                lambda p=path, m=mode, o=d_owner, g=d_group:  # type: ignore[misc]
                     _ensure_dir(p, mode=m, owner=o, group=g, dry_run=dry_run),
             )
         _step(
@@ -813,7 +813,7 @@ def register(app: typer.Typer) -> None:
         )
         _step(
             "systemctl daemon-reload",
-            lambda: (_run(["systemctl", "daemon-reload"], dry_run=dry_run), "ok")[1],
+            lambda: (_run(["systemctl", "daemon-reload"], dry_run=dry_run), "ok")[1],  # type: ignore[func-returns-value]
         )
 
         if no_start:
@@ -824,7 +824,7 @@ def register(app: typer.Typer) -> None:
             _step(
                 "systemctl enable --now decnet.target",
                 lambda: (
-                    _run(
+                    _run(  # type: ignore[func-returns-value]
                         ["systemctl", "enable", "--now", "decnet.target"],
                         dry_run=dry_run,
                     ),

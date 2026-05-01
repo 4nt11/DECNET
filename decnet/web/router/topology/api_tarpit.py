@@ -59,7 +59,7 @@ def _db_key(topology_id: str, decky_name: str) -> str:
 async def api_enable_tarpit(
     topology_id: str = Path(..., pattern=_TOPO_RE),
     decky_name: str = Path(..., pattern=_DECKY_RE),
-    req: TarpitEnableRequest = ...,
+    req: TarpitEnableRequest = ...,  # type: ignore[assignment]
     admin: dict = Depends(require_admin),
 ) -> MessageResponse:
     try:

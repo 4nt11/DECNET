@@ -12,11 +12,11 @@ SQLite's:
 """
 from __future__ import annotations
 
-from typing import List, Optional
+from typing import Any, List, Optional
 
 from sqlalchemy import func, select, text, literal_column
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
-from sqlmodel.sql.expression import SelectOfScalar
+
 
 from decnet.web.db.models import Log
 from decnet.web.db.mysql.database import get_async_engine
@@ -162,11 +162,11 @@ class MySQLRepository(SQLModelRepository):
         # Truncate each timestamp to the start of its bucket:
         #   FROM_UNIXTIME( (UNIX_TIMESTAMP(timestamp) DIV N) * N )
         # DIV is MySQL's integer division operator.
-        bucket_expr = literal_column(
+        bucket_expr: Any = literal_column(
             f"FROM_UNIXTIME((UNIX_TIMESTAMP(timestamp) DIV {bucket_seconds}) * {bucket_seconds})"
         ).label("bucket_time")
 
-        statement: SelectOfScalar = select(bucket_expr, func.count().label("count")).select_from(Log)
+        statement: Any = select(bucket_expr, func.count().label("count")).select_from(Log)
         statement = self._apply_filters(statement, search, start_time, end_time)
         statement = statement.group_by(literal_column("bucket_time")).order_by(
             literal_column("bucket_time")

@@ -19,6 +19,7 @@ def get_repository(**kwargs: Any) -> BaseRepository:
     * MySQL accepts ``url`` and engine tuning knobs (``pool_size``, …).
     """
     db_type = os.environ.get("DECNET_DB_TYPE", "sqlite").lower()
+    repo: BaseRepository
 
     if db_type == "sqlite":
         from decnet.web.db.sqlite.repository import SQLiteRepository

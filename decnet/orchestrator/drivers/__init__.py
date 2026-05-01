@@ -65,7 +65,7 @@ def get_driver_for(action: Action) -> ActivityDriver:
     try:
         from decnet.orchestrator.emailgen.scheduler import EmailAction
     except ImportError:  # pragma: no cover - scheduler always exists
-        EmailAction = None  # type: ignore[assignment]
+        EmailAction = None  # type: ignore[assignment, misc]
     if EmailAction is not None and isinstance(action, EmailAction):
         from decnet.orchestrator.drivers.email import EmailDriver
         return EmailDriver()

@@ -131,7 +131,7 @@ def _build_response(
     question = qname_bytes + struct.pack("!HH", query.qtype, query.qclass)
 
     answer = b""
-    if an_count:
+    if an_count and answer_ip is not None:
         # Use a name pointer back to the question (offset 12).
         ptr = struct.pack("!H", 0xC000 | 12)
         rdata = bytes(int(o) for o in answer_ip.split("."))
@@ -190,7 +190,7 @@ class CanaryDNSProtocol(asyncio.DatagramProtocol):
             return
         # Known name — answer with our sinkhole IP, then fire the hook.
         self._send(addr, _build_response(query, answer_ip=self._answer_ip))
-        asyncio.create_task(self._hook(slug, query, addr[0]))
+        asyncio.ensure_future(self._hook(slug, query, addr[0]))
 
     def _slug_for(self, qname: str) -> Optional[str]:
         if not self._zone or not qname.endswith(self._suffix):
