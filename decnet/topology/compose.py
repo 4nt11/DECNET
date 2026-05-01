@@ -26,6 +26,10 @@ from decnet.services.registry import get_service
 
 _DEFAULT_BASE_IMAGE = "debian:bookworm-slim"
 
+# 8 chars matches the git short-SHA convention; collision-safe within
+# a single deployment's network namespace.
+_TOPOLOGY_ID_PREFIX_LEN = 8
+
 _DOCKER_LOGGING = {
     "driver": "json-file",
     "options": {"max-size": "10m", "max-file": "5"},
@@ -34,12 +38,12 @@ _DOCKER_LOGGING = {
 
 def _network_name(topology_id: str, lan_name: str) -> str:
     """Docker network name for a given (topology, LAN) pair."""
-    return f"decnet_t_{topology_id[:8]}_{lan_name.lower()}"
+    return f"decnet_t_{topology_id[:_TOPOLOGY_ID_PREFIX_LEN]}_{lan_name.lower()}"
 
 
 def _container_name(topology_id: str, decky_name: str) -> str:
     """Container name for a decky base in a topology."""
-    return f"decnet_t_{topology_id[:8]}_{decky_name}"
+    return f"decnet_t_{topology_id[:_TOPOLOGY_ID_PREFIX_LEN]}_{decky_name}"
 
 
 def generate_topology_compose(hydrated: dict[str, Any]) -> dict:
