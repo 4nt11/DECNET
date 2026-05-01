@@ -32,7 +32,7 @@ router = APIRouter(prefix="/deckies/{decky_name}/tarpit", tags=["Deckies"])
 _DECKY_RE = r"^[a-z0-9\-]{1,64}$"
 
 
-def _tc(*args: str) -> subprocess.CompletedProcess:  # type: ignore[type-arg]
+def _tc(*args: str) -> subprocess.CompletedProcess[str]:
     cmd = ["tc", *args]
     return subprocess.run(cmd, capture_output=True, text=True)  # nosec B603 B404
 

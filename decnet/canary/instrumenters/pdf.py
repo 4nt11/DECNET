@@ -34,7 +34,7 @@ class PdfInstrumenter(CanaryInstrumenter):
         self, blob: bytes, ctx: CanaryContext, *, target_path: str,
     ) -> CanaryArtifact:
         try:
-            import pikepdf  # type: ignore[import-not-found]
+            import pikepdf
         except ImportError as e:
             raise InstrumenterRejectedError(
                 "PDF instrumenter requires pikepdf; install it (`pip "

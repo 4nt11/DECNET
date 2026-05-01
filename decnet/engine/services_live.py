@@ -338,7 +338,7 @@ async def _persist_fleet_change(
     repo: BaseRepository, decky: Any, services: list[str], compose_path: Path,
 ) -> None:
     """Persist the mutation to JSON state, compose file, and the DB row."""
-    config, _ = _load_state()  # type: ignore[misc] — checked earlier
+    config, _ = _load_state()
     target = _fleet_find_decky(config, decky.name)
     target.services = services
     _save_state(config, compose_path)

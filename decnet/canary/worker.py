@@ -380,7 +380,7 @@ async def _start_dns_server(
         local_addr=(_dns_bind(), _dns_port()),
     )
     log.info("canary.dns listening zone=%s port=%d", zone, _dns_port())
-    return transport  # type: ignore[return-value]
+    return transport
 
 
 # ---------------------------- entry point --------------------------------

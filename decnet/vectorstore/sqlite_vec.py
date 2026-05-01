@@ -45,7 +45,7 @@ class SqliteVecUnavailable(RuntimeError):
 
 def _load_sqlite_vec(conn: sqlite3.Connection) -> None:
     try:
-        import sqlite_vec  # type: ignore[import-untyped]
+        import sqlite_vec
     except ImportError as e:
         raise SqliteVecUnavailable("sqlite_vec package not installed") from e
     try:

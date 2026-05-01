@@ -32,7 +32,7 @@ class ImageInstrumenter(CanaryInstrumenter):
         self, blob: bytes, ctx: CanaryContext, *, target_path: str,
     ) -> CanaryArtifact:
         try:
-            from PIL import Image, PngImagePlugin  # type: ignore[import-not-found]
+            from PIL import Image, PngImagePlugin
         except ImportError as e:
             raise InstrumenterRejectedError(
                 "image instrumenter requires Pillow; install it (`pip "

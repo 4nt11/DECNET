@@ -374,7 +374,7 @@ def check_no_host_port_collision(h: dict[str, Any]) -> list[ValidationIssue]:
         return []
 
     try:
-        import psutil  # type: ignore
+        import psutil
         bound = {
             c.laddr.port
             for c in psutil.net_connections(kind="inet")

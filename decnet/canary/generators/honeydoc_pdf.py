@@ -43,7 +43,7 @@ class HoneydocPdfGenerator(CanaryGenerator):
 
     def generate(self, ctx: CanaryContext) -> CanaryArtifact:
         try:
-            from pikepdf import Pdf, Name, Dictionary, String  # type: ignore[import-not-found]
+            from pikepdf import Pdf, Name, Dictionary, String
         except ImportError as e:
             raise InstrumenterRejectedError(
                 "honeydoc_pdf requires pikepdf; install it (`pip install "
