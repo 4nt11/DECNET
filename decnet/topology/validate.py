@@ -16,7 +16,10 @@ from ipaddress import IPv4Address, IPv4Network
 from typing import Any, Callable, Literal
 
 from decnet.fleet import all_service_names
+from decnet.logging import get_logger
 from decnet.services.registry import get_service
+
+log = get_logger("topology.validate")
 
 Severity = Literal["error", "warning"]
 
@@ -373,7 +376,8 @@ def check_no_host_port_collision(h: dict[str, Any]) -> list[ValidationIssue]:
             for c in psutil.net_connections(kind="inet")
             if c.status == psutil.CONN_LISTEN and c.laddr
         }
-    except Exception:
+    except ImportError:
+        log.warning("psutil not available; skipping host port collision check")
         return []
 
     issues: list[ValidationIssue] = []
