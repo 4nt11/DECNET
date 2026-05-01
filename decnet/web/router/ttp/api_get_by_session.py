@@ -7,7 +7,7 @@ from fastapi import APIRouter, Depends
 
 from decnet.telemetry import traced as _traced
 from decnet.web.db.models import IdentityTechniqueRow
-from decnet.web.dependencies import require_viewer
+from decnet.web.dependencies import repo, require_viewer
 
 router = APIRouter()
 
@@ -27,5 +27,5 @@ async def api_ttp_by_session(
     session_id: str,
     user: dict[str, Any] = Depends(require_viewer),
 ) -> list[IdentityTechniqueRow]:
-    """Per-session TTP tag timeline. Empty at contract phase."""
-    return []
+    """Per-session TTP tag timeline."""
+    return await repo.list_techniques_by_session(session_id)

@@ -7,7 +7,7 @@ from fastapi import APIRouter, Depends
 
 from decnet.telemetry import traced as _traced
 from decnet.web.db.models import CampaignTechniqueRow
-from decnet.web.dependencies import require_viewer
+from decnet.web.dependencies import repo, require_viewer
 
 router = APIRouter()
 
@@ -27,5 +27,5 @@ async def api_ttp_by_campaign(
     campaign_uuid: str,
     user: dict[str, Any] = Depends(require_viewer),
 ) -> list[CampaignTechniqueRow]:
-    """Campaign-rollup TTP rows. Empty at contract phase."""
-    return []
+    """Campaign-rollup TTP rows."""
+    return await repo.list_techniques_by_campaign(campaign_uuid)

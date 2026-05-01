@@ -11,7 +11,7 @@ from fastapi import APIRouter, Depends
 
 from decnet.telemetry import traced as _traced
 from decnet.web.db.models import IdentityTechniqueRow
-from decnet.web.dependencies import require_viewer
+from decnet.web.dependencies import repo, require_viewer
 
 router = APIRouter()
 
@@ -31,5 +31,5 @@ async def api_ttp_by_attacker(
     attacker_uuid: str,
     user: dict[str, Any] = Depends(require_viewer),
 ) -> list[IdentityTechniqueRow]:
-    """Per-Attacker (per-IP) TTP rows. Empty at contract phase."""
-    return []
+    """Per-Attacker (per-IP) TTP rows."""
+    return await repo.list_techniques_by_attacker(attacker_uuid)

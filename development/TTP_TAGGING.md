@@ -2925,6 +2925,10 @@ Order:
    dialect hook fires.
 4. **API endpoints** — fill in handlers reading from repo. Empty
    store still returns empty lists; `test_*.py` shape tests green.
+   ✅ done. Five GET rollup endpoints + Navigator (fleet + identity)
+   wired to the repo singleton from `decnet.web.dependencies`. Rule
+   catalogue (`GET /ttp/rules`) still returns `[]` — backed by the
+   RuleStore, lands at E.3.5/E.3.6.
 5. **RuleStore — FilesystemRuleStore** — implement YAML parse,
    Pydantic validation, inotify watch, in-process state cache,
    `subscribe_changes()` async iterator yielding per-rule events.

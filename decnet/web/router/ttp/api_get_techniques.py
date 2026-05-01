@@ -11,7 +11,7 @@ from fastapi import APIRouter, Depends
 
 from decnet.telemetry import traced as _traced
 from decnet.web.db.models import TechniqueRollupRow
-from decnet.web.dependencies import require_viewer
+from decnet.web.dependencies import repo, require_viewer
 
 router = APIRouter()
 
@@ -30,5 +30,5 @@ async def api_list_techniques(
     user: dict[str, Any] = Depends(require_viewer),
 ) -> list[TechniqueRollupRow]:
     """Distinct techniques observed across the fleet, with counts and
-    last-seen timestamps. Empty list at contract phase."""
-    return []
+    last-seen timestamps."""
+    return await repo.list_distinct_techniques()

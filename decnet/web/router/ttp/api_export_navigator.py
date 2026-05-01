@@ -12,8 +12,8 @@ from typing import Any
 from fastapi import APIRouter, Depends
 
 from decnet.telemetry import traced as _traced
-from decnet.web.db.models import NavigatorLayer
-from decnet.web.dependencies import require_viewer
+from decnet.web.db.models import NavigatorLayer, NavigatorTechnique
+from decnet.web.dependencies import repo, require_viewer
 
 router = APIRouter()
 
@@ -31,8 +31,16 @@ router = APIRouter()
 async def api_export_navigator_fleet(
     user: dict[str, Any] = Depends(require_viewer),
 ) -> NavigatorLayer:
-    """Fleet-wide Navigator layer. Empty-but-valid at contract phase."""
-    return NavigatorLayer(name="DECNET TTP coverage — fleet")
+    """Fleet-wide Navigator layer."""
+    rows = await repo.list_distinct_techniques()
+    techniques = [
+        NavigatorTechnique(techniqueID=r.technique_id, score=r.count)
+        for r in rows
+    ]
+    return NavigatorLayer(
+        name="DECNET TTP coverage — fleet",
+        techniques=techniques,
+    )
 
 
 @router.get(
@@ -51,6 +59,12 @@ async def api_export_navigator_identity(
     user: dict[str, Any] = Depends(require_viewer),
 ) -> NavigatorLayer:
     """Per-Identity Navigator layer (the SOC demo)."""
+    rows = await repo.list_techniques_by_identity(identity_uuid)
+    techniques = [
+        NavigatorTechnique(techniqueID=r.technique_id, score=r.count)
+        for r in rows
+    ]
     return NavigatorLayer(
         name=f"DECNET TTP coverage — identity {identity_uuid}",
+        techniques=techniques,
     )
