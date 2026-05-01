@@ -169,10 +169,10 @@ class CanaryDNSProtocol(asyncio.DatagramProtocol):
         self._answer_ip = answer_ip
         self._transport: Optional[asyncio.DatagramTransport] = None
 
-    def connection_made(self, transport) -> None:  # type: ignore[override]
-        self._transport = transport  # type: ignore[assignment]
+    def connection_made(self, transport) -> None:
+        self._transport = transport
 
-    def datagram_received(  # type: ignore[override]
+    def datagram_received(
         self, data: bytes, addr: Tuple[str, int],
     ) -> None:
         try:

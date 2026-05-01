@@ -99,7 +99,7 @@ class WorkerRegistry:
             payload.pop("ts", None)
             out.append(WorkerStatus(
                 name=name,
-                status=status,  # type: ignore[arg-type]
+                status=status,
                 last_heartbeat_ts=ts,
                 seconds_since=seconds_since,
                 extra=payload,

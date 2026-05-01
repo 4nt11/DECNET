@@ -346,7 +346,7 @@ def _stream_container(
     publish_fn: CollectorPublishFn | None = None,
 ) -> None:
     """Stream logs from one container and append to the host log files."""
-    import docker  # type: ignore[import]
+    import docker
 
     lf: Optional[Any] = None
     jf: Optional[Any] = None
@@ -450,7 +450,7 @@ async def log_collector_worker(log_file: str) -> None:
 
     Watches Docker events to pick up containers started after initial scan.
     """
-    import docker  # type: ignore[import]
+    import docker
 
     log_path = Path(log_file)
     json_path = log_path.with_suffix(".json")

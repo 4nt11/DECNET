@@ -76,7 +76,7 @@ def _maybe_wrap_telemetry(bus: BaseBus) -> BaseBus:
     up at all we no-op.
     """
     try:
-        from decnet.telemetry import wrap_repository  # type: ignore[attr-defined]
+        from decnet.telemetry import wrap_repository
     except ImportError:
         return bus
     try:
