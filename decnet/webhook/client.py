@@ -148,7 +148,7 @@ async def deliver(
     url = sub["url"]
 
     owns_client = client is None
-    if owns_client:
+    if client is None:
         client = httpx.AsyncClient(timeout=timeout_s)
 
     last_status: Optional[int] = None

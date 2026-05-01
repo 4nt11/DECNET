@@ -85,7 +85,7 @@ async def webhook_worker(
 
     shutdown = asyncio.Event()
     owns_http = http_client is None
-    if owns_http:
+    if http_client is None:
         http_client = httpx.AsyncClient(timeout=10.0)
 
     try:
