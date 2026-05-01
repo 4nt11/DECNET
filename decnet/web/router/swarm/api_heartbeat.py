@@ -20,6 +20,7 @@ from typing import Any, Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Request
 from pydantic import BaseModel, ValidationError
+from sqlalchemy.exc import SQLAlchemyError
 
 from decnet.config import DeckyConfig
 from decnet.logging import get_logger
@@ -122,7 +123,7 @@ async def _reconcile_topology_report(
 
     try:
         topos = await repo.list_topologies(status=TopologyStatus.ACTIVE)
-    except Exception:
+    except SQLAlchemyError:
         # Non-fatal: reconcile is best-effort; the host stays alive regardless
         log.exception("heartbeat: could not list active topologies")
         return
@@ -141,7 +142,7 @@ async def _reconcile_topology_report(
         if reported_id == tid and reported_hash:
             try:
                 hydrated = await hydrate(repo, tid)
-            except Exception:
+            except (SQLAlchemyError, KeyError, TypeError):
                 # Non-fatal: skip this topology; mutator reconcile loop will retry
                 log.exception("heartbeat: hydrate failed tid=%s", tid)
                 continue
@@ -158,7 +159,7 @@ async def _reconcile_topology_report(
                 "reported_id=%s reported_hash=%s expected=%s)",
                 tid, host_uuid, reported_id, reported_hash, expected,
             )
-        except Exception:
+        except SQLAlchemyError:
             # Non-fatal: mutator reconcile loop will detect the mismatch again next heartbeat
             log.exception("heartbeat: failed to flag resync tid=%s", tid)
 
