@@ -34,6 +34,10 @@ Token structure (NATS-style, dot-separated):
     system.log
     system.bus.health
     system.{worker}.health
+    email.received
+    ttp.tagged
+    ttp.rule.fired.{technique_id}
+    ttp.rule.suppressed
 
 Wildcards (per :func:`decnet.bus.base.matches`):
 
@@ -55,6 +59,8 @@ CREDENTIAL = "credential"
 ORCHESTRATOR = "orchestrator"
 CANARY = "canary"
 SMTP = "smtp"
+EMAIL = "email"
+TTP = "ttp"
 
 
 # ─── Leaf event-type constants (the last segment of each topic) ──────────────
@@ -245,6 +251,40 @@ WORKER_CONTROL_START = "start"
 # of patterns. Payload is currently empty; consumers only need the signal.
 WEBHOOK_SUBSCRIPTIONS_CHANGED = "system.webhook.subscriptions_changed"
 
+# Email-receipt event — fired by smtp / smtp-relay services on full-message
+# receipt (envelope + headers + body + attachments captured). Single-token
+# leaf so the bus tokenizer accepts it directly under the ``email`` root.
+# Consumed by the TTP ``email_lifter`` for header / body-pattern / attachment
+# rules. PII rule (TTP_TAGGING.md "Hard parts §6"): payload carries hashes,
+# counts, header names, and rcpt-domain sets — never rcpt addresses or body
+# bytes.
+EMAIL_RECEIVED = "received"
+
+# TTP-tagging event types (second/third tokens under ``ttp``).
+#
+#   ttp.tagged                     — one or more new tags written. Published
+#                                    only when ``INSERT OR IGNORE`` wrote at
+#                                    least one new row; idempotent
+#                                    re-evaluations publish nothing
+#                                    (loop-prevention invariant — see
+#                                    TTP_TAGGING.md).
+#   ttp.rule.fired.{technique_id}  — per-technique fan-out for SIEM
+#                                    consumers that subscribe to a single
+#                                    technique. Topic key is the parent
+#                                    technique; sub_technique is in the
+#                                    payload. Built via :func:`ttp_rule_fired`.
+#   ttp.rule.suppressed            — rule fired but the tag was dropped
+#                                    (confidence below floor, rate-limited,
+#                                    or the rule's RuleState was disabled).
+#                                    Observability signal for the dashboard.
+#
+# Per-rule reload + state-change topics (``ttp.rule.reloaded.{rule_id}`` /
+# ``ttp.rule.state.{rule_id}``) ship in the RuleStore contract step — they
+# are co-located with the producer.
+TTP_TAGGED = "tagged"
+TTP_RULE_FIRED = "rule.fired"
+TTP_RULE_SUPPRESSED = "rule.suppressed"
+
 
 # ─── Builders ────────────────────────────────────────────────────────────────
 
@@ -403,6 +443,46 @@ def smtp(event_type: str) -> str:
     if not event_type:
         raise ValueError("smtp topic requires a non-empty event_type")
     return f"{SMTP}.{event_type}"
+
+
+def email_topic(event_type: str) -> str:
+    """Build ``email.<event_type>``.
+
+    Named ``email_topic`` rather than ``email`` to avoid shadowing the
+    Python ``email`` stdlib package at import sites that pull both.
+    *event_type* is typically :data:`EMAIL_RECEIVED`.
+    """
+    if not event_type:
+        raise ValueError("email topic requires a non-empty event_type")
+    return f"{EMAIL}.{event_type}"
+
+
+def ttp(event_type: str) -> str:
+    """Build ``ttp.<event_type>``.
+
+    *event_type* is typically one of :data:`TTP_TAGGED`,
+    :data:`TTP_RULE_FIRED`, or :data:`TTP_RULE_SUPPRESSED`. Dotted
+    leaves (``rule.fired``) are permitted — same rationale as
+    :func:`system`. For per-technique fan-out use
+    :func:`ttp_rule_fired`.
+    """
+    if not event_type:
+        raise ValueError("ttp topic requires a non-empty event_type")
+    return f"{TTP}.{event_type}"
+
+
+def ttp_rule_fired(technique_id: str) -> str:
+    """Build ``ttp.rule.fired.<technique_id>``.
+
+    Per-technique fan-out: SIEM subscribers can listen on
+    ``ttp.rule.fired.>`` for everything, ``ttp.rule.fired.T1110`` for
+    one technique. *technique_id* is validated as a single segment —
+    sub-techniques like ``T1110.001`` are rejected because they would
+    split into two tokens. The topic key is the parent technique;
+    ``sub_technique_id`` lives in the payload.
+    """
+    _reject_tokens(technique_id)
+    return f"{TTP}.rule.fired.{technique_id}"
 
 
 def _reject_tokens(*parts: str) -> None:

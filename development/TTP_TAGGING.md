@@ -2249,11 +2249,15 @@ Contracts ship in this order, one commit per step:
 
 **E.1.2 — Bus topic contract** (`decnet/bus/topics.py`)
 
+**Status:** ✅ done.
+
 - New constants: `TTP_TAGGED`, `TTP_RULE_FIRED`,
   `TTP_RULE_SUPPRESSED`.
-- Confirm `ATTACKER_ENRICHED` exists (it does — verify), confirm
-  `IDENTITY_FORMED` / `IDENTITY_MERGED` exist (they do).
-- New `EMAIL_RECEIVED` topic constant.
+- Confirm `ATTACKER_INTEL_ENRICHED` exists (it does — `"intel.enriched"`,
+  topic `attacker.intel.enriched`), confirm `IDENTITY_FORMED` /
+  `IDENTITY_MERGED` exist (they do).
+- New `EMAIL_RECEIVED` topic constant + `EMAIL` / `TTP` root prefixes
+  + builders `email_topic()`, `ttp()`, `ttp_rule_fired()`.
 - Wiki update (`wiki-checkout/Service-Bus.md`) lands in the same
   commit per project convention.
 
