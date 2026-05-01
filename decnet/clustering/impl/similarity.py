@@ -265,7 +265,7 @@ def combined_edge_weight(a: Observation, b: Observation) -> float:
 # ─── Adapter for the synthetic-corpus tests ─────────────────────────────────
 
 
-def from_synthetic(att) -> Observation:  # type: ignore[no-untyped-def]
+def from_synthetic(att) -> Observation:
     """Build an :class:`Observation` from a ``SyntheticAttacker``.
 
     Lives here so test code doesn't import the factory shape into the

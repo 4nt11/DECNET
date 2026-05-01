@@ -342,7 +342,7 @@ def combined_campaign_weight(
 # ─── Adapter for synthetic-fixture tests ────────────────────────────────────
 
 
-def from_synthetic_identity(att, identity_uuid: Optional[str] = None) -> IdentityFeatures:  # type: ignore[no-untyped-def]
+def from_synthetic_identity(att, identity_uuid: Optional[str] = None) -> IdentityFeatures:
     """Build an :class:`IdentityFeatures` from a ``SyntheticAttacker``.
 
     Treats one ``SyntheticAttacker`` as one identity — adequate for
