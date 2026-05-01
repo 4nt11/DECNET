@@ -2610,7 +2610,16 @@ until E.3.6).
   whatever the future ingester namespace becomes) imports under
   `decnet/ttp/`.
 
-**E.2.8 — API shape + auth tests** (`tests/web/router/ttp/test_*.py`)
+**E.2.8 — API shape + auth tests** (`tests/api/ttp/test_*.py`)
+
+**Status:** ✅ done (tests live under `tests/api/ttp/` per repo
+convention rather than the spec's `tests/web/router/ttp/` wording —
+the repo standardized on `tests/api/<resource>/`. All
+router-presence assertions, the per-endpoint 200/401 contract, and
+the admin-only POST/DELETE 401/403/200/400 enforcement live behind
+`xfail(strict=True)` until E.3.8 mounts the router; the OpenAPI
+golden-stability SHA is GREEN today and trips on any accidental
+edit of `tests/api/ttp/schemas/endpoints.placeholder.json`).
 
 - Each endpoint returns `200` with the documented response shape
   for a known-empty store.

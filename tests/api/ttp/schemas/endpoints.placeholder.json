@@ -1,0 +1,4 @@
+{
+  "_comment": "Placeholder golden for E.2.8. Replaced by E.3.8 with per-endpoint OpenAPI schemas. The SHA-256 of this file (sorted keys) is pinned in tests/api/ttp/test_response_schemas.py::test_placeholder_golden_is_stable.",
+  "endpoints": []
+}
