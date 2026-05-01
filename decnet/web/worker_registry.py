@@ -43,6 +43,7 @@ KNOWN_WORKERS: tuple[str, ...] = (
     "enrich",     # threat-intel enrichment — bus-woken on attacker.observed/scored
     "clusterer",  # behavioral clustering — bus-woken on attacker.scored
     "campaign-clusterer",  # campaign assembly — bus-woken on identity.formed
+    "ttp",        # MITRE ATT&CK technique tagging — bus-woken on session.ended / intel.enriched / email.received
     "webhook",    # external SIEM/SOAR egress — bus consumer → HMAC HTTP POSTs
     "orchestrator",  # synthetic life-injection — inter-decky traffic + file ops
     "agent",

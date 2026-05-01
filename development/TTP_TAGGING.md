@@ -2322,6 +2322,8 @@ unrelated events.
 
 **E.1.7 — Worker contract** (`decnet/ttp/worker.py`)
 
+**Status:** ✅ done.
+
 - `async def run_ttp_worker_loop(...)` signature matching
   `decnet/clustering/worker.py` and `decnet/intel/worker.py` (the
   parameter shape is already standardised across workers — copy it).
