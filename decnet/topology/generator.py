@@ -74,7 +74,7 @@ def _pick_services(
     rng: random.Random,
     services_explicit: Optional[list[str]],
     pool: list[str],
-    used_combos: set[frozenset],
+    seen_service_pairs: set[frozenset],
 ) -> list[str]:
     if services_explicit:
         return list(services_explicit)
@@ -85,10 +85,37 @@ def _pick_services(
         count = rng.randint(_SVC_MIN, min(_SVC_MAX, len(pool)))  # nosec B311
         chosen = frozenset(rng.sample(pool, count))  # nosec B311
         attempts += 1
-        if chosen not in used_combos or attempts > 20:
+        if chosen not in seen_service_pairs or attempts > 20:
             break
-    used_combos.add(chosen)
+    seen_service_pairs.add(chosen)
     return list(chosen)
+
+
+def _take_ip(ip_allocs: dict[str, IPAllocator], lan_name: str) -> str:
+    return ip_allocs[lan_name].next_free()
+
+
+def _new_decky(
+    home_lan: str,
+    *,
+    counter: list[int],
+    rng: random.Random,
+    config: TopologyConfig,
+    svc_pool: list[str],
+    seen_service_pairs: set[frozenset],
+    ip_allocs: dict[str, IPAllocator],
+    deckies: list[_PlannedDecky],
+) -> _PlannedDecky:
+    counter[0] += 1
+    name = f"decky-{counter[0]:03d}"
+    services = _pick_services(rng, config.services_explicit, svc_pool, seen_service_pairs)
+    decky = _PlannedDecky(
+        name=name,
+        services=services,
+        ips_by_lan={home_lan: _take_ip(ip_allocs, home_lan)},
+    )
+    deckies.append(decky)
+    return decky
 
 
 def generate(
@@ -108,7 +135,9 @@ def generate(
     """
     rng = random.Random(config.seed)  # nosec B311
     svc_pool = all_service_names() if config.randomize_services else []
-    used_combos: set[frozenset] = set()
+    # Tracks unique service frozensets assigned so far; prevents every decky
+    # from getting the same randomly-picked combo on small service pools.
+    seen_service_pairs: set[frozenset] = set()
 
     subnets = SubnetAllocator(
         config.subnet_base_prefix, reserved=reserved_subnets or set()
@@ -121,27 +150,9 @@ def generate(
         lan.name: IPAllocator(lan.subnet) for lan in lans
     }
 
-    def _take_ip(lan_name: str) -> str:
-        return ip_allocs[lan_name].next_free()
-
     deckies: list[_PlannedDecky] = []
     edges: list[_PlannedEdge] = []
-    decky_counter = 0
-
-    def _new_decky(home_lan: str) -> _PlannedDecky:
-        nonlocal decky_counter
-        decky_counter += 1
-        name = f"decky-{decky_counter:03d}"
-        services = _pick_services(
-            rng, config.services_explicit, svc_pool, used_combos
-        )
-        decky = _PlannedDecky(
-            name=name,
-            services=services,
-            ips_by_lan={home_lan: _take_ip(home_lan)},
-        )
-        deckies.append(decky)
-        return decky
+    decky_counter = [0]
 
     # Populate each LAN with its own deckies.
     for lan in lans:
@@ -154,7 +165,16 @@ def generate(
             if count < 1:
                 count = 1  # every LAN needs ≥1 decky to host the bridge
         for _ in range(count):
-            decky = _new_decky(lan.name)
+            decky = _new_decky(
+                lan.name,
+                counter=decky_counter,
+                rng=rng,
+                config=config,
+                svc_pool=svc_pool,
+                seen_service_pairs=seen_service_pairs,
+                ip_allocs=ip_allocs,
+                deckies=deckies,
+            )
             edges.append(
                 _PlannedEdge(
                     decky_name=decky.name,
@@ -178,7 +198,7 @@ def generate(
             continue
         candidates = deckies_by_lan[lan.name]
         bridge = rng.choice(candidates)  # nosec B311
-        bridge.ips_by_lan[lan.parent] = _take_ip(lan.parent)
+        bridge.ips_by_lan[lan.parent] = _take_ip(ip_allocs, lan.parent)
         forwards = rng.random() < config.bridge_forward_probability  # nosec B311
         bridge.forwards_l3 = bridge.forwards_l3 or forwards
         # Mark both existing edges as bridge edges for this decky, and
@@ -214,7 +234,7 @@ def generate(
             decky = rng.choice(deckies_by_lan[lan.name])  # nosec B311
             if peer.name in decky.ips_by_lan:
                 continue  # already connected, skip
-            decky.ips_by_lan[peer.name] = _take_ip(peer.name)
+            decky.ips_by_lan[peer.name] = _take_ip(ip_allocs, peer.name)
             forwards = rng.random() < config.bridge_forward_probability  # nosec B311
             decky.forwards_l3 = decky.forwards_l3 or forwards
             for e in edges:
