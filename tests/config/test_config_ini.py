@@ -302,3 +302,18 @@ swarmctl-port = 9999
     load_ini_config(ini)
     # [master] loaded first, [swarm] lost via setdefault
     assert os.environ["DECNET_SWARMCTL_PORT"] == "9001"
+
+
+def test_swarm_section_seeds_swarmctl_host(monkeypatch, tmp_path):
+    """[swarm] swarmctl-host → DECNET_SWARMCTL_HOST so the systemd unit and
+    `decnet swarmctl` CLI both pick up the operator's bind choice from the
+    INI without anyone passing --host on ExecStart."""
+    _scrub(monkeypatch, "DECNET_MODE", "DECNET_SWARMCTL_HOST", "DECNET_SWARMCTL_PORT")
+    ini = _write_ini(tmp_path, """
+[swarm]
+swarmctl-host = 0.0.0.0
+swarmctl-port = 9000
+""")
+    load_ini_config(ini)
+    assert os.environ["DECNET_SWARMCTL_HOST"] == "0.0.0.0"
+    assert os.environ["DECNET_SWARMCTL_PORT"] == "9000"

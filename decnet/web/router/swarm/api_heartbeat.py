@@ -20,7 +20,8 @@ from collections.abc import MutableMapping
 from typing import Any, Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Request
-from pydantic import BaseModel
+from pydantic import BaseModel, ValidationError
+from sqlalchemy.exc import SQLAlchemyError
 
 from decnet.config import DeckyConfig
 from decnet.logging import get_logger
@@ -61,7 +62,8 @@ def _extract_peer_fingerprint(scope: MutableMapping[str, Any]) -> Optional[str]:
         if chain:
             peer_der = chain[0]
             source = "primary"
-    except Exception:
+    except (AttributeError, KeyError, TypeError):
+        # scope["extensions"]["tls"] structure varies across uvicorn versions
         peer_der = None
 
     if peer_der is None:
@@ -72,7 +74,8 @@ def _extract_peer_fingerprint(scope: MutableMapping[str, Any]) -> Optional[str]:
                 peer_der = ssl_obj.getpeercert(binary_form=True)
                 if peer_der:
                     source = "fallback"
-        except Exception:
+        except (AttributeError, OSError):
+            # transport may not be an SSL transport, or the handshake may be incomplete
             peer_der = None
 
     if not peer_der:
@@ -121,7 +124,8 @@ async def _reconcile_topology_report(
 
     try:
         topos = await repo.list_topologies(status=TopologyStatus.ACTIVE)
-    except Exception:
+    except SQLAlchemyError:
+        # Non-fatal: reconcile is best-effort; the host stays alive regardless
         log.exception("heartbeat: could not list active topologies")
         return
     mine = [t for t in topos if t.target_host_uuid == host_uuid]
@@ -132,14 +136,15 @@ async def _reconcile_topology_report(
     reported_hash = (reported or {}).get("applied_version_hash")
 
     for topo in mine:
-        tid = topo["id"]
-        if topo.get("needs_resync"):
+        tid = topo.id
+        if topo.needs_resync:
             continue
         expected: Optional[str] = None
         if reported_id == tid and reported_hash:
             try:
                 hydrated = await hydrate(repo, tid)
-            except Exception:
+            except (SQLAlchemyError, KeyError, TypeError):
+                # Non-fatal: skip this topology; mutator reconcile loop will retry
                 log.exception("heartbeat: hydrate failed tid=%s", tid)
                 continue
             if hydrated is None:
@@ -155,7 +160,8 @@ async def _reconcile_topology_report(
                 "reported_id=%s reported_hash=%s expected=%s)",
                 tid, host_uuid, reported_id, reported_hash, expected,
             )
-        except Exception:
+        except SQLAlchemyError:
+            # Non-fatal: mutator reconcile loop will detect the mismatch again next heartbeat
             log.exception("heartbeat: failed to flag resync tid=%s", tid)
 
 
@@ -193,7 +199,7 @@ async def heartbeat(
     for decky_dict in status_body.get("deckies") or []:
         try:
             d = DeckyConfig(**decky_dict)
-        except Exception:
+        except (ValidationError, TypeError):
             log.exception("heartbeat: skipping malformed decky payload host=%s", req.host_uuid)
             continue
         rstate = runtime.get(d.name) or {}

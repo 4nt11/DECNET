@@ -182,7 +182,10 @@ const LiveLogs: React.FC = () => {
     <div className="logs-root">
       <div className="page-header">
         <div className="page-title-group">
-          <h1>LOGS</h1>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+            <Terminal size={22} className="violet-accent" />
+            <h1>LOGS</h1>
+          </div>
           <span className="page-sub">
             {filteredLogs.length.toLocaleString()} SHOWN · {totalLogs.toLocaleString()} MATCHES · STREAM {streaming ? 'LIVE' : 'PAUSED'}
           </span>
@@ -271,17 +274,15 @@ const LiveLogs: React.FC = () => {
           </div>
           <div className="section-actions">
             <span>SHOWING {filteredLogs.length} OF {totalLogs.toLocaleString()}</span>
-            {!streaming && (
-              <div className="pager" style={{ marginLeft: 16 }}>
-                <span className="dim">Page {page} of {totalPages}</span>
-                <button disabled={page === 1} onClick={() => changePage(page - 1)} aria-label="Previous page">
-                  <ChevronLeft size={14} />
-                </button>
-                <button disabled={page >= totalPages} onClick={() => changePage(page + 1)} aria-label="Next page">
-                  <ChevronRight size={14} />
-                </button>
-              </div>
-            )}
+            <div className="pager" style={{ marginLeft: 16 }}>
+              <span className="dim">Page {page} of {totalPages}</span>
+              <button disabled={page === 1} onClick={() => changePage(page - 1)} aria-label="Previous page">
+                <ChevronLeft size={14} />
+              </button>
+              <button disabled={page >= totalPages} onClick={() => changePage(page + 1)} aria-label="Next page">
+                <ChevronRight size={14} />
+              </button>
+            </div>
           </div>
         </div>
 

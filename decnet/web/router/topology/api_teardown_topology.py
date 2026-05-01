@@ -66,11 +66,11 @@ async def api_teardown_topology(
     topo = await repo.get_topology(topology_id)
     if topo is None:
         raise HTTPException(status_code=404, detail="Topology not found")
-    if topo["status"] not in _TEARDOWNABLE:
+    if topo.status not in _TEARDOWNABLE:
         raise HTTPException(
             status_code=409,
             detail=(
-                f"Topology is {topo['status']!r}; cannot teardown "
+                f"Topology is {topo.status!r}; cannot teardown "
                 f"(allowed from: {sorted(_TEARDOWNABLE)})."
             ),
         )

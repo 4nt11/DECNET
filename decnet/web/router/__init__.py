@@ -14,6 +14,7 @@ from .fleet.api_mutate_interval import router as mutate_interval_router
 from .fleet.api_deploy_deckies import router as deploy_deckies_router
 from .stream.api_stream_events import router as stream_router
 from .attackers.api_get_attackers import router as attackers_router
+from .attackers.api_export_attackers import router as attackers_export_router
 from .attackers.api_get_attacker_detail import router as attacker_detail_router
 from .attackers.api_get_attacker_commands import router as attacker_commands_router
 from .attackers.api_get_attacker_artifacts import router as attacker_artifacts_router
@@ -50,6 +51,7 @@ from .swarm_mgmt import swarm_mgmt_router
 from .system import system_router
 from .topology import topology_router
 from .canary import canary_router
+from .deckies import deckies_router
 from .webhooks import webhooks_router
 
 api_router = APIRouter(
@@ -90,6 +92,7 @@ api_router.include_router(deploy_deckies_router)
 
 # Attacker Profiles
 api_router.include_router(attackers_router)
+api_router.include_router(attackers_export_router)
 api_router.include_router(attacker_detail_router)
 api_router.include_router(attacker_commands_router)
 api_router.include_router(attacker_artifacts_router)
@@ -156,6 +159,7 @@ api_router.include_router(topology_router)
 # Canary tokens — operator-facing CRUD (worker hosts the
 # attacker-facing surface separately via `decnet canary`).
 api_router.include_router(canary_router)
+api_router.include_router(deckies_router)
 
 # External webhook subscriptions (SIEM/SOAR egress)
 api_router.include_router(webhooks_router)

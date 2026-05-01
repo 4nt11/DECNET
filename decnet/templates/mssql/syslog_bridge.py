@@ -13,6 +13,7 @@ Facility: local0 (16). SD element ID uses PEN 55555.
 """
 
 import base64
+import binascii
 import re
 from datetime import datetime, timezone
 from typing import Any, Optional
@@ -144,7 +145,7 @@ def classify_authorization(header_value: Optional[str]) -> Optional[dict[str, An
     if scheme == "basic":
         try:
             decoded = base64.b64decode(rest, validate=True).decode("utf-8", errors="replace")
-        except (ValueError, base64.binascii.Error):
+        except (ValueError, binascii.Error):
             return None
         if ":" not in decoded:
             return None

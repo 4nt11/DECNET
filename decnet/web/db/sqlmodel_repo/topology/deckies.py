@@ -8,13 +8,15 @@ from typing import Any, Optional
 from sqlalchemy import asc, select, text, update
 
 from decnet.web.db.models import TopologyDecky
+from decnet.web.db.models.topology import DeckyRow
 from decnet.web.db.sqlmodel_repo._helpers import (
+    _MixinBase,
     _deserialize_json_fields,
     _serialize_json_fields,
 )
 
 
-class TopologyDeckiesMixin:
+class TopologyDeckiesMixin(_MixinBase):
     """``self._assert_pending`` / ``self._check_and_bump_version`` resolve
     through ``TopologyCoreMixin`` via MRO."""
 
@@ -72,8 +74,19 @@ class TopologyDeckiesMixin:
         decky_uuid: str,
         *,
         expected_version: Optional[int] = None,
+        enforce_pending: bool = True,
     ) -> None:
-        """Cascade-delete a decky + all its edges from a pending topology."""
+        """Cascade-delete a decky + all its edges from a topology.
+
+        Defaults to ``enforce_pending=True`` so HTTP CRUD callers
+        (api_decky_crud.py) get the existing 409 guard for free.  The
+        mutator's ``apply_remove_decky`` is the only path that's
+        legitimately allowed to delete from an active topology — it
+        passes ``enforce_pending=False`` after dequeuing the mutation
+        through its own active-topology gating (the queue is the live
+        editing surface; the repo's CRUD guard is for the design-time
+        endpoints that mustn't bypass it).
+        """
         async with self._session() as session:
             result = await session.execute(
                 select(TopologyDecky).where(TopologyDecky.uuid == decky_uuid)
@@ -81,7 +94,8 @@ class TopologyDeckiesMixin:
             d = result.scalar_one_or_none()
             if d is None:
                 return
-            await self._assert_pending(session, d.topology_id)
+            if enforce_pending:
+                await self._assert_pending(session, d.topology_id)
             if expected_version is not None:
                 await self._check_and_bump_version(
                     session, d.topology_id, expected_version
@@ -98,7 +112,7 @@ class TopologyDeckiesMixin:
 
     async def list_topology_deckies(
         self, topology_id: str
-    ) -> list[dict[str, Any]]:
+    ) -> list[DeckyRow]:
         async with self._session() as session:
             result = await session.execute(
                 select(TopologyDecky)
@@ -106,8 +120,10 @@ class TopologyDeckiesMixin:
                 .order_by(asc(TopologyDecky.name))
             )
             return [
-                _deserialize_json_fields(
-                    r.model_dump(mode="json"), ("services", "decky_config")
+                DeckyRow.model_validate(
+                    _deserialize_json_fields(
+                        r.model_dump(mode="json"), ("services", "decky_config")
+                    )
                 )
                 for r in result.scalars().all()
             ]

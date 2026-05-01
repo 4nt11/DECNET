@@ -61,6 +61,27 @@ def _row_to_response(row: dict[str, Any]) -> CanaryTokenResponse:
     return CanaryTokenResponse(**row)
 
 
+async def _resolve_topology_target(
+    topology_id: str, decky_name: str,
+) -> str:
+    """Validate (topology_id, decky_name) and return the docker container.
+
+    Delegates to :func:`decnet.decky_io.resolve_decky_container` and
+    translates its ``LookupError`` into HTTP 404/422 — 404 when the
+    topology itself is missing, 422 when the named decky isn't in it.
+    """
+    from decnet.decky_io import resolve_decky_container
+    try:
+        return await resolve_decky_container(
+            repo, decky_name, topology_id=topology_id,
+        )
+    except LookupError as exc:
+        msg = str(exc)
+        if "topology" in msg and "not found" in msg:
+            raise HTTPException(status_code=404, detail=msg) from exc
+        raise HTTPException(status_code=422, detail=msg) from exc
+
+
 def _trigger_row_to_response(row: dict[str, Any]) -> CanaryTriggerResponse:
     # Decode raw_headers JSON for the response shape.
     headers = row.get("raw_headers") or "{}"
@@ -105,6 +126,14 @@ async def api_create_token(
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e)) from e
 
+    # Resolve the docker container before any expensive work — surfacing
+    # 404/422 here keeps a typo from minting a half-baked token row.
+    container: str | None = None
+    if req.topology_id:
+        container = await _resolve_topology_target(
+            req.topology_id, req.decky_name,
+        )
+
     slug = token_urlsafe(16)
     ctx = CanaryContext(
         callback_token=slug, http_base=_http_base(), dns_zone=_dns_zone(),
@@ -147,6 +176,7 @@ async def api_create_token(
         "uuid": token_uuid,
         "kind": kind,
         "decky_name": req.decky_name,
+        "topology_id": req.topology_id,
         "blob_uuid": req.blob_uuid,
         "instrumenter": instrumenter_name,
         "generator": req.generator,
@@ -156,7 +186,10 @@ async def api_create_token(
         "created_by": admin.get("uuid", "unknown"),
         "state": "planted",
     })
-    await planter.plant(req.decky_name, artifact, token_uuid=token_uuid, repo=repo)
+    await planter.plant(
+        req.decky_name, artifact,
+        token_uuid=token_uuid, repo=repo, container=container,
+    )
     row = await repo.get_canary_token(token_uuid)
     if row is None:
         raise HTTPException(status_code=500, detail="token insert succeeded but row not found")
@@ -177,10 +210,12 @@ async def api_list_tokens(
     decky_name: str | None = Query(default=None),
     state: str | None = Query(default=None),
     kind: str | None = Query(default=None),
+    topology_id: str | None = Query(default=None),
     viewer: dict = Depends(require_viewer),
 ) -> CanaryTokensResponse:
     rows = await repo.list_canary_tokens(
         decky_name=decky_name, state=state, kind=kind,
+        topology_id=topology_id,
     )
     return CanaryTokensResponse(
         tokens=[_row_to_response(r) for r in rows],
@@ -315,8 +350,21 @@ async def api_revoke_token(
     row = await repo.get_canary_token(uuid)
     if row is None:
         raise HTTPException(status_code=404, detail="token not found")
+    # Re-resolve the container at revoke time: the topology may have
+    # been redeployed since placement.  If it's gone entirely we fall
+    # through to the planter's fleet default — the call will fail
+    # best-effort and the row still flips to revoked.
+    container: str | None = None
+    topology_id = row.get("topology_id")
+    if topology_id:
+        try:
+            container = await _resolve_topology_target(
+                topology_id, row["decky_name"],
+            )
+        except HTTPException:
+            container = None
     await planter.revoke(
         row["decky_name"], row["placement_path"],
-        token_uuid=uuid, repo=repo,
+        token_uuid=uuid, repo=repo, container=container,
     )
     return MessageResponse(message="ok")

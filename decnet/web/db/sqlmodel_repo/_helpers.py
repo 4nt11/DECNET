@@ -12,13 +12,59 @@ from __future__ import annotations
 
 import asyncio
 import json
+from abc import abstractmethod
 from contextlib import asynccontextmanager
-from typing import Any
+from typing import Any, Optional, TypeVar
 
 import orjson
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
 from decnet.logging import get_logger
+
+T = TypeVar("T")
+
+
+def _require(val: T | None, msg: str) -> T:
+    """Narrow ``X | None`` to ``X``, raising ``ValueError`` if None."""
+    if val is None:
+        raise ValueError(msg)
+    return val
+
+
+class _MixinBase:
+    """Typing base for all repo mixins.
+
+    Declares the contract that ``SQLModelRepository`` satisfies at runtime
+    via MRO composition.  Without this, mypy checks each mixin in isolation
+    and cannot see ``_session`` or cross-mixin helpers.
+    """
+
+    @abstractmethod
+    def _session(self):
+        """Return a cancellation-safe async session context manager."""
+        raise NotImplementedError
+
+    @staticmethod
+    def _deserialize_attacker(d: dict[str, Any]) -> dict[str, Any]:
+        """Stub — concrete impl on AttackersCoreMixin via MRO."""
+        return d
+
+    async def _assert_pending(self, session: AsyncSession, topology_id: str) -> None:
+        """Stub — concrete impl on TopologyCoreMixin via MRO."""
+        raise NotImplementedError
+
+    async def _check_and_bump_version(
+        self,
+        session: AsyncSession,
+        topology_id: str,
+        expected_version: Optional[int],
+    ) -> None:
+        """Stub — concrete impl on TopologyCoreMixin via MRO."""
+        raise NotImplementedError
+
+    async def list_running_topology_deckies(self) -> list[dict[str, Any]]:
+        """Stub — concrete impl on TopologyDeckiesMixin via MRO."""
+        raise NotImplementedError
 
 _log = get_logger("db.pool")
 
@@ -66,7 +112,7 @@ def _detach_close(session: AsyncSession) -> None:
     task = loop.create_task(_cleanup())
     _cleanup_tasks.add(task)
     # Consume any exception to silence "Task exception was never retrieved".
-    task.add_done_callback(lambda t: (_cleanup_tasks.discard(t), t.exception()))
+    task.add_done_callback(lambda t: (_cleanup_tasks.discard(t), t.exception()))  # type: ignore[func-returns-value]
 
 
 @asynccontextmanager

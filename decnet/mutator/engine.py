@@ -289,13 +289,13 @@ async def reconcile_agent_resyncs(repo: BaseRepository) -> int:
         return 0
     drained = 0
     for topo in pending:
-        tid = topo["id"]
+        tid = topo.id
         try:
             await _deployer.resync_agent_topology(repo, tid)
             await repo.set_topology_resync(tid, False)
             drained += 1
             log.info("topology %s resynced to agent %s",
-                     tid, topo.get("target_host_uuid"))
+                     tid, topo.target_host_uuid)
         except Exception as exc:  # noqa: BLE001
             log.warning(
                 "topology %s resync failed (will retry): %s", tid, exc,

@@ -9,6 +9,7 @@ returns an error. Logs all interactions as JSON.
 import asyncio
 import os
 import struct
+from typing import cast
 
 import instance_seed as _seed
 import base64 as _base64
@@ -59,15 +60,18 @@ def _log(event_type: str, severity: int = 6, **kwargs) -> None:
 
 
 class PostgresProtocol(asyncio.Protocol):
+    _transport: asyncio.Transport | None = None
+    _peer: tuple[str, int] | None = None
+
     def __init__(self):
         self._transport = None
         self._peer = None
         self._buf = b""
         self._state = "startup"
 
-    def connection_made(self, transport):
-        self._transport = transport
-        self._peer = transport.get_extra_info("peername", ("?", 0))
+    def connection_made(self, transport: asyncio.BaseTransport) -> None:
+        self._transport = cast(asyncio.Transport, transport)
+        self._peer = cast(tuple[str, int], self._transport.get_extra_info("peername", ("?", 0)))
         _log("connect", src=self._peer[0], src_port=self._peer[1])
 
     def data_received(self, data):
@@ -75,6 +79,7 @@ class PostgresProtocol(asyncio.Protocol):
         self._process()
 
     def _process(self):
+        assert self._transport is not None
         if self._state == "startup":
             if len(self._buf) < 4:
                 return
@@ -104,7 +109,9 @@ class PostgresProtocol(asyncio.Protocol):
             if msg_type == "p":
                 self._handle_password(payload)
 
-    def _handle_startup(self, msg: bytes):
+    def _handle_startup(self, msg: bytes) -> None:
+        assert self._transport is not None
+        assert self._peer is not None
         # Startup message: length(4) + protocol_version(4) + params (key=value\0 pairs)
         if len(msg) < 8:
             return
@@ -128,8 +135,8 @@ class PostgresProtocol(asyncio.Protocol):
         # rejects *before* asking for a password. Short-circuit so the decoy
         # matches that behavior and exposes the per-decky DB list.
         if database and database not in _DATABASES:
-            msg = f'database "{database}" does not exist'
-            self._transport.write(_error_response("FATAL", "3D000", msg))
+            err_msg = f'database "{database}" does not exist'
+            self._transport.write(_error_response("FATAL", "3D000", err_msg))
             self._transport.close()
             return
         self._state = "auth"
@@ -137,7 +144,9 @@ class PostgresProtocol(asyncio.Protocol):
         auth_md5 = b"R" + struct.pack(">I", 12) + struct.pack(">I", 5) + salt
         self._transport.write(auth_md5)
 
-    def _handle_password(self, payload: bytes):
+    def _handle_password(self, payload: bytes) -> None:
+        assert self._transport is not None
+        assert self._peer is not None
         # Postgres MD5 challenge-response: the wire form is the literal
         # ASCII string "md5" + 32 hex chars (md5(md5(pw+user)+salt)).
         # Plaintext is unrecoverable, so we land this in the Credential

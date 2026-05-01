@@ -20,11 +20,8 @@ shape but speaks bytes-via-base64 over the wire.
 """
 from __future__ import annotations
 
-import asyncio
-import base64
 import os
-import shlex
-import time
+from datetime import datetime, timedelta, timezone
 from secrets import token_urlsafe
 from typing import Any, Iterable, Optional
 
@@ -34,13 +31,16 @@ from decnet.bus.factory import get_bus
 from decnet.canary.base import CanaryArtifact, CanaryContext
 from decnet.canary.factory import get_generator
 from decnet.canary.paths import default_path_for
+from decnet.decky_io import (
+    delete_file_from_container,
+    resolve_topology_container,
+    write_file_to_container,
+)
 from decnet.logging import get_logger
 from decnet.web.db.repository import BaseRepository
 
 log = get_logger("canary.planter")
 
-_DOCKER = "docker"
-_TIMEOUT = 8.0
 # Container suffix — matches the orchestrator SSH driver's convention
 # (``<decky_name>-ssh``).  Canary placement always happens through the
 # ssh container because every decky has one and it carries the most
@@ -52,62 +52,16 @@ def _container_for(decky_name: str) -> str:
     return f"{decky_name}{_SSH_CONTAINER_SUFFIX}"
 
 
-def _dirname(path: str) -> str:
-    idx = path.rfind("/")
-    if idx <= 0:
-        return "/"
-    return path[:idx]
-
-
-async def _run(
-    argv: list[str], *, stdin_bytes: Optional[bytes] = None,
-) -> tuple[int, str, str]:
-    try:
-        proc = await asyncio.create_subprocess_exec(
-            *argv,
-            stdin=asyncio.subprocess.PIPE if stdin_bytes is not None else None,
-            stdout=asyncio.subprocess.PIPE,
-            stderr=asyncio.subprocess.PIPE,
-        )
-    except FileNotFoundError as exc:
-        return 127, "", f"argv[0] not found: {exc}"
-    try:
-        stdout, stderr = await asyncio.wait_for(
-            proc.communicate(input=stdin_bytes), timeout=_TIMEOUT,
-        )
-    except asyncio.TimeoutError:
-        try:
-            proc.kill()
-        except ProcessLookupError:
-            pass
-        return 124, "", "timeout"
-    return (
-        proc.returncode if proc.returncode is not None else -1,
-        stdout.decode("utf-8", "replace"),
-        stderr.decode("utf-8", "replace"),
-    )
-
-
-def _build_plant_command(artifact: CanaryArtifact) -> tuple[str, bytes]:
-    """Compose the ``sh -c`` script + stdin payload for one artifact.
-
-    Binary safety: we base64-encode on the host and stream the result
-    over stdin to ``base64 -d`` inside the container, so the bytes
-    never touch the argv (kernel ARG_MAX would reject anything larger
-    than ~128KB-2MB depending on the host).  Both ``base64`` (coreutils)
-    and ``touch -d @<unix_ts>`` are present on every Linux base image
-    we ship, so there's no per-distro branching.
-    """
-    encoded = base64.b64encode(artifact.content)
-    mtime = int(time.time() + artifact.mtime_offset)
-    mode_str = oct(artifact.mode)[2:]
-    parts = [
-        f"mkdir -p {shlex.quote(_dirname(artifact.path))}",
-        f"base64 -d > {shlex.quote(artifact.path)}",
-        f"chmod {mode_str} {shlex.quote(artifact.path)}",
-        f"touch -d @{mtime} {shlex.quote(artifact.path)}",
-    ]
-    return " && ".join(parts), encoded
+# resolve_topology_container is re-exported from decky_io for back-compat
+# with callers (tests, deploy hook) that imported it from this module
+# before the decky_io extraction.
+__all__ = [
+    "plant",
+    "revoke",
+    "resolve_topology_container",
+    "seed_baseline",
+    "seed_baseline_topology",
+]
 
 
 async def _publish(
@@ -139,6 +93,7 @@ async def plant(
     repo: Optional[BaseRepository] = None,
     publish: bool = True,
     bus: Optional[BaseBus] = None,
+    container: Optional[str] = None,
 ) -> tuple[bool, Optional[str]]:
     """Write *artifact* into the decky's ssh container.
 
@@ -157,13 +112,12 @@ async def plant(
             await repo.update_canary_token_state(token_uuid, "failed", err)
         return False, err
 
-    sh_cmd, stdin_payload = _build_plant_command(artifact)
-    # ``-i`` keeps stdin attached so base64 -d inside the container can
-    # consume the encoded payload streamed from the host.
-    argv = [_DOCKER, "exec", "-i", _container_for(decky_name), "sh", "-c", sh_cmd]
-    rc, _stdout, stderr = await _run(argv, stdin_bytes=stdin_payload)
-    success = rc == 0
-    error = None if success else (stderr.strip()[:256] or f"rc={rc}")
+    target_container = container or _container_for(decky_name)
+    mtime = datetime.now(timezone.utc) + timedelta(seconds=artifact.mtime_offset)
+    success, error = await write_file_to_container(
+        target_container, artifact.path, artifact.content,
+        mode=artifact.mode, mtime=mtime,
+    )
 
     if repo is not None:
         if success:
@@ -182,8 +136,8 @@ async def plant(
 
     if not success:
         log.warning(
-            "canary.plant failed decky=%s token=%s rc=%d stderr=%r",
-            decky_name, token_uuid, rc, stderr[:120],
+            "canary.plant failed decky=%s token=%s container=%s err=%r",
+            decky_name, token_uuid, target_container, error,
         )
     return success, error
 
@@ -196,6 +150,7 @@ async def revoke(
     repo: Optional[BaseRepository] = None,
     publish: bool = True,
     bus: Optional[BaseBus] = None,
+    container: Optional[str] = None,
 ) -> tuple[bool, Optional[str]]:
     """Best-effort unlink + state transition + bus publish.
 
@@ -203,11 +158,10 @@ async def revoke(
     the file is gone after the call (whether we deleted it or it was
     already missing); only docker / container-down errors return False.
     """
-    sh_cmd = f"rm -f {shlex.quote(placement_path)}"
-    argv = [_DOCKER, "exec", _container_for(decky_name), "sh", "-c", sh_cmd]
-    rc, _stdout, stderr = await _run(argv)
-    success = rc == 0
-    error = None if success else (stderr.strip()[:256] or f"rc={rc}")
+    target_container = container or _container_for(decky_name)
+    success, error = await delete_file_from_container(
+        target_container, placement_path,
+    )
 
     if repo is not None:
         await repo.update_canary_token_state(token_uuid, "revoked", error if not success else None)
@@ -250,6 +204,7 @@ async def seed_baseline(
     persona: str = "linux",
     created_by: str = "system",
     bus: Optional[BaseBus] = None,
+    container: Optional[str] = None,
 ) -> list[dict[str, Any]]:
     """Plant the configured baseline canary set on one decky.
 
@@ -293,9 +248,59 @@ async def seed_baseline(
         await plant(
             decky_name, artifact,
             token_uuid=token_uuid, repo=repo, publish=True, bus=bus,
+            container=container,
         )
         out.append({
             "token_uuid": token_uuid, "generator": gen_name, "kind": kind,
             "callback_token": slug, "placement_path": artifact.path,
         })
+    return out
+
+
+async def seed_baseline_topology(
+    repo: BaseRepository,
+    topology_id: str,
+    *,
+    created_by: str = "system",
+    bus: Optional[BaseBus] = None,
+) -> list[dict[str, Any]]:
+    """Plant baseline canaries on every decky in a MazeNET topology.
+
+    Mirrors :func:`seed_baseline` for the topology path. Container name
+    resolution uses :func:`resolve_topology_container` since topology
+    deckies may not have an ssh service — in that case we target the
+    base container instead.
+
+    Best-effort: failures on any single decky are logged inside
+    :func:`plant`; the deploy hook treats the return value as
+    informational. Returns a flat list of per-token dicts (with an added
+    ``decky_name`` key) across all deckies.
+    """
+    from decnet.topology.persistence import hydrate
+
+    hydrated = await hydrate(repo, topology_id)
+    if hydrated is None:
+        log.warning(
+            "canary.seed_baseline_topology: topology %s not found", topology_id,
+        )
+        return []
+
+    out: list[dict[str, Any]] = []
+    for decky in hydrated["deckies"]:
+        cfg = decky.get("decky_config") or {}
+        decky_name = cfg.get("name") or decky.get("name")
+        if not decky_name:
+            continue
+        services = decky.get("services") or []
+        container = resolve_topology_container(topology_id, decky_name, services)
+        # MazeNET deckies don't carry an OS persona today; default to
+        # linux (every base image we ship is Linux).
+        rows = await seed_baseline(
+            decky_name, repo,
+            persona="linux", created_by=created_by, bus=bus,
+            container=container,
+        )
+        for r in rows:
+            r["decky_name"] = decky_name
+            out.append(r)
     return out

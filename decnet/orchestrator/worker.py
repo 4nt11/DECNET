@@ -25,6 +25,7 @@ import secrets
 from datetime import datetime, timezone
 from typing import Any, Optional
 
+from decnet.bus import topics as _topics
 from decnet.bus.factory import get_bus
 from decnet.bus.publish import (
     publish_safely,
@@ -34,6 +35,7 @@ from decnet.bus.publish import (
 from decnet.logging import get_logger
 from decnet.orchestrator import events, scheduler
 from decnet.orchestrator.drivers import get_driver_for
+from decnet.orchestrator.drivers.smtp_relay import forward_probe
 from decnet.orchestrator.emailgen import (
     events as email_events,
     scheduler as email_scheduler,
@@ -138,6 +140,9 @@ async def orchestrator_worker(
     control_task = asyncio.create_task(
         run_control_listener(bus, "orchestrator", shutdown),
     )
+    probe_task = asyncio.create_task(
+        _run_smtp_probe_listener(repo, shutdown),
+    )
     tick_n = 0
     try:
         while not shutdown.is_set():
@@ -157,7 +162,7 @@ async def orchestrator_worker(
             if tick_n % _REALISM_CONFIG_REFRESH_TICKS == 0:
                 await _refresh_realism_config(repo)
     finally:
-        for t in (heartbeat_task, control_task):
+        for t in (heartbeat_task, control_task, probe_task):
             t.cancel()
             with contextlib.suppress(Exception, asyncio.CancelledError):
                 await t
@@ -465,6 +470,100 @@ async def _bump_synthetic_file_after_edit(repo, action, result) -> None:
         ).hexdigest()
         patch["last_body"] = new_body
     await repo.update_synthetic_file(action.synthetic_file_uuid, patch)
+
+
+async def _run_smtp_probe_listener(
+    repo: BaseRepository,
+    shutdown: asyncio.Event,
+) -> None:
+    """Subscribe to smtp.probe.pending and forward probe emails upstream.
+
+    Runs as a long-lived subtask alongside the tick loop. When a probe lands
+    we check if this (attacker_ip, decky) has already been forwarded up to
+    probe_limit times — if not, forward via the master's real internet
+    connection and store a probe_relay bounty with the result.
+    """
+    try:
+        bus = get_bus(client_name="orchestrator-probe")
+        await bus.connect()
+        sub = bus.subscribe(_topics.smtp("probe.pending"))
+        async with sub:
+            async for event in sub:
+                if shutdown.is_set():
+                    break
+                try:
+                    await _handle_probe_pending(repo, event.payload)
+                except Exception as exc:  # noqa: BLE001
+                    logger.warning("smtp probe listener: handle error: %s", exc)
+    except asyncio.CancelledError:
+        raise
+    except Exception as exc:  # noqa: BLE001
+        logger.warning("smtp probe listener: bus unavailable: %s", exc)
+    finally:
+        with contextlib.suppress(Exception):
+            await bus.close()
+
+
+async def _handle_probe_pending(repo: BaseRepository, payload: dict) -> None:
+    decky_name  = (payload.get("decky") or "").strip()
+    attacker_ip = (payload.get("attacker_ip") or "").strip()
+    stored_as   = (payload.get("stored_as") or "").strip()
+    mail_from   = (payload.get("mail_from") or "").strip()
+    rcpt_to_raw = (payload.get("rcpt_to") or "").strip()
+
+    if not (decky_name and attacker_ip and stored_as):
+        return
+
+    decky_row = await repo.get_fleet_decky_by_name(decky_name)
+    if not decky_row:
+        return
+    svc_cfg = (
+        (decky_row.get("decky_config") or {})
+        .get("service_config", {})
+        .get("smtp_relay") or {}
+    )
+    if not (svc_cfg.get("upstream_host") or "").strip():
+        return
+
+    probe_limit = int(svc_cfg.get("probe_limit") or 1)
+    already_sent = await repo.count_probe_relays(attacker_ip, decky_name)
+    if already_sent >= probe_limit:
+        return
+
+    rcpt_to = [r.strip() for r in rcpt_to_raw.split(",") if r.strip()]
+    artifacts_root = os.environ.get("DECNET_ARTIFACTS_ROOT", "/var/lib/decnet/artifacts")
+
+    loop = asyncio.get_event_loop()
+    ok, reason = await loop.run_in_executor(
+        None,
+        lambda: forward_probe(
+            svc_cfg=svc_cfg,
+            stored_as=stored_as,
+            decky_name=decky_name,
+            mail_from=mail_from,
+            rcpt_to=rcpt_to,
+            artifacts_root=artifacts_root,
+        ),
+    )
+
+    await repo.add_bounty({
+        "decky": decky_name,
+        "service": "smtp_relay",
+        "attacker_ip": attacker_ip,
+        "bounty_type": "probe_relay",
+        "payload": {
+            "stored_as": stored_as,
+            "forwarded": ok,
+            **({"fwd_error": reason} if not ok else {}),
+        },
+    })
+    if ok:
+        logger.info("smtp probe forwarded decky=%s ip=%s", decky_name, attacker_ip)
+    else:
+        logger.warning(
+            "smtp probe forward failed decky=%s ip=%s error=%s",
+            decky_name, attacker_ip, reason,
+        )
 
 
 async def _record_synthetic_file(repo, action) -> None:

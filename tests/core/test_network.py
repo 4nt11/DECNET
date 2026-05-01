@@ -203,10 +203,22 @@ class TestSetupHostMacvlan:
         add_cmds = [cmd for cmd in calls if cmd[:3] == ["ip", "link", "add"]]
         assert not any(HOST_MACVLAN_IFACE in cmd for cmd in add_cmds)
 
+    @patch("decnet.network._has_cap_net_admin", return_value=False)
     @patch("decnet.network.os.geteuid", return_value=1)
-    def test_requires_root(self, _):
+    def test_rejects_when_not_root_and_no_cap(self, _eu, _cap):
         with pytest.raises(PermissionError):
             setup_host_macvlan("eth0", "192.168.1.5", "192.168.1.96/27")
+
+    @patch("decnet.network._has_cap_net_admin", return_value=True)
+    @patch("decnet.network.os.geteuid", return_value=1000)
+    @patch("decnet.network._run")
+    def test_accepts_cap_net_admin_without_root(self, mock_run, _eu, _cap):
+        # Non-root with CAP_NET_ADMIN is what systemd's
+        # AmbientCapabilities=CAP_NET_ADMIN gives the API service.  The
+        # kernel will accept the netlink RTM_NEWLINK; we must not reject
+        # earlier on a stricter euid==0 check.
+        mock_run.side_effect = lambda cmd, **kw: MagicMock(returncode=1) if "show" in cmd else MagicMock(returncode=0)
+        setup_host_macvlan("eth0", "192.168.1.5", "192.168.1.96/27")
 
 
 # ---------------------------------------------------------------------------
@@ -236,8 +248,9 @@ class TestSetupHostIpvlan:
         macvlan_refs = [cmd for cmd in calls if HOST_MACVLAN_IFACE in cmd]
         assert all(cmd[:3] == ["ip", "link", "del"] for cmd in macvlan_refs)
 
+    @patch("decnet.network._has_cap_net_admin", return_value=False)
     @patch("decnet.network.os.geteuid", return_value=1)
-    def test_requires_root(self, _):
+    def test_rejects_when_not_root_and_no_cap(self, _eu, _cap):
         with pytest.raises(PermissionError):
             setup_host_ipvlan("wlan0", "192.168.1.5", "192.168.1.96/27")
 
@@ -396,7 +409,8 @@ class TestTeardownHostMacvlan:
         calls = [str(c) for c in mock_run.call_args_list]
         assert any(HOST_MACVLAN_IFACE in c for c in calls)
 
+    @patch("decnet.network._has_cap_net_admin", return_value=False)
     @patch("decnet.network.os.geteuid", return_value=1)
-    def test_requires_root(self, _):
+    def test_rejects_when_not_root_and_no_cap(self, _eu, _cap):
         with pytest.raises(PermissionError):
             teardown_host_macvlan("192.168.1.96/27")

@@ -1,5 +1,5 @@
 import React, { useEffect, useRef, useState } from 'react';
-import api from '../utils/api';
+import api, { type ApiError } from '../utils/api';
 import EmptyState from './EmptyState/EmptyState';
 import Modal from './Modal/Modal';
 import './Dashboard.css';
@@ -108,7 +108,7 @@ const EnrollmentWizard: React.FC<EnrollmentWizardProps> = ({ open, onClose, onEn
       setResult(res.data);
       onEnrolled();
     } catch (err: unknown) {
-      const e = err as { response?: { data?: { detail?: string } } };
+      const e = err as ApiError;
       setError(e?.response?.data?.detail || 'Enrollment bundle creation failed');
     } finally {
       setSubmitting(false);
@@ -413,7 +413,10 @@ const SwarmHosts: React.FC = () => {
     <div className="dashboard swarm-root">
       <div className="page-header">
         <div className="page-title-group">
-          <h1><HardDrive size={18} /> SWARM HOSTS</h1>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+            <HardDrive size={22} className="violet-accent" />
+            <h1>SWARM HOSTS</h1>
+          </div>
           <span className="page-sub">
             {loading ? 'LOADING…' : `${hosts.length} ENROLLED · ${online} ONLINE`}
           </span>

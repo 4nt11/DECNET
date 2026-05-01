@@ -28,7 +28,7 @@ class _ComponentFilter(logging.Filter):
         self.component = component
 
     def filter(self, record: logging.LogRecord) -> bool:
-        record.decnet_component = self.component  # type: ignore[attr-defined]
+        record.decnet_component = self.component
         return True
 
 
@@ -49,14 +49,14 @@ class _TraceContextFilter(logging.Filter):
             span = trace.get_current_span()
             ctx = span.get_span_context()
             if ctx and ctx.trace_id:
-                record.otel_trace_id = format(ctx.trace_id, "032x")  # type: ignore[attr-defined]
-                record.otel_span_id = format(ctx.span_id, "016x")  # type: ignore[attr-defined]
+                record.otel_trace_id = format(ctx.trace_id, "032x")
+                record.otel_span_id = format(ctx.span_id, "016x")
             else:
-                record.otel_trace_id = "0"  # type: ignore[attr-defined]
-                record.otel_span_id = "0"  # type: ignore[attr-defined]
+                record.otel_trace_id = "0"
+                record.otel_span_id = "0"
         except Exception:
-            record.otel_trace_id = "0"  # type: ignore[attr-defined]
-            record.otel_span_id = "0"  # type: ignore[attr-defined]
+            record.otel_trace_id = "0"
+            record.otel_span_id = "0"
         return True
 
 

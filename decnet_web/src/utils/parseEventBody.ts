@@ -11,11 +11,16 @@ export interface ParsedBody {
   tail: string | null;
 }
 
+// RFC 5424: <PRI>VERSION TIMESTAMP HOSTNAME APPNAME PROCID MSGID SD MSG
+// Matches both framed (<135>1 ...) and unframed (bare timestamp) variants.
+const rfc5424Re = /^(?:<\d+>\d\s+)?\d{4}-\d{2}-\d{2}T[\d:.+-]+\s+\S+\s+\S+\s+\S+\s+\S+\s+(?:-|\[.*?\])\s*/;
+
 export function parseEventBody(msg: string | null | undefined): ParsedBody {
   const empty: ParsedBody = { head: null, fields: {}, tail: null };
   if (!msg) return empty;
-  const body = msg.trim();
+  let body = msg.trim();
   if (!body || body === '-') return empty;
+  body = body.replace(rfc5424Re, '');
 
   const keyRe = /([A-Za-z_][A-Za-z0-9_]*)=/g;
   const firstKv = body.search(/(^|\s)[A-Za-z_][A-Za-z0-9_]*=/);

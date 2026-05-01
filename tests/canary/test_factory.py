@@ -61,6 +61,7 @@ def test_known_lists_are_stable() -> None:
     assert KNOWN_GENERATORS == (
         "git_config", "env_file", "ssh_key", "aws_creds",
         "honeydoc", "honeydoc_docx", "honeydoc_pdf", "mysql_dump",
+        "fingerprint_html", "fingerprint_svg",
     )
     assert KNOWN_INSTRUMENTERS == (
         "docx", "xlsx", "pdf", "html", "image", "plain", "passthrough",

@@ -8,6 +8,7 @@ import EmptyState from './EmptyState/EmptyState';
 import { useFocusSearch } from '../hooks/useFocusSearch';
 import { useIdentityStream } from './useIdentityStream';
 import './Dashboard.css';
+import './Attackers.css';
 
 interface IdentityEntry {
   uuid: string;

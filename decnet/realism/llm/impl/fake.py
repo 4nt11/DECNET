@@ -38,7 +38,7 @@ class FakeBackend(LLMBackend):
         )
         self._success = success
 
-    async def generate(self, prompt: str) -> LLMResult:    # noqa: ARG002
+    async def generate(self, _prompt: str) -> LLMResult:
         t0 = time.monotonic()
         latency_ms = int((time.monotonic() - t0) * 1000)
         return LLMResult(

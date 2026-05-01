@@ -7,9 +7,12 @@ forwards events as JSON to LOG_TARGET if set.
 
 import os
 from pathlib import Path
+from typing import cast
 
 from twisted.internet import defer, reactor
+from twisted.internet.interfaces import IReactorTCP
 from twisted.protocols.ftp import FTP, FTPFactory, FTPAnonymousShell
+from twisted.python.failure import Failure
 from twisted.python.filepath import FilePath
 from twisted.python import log as twisted_log
 
@@ -95,7 +98,8 @@ _BAIT_PATH = _setup_bait_fs()
 
 class ServerFTP(FTP):
     def connectionMade(self):
-        peer = self.transport.getPeer()
+        assert self.transport is not None
+        peer = self.transport.getPeer()  # type: ignore[misc]
         _log("connection", src_ip=peer.host, src_port=peer.port)
         super().connectionMade()
 
@@ -120,15 +124,16 @@ class ServerFTP(FTP):
             return defer.succeed((530, "Login incorrect."))
         self.state = self.AUTHED
         self._user = getattr(self, "_server_user", "anonymous")
-        self.shell = FTPAnonymousShell(FilePath(_BAIT_PATH))
+        self.shell = FTPAnonymousShell(FilePath(_BAIT_PATH))  # type: ignore[assignment]
         return defer.succeed((230, "Login successful."))
 
     def ftp_RETR(self, path):
         _log("download_attempt", path=path)
         return super().ftp_RETR(path)
 
-    def connectionLost(self, reason):
-        peer = self.transport.getPeer()
+    def connectionLost(self, reason: Failure) -> None:  # type: ignore[override]
+        assert self.transport is not None
+        peer = self.transport.getPeer()  # type: ignore[misc]
         _log("disconnect", src_ip=peer.host, src_port=peer.port)
         super().connectionLost(reason)
 
@@ -140,5 +145,5 @@ class ServerFTPFactory(FTPFactory):
 if __name__ == "__main__":
     twisted_log.startLoggingWithObserver(lambda e: None, setStdout=False)
     _log("startup", msg=f"FTP server starting as {NODE_NAME} on port {PORT}")
-    reactor.listenTCP(PORT, ServerFTPFactory())
-    reactor.run()
+    cast(IReactorTCP, reactor).listenTCP(PORT, ServerFTPFactory())  # type: ignore[arg-type]
+    reactor.run()  # type: ignore[attr-defined]

@@ -3,7 +3,7 @@ import {
   Plus, Trash2, Pencil, Zap, AlertTriangle, Copy, X, Save,
   Check, Webhook as WebhookIcon,
 } from '../icons';
-import api from '../utils/api';
+import api, { type ApiError } from '../utils/api';
 import { useToast } from './Toasts/useToast';
 import './Dashboard.css';
 import './Config.css';
@@ -54,10 +54,7 @@ const BLANK_FORM: FormState = {
 };
 
 function extractErrorDetail(err: unknown, fallback: string): string {
-  const e = err as {
-    response?: { status?: number; data?: { detail?: string } };
-    message?: string;
-  };
+  const e = err as ApiError;
   if (e?.response?.data?.detail) return e.response.data.detail;
   if (e?.response?.status === 403) return 'Insufficient permissions (admin only)';
   if (e?.response?.status === 401) return 'Session expired — please log in again';
@@ -292,7 +289,10 @@ const Webhooks: React.FC = () => {
     <div className="webhooks-root">
       <div className="page-header">
         <div className="page-title-group">
-          <h1>WEBHOOKS</h1>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+            <WebhookIcon size={22} className="violet-accent" />
+            <h1>WEBHOOKS</h1>
+          </div>
           <span className="page-sub">
             {webhooks.length} CONFIGURED · {enabledCount} ENABLED
             {trippedCount > 0 && ` · ${trippedCount} TRIPPED`}

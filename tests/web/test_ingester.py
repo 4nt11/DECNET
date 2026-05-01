@@ -73,6 +73,88 @@ class TestExtractBounty:
         mock_repo.upsert_credential.assert_not_awaited()
 
     @pytest.mark.asyncio
+    async def test_file_captured_emits_artifact_bounty(self):
+        """SSH inotifywait `file_captured` event becomes a Bounty row of
+        type=artifact so it shows on the global Vault page, not just on
+        the per-attacker artifacts tab."""
+        from decnet.web.ingester import _extract_bounty
+        mock_repo = MagicMock()
+        mock_repo.add_bounty = AsyncMock()
+        mock_repo.upsert_credential = AsyncMock()
+        await _extract_bounty(mock_repo, {
+            "decky": "dmz-gateway",
+            "service": "ssh",
+            "attacker_ip": "31.56.209.39",
+            "event_type": "file_captured",
+            "fields": {
+                "stored_as": "2026-04-28T22:35:58Z_abc123def456_evil.sh",
+                "sha256": "deadbeef" * 8,
+                "size": "1234",
+                "orig_path": "/tmp/evil.sh",
+                "attribution": "ssh-session-pid-940",
+                "writer_comm": "bash",
+            },
+        })
+        mock_repo.add_bounty.assert_awaited_once()
+        bounty = mock_repo.add_bounty.call_args[0][0]
+        assert bounty["bounty_type"] == "artifact"
+        assert bounty["attacker_ip"] == "31.56.209.39"
+        assert bounty["payload"]["kind"] == "file"
+        assert bounty["payload"]["orig_path"] == "/tmp/evil.sh"
+        assert bounty["payload"]["sha256"] == "deadbeef" * 8
+
+    @pytest.mark.asyncio
+    async def test_file_captured_without_stored_as_skipped(self):
+        """A malformed file_captured row missing stored_as never lands in
+        Bounty — sha256/size alone aren't enough to retrieve the bytes."""
+        from decnet.web.ingester import _extract_bounty
+        mock_repo = MagicMock()
+        mock_repo.add_bounty = AsyncMock()
+        mock_repo.upsert_credential = AsyncMock()
+        await _extract_bounty(mock_repo, {
+            "decky": "dmz-gateway",
+            "service": "ssh",
+            "attacker_ip": "1.2.3.4",
+            "event_type": "file_captured",
+            "fields": {"sha256": "abc", "size": "10"},
+        })
+        mock_repo.add_bounty.assert_not_awaited()
+
+    @pytest.mark.asyncio
+    async def test_message_stored_emits_mail_artifact_bounty(self):
+        """SMTP `message_stored` event lands as bounty_type=artifact with
+        payload.kind=mail so the UI can render it with the Mail icon and
+        subject/from preview rather than the file-drop layout."""
+        from decnet.web.ingester import _extract_bounty
+        mock_repo = MagicMock()
+        mock_repo.add_bounty = AsyncMock()
+        mock_repo.upsert_credential = AsyncMock()
+        await _extract_bounty(mock_repo, {
+            "decky": "mail-decky",
+            "service": "smtp",
+            "attacker_ip": "203.0.113.7",
+            "event_type": "message_stored",
+            "fields": {
+                "stored_as": "2026-04-28T12:00:00Z_abc123def456_msg.eml",
+                "sha256": "cafebabe" * 8,
+                "size": "8192",
+                "subject": "URGENT: invoice",
+                "from_hdr": "billing@spammer.example",
+                "to_hdr": "victim@target.tld",
+                "mail_from": "spammer@spammer.example",
+                "rcpt_to": "victim@target.tld",
+                "attachment_count": "1",
+                "content_type": "multipart/mixed",
+            },
+        })
+        mock_repo.add_bounty.assert_awaited_once()
+        bounty = mock_repo.add_bounty.call_args[0][0]
+        assert bounty["bounty_type"] == "artifact"
+        assert bounty["payload"]["kind"] == "mail"
+        assert bounty["payload"]["subject"] == "URGENT: invoice"
+        assert bounty["payload"]["mail_from"] == "spammer@spammer.example"
+
+    @pytest.mark.asyncio
     async def test_no_secret_b64_no_credential(self):
         """The native branch keys off `secret_b64`. Fields lacking it
         produce no Credential row — even if username/password keys

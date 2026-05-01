@@ -54,6 +54,7 @@ SYSTEM = "system"
 CREDENTIAL = "credential"
 ORCHESTRATOR = "orchestrator"
 CANARY = "canary"
+SMTP = "smtp"
 
 
 # ─── Leaf event-type constants (the last segment of each topic) ──────────────
@@ -83,6 +84,19 @@ DECKY_MUTATE_REQUEST = "mutate_request"
 # syslog sidechannel too) to interleave substrate-change markers into
 # attacker traversals.
 DECKY_MUTATION = "mutation"
+# Per-service add/remove on a deployed decky (live; no full redeploy).
+# Payload carries ``decky_name``, ``service_name``, optional
+# ``topology_id``, and ``services`` (the post-mutation list).  Consumers
+# that watch substrate shape (correlator, dashboard, profiler) reconcile
+# off these without waiting for the next decnet-state.json snapshot.
+DECKY_SERVICE_ADDED = "service_added"
+DECKY_SERVICE_REMOVED = "service_removed"
+# Per-service config change (the schema-driven Inspector form).  Payload
+# carries ``decky_name``, ``service_name``, optional ``topology_id``,
+# ``service_config`` (the new validated dict), and ``recreated`` — true
+# when the operator hit Apply (container was force-recreated to pick up
+# the new env), false when they only hit Save (DB-only).
+DECKY_SERVICE_CONFIG_CHANGED = "service_config_changed"
 
 # Attacker event types (second token under the ``attacker`` root).  First
 # sighting, session boundary transitions, and score-threshold crossings
@@ -379,6 +393,16 @@ def system_control(worker: str) -> str:
     """
     _reject_tokens(worker)
     return f"{SYSTEM}.{worker}.{SYSTEM_CONTROL}"
+
+
+def smtp(event_type: str) -> str:
+    """Build ``smtp.<event_type>``.
+
+    *event_type* may contain dots (e.g. ``probe.pending``).
+    """
+    if not event_type:
+        raise ValueError("smtp topic requires a non-empty event_type")
+    return f"{SMTP}.{event_type}"
 
 
 def _reject_tokens(*parts: str) -> None:

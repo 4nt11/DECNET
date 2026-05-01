@@ -58,15 +58,30 @@ async def test_traffic_failure_when_banner_missing(monkeypatch):
 async def test_file_action_invokes_docker_exec_on_dst(monkeypatch):
     captured: list[tuple[list[str], bytes | None]] = []
 
-    async def fake_run_with_stdin(argv, stdin_bytes):
-        captured.append((argv, stdin_bytes))
-        return 0, "", ""
+    class _FakeProc:
+        returncode = 0
+        async def communicate(self, input=None):
+            return b"", b""
+        def kill(self):  # pragma: no cover
+            pass
+
+    async def fake_create(*argv, **kw):
+        captured.append((list(argv), None))
+        proc = _FakeProc()
+        orig = proc.communicate
+
+        async def communicate(input=None):
+            captured[-1] = (captured[-1][0], input)
+            return await orig(None)
+        proc.communicate = communicate
+        return proc
 
     # plant_file streams base64 content via stdin to avoid ARG_MAX
-    # (mirrors decnet.canary.planter; see commit c17b9e0).  The test
-    # patches _run_with_stdin instead of _run because that's the
-    # codepath FileAction now exercises.
-    monkeypatch.setattr(ssh_driver, "_run_with_stdin", fake_run_with_stdin)
+    # (mirrors decnet.canary.planter; see commit c17b9e0).  The driver
+    # now delegates to decky_io.write_file_to_container, which calls
+    # asyncio.create_subprocess_exec — patch that.
+    import asyncio as _asyncio
+    monkeypatch.setattr(_asyncio, "create_subprocess_exec", fake_create)
     drv = ssh_driver.SSHDriver()
     action = FileAction(
         dst_uuid="u2", dst_name="decky-02",
@@ -107,13 +122,21 @@ async def test_run_handles_missing_docker_binary(monkeypatch):
 @pytest.mark.asyncio
 async def test_plant_file_applies_mtime_via_touch_d(monkeypatch):
     from datetime import datetime, timezone
-    captured: list[tuple[list[str], bytes | None]] = []
+    captured: list[list[str]] = []
 
-    async def fake_run_with_stdin(argv, stdin_bytes):
-        captured.append((argv, stdin_bytes))
-        return 0, "", ""
+    class _FakeProc:
+        returncode = 0
+        async def communicate(self, input=None):
+            return b"", b""
+        def kill(self):  # pragma: no cover
+            pass
 
-    monkeypatch.setattr(ssh_driver, "_run_with_stdin", fake_run_with_stdin)
+    async def fake_create(*argv, **kw):
+        captured.append(list(argv))
+        return _FakeProc()
+
+    import asyncio as _asyncio
+    monkeypatch.setattr(_asyncio, "create_subprocess_exec", fake_create)
     drv = ssh_driver.SSHDriver()
     mtime = datetime(2026, 4, 20, 11, 30, 0, tzinfo=timezone.utc)
     result = await drv.plant_file(
@@ -121,7 +144,7 @@ async def test_plant_file_applies_mtime_via_touch_d(monkeypatch):
         mode=0o644, mtime=mtime,
     )
     assert result.success is True
-    sh_cmd = captured[0][0][6]
+    sh_cmd = captured[0][6]
     # Backdated mtime appears in the touch -d argument.
     assert "touch -d '2026-04-20 11:30:00 UTC'" in sh_cmd
     assert "chmod 644" in sh_cmd

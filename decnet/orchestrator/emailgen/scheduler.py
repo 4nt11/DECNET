@@ -175,7 +175,7 @@ async def pick(
         )
         return None
 
-    active = [p for p in personas if in_active_hours(p, now_dt.hour)]
+    active = [p for p in personas if in_active_hours(p, now_dt)]
     if len(active) < 2:
         logger.debug(
             "emailgen pick: source=%s mail_decky=%s only %d personas in-hours",

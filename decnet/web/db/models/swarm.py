@@ -198,3 +198,34 @@ class SwarmHostHealth(BaseModel):
 
 class SwarmCheckResponse(BaseModel):
     results: list[SwarmHostHealth]
+
+
+class EnrollBundleRequest(BaseModel):
+    master_host: str = PydanticField(..., min_length=1, max_length=253,
+                                     description="IP/host the agent will reach back to")
+    agent_name: str = PydanticField(..., pattern=r"^[a-z0-9][a-z0-9-]{0,62}$",
+                                    description="Worker name (DNS-label safe)")
+    with_updater: bool = PydanticField(
+        default=True,
+        description="Include updater cert bundle and auto-start decnet updater on the agent",
+    )
+    use_ipvlan: bool = PydanticField(
+        default=False,
+        description=(
+            "Run deckies on this agent over IPvlan L2 instead of MACVLAN. "
+            "Required when the agent is a VirtualBox/VMware guest bridged over Wi-Fi — "
+            "Wi-Fi APs bind one MAC per station, so MACVLAN's extra container MACs "
+            "rotate the VM's DHCP lease. Safe no-op on wired/bare-metal hosts."
+        ),
+    )
+    services_ini: Optional[str] = PydanticField(
+        default=None,
+        description="Optional INI text shipped to the agent as /etc/decnet/services.ini",
+    )
+
+
+class EnrollBundleResponse(BaseModel):
+    token: str
+    command: str
+    expires_at: datetime
+    host_uuid: str

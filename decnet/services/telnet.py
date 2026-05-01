@@ -1,7 +1,7 @@
 import os
 from pathlib import Path
 
-from decnet.services.base import BaseService
+from decnet.services.base import BaseService, ServiceConfigField
 
 TEMPLATES_DIR = Path(__file__).parent.parent / "templates" / "telnet"
 ARTIFACTS_ROOT = os.environ.get("DECNET_ARTIFACTS_ROOT", "/var/lib/decnet/artifacts")
@@ -23,6 +23,27 @@ class TelnetService(BaseService):
     name = "telnet"
     ports = [23]
     default_image = "build"
+
+    config_schema = [
+        ServiceConfigField(
+            key="password",
+            label="Root password",
+            type="password",
+            default="admin",
+            secret=True,
+            help="Plaintext root password for the in-container telnetd.",
+        ),
+        ServiceConfigField(
+            key="hostname",
+            label="Container hostname",
+            type="string",
+            placeholder="e.g. mail-01.corp.local",
+            help=(
+                "Cosmetic override for the telnet banner — keeps decoys "
+                "looking heterogeneous. Decky identity (NODE_NAME) is unaffected."
+            ),
+        ),
+    ]
 
     def compose_fragment(
         self,

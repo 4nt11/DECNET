@@ -25,10 +25,13 @@ from __future__ import annotations
 import asyncio
 import secrets
 from datetime import datetime, timezone
-from typing import Callable, Optional
+from typing import TYPE_CHECKING, Callable, Optional
 
 from decnet.logging import get_logger
 from decnet.realism.taxonomy import ContentClass
+
+if TYPE_CHECKING:
+    from decnet.realism.personas import EmailPersona
 
 log = get_logger("realism.bodies")
 
@@ -205,6 +208,9 @@ _BODIES: dict[ContentClass, Callable[[str, secrets.SystemRandom], str]] = {
     ContentClass.LOG_DAEMON: _body_log_daemon,
     ContentClass.CACHE_TMP: _body_cache_tmp,
     ContentClass.EMAIL: _body_email,
+    # All canary classes share one placeholder — content-class discriminant is the
+    # "what"; the real payload (token slug, DNS hook URL) is injected by the canary
+    # cultivator. Do not replace with distinct generators without updating cultivator.
     ContentClass.CANARY_AWS_CREDS: _body_canary,
     ContentClass.CANARY_ENV_FILE: _body_canary,
     ContentClass.CANARY_GIT_CONFIG: _body_canary,
@@ -213,6 +219,8 @@ _BODIES: dict[ContentClass, Callable[[str, secrets.SystemRandom], str]] = {
     ContentClass.CANARY_HONEYDOC_DOCX: _body_canary,
     ContentClass.CANARY_HONEYDOC_PDF: _body_canary,
     ContentClass.CANARY_MYSQL_DUMP: _body_canary,
+    ContentClass.CANARY_FINGERPRINT_HTML: _body_canary,
+    ContentClass.CANARY_FINGERPRINT_SVG: _body_canary,
 }
 
 
@@ -240,7 +248,7 @@ def make_body(
 
 async def make_body_with_llm(
     content_class: ContentClass,
-    persona,  # EmailPersona — typed loosely to avoid an import cycle
+    persona: "EmailPersona",
     *,
     llm=None,  # LLMBackend | None
     breaker=None,  # LLMCircuitBreaker | None

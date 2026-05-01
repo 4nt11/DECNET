@@ -1,6 +1,8 @@
 from abc import ABC, abstractmethod
 from typing import Any, Optional
 
+from decnet.web.db.models.topology import DeckyRow, EdgeRow, LANRow, TopologySummary
+
 
 class BaseRepository(ABC):
     """Abstract base class for DECNET web dashboard data storage."""
@@ -724,7 +726,7 @@ class BaseRepository(ABC):
     async def create_topology(self, data: dict[str, Any]) -> str:
         raise NotImplementedError
 
-    async def get_topology(self, topology_id: str) -> Optional[dict[str, Any]]:
+    async def get_topology(self, topology_id: str) -> Optional[TopologySummary]:
         raise NotImplementedError
 
     async def list_topologies(
@@ -732,7 +734,7 @@ class BaseRepository(ABC):
         status: Optional[str] = None,
         limit: Optional[int] = None,
         offset: Optional[int] = None,
-    ) -> list[dict[str, Any]]:
+    ) -> list[TopologySummary]:
         raise NotImplementedError
 
     async def count_topologies(self, status: Optional[str] = None) -> int:
@@ -757,7 +759,7 @@ class BaseRepository(ABC):
     ) -> bool:
         raise NotImplementedError
 
-    async def list_topologies_needing_resync(self) -> list[dict[str, Any]]:
+    async def list_topologies_needing_resync(self) -> list[TopologySummary]:
         raise NotImplementedError
 
     async def add_lan(
@@ -780,7 +782,7 @@ class BaseRepository(ABC):
 
     async def list_lans_for_topology(
         self, topology_id: str
-    ) -> list[dict[str, Any]]:
+    ) -> list[LANRow]:
         raise NotImplementedError
 
     async def add_topology_decky(
@@ -803,7 +805,7 @@ class BaseRepository(ABC):
 
     async def list_topology_deckies(
         self, topology_id: str
-    ) -> list[dict[str, Any]]:
+    ) -> list[DeckyRow]:
         raise NotImplementedError
 
     async def add_topology_edge(
@@ -816,7 +818,7 @@ class BaseRepository(ABC):
 
     async def list_topology_edges(
         self, topology_id: str
-    ) -> list[dict[str, Any]]:
+    ) -> list[EdgeRow]:
         raise NotImplementedError
 
     async def list_topology_status_events(
@@ -827,17 +829,29 @@ class BaseRepository(ABC):
     # -------------------- pre-deploy (pending-only) mutations --------------------
 
     async def delete_lan(
-        self, lan_id: str, *, expected_version: Optional[int] = None
+        self,
+        lan_id: str,
+        *,
+        expected_version: Optional[int] = None,
+        enforce_pending: bool = True,
     ) -> None:
         raise NotImplementedError
 
     async def delete_topology_decky(
-        self, decky_uuid: str, *, expected_version: Optional[int] = None
+        self,
+        decky_uuid: str,
+        *,
+        expected_version: Optional[int] = None,
+        enforce_pending: bool = True,
     ) -> None:
         raise NotImplementedError
 
     async def delete_topology_edge(
-        self, edge_id: str, *, expected_version: Optional[int] = None
+        self,
+        edge_id: str,
+        *,
+        expected_version: Optional[int] = None,
+        enforce_pending: bool = True,
     ) -> None:
         raise NotImplementedError
 
@@ -976,6 +990,7 @@ class BaseRepository(ABC):
         decky_name: Optional[str] = None,
         state: Optional[str] = None,
         kind: Optional[str] = None,
+        topology_id: Optional[str] = None,
     ) -> list[dict[str, Any]]:
         raise NotImplementedError
 

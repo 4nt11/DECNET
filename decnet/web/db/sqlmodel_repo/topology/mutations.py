@@ -10,7 +10,9 @@ from sqlalchemy import asc, desc, select, text
 from decnet.web.db.models import TopologyMutation
 
 
-class TopologyMutationsMixin:
+from decnet.web.db.sqlmodel_repo._helpers import _MixinBase
+
+class TopologyMutationsMixin(_MixinBase):
     """``self._check_and_bump_version`` resolves through
     ``TopologyCoreMixin`` via MRO."""
 

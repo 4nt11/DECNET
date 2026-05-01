@@ -9,6 +9,7 @@ Logs all requests as JSON.
 import asyncio
 import os
 import struct
+from typing import cast
 from syslog_bridge import (
     encode_secret,
     forward_syslog,
@@ -225,11 +226,13 @@ def _build_response(version: int, community: str, request_id: int, oids: list) -
 
 
 class SNMPProtocol(asyncio.DatagramProtocol):
+    _transport: asyncio.DatagramTransport | None = None
+
     def __init__(self):
         self._transport = None
 
-    def connection_made(self, transport):
-        self._transport = transport
+    def connection_made(self, transport: asyncio.BaseTransport) -> None:
+        self._transport = cast(asyncio.DatagramTransport, transport)
 
     def datagram_received(self, data, addr):
         try:
@@ -244,7 +247,8 @@ class SNMPProtocol(asyncio.DatagramProtocol):
                  principal=None, secret_kind="snmp_community",
                  **encode_secret(community))
             response = _build_response(version, community, request_id, oids)
-            self._transport.sendto(response, addr)
+            if self._transport is not None:
+                self._transport.sendto(response, addr)
         except Exception as e:
             _log("parse_error", severity=4, src=addr[0], error=str(e), data=data[:64].hex())
 

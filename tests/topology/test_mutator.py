@@ -59,13 +59,13 @@ async def _make_active(repo) -> str:
 @pytest.mark.anyio
 async def test_enqueue_bumps_topology_version(repo):
     tid = await _make_active(repo)
-    before = (await repo.get_topology(tid))["version"]
+    before = (await repo.get_topology(tid)).version
     mid = await repo.enqueue_topology_mutation(
         tid, "add_lan", {"name": "LAN-X", "subnet": "172.20.77.0/24"},
         expected_version=before,
     )
     topo = await repo.get_topology(tid)
-    assert topo["version"] == before + 1
+    assert topo.version == before + 1
     rows = await repo.list_topology_mutations(tid)
     assert rows[0]["id"] == mid
     assert rows[0]["state"] == "pending"
@@ -159,7 +159,7 @@ async def test_apply_add_lan_persists(repo):
     await apply_add_lan(
         repo, tid, {"name": "LAN-MUT", "subnet": "172.20.55.0/24"}
     )
-    names = {l["name"] for l in await repo.list_lans_for_topology(tid)}
+    names = {l.name for l in await repo.list_lans_for_topology(tid)}
     assert "LAN-MUT" in names
 
 
@@ -174,21 +174,21 @@ async def test_apply_add_decky_creates_and_attaches(repo):
         repo, tid,
         {
             "name": "new-decky-mut",
-            "lan": home_lan["name"],
+            "lan": home_lan.name,
             "services": ["ssh"],
             "archetype": "deaddeck",
         },
     )
 
     deckies = await repo.list_topology_deckies(tid)
-    new = next((d for d in deckies if d["decky_config"]["name"] == "new-decky-mut"), None)
+    new = next((d for d in deckies if d.decky_config and d.decky_config["name"] == "new-decky-mut"), None)
     assert new is not None
-    assert new["services"] == ["ssh"]
-    assert new["decky_config"]["archetype"] == "deaddeck"
-    assert home_lan["name"] in new["decky_config"]["ips_by_lan"]
+    assert new.services == ["ssh"]
+    assert new.decky_config["archetype"] == "deaddeck"
+    assert home_lan.name in new.decky_config["ips_by_lan"]
 
     edges = await repo.list_topology_edges(tid)
-    assert any(e["decky_uuid"] == new["uuid"] and e["lan_id"] == home_lan["id"] for e in edges)
+    assert any(e.decky_uuid == new.uuid and e.lan_id == home_lan.id for e in edges)
 
 
 @pytest.mark.anyio
@@ -199,7 +199,7 @@ async def test_apply_add_decky_rejects_duplicate_name(repo):
     with pytest.raises(MutationError, match="already exists"):
         await apply_add_decky(
             repo, tid,
-            {"name": existing["decky_config"]["name"], "lan": lans[0]["name"]},
+            {"name": existing.decky_config["name"], "lan": lans[0].name},
         )
 
 
@@ -220,15 +220,15 @@ async def test_apply_update_decky_replaces_services(repo):
     await apply_update_decky(
         repo, tid,
         {
-            "decky": decky["decky_config"]["name"],
+            "decky": decky.decky_config["name"],
             "services": ["ssh", "http"],
         },
     )
     updated = next(
         d for d in await repo.list_topology_deckies(tid)
-        if d["uuid"] == decky["uuid"]
+        if d.uuid == decky.uuid
     )
-    assert sorted(updated["services"]) == ["http", "ssh"]
+    assert sorted(updated.services) == ["http", "ssh"]
 
 
 @pytest.mark.anyio
@@ -240,7 +240,7 @@ async def test_apply_rejected_on_validator_error(repo):
         await apply_update_decky(
             repo, tid,
             {
-                "decky": decky["decky_config"]["name"],
+                "decky": decky.decky_config["name"],
                 # service_config for an undeclared service trips
                 # SERVICE_CFG_UNDECLARED in the post-apply invariants.
                 "patch": {"service_config": {"telnet": {"banner": "x"}}},
@@ -260,7 +260,7 @@ async def test_reconcile_applies_pending_mutation(repo):
     )
     drained = await _engine.reconcile_topologies(repo)
     assert drained == 1
-    names = {l["name"] for l in await repo.list_lans_for_topology(tid)}
+    names = {l.name for l in await repo.list_lans_for_topology(tid)}
     assert "LAN-RECON" in names
     # Mutation row is now applied.
     state = {r["state"] for r in await repo.list_topology_mutations(tid)}
@@ -270,7 +270,7 @@ async def test_reconcile_applies_pending_mutation(repo):
 @pytest.mark.anyio
 async def test_reconcile_failed_mutation_degrades_topology(repo):
     tid = await _make_active(repo)
-    existing = (await repo.list_lans_for_topology(tid))[0]["name"]
+    existing = (await repo.list_lans_for_topology(tid))[0].name
     # Validator will reject duplicate LAN name → failure path.
     await repo.enqueue_topology_mutation(
         tid, "add_lan", {"name": existing, "subnet": "172.20.88.0/24"},
@@ -280,7 +280,7 @@ async def test_reconcile_failed_mutation_degrades_topology(repo):
     mut = (await repo.list_topology_mutations(tid))[0]
     assert mut["state"] == "failed"
     topo = await repo.get_topology(tid)
-    assert topo["status"] == TopologyStatus.DEGRADED
+    assert topo.status == TopologyStatus.DEGRADED
 
 
 # ----------------------------------------------------- watch-loop guard isolation
@@ -392,7 +392,7 @@ async def test_reconcile_publishes_applying_and_applied(repo):
 @pytest.mark.anyio
 async def test_reconcile_publishes_failed_and_status(repo):
     tid = await _make_active(repo)
-    existing = (await repo.list_lans_for_topology(tid))[0]["name"]
+    existing = (await repo.list_lans_for_topology(tid))[0].name
     await repo.enqueue_topology_mutation(
         tid, "add_lan", {"name": existing, "subnet": "172.20.89.0/24"},
     )

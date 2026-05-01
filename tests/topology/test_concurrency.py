@@ -40,7 +40,7 @@ async def test_version_starts_at_one_after_persist(repo):
     # the version token stays at 1.
     tid = await persist(repo, plan)
     topo = await repo.get_topology(tid)
-    assert topo["version"] == 1
+    assert topo.version == 1
 
 
 @pytest.mark.anyio
@@ -52,13 +52,13 @@ async def test_happy_path_two_sequential_writes(repo):
         {"topology_id": tid, "name": "LAN-A", "subnet": "10.9.0.0/24", "is_dmz": False},
         expected_version=1,
     )
-    assert (await repo.get_topology(tid))["version"] == 2
+    assert (await repo.get_topology(tid)).version == 2
 
     await repo.add_lan(
         {"topology_id": tid, "name": "LAN-B", "subnet": "10.9.1.0/24", "is_dmz": False},
         expected_version=2,
     )
-    assert (await repo.get_topology(tid))["version"] == 3
+    assert (await repo.get_topology(tid)).version == 3
 
 
 @pytest.mark.anyio
@@ -85,11 +85,11 @@ async def test_no_expected_version_skips_check(repo):
     continue to work without version bumps."""
     plan = generate(_cfg())
     tid = await persist(repo, plan)
-    before = (await repo.get_topology(tid))["version"]
+    before = (await repo.get_topology(tid)).version
     await repo.add_lan(
         {"topology_id": tid, "name": "LAN-X", "subnet": "10.7.0.0/24", "is_dmz": False}
     )
-    after = (await repo.get_topology(tid))["version"]
+    after = (await repo.get_topology(tid)).version
     assert before == after  # no bump when version not asserted
 
 
@@ -99,14 +99,14 @@ async def test_update_topology_decky_bumps_version(repo):
     tid = await persist(repo, plan)
     decky = (await repo.list_topology_deckies(tid))[0]
     await repo.update_topology_decky(
-        decky["uuid"],
-        {"decky_config": {"name": decky["name"], "services": ["ssh"],
-                          "ips_by_lan": decky["decky_config"]["ips_by_lan"],
+        decky.uuid,
+        {"decky_config": {"name": decky.name, "services": ["ssh"],
+                          "ips_by_lan": decky.decky_config["ips_by_lan"],
                           "forwards_l3": False,
                           "service_config": {"ssh": {"password": "x"}}}},
         expected_version=1,
     )
-    assert (await repo.get_topology(tid))["version"] == 2
+    assert (await repo.get_topology(tid)).version == 2
 
 
 @pytest.mark.anyio
@@ -114,5 +114,5 @@ async def test_update_lan_bumps_version(repo):
     plan = generate(_cfg())
     tid = await persist(repo, plan)
     lan = (await repo.list_lans_for_topology(tid))[0]
-    await repo.update_lan(lan["id"], {"name": "LAN-RENAMED"}, expected_version=1)
-    assert (await repo.get_topology(tid))["version"] == 2
+    await repo.update_lan(lan.id, {"name": "LAN-RENAMED"}, expected_version=1)
+    assert (await repo.get_topology(tid)).version == 2

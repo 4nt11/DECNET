@@ -112,7 +112,7 @@ async def test_deploy_on_agent_routes_via_agent_client(repo, fake_agent) -> None
     assert version_hash == canonical_hash(hydrated)
 
     topo = await repo.get_topology(tid)
-    assert topo["status"] == TopologyStatus.ACTIVE
+    assert topo.status == TopologyStatus.ACTIVE
 
 
 @pytest.mark.anyio
@@ -132,7 +132,7 @@ async def test_deploy_on_agent_failure_marks_failed(repo, monkeypatch) -> None:
         await _deployer.deploy_topology(repo, tid)
 
     topo = await repo.get_topology(tid)
-    assert topo["status"] == TopologyStatus.FAILED
+    assert topo.status == TopologyStatus.FAILED
 
 
 @pytest.mark.anyio
@@ -165,4 +165,4 @@ async def test_teardown_on_agent_routes_via_agent_client(repo, fake_agent) -> No
     assert inst.calls == [("teardown", (tid,), {})]
 
     topo = await repo.get_topology(tid)
-    assert topo["status"] == TopologyStatus.TORN_DOWN
+    assert topo.status == TopologyStatus.TORN_DOWN

@@ -5,12 +5,13 @@ from ipaddress import IPv4Address, IPv4Network
 from typing import Any
 
 from decnet.topology.allocator import IPAllocator
+from decnet.topology.repository import TopologyRepository
 from decnet.topology.config import GeneratedTopology
 from decnet.topology.status import TopologyStatus, assert_transition
 
 
 async def persist(
-    repo: Any,
+    repo: TopologyRepository,
     plan: GeneratedTopology,
     *,
     target_host_uuid: str | None = None,
@@ -90,7 +91,7 @@ async def persist(
 
 
 async def transition_status(
-    repo: Any,
+    repo: TopologyRepository,
     topology_id: str,
     new_status: str,
     reason: str | None = None,
@@ -103,11 +104,11 @@ async def transition_status(
     topo = await repo.get_topology(topology_id)
     if topo is None:
         raise ValueError(f"topology {topology_id!r} not found")
-    assert_transition(topo["status"], new_status)
+    assert_transition(topo.status, new_status)
     await repo.update_topology_status(topology_id, new_status, reason=reason)
 
 
-async def hydrate(repo: Any, topology_id: str) -> dict[str, Any] | None:
+async def hydrate(repo: TopologyRepository, topology_id: str) -> dict[str, Any] | None:
     """Load a topology + children into a single dict for callers.
 
     Shape::
@@ -124,15 +125,21 @@ async def hydrate(repo: Any, topology_id: str) -> dict[str, Any] | None:
     topo = await repo.get_topology(topology_id)
     if topo is None:
         return None
-    lans = await repo.list_lans_for_topology(topology_id)
-    deckies = await repo.list_topology_deckies(topology_id)
-    edges = await repo.list_topology_edges(topology_id)
-    _backfill_decky_configs(lans, deckies, edges)
+    lans_dto = await repo.list_lans_for_topology(topology_id)
+    deckies_dto = await repo.list_topology_deckies(topology_id)
+    edges_dto = await repo.list_topology_edges(topology_id)
+    # Convert to dicts for _backfill_decky_configs (mutates decky_config in-place).
+    # mode="json" is mandatory: datetime fields must arrive as ISO strings for all
+    # downstream consumers (canonical_hash, deployer, api_get_topology, etc.).
+    lan_dicts = [m.model_dump(mode="json") for m in lans_dto]
+    decky_dicts = [m.model_dump(mode="json") for m in deckies_dto]
+    edge_dicts = [m.model_dump(mode="json") for m in edges_dto]
+    _backfill_decky_configs(lan_dicts, decky_dicts, edge_dicts)
     return {
-        "topology": topo,
-        "lans": lans,
-        "deckies": deckies,
-        "edges": edges,
+        "topology": topo.model_dump(mode="json"),
+        "lans": lan_dicts,
+        "deckies": decky_dicts,
+        "edges": edge_dicts,
     }
 
 

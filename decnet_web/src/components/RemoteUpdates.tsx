@@ -169,7 +169,10 @@ const RemoteUpdates: React.FC = () => {
     <div className="dashboard swarm-root">
       <div className="page-header">
         <div className="page-title-group">
-          <h1><Package size={18} /> REMOTE UPDATES</h1>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+            <Package size={22} className="violet-accent" />
+            <h1>REMOTE UPDATES</h1>
+          </div>
           <span className="page-sub">
             push updater bundles to enrolled workers · {hosts.length} WORKER{hosts.length === 1 ? '' : 'S'}
           </span>

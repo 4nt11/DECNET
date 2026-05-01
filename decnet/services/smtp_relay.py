@@ -1,7 +1,7 @@
 import os
 from pathlib import Path
 
-from decnet.services.base import BaseService
+from decnet.services.base import BaseService, ServiceConfigField
 
 # Reuses the same template as the smtp service — only difference is
 # SMTP_OPEN_RELAY=1 in the environment, which enables the open relay persona.
@@ -18,6 +18,64 @@ class SMTPRelayService(BaseService):
     ports = [25, 587]
     default_image = "build"
 
+    config_schema = [
+        ServiceConfigField(
+            key="banner",
+            label="SMTP greeting banner",
+            type="string",
+            placeholder="mail.corp.local ESMTP Postfix",
+            help="First line returned on TCP connect (220 ...).",
+        ),
+        ServiceConfigField(
+            key="mta",
+            label="MTA persona",
+            type="enum",
+            enum=["postfix", "exim", "sendmail"],
+            default="postfix",
+            help="Shapes EHLO capability list and error wording.",
+        ),
+        ServiceConfigField(
+            key="upstream_host",
+            label="Upstream relay host",
+            type="string",
+            placeholder="smtp.sendgrid.net",
+            help="Real SMTP relay used to forward probe emails. Leave blank to disable forwarding.",
+        ),
+        ServiceConfigField(
+            key="upstream_port",
+            label="Upstream relay port",
+            type="int",
+            default=25,
+            help="Port on the upstream relay (25 or 587).",
+        ),
+        ServiceConfigField(
+            key="upstream_user",
+            label="Upstream relay username",
+            type="string",
+            help="AUTH username for the upstream relay (optional).",
+        ),
+        ServiceConfigField(
+            key="upstream_pass",
+            label="Upstream relay password",
+            type="string",
+            help="AUTH password for the upstream relay (optional).",
+        ),
+        ServiceConfigField(
+            key="upstream_sender",
+            label="Upstream envelope sender",
+            type="string",
+            placeholder="probe@yourdomain.com",
+            help="Envelope MAIL FROM used when talking to the upstream relay. Set this to an address your server is authorised to send from so SPF passes at the recipient. The attacker's From: header inside the message is untouched.",
+        ),
+        ServiceConfigField(
+            key="probe_limit",
+            label="Probe forward limit",
+            type="int",
+            default=1,
+            help="Number of emails per source IP to actually deliver upstream. All subsequent emails are silently quarantined.",
+        ),
+    ]
+
     def compose_fragment(
         self,
         decky_name: str,
@@ -33,6 +91,7 @@ class SMTPRelayService(BaseService):
             "cap_add": ["NET_BIND_SERVICE"],
             "environment": {
                 "NODE_NAME": decky_name,
+                "SMTP_SERVICE_NAME": "smtp_relay",
                 "SMTP_OPEN_RELAY": "1",
                 "SMTP_QUARANTINE_DIR": _IN_CONTAINER_QUARANTINE,
             },

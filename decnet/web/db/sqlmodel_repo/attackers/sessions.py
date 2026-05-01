@@ -9,7 +9,9 @@ from sqlalchemy import select
 from decnet.web.db.models import SessionProfile
 
 
-class SessionProfilesMixin:
+from decnet.web.db.sqlmodel_repo._helpers import _MixinBase
+
+class SessionProfilesMixin(_MixinBase):
     async def upsert_session_profile(
         self,
         sid: str,

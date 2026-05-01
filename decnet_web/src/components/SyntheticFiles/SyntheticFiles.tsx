@@ -2,7 +2,7 @@ import React, { useEffect, useMemo, useRef, useState } from 'react';
 import api from '../../utils/api';
 import { useEscapeKey } from '../../hooks/useEscapeKey';
 import { useFocusTrap } from '../../hooks/useFocusTrap';
-import { X } from '../../icons';
+import { X, FileText } from '../../icons';
 import { contentClassLabel, isCanaryClass } from '../../realism/labels';
 // Reuse the DeckyFleet shell + the persona-page tweaks so this page reads
 // the same as the rest of the realism nav group.
@@ -52,6 +52,7 @@ const CONTENT_CLASSES = [
   'canary_aws_creds', 'canary_env_file', 'canary_git_config',
   'canary_ssh_key', 'canary_honeydoc', 'canary_honeydoc_docx',
   'canary_honeydoc_pdf', 'canary_mysql_dump',
+  'canary_fingerprint_html', 'canary_fingerprint_svg',
 ] as const;
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
@@ -240,7 +241,10 @@ const SyntheticFiles: React.FC = () => {
     <div className="fleet-root synthetic-files-root">
       <div className="page-header">
         <div className="page-title-group">
-          <h1>SYNTHETIC FILES</h1>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+            <FileText size={22} className="violet-accent" />
+            <h1>SYNTHETIC FILES</h1>
+          </div>
           <span className="page-sub">
             {total} TOTAL · PAGE {page + 1} / {totalPages}
             {filtersActive ? ' · FILTERED' : ''}

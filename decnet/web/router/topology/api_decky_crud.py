@@ -58,10 +58,10 @@ async def api_create_decky(
         raise map_repo_exception(exc) from exc
 
     rows = await repo.list_topology_deckies(topology_id)
-    row = next((r for r in rows if r["uuid"] == decky_uuid), None)
+    row = next((r for r in rows if r.uuid == decky_uuid), None)
     if row is None:  # pragma: no cover
         raise HTTPException(status_code=500, detail="Decky insert vanished")
-    return DeckyRow(**row)
+    return row
 
 
 @router.patch(
@@ -99,10 +99,10 @@ async def api_update_decky(
         raise HTTPException(status_code=404, detail=str(exc)) from exc
 
     rows = await repo.list_topology_deckies(topology_id)
-    row = next((r for r in rows if r["uuid"] == decky_uuid), None)
+    row = next((r for r in rows if r.uuid == decky_uuid), None)
     if row is None:
         raise HTTPException(status_code=404, detail="Decky not found")
-    return DeckyRow(**row)
+    return row
 
 
 @router.delete(
@@ -126,7 +126,7 @@ async def api_delete_decky(
     await assert_pending_or_409(topology_id)
 
     rows = await repo.list_topology_deckies(topology_id)
-    if not any(r["uuid"] == decky_uuid for r in rows):
+    if not any(r.uuid == decky_uuid for r in rows):
         raise HTTPException(status_code=404, detail="Decky not found")
 
     try:

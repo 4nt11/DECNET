@@ -1,5 +1,5 @@
 from pathlib import Path
-from decnet.services.base import BaseService
+from decnet.services.base import BaseService, ServiceConfigField
 
 TEMPLATES_DIR = Path(__file__).parent.parent / "templates" / "rdp"
 
@@ -8,6 +8,19 @@ class RDPService(BaseService):
     name = "rdp"
     ports = [3389]
     default_image = "build"
+
+    config_schema = [
+        ServiceConfigField(
+            key="nla",
+            label="Enable CredSSP / NLA",
+            type="bool",
+            default=False,
+            help=(
+                "Off by default — basic X.224 cookie capture is enough for most "
+                "attacker traffic and avoids the openssl cert-gen at container start."
+            ),
+        ),
+    ]
 
     def compose_fragment(self, decky_name: str, log_target: str | None = None, service_cfg: dict | None = None) -> dict:
         fragment: dict = {

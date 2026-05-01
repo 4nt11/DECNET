@@ -8,13 +8,16 @@ from typing import Any, Optional
 from sqlalchemy import desc, func, select, text
 
 from decnet.web.db.models import Topology, TopologyStatusEvent
+from decnet.web.db.models.topology import TopologySummary
+from sqlmodel import col
+
 from decnet.web.db.sqlmodel_repo._helpers import (
-    _deserialize_json_fields,
-    _serialize_json_fields,
+    _MixinBase,
+    _serialize_json_fields
 )
 
 
-class TopologyCoreMixin:
+class TopologyCoreMixin(_MixinBase):
     """Topologies CRUD + ``_assert_pending`` / ``_check_and_bump_version``.
 
     The two private helpers live here because every other topology
@@ -32,7 +35,7 @@ class TopologyCoreMixin:
             await session.refresh(row)
             return row.id
 
-    async def get_topology(self, topology_id: str) -> Optional[dict[str, Any]]:
+    async def get_topology(self, topology_id: str) -> Optional[TopologySummary]:
         async with self._session() as session:
             result = await session.execute(
                 select(Topology).where(Topology.id == topology_id)
@@ -40,15 +43,14 @@ class TopologyCoreMixin:
             row = result.scalar_one_or_none()
             if not row:
                 return None
-            d = row.model_dump(mode="json")
-            return _deserialize_json_fields(d, ("config_snapshot",))
+            return TopologySummary.model_validate(row.model_dump(mode="json"))
 
     async def list_topologies(
         self,
         status: Optional[str] = None,
         limit: Optional[int] = None,
         offset: Optional[int] = None,
-    ) -> list[dict[str, Any]]:
+    ) -> list[TopologySummary]:
         statement = select(Topology).order_by(desc(Topology.created_at))
         if status:
             statement = statement.where(Topology.status == status)
@@ -59,9 +61,7 @@ class TopologyCoreMixin:
         async with self._session() as session:
             result = await session.execute(statement)
             return [
-                _deserialize_json_fields(
-                    r.model_dump(mode="json"), ("config_snapshot",)
-                )
+                TopologySummary.model_validate(r.model_dump(mode="json"))
                 for r in result.scalars().all()
             ]
 
@@ -140,15 +140,13 @@ class TopologyCoreMixin:
             await session.commit()
             return True
 
-    async def list_topologies_needing_resync(self) -> list[dict[str, Any]]:
+    async def list_topologies_needing_resync(self) -> list[TopologySummary]:
         async with self._session() as session:
             result = await session.execute(
                 select(Topology).where(Topology.needs_resync == True)  # noqa: E712
             )
             return [
-                _deserialize_json_fields(
-                    r.model_dump(mode="json"), ("config_snapshot",)
-                )
+                TopologySummary.model_validate(r.model_dump(mode="json"))
                 for r in result.scalars().all()
             ]
 
@@ -191,8 +189,8 @@ class TopologyCoreMixin:
         """Return ids of topologies currently in ``active|degraded``."""
         async with self._session() as session:
             result = await session.execute(
-                select(Topology.id).where(
-                    Topology.status.in_(["active", "degraded"])
+                select(col(Topology.id)).where(
+                    col(Topology.status).in_(["active", "degraded"])
                 )
             )
             return [r for r in result.scalars().all()]

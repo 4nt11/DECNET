@@ -10,7 +10,9 @@ from decnet.web.db.models import RealismConfig, SyntheticFile
 from decnet.web.db.models.realism import SYNTHETIC_FILE_BODY_LIMIT
 
 
-class RealismMixin:
+from decnet.web.db.sqlmodel_repo._helpers import _MixinBase
+
+class RealismMixin(_MixinBase):
     """Mixin: composed onto ``SQLModelRepository``."""
 
     async def record_synthetic_file(self, data: dict[str, Any]) -> str:

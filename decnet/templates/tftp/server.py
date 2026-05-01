@@ -8,6 +8,7 @@ then responds with an error packet. Logs all requests as JSON.
 import asyncio
 import os
 import struct
+from typing import cast
 from syslog_bridge import syslog_line, write_syslog_file, forward_syslog
 
 NODE_NAME = os.environ.get("NODE_NAME", "tftpserver")
@@ -33,11 +34,13 @@ def _log(event_type: str, severity: int = 6, **kwargs) -> None:
 
 
 class TFTPProtocol(asyncio.DatagramProtocol):
+    _transport: asyncio.DatagramTransport | None = None
+
     def __init__(self):
         self._transport = None
 
-    def connection_made(self, transport):
-        self._transport = transport
+    def connection_made(self, transport: asyncio.BaseTransport) -> None:
+        self._transport = cast(asyncio.DatagramTransport, transport)
 
     def datagram_received(self, data: bytes, addr):
         if len(data) < 4:
@@ -56,7 +59,8 @@ class TFTPProtocol(asyncio.DatagramProtocol):
                 filename=filename,
                 mode=mode,
             )
-            self._transport.sendto(_error_pkt(2, "Access violation"), addr)
+            if self._transport is not None:
+                self._transport.sendto(_error_pkt(2, "Access violation"), addr)
         else:
             _log("unknown_opcode", src=addr[0], opcode=opcode, data=data[:32].hex())
 

@@ -22,6 +22,8 @@ from decnet.web.db.models import (
     NextIPResponse,
     NextSubnetResponse,
     ServiceCatalogResponse,
+    ServiceConfigFieldDTO,
+    ServiceSchemaResponse,
 )
 from decnet.web.dependencies import repo, require_viewer
 
@@ -42,7 +44,48 @@ router = APIRouter()
 async def api_list_services(
     _viewer: dict = Depends(require_viewer),
 ) -> ServiceCatalogResponse:
-    return ServiceCatalogResponse(services=all_service_names())
+    from decnet.services.registry import all_services
+    registry = all_services()
+    return ServiceCatalogResponse(
+        services=all_service_names(),
+        fleet_singletons=[
+            name for name, svc in registry.items() if svc.fleet_singleton
+        ],
+    )
+
+
+@router.get(
+    "/services/{service_name}/schema",
+    tags=["MazeNET Topologies"],
+    response_model=ServiceSchemaResponse,
+    responses={
+        401: {"description": "Missing or invalid credentials"},
+        403: {"description": "Insufficient permissions"},
+        404: {"description": "Unknown service"},
+    },
+)
+@_traced("api.topology.catalog.service_schema")
+async def api_service_schema(
+    service_name: str,
+    _viewer: dict = Depends(require_viewer),
+) -> ServiceSchemaResponse:
+    """Return the declarative config schema for one service.
+
+    Drives the schema-driven Inspector form on both Fleet and MazeNET.
+    Empty ``fields`` means the service has no customizable knobs yet —
+    the form renders a "No customizable fields" placeholder.
+    """
+    from decnet.services.registry import get_service
+    try:
+        svc = get_service(service_name)
+    except KeyError:
+        raise HTTPException(status_code=404, detail=f"Unknown service: {service_name!r}")
+    return ServiceSchemaResponse(
+        name=svc.name,
+        ports=list(svc.ports),
+        fleet_singleton=bool(svc.fleet_singleton),
+        fields=[ServiceConfigFieldDTO(**f.to_json()) for f in svc.config_schema],
+    )
 
 
 @router.get(
@@ -121,13 +164,13 @@ async def api_next_ip(
     if await repo.get_topology(topology_id) is None:
         raise HTTPException(status_code=404, detail="Topology not found")
     lans = await repo.list_lans_for_topology(topology_id)
-    lan = next((ln for ln in lans if ln["id"] == lan_id), None)
+    lan = next((ln for ln in lans if ln.id == lan_id), None)
     if lan is None:
         raise HTTPException(status_code=404, detail="LAN not found")
     deckies = await repo.list_topology_deckies(topology_id)
-    alloc = IPAllocator(subnet=lan["subnet"])
+    alloc = IPAllocator(subnet=lan.subnet)
     for d in deckies:
-        ip = (d.get("decky_config") or {}).get("ips_by_lan", {}).get(lan["name"])
+        ip = (d.decky_config or {}).get("ips_by_lan", {}).get(lan.name)
         if ip:
             try:
                 alloc.reserve(ip)
@@ -137,4 +180,4 @@ async def api_next_ip(
         ip = alloc.next_free()
     except AllocatorExhausted as e:
         raise HTTPException(status_code=409, detail=str(e))
-    return NextIPResponse(subnet=lan["subnet"], ip=ip)
+    return NextIPResponse(subnet=lan.subnet, ip=ip)

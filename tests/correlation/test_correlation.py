@@ -103,6 +103,40 @@ class TestParserBasic:
         assert event.raw == line.strip()
 
 
+class TestParserBashPromptCommand:
+    """
+    Bash PROMPT_COMMAND lines from SSH/telnet decky containers arrive as
+    free-form `logger -t bash "CMD …"` syslog with MSGID=NIL. The parser
+    must rewrite them to event_type=command so the behavioral profiler
+    picks them up.
+    """
+
+    _RAW = (
+        '<14>1 2026-04-28T22:35:58.021674+00:00 dmz-gateway bash - - -  '
+        'CMD uid=0 user=root src=31.56.209.39 pwd=/root '
+        'cmd=echo "history -cw; rm -rf *.sh" | sh'
+    )
+
+    def test_event_type_normalized_to_command(self):
+        event = parse_line(self._RAW)
+        assert event is not None
+        assert event.event_type == "command"
+
+    def test_attacker_ip_extracted(self):
+        event = parse_line(self._RAW)
+        assert event.attacker_ip == "31.56.209.39"
+
+    def test_command_field_captures_full_cmd_with_spaces(self):
+        event = parse_line(self._RAW)
+        assert event.fields["command"] == 'echo "history -cw; rm -rf *.sh" | sh'
+
+    def test_metadata_fields_populated(self):
+        event = parse_line(self._RAW)
+        assert event.fields["uid"] == "0"
+        assert event.fields["user"] == "root"
+        assert event.fields["pwd"] == "/root"
+
+
 class TestParserAttackerIP:
     def test_src_ip_field(self):
         event = parse_line(_make_line(src_ip="10.0.0.1"))

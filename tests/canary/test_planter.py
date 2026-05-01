@@ -115,9 +115,9 @@ async def test_plant_argv_and_base64_round_trip(repo: SQLiteRepository, fake_bus
     assert stdin_seen[0] == base64.b64encode(art.content)
     assert "base64 -d > /home/admin/.aws/credentials" in script
     assert base64.b64encode(art.content).decode() not in script
-    # touch -d @<mtime> with negative offset → an int strictly less than now.
-    m = re.search(r"touch -d @(\d+) ", script)
-    assert m and int(m.group(1)) > 0
+    # touch -d 'YYYY-MM-DD HH:MM:SS UTC' — backdated via mtime_offset.
+    m = re.search(r"touch -d '(\d{4}-\d{2}-\d{2}) ", script)
+    assert m
     # State transitioned to planted.
     row = await repo.get_canary_token("tok-1")
     assert row["state"] == "planted" and row["last_error"] is None
@@ -231,6 +231,98 @@ async def test_seed_baseline_skips_unknown_generator(repo: SQLiteRepository, mon
     with patcher:
         rows = await planter.seed_baseline("web1", repo)
     assert {r["generator"] for r in rows} == {"env_file"}
+
+
+@pytest.mark.asyncio
+async def test_plant_honours_explicit_container_override(repo: SQLiteRepository) -> None:
+    """``container=`` lets MazeNET callers target a non-``<name>-ssh`` container."""
+    await repo.create_canary_token({
+        "uuid": "tok-c", "kind": "http", "decky_name": "web1",
+        "generator": "env_file", "placement_path": "/x",
+        "callback_token": "slugC", "secret_seed": "s", "created_by": "u1",
+    })
+    art = CanaryArtifact(path="/x", content=b"y", generator="env_file")
+    patcher, captured, _stdin = _patch_subprocess(rc=0)
+    with patcher:
+        ok, _err = await planter.plant(
+            "web1", art, token_uuid="tok-c", repo=repo,
+            container="decnet_t_abc12345_web1",
+        )
+    assert ok is True
+    # docker exec -i <override-container> ...
+    assert captured[0][3] == "decnet_t_abc12345_web1"
+
+
+def test_resolve_topology_container_prefers_ssh_service() -> None:
+    name = planter.resolve_topology_container(
+        "abc123def456", "web1", services=["ssh", "http"],
+    )
+    assert name == "web1-ssh"
+
+
+def test_resolve_topology_container_falls_back_to_base() -> None:
+    name = planter.resolve_topology_container(
+        "abc123def456789", "router", services=["dns"],
+    )
+    # decnet_t_<id8>_<decky_name>; matches topology.compose._container_name.
+    assert name == "decnet_t_abc123de_router"
+
+
+@pytest.mark.asyncio
+async def test_seed_baseline_topology_iterates_deckies_and_resolves_container(
+    repo: SQLiteRepository, monkeypatch
+) -> None:
+    """Topology seed: ssh-bearing decky → ``<name>-ssh``; bare decky → base."""
+    monkeypatch.setenv("DECNET_CANARY_BASELINE", "env_file")
+    topo_id = "abcdef0123456789"
+
+    async def _fake_hydrate(_repo, _topo_id):
+        assert _topo_id == topo_id
+        return {
+            "topology": {"id": topo_id},
+            "lans": [],
+            "deckies": [
+                {
+                    "uuid": "u1", "name": "web1",
+                    "decky_config": {"name": "web1"},
+                    "services": ["ssh", "http"],
+                },
+                {
+                    "uuid": "u2", "name": "router",
+                    "decky_config": {"name": "router"},
+                    "services": ["dns"],
+                },
+            ],
+            "edges": [],
+        }
+
+    import decnet.canary.planter as _planter_mod
+    monkeypatch.setattr(
+        "decnet.topology.persistence.hydrate", _fake_hydrate,
+    )
+
+    patcher, captured, _stdin = _patch_subprocess(rc=0)
+    with patcher:
+        rows = await _planter_mod.seed_baseline_topology(repo, topo_id)
+
+    # One token per decky × one generator in the baseline.
+    assert {r["decky_name"] for r in rows} == {"web1", "router"}
+    # docker exec -i <container> ... — captured argv index 3 is container.
+    containers = sorted(argv[3] for argv in captured)
+    assert containers == ["decnet_t_abcdef01_router", "web1-ssh"]
+
+
+@pytest.mark.asyncio
+async def test_seed_baseline_topology_returns_empty_for_missing_topology(
+    repo: SQLiteRepository, monkeypatch
+) -> None:
+    async def _none_hydrate(_repo, _topo_id):
+        return None
+    monkeypatch.setattr(
+        "decnet.topology.persistence.hydrate", _none_hydrate,
+    )
+    rows = await planter.seed_baseline_topology(repo, "missing-id")
+    assert rows == []
 
 
 @pytest.mark.asyncio

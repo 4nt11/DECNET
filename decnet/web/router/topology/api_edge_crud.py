@@ -46,13 +46,13 @@ async def api_create_edge(
 
     # Referential integrity: decky + LAN must belong to this topology.
     deckies = await repo.list_topology_deckies(topology_id)
-    if not any(d["uuid"] == body.decky_uuid for d in deckies):
+    if not any(d.uuid == body.decky_uuid for d in deckies):
         raise HTTPException(
             status_code=400,
             detail=f"decky {body.decky_uuid!r} not in topology {topology_id!r}",
         )
     lans = await repo.list_lans_for_topology(topology_id)
-    if not any(r["id"] == body.lan_id for r in lans):
+    if not any(r.id == body.lan_id for r in lans):
         raise HTTPException(
             status_code=400,
             detail=f"lan {body.lan_id!r} not in topology {topology_id!r}",
@@ -73,10 +73,10 @@ async def api_create_edge(
         raise map_repo_exception(exc) from exc
 
     edges = await repo.list_topology_edges(topology_id)
-    row = next((e for e in edges if e["id"] == edge_id), None)
+    row = next((e for e in edges if e.id == edge_id), None)
     if row is None:  # pragma: no cover
         raise HTTPException(status_code=500, detail="Edge insert vanished")
-    return EdgeRow(**row)
+    return row
 
 
 @router.delete(
@@ -100,7 +100,7 @@ async def api_delete_edge(
     await assert_pending_or_409(topology_id)
 
     edges = await repo.list_topology_edges(topology_id)
-    if not any(e["id"] == edge_id for e in edges):
+    if not any(e.id == edge_id for e in edges):
         raise HTTPException(status_code=404, detail="Edge not found")
 
     try:

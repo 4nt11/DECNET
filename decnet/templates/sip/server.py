@@ -8,6 +8,7 @@ Authorization header and call metadata, then responds with 401 Unauthorized.
 import asyncio
 import os
 import re
+from typing import cast
 from syslog_bridge import (
     classify_authorization,
     forward_syslog,
@@ -98,11 +99,13 @@ def _handle_message(data: bytes, src_addr) -> bytes | None:
 
 
 class SIPUDPProtocol(asyncio.DatagramProtocol):
+    _transport: asyncio.DatagramTransport | None = None
+
     def __init__(self):
         self._transport = None
 
-    def connection_made(self, transport):
-        self._transport = transport
+    def connection_made(self, transport: asyncio.BaseTransport) -> None:
+        self._transport = cast(asyncio.DatagramTransport, transport)
 
     def datagram_received(self, data, addr):
         response = _handle_message(data, addr)
@@ -111,21 +114,24 @@ class SIPUDPProtocol(asyncio.DatagramProtocol):
 
 
 class SIPTCPProtocol(asyncio.Protocol):
+    _transport: asyncio.Transport | None = None
+    _peer: tuple[str, int] | None = None
+
     def __init__(self):
         self._transport = None
         self._peer = None
         self._buf = b""
 
-    def connection_made(self, transport):
-        self._transport = transport
-        self._peer = transport.get_extra_info("peername", ("?", 0))
+    def connection_made(self, transport: asyncio.BaseTransport) -> None:
+        self._transport = cast(asyncio.Transport, transport)
+        self._peer = cast(tuple[str, int], self._transport.get_extra_info("peername", ("?", 0)))
 
-    def data_received(self, data):
+    def data_received(self, data: bytes) -> None:
         self._buf += data
         if b"\r\n\r\n" in self._buf or b"\n\n" in self._buf:
             response = _handle_message(self._buf, self._peer)
             self._buf = b""
-            if response:
+            if response and self._transport:
                 self._transport.write(response)
 
     def connection_lost(self, exc):

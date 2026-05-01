@@ -11,12 +11,15 @@ import json
 import uuid as _uuid
 from typing import Any, List, Optional
 
-from sqlalchemy import desc, func, select
+from sqlalchemy import desc, func, outerjoin, select
+from sqlmodel import col
 
-from decnet.web.db.models import Attacker
+from decnet.web.db.models import Attacker, AttackerIntel
 
 
-class AttackersCoreMixin:
+from decnet.web.db.sqlmodel_repo._helpers import _MixinBase
+
+class AttackersCoreMixin(_MixinBase):
     @staticmethod
     def _deserialize_attacker(d: dict[str, Any]) -> dict[str, Any]:
         for key in ("services", "deckies", "fingerprints", "commands"):
@@ -63,16 +66,16 @@ class AttackersCoreMixin:
         sort_by: str = "recent",
         service: Optional[str] = None,
     ) -> List[dict[str, Any]]:
-        order = {
+        order: Any = {
             "active": desc(Attacker.event_count),
             "traversals": desc(Attacker.is_traversal),
         }.get(sort_by, desc(Attacker.last_seen))
 
         statement = select(Attacker).order_by(order).offset(offset).limit(limit)
         if search:
-            statement = statement.where(Attacker.ip.like(f"%{search}%"))
+            statement = statement.where(col(Attacker.ip).like(f"%{search}%"))
         if service:
-            statement = statement.where(Attacker.services.like(f'%"{service}"%'))
+            statement = statement.where(col(Attacker.services).like(f'%"{service}"%'))
 
         async with self._session() as session:
             result = await session.execute(statement)
@@ -81,14 +84,49 @@ class AttackersCoreMixin:
                 for a in result.scalars().all()
             ]
 
+    async def get_all_attackers_for_export(self) -> list[dict[str, Any]]:
+        """Return every attacker row left-joined with its intel row.
+
+        Used exclusively by the export endpoint — no pagination, ordered by
+        last_seen desc so the file reads newest-first.
+        """
+        stmt = (
+            select(Attacker, AttackerIntel)
+            .select_from(
+                outerjoin(Attacker, AttackerIntel, Attacker.uuid == AttackerIntel.attacker_uuid)
+            )
+            .order_by(desc(Attacker.last_seen))
+        )
+        async with self._session() as session:
+            rows = (await session.execute(stmt)).all()
+
+        _intel_raw_keys = ("greynoise_raw", "abuseipdb_raw", "feodo_raw", "threatfox_raw")
+        result = []
+        for attacker, intel in rows:
+            d = self._deserialize_attacker(attacker.model_dump(mode="json"))
+            if intel is not None:
+                intel_d = intel.model_dump(mode="json")
+                for key in _intel_raw_keys:
+                    raw = intel_d.get(key)
+                    if isinstance(raw, str):
+                        try:
+                            intel_d[key] = json.loads(raw)
+                        except (json.JSONDecodeError, TypeError):
+                            pass
+                d["threat_intel"] = intel_d
+            else:
+                d["threat_intel"] = None
+            result.append(d)
+        return result
+
     async def get_total_attackers(
         self, search: Optional[str] = None, service: Optional[str] = None
     ) -> int:
         statement = select(func.count()).select_from(Attacker)
         if search:
-            statement = statement.where(Attacker.ip.like(f"%{search}%"))
+            statement = statement.where(col(Attacker.ip).like(f"%{search}%"))
         if service:
-            statement = statement.where(Attacker.services.like(f'%"{service}"%'))
+            statement = statement.where(col(Attacker.services).like(f'%"{service}"%'))
 
         async with self._session() as session:
             result = await session.execute(statement)

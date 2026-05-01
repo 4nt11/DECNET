@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import json
+from datetime import datetime
 
 from decnet.realism.personas import (
     EmailPersona,
@@ -75,31 +76,52 @@ def test_uses_llms_heavily_can_be_set():
     assert parsed[0].uses_llms_heavily is True
 
 
+def _dt(h: int, m: int = 0) -> datetime:
+    return datetime(2024, 1, 15, h, m)
+
+
 def test_active_hours_normal_window():
     p = EmailPersona(**_persona(active_hours="09:00-18:00"))
-    assert in_active_hours(p, 12) is True
-    assert in_active_hours(p, 8) is False
-    assert in_active_hours(p, 18) is False
-    assert in_active_hours(p, 9) is True
+    assert in_active_hours(p, _dt(12)) is True
+    assert in_active_hours(p, _dt(8)) is False
+    assert in_active_hours(p, _dt(18)) is False
+    assert in_active_hours(p, _dt(9)) is True
 
 
 def test_active_hours_wraparound_window():
     p = EmailPersona(**_persona(active_hours="22:00-06:00"))
-    assert in_active_hours(p, 23) is True
-    assert in_active_hours(p, 0) is True
-    assert in_active_hours(p, 5) is True
-    assert in_active_hours(p, 7) is False
+    assert in_active_hours(p, _dt(23)) is True
+    assert in_active_hours(p, _dt(0)) is True
+    assert in_active_hours(p, _dt(5)) is True
+    assert in_active_hours(p, _dt(7)) is False
 
 
 def test_active_hours_malformed_treats_as_always_on():
     p = EmailPersona(**_persona(active_hours="garbage"))
-    assert in_active_hours(p, 0) is True
-    assert in_active_hours(p, 23) is True
+    assert in_active_hours(p, _dt(0)) is True
+    assert in_active_hours(p, _dt(23)) is True
 
 
 def test_active_hours_equal_window_treated_as_always_on():
     p = EmailPersona(**_persona(active_hours="10:00-10:00"))
-    assert in_active_hours(p, 5) is True
+    assert in_active_hours(p, _dt(5)) is True
+
+
+def test_active_hours_minute_precision_start_boundary():
+    p = EmailPersona(**_persona(active_hours="09:30-17:45"))
+    assert in_active_hours(p, _dt(9, 15)) is False
+    assert in_active_hours(p, _dt(9, 29)) is False
+    assert in_active_hours(p, _dt(9, 30)) is True
+    assert in_active_hours(p, _dt(17, 44)) is True
+    assert in_active_hours(p, _dt(17, 45)) is False
+
+
+def test_active_hours_minute_precision_wraparound():
+    p = EmailPersona(**_persona(active_hours="22:30-06:15"))
+    assert in_active_hours(p, _dt(22, 29)) is False
+    assert in_active_hours(p, _dt(22, 30)) is True
+    assert in_active_hours(p, _dt(6, 14)) is True
+    assert in_active_hours(p, _dt(6, 15)) is False
 
 
 def test_login_for_normalises_display_name():

@@ -89,24 +89,42 @@ export function adaptTopology(detail: TopologyDetail): HydratedTopology {
     h: NET_H,
   }));
 
-  // Home LAN = first edge; a multi-homed gateway is drawn inside its
-  // home LAN, membership in others is expressed via the edge list.
-  // Gateways (forwards_l3) MUST render inside a DMZ — edge ordering from
-  // the backend is not guaranteed, so we pick the DMZ edge explicitly.
+  // Home LAN selection — stable across DB row ordering:
+  //
+  //   1. Gateway (forwards_l3): the DMZ edge wins.  The decky may have
+  //      multiple LAN memberships, but the home is the DMZ.
+  //   2. Non-gateway: the non-bridge edge (``is_bridge=False``) wins.
+  //      apply_add_decky writes is_bridge=False for the original edge;
+  //      apply_attach_decky writes is_bridge=True for subsequent
+  //      multi-homing edges.  Picking the non-bridge edge keeps the
+  //      decky in its original LAN even when SQL row order shifts on
+  //      rehydrate (list_topology_edges has no ORDER BY) — without
+  //      this, attaching a decky to a second LAN would 'teleport' it.
+  //   3. Fallback for older edges with no bridge flag set: first one
+  //      wins, same as before.
   const dmzIds = new Set(detail.lans.filter((l) => l.is_dmz).map((l) => l.id));
   const gatewayUuids = new Set(
     detail.edges.filter((e) => e.forwards_l3).map((e) => e.decky_uuid),
   );
   const firstLanFor = new Map<string, string>();
+  // Pass 1: pinned-home preferences (DMZ for gateways, non-bridge for others).
   for (const e of detail.edges) {
     if (gatewayUuids.has(e.decky_uuid)) {
-      // Only accept a DMZ edge as home for a gateway.
       if (dmzIds.has(e.lan_id) && !firstLanFor.has(e.decky_uuid)) {
         firstLanFor.set(e.decky_uuid, e.lan_id);
       }
       continue;
     }
-    if (!firstLanFor.has(e.decky_uuid)) firstLanFor.set(e.decky_uuid, e.lan_id);
+    if (e.is_bridge === false && !firstLanFor.has(e.decky_uuid)) {
+      firstLanFor.set(e.decky_uuid, e.lan_id);
+    }
+  }
+  // Pass 2: fallback — anything without a pinned home gets the first
+  // edge it has (legacy rows where is_bridge wasn't set).
+  for (const e of detail.edges) {
+    if (firstLanFor.has(e.decky_uuid)) continue;
+    if (gatewayUuids.has(e.decky_uuid)) continue;
+    firstLanFor.set(e.decky_uuid, e.lan_id);
   }
 
   // Layout deckies in a 2-column grid inside their home LAN so two

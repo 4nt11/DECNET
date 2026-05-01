@@ -110,7 +110,7 @@ async def test_resync_agent_topology_pushes_current_hash(repo, fake_agent) -> No
     assert hydrated["topology"]["id"] == tid
 
     row = await repo.get_topology(tid)
-    assert row["status"] == TopologyStatus.ACTIVE  # unchanged
+    assert row.status == TopologyStatus.ACTIVE  # unchanged
 
 
 @pytest.mark.anyio
@@ -133,7 +133,7 @@ async def test_reconcile_agent_resyncs_drains_flag(repo, fake_agent) -> None:
     drained = await _mut_engine.reconcile_agent_resyncs(repo)
     assert drained == 1
     row = await repo.get_topology(tid)
-    assert row["needs_resync"] is False
+    assert row.needs_resync is False
     assert len(fake_agent.instances) == 1
 
 
@@ -156,7 +156,7 @@ async def test_reconcile_retains_flag_on_push_failure(repo, monkeypatch) -> None
     drained = await _mut_engine.reconcile_agent_resyncs(repo)
     assert drained == 0
     row = await repo.get_topology(tid)
-    assert row["needs_resync"] is True  # still flagged — next tick retries
+    assert row.needs_resync is True  # still flagged — next tick retries
 
 
 @pytest.mark.anyio

@@ -8,10 +8,13 @@ import orjson
 from sqlalchemy import asc, select, text, update
 
 from decnet.web.db.models import DeckyShard, FleetDecky, LOCAL_HOST_SENTINEL
-from decnet.web.db.sqlmodel_repo._helpers import _deserialize_json_fields
+from decnet.web.db.sqlmodel_repo._helpers import (
+    _MixinBase,
+    _deserialize_json_fields
+)
 
 
-class FleetMixin:
+class FleetMixin(_MixinBase):
     """Mixin: composed onto ``SQLModelRepository``.
 
     ``list_running_deckies`` aggregates topology + fleet + swarm-shard
@@ -58,6 +61,16 @@ class FleetMixin:
                 {"h": host_uuid, "n": name},
             )
             await session.commit()
+
+    async def get_fleet_decky_by_name(self, name: str) -> dict[str, Any] | None:
+        async with self._session() as session:
+            result = await session.execute(
+                select(FleetDecky).where(FleetDecky.name == name)
+            )
+            row = result.scalar_one_or_none()
+            if row is None:
+                return None
+            return _deserialize_json_fields(row.model_dump(mode="json"), ("services", "decky_config"))
 
     async def list_fleet_deckies(
         self, *, host_uuid: Optional[str] = None,

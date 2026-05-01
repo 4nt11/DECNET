@@ -137,6 +137,19 @@ def parse_line(line: str) -> LogEvent | None:
         msg = tail.group(1).strip() if tail else ""
     attacker_ip = _extract_attacker_ip(fields, msg)
 
+    # Free-form bash PROMPT_COMMAND lines arrive with MSGID=NIL or MSGID=command
+    # and a body like `CMD uid=0 user=root src=… pwd=… cmd=<rest of line>`.
+    # Without this rewrite they're invisible to the behavioral profiler, which
+    # filters on event_type ∈ {command, exec, query, …}. The Dockerfile logger
+    # invocation uses --msgid command, so we must also handle the non-nil case.
+    if event_type in ("-", "command") and msg.startswith("CMD ") and "command" not in fields:
+        event_type = "command"
+        head, sep, cmd_rest = msg[4:].partition("cmd=")
+        for k, v in re.findall(r'(\w+)=(\S+)', head):
+            fields.setdefault(k, v)
+        if sep:
+            fields.setdefault("command", cmd_rest)
+
     # Mutator-emitted transitions arrive on the same ingest stream but
     # belong in the substrate-state index, not the per-IP attacker one.
     kind: EventKind = (

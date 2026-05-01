@@ -13,11 +13,14 @@ from datetime import datetime, timezone
 from typing import Any, Optional
 
 from sqlalchemy import desc, or_, select
+from sqlmodel import col
 
 from decnet.web.db.models import Attacker, AttackerIntel
 
 
-class AttackerIntelMixin:
+from decnet.web.db.sqlmodel_repo._helpers import _MixinBase
+
+class AttackerIntelMixin(_MixinBase):
     """Mixin: methods composed onto ``SQLModelRepository``.
 
     Expects ``self._session()`` from the base.
@@ -82,13 +85,13 @@ class AttackerIntelMixin:
         now = datetime.now(timezone.utc)
         async with self._session() as session:
             stmt = (
-                select(Attacker.uuid, Attacker.ip)
+                select(col(Attacker.uuid), col(Attacker.ip))
                 .outerjoin(
                     AttackerIntel, AttackerIntel.attacker_uuid == Attacker.uuid,
                 )
                 .where(
                     or_(
-                        AttackerIntel.uuid.is_(None),
+                        col(AttackerIntel.uuid).is_(None),
                         AttackerIntel.expires_at < now,
                     )
                 )

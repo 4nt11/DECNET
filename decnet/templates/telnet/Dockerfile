@@ -83,7 +83,7 @@ RUN mkdir -p /root/scripts /root/backups && \
     printf 'alias ll="ls -alF"\nalias la="ls -A"\nexport HISTSIZE=1000\n' >> /root/.bashrc
 
 # Log bash commands via syslog
-RUN echo 'PROMPT_COMMAND='"'"'logger -p user.info -t bash "CMD uid=$UID pwd=$PWD cmd=$(history 1 | sed "s/^ *[0-9]* *//")";'"'" >> /root/.bashrc
+RUN echo 'PROMPT_COMMAND='"'"'logger --rfc5424 --msgid command -p user.info -t bash "CMD uid=$UID pwd=$PWD cmd=$(history 1 | sed "s/^ *[0-9]* *//")";'"'" >> /root/.bashrc
 
 COPY entrypoint.sh /entrypoint.sh
 RUN chmod +x /entrypoint.sh

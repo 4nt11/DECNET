@@ -54,13 +54,13 @@ async def list_topology_personas(
     topo = await repo.get_topology(topology_id)
     if topo is None:
         raise HTTPException(status_code=404, detail="Topology not found")
-    language_default = topo.get("language_default") or "en"
+    language_default = topo.language_default or "en"
     personas = parse_personas(
-        topo.get("email_personas"), language_default=language_default,
+        topo.email_personas, language_default=language_default,
     )
     return {
         "topology_id": topology_id,
-        "topology_name": topo.get("name", ""),
+        "topology_name": topo.name,
         "language_default": language_default,
         "personas": _serialize(personas),
     }
@@ -100,7 +100,7 @@ async def replace_topology_personas(
     topo = await repo.get_topology(topology_id)
     if topo is None:
         raise HTTPException(status_code=404, detail="Topology not found")
-    language_default = topo.get("language_default") or "en"
+    language_default = topo.language_default or "en"
 
     parsed = parse_personas(raw, language_default=language_default)
     if raw and not parsed:
@@ -125,7 +125,7 @@ async def replace_topology_personas(
     )
     return {
         "topology_id": topology_id,
-        "topology_name": topo.get("name", ""),
+        "topology_name": topo.name,
         "language_default": language_default,
         "personas": serialized,
     }

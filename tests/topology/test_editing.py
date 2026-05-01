@@ -42,8 +42,8 @@ async def test_add_lan_to_pending_bumps_version(repo):
         expected_version=1,
     )
     topo = await repo.get_topology(tid)
-    assert topo["version"] == 2
-    lans = {l["name"] for l in await repo.list_lans_for_topology(tid)}
+    assert topo.version == 2
+    lans = {l.name for l in await repo.list_lans_for_topology(tid)}
     assert "LAN-NEW" in lans
 
 
@@ -52,16 +52,16 @@ async def test_update_decky_roundtrips_service_config(repo):
     plan = generate(_cfg())
     tid = await persist(repo, plan)
     decky = (await repo.list_topology_deckies(tid))[0]
-    patch = dict(decky["decky_config"])
+    patch = dict(decky.decky_config)
     patch["service_config"] = {"ssh": {"password": "megapassword"}}
     await repo.update_topology_decky(
-        decky["uuid"], {"decky_config": patch}, expected_version=1,
+        decky.uuid, {"decky_config": patch}, expected_version=1,
     )
     fresh = next(
         d for d in await repo.list_topology_deckies(tid)
-        if d["uuid"] == decky["uuid"]
+        if d.uuid == decky.uuid
     )
-    assert fresh["decky_config"]["service_config"]["ssh"]["password"] == "megapassword"
+    assert fresh.decky_config["service_config"]["ssh"]["password"] == "megapassword"
 
 
 @pytest.mark.anyio
@@ -74,8 +74,8 @@ async def test_update_decky_rejected_on_active_topology(repo):
     await transition_status(repo, tid, TopologyStatus.ACTIVE)
     with pytest.raises(TopologyNotEditable) as ei:
         await repo.update_topology_decky(
-            decky["uuid"],
-            {"decky_config": decky["decky_config"]},
+            decky.uuid,
+            {"decky_config": decky.decky_config},
             enforce_pending=True,
         )
     assert ei.value.status == TopologyStatus.ACTIVE
@@ -88,7 +88,7 @@ async def test_delete_lan_with_home_decky_refused(repo):
     tid = await persist(repo, plan)
     lan = (await repo.list_lans_for_topology(tid))[0]
     with pytest.raises(ValueError, match="orphaned"):
-        await repo.delete_lan(lan["id"])
+        await repo.delete_lan(lan.id)
 
 
 @pytest.mark.anyio
@@ -98,16 +98,16 @@ async def test_delete_edge_leaves_decky_intact(repo):
     plan = generate(_cfg())
     tid = await persist(repo, plan)
     edges = await repo.list_topology_edges(tid)
-    bridge_edges = [e for e in edges if e["is_bridge"]]
+    bridge_edges = [e for e in edges if e.is_bridge]
     assert bridge_edges, "generator should produce at least one bridge edge"
     # Delete exactly one — the bridge decky should keep at least one edge.
     edge = bridge_edges[0]
-    before_deckies = {d["uuid"] for d in await repo.list_topology_deckies(tid)}
-    await repo.delete_topology_edge(edge["id"])
-    after_deckies = {d["uuid"] for d in await repo.list_topology_deckies(tid)}
+    before_deckies = {d.uuid for d in await repo.list_topology_deckies(tid)}
+    await repo.delete_topology_edge(edge.id)
+    after_deckies = {d.uuid for d in await repo.list_topology_deckies(tid)}
     assert before_deckies == after_deckies
     remaining = await repo.list_topology_edges(tid)
-    assert edge["id"] not in {e["id"] for e in remaining}
+    assert edge.id not in {e.id for e in remaining}
 
 
 @pytest.mark.anyio
@@ -115,10 +115,10 @@ async def test_delete_decky_cascades_edges(repo):
     plan = generate(_cfg())
     tid = await persist(repo, plan)
     decky = (await repo.list_topology_deckies(tid))[0]
-    await repo.delete_topology_decky(decky["uuid"])
+    await repo.delete_topology_decky(decky.uuid)
     # No edge pointing to the removed decky remains.
     remaining = await repo.list_topology_edges(tid)
-    assert decky["uuid"] not in {e["decky_uuid"] for e in remaining}
+    assert decky.uuid not in {e.decky_uuid for e in remaining}
 
 
 @pytest.mark.anyio
@@ -129,4 +129,4 @@ async def test_delete_edge_rejected_on_active(repo):
     await transition_status(repo, tid, TopologyStatus.DEPLOYING)
     await transition_status(repo, tid, TopologyStatus.ACTIVE)
     with pytest.raises(TopologyNotEditable):
-        await repo.delete_topology_edge(edges[0]["id"])
+        await repo.delete_topology_edge(edges[0].id)

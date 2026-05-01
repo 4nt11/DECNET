@@ -344,6 +344,231 @@ async def test_triggers_list_for_token(
     assert res.status_code == 404
 
 
+# ---------------- topology (MazeNET) deckies ------------------------------
+
+
+def _patch_subprocess_capture():
+    """Subprocess patcher that records argv for assertion in tests."""
+    captured: list[list[str]] = []
+
+    async def _fake(*argv, **kw):  # noqa: ANN001
+        captured.append(list(argv))
+        return _FakeProc(rc=0)
+
+    return patch.object(asyncio, "create_subprocess_exec", _fake), captured
+
+
+def _hydrate_returning(deckies: list[dict]):
+    async def _fake_hydrate(_repo, _topology_id):
+        return {
+            "topology": {"id": _topology_id},
+            "lans": [],
+            "deckies": deckies,
+            "edges": [],
+        }
+    return _fake_hydrate
+
+
+@pytest.mark.asyncio
+async def test_create_token_on_topology_decky_with_ssh_resolves_ssh_container(
+    client: httpx.AsyncClient, auth_token: str, monkeypatch
+) -> None:
+    monkeypatch.setenv("DECNET_CANARY_HTTP_BASE", "https://canary.test")
+    topo_id = "abcdef0123456789"
+    monkeypatch.setattr(
+        "decnet.topology.persistence.hydrate",
+        _hydrate_returning([{
+            "uuid": "u1", "name": "web1",
+            "decky_config": {"name": "web1"},
+            "services": ["ssh", "http"],
+        }]),
+    )
+    patcher, captured = _patch_subprocess_capture()
+    with patcher:
+        res = await client.post(
+            f"{_BASE}/tokens",
+            json={
+                "decky_name": "web1",
+                "topology_id": topo_id,
+                "kind": "http",
+                "placement_path": "/etc/canary.env",
+                "generator": "env_file",
+            },
+            headers=_hdr(auth_token),
+        )
+    assert res.status_code == 201, res.text
+    body = res.json()
+    assert body["topology_id"] == topo_id
+    # docker exec -i <container> sh -c <script>
+    assert captured and captured[0][3] == "web1-ssh"
+
+
+@pytest.mark.asyncio
+async def test_create_token_on_topology_decky_without_ssh_uses_base_container(
+    client: httpx.AsyncClient, auth_token: str, monkeypatch
+) -> None:
+    monkeypatch.setenv("DECNET_CANARY_HTTP_BASE", "https://canary.test")
+    topo_id = "fedcba9876543210"
+    monkeypatch.setattr(
+        "decnet.topology.persistence.hydrate",
+        _hydrate_returning([{
+            "uuid": "u1", "name": "router",
+            "decky_config": {"name": "router"},
+            "services": ["dns"],
+        }]),
+    )
+    patcher, captured = _patch_subprocess_capture()
+    with patcher:
+        res = await client.post(
+            f"{_BASE}/tokens",
+            json={
+                "decky_name": "router",
+                "topology_id": topo_id,
+                "kind": "http",
+                "placement_path": "/etc/canary.env",
+                "generator": "env_file",
+            },
+            headers=_hdr(auth_token),
+        )
+    assert res.status_code == 201, res.text
+    assert captured[0][3] == "decnet_t_fedcba98_router"
+
+
+@pytest.mark.asyncio
+async def test_create_token_404_when_topology_unknown(
+    client: httpx.AsyncClient, auth_token: str, monkeypatch
+) -> None:
+    async def _no_topology(_repo, _topology_id):
+        return None
+    monkeypatch.setattr(
+        "decnet.topology.persistence.hydrate", _no_topology,
+    )
+    res = await client.post(
+        f"{_BASE}/tokens",
+        json={
+            "decky_name": "web1",
+            "topology_id": "ghost",
+            "kind": "http",
+            "placement_path": "/x.env",
+            "generator": "env_file",
+        },
+        headers=_hdr(auth_token),
+    )
+    assert res.status_code == 404
+
+
+@pytest.mark.asyncio
+async def test_create_token_422_when_decky_not_in_topology(
+    client: httpx.AsyncClient, auth_token: str, monkeypatch
+) -> None:
+    monkeypatch.setattr(
+        "decnet.topology.persistence.hydrate",
+        _hydrate_returning([{
+            "uuid": "u1", "name": "other",
+            "decky_config": {"name": "other"},
+            "services": [],
+        }]),
+    )
+    res = await client.post(
+        f"{_BASE}/tokens",
+        json={
+            "decky_name": "web1",
+            "topology_id": "abcdef0123456789",
+            "kind": "http",
+            "placement_path": "/x.env",
+            "generator": "env_file",
+        },
+        headers=_hdr(auth_token),
+    )
+    assert res.status_code == 422
+
+
+@pytest.mark.asyncio
+async def test_revoke_token_re_resolves_container_from_topology_id(
+    client: httpx.AsyncClient, auth_token: str, monkeypatch
+) -> None:
+    monkeypatch.setenv("DECNET_CANARY_HTTP_BASE", "https://canary.test")
+    topo_id = "11112222333344445555"
+    monkeypatch.setattr(
+        "decnet.topology.persistence.hydrate",
+        _hydrate_returning([{
+            "uuid": "u1", "name": "router",
+            "decky_config": {"name": "router"},
+            "services": [],
+        }]),
+    )
+    # Create the token on a topology decky.
+    create_patcher, _ = _patch_subprocess_capture()
+    with create_patcher:
+        res = await client.post(
+            f"{_BASE}/tokens",
+            json={
+                "decky_name": "router",
+                "topology_id": topo_id,
+                "kind": "http",
+                "placement_path": "/x.env",
+                "generator": "env_file",
+            },
+            headers=_hdr(auth_token),
+        )
+    assert res.status_code == 201
+    token = res.json()
+    # Revoke and assert the captured argv targets the topology base
+    # container, not <name>-ssh.
+    revoke_patcher, captured = _patch_subprocess_capture()
+    with revoke_patcher:
+        rev = await client.delete(
+            f"{_BASE}/tokens/{token['uuid']}", headers=_hdr(auth_token),
+        )
+    assert rev.status_code == 200, rev.text
+    assert captured and captured[0][2] == "decnet_t_11112222_router"
+
+
+@pytest.mark.asyncio
+async def test_list_tokens_filters_by_topology_id(
+    client: httpx.AsyncClient, auth_token: str, monkeypatch
+) -> None:
+    monkeypatch.setenv("DECNET_CANARY_HTTP_BASE", "https://canary.test")
+    topo_id = "topotopotopotopo"
+    monkeypatch.setattr(
+        "decnet.topology.persistence.hydrate",
+        _hydrate_returning([{
+            "uuid": "u1", "name": "web1",
+            "decky_config": {"name": "web1"},
+            "services": ["ssh"],
+        }]),
+    )
+    # Create one fleet token (no topology_id) and one topology token.
+    with _patch_subprocess(rc=0):
+        await client.post(
+            f"{_BASE}/tokens",
+            json={
+                "decky_name": "fleet1", "kind": "http",
+                "placement_path": "/etc/a.env", "generator": "env_file",
+            },
+            headers=_hdr(auth_token),
+        )
+        await client.post(
+            f"{_BASE}/tokens",
+            json={
+                "decky_name": "web1", "topology_id": topo_id,
+                "kind": "http", "placement_path": "/etc/b.env",
+                "generator": "env_file",
+            },
+            headers=_hdr(auth_token),
+        )
+    # Filter to topology tokens only.
+    res = await client.get(
+        f"{_BASE}/tokens", params={"topology_id": topo_id},
+        headers=_hdr(auth_token),
+    )
+    assert res.status_code == 200
+    body = res.json()
+    decky_names = {t["decky_name"] for t in body["tokens"]}
+    assert decky_names == {"web1"}
+    assert all(t["topology_id"] == topo_id for t in body["tokens"])
+
+
 # ---------------- auth ----------------------------------------------------
 
 

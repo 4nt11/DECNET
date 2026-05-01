@@ -209,6 +209,23 @@ class TestParseRfc5424:
         assert result["fields"]["src_ip"] == "1.2.3.4"
         assert result["msg"] == "login attempt"
 
+    def test_bash_prompt_command_normalized_to_command(self):
+        # SSH/telnet decky PROMPT_COMMAND emits free-form `logger -t bash
+        # "CMD …"` with MSGID=NIL. Normalize so the profiler picks it up.
+        # `fields` stays empty — the frontend renders kv pairs from msg.
+        line = (
+            '<14>1 2026-04-28T22:35:58.021674+00:00 dmz-gateway bash - - -  '
+            'CMD uid=0 user=root src=31.56.209.39 pwd=/root '
+            'cmd=echo "rm -rf *.sh" | sh'
+        )
+        result = parse_rfc5424(line)
+        assert result is not None
+        assert result["event_type"] == "command"
+        assert result["attacker_ip"] == "31.56.209.39"
+        assert result["fields"] == {}
+        # cmd payload survives in msg for the dashboard renderer.
+        assert "cmd=echo" in result["msg"]
+
 
 class TestIsServiceContainer:
     def test_known_container_returns_true(self):
@@ -584,6 +601,20 @@ class TestIngestRateLimiter:
         for _ in range(5):
             assert _should_ingest(self._event(event_type="login_attempt")) is True
             assert _should_ingest(self._event(event_type="request")) is True
+
+    def test_native_sshd_logs_dropped(self):
+        # sshd's "Failed password / Accepted password" prose duplicates the
+        # auth-helper's structured event_type=auth_attempt and is unwanted.
+        assert _should_ingest(self._event(service="sshd", event_type="-")) is False
+
+    def test_pam_and_other_unix_noise_dropped(self):
+        for noisy in ("pam_unix", "sudo", "CRON", "systemd", "kernel", "rsyslogd"):
+            assert _should_ingest(self._event(service=noisy)) is False, noisy
+
+    def test_decnet_services_pass(self):
+        # Real DECNET emitters keep flowing — service ∈ {ssh, http, bash, …}.
+        for ok in ("ssh", "http", "ftp", "bash", "auth-helper", "sessrec", "mutator"):
+            assert _should_ingest(self._event(service=ok, event_type="login_attempt")) is True, ok
 
     def test_first_connect_passes(self):
         assert _should_ingest(self._event()) is True

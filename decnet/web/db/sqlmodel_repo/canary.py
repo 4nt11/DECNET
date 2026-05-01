@@ -10,7 +10,9 @@ from sqlalchemy import desc, func, select, update
 from decnet.web.db.models import CanaryBlob, CanaryToken, CanaryTrigger
 
 
-class CanaryMixin:
+from decnet.web.db.sqlmodel_repo._helpers import _MixinBase
+
+class CanaryMixin(_MixinBase):
     """Mixin: composed onto ``SQLModelRepository``."""
 
     async def upsert_canary_blob(self, data: dict[str, Any]) -> dict[str, Any]:
@@ -110,7 +112,8 @@ class CanaryMixin:
         async with self._session() as session:
             result = await session.execute(
                 select(CanaryToken).where(
-                    CanaryToken.callback_token == callback_token
+                    CanaryToken.callback_token == callback_token,
+                    CanaryToken.state == "planted",
                 )
             )
             row = result.scalar_one_or_none()
@@ -122,6 +125,7 @@ class CanaryMixin:
         decky_name: Optional[str] = None,
         state: Optional[str] = None,
         kind: Optional[str] = None,
+        topology_id: Optional[str] = None,
     ) -> list[dict[str, Any]]:
         async with self._session() as session:
             stmt = select(CanaryToken)
@@ -131,6 +135,8 @@ class CanaryMixin:
                 stmt = stmt.where(CanaryToken.state == state)
             if kind is not None:
                 stmt = stmt.where(CanaryToken.kind == kind)
+            if topology_id is not None:
+                stmt = stmt.where(CanaryToken.topology_id == topology_id)
             stmt = stmt.order_by(desc(CanaryToken.placed_at))
             result = await session.execute(stmt)
             return [r.model_dump(mode="json") for r in result.scalars().all()]

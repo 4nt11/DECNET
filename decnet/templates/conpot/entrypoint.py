@@ -128,6 +128,9 @@ def main():
     signal.signal(signal.SIGINT, _forward)
 
     try:
+        if proc.stdout is None:
+            proc.wait()
+            return
         for raw_line in proc.stdout:
             line = raw_line.rstrip()
             if not line:

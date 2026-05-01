@@ -19,11 +19,13 @@ not stall the entire realism tick.
 from __future__ import annotations
 
 import json
+from datetime import datetime
 from typing import Literal, Optional
 
 from pydantic import BaseModel, Field, ValidationError, field_validator, model_validator
 
 from decnet.logging import get_logger
+from decnet.realism.diurnal import in_work_hours
 
 logger = get_logger("realism.personas")
 
@@ -132,22 +134,10 @@ def login_for(persona: str) -> str:
     return "user"
 
 
-def in_active_hours(persona: EmailPersona, now_hour: int) -> bool:
-    """Return True if *now_hour* (0–23) falls in the persona's window.
+def in_active_hours(persona: EmailPersona, now: datetime) -> bool:
+    """Return True if *now* falls in the persona's active-hours window.
 
-    Format: ``"HH:MM-HH:MM"``. Wrap-around windows (``"22:00-06:00"``)
-    are supported. Invalid windows treat the persona as always-on so a
-    config typo never silences the whole fleet.
+    Delegates to :func:`decnet.realism.diurnal.in_work_hours` so minute
+    precision is preserved (``"09:30-17:45"`` is honoured correctly).
     """
-    try:
-        start_s, end_s = persona.active_hours.split("-")
-        start_h = int(start_s.split(":")[0])
-        end_h = int(end_s.split(":")[0])
-    except (ValueError, IndexError):
-        return True
-    if start_h == end_h:
-        return True
-    if start_h < end_h:
-        return start_h <= now_hour < end_h
-    # Wrap-around (e.g. 22:00-06:00).
-    return now_hour >= start_h or now_hour < end_h
+    return in_work_hours(persona.active_hours, now)

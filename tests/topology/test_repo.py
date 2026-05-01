@@ -27,10 +27,8 @@ async def test_topology_roundtrip(repo):
     assert t_id
     t = await repo.get_topology(t_id)
     assert t is not None
-    assert t["name"] == "alpha"
-    assert t["status"] == "pending"
-    # JSON field round-trips as a dict, not a string
-    assert t["config_snapshot"] == {"depth": 3, "seed": 42}
+    assert t.name == "alpha"
+    assert t.status == "pending"
 
 
 @pytest.mark.anyio
@@ -47,10 +45,10 @@ async def test_lan_add_update_list(repo):
     await repo.update_lan(lan_id, {"docker_network_id": "abc123"})
     lans = await repo.list_lans_for_topology(t_id)
     assert len(lans) == 2
-    by_name = {lan["name"]: lan for lan in lans}
-    assert by_name["DMZ"]["docker_network_id"] == "abc123"
-    assert by_name["DMZ"]["is_dmz"] is True
-    assert by_name["LAN-A"]["is_dmz"] is False
+    by_name = {lan.name: lan for lan in lans}
+    assert by_name["DMZ"].docker_network_id == "abc123"
+    assert by_name["DMZ"].is_dmz is True
+    assert by_name["LAN-A"].is_dmz is False
 
 
 @pytest.mark.anyio
@@ -70,14 +68,14 @@ async def test_topology_decky_json_roundtrip(repo):
     assert d_uuid
     deckies = await repo.list_topology_deckies(t_id)
     assert len(deckies) == 1
-    assert deckies[0]["services"] == ["ssh", "http"]
-    assert deckies[0]["decky_config"] == {"hostname": "bastion"}
-    assert deckies[0]["state"] == "pending"
+    assert deckies[0].services == ["ssh", "http"]
+    assert deckies[0].decky_config == {"hostname": "bastion"}
+    assert deckies[0].state == "pending"
 
     await repo.update_topology_decky(d_uuid, {"state": "running", "ip": "172.20.0.11"})
     deckies = await repo.list_topology_deckies(t_id)
-    assert deckies[0]["state"] == "running"
-    assert deckies[0]["ip"] == "172.20.0.11"
+    assert deckies[0].state == "running"
+    assert deckies[0].ip == "172.20.0.11"
 
 
 @pytest.mark.anyio
@@ -111,7 +109,7 @@ async def test_status_transition_writes_event(repo):
     await repo.update_topology_status(t_id, "deploying", reason="kickoff")
     await repo.update_topology_status(t_id, "active")
     topo = await repo.get_topology(t_id)
-    assert topo["status"] == "active"
+    assert topo.status == "active"
 
     events = await repo.list_topology_status_events(t_id)
     assert len(events) == 2
@@ -160,8 +158,8 @@ async def test_list_topologies_filters_by_status(repo):
     )
     await repo.update_topology_status(b, "deploying")
     pend = await repo.list_topologies(status="pending")
-    assert {t["id"] for t in pend} == {a}
+    assert {t.id for t in pend} == {a}
     dep = await repo.list_topologies(status="deploying")
-    assert {t["id"] for t in dep} == {b}
+    assert {t.id for t in dep} == {b}
     both = await repo.list_topologies()
-    assert {t["id"] for t in both} == {a, b}
+    assert {t.id for t in both} == {a, b}

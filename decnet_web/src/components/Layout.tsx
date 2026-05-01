@@ -66,7 +66,9 @@ const Layout: React.FC<LayoutProps> = ({
   alertCount: alertCountProp = 0,
   build = 'v0.1',
 }) => {
-  const [sidebarOpen, setSidebarOpen] = useState(true);
+  const [sidebarOpen, setSidebarOpen] = useState(() => {
+    try { return localStorage.getItem('decnet_sidebar_open') !== 'false'; } catch { return true; }
+  });
   const [search, setSearch] = useState('');
   const [systemActive, setSystemActive] = useState(false);
   const [clockTime, setClockTime] = useState(() => formatClock(new Date()));
@@ -106,7 +108,11 @@ const Layout: React.FC<LayoutProps> = ({
         <div className="sidebar-header">
           <Activity size={24} className="violet-accent" />
           {sidebarOpen && <span className="logo-text">DECNET</span>}
-          <button className="toggle-btn" onClick={() => setSidebarOpen(!sidebarOpen)}>
+          <button className="toggle-btn" onClick={() => setSidebarOpen(v => {
+            const next = !v;
+            try { localStorage.setItem('decnet_sidebar_open', String(next)); } catch {}
+            return next;
+          })}>
             {sidebarOpen ? <X size={20} /> : <Menu size={20} />}
           </button>
         </div>
@@ -255,13 +261,21 @@ interface NavGroupProps {
 }
 
 const NavGroup: React.FC<NavGroupProps> = ({ label, icon, open, children }) => {
-  const [expanded, setExpanded] = useState(true);
+  const storageKey = `decnet_navgroup_${label.toLowerCase()}`;
+  const [expanded, setExpanded] = useState(() => {
+    try { return localStorage.getItem(storageKey) === 'true'; } catch { return false; }
+  });
+  const toggle = () => setExpanded(v => {
+    const next = !v;
+    try { localStorage.setItem(storageKey, String(next)); } catch {}
+    return next;
+  });
   return (
     <div className="nav-group">
       <button
         type="button"
         className="nav-item nav-group-toggle"
-        onClick={() => setExpanded((v) => !v)}
+        onClick={toggle}
       >
         {icon}
         {open && (

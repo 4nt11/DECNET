@@ -154,7 +154,10 @@ const TopologyList: React.FC = () => {
     <div className="tlist-root tlist-page">
       <div className="page-header">
         <div className="page-title-group">
-          <h1>TOPOLOGIES</h1>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+            <Network size={22} className="violet-accent" />
+            <h1>TOPOLOGIES</h1>
+          </div>
           <span className="page-sub">
             {loading ? 'LOADING…' : `${rows.length} ${rows.length === 1 ? 'TOPOLOGY' : 'TOPOLOGIES'}`}
             {err && <span className="alert-text"> · {err}</span>}

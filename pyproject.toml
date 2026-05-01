@@ -83,7 +83,9 @@ dev = [
     "pymongo>=4.16.0",
     "locust>=2.29",
     "gevent>=24.0",
-    "pydeps>=3.0.3"
+    "pydeps>=3.0.3",
+    "types-PyYAML>=6.0",
+    "mypy>=1.16,<1.20"
 ]
 
 [project.scripts]
@@ -125,7 +127,14 @@ include = ["decnet*"]
 [tool.setuptools.package-data]
 # Ship docker build contexts + syslog_bridge.py as package data so they land
 # in site-packages when agents install the bundle via `pip install`.
-decnet = ["templates/**/*"]
+# canary/*.js + canary/package.json ship the Node-side toolchain manifest
+# so `decnet canary-install-toolchain` can `npm install` post-install.
+decnet = [
+    "templates/**/*",
+    "canary/_obfuscate_helper.js",
+    "canary/fingerprint_payload.js",
+    "canary/package.json",
+]
 
 [tool.bandit]
 # Docker build contexts — code runs inside decoy containers, not in the
@@ -134,3 +143,22 @@ decnet = ["templates/**/*"]
 exclude_dirs = [
     "decnet/templates",
 ]
+
+[tool.mypy]
+plugins = [
+  "pydantic.mypy"
+]
+python_version = "3.11"
+strict = false
+ignore_missing_imports = true
+check_untyped_defs = true
+warn_redundant_casts = true
+warn_unused_ignores = true
+
+[[tool.mypy.overrides]]
+# The pydantic plugin types SQLModel class-level field descriptors as their
+# Python value types (str, bool, …) instead of InstrumentedAttribute. Every
+# .where(Model.field == value) then becomes where(bool) — a false positive.
+# Suppressing arg-type here; genuine argument errors are caught by call-arg.
+module = "decnet.web.db.sqlmodel_repo.*"
+disable_error_code = ["arg-type"]

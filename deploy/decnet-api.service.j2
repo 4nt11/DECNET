@@ -21,6 +21,10 @@ Environment=DECNET_SYSTEM_LOGS=/var/log/decnet/decnet.api.log
 # hardening stays on without crippling the build path.
 Environment=DOCKER_CONFIG={{ install_dir }}/.docker
 Environment=BUILDX_CONFIG={{ install_dir }}/.docker/buildx
+# Provision the Node toolchain used by fingerprint canaries. Non-fatal
+# (leading '-'): if Node is missing the API still boots; minting a
+# fingerprint canary returns a clear error at request time. Idempotent.
+ExecStartPre=-{{ venv_dir }}/bin/decnet canary-install-toolchain
 ExecStart={{ venv_dir }}/bin/decnet api
 StandardOutput=append:/var/log/decnet/decnet.api.log
 StandardError=append:/var/log/decnet/decnet.api.log
@@ -32,7 +36,7 @@ AmbientCapabilities=CAP_NET_ADMIN CAP_NET_RAW
 # Security Hardening
 NoNewPrivileges=yes
 ProtectSystem=full
-ProtectHome=read-only
+#ProtectHome=read-only
 PrivateTmp=yes
 ProtectKernelTunables=yes
 ProtectKernelModules=yes

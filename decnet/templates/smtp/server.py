@@ -30,6 +30,7 @@ from datetime import datetime, timezone
 from email import message_from_bytes
 from email.header import decode_header, make_header
 from email.message import Message
+from typing import cast
 
 import instance_seed as _seed
 from syslog_bridge import (
@@ -41,7 +42,7 @@ from syslog_bridge import (
 )
 
 NODE_NAME   = os.environ.get("NODE_NAME", "mailserver")
-SERVICE_NAME = "smtp"
+SERVICE_NAME = os.environ.get("SMTP_SERVICE_NAME", "smtp")
 LOG_TARGET  = os.environ.get("LOG_TARGET", "")
 PORT        = int(os.environ.get("PORT", "25"))
 OPEN_RELAY  = os.environ.get("SMTP_OPEN_RELAY", "0").strip() == "1"
@@ -150,7 +151,8 @@ def _summarize_message(body: bytes, msg_id: str) -> dict:
         if not filename and "attachment" not in disposition:
             continue
         try:
-            payload = part.get_payload(decode=True) or b""
+            _raw = part.get_payload(decode=True) or b""
+            payload: bytes = _raw if isinstance(_raw, bytes) else b""
         except Exception:
             payload = b""
         attachments.append({
@@ -207,6 +209,9 @@ def _decode_auth_plain(blob: str) -> tuple[str, str]:
 
 
 class SMTPProtocol(asyncio.Protocol):
+    _transport: asyncio.Transport | None = None
+    _peer: tuple[str, int]
+
     def __init__(self):
         self._transport = None
         self._peer      = ("?", 0)
@@ -228,11 +233,11 @@ class SMTPProtocol(asyncio.Protocol):
 
     # ── asyncio.Protocol ──────────────────────────────────────────────────────
 
-    def connection_made(self, transport):
-        self._transport = transport
-        self._peer = transport.get_extra_info("peername", ("?", 0))
+    def connection_made(self, transport: asyncio.BaseTransport) -> None:
+        self._transport = cast(asyncio.Transport, transport)
+        self._peer = self._transport.get_extra_info("peername", ("?", 0))
         _log("connect", src=self._peer[0], src_port=self._peer[1])
-        transport.write(f"{_SMTP_BANNER}\r\n".encode())
+        self._transport.write(f"{_SMTP_BANNER}\r\n".encode())
 
     def data_received(self, data):
         self._buf += data
@@ -247,6 +252,7 @@ class SMTPProtocol(asyncio.Protocol):
     # ── Command dispatch ──────────────────────────────────────────────────────
 
     def _handle_line(self, line: str) -> None:
+        assert self._transport is not None
         # ── DATA body accumulation ────────────────────────────────────────────
         if self._in_data:
             if line == ".":
@@ -444,6 +450,7 @@ class SMTPProtocol(asyncio.Protocol):
     # ── AUTH helpers ──────────────────────────────────────────────────────────
 
     def _handle_auth(self, args: str) -> None:
+        assert self._transport is not None
         parts    = args.split(None, 1)
         mech     = parts[0].upper() if parts else ""
         initial  = parts[1] if len(parts) > 1 else ""
@@ -468,6 +475,7 @@ class SMTPProtocol(asyncio.Protocol):
             self._transport.write(b"504 5.5.4 Unrecognized authentication mechanism\r\n")
 
     def _finish_auth(self, username: str, password: str) -> None:
+        assert self._transport is not None
         _log("auth_attempt", src=self._peer[0],
              username=username, principal=username,
              severity=SEVERITY_WARNING, **encode_secret(password))

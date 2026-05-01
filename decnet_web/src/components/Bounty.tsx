@@ -1,8 +1,8 @@
-import React, { useEffect, useRef, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { useSearchParams, useNavigate } from 'react-router-dom';
 import {
   Archive, Search, ChevronLeft, ChevronRight, Filter, Key, Package, ChevronRight as ChevR,
-  Target,
+  Target, FileText, Mail,
 } from '../icons';
 import api from '../utils/api';
 import BountyInspector from './BountyInspector';
@@ -61,6 +61,8 @@ const Bounty: React.FC = () => {
   const searchRef = useRef<HTMLInputElement | null>(null);
   useFocusSearch(searchRef);
   const [selected, setSelected] = useState<BountyEntry | null>(null);
+  const [sortCol, setSortCol] = useState<string>('');
+  const [sortDir, setSortDir] = useState<'asc' | 'desc'>('asc');
 
   const limit = 50;
 
@@ -70,7 +72,8 @@ const Bounty: React.FC = () => {
       const offset = (page - 1) * limit;
       let url = `/bounty?limit=${limit}&offset=${offset}`;
       if (query) url += `&search=${encodeURIComponent(query)}`;
-      if (typeFilter) url += `&bounty_type=${typeFilter}`;
+      const apiType = typeFilter === 'mail' ? 'artifact' : typeFilter;
+      if (apiType) url += `&bounty_type=${apiType}`;
       const res = await api.get(url);
       setBounties(res.data.data);
       setTotal(res.data.total);
@@ -92,16 +95,64 @@ const Bounty: React.FC = () => {
 
   const totalPages = Math.max(1, Math.ceil(total / limit));
 
-  const credCount = bounties.filter(b => b.bounty_type === 'credential').length;
-  const payCount = bounties.filter(b => b.bounty_type === 'payload').length;
   const fpCount = bounties.filter(b => b.bounty_type === 'fingerprint').length;
+  const artCount = bounties.filter(b => b.bounty_type === 'artifact' && b.payload?.kind !== 'mail').length;
+  const mailCount = bounties.filter(b => b.bounty_type === 'artifact' && b.payload?.kind === 'mail').length;
+
+  const handleSortCol = (col: string) => {
+    if (sortCol === col) {
+      if (sortDir === 'asc') setSortDir('desc');
+      else { setSortCol(''); setSortDir('asc'); }
+    } else {
+      setSortCol(col);
+      setSortDir('asc');
+    }
+  };
+
+  const filteredBounties = useMemo(() => {
+    if (typeFilter !== 'mail') return bounties;
+    return bounties.filter(b => b.bounty_type === 'artifact' && b.payload?.kind === 'mail');
+  }, [bounties, typeFilter]);
+
+  const sortedBounties = useMemo(() => {
+    if (!sortCol) return filteredBounties;
+    return [...filteredBounties].sort((a, b) => {
+      let av: string | number = '';
+      let bv: string | number = '';
+      if (sortCol === 'time') { av = a.timestamp; bv = b.timestamp; }
+      else if (sortCol === 'decky') { av = a.decky; bv = b.decky; }
+      else if (sortCol === 'svc') { av = a.service; bv = b.service; }
+      else if (sortCol === 'attacker') { av = a.attacker_ip; bv = b.attacker_ip; }
+      else if (sortCol === 'type') { av = a.bounty_type; bv = b.bounty_type; }
+      const cmp = String(av).localeCompare(String(bv));
+      return sortDir === 'asc' ? cmp : -cmp;
+    });
+  }, [filteredBounties, sortCol, sortDir]);
+
+  const SortTh: React.FC<{ col: string; children: React.ReactNode }> = ({ col, children }) => (
+    <th
+      style={{ cursor: 'pointer', userSelect: 'none', whiteSpace: 'nowrap' }}
+      onClick={() => handleSortCol(col)}
+    >
+      {children}
+      {sortCol === col ? (sortDir === 'asc' ? ' ▲' : ' ▼') : ''}
+    </th>
+  );
 
   const SEGMENTS: [string, string][] = [
     ['', 'ALL'],
-    ['credential', 'CREDENTIALS'],
-    ['payload', 'PAYLOADS'],
+    ['artifact', 'ARTIFACTS'],
     ['fingerprint', 'FINGERPRINTS'],
+    ['mail', 'EMAIL'],
   ];
+
+  const formatBytes = (n: any): string => {
+    const v = typeof n === 'string' ? parseInt(n, 10) : n;
+    if (!Number.isFinite(v) || v < 0) return '';
+    if (v < 1024) return `${v} B`;
+    if (v < 1024 * 1024) return `${(v / 1024).toFixed(1)} KB`;
+    return `${(v / (1024 * 1024)).toFixed(1)} MB`;
+  };
 
   return (
     <div className="bounty-root">
@@ -112,7 +163,7 @@ const Bounty: React.FC = () => {
             <h1>BOUNTY VAULT</h1>
           </div>
           <span className="page-sub">
-            {total.toLocaleString()} ARTIFACTS · {credCount} CREDENTIALS · {payCount} PAYLOADS · {fpCount} FINGERPRINTS
+            {total.toLocaleString()} BOUNTIES · {artCount} ARTIFACTS · {fpCount} FINGERPRINTS · {mailCount} EMAIL
           </span>
         </div>
       </div>
@@ -165,20 +216,22 @@ const Bounty: React.FC = () => {
           <table className="logs-table">
             <thead>
               <tr>
-                <th>TIME</th>
-                <th>DECKY</th>
-                <th>SVC</th>
-                <th>ATTACKER</th>
-                <th>TYPE</th>
+                <SortTh col="time">TIME</SortTh>
+                <SortTh col="decky">DECKY</SortTh>
+                <SortTh col="svc">SVC</SortTh>
+                <SortTh col="attacker">ATTACKER</SortTh>
+                <SortTh col="type">TYPE</SortTh>
                 <th>DATA</th>
                 <th></th>
               </tr>
             </thead>
             <tbody>
-              {bounties.length > 0 ? bounties.map(b => {
+              {sortedBounties.length > 0 ? sortedBounties.map(b => {
                 const isCred = b.bounty_type === 'credential';
                 const isFp = b.bounty_type === 'fingerprint';
-                const Icon = isCred ? Key : Package;
+                const isArt = b.bounty_type === 'artifact';
+                const isMail = isArt && b.payload?.kind === 'mail';
+                const Icon = isCred ? Key : isMail ? Mail : isArt ? FileText : Package;
                 return (
                   <tr key={b.id} className="clickable" onClick={() => setSelected(b)}>
                     <td className="dim" style={{ fontSize: '0.72rem', whiteSpace: 'nowrap' }}>
@@ -211,6 +264,29 @@ const Bounty: React.FC = () => {
                         </div>
                       ) : isFp ? (
                         <FingerprintPreview payload={b.payload} />
+                      ) : isMail ? (
+                        <span className="data-preview">
+                          <span className="matrix-text">{b.payload?.subject || '(no subject)'}</span>
+                          {b.payload?.mail_from && (
+                            <span className="dim" style={{ marginLeft: 8 }}>from {b.payload.mail_from}</span>
+                          )}
+                          {b.payload?.attachment_count > 0 && (
+                            <span className="dim" style={{ marginLeft: 8 }}>· {b.payload.attachment_count} attach</span>
+                          )}
+                          {b.payload?.size != null && (
+                            <span className="dim" style={{ marginLeft: 8 }}>· {formatBytes(b.payload.size)}</span>
+                          )}
+                        </span>
+                      ) : isArt ? (
+                        <span className="data-preview">
+                          <span className="matrix-text">{b.payload?.orig_path || b.payload?.stored_as || '—'}</span>
+                          {b.payload?.size != null && (
+                            <span className="dim" style={{ marginLeft: 8 }}>{formatBytes(b.payload.size)}</span>
+                          )}
+                          {b.payload?.attribution && (
+                            <span className="dim" style={{ marginLeft: 8 }}>· via {b.payload.attribution}</span>
+                          )}
+                        </span>
                       ) : (
                         <span className="data-preview">
                           {b.payload?.query || b.payload?.body || b.payload?.command || JSON.stringify(b.payload)}

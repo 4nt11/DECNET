@@ -8,6 +8,7 @@ import EmptyState from './EmptyState/EmptyState';
 import { useFocusSearch } from '../hooks/useFocusSearch';
 import { useCampaignStream } from './useCampaignStream';
 import './Dashboard.css';
+import './Attackers.css';
 
 interface CampaignEntry {
   uuid: string;

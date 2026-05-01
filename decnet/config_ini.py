@@ -39,6 +39,7 @@ Shape::
     master-host = 10.0.0.1        # required on agents
     syslog-port = 6514
     swarmctl-port = 8770
+    swarmctl-host = 127.0.0.1     # bind address for `decnet swarmctl`
 
     [logging]
     system-log = /var/log/decnet/decnet.system.log
@@ -120,6 +121,7 @@ _DOMAIN_MAP: dict[str, dict[str, str]] = {
         "master-host": "DECNET_SWARM_MASTER_HOST",
         "syslog-port": "DECNET_SWARM_SYSLOG_PORT",
         "swarmctl-port": "DECNET_SWARMCTL_PORT",
+        "swarmctl-host": "DECNET_SWARMCTL_HOST",
     },
     "logging": {
         "system-log": "DECNET_SYSTEM_LOGS",

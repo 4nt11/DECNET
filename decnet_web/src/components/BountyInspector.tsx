@@ -1,6 +1,7 @@
-import React from 'react';
-import { X, Key, Package, Copy, Send, Ban } from '../icons';
+import React, { useState } from 'react';
+import { X, Key, Package, Copy, Send, Ban, FileText, Mail, Download, AlertTriangle } from '../icons';
 import { useToast } from './Toasts/useToast';
+import api from '../utils/api';
 
 interface BountyEntry {
   id: number;
@@ -21,8 +22,14 @@ interface Props {
 const BountyInspector: React.FC<Props> = ({ bounty, onClose, onSelectAttacker }) => {
   const { push } = useToast();
   const isCred = bounty.bounty_type === 'credential';
-  const Icon = isCred ? Key : Package;
+  const isArt = bounty.bounty_type === 'artifact';
   const p = bounty.payload || {};
+  const isMail = isArt && p.kind === 'mail';
+  const Icon = isCred ? Key : isMail ? Mail : isArt ? FileText : Package;
+  const storedAs: string | undefined = isArt ? p.stored_as : undefined;
+
+  const [downloading, setDownloading] = useState(false);
+  const [dlError, setDlError] = useState<string | null>(null);
 
   const copyJson = async () => {
     try {
@@ -30,6 +37,37 @@ const BountyInspector: React.FC<Props> = ({ bounty, onClose, onSelectAttacker })
       push({ text: 'JSON COPIED', tone: 'matrix', icon: 'copy' });
     } catch {
       push({ text: 'CLIPBOARD BLOCKED', tone: 'alert', icon: 'alert-triangle' });
+    }
+  };
+
+  const downloadArtifact = async () => {
+    if (!storedAs) return;
+    setDownloading(true);
+    setDlError(null);
+    try {
+      const res = await api.get(
+        `/artifacts/${encodeURIComponent(bounty.decky)}/${encodeURIComponent(storedAs)}?service=${encodeURIComponent(bounty.service)}`,
+        { responseType: 'blob' },
+      );
+      const blobUrl = URL.createObjectURL(res.data);
+      const a = document.createElement('a');
+      a.href = blobUrl;
+      a.download = storedAs;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      URL.revokeObjectURL(blobUrl);
+    } catch (err: any) {
+      const status = err?.response?.status;
+      setDlError(
+        status === 403 ? 'Admin role required to download artifacts.' :
+        status === 404 ? 'Artifact not found on disk (may have been purged).' :
+        status === 400 ? 'Server rejected the request (invalid parameters).' :
+        'Download failed — see console.'
+      );
+      console.error('artifact download failed', err);
+    } finally {
+      setDownloading(false);
     }
   };
 
@@ -52,7 +90,10 @@ const BountyInspector: React.FC<Props> = ({ bounty, onClose, onSelectAttacker })
           <div className="kvs">
             <div className="k">TYPE</div>
             <div className="v">
-              <span className={`chip ${isCred ? 'matrix' : 'violet'}`}>{bounty.bounty_type.toUpperCase()}</span>
+              <span className={`chip ${isCred ? 'matrix' : 'violet'}`}>
+                <Icon size={9} style={{ marginRight: 4 }} />
+                {bounty.bounty_type.toUpperCase()}{isMail ? ' · MAIL' : ''}
+              </span>
             </div>
             <div className="k">TIMESTAMP</div>
             <div className="v">{new Date(bounty.timestamp).toLocaleString()}</div>
@@ -72,7 +113,9 @@ const BountyInspector: React.FC<Props> = ({ bounty, onClose, onSelectAttacker })
           </div>
 
           <div>
-            <div className="type-label">{isCred ? 'CAPTURED CREDENTIAL' : 'CAPTURED PAYLOAD'}</div>
+            <div className="type-label">
+              {isCred ? 'CAPTURED CREDENTIAL' : isMail ? 'CAPTURED MESSAGE' : isArt ? 'CAPTURED FILE' : 'CAPTURED PAYLOAD'}
+            </div>
             {isCred ? (
               <pre className="code-block">
                 <span className="ck">username:</span> <span className="cs">{p.username}</span>{'\n'}
@@ -82,6 +125,34 @@ const BountyInspector: React.FC<Props> = ({ bounty, onClose, onSelectAttacker })
               <pre className="code-block">{JSON.stringify(p, null, 2)}</pre>
             )}
           </div>
+
+          {isArt && storedAs && (
+            <div>
+              <div className="type-label">RAW BYTES</div>
+              <div
+                className="info-banner"
+                style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 8 }}
+              >
+                <AlertTriangle size={14} />
+                <span>Attacker-controlled content. Download at your own risk.</span>
+              </div>
+              <div className="bd-actions">
+                <button
+                  className="btn"
+                  onClick={downloadArtifact}
+                  disabled={downloading}
+                  style={{ cursor: downloading ? 'wait' : 'pointer', opacity: downloading ? 0.5 : 1 }}
+                >
+                  <Download size={12} /> {downloading ? 'DOWNLOADING…' : 'DOWNLOAD RAW'}
+                </button>
+              </div>
+              {dlError && (
+                <div style={{ color: 'var(--alert)', fontSize: '0.75rem', marginTop: 8 }}>
+                  {dlError}
+                </div>
+              )}
+            </div>
+          )}
 
           <div>
             <div className="type-label">EXPORT</div>

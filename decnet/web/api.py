@@ -31,6 +31,7 @@ from decnet.web.dependencies import repo
 from decnet.collector import log_collector_worker
 from decnet.web.ingester import log_ingestion_worker
 from decnet.profiler import attacker_profile_worker
+from decnet.tarpit import tarpit_watcher_worker
 from decnet.web.limiter import limiter
 from decnet.web.router import api_router
 from slowapi import _rate_limit_exceeded_handler
@@ -43,6 +44,7 @@ collector_task: Optional[asyncio.Task[Any]] = None
 attacker_task: Optional[asyncio.Task[Any]] = None
 sniffer_task: Optional[asyncio.Task[Any]] = None
 heartbeat_task: Optional[asyncio.Task[Any]] = None
+tarpit_task: Optional[asyncio.Task[Any]] = None
 
 
 def get_background_tasks() -> dict[str, Optional[asyncio.Task[Any]]]:
@@ -52,13 +54,14 @@ def get_background_tasks() -> dict[str, Optional[asyncio.Task[Any]]]:
         "collector_worker": collector_task,
         "attacker_worker": attacker_task,
         "sniffer_worker": sniffer_task,
+        "tarpit_watcher": tarpit_task,
     }
 
 
 @asynccontextmanager
 async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
     global ingestion_task, collector_task, attacker_task, sniffer_task
-    global heartbeat_task
+    global heartbeat_task, tarpit_task
 
     import resource
     soft, hard = resource.getrlimit(resource.RLIMIT_NOFILE)
@@ -162,6 +165,11 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
                 log.warning("Sniffer worker failed to start — API continues without sniffing: %s", exc)
         else:
             log.debug("API startup: sniffer not embedded — expecting standalone daemon")
+
+        # Tarpit watcher — always-on, near-zero cost when no rules exist.
+        if tarpit_task is None or tarpit_task.done():
+            tarpit_task = asyncio.create_task(tarpit_watcher_worker(repo))
+            log.debug("API startup: tarpit watcher started")
     else:
         log.info("Contract Test Mode: skipping background worker startup")
 
@@ -191,7 +199,7 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
         await get_registry().stop()
     except Exception as exc:  # noqa: BLE001
         log.warning("worker registry stop raised: %s", exc)
-    for task in (ingestion_task, collector_task, attacker_task, sniffer_task, heartbeat_task):
+    for task in (ingestion_task, collector_task, attacker_task, sniffer_task, heartbeat_task, tarpit_task):
         if task and not task.done():
             task.cancel()
             try:

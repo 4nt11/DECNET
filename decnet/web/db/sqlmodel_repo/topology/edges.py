@@ -6,9 +6,12 @@ from typing import Any, Optional
 from sqlalchemy import desc, select, text
 
 from decnet.web.db.models import TopologyEdge, TopologyStatusEvent
+from decnet.web.db.models.topology import EdgeRow
 
 
-class TopologyEdgesMixin:
+from decnet.web.db.sqlmodel_repo._helpers import _MixinBase
+
+class TopologyEdgesMixin(_MixinBase):
     """``self._assert_pending`` / ``self._check_and_bump_version`` resolve
     through ``TopologyCoreMixin`` via MRO."""
 
@@ -33,7 +36,12 @@ class TopologyEdgesMixin:
         edge_id: str,
         *,
         expected_version: Optional[int] = None,
+        enforce_pending: bool = True,
     ) -> None:
+        """Delete one edge.  ``enforce_pending=True`` by default — the
+        mutator's ``apply_detach_decky`` opts out, same rationale as
+        ``delete_topology_decky``.
+        """
         async with self._session() as session:
             result = await session.execute(
                 select(TopologyEdge).where(TopologyEdge.id == edge_id)
@@ -41,7 +49,8 @@ class TopologyEdgesMixin:
             edge = result.scalar_one_or_none()
             if edge is None:
                 return
-            await self._assert_pending(session, edge.topology_id)
+            if enforce_pending:
+                await self._assert_pending(session, edge.topology_id)
             if expected_version is not None:
                 await self._check_and_bump_version(
                     session, edge.topology_id, expected_version
@@ -54,12 +63,12 @@ class TopologyEdgesMixin:
 
     async def list_topology_edges(
         self, topology_id: str
-    ) -> list[dict[str, Any]]:
+    ) -> list[EdgeRow]:
         async with self._session() as session:
             result = await session.execute(
                 select(TopologyEdge).where(TopologyEdge.topology_id == topology_id)
             )
-            return [r.model_dump(mode="json") for r in result.scalars().all()]
+            return [EdgeRow.model_validate(r.model_dump(mode="json")) for r in result.scalars().all()]
 
     async def list_topology_status_events(
         self, topology_id: str, limit: int = 100

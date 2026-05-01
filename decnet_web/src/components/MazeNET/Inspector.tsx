@@ -1,10 +1,12 @@
-import React, { useMemo } from 'react';
+import React, { useMemo, useRef, useEffect, useState } from 'react';
 import {
   ArrowLeft, ArrowRight, Crosshair, Globe, GitMerge, MousePointer2, Plus,
   Server, Trash2, X, Shield,
 } from '../../icons';
 import type { Net, MazeNode, Edge } from './types';
 import { DEFAULT_SERVICES } from './data';
+import ServiceConfigForm from '../ServiceConfigForm';
+import type { ApiError } from '../../utils/api';
 
 export type Selection =
   | { type: 'net'; id: string }
@@ -18,12 +20,36 @@ interface Props {
   nets: Net[];
   nodes: MazeNode[];
   edges: Edge[];
+  /** Topology ID (MazeNET-only) — required for the schema-driven service
+   *  config form to hit the per-topology REST path. Omit for fleet. */
+  topologyId?: string;
   topologyStatus?: string;
   onClose?: () => void;
   onDeleteNet?: (id: string) => void;
   onDeleteNode?: (id: string) => void;
   onDeleteEdge?: (id: string) => void;
   onRemoveService?: (nodeId: string, slug: string) => void;
+  // Live (post-deploy) service mutation, hitting W3 endpoints directly.
+  // Distinct from onRemoveService which queues a design-time graph
+  // mutation.  Both can coexist; the inspector picks based on
+  // topologyStatus (active/degraded → live, pending/anything else →
+  // design-time only).  Wiring these props from MazeNET.tsx is the
+  // single switch that turns chips into live controls.
+  /** Trigger the schema-driven add-service flow.  Synchronous: opens
+   *  the AddServiceConfigModal at the page level (or auto-confirms if
+   *  the service has no schema fields).  Errors surface inside the modal. */
+  onLiveAddService?: (nodeName: string, slug: string) => void;
+  onLiveRemoveService?: (nodeName: string, slug: string) => Promise<void>;
+  /** Per-decky-eligible service slugs, fetched via useServiceRegistry. */
+  availableServices?: string[];
+  /** Toggle ``forwards_l3`` (gateway) on the selected decky.  When the
+   *  topology is active/degraded the caller is responsible for the
+   *  destructive-recreate confirm dialog and the ``force: true`` submit
+   *  — this prop just relays the user's intent. */
+  onToggleGateway?: (nodeId: string, nextValue: boolean) => Promise<void>;
+  /** Tarpit controls — only shown when topology is active/degraded and node is a deployed decky. */
+  onLiveTarpitEnable?: (nodeName: string, ports: number[], delayMs: number) => Promise<void>;
+  onLiveTarpitDisable?: (nodeName: string) => Promise<void>;
   onAddDecky?: (netId: string) => void;
   setSelection?: (sel: Selection) => void;
   pendingChanges?: number;
@@ -31,11 +57,39 @@ interface Props {
 }
 
 const Inspector: React.FC<Props> = ({
-  selection, nets, nodes, edges, topologyStatus, onClose,
-  onDeleteNet, onDeleteNode, onDeleteEdge, onRemoveService, onAddDecky, setSelection,
+  selection, nets, nodes, edges, topologyId, topologyStatus, onClose,
+  onDeleteNet, onDeleteNode, onDeleteEdge, onRemoveService,
+  onLiveAddService, onLiveRemoveService, availableServices = [],
+  onToggleGateway,
+  onLiveTarpitEnable, onLiveTarpitDisable,
+  onAddDecky, setSelection,
   pendingChanges = 0,
   className = '',
 }) => {
+  const liveOpsEnabled =
+    !!onLiveAddService &&
+    !!onLiveRemoveService &&
+    (topologyStatus === 'active' || topologyStatus === 'degraded');
+  const [addOpen, setAddOpen] = useState(false);
+  const [addSlug, setAddSlug] = useState('');
+  const [busy, setBusy] = useState<string | null>(null);  // slug currently mutating
+  const [opError, setOpError] = useState<string | null>(null);
+
+  // Tarpit state — local form, fires parent callbacks
+  const [tarpitOpen, setTarpitOpen] = useState(false);
+  const [tarpitPorts, setTarpitPorts] = useState('22');
+  const [tarpitDelay, setTarpitDelay] = useState(30000);
+  const tarpitEnabled = liveOpsEnabled && !!onLiveTarpitEnable && !!onLiveTarpitDisable;
+
+  // Close tarpit form when selection changes
+  const prevNodeId = useRef<string | undefined>(undefined);
+  useEffect(() => {
+    const nodeId = selection?.type === 'node' ? selection.id : undefined;
+    if (nodeId !== prevNodeId.current) {
+      prevNodeId.current = nodeId;
+      setTarpitOpen(false);
+    }
+  }, [selection]);
   const net  = selection?.type === 'net'  ? nets.find((n) => n.id === selection.id)  : undefined;
   const node = selection?.type === 'node' ? nodes.find((n) => n.id === selection.id) : undefined;
   const edge = selection?.type === 'edge' ? edges.find((e) => e.id === selection.id) : undefined;
@@ -107,9 +161,110 @@ const Inspector: React.FC<Props> = ({
                 <div className="inspector-service-row">
                   {node.services.length === 0 && <span className="dim">—</span>}
                   {node.services.map((s) => (
-                    <span key={s} className="service-tag">{s}</span>
+                    <span key={s} className="service-tag" style={{ display: 'inline-flex', alignItems: 'center', gap: 4 }}>
+                      <span>{s}</span>
+                      {liveOpsEnabled && node.kind !== 'observed' && (
+                        <button
+                          type="button"
+                          title={`Remove ${s} (live)`}
+                          disabled={busy === s}
+                          onClick={async () => {
+                            setOpError(null);
+                            setBusy(s);
+                            try {
+                              await onLiveRemoveService!(node.name, s);
+                            } catch (err) {
+                              const msg = (err as ApiError)?.response?.data?.detail
+                                ?? 'Remove failed.';
+                              setOpError(msg);
+                            } finally {
+                              setBusy(null);
+                            }
+                          }}
+                          style={{
+                            background: 'transparent', border: 'none', padding: 0,
+                            color: 'inherit', cursor: busy === s ? 'wait' : 'pointer',
+                            opacity: busy === s ? 0.4 : 0.7, lineHeight: 1,
+                          }}
+                        >
+                          <X size={9} />
+                        </button>
+                      )}
+                    </span>
                   ))}
+                  {liveOpsEnabled && node.kind !== 'observed' && !addOpen && (
+                    <button
+                      type="button"
+                      className="service-tag"
+                      onClick={() => { setAddOpen(true); setAddSlug(''); }}
+                      style={{ cursor: 'pointer', borderStyle: 'dashed' }}
+                      title="Add service (live)"
+                    >
+                      <Plus size={10} /> ADD
+                    </button>
+                  )}
                 </div>
+                {liveOpsEnabled && addOpen && (
+                  <div style={{ display: 'flex', gap: 6, marginTop: 6, alignItems: 'center' }}>
+                    <select
+                      value={addSlug}
+                      onChange={(e) => setAddSlug(e.target.value)}
+                      style={{
+                        flex: 1, fontSize: '0.75rem', padding: '4px 6px',
+                        background: 'rgba(255,255,255,0.04)',
+                        border: '1px solid var(--border-color, #30363d)',
+                        color: 'var(--text-color)',
+                      }}
+                    >
+                      <option value="">— pick a service —</option>
+                      {availableServices
+                        .filter((s) => !(node.services as readonly string[]).includes(s))
+                        .map((s) => (
+                          <option key={s} value={s}>{s}</option>
+                        ))}
+                    </select>
+                    <button
+                      type="button"
+                      disabled={!addSlug || busy === addSlug}
+                      onClick={() => {
+                        if (!addSlug) return;
+                        setOpError(null);
+                        // Fire-and-forget: opens the schema-driven config
+                        // modal at the page level (or auto-confirms for
+                        // schema-less services). Errors surface in the modal.
+                        onLiveAddService!(node.name, addSlug);
+                        setAddOpen(false);
+                        setAddSlug('');
+                      }}
+                      style={{
+                        padding: '4px 10px', fontSize: '0.7rem',
+                        border: '1px solid var(--accent-color, #00ff88)',
+                        background: 'var(--accent-color, #00ff88)',
+                        color: 'var(--bg-color, #0d1117)',
+                        cursor: busy === addSlug ? 'wait' : 'pointer',
+                        opacity: !addSlug || busy === addSlug ? 0.5 : 1,
+                        textTransform: 'uppercase',
+                      }}
+                    >
+                      ADD
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => { setAddOpen(false); setAddSlug(''); }}
+                      style={{
+                        padding: '4px 10px', fontSize: '0.7rem',
+                        border: '1px solid var(--dim-color)',
+                        background: 'transparent', color: 'var(--dim-color)',
+                        cursor: 'pointer', textTransform: 'uppercase',
+                      }}
+                    >
+                      CANCEL
+                    </button>
+                  </div>
+                )}
+                {opError && (
+                  <div style={{ color: '#ff5555', fontSize: '0.7rem', marginTop: 6 }}>{opError}</div>
+                )}
               </div>
             </div>
             <div>
@@ -130,6 +285,142 @@ const Inspector: React.FC<Props> = ({
                 <div className="dim inspector-empty-line">NO EDGES</div>
               )}
             </div>
+            {onToggleGateway && !isObserved && (
+              <button
+                type="button"
+                className={`maze-btn small ${isGateway ? 'alert' : ''}`}
+                disabled={busy === '__gateway__'}
+                title={
+                  isGateway
+                    ? 'Demote this decky from gateway (forwards_l3=false)'
+                    : 'Promote this decky to gateway (forwards_l3=true)'
+                }
+                onClick={async () => {
+                  const next = !isGateway;
+                  // forwards_l3 flip on a deployed topology recreates
+                  // the base container — destructive.  Confirm before
+                  // hitting the API; the caller (MazeNET.tsx) submits
+                  // with force: true on active topologies.
+                  const live = topologyStatus === 'active' || topologyStatus === 'degraded';
+                  if (live) {
+                    const ok = window.confirm(
+                      `${next ? 'Promote' : 'Demote'} ${node.name} ${next ? 'to' : 'from'} gateway?\n\n` +
+                      'This recreates the base container to apply the new port-publishing config. ' +
+                      'In-container state is lost; active sessions to it drop.',
+                    );
+                    if (!ok) return;
+                  }
+                  setOpError(null);
+                  setBusy('__gateway__');
+                  try {
+                    await onToggleGateway(node.id, next);
+                  } catch (err) {
+                    const msg = (err as ApiError)?.response?.data?.detail
+                      ?? 'Gateway toggle failed.';
+                    setOpError(msg);
+                  } finally {
+                    setBusy(null);
+                  }
+                }}
+              >
+                <Shield size={12} />
+                {busy === '__gateway__'
+                  ? (isGateway ? 'DEMOTING…' : 'PROMOTING…')
+                  : (isGateway ? 'DEMOTE GATEWAY' : 'PROMOTE TO GATEWAY')}
+              </button>
+            )}
+            {tarpitEnabled && !isObserved && (
+              <div className="inspector-tarpit-wrap">
+                <div className="inspector-tarpit-row">
+                  <button
+                    type="button"
+                    className={`maze-btn small ${tarpitOpen ? 'active' : ''}`}
+                    disabled={busy === '__tarpit__'}
+                    onClick={() => setTarpitOpen((o) => !o)}
+                    title="Configure tc netem tarpit on this decky"
+                  >
+                    <Shield size={12} />
+                    {tarpitOpen ? 'CANCEL' : 'TARPIT'}
+                  </button>
+                  <button
+                    type="button"
+                    className="maze-btn alert small"
+                    disabled={busy === '__tarpit__'}
+                    title="Remove active tarpit rule"
+                    onClick={async () => {
+                      setOpError(null);
+                      setBusy('__tarpit__');
+                      try {
+                        await onLiveTarpitDisable!(node.name);
+                      } catch (err) {
+                        const msg = (err as ApiError)
+                          ?.response?.data?.detail ?? 'Tarpit disable failed.';
+                        setOpError(msg);
+                      } finally {
+                        setBusy(null);
+                      }
+                    }}
+                  >
+                    {busy === '__tarpit__' ? '…' : 'DISABLE'}
+                  </button>
+                </div>
+                {tarpitOpen && (
+                  <div className="inspector-tarpit-form">
+                    <div className="inspector-tarpit-field">
+                      <label className="type-label">PORTS</label>
+                      <input
+                        className="maze-input"
+                        value={tarpitPorts}
+                        placeholder="22,80,443"
+                        onChange={(e) => setTarpitPorts(e.target.value)}
+                      />
+                    </div>
+                    <div className="inspector-tarpit-field">
+                      <label className="type-label">
+                        DELAY · {tarpitDelay >= 1000
+                          ? `${(tarpitDelay / 1000).toFixed(0)}s`
+                          : `${tarpitDelay}ms`}
+                      </label>
+                      <input
+                        type="range"
+                        min={100}
+                        max={60000}
+                        step={100}
+                        value={tarpitDelay}
+                        onChange={(e) => setTarpitDelay(parseInt(e.target.value, 10))}
+                        style={{ width: '100%' }}
+                      />
+                    </div>
+                    <button
+                      type="button"
+                      className="maze-btn alert small"
+                      disabled={busy === '__tarpit__' || !tarpitPorts.trim()}
+                      onClick={async () => {
+                        const ports = tarpitPorts
+                          .split(',')
+                          .map((p) => parseInt(p.trim(), 10))
+                          .filter((p) => !isNaN(p) && p > 0 && p <= 65535);
+                        if (!ports.length) return;
+                        setOpError(null);
+                        setBusy('__tarpit__');
+                        try {
+                          await onLiveTarpitEnable!(node.name, ports, tarpitDelay);
+                          setTarpitOpen(false);
+                        } catch (err) {
+                          const msg = (err as ApiError)
+                            ?.response?.data?.detail ?? 'Tarpit enable failed.';
+                          setOpError(msg);
+                        } finally {
+                          setBusy(null);
+                        }
+                      }}
+                    >
+                      {busy === '__tarpit__' ? 'APPLYING…' : 'APPLY TARPIT'}
+                    </button>
+                  </div>
+                )}
+              </div>
+            )}
             {onDeleteNode && (
               <button
                 type="button"
@@ -263,6 +554,18 @@ const Inspector: React.FC<Props> = ({
               <div className="k">SUBNET</div>
               <div className="v">{serviceParentNet?.label ?? '—'}</div>
             </div>
+            {topologyId && serviceParent && serviceParent.kind !== 'observed' && (
+              <ServiceConfigForm
+                key={`${serviceParent.name}:${serviceSel.id}`}
+                deckyName={serviceParent.name}
+                serviceSlug={serviceSel.id}
+                topologyId={topologyId}
+                currentConfig={
+                  ((serviceParent.decky_config as { service_config?: Record<string, Record<string, unknown>> } | undefined)
+                    ?.service_config?.[serviceSel.id]) ?? {}
+                }
+              />
+            )}
             {onRemoveService && serviceParent && serviceParent.kind !== 'observed' && (
               <button
                 type="button"

@@ -21,6 +21,8 @@ KNOWN_GENERATORS: Tuple[str, ...] = (
     "honeydoc_docx",
     "honeydoc_pdf",
     "mysql_dump",
+    "fingerprint_html",
+    "fingerprint_svg",
 )
 
 KNOWN_INSTRUMENTERS: Tuple[str, ...] = (
@@ -64,6 +66,16 @@ def get_generator(name: str) -> CanaryGenerator:
     if name == "mysql_dump":
         from decnet.canary.generators.mysql_dump import MySQLDumpGenerator
         return MySQLDumpGenerator()
+    if name == "fingerprint_html":
+        from decnet.canary.generators.fingerprint_html import (
+            FingerprintHtmlGenerator,
+        )
+        return FingerprintHtmlGenerator()
+    if name == "fingerprint_svg":
+        from decnet.canary.generators.fingerprint_svg import (
+            FingerprintSvgGenerator,
+        )
+        return FingerprintSvgGenerator()
     raise ValueError(
         f"Unknown canary generator: {name!r}. Known: {KNOWN_GENERATORS}"
     )

@@ -20,5 +20,6 @@ RUN useradd -r -s /bin/false -d /opt logrelay \
 HEALTHCHECK --interval=30s --timeout=5s --start-period=10s --retries=3 \
   CMD kill -0 1 || exit 1
 
-USER logrelay
+# Entrypoint runs as root so it can fix quarantine dir permissions before
+# dropping to logrelay via su.
 ENTRYPOINT ["/entrypoint.sh"]

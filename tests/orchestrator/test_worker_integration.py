@@ -73,12 +73,14 @@ async def test_one_tick_records_event_and_publishes(repo, fake_bus, monkeypatch)
 
     monkeypatch.setattr(ssh_driver, "_run", fake_run)
 
-    async def fake_run_with_stdin(argv, stdin_bytes):
-        # plant_file takes the base64-streaming path; treat any docker
-        # exec write as a successful no-op for the integration test.
-        return 0, "", ""
+    # plant_file delegates to decky_io.write_file_to_container; treat
+    # any docker exec write as a successful no-op for the integration
+    # test.
+    async def fake_write_file(*a, **kw):
+        return True, None
 
-    monkeypatch.setattr(ssh_driver, "_run_with_stdin", fake_run_with_stdin)
+    import decnet.decky_io.write as _decky_io_write
+    monkeypatch.setattr(_decky_io_write, "write_file_to_container", fake_write_file)
 
     received: list = []
 
@@ -140,12 +142,14 @@ async def test_one_tick_picks_fleet_deckies(repo, fake_bus, monkeypatch):
 
     monkeypatch.setattr(ssh_driver, "_run", fake_run)
 
-    async def fake_run_with_stdin(argv, stdin_bytes):
-        # plant_file takes the base64-streaming path; treat any docker
-        # exec write as a successful no-op for the integration test.
-        return 0, "", ""
+    # plant_file delegates to decky_io.write_file_to_container; treat
+    # any docker exec write as a successful no-op for the integration
+    # test.
+    async def fake_write_file(*a, **kw):
+        return True, None
 
-    monkeypatch.setattr(ssh_driver, "_run_with_stdin", fake_run_with_stdin)
+    import decnet.decky_io.write as _decky_io_write
+    monkeypatch.setattr(_decky_io_write, "write_file_to_container", fake_write_file)
 
     await orch_worker._one_tick(repo, fake_bus)
 
@@ -282,12 +286,14 @@ async def test_tick_is_noop_when_no_running_deckies(repo, fake_bus, monkeypatch)
 
     monkeypatch.setattr(ssh_driver, "_run", fake_run)
 
-    async def fake_run_with_stdin(argv, stdin_bytes):
-        # plant_file takes the base64-streaming path; treat any docker
-        # exec write as a successful no-op for the integration test.
-        return 0, "", ""
+    # plant_file delegates to decky_io.write_file_to_container; treat
+    # any docker exec write as a successful no-op for the integration
+    # test.
+    async def fake_write_file(*a, **kw):
+        return True, None
 
-    monkeypatch.setattr(ssh_driver, "_run_with_stdin", fake_run_with_stdin)
+    import decnet.decky_io.write as _decky_io_write
+    monkeypatch.setattr(_decky_io_write, "write_file_to_container", fake_write_file)
     await orch_worker._one_tick(repo, fake_bus)
 
     assert called is False

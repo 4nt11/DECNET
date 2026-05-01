@@ -109,7 +109,7 @@ RUN echo 'alias ll="ls -alF"' >> /root/.bashrc && \
     echo 'alias l="ls -CF"'   >> /root/.bashrc && \
     echo 'export HISTSIZE=1000' >> /root/.bashrc && \
     echo 'export HISTFILESIZE=2000' >> /root/.bashrc && \
-    echo 'PROMPT_COMMAND='"'"'logger -p user.info -t bash "CMD uid=$UID user=$USER src=${SSH_CLIENT%% *} pwd=$PWD cmd=$(history 1 | sed "s/^ *[0-9]* *//")";'"'" >> /root/.bashrc
+    echo 'PROMPT_COMMAND='"'"'logger --rfc5424 --msgid command -p user.info -t bash "CMD uid=$UID user=$USER src=${SSH_CLIENT%% *} pwd=$PWD cmd=$(history 1 | sed "s/^ *[0-9]* *//")";'"'" >> /root/.bashrc
 
 # Fake project files to look lived-in
 RUN mkdir -p /root/projects /root/backups /var/www/html && \

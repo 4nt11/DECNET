@@ -1,6 +1,6 @@
 import json
 from pathlib import Path
-from decnet.services.base import BaseService
+from decnet.services.base import BaseService, ServiceConfigField
 
 TEMPLATES_DIR = Path(__file__).parent.parent / "templates" / "http"
 
@@ -9,6 +9,41 @@ class HTTPService(BaseService):
     name = "http"
     ports = [80, 443]
     default_image = "build"
+
+    config_schema = [
+        ServiceConfigField(
+            key="server_header",
+            label="Server header",
+            type="string",
+            placeholder="Apache/2.4.41 (Ubuntu)",
+            help="Value sent in the HTTP Server: response header.",
+        ),
+        ServiceConfigField(
+            key="response_code",
+            label="Default response code",
+            type="int",
+            default=200,
+        ),
+        ServiceConfigField(
+            key="fake_app",
+            label="Fake application",
+            type="enum",
+            enum=["none", "wordpress", "phpmyadmin", "tomcat", "jenkins"],
+            default="none",
+            help="Pre-baked application skin to render on the index page.",
+        ),
+        ServiceConfigField(
+            key="extra_headers",
+            label="Extra headers (JSON or raw)",
+            type="textarea",
+            placeholder='{"X-Powered-By": "PHP/7.4.3"}',
+        ),
+        ServiceConfigField(
+            key="custom_body",
+            label="Custom response body",
+            type="textarea",
+        ),
+    ]
 
     def compose_fragment(
         self,

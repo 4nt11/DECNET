@@ -10,10 +10,12 @@ User={{ user }}
 Group={{ group }}
 WorkingDirectory={{ install_dir }}
 EnvironmentFile=-{{ install_dir }}/.env.local
-# Default bind is loopback — the controller is a master-local orchestrator
-# reached by the CLI and the web dashboard, not by workers.
+# Bind/port resolved from /etc/decnet/decnet.ini ([swarm] swarmctl-host /
+# swarmctl-port) — falls back to 127.0.0.1:8770 when the keys are absent.
+# Pass --host/--port on the ExecStart line only if you want to pin them
+# regardless of what the INI says.
 Environment=DECNET_SYSTEM_LOGS=/var/log/decnet/decnet.swarmctl.log
-ExecStart={{ venv_dir }}/bin/decnet swarmctl --host 127.0.0.1 --port 8770
+ExecStart={{ venv_dir }}/bin/decnet swarmctl
 StandardOutput=append:/var/log/decnet/decnet.swarmctl.log
 StandardError=append:/var/log/decnet/decnet.swarmctl.log
 

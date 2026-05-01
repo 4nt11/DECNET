@@ -1,7 +1,7 @@
 import os
 from pathlib import Path
 
-from decnet.services.base import BaseService
+from decnet.services.base import BaseService, ServiceConfigField
 
 TEMPLATES_DIR = Path(__file__).parent.parent / "templates" / "smtp"
 ARTIFACTS_ROOT = os.environ.get("DECNET_ARTIFACTS_ROOT", "/var/lib/decnet/artifacts")
@@ -15,6 +15,24 @@ class SMTPService(BaseService):
     name = "smtp"
     ports = [25, 587]
     default_image = "build"
+
+    config_schema = [
+        ServiceConfigField(
+            key="banner",
+            label="SMTP greeting banner",
+            type="string",
+            placeholder="mail.corp.local ESMTP Postfix",
+            help="First line returned on TCP connect (220 ...).",
+        ),
+        ServiceConfigField(
+            key="mta",
+            label="MTA persona",
+            type="enum",
+            enum=["postfix", "exim", "sendmail"],
+            default="postfix",
+            help="Shapes EHLO capability list and error wording.",
+        ),
+    ]
 
     def compose_fragment(
         self,

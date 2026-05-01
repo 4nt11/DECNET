@@ -9,6 +9,7 @@ import asyncio
 import base64
 import os
 import struct
+from typing import cast
 
 import instance_seed as _seed
 from syslog_bridge import syslog_line, write_syslog_file, forward_syslog
@@ -108,18 +109,23 @@ def _tds_error_packet(message: str) -> bytes:
 
 
 class MSSQLProtocol(asyncio.Protocol):
+    _transport: asyncio.Transport | None = None
+    _peer: tuple[str, int] | None = None
+
     def __init__(self):
         self._transport = None
         self._peer = None
         self._buf = b""
         self._prelogin_done = False
 
-    def connection_made(self, transport):
-        self._transport = transport
-        self._peer = transport.get_extra_info("peername", ("?", 0))
+    def connection_made(self, transport: asyncio.BaseTransport) -> None:
+        self._transport = cast(asyncio.Transport, transport)
+        self._peer = cast(tuple[str, int], self._transport.get_extra_info("peername", ("?", 0)))
         _log("connect", src=self._peer[0], src_port=self._peer[1])
 
-    def data_received(self, data):
+    def data_received(self, data: bytes) -> None:
+        assert self._transport is not None
+        assert self._peer is not None
         self._buf += data
         while len(self._buf) >= 8:
             pkt_type = self._buf[0]
@@ -138,7 +144,9 @@ class MSSQLProtocol(asyncio.Protocol):
                 self._buf = b""
                 break
 
-    def _handle_packet(self, pkt_type: int, payload: bytes):
+    def _handle_packet(self, pkt_type: int, payload: bytes) -> None:
+        assert self._transport is not None
+        assert self._peer is not None
         if pkt_type == 0x12:  # Pre-login
             self._transport.write(_PRELOGIN_RESP)
             self._prelogin_done = True

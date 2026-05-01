@@ -24,3 +24,9 @@ api.interceptors.response.use(
 );
 
 export default api;
+
+/** Shape of an axios error response from the DECNET API. */
+export interface ApiError {
+  response?: { status?: number; data?: { detail?: string } };
+  message?: string;
+}

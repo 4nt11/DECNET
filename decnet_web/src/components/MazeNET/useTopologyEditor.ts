@@ -68,6 +68,11 @@ export interface UseTopologyEditor {
     uuid: string,
     deckyName: string,
     patch: Partial<DeckyRow>,
+    /** Extra top-level flags for the queued mutation payload — currently
+     *  only ``force`` (opts in to destructive recreates like the
+     *  forwards_l3 flip on a live topology).  Ignored on the pending
+     *  CRUD path since pending edits never need force. */
+    extras?: { force?: boolean },
   ): Promise<PrimitiveResult<DeckyRow>>;
   deleteDecky(
     topologyId: string,
@@ -169,7 +174,7 @@ export function useTopologyEditor(
       const res = await api.enqueueMutation(topologyId, 'add_decky', payload, topoVersion);
       return { kind: 'enqueued', mutationId: res.mutation_id };
     },
-    async updateDecky(topologyId, uuid, deckyName, patch) {
+    async updateDecky(topologyId, uuid, deckyName, patch, extras) {
       if (!live) {
         const data = await api.updateDecky(topologyId, uuid, patch);
         return { kind: 'applied', data };
@@ -181,6 +186,7 @@ export function useTopologyEditor(
         else patchFields[k] = v;
       }
       if (Object.keys(patchFields).length > 0) payload.patch = patchFields;
+      if (extras?.force) payload.force = true;
       const res = await api.enqueueMutation(topologyId, 'update_decky', payload, topoVersion);
       return { kind: 'enqueued', mutationId: res.mutation_id };
     },

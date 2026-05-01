@@ -94,7 +94,7 @@ class ESHandler(BaseHTTPRequestHandler):
     server_version = "elasticsearch"
     sys_version = ""
 
-    def _send_json(self, code: int, data: dict) -> None:
+    def _send_json(self, code: int, data: dict | list) -> None:
         body = json.dumps(data).encode()
         self.send_response(code)
         self.send_header("Content-Type", "application/json; charset=UTF-8")

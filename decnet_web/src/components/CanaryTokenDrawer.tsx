@@ -8,6 +8,10 @@ export interface CanaryTokenRow {
   uuid: string;
   kind: 'http' | 'dns' | 'aws_passive';
   decky_name: string;
+  // Set when the token targets a MazeNET topology decky.  Null/absent
+  // for fleet tokens.  Drives the "scope" badge in the list and the
+  // topology jump-link in the drawer.
+  topology_id: string | null;
   blob_uuid: string | null;
   instrumenter: string | null;
   generator: string | null;
@@ -247,6 +251,19 @@ const CanaryTokenDrawer: React.FC<Props> = ({ token, onClose, onRevoked }) => {
           </h3>
           <Row label="UUID" value={<code>{token.uuid}</code>} />
           <Row label="Decky" value={token.decky_name} />
+          <Row
+            label="Scope"
+            value={token.topology_id ? (
+              <a
+                href={`/mazenet?topology=${encodeURIComponent(token.topology_id)}`}
+                style={{ color: 'var(--accent-color, #00ff88)' }}
+              >
+                topology · {token.topology_id.slice(0, 8)}…
+              </a>
+            ) : (
+              <span style={{ opacity: 0.6 }}>fleet</span>
+            )}
+          />
           <Row label="Kind" value={KIND_LABEL[token.kind]} />
           <Row label="Source" value={token.generator ? `generator: ${token.generator}` : token.instrumenter ? `instrumenter: ${token.instrumenter}` : '—'} />
           <Row label="Slug" value={<code>{token.callback_token}</code>} />

@@ -120,7 +120,7 @@ def parse_type3(blob: bytes) -> Optional[dict]:
     if domain:
         principal = f"{domain}\\{username}"
     else:
-        principal = username or None
+        principal = username
 
     return {
         "username": username,

@@ -6,9 +6,12 @@ from typing import Any, Optional
 from sqlalchemy import asc, select, text, update
 
 from decnet.web.db.models import LAN, TopologyEdge
+from decnet.web.db.models.topology import LANRow
 
 
-class LansMixin:
+from decnet.web.db.sqlmodel_repo._helpers import _MixinBase
+
+class LansMixin(_MixinBase):
     """``self._assert_pending`` / ``self._check_and_bump_version`` resolve
     through ``TopologyCoreMixin`` via MRO."""
 
@@ -61,12 +64,18 @@ class LansMixin:
         lan_id: str,
         *,
         expected_version: Optional[int] = None,
+        enforce_pending: bool = True,
     ) -> None:
-        """Cascade-delete a LAN from a pending topology.
+        """Cascade-delete a LAN.
 
         Rejects if any decky declares this LAN as its home (i.e. has a
         non-bridge edge to it — the only LAN that decky lives in).  The
         caller must delete or reassign the home-deckies first.
+
+        ``enforce_pending=True`` by default keeps the HTTP CRUD guard
+        intact; the mutator's ``apply_remove_lan`` opts out (it has
+        already gated on topology status and the live-LAN docker
+        materialisation runs after).
         """
         from decnet.topology.status import TopologyNotEditable  # noqa: F401
 
@@ -75,7 +84,8 @@ class LansMixin:
             lan = result.scalar_one_or_none()
             if lan is None:
                 return
-            await self._assert_pending(session, lan.topology_id)
+            if enforce_pending:
+                await self._assert_pending(session, lan.topology_id)
 
             # Home-decky check: any decky whose only edge lands here?
             edges_result = await session.execute(
@@ -110,9 +120,9 @@ class LansMixin:
 
     async def list_lans_for_topology(
         self, topology_id: str
-    ) -> list[dict[str, Any]]:
+    ) -> list[LANRow]:
         async with self._session() as session:
             result = await session.execute(
                 select(LAN).where(LAN.topology_id == topology_id).order_by(asc(LAN.name))
             )
-            return [r.model_dump(mode="json") for r in result.scalars().all()]
+            return [LANRow.model_validate(r.model_dump(mode="json")) for r in result.scalars().all()]

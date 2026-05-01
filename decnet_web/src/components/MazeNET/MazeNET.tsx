@@ -6,7 +6,7 @@ import {
   Plus, Trash2, Zap, Copy, Eye, ShieldAlert, GitMerge, Server, Mail,
 } from '../../icons';
 import './MazeNET.css';
-import axios from '../../utils/api';
+import axios, { type ApiError } from '../../utils/api';
 import { useSwarmHosts } from '../../hooks/useSwarmHosts';
 import Palette from './Palette';
 import Canvas from './Canvas';
@@ -17,21 +17,156 @@ import { DEFAULT_SERVICES } from './data';
 import type { Archetype, ServiceDef } from './data';
 import type { Net, MazeNode, Edge, DeckyNode } from './types';
 import { useMazeApi } from './useMazeApi';
+import type { DeckyRow } from './useMazeApi';
 import { useTopologyEditor } from './useTopologyEditor';
 import { useMazeInteraction, type PaletteDrag } from './useMazeInteraction';
 import { useLayoutPersistor } from './useMazeLayoutStore';
 import { useTopologyStream, type TopologyStreamEvent } from './useTopologyStream';
 import { ARCHETYPES as DEFAULT_ARCHETYPES } from './data';
 import { useToast } from '../Toasts/useToast';
+import { useServiceRegistry } from '../../hooks/useServiceRegistry';
+import AddServiceConfigModal from '../AddServiceConfigModal';
 
 /* Short unique suffix for default names — avoids the DB uniqueness
  * constraint regardless of delete/re-add sequencing on the client. */
-const hex4 = (): string => {
+const tempIdSuffix = (): string => {
   const r = typeof crypto !== 'undefined' && 'randomUUID' in crypto
     ? crypto.randomUUID().replace(/-/g, '')
     : Math.random().toString(16).slice(2);
   return r.slice(0, 4);
 };
+
+const NET_GRID_W    = 300;
+const NET_GRID_H    = 240;
+const NET_GRID_GAP  = 40;
+const NET_GRID_COLS = 3;
+
+async function _dropNetwork(
+  drag: PaletteDrag,
+  topologyId: string,
+  nets: Net[],
+  api: ReturnType<typeof useMazeApi>,
+  editor: ReturnType<typeof useTopologyEditor>,
+  setNets: React.Dispatch<React.SetStateAction<Net[]>>,
+  setNodes: React.Dispatch<React.SetStateAction<MazeNode[]>>,
+  flashErr: (err: unknown, fallback: string) => void,
+): Promise<void> {
+  const isDmz = drag.kind === 'network-dmz';
+  if (isDmz && nets.some((n) => n.kind === 'dmz')) {
+    flashErr(null, 'topology already has a DMZ');
+    return;
+  }
+  const i = nets.filter((n) => n.kind !== 'internet').length;
+  const x = NET_GRID_GAP + (i % NET_GRID_COLS) * (NET_GRID_W + NET_GRID_GAP);
+  const y = NET_GRID_GAP + Math.floor(i / NET_GRID_COLS) * (NET_GRID_H + NET_GRID_GAP);
+  const name = isDmz ? `dmz-${tempIdSuffix()}` : `subnet-${tempIdSuffix()}`;
+  try {
+    const subnet = await api.getNextSubnet().catch(() => undefined);
+    const lanRes = await editor.createLan(topologyId, { name, is_dmz: isDmz, x, y, ...(subnet ? { subnet } : {}) });
+    if (lanRes.kind !== 'applied') {
+      const tempId = `pending-lan-${name}`;
+      setNets((p) => [...p, {
+        id: tempId, name, label: name.toUpperCase(),
+        cidr: subnet ?? '', kind: isDmz ? 'dmz' : 'subnet',
+        x, y, w: NET_GRID_W, h: NET_GRID_H, pending: true,
+      }]);
+      return;
+    }
+    const lan = lanRes.data;
+    setNets((p) => [...p, {
+      id: lan.id, name: lan.name, label: lan.name.toUpperCase(), cidr: lan.subnet,
+      kind: isDmz ? 'dmz' : 'subnet', x, y, w: NET_GRID_W, h: NET_GRID_H,
+    }]);
+    if (isDmz) {
+      const gwName = `dmz-gateway-${tempIdSuffix()}`;
+      const gwRes = await editor.addDeckyToLan(
+        topologyId,
+        { name: gwName, services: ['ssh'], x: 20, y: 40,
+          decky_config: { archetype: 'deaddeck', forwards_l3: true } },
+        lan.id, lan.name,
+        { is_bridge: true, forwards_l3: true },
+      );
+      if (gwRes.kind !== 'applied') return;
+      const gw = gwRes.data;
+      setNodes((p) => [...p, {
+        kind: 'decky', id: gw.uuid, netId: lan.id, name: gw.name,
+        archetype: 'deaddeck', services: ['ssh'], status: 'idle',
+        x: 20, y: 40, decky_config: { forwards_l3: true },
+      } as DeckyNode]);
+    }
+  } catch (err) {
+    flashErr(err, 'create network failed');
+  }
+}
+
+async function _dropArchetype(
+  drag: PaletteDrag,
+  world: { x: number; y: number },
+  overNetId: string,
+  topologyId: string,
+  nets: Net[],
+  archetypes: Archetype[],
+  editor: ReturnType<typeof useTopologyEditor>,
+  setNodes: React.Dispatch<React.SetStateAction<MazeNode[]>>,
+  flashErr: (err: unknown, fallback: string) => void,
+): Promise<void> {
+  const net = nets.find((n) => n.id === overNetId);
+  if (!net) return;
+  const arch = archetypes.find((a) => a.slug === drag.slug);
+  const dServices = drag.services ?? arch?.services ?? [];
+  const nx = Math.max(8, Math.round(world.x - net.x - 70));
+  const ny = Math.max(28, Math.round(world.y - net.y - 24));
+  const name = `decky-${tempIdSuffix()}`;
+  try {
+    const dRes = await editor.addDeckyToLan(
+      topologyId,
+      { name, services: dServices, x: nx, y: ny, decky_config: { archetype: drag.slug } },
+      overNetId, net.name,
+    );
+    if (dRes.kind !== 'applied') return;
+    const decky = dRes.data;
+    setNodes((p) => [...p, {
+      kind: 'decky', id: decky.uuid, netId: overNetId, name: decky.name,
+      archetype: drag.slug, services: dServices, status: 'idle', x: nx, y: ny,
+    } as DeckyNode]);
+  } catch (err) {
+    flashErr(err, 'create decky failed');
+  }
+}
+
+async function _dropService(
+  drag: PaletteDrag,
+  overNodeId: string,
+  topologyId: string,
+  nodes: MazeNode[],
+  topoStatus: string,
+  requestAddService: (name: string, slug: string) => void,
+  editor: ReturnType<typeof useTopologyEditor>,
+  setNodes: React.Dispatch<React.SetStateAction<MazeNode[]>>,
+  flashErr: (err: unknown, fallback: string) => void,
+): Promise<void> {
+  const target = nodes.find((n) => n.id === overNodeId);
+  if (!target || target.kind !== 'decky') return;
+  if (target.services.includes(drag.slug)) return;
+  // Active/degraded topologies route through the live W3 endpoint — the
+  // design-time mutator queue would silently enqueue and the chip would never
+  // visibly land. Schema-driven services pop the config modal; empty-schema
+  // services auto-confirm and short-circuit.
+  if (topoStatus === 'active' || topoStatus === 'degraded') {
+    requestAddService(target.name, drag.slug);
+    return;
+  }
+  const nextServices = [...target.services, drag.slug];
+  try {
+    const r = await editor.updateDecky(topologyId, overNodeId, target.name, { services: nextServices });
+    if (r.kind !== 'applied') return;
+    setNodes((p) => p.map((n) => n.id === overNodeId && n.kind === 'decky'
+      ? { ...n, services: nextServices }
+      : n));
+  } catch (err) {
+    flashErr(err, 'update services failed');
+  }
+}
 
 const MazeNET: React.FC = () => {
   const api = useMazeApi();
@@ -102,129 +237,105 @@ const MazeNET: React.FC = () => {
   const editor = useTopologyEditor({ api, topoStatus, topoVersion });
 
   const flashErr = useCallback((err: unknown, fallback: string) => {
-    const msg = (err as { response?: { data?: { detail?: string } }; message?: string })
-      ?.response?.data?.detail ?? (err as Error)?.message ?? fallback;
+    const msg = (err as ApiError)?.response?.data?.detail ?? (err as ApiError)?.message ?? fallback;
     setActionErr(msg);
     setTimeout(() => setActionErr(null), 4000);
   }, []);
+
+  /* ── Live service mutation (W3 endpoints) — hoisted above palette
+     drop so onPaletteDrop's deps can reference it without hitting the
+     const TDZ.  Optimistic local update; SSE forwarder reconciles
+     cross-tab. */
+  const serviceRegistry = useServiceRegistry();
+
+  const liveAddService = useCallback(async (
+    nodeName: string,
+    slug: string,
+    config: Record<string, unknown> = {},
+  ) => {
+    const { data } = await axios.post<{ services: string[] }>(
+      `/topologies/${encodeURIComponent(topologyId)}/deckies/${encodeURIComponent(nodeName)}/services`,
+      { name: slug, config },
+    );
+    setNodes((p) => p.map((x) => x.kind === 'decky' && x.name === nodeName
+      ? { ...x, services: data.services } : x));
+  }, [topologyId]);
+
+  // Pending add for the schema-driven config modal — both the palette
+  // drag-drop and the Inspector ADD SERVICE picker funnel through here so
+  // operators get the same "configure on first up" flow either way.
+  const [pendingAddSvc, setPendingAddSvc] = useState<{ deckyName: string; slug: string } | null>(null);
+
+  const requestAddService = useCallback((nodeName: string, slug: string) => {
+    setPendingAddSvc({ deckyName: nodeName, slug });
+  }, []);
+
+  const confirmAddService = useCallback(async (
+    nodeName: string, slug: string, cfg: Record<string, unknown>,
+  ) => {
+    try {
+      await liveAddService(nodeName, slug, cfg);
+      setPendingAddSvc(null);
+    } catch (err) {
+      flashErr(err, 'add service failed');
+      throw err;
+    }
+  }, [liveAddService, flashErr]);
+
+  const liveRemoveService = useCallback(async (nodeName: string, slug: string) => {
+    const { data } = await axios.delete<{ services: string[] }>(
+      `/topologies/${encodeURIComponent(topologyId)}/deckies/${encodeURIComponent(nodeName)}/services/${encodeURIComponent(slug)}`,
+    );
+    setNodes((p) => p.map((x) => x.kind === 'decky' && x.name === nodeName
+      ? { ...x, services: data.services } : x));
+  }, [topologyId]);
+
+  /* forwards_l3 toggle.  Active topologies require the destructive
+     base-recreate path on the backend, gated by force: true; the
+     Inspector is responsible for confirming with the user before this
+     fires. */
+  const toggleGateway = useCallback(async (nodeId: string, nextValue: boolean) => {
+    const node = nodes.find((n) => n.id === nodeId);
+    if (!node || node.kind !== 'decky') return;
+    const live = topoStatus === 'active' || topoStatus === 'degraded';
+    const r = await editor.updateDecky(
+      topologyId, nodeId, node.name,
+      { decky_config: { ...(node.decky_config ?? {}), forwards_l3: nextValue } } as Partial<DeckyRow>,
+      live ? { force: true } : undefined,
+    );
+    // Optimistic local update — pending path returns 'applied'
+    // synchronously; active path returns 'enqueued' and the
+    // mutation.applied SSE will refetch shortly.  Either way, paint
+    // the change immediately so the toggle feels responsive.
+    setNodes((prev) => prev.map((n) =>
+      n.id === nodeId && n.kind === 'decky'
+        ? {
+          ...n,
+          decky_config: { ...(n.decky_config ?? {}), forwards_l3: nextValue },
+        }
+        : n,
+    ));
+    if (r.kind === 'enqueued') {
+      pushToast({
+        tone: 'violet',
+        text: `Gateway ${nextValue ? 'promotion' : 'demotion'} queued — base recreate in flight.`,
+      });
+    }
+  }, [editor, nodes, pushToast, topoStatus, topologyId]);
 
   /* ── Palette drop — create LANs / deckies / services via REST ─── */
   const onPaletteDrop = useCallback(
     async (drag: PaletteDrag, world: { x: number; y: number }, overNetId: string | null, overNodeId: string | null) => {
       if (!topologyId) return;
-
       if (drag.kind === 'network-subnet' || drag.kind === 'network-dmz') {
-        const isDmz = drag.kind === 'network-dmz';
-        if (isDmz && nets.some((n) => n.kind === 'dmz')) {
-          flashErr(null, 'topology already has a DMZ');
-          return;
-        }
-        // Append to the 3-col grid matching adaptTopology. Counting
-        // existing nets PLUS any pending placeholders (live-topology
-        // enqueued mutations that haven't echoed through SSE yet)
-        // keeps successive drops from stacking on the same cell.
-        const w = 300, h = 240;
-        const GAP = 40, COLS = 3;
-        const i = nets.filter((n) => n.kind !== 'internet').length;
-        const x = GAP + (i % COLS) * (w + GAP);
-        const y = GAP + Math.floor(i / COLS) * (h + GAP);
-        const name = isDmz ? `dmz-${hex4()}` : `subnet-${hex4()}`;
-        try {
-          const subnet = await api.getNextSubnet().catch(() => undefined);
-          const lanRes = await editor.createLan(topologyId, { name, is_dmz: isDmz, x, y, ...(subnet ? { subnet } : {}) });
-          if (lanRes.kind !== 'applied') {
-            // Live topology: mutator will materialise the LAN. Drop
-            // a placeholder net so the grid index advances and the
-            // user gets an immediate visual ack. Real LAN arriving
-            // via SSE replaces the placeholder by id when its
-            // canonical id lands; until then, the temp id is unique.
-            const tempId = `pending-lan-${name}`;
-            setNets((p) => [...p, {
-              id: tempId, name, label: name.toUpperCase(),
-              cidr: subnet ?? '', kind: isDmz ? 'dmz' : 'subnet',
-              x, y, w, h, pending: true,
-            }]);
-            return;
-          }
-          const lan = lanRes.data;
-          const net: Net = {
-            id: lan.id, name: lan.name, label: lan.name.toUpperCase(), cidr: lan.subnet,
-            kind: isDmz ? 'dmz' : 'subnet', x, y, w, h,
-          };
-          setNets((p) => [...p, net]);
-
-          if (isDmz) {
-            const gwName = `dmz-gateway-${hex4()}`;
-            const gwRes = await editor.addDeckyToLan(
-              topologyId,
-              { name: gwName, services: ['ssh'], x: 20, y: 40,
-                decky_config: { archetype: 'deaddeck', forwards_l3: true } },
-              lan.id, lan.name,
-              { is_bridge: true, forwards_l3: true },
-            );
-            if (gwRes.kind !== 'applied') return;
-            const gw = gwRes.data;
-            const gwNode: DeckyNode = {
-              kind: 'decky', id: gw.uuid, netId: lan.id, name: gw.name,
-              archetype: 'deaddeck', services: ['ssh'], status: 'idle',
-              x: 20, y: 40, decky_config: { forwards_l3: true },
-            };
-            setNodes((p) => [...p, gwNode]);
-          }
-        } catch (err) {
-          flashErr(err, 'create network failed');
-        }
-        return;
-      }
-
-      if (drag.kind === 'archetype') {
-        if (!overNetId) return;
-        const net = nets.find((n) => n.id === overNetId);
-        if (!net) return;
-        const arch = archetypes.find((a) => a.slug === drag.slug);
-        const archSlug = drag.slug;
-        const dServices = drag.services ?? arch?.services ?? [];
-        const nx = Math.max(8, Math.round(world.x - net.x - 70));
-        const ny = Math.max(28, Math.round(world.y - net.y - 24));
-        const name = `decky-${hex4()}`;
-        try {
-          const dRes = await editor.addDeckyToLan(
-            topologyId,
-            { name, services: dServices, x: nx, y: ny,
-              decky_config: { archetype: archSlug } },
-            overNetId, net.name,
-          );
-          if (dRes.kind !== 'applied') return;
-          const decky = dRes.data;
-          const node: DeckyNode = {
-            kind: 'decky', id: decky.uuid, netId: overNetId, name: decky.name,
-            archetype: archSlug, services: dServices, status: 'idle', x: nx, y: ny,
-          };
-          setNodes((p) => [...p, node]);
-        } catch (err) {
-          flashErr(err, 'create decky failed');
-        }
-        return;
-      }
-
-      if (drag.kind === 'service') {
-        if (!overNodeId) return;
-        const target = nodes.find((n) => n.id === overNodeId);
-        if (!target || target.kind !== 'decky') return;
-        if (target.services.includes(drag.slug)) return;
-        const nextServices = [...target.services, drag.slug];
-        try {
-          const r = await editor.updateDecky(topologyId, overNodeId, target.name, { services: nextServices });
-          if (r.kind !== 'applied') return;
-          setNodes((p) => p.map((n) => n.id === overNodeId && n.kind === 'decky'
-            ? { ...n, services: nextServices }
-            : n));
-        } catch (err) {
-          flashErr(err, 'update services failed');
-        }
+        await _dropNetwork(drag, topologyId, nets, api, editor, setNets, setNodes, flashErr);
+      } else if (drag.kind === 'archetype' && overNetId) {
+        await _dropArchetype(drag, world, overNetId, topologyId, nets, archetypes, editor, setNodes, flashErr);
+      } else if (drag.kind === 'service' && overNodeId) {
+        await _dropService(drag, overNodeId, topologyId, nodes, topoStatus, requestAddService, editor, setNodes, flashErr);
       }
     },
-    [api, archetypes, editor, flashErr, nets, nodes, topologyId],
+    [api, archetypes, editor, flashErr, nets, nodes, topologyId, topoStatus, requestAddService],
   );
 
   /* ── Cross-net reparent via node drag (detach + attach edge) ─── */
@@ -377,7 +488,7 @@ const MazeNET: React.FC = () => {
   const duplicateNode = async (id: string) => {
     const n = nodes.find((x) => x.id === id);
     if (!n || n.kind !== 'decky') return;
-    const name = `${n.name.replace(/-[0-9a-f]{4}$/, '')}-${hex4()}`;
+    const name = `${n.name.replace(/-[0-9a-f]{4}$/, '')}-${tempIdSuffix()}`;
     try {
       const parentNet = nets.find((net) => net.id === n.netId);
       const dRes = await editor.addDeckyToLan(
@@ -402,6 +513,20 @@ const MazeNET: React.FC = () => {
   const removeServiceFromNode = async (id: string, slug: string) => {
     const n = nodes.find((x) => x.id === id);
     if (!n || n.kind !== 'decky' || !n.services.includes(slug)) return;
+    // Same routing rule as the palette drop: active/degraded topologies
+    // hit the live W3 endpoint so the chip disappears immediately and
+    // the container stops; pending topologies queue through the
+    // design-time mutator.
+    const live = topoStatus === 'active' || topoStatus === 'degraded';
+    if (live) {
+      try {
+        await liveRemoveService(n.name, slug);
+        setSelection(null);
+      } catch (err) {
+        flashErr(err, 'remove service failed');
+      }
+      return;
+    }
     const nextServices = n.services.filter((s) => s !== slug);
     try {
       const r = await editor.updateDecky(topologyId, id, n.name, { services: nextServices });
@@ -486,7 +611,7 @@ const MazeNET: React.FC = () => {
     const archetypeSubmenu: MenuItem[] = archetypes.map((a) => ({
       label: a.name, icon: <Server size={12} />,
       onClick: async () => {
-        const name = `decky-${hex4()}`;
+        const name = `decky-${tempIdSuffix()}`;
         try {
           const dRes = await editor.addDeckyToLan(
             topologyId,
@@ -621,6 +746,22 @@ const MazeNET: React.FC = () => {
       || event.name === 'mutation.failed'
       || event.name === 'status') {
       refetch();
+    }
+    // Live service mutations from another tab / admin: optimistically
+    // patch local state so the chip set reflects shape without a full
+    // re-hydrate.  The post-mutation services list lives on the
+    // payload; same shape the actor's POST/DELETE response carries.
+    if (event.name === 'decky.service_added'
+      || event.name === 'decky.service_removed') {
+      const p = event.payload ?? {};
+      const deckyName = typeof p.decky_name === 'string' ? p.decky_name : null;
+      const services = Array.isArray(p.services) ? p.services as string[] : null;
+      if (deckyName && services) {
+        setNodes((prev) => prev.map((n) => n.kind === 'decky' && n.name === deckyName
+          ? { ...n, services } : n));
+        setStreamLive(true);
+        setLastEventAt(new Date());
+      }
     }
   }, [refetch]);
   const onStreamError = useCallback(() => { setStreamLive(false); }, []);
@@ -789,12 +930,30 @@ const MazeNET: React.FC = () => {
           nets={nets}
           nodes={nodes}
           edges={edges}
+          topologyId={topologyId || undefined}
           topologyStatus={topoStatus}
           onClose={() => setInspectorOpen(false)}
           onDeleteNet={removeNet}
           onDeleteNode={removeNode}
           onDeleteEdge={removeEdge}
           onRemoveService={removeServiceFromNode}
+          availableServices={serviceRegistry.perDecky}
+          onLiveAddService={requestAddService}
+          onLiveRemoveService={liveRemoveService}
+          onToggleGateway={toggleGateway}
+          onLiveTarpitEnable={async (nodeName, ports, delayMs) => {
+            await axios.post(
+              `/topologies/${encodeURIComponent(topologyId)}/deckies/${encodeURIComponent(nodeName)}/tarpit`,
+              { ports, delay_ms: delayMs },
+            );
+            pushToast({ text: `TARPIT ON · ${nodeName.toUpperCase()} · ${ports.join(',')} / ${delayMs >= 1000 ? `${delayMs / 1000}s` : `${delayMs}ms`}`, tone: 'matrix', icon: 'shield' });
+          }}
+          onLiveTarpitDisable={async (nodeName) => {
+            await axios.delete(
+              `/topologies/${encodeURIComponent(topologyId)}/deckies/${encodeURIComponent(nodeName)}/tarpit`,
+            );
+            pushToast({ text: `TARPIT OFF · ${nodeName.toUpperCase()}`, tone: 'matrix', icon: 'shield' });
+          }}
           onAddDecky={(netId) => {
             const net = nets.find((n) => n.id === netId);
             if (!net) return;
@@ -809,6 +968,11 @@ const MazeNET: React.FC = () => {
           className={inspectorOpen ? '' : 'collapsed'}
         />
       </div>
+      <AddServiceConfigModal
+        pending={pendingAddSvc}
+        onCancel={() => setPendingAddSvc(null)}
+        onConfirm={confirmAddService}
+      />
     </div>
   );
 };

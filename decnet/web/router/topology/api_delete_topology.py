@@ -36,11 +36,11 @@ async def api_delete_topology(
     topo = await repo.get_topology(topology_id)
     if topo is None:
         raise HTTPException(status_code=404, detail="Topology not found")
-    if topo["status"] not in _DELETABLE:
+    if topo.status not in _DELETABLE:
         raise HTTPException(
             status_code=409,
             detail=(
-                f"Topology is {topo['status']!r}; teardown to 'torn_down' "
+                f"Topology is {topo.status!r}; teardown to 'torn_down' "
                 f"before delete."
             ),
         )

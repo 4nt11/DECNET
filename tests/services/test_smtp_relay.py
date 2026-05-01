@@ -10,6 +10,7 @@ def test_smtp_relay_compose_fragment():
 
     assert fragment["container_name"] == "test-decky-smtp_relay"
     assert fragment["environment"]["SMTP_OPEN_RELAY"] == "1"
+    assert fragment["environment"]["SMTP_SERVICE_NAME"] == "smtp_relay"
     assert fragment["environment"]["LOG_TARGET"] == "log-server"
 
 def test_smtp_relay_custom_cfg():
@@ -26,6 +27,29 @@ def test_smtp_relay_dockerfile_context():
     ctx = svc.dockerfile_context()
     assert ctx.name == "smtp"
     assert ctx.is_dir()
+
+
+def test_smtp_relay_upstream_cfg_not_in_container_env():
+    """Upstream relay config is stored in decky_config and consumed by the
+    realism worker — it must NOT be injected into the container environment
+    (credentials don't belong in container env vars)."""
+    svc = SMTPRelayService()
+    fragment = svc.compose_fragment(
+        "test-decky",
+        service_cfg={
+            "upstream_host": "smtp.sendgrid.net",
+            "upstream_port": 587,
+            "upstream_user": "apikey",
+            "upstream_pass": "SG.secret",
+            "probe_limit": 2,
+        },
+    )
+    env = fragment["environment"]
+    assert "SMTP_UPSTREAM_HOST" not in env
+    assert "SMTP_UPSTREAM_PORT" not in env
+    assert "SMTP_UPSTREAM_USER" not in env
+    assert "SMTP_UPSTREAM_PASS" not in env
+    assert "SMTP_PROBE_LIMIT" not in env
 
 
 def test_smtp_relay_quarantine_bind_mount():

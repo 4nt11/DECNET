@@ -114,6 +114,11 @@ DECNET_SWARM_MASTER_HOST: str | None = os.environ.get("DECNET_SWARM_MASTER_HOST"
 DECNET_HOST_UUID: str | None = os.environ.get("DECNET_HOST_UUID")
 DECNET_MASTER_HOST: str | None = os.environ.get("DECNET_MASTER_HOST")
 DECNET_SWARMCTL_PORT: int = _port("DECNET_SWARMCTL_PORT", 8770)
+# Bind address for the master-side swarm controller. Loopback by default —
+# operators flip to 0.0.0.0 (or a specific NIC) on production masters where
+# workers heartbeat in over mTLS from other hosts. Seeded by [swarm]
+# swarmctl-host in /etc/decnet/decnet.ini.
+DECNET_SWARMCTL_HOST: str = os.environ.get("DECNET_SWARMCTL_HOST", "127.0.0.1")
 
 # Ingester batching: how many log rows to accumulate per commit, and the
 # max wait (ms) before flushing a partial batch. Larger batches reduce

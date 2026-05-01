@@ -63,6 +63,16 @@ from .deploy import (
     MutateIntervalRequest,
     PurgeResponse,
 )
+from .decky import (
+    DeckyFileDeleteRequest,
+    DeckyFileDropRequest,
+    DeckyServiceAddRequest,
+    DeckyServiceConfigRequest,
+    DeckyServiceConfigResponse,
+    DeckyServicesResponse,
+    ServiceConfigFieldDTO,
+    ServiceSchemaResponse,
+)
 from .fleet import (
     LOCAL_HOST_SENTINEL,
     FleetDecky,
@@ -169,6 +179,12 @@ from .workers import (
     WorkersResponse,
     WorkerStatus,
 )
+from .tarpit import (
+    TarpitEnableRequest,
+    TarpitRule,
+    TarpitRuleResponse,
+    TarpitStatusResponse,
+)
 
 __all__ = [
     # _base
@@ -222,7 +238,15 @@ __all__ = [
     "PurgeResponse",
     # fleet
     "LOCAL_HOST_SENTINEL",
+    "DeckyFileDeleteRequest",
+    "DeckyFileDropRequest",
+    "DeckyServiceAddRequest",
+    "DeckyServiceConfigRequest",
+    "DeckyServiceConfigResponse",
+    "DeckyServicesResponse",
     "FleetDecky",
+    "ServiceConfigFieldDTO",
+    "ServiceSchemaResponse",
     # health
     "ComponentHealth",
     "HealthResponse",
@@ -316,4 +340,9 @@ __all__ = [
     "WorkerControlResponse",
     "WorkersResponse",
     "WorkerStatus",
+    # tarpit
+    "TarpitEnableRequest",
+    "TarpitRule",
+    "TarpitRuleResponse",
+    "TarpitStatusResponse",
 ]

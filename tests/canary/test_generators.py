@@ -9,11 +9,30 @@ the artifact" property.
 from __future__ import annotations
 
 import re
+import shutil
+from pathlib import Path
 
 import pytest
 
 from decnet.canary import CanaryContext, get_generator
 from decnet.canary.factory import KNOWN_GENERATORS
+
+# fingerprint_* generators shell out to javascript-obfuscator via Node.
+# Skip those parametrized cases when the toolchain isn't installed so a
+# bare CI checkout doesn't fail before `npm install` runs.
+_NEEDS_NODE = {"fingerprint_html", "fingerprint_svg"}
+
+
+def _node_toolchain_ready() -> bool:
+    if shutil.which("node") is None:
+        return False
+    canary_dir = Path(__file__).resolve().parents[2] / "decnet" / "canary"
+    return (canary_dir / "node_modules" / "javascript-obfuscator").is_dir()
+
+
+def _maybe_skip(name: str) -> None:
+    if name in _NEEDS_NODE and not _node_toolchain_ready():
+        pytest.skip(f"{name} requires node + javascript-obfuscator")
 
 
 def _ctx(**kw) -> CanaryContext:
@@ -29,6 +48,7 @@ def _ctx(**kw) -> CanaryContext:
 
 @pytest.mark.parametrize("name", KNOWN_GENERATORS)
 def test_generator_is_deterministic(name: str) -> None:
+    _maybe_skip(name)
     g = get_generator(name)
     a = g.generate(_ctx())
     b = g.generate(_ctx())
@@ -184,5 +204,7 @@ def test_artifacts_carry_notes() -> None:
     # check what we did before the file lands. Empty notes would mean
     # the operator is staring at opaque bytes.
     for name in KNOWN_GENERATORS:
+        if name in _NEEDS_NODE and not _node_toolchain_ready():
+            continue
         art = get_generator(name).generate(_ctx())
         assert art.notes, f"{name} produced no notes"

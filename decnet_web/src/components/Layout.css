@@ -346,3 +346,8 @@
   padding: 32px;
   overflow-y: auto;
 }
+
+/* Dashboard fills the viewport without scrolling — panels scroll internally */
+.content-viewport:has(> .dashboard > .dash-grid) {
+  overflow: hidden;
+}

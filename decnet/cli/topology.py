@@ -233,8 +233,8 @@ def _delete(
         topo = await repo.get_topology(topology_id)
         if topo is None:
             return False, "not-found"
-        if topo["status"] in _RUNNING:
-            return False, str(topo["status"])
+        if topo.status in _RUNNING:
+            return False, str(topo.status)
         ok = await repo.delete_topology_cascade(topology_id)
         return ok, None
 

@@ -1,6 +1,6 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { useSearchParams, useNavigate } from 'react-router-dom';
-import { Search, ChevronLeft, ChevronRight, Users } from '../icons';
+import { Search, ChevronLeft, ChevronRight, Users, Download } from '../icons';
 import api from '../utils/api';
 import EmptyState from './EmptyState/EmptyState';
 import { useFocusSearch } from '../hooks/useFocusSearch';
@@ -63,6 +63,8 @@ const Attackers: React.FC = () => {
   const query = searchParams.get('q') || '';
   const sortBy = searchParams.get('sort_by') || 'recent';
   const serviceFilter = searchParams.get('service') || '';
+  const activityFilter = searchParams.get('activity') || '';
+  const countryFilter = searchParams.get('country') || '';
   const page = parseInt(searchParams.get('page') || '1');
 
   const [attackers, setAttackers] = useState<AttackerEntry[]>([]);
@@ -96,7 +98,10 @@ const Attackers: React.FC = () => {
   useEffect(() => { setSearchInput(query); }, [query]);
 
   const _params = (overrides: Record<string, string> = {}) => {
-    const base: Record<string, string> = { q: query, sort_by: sortBy, service: serviceFilter, page: '1' };
+    const base: Record<string, string> = {
+      q: query, sort_by: sortBy, service: serviceFilter,
+      activity: activityFilter, country: countryFilter, page: '1',
+    };
     return Object.fromEntries(Object.entries({ ...base, ...overrides }).filter(([, v]) => v !== ''));
   };
 
@@ -107,19 +112,49 @@ const Attackers: React.FC = () => {
   const setPage = (p: number) => setSearchParams(_params({ page: p.toString() }));
   const setSort = (s: string) => setSearchParams(_params({ sort_by: s }));
   const clearService = () => setSearchParams(_params({ service: '' }));
+  const setActivity = (a: string) => setSearchParams(_params({ activity: activityFilter === a ? '' : a }));
+  const setCountry = (c: string) => setSearchParams(_params({ country: countryFilter === c ? '' : c }));
 
   const totalPages = Math.max(1, Math.ceil(total / limit));
+
+  const handleExport = async () => {
+    try {
+      const res = await api.get('/attackers/export', { responseType: 'blob' });
+      const disposition: string = res.headers['content-disposition'] || '';
+      const match = disposition.match(/filename="([^"]+)"/);
+      const filename = match ? match[1] : 'decnet-export.json';
+      const url = URL.createObjectURL(new Blob([res.data], { type: 'application/json' }));
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = filename;
+      a.click();
+      URL.revokeObjectURL(url);
+    } catch (err) {
+      console.error('Export failed', err);
+    }
+  };
 
   const activityCounts = attackers.reduce(
     (acc, a) => { acc[deriveActivity(a)]++; return acc; },
     { active: 0, passive: 0, inactive: 0 } as Record<ActivityTier, number>,
   );
 
+  const countries = [...new Set(attackers.map(a => a.country_code).filter(Boolean))].sort() as string[];
+
+  const visibleAttackers = attackers.filter(a => {
+    if (activityFilter && deriveActivity(a) !== activityFilter) return false;
+    if (countryFilter && a.country_code !== countryFilter) return false;
+    return true;
+  });
+
   return (
     <div className="attackers-root">
       <div className="page-header">
         <div className="page-title-group">
-          <h1>ATTACKERS</h1>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+            <Users size={22} className="violet-accent" />
+            <h1>ATTACKERS</h1>
+          </div>
           <span className="page-sub">
             {total.toLocaleString()} UNIQUE SOURCES · {activityCounts.active} ACTIVE · {activityCounts.passive} PASSIVE · {activityCounts.inactive} INACTIVE
           </span>
@@ -132,7 +167,7 @@ const Attackers: React.FC = () => {
           <input
             ref={searchRef}
             type="text"
-            placeholder="Search by IP..."
+            placeholder="Search IP, ASN, country, org…"
             value={searchInput}
             onChange={(e) => setSearchInput(e.target.value)}
           />
@@ -143,6 +178,39 @@ const Attackers: React.FC = () => {
           <option value="traversals">TRAVERSALS</option>
         </select>
       </form>
+
+      <div className="ak-filter-row">
+        <div className="seg-group" role="tablist">
+          <button type="button" className={!activityFilter ? 'active' : ''} onClick={() => setActivity('')}>
+            ALL
+          </button>
+          {(['active', 'passive', 'inactive'] as ActivityTier[]).map(tier => (
+            <button
+              key={tier}
+              type="button"
+              className={activityFilter === tier ? 'active' : ''}
+              onClick={() => setActivity(tier)}
+            >
+              <span className={`ak-dot ak-dot-${tier}`} />
+              {tier.toUpperCase()}{activityCounts[tier] > 0 ? ` ${activityCounts[tier]}` : ''}
+            </button>
+          ))}
+        </div>
+        {countries.length > 0 && (
+          <div className="seg-group" role="tablist">
+            {countries.map(cc => (
+              <button
+                key={cc}
+                type="button"
+                className={countryFilter === cc ? 'active' : ''}
+                onClick={() => setCountry(cc)}
+              >
+                {cc}
+              </button>
+            ))}
+          </div>
+        )}
+      </div>
 
       <div className="logs-section">
         <div className="section-header">
@@ -160,6 +228,16 @@ const Attackers: React.FC = () => {
             )}
           </div>
           <div className="section-actions">
+            <button
+              type="button"
+              className="btn btn-ghost"
+              onClick={handleExport}
+              title="Export all threat data as JSON"
+              style={{ display: 'flex', alignItems: 'center', gap: 6 }}
+            >
+              <Download size={13} />
+              EXPORT
+            </button>
             <div className="pager">
               <span className="dim">Page {page} of {totalPages}</span>
               <button disabled={page <= 1} onClick={() => setPage(page - 1)} aria-label="Previous page">
@@ -182,7 +260,7 @@ const Attackers: React.FC = () => {
           />
         ) : (
           <div className="ak-grid">
-            {attackers.map(a => {
+            {visibleAttackers.map(a => {
               const activity = deriveActivity(a);
               const lastCmd = a.commands.length > 0 ? a.commands[a.commands.length - 1] : null;
               return (

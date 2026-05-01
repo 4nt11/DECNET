@@ -100,6 +100,12 @@ class CanaryToken(SQLModel, table=True):
     uuid: str = Field(default_factory=lambda: str(uuid4()), primary_key=True)
     kind: str = Field(index=True)  # CanaryKind literal at the API layer
     decky_name: str = Field(index=True)  # FleetDecky.name; no FK (composite PK)
+    # When NULL, the token is on a fleet decky (decky_name resolves to
+    # ``<name>-ssh``).  When set, it points at a MazeNET topology — the
+    # planter resolves the container via :func:`resolve_topology_container`.
+    # No FK: topologies are mutable and we don't want a row to vanish on
+    # cascade; the row is the historical record of placement.
+    topology_id: Optional[str] = Field(default=None, index=True)
     blob_uuid: Optional[str] = Field(
         default=None, foreign_key="canary_blobs.uuid", index=True,
     )
@@ -126,6 +132,12 @@ class CanaryToken(SQLModel, table=True):
     last_error: Optional[str] = Field(
         default=None, sa_column=Column("last_error", Text, nullable=True),
     )
+    # 16-hex HMAC nonce embedded in fingerprint canary JS payloads. NULL for
+    # all non-fingerprint generators. Derived at mint time from
+    # HMAC-SHA256(DECNET_CANARY_FINGERPRINT_SECRET, callback_token + mint_uuid)
+    # truncated to 16 chars; the worker validates incoming ?n= against this
+    # value to reject slug-only fingerprint spoofs.
+    fingerprint_nonce: Optional[str] = Field(default=None, max_length=16)
 
 
 class CanaryTrigger(SQLModel, table=True):
@@ -188,6 +200,10 @@ class CanaryTokenCreateRequest(BaseModel):
     router so the 400 carries a clear detail message.
     """
     decky_name: str = PydanticField(..., min_length=1)
+    # When set, ``decky_name`` is interpreted as a MazeNET topology decky
+    # name; the server validates membership and resolves the container
+    # accordingly.  Absent ⇒ fleet semantics (today's behavior).
+    topology_id: Optional[str] = None
     kind: CanaryKind
     placement_path: str = PydanticField(..., min_length=1)
     blob_uuid: Optional[str] = None
@@ -202,6 +218,7 @@ class CanaryTokenResponse(BaseModel):
     uuid: str
     kind: CanaryKind
     decky_name: str
+    topology_id: Optional[str] = None
     blob_uuid: Optional[str]
     instrumenter: Optional[str]
     generator: Optional[str]

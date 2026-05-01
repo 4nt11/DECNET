@@ -9,7 +9,7 @@ from decnet.geoip.base import Provider
 from decnet.geoip.lookup import Lookup
 from decnet.geoip.paths import ensure_root
 from decnet.geoip.rir.fetch import RIR_SOURCES, fetch_all
-from decnet.geoip.rir.parse import parse_file
+from decnet.geoip.rir.parse import Range, parse_file
 
 logger = logging.getLogger("decnet.geoip.rir.provider")
 
@@ -45,7 +45,7 @@ class RirProvider(Provider):
             except Exception as exc:
                 logger.warning("geoip.rir: cache load failed, rebuilding: %s", exc)
 
-        ranges = []
+        ranges: list[Range] = []
         for path in self.data_paths():
             if not path.exists():
                 continue

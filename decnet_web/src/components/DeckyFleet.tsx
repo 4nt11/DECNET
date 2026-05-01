@@ -1,12 +1,21 @@
-import React, { useEffect, useMemo, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   Cpu, Database, Globe, Monitor, Network, PlusCircle, PowerOff,
-  RefreshCw, Server, Shield, Terminal,
+  RefreshCw, Server, Shield, Terminal, Plus, X,
 } from '../icons';
-import api from '../utils/api';
+import { useEscapeKey } from '../hooks/useEscapeKey';
+import api, { type ApiError } from '../utils/api';
 import { ARCHETYPES as FALLBACK_ARCHETYPES, DEFAULT_SERVICES } from './MazeNET/data';
 import { useToast } from './Toasts/useToast';
 import Modal from './Modal/Modal';
+import { useServiceRegistry } from '../hooks/useServiceRegistry';
+import ServiceConfigForm from './ServiceConfigForm';
+import AddServiceConfigModal from './AddServiceConfigModal';
+import ServiceConfigFields, {
+  type FormState as SvcFormState,
+  type ServiceConfigFieldDTO as SvcFieldDTO,
+  compactPayload as svcCompactPayload,
+} from './ServiceConfigFields';
 import './DeckyFleet.css';
 
 // ─── Types ────────────────────────────────────────────────────────────────
@@ -117,6 +126,124 @@ const _stateColor = (state: string): string => {
   }
 };
 
+// ─── Decky inspect panel ─────────────────────────────────────────────────
+
+interface DeckyInspectPanelProps {
+  decky: Decky;
+  onClose: () => void;
+}
+
+const DeckyInspectPanel: React.FC<DeckyInspectPanelProps> = ({ decky, onClose }) => {
+  useEscapeKey(onClose, true);
+  const status = _dotFor(decky);
+
+  useEffect(() => {
+    const prev = document.body.style.overflow;
+    document.body.style.overflow = 'hidden';
+    return () => { document.body.style.overflow = prev; };
+  }, []);
+
+  const fmtDate = (ts: number | string | null | undefined) => {
+    if (!ts) return '—';
+    const d = typeof ts === 'number' ? new Date(ts * 1000) : new Date(ts);
+    return isNaN(d.getTime()) ? String(ts) : d.toLocaleString();
+  };
+
+  return (
+    <div
+      onClick={onClose}
+      style={{
+        position: 'fixed', inset: 0,
+        backgroundColor: 'rgba(0,0,0,0.55)',
+        display: 'flex', justifyContent: 'flex-end',
+        zIndex: 1200,
+      }}
+    >
+      <div
+        onClick={(e) => e.stopPropagation()}
+        style={{
+          width: 360,
+          background: 'var(--secondary-color)',
+          borderLeft: '1px solid var(--border)',
+          display: 'flex', flexDirection: 'column',
+          height: '100%',
+          overflowY: 'auto',
+        }}
+      >
+        <div style={{
+          display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+          padding: '16px 20px',
+          borderBottom: '1px solid var(--border)',
+          gap: 12,
+        }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+            <span className={`status-dot ${status}`} />
+            <span style={{ fontWeight: 700, letterSpacing: 3, fontSize: '0.95rem', color: 'var(--matrix)' }}>
+              {decky.name}
+            </span>
+          </div>
+          <button
+            onClick={onClose}
+            style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--dim-color)', padding: 4 }}
+          >
+            <X size={16} />
+          </button>
+        </div>
+
+        <div style={{ padding: '16px 20px', display: 'flex', flexDirection: 'column', gap: 14 }}>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+            {[
+              ['IP', decky.ip],
+              ['HOSTNAME', decky.hostname],
+              ['DISTRO', decky.distro],
+              ['ARCHETYPE', decky.archetype],
+              ['LAST MUTATED', fmtDate(decky.last_mutated)],
+              ['MUTATE INTERVAL', decky.mutate_interval != null ? `${decky.mutate_interval}s` : '—'],
+            ].map(([label, val]) => val ? (
+              <div key={label} style={{ display: 'flex', gap: 10, fontSize: '0.78rem' }}>
+                <span style={{ minWidth: 130, opacity: 0.45, letterSpacing: 1 }}>{label}</span>
+                <span style={{ color: 'var(--matrix)', wordBreak: 'break-all' }}>{val}</span>
+              </div>
+            ) : null)}
+          </div>
+
+          {decky.services.length > 0 && (
+            <div>
+              <div style={{ fontSize: '0.65rem', opacity: 0.45, letterSpacing: 1.5, marginBottom: 8 }}>SERVICES</div>
+              <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
+                {decky.services.map(svc => (
+                  <span key={svc} className="chip violet" style={{ fontSize: '0.65rem' }}>{svc}</span>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {decky.swarm && (
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 8, paddingTop: 8, borderTop: '1px solid var(--border)' }}>
+              <div style={{ fontSize: '0.65rem', opacity: 0.45, letterSpacing: 1.5, marginBottom: 2 }}>SWARM</div>
+              {[
+                ['HOST', decky.swarm.host_name],
+                ['ADDRESS', decky.swarm.host_address],
+                ['STATE', decky.swarm.state],
+                ['LAST SEEN', fmtDate(decky.swarm.last_seen)],
+                ['ERROR', decky.swarm.last_error],
+              ].map(([label, val]) => val ? (
+                <div key={label} style={{ display: 'flex', gap: 10, fontSize: '0.78rem' }}>
+                  <span style={{ minWidth: 130, opacity: 0.45, letterSpacing: 1 }}>{label}</span>
+                  <span style={{
+                    color: label === 'STATE' ? _stateColor(val) : label === 'ERROR' ? 'var(--alert)' : 'var(--matrix)',
+                    wordBreak: 'break-all',
+                  }}>{val}</span>
+                </div>
+              ) : null)}
+            </div>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+};
+
 // ─── Decky card ───────────────────────────────────────────────────────────
 
 interface DeckyCardProps {
@@ -130,16 +257,140 @@ interface DeckyCardProps {
   onIntervalChange: (name: string, current: number | null) => void;
   onInspect: (d: Decky) => void;
   innerRef?: React.Ref<HTMLDivElement>;
+  /** Per-decky-eligible service slugs from useServiceRegistry. */
+  availableServices: string[];
+  /** Called after a successful live add/remove so the parent can
+   * optimistically apply the response's services list. */
+  onServicesChanged: (deckyName: string, services: string[]) => void;
+  /** Called after a tarpit enable/disable with success or error text. */
+  onTarpitResult: (deckyName: string, ok: boolean, message: string) => void;
 }
 
 const DeckyCard: React.FC<DeckyCardProps> = ({
-  decky, mutating, isAdmin, armed, tdBusy, onForce, onTeardown, onIntervalChange, onInspect, innerRef,
+  decky, mutating, isAdmin, armed, tdBusy, onForce, onTeardown, onIntervalChange, onInspect,
+  innerRef, availableServices, onServicesChanged, onTarpitResult,
 }) => {
   const dot = _dotFor(decky);
   const hits = _hitsFor(decky);
   const hot = dot === 'hot';
   const dotClass = mutating ? 'mutating' : dot;
   const tdKey = decky.swarm ? `td:${decky.swarm.host_uuid}:${decky.name}` : '';
+
+  // Live service mutation is local-only (admin, non-swarm).  Swarm
+  // deckies live on a remote agent — the W3 path runs docker compose
+  // locally and won't reach the agent's containers (same gap as the
+  // canary planter has for agent-pinned topologies; out of scope here).
+  const liveServicesEnabled = isAdmin && !decky.swarm;
+  const [addOpen, setAddOpen] = useState(false);
+  const [addSlug, setAddSlug] = useState('');
+  const [busy, setBusy] = useState<string | null>(null);
+  const [opError, setOpError] = useState<string | null>(null);
+  const [openCfgSvc, setOpenCfgSvc] = useState<string | null>(null);
+  // Pending add — when non-null, AddServiceConfigModal is mounted and
+  // will either auto-fire onConfirm (no schema fields) or show the form.
+  const [pendingAdd, setPendingAdd] = useState<{ deckyName: string; slug: string } | null>(null);
+
+  // Tarpit controls — admin + non-swarm only (same gate as liveServicesEnabled)
+  const [tarpitMenuOpen, setTarpitMenuOpen] = useState(false);
+  const [tarpitFormOpen, setTarpitFormOpen] = useState(false);
+  const [tarpitBusy, setTarpitBusy] = useState(false);
+  const [tarpitPorts, setTarpitPorts] = useState('22');
+  const [tarpitDelayMs, setTarpitDelayMs] = useState(30000);
+  const tarpitMenuRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (!tarpitMenuOpen) return;
+    const handler = (e: MouseEvent) => {
+      if (tarpitMenuRef.current && !tarpitMenuRef.current.contains(e.target as Node)) {
+        setTarpitMenuOpen(false);
+      }
+    };
+    document.addEventListener('mousedown', handler);
+    return () => document.removeEventListener('mousedown', handler);
+  }, [tarpitMenuOpen]);
+
+  const enableTarpit = useCallback(async () => {
+    const ports = tarpitPorts
+      .split(',')
+      .map((p) => parseInt(p.trim(), 10))
+      .filter((p) => !isNaN(p) && p > 0 && p <= 65535);
+    if (ports.length === 0) return;
+    setTarpitBusy(true);
+    try {
+      await api.post(`/deckies/${encodeURIComponent(decky.name)}/tarpit`, {
+        ports,
+        delay_ms: tarpitDelayMs,
+      });
+      setTarpitFormOpen(false);
+      setTarpitMenuOpen(false);
+      onTarpitResult(decky.name, true, `TARPIT ON · ${decky.name.toUpperCase()} · ${ports.join(',')} / ${tarpitDelayMs}ms`);
+    } catch (err) {
+      const msg = (err as ApiError)?.response?.data?.detail ?? 'Tarpit enable failed';
+      onTarpitResult(decky.name, false, msg);
+    } finally {
+      setTarpitBusy(false);
+    }
+  }, [decky.name, tarpitPorts, tarpitDelayMs, onTarpitResult]);
+
+  const disableTarpit = useCallback(async () => {
+    setTarpitBusy(true);
+    setTarpitMenuOpen(false);
+    try {
+      await api.delete(`/deckies/${encodeURIComponent(decky.name)}/tarpit`);
+      onTarpitResult(decky.name, true, `TARPIT OFF · ${decky.name.toUpperCase()}`);
+    } catch (err) {
+      const msg = (err as ApiError)?.response?.data?.detail ?? 'Tarpit disable failed';
+      onTarpitResult(decky.name, false, msg);
+    } finally {
+      setTarpitBusy(false);
+    }
+  }, [decky.name, onTarpitResult]);
+
+  const removeService = async (slug: string) => {
+    setOpError(null);
+    setBusy(slug);
+    try {
+      const { data } = await api.delete<{ services: string[] }>(
+        `/deckies/${encodeURIComponent(decky.name)}/services/${encodeURIComponent(slug)}`,
+      );
+      onServicesChanged(decky.name, data.services);
+    } catch (err) {
+      const msg = (err as ApiError)?.response?.data?.detail
+        ?? 'Remove failed.';
+      setOpError(msg);
+    } finally {
+      setBusy(null);
+    }
+  };
+
+  const beginAdd = () => {
+    if (!addSlug) return;
+    setOpError(null);
+    setPendingAdd({ deckyName: decky.name, slug: addSlug });
+  };
+
+  const confirmAdd = async (deckyName: string, slug: string, cfg: Record<string, unknown>) => {
+    setBusy(slug);
+    try {
+      const { data } = await api.post<{ services: string[] }>(
+        `/deckies/${encodeURIComponent(deckyName)}/services`,
+        { name: slug, config: cfg },
+      );
+      onServicesChanged(deckyName, data.services);
+      setPendingAdd(null);
+      setAddOpen(false);
+      setAddSlug('');
+    } catch (err) {
+      // Re-raise so the modal can surface the error in its own status row.
+      // Also mirror onto opError for the inline picker case.
+      const msg = (err as ApiError)?.response?.data?.detail
+        ?? 'Add failed.';
+      setOpError(msg);
+      throw err;
+    } finally {
+      setBusy(null);
+    }
+  };
 
   return (
     <div
@@ -212,8 +463,102 @@ const DeckyCard: React.FC<DeckyCardProps> = ({
       <div>
         <div className="type-label" style={{ marginBottom: 6 }}>EXPOSED</div>
         <div className="decky-services">
-          {decky.services.map((s) => <span key={s} className="service-tag">{s}</span>)}
+          {decky.services.map((s) => (
+            <span key={s} className="service-tag" style={{ display: 'inline-flex', alignItems: 'center', gap: 4 }}>
+              {liveServicesEnabled ? (
+                <button
+                  type="button"
+                  className="svc-cfg-toggle-btn"
+                  title={`Configure ${s}`}
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    setOpenCfgSvc((cur) => (cur === s ? null : s));
+                  }}
+                >
+                  {s}
+                </button>
+              ) : (
+                <span>{s}</span>
+              )}
+              {liveServicesEnabled && (
+                <button
+                  type="button"
+                  title={`Remove ${s}`}
+                  disabled={busy === s}
+                  onClick={(e) => { e.stopPropagation(); removeService(s); }}
+                  style={{
+                    background: 'transparent', border: 'none', padding: 0,
+                    color: 'inherit', cursor: busy === s ? 'wait' : 'pointer',
+                    opacity: busy === s ? 0.4 : 0.7, lineHeight: 1,
+                  }}
+                >
+                  <X size={9} />
+                </button>
+              )}
+            </span>
+          ))}
+          {liveServicesEnabled && !addOpen && (
+            <button
+              type="button"
+              className="service-tag"
+              onClick={(e) => { e.stopPropagation(); setAddOpen(true); setAddSlug(''); }}
+              style={{ cursor: 'pointer', borderStyle: 'dashed' }}
+              title="Add service (live)"
+            >
+              <Plus size={10} /> ADD
+            </button>
+          )}
         </div>
+        {liveServicesEnabled && addOpen && (
+          <div
+            onClick={(e) => e.stopPropagation()}
+            style={{ display: 'flex', gap: 6, marginTop: 6, alignItems: 'center' }}
+          >
+            <select
+              value={addSlug}
+              onChange={(e) => setAddSlug(e.target.value)}
+              style={{
+                flex: 1, fontSize: '0.75rem', padding: '4px 6px',
+                background: 'rgba(255,255,255,0.04)',
+                border: '1px solid var(--border-color, #30363d)',
+                color: 'var(--text-color)',
+              }}
+            >
+              <option value="">— pick a service —</option>
+              {availableServices
+                .filter((s) => !decky.services.includes(s))
+                .map((s) => <option key={s} value={s}>{s}</option>)}
+            </select>
+            <button
+              type="button"
+              disabled={!addSlug || busy === addSlug}
+              onClick={beginAdd}
+              className="btn violet small"
+            >
+              {busy === addSlug ? 'ADDING' : 'ADD'}
+            </button>
+            <button
+              type="button"
+              onClick={() => { setAddOpen(false); setAddSlug(''); }}
+              className="btn small"
+            >
+              CANCEL
+            </button>
+          </div>
+        )}
+        {opError && (
+          <div className="alert-text" style={{ fontSize: '0.7rem', marginTop: 6 }}>{opError}</div>
+        )}
+        {liveServicesEnabled && openCfgSvc && decky.services.includes(openCfgSvc) && (
+          <div onClick={(e) => e.stopPropagation()}>
+            <ServiceConfigForm
+              key={`${decky.name}:${openCfgSvc}`}
+              deckyName={decky.name}
+              serviceSlug={openCfgSvc}
+              currentConfig={decky.service_config?.[openCfgSvc] ?? {}}
+            />
+          </div>
+        )}
       </div>
 
       <div className="decky-footer">
@@ -226,7 +571,7 @@ const DeckyCard: React.FC<DeckyCardProps> = ({
             {hits}
           </span>
         </span>
-        <div style={{ display: 'flex', gap: 6 }}>
+        <div style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
           {!decky.swarm && isAdmin && (
             <button
               className="btn violet small"
@@ -251,8 +596,100 @@ const DeckyCard: React.FC<DeckyCardProps> = ({
                 : armed === tdKey ? 'CONFIRM' : 'TEARDOWN'}
             </button>
           )}
+          {liveServicesEnabled && (
+            <div className="tarpit-menu-wrap" ref={tarpitMenuRef}>
+              <button
+                type="button"
+                className="btn small tarpit-menu-btn"
+                title="Tarpit controls"
+                disabled={tarpitBusy}
+                onClick={() => {
+                  setTarpitMenuOpen((o) => !o);
+                  setTarpitFormOpen(false);
+                }}
+              >
+                {tarpitBusy ? '…' : '⋮'}
+              </button>
+              {tarpitMenuOpen && (
+                <div className="tarpit-dropdown">
+                  <button
+                    type="button"
+                    className="tarpit-dropdown-item"
+                    onClick={() => {
+                      setTarpitMenuOpen(false);
+                      setTarpitFormOpen(true);
+                    }}
+                  >
+                    ENABLE TARPIT
+                  </button>
+                  <button
+                    type="button"
+                    className="tarpit-dropdown-item alert"
+                    onClick={() => void disableTarpit()}
+                  >
+                    DISABLE TARPIT
+                  </button>
+                </div>
+              )}
+            </div>
+          )}
         </div>
       </div>
+
+      {liveServicesEnabled && tarpitFormOpen && (
+        <div
+          className="tarpit-form"
+          onClick={(e) => e.stopPropagation()}
+        >
+          <div className="tarpit-form-row">
+            <label className="type-label" style={{ minWidth: 70 }}>PORTS</label>
+            <input
+              className="input"
+              value={tarpitPorts}
+              placeholder="22,80,443"
+              onChange={(e) => setTarpitPorts(e.target.value)}
+              style={{ flex: 1 }}
+            />
+          </div>
+          <div className="tarpit-form-row">
+            <label className="type-label" style={{ minWidth: 70 }}>DELAY</label>
+            <input
+              type="range"
+              min={100}
+              max={60000}
+              step={100}
+              value={tarpitDelayMs}
+              onChange={(e) => setTarpitDelayMs(parseInt(e.target.value, 10))}
+              style={{ flex: 1 }}
+            />
+            <span className="dim" style={{ fontSize: '0.7rem', minWidth: 52, textAlign: 'right' }}>
+              {tarpitDelayMs >= 1000 ? `${(tarpitDelayMs / 1000).toFixed(1)}s` : `${tarpitDelayMs}ms`}
+            </span>
+          </div>
+          <div style={{ display: 'flex', gap: 6, justifyContent: 'flex-end', marginTop: 4 }}>
+            <button
+              type="button"
+              className="btn small"
+              onClick={() => setTarpitFormOpen(false)}
+            >
+              CANCEL
+            </button>
+            <button
+              type="button"
+              className="btn alert small"
+              disabled={tarpitBusy || !tarpitPorts.trim()}
+              onClick={() => void enableTarpit()}
+            >
+              {tarpitBusy ? 'APPLYING…' : 'APPLY'}
+            </button>
+          </div>
+        </div>
+      )}
+      <AddServiceConfigModal
+        pending={pendingAdd}
+        onCancel={() => setPendingAdd(null)}
+        onConfirm={confirmAdd}
+      />
     </div>
   );
 };
@@ -281,10 +718,20 @@ const PLACEHOLDER_LINES = (
   `[OK]   ${count} deckies online — fleet size now ${fleetSize + count}`,
 ];
 
+// UTF-8-safe base64 encode (btoa alone breaks on non-ASCII).
+const _b64encodeUtf8 = (s: string): string => {
+  const bytes = new TextEncoder().encode(s);
+  let bin = '';
+  for (let i = 0; i < bytes.length; i++) bin += String.fromCharCode(bytes[i]);
+  return btoa(bin);
+};
+
 const _buildIni = (
   prefix: string, count: number, fleetSize: number,
   mode: PickMode, archetype: Archetype | null, services: string[],
   mutate: boolean, mutateEvery: number,
+  serviceConfigs: Record<string, Record<string, unknown>>,
+  serviceSchemas: Record<string, SvcFieldDTO[]>,
 ): string => {
   const lines: string[] = [];
   for (let i = 0; i < count; i++) {
@@ -296,6 +743,29 @@ const _buildIni = (
       lines.push(`services=${services.join(',')}`);
     }
     if (mutate) lines.push(`mutate_interval=${mutateEvery}`);
+    lines.push('');
+  }
+  // Per-service overrides emitted as [<prefix>.<svc>] group subsections.
+  // The INI loader (decnet/ini_loader.py) prefix-matches these onto every
+  // ``${prefix}-NN`` decky in the batch, so one block covers all clones.
+  for (const svc of services) {
+    const cfg = serviceConfigs[svc];
+    if (!cfg || Object.keys(cfg).length === 0) continue;
+    const fieldTypes: Record<string, SvcFieldDTO['type']> = {};
+    for (const f of serviceSchemas[svc] ?? []) fieldTypes[f.key] = f.type;
+    lines.push(`[${prefix}.${svc}]`);
+    for (const [k, v] of Object.entries(cfg)) {
+      // textarea values may contain newlines that ConfigParser can't carry
+      // on a single line; wrap them in `b64:` so validate_cfg decodes back
+      // to the original UTF-8 string. Other types are emitted raw.
+      let serialised: string;
+      if (fieldTypes[k] === 'textarea' && typeof v === 'string') {
+        serialised = `b64:${_b64encodeUtf8(v)}`;
+      } else {
+        serialised = typeof v === 'string' ? v : String(v);
+      }
+      lines.push(`${k}=${serialised}`);
+    }
     lines.push('');
   }
   return lines.join('\n');
@@ -315,6 +785,12 @@ const DeployWizard: React.FC<DeployWizardProps> = ({
   const [deploying, setDeploying] = useState(false);
   const [log, setLog] = useState<string[]>([]);
   const [deployErr, setDeployErr] = useState<string | null>(null);
+  // Per-service config dicts keyed by service slug.  Edits flow into
+  // the INI as [<decky>.<svc>] subsections at deploy time so the
+  // initial container build picks them up — no follow-up apply needed.
+  const [serviceConfigs, setServiceConfigs] = useState<Record<string, SvcFormState>>({});
+  const [serviceSchemas, setServiceSchemas] = useState<Record<string, SvcFieldDTO[]>>({});
+  const [openSvcCfg, setOpenSvcCfg] = useState<string | null>(null);
 
   useEffect(() => {
     if (!open) return;
@@ -329,6 +805,9 @@ const DeployWizard: React.FC<DeployWizardProps> = ({
     setDeploying(false);
     setLog([]);
     setDeployErr(null);
+    setServiceConfigs({});
+    setServiceSchemas({});
+    setOpenSvcCfg(null);
   }, [open]);
 
   const effectiveArchetypeName = archetype?.name
@@ -336,6 +815,20 @@ const DeployWizard: React.FC<DeployWizardProps> = ({
   const effectiveServices = pickMode === 'archetype'
     ? (archetype?.services ?? [])
     : selectedServices;
+
+  // Drop config for services no longer in the selection so the INI
+  // doesn't carry orphaned subsections, and auto-collapse the open
+  // panel if its service got removed.
+  useEffect(() => {
+    setServiceConfigs((prev) => {
+      const allowed = new Set(effectiveServices);
+      const next: Record<string, SvcFormState> = {};
+      for (const [k, v] of Object.entries(prev)) if (allowed.has(k)) next[k] = v;
+      return next;
+    });
+    setOpenSvcCfg((cur) => (cur && effectiveServices.includes(cur) ? cur : null));
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [effectiveServices.join('|')]);
 
   // Preview lines, count-aware (shows up to 6, with "…and N more" footer).
   const previewLines = useMemo(() => {
@@ -382,9 +875,23 @@ const DeployWizard: React.FC<DeployWizardProps> = ({
     setDeployOk(false);
     setDeployFailures([]);
     setDeploying(true);
+    // Roll the per-service forms into the compact payload the server
+    // expects — empty values dropped, types coerced where the schema
+    // already pulled in primitives.
+    const rolled: Record<string, Record<string, unknown>> = {};
+    for (const svc of effectiveServices) {
+      const fields = serviceSchemas[svc];
+      const state = serviceConfigs[svc];
+      if (!fields || !state) continue;
+      const compact = svcCompactPayload(fields, state);
+      if (Object.keys(compact).length > 0) rolled[svc] = compact;
+    }
+    const servicesForIni = pickMode === 'archetype'
+      ? (archetype?.services ?? [])
+      : selectedServices;
     const ini = _buildIni(
-      prefix, count, fleetSize, pickMode, archetype, selectedServices,
-      mutate, mutateEvery,
+      prefix, count, fleetSize, pickMode, archetype, servicesForIni,
+      mutate, mutateEvery, rolled, serviceSchemas,
     );
     try {
       const res = await api.post<{ failures?: { name: string; reason: string }[] }>(
@@ -556,19 +1063,52 @@ const DeployWizard: React.FC<DeployWizardProps> = ({
                 </div>
               </div>
 
-              <div className="tweak-group">
-                <label>PER-SERVICE OVERRIDES (k=v, one per line)</label>
-                <textarea
-                  className="input"
-                  rows={3}
-                  placeholder={'ssh.banner=OpenSSH_8.9p1\nhttp.server_name=nginx/1.24'}
-                  disabled
-                  style={{ resize: 'vertical', fontFamily: 'var(--font-mono)', opacity: 0.55 }}
-                />
-                <div className="dim" style={{ fontSize: '0.62rem', letterSpacing: '1px' }}>
-                  (placeholder — per-service configuration lands in a follow-up)
+              {effectiveServices.length > 0 && (
+                <div className="tweak-group">
+                  <label>PER-SERVICE CONFIG</label>
+                  <div className="dim" style={{ fontSize: '0.62rem', letterSpacing: 1, marginBottom: 6 }}>
+                    Click a service to set passwords, banners, response codes, TLS
+                    material — applied to every decky in this batch via INI
+                    subsections.
+                  </div>
+                  <div className="wizard-svc-list">
+                    {effectiveServices.map((svc) => {
+                      const open = openSvcCfg === svc;
+                      const overrideCount = Object.values(serviceConfigs[svc] ?? {})
+                        .filter((v) => v !== '' && v !== undefined && v !== null && v !== false)
+                        .length;
+                      return (
+                        <div key={svc} className="wizard-svc-block">
+                          <button
+                            type="button"
+                            className={`wizard-svc-toggle ${open ? 'open' : ''}`}
+                            onClick={() => setOpenSvcCfg(open ? null : svc)}
+                          >
+                            <span className="wizard-svc-caret">{open ? '▾' : '▸'}</span>
+                            <span className="wizard-svc-name">{svc}</span>
+                            {overrideCount > 0 && (
+                              <span className="wizard-svc-badge">{overrideCount} set</span>
+                            )}
+                          </button>
+                          {open && (
+                            <div className="wizard-svc-fields">
+                              <ServiceConfigFields
+                                serviceSlug={svc}
+                                idScope={`wizard-${svc}`}
+                                value={serviceConfigs[svc] ?? {}}
+                                onChange={(next) =>
+                                  setServiceConfigs((s) => ({ ...s, [svc]: next }))}
+                                onSchema={(sch) =>
+                                  setServiceSchemas((s) => ({ ...s, [svc]: sch.fields }))}
+                              />
+                            </div>
+                          )}
+                        </div>
+                      );
+                    })}
+                  </div>
                 </div>
-              </div>
+              )}
 
               <div className="code-block">
                 <span className="comment"># preview: deckies that will come online</span>
@@ -630,10 +1170,12 @@ const DeployWizard: React.FC<DeployWizardProps> = ({
                 {log.length === 0 && !deploying && (
                   <>
                     <span className="comment"># decnet deploy \</span>{'\n'}
-                    <span className="key">  --archetype</span>{' '}
-                    <span className="str">
-                      {pickMode === 'archetype' ? (archetype?.slug ?? '—') : 'custom'}
-                    </span>{' \\'}{'\n'}
+                    {pickMode === 'archetype' && archetype && (
+                      <>
+                        <span className="key">  --archetype</span>{' '}
+                        <span className="str">{archetype.slug}</span>{' \\'}{'\n'}
+                      </>
+                    )}
                     <span className="key">  --count</span>{' '}
                     <span className="str">{count}</span>{' \\'}{'\n'}
                     <span className="key">  --prefix</span>{' '}
@@ -744,6 +1286,7 @@ interface FleetProps {
 
 const DeckyFleet: React.FC<FleetProps> = ({ searchQuery = '' }) => {
   const { push } = useToast();
+  const serviceRegistry = useServiceRegistry();
   const [deckies, setDeckies] = useState<Decky[]>([]);
   const [loading, setLoading] = useState(true);
   const [mutating, setMutating] = useState<string | null>(null);
@@ -756,6 +1299,7 @@ const DeckyFleet: React.FC<FleetProps> = ({ searchQuery = '' }) => {
   const [archetypes, setArchetypes] = useState<Archetype[]>(FALLBACK_ARCHETYPES);
   const [localSearch, setLocalSearch] = useState<string>('');
   const [intervalEditor, setIntervalEditor] = useState<{ name: string; current: number | null } | null>(null);
+  const [selectedDecky, setSelectedDecky] = useState<Decky | null>(null);
   const cardRefs = useRef<Map<string, HTMLDivElement>>(new Map());
 
   const lastSearchPropRef = useRef<string>(searchQuery);
@@ -922,7 +1466,7 @@ const DeckyFleet: React.FC<FleetProps> = ({ searchQuery = '' }) => {
       await fetchDeckies(deployMode?.mode);
       push({ text: `TORN DOWN · ${d.name.toUpperCase()}`, tone: 'matrix', icon: 'check-circle' });
     } catch (err: unknown) {
-      const e = err as { response?: { data?: { detail?: string } } };
+      const e = err as ApiError;
       push({
         text: `TEARDOWN FAILED · ${e?.response?.data?.detail || d.name}`,
         tone: 'alert',
@@ -938,9 +1482,7 @@ const DeckyFleet: React.FC<FleetProps> = ({ searchQuery = '' }) => {
   };
 
   const handleInspect = (d: Decky) => {
-    window.dispatchEvent(new CustomEvent('decnet:cmd', {
-      detail: { id: 'filter-decky', payload: d.name },
-    }));
+    setSelectedDecky(d);
   };
 
   useEffect(() => {
@@ -969,16 +1511,6 @@ const DeckyFleet: React.FC<FleetProps> = ({ searchQuery = '' }) => {
       if (detail.id === 'mutate-all') {
         void handleMutateAll();
         return;
-      }
-      if (detail.id === 'filter-decky' && typeof detail.payload === 'string') {
-        const name = detail.payload;
-        setLocalSearch(name);
-        push({ text: `FILTERING · ${name.toUpperCase()}`, tone: 'violet', icon: 'crosshair' });
-        // Defer so React renders filtered grid first.
-        window.setTimeout(() => {
-          const el = cardRefs.current.get(name);
-          if (el) el.scrollIntoView({ block: 'center', behavior: 'smooth' });
-        }, 80);
       }
     };
     window.addEventListener('decnet:cmd', onCmd);
@@ -1021,7 +1553,10 @@ const DeckyFleet: React.FC<FleetProps> = ({ searchQuery = '' }) => {
     <div className="fleet-root">
       <div className="page-header">
         <div className="page-title-group">
-          <h1>DECOY FLEET</h1>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+            <Server size={22} className="violet-accent" />
+            <h1>DECOY FLEET</h1>
+          </div>
           <span className="page-sub">
             {deckies.length} DECKIES DEPLOYED · {counts.active + counts.hot} ACTIVE · {counts.hot} UNDER SIEGE
             {deployMode && (
@@ -1083,6 +1618,19 @@ const DeckyFleet: React.FC<FleetProps> = ({ searchQuery = '' }) => {
                 if (el) cardRefs.current.set(d.name, el);
                 else cardRefs.current.delete(d.name);
               }}
+              availableServices={serviceRegistry.perDecky}
+              onServicesChanged={(name, services) => {
+                setDeckies((prev) => prev.map((row) =>
+                  row.name === name ? { ...row, services } : row,
+                ));
+              }}
+              onTarpitResult={(_name, ok, message) => {
+                push({
+                  text: message,
+                  tone: ok ? 'matrix' : 'alert',
+                  icon: ok ? 'shield' : 'alert-triangle',
+                });
+              }}
             />
           ))
         )}
@@ -1112,6 +1660,13 @@ const DeckyFleet: React.FC<FleetProps> = ({ searchQuery = '' }) => {
         onClose={() => setIntervalEditor(null)}
         onSave={handleIntervalSave}
       />
+
+      {selectedDecky && (
+        <DeckyInspectPanel
+          decky={selectedDecky}
+          onClose={() => setSelectedDecky(null)}
+        />
+      )}
     </div>
   );
 };

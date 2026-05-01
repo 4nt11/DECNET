@@ -13,7 +13,7 @@ from typing import Sequence
 from decnet.asn.base import Provider
 from decnet.asn.iptoasn.fetch import IPTOASN_SOURCES, fetch_all
 from decnet.asn.iptoasn.parse import parse_file
-from decnet.asn.lookup import AsnLookup
+from decnet.asn.lookup import AsnLookup, Range
 from decnet.asn.paths import ensure_root
 
 logger = logging.getLogger("decnet.asn.iptoasn.provider")
@@ -54,7 +54,7 @@ class IptoasnProvider(Provider):
                     "asn.iptoasn: cache load failed, rebuilding: %s", exc
                 )
 
-        ranges = []
+        ranges: list[Range] = []
         for path in self.data_paths():
             if not path.exists():
                 continue
