@@ -2463,6 +2463,8 @@ time / xfail-flip at impl time" discipline above applies to
 
 **E.2.1 — Schema invariant tests** (`tests/ttp/test_schema.py`)
 
+**Status:** ✅ done.
+
 - `attacker_uuid OR identity_uuid` CHECK constraint rejects rows
   with both null. Use a real engine (sqlite in-memory) — no mocks.
 - App-layer guard: `TTPTag(attacker_uuid=None, identity_uuid=None,
