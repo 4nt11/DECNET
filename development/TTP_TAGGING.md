@@ -2334,6 +2334,8 @@ unrelated events.
 
 **E.1.8 — UKC bridge contract** (`decnet/clustering/ukc.py`)
 
+**Status:** ✅ done.
+
 - `ATTACK_TACTIC_TO_UKC: dict[str, UKCPhase]` — the static map
   from the body of this doc.
 - `def tactic_to_ukc_phase(tactic: str) -> UKCPhase | None`.
