@@ -12,9 +12,10 @@ open one.
 from __future__ import annotations
 
 from ipaddress import IPv4Network
-from typing import Any, Iterable
+from typing import Iterable
 
 from decnet.topology.status import TopologyStatus
+from decnet.web.db.repository import BaseRepository
 
 
 class AllocatorExhausted(RuntimeError):
@@ -34,6 +35,7 @@ class IPAllocator:
         self._pool: list[str] = [
             str(ip) for ip in self._net.hosts() if str(ip) != self._gateway
         ]
+        self._host_set: frozenset[str] = frozenset(str(h) for h in self._net.hosts())
         self._taken: set[str] = set()
         self._cursor = 0
 
@@ -57,7 +59,7 @@ class IPAllocator:
     def reserve(self, ip: str) -> None:
         if ip == self._gateway:
             raise ValueError(f"{ip} is the gateway of {self._net.with_prefixlen}")
-        if ip not in {str(h) for h in self._net.hosts()}:
+        if ip not in self._host_set:
             raise ValueError(f"{ip} not in {self._net.with_prefixlen}")
         self._taken.add(ip)
 
@@ -65,7 +67,7 @@ class IPAllocator:
         self._taken.discard(ip)
 
     def is_free(self, ip: str) -> bool:
-        return ip not in self._taken and ip in {str(h) for h in self._net.hosts()} and ip != self._gateway
+        return ip not in self._taken and ip in self._host_set and ip != self._gateway
 
 
 class SubnetAllocator:
@@ -148,7 +150,7 @@ _SUBNET_CLAIMING_STATES: frozenset[str] = frozenset(
 )
 
 
-async def reserved_subnets(repo: Any) -> set[str]:
+async def reserved_subnets(repo: BaseRepository) -> set[str]:
     """All LAN subnets currently claimed by non-torn-down topologies."""
     out: set[str] = set()
     for status in _SUBNET_CLAIMING_STATES:

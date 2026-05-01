@@ -5,12 +5,13 @@ from ipaddress import IPv4Address, IPv4Network
 from typing import Any
 
 from decnet.topology.allocator import IPAllocator
+from decnet.web.db.repository import BaseRepository
 from decnet.topology.config import GeneratedTopology
 from decnet.topology.status import TopologyStatus, assert_transition
 
 
 async def persist(
-    repo: Any,
+    repo: BaseRepository,
     plan: GeneratedTopology,
     *,
     target_host_uuid: str | None = None,
@@ -90,7 +91,7 @@ async def persist(
 
 
 async def transition_status(
-    repo: Any,
+    repo: BaseRepository,
     topology_id: str,
     new_status: str,
     reason: str | None = None,
@@ -107,7 +108,7 @@ async def transition_status(
     await repo.update_topology_status(topology_id, new_status, reason=reason)
 
 
-async def hydrate(repo: Any, topology_id: str) -> dict[str, Any] | None:
+async def hydrate(repo: BaseRepository, topology_id: str) -> dict[str, Any] | None:
     """Load a topology + children into a single dict for callers.
 
     Shape::
