@@ -2969,7 +2969,20 @@ Order:
    test per Appendix C in the same commit. The corpus for
    precision testing comes from a labelled holdout fixture under
    `tests/ttp/rule_precision/corpus/` — that fixture is itself a
-   sub-step (commit) before any rule lands.
+   sub-step (commit) before any rule lands. ✅ done. Cohorts shipped
+   in 6 commits: corpus+harness, then command (R0001–R0030),
+   behavioral (R0031–R0040), email (R0041–R0048), canary
+   (R0049–R0053), intel (R0054–R0058). Live precision asserts on
+   R0007–R0029 (regex-on-payload-field). Lifter-bound rules
+   (R0001–R0006, R0030, R0031–R0058) are inert under the v0 engine
+   by design — their YAMLs declare technique mappings the
+   E.3.9–E.3.13 lifters consume by `rule_id`, with each precision
+   case `xfail(strict=True)`-gated on the matching lifter step.
+   R0058 emits at confidence 0.0 (bump-only meta-rule; repository
+   drops sub-0.3 anyway). The corpus extractor lives at
+   `tests/ttp/rule_precision/_build_corpus.py`; operator-built
+   corpora are gitignored, only synthetic `seed_*.jsonl` is
+   committed.
 9. **BehavioralLifter** — read `AttackerBehavior` /
    `Credential` / `CredentialReuse`, emit per Appendix A behavior
    tables. Tests in `test_lifter_absence.py` and a new

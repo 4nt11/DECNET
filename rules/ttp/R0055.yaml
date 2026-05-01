@@ -1,0 +1,23 @@
+rule_id: R0055
+rule_version: 1
+name: greynoise_classification
+description: |
+  GreyNoise classification + tag → ATT&CK technique per A.10.
+  IntelLifter reads AttackerIntel.greynoise_classification and
+  greynoise_tags.
+applies_to:
+  - intel
+match:
+  kind: lifter:intel_greynoise
+  provider: greynoise
+emits:
+  - tactic: TA0043
+    technique_id: T1595
+    sub_technique_id: T1595.002
+    confidence: 0.7
+  - tactic: TA0011
+    technique_id: T1071
+    confidence: 0.7
+evidence_fields:
+  - greynoise_classification
+  - greynoise_tags
