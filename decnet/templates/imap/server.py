@@ -17,6 +17,7 @@ import os
 import time
 from email.utils import getaddresses
 from pathlib import Path
+from typing import cast
 from syslog_bridge import (
     SEVERITY_WARNING,
     encode_secret,
@@ -377,7 +378,7 @@ def _log(event_type: str, severity: int = 6, **kwargs) -> None:
 
 def _parse_seq_range(range_str: str, total: int) -> list[int]:
     """Parse IMAP sequence set ('1', '1:3', '1:*', '*') → list of 1-based indices."""
-    result = []
+    result: list[int] = []
     for part in range_str.split(","):
         part = part.strip()
         if ":" in part:
@@ -472,6 +473,9 @@ def _build_fetch_response(seq: int, msg: dict, items: list[str]) -> bytes:
 # ── Protocol ──────────────────────────────────────────────────────────────────
 
 class IMAPProtocol(asyncio.Protocol):
+    _transport: asyncio.Transport | None = None
+    _peer: tuple[str, int]
+
     def __init__(self):
         self._transport  = None
         self._peer       = ("?", 0)
@@ -479,12 +483,12 @@ class IMAPProtocol(asyncio.Protocol):
         self._state      = "NOT_AUTHENTICATED"
         self._selected   = None   # mailbox name currently selected
 
-    def connection_made(self, transport):
-        self._transport = transport
-        self._peer = transport.get_extra_info("peername", ("?", 0))
+    def connection_made(self, transport: asyncio.BaseTransport) -> None:
+        self._transport = cast(asyncio.Transport, transport)
+        self._peer = self._transport.get_extra_info("peername", ("?", 0))
         _log("connect", src=self._peer[0], src_port=self._peer[1])
         banner = IMAP_BANNER if IMAP_BANNER.endswith("\r\n") else IMAP_BANNER + "\r\n"
-        transport.write(banner.encode())
+        self._transport.write(banner.encode())
 
     def data_received(self, data):
         self._buf += data
@@ -519,6 +523,7 @@ class IMAPProtocol(asyncio.Protocol):
         elif cmd == "LOGOUT":
             self._w(b"* BYE Logging out\r\n")
             self._w(f"{tag} OK LOGOUT completed\r\n")
+            assert self._transport is not None
             self._transport.close()
 
         # NOT_AUTHENTICATED only
@@ -638,6 +643,7 @@ class IMAPProtocol(asyncio.Protocol):
         if use_uid and "UID" not in items:
             items = ["UID"] + items
 
+        assert self._transport is not None
         for seq in indices:
             if 1 <= seq <= total:
                 self._transport.write(_build_fetch_response(seq, emails[seq - 1], items))
@@ -662,6 +668,7 @@ class IMAPProtocol(asyncio.Protocol):
     # ── Helpers ───────────────────────────────────────────────────────────────
 
     def _w(self, data: str | bytes) -> None:
+        assert self._transport is not None
         if isinstance(data, str):
             data = data.encode()
         self._transport.write(data)

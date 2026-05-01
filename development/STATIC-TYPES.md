@@ -178,4 +178,14 @@ Enable `check_untyped_defs = true` as the final step once the repo is clean.
   - Remove 9 stale `# type: ignore` comments across logging, helpers, credentials
   - Fix `telemetry.py` overload `no-redef` + `misc`
   - Fix `logs.py` `datetime/str` operator errors and nullable PK comparison
-- [ ] Annotate `transport` in template servers + guard call sites (P3, ~100 errors)
+- [x] P3 — template servers now have 0 mypy errors (146 fixed):
+  - Add `_transport: asyncio.Transport | None` class-level annotation + `cast()` in `connection_made` for 11 TCP Protocol files (pop3, smtp, mqtt, postgres, mssql, mongodb, imap, ldap, redis, mysql, sip, vnc)
+  - Add `_transport: asyncio.DatagramTransport | None` for 2 UDP DatagramProtocol files (snmp, tftp) + SIPUDPProtocol
+  - `assert self._transport is not None` guards in each method that directly accesses transport
+  - Fix RDP `start_tls()` `Transport | None` narrowing with `assert new_transport is not None`
+  - Fix FTP Twisted stubs: `assert self.transport is not None`, `# type: ignore[misc/override/arg-type/attr-defined]` for imprecise Twisted stubs, `IReactorTCP` cast for `listenTCP`
+  - Fix conpot `proc.stdout is None` guard before iteration
+  - Fix SMTP `get_payload(decode=True)` → explicit `bytes` narrowing
+  - Fix postgres `_handle_startup` param-name shadowing (`msg` bytes → `err_msg` str)
+  - Fix mongodb `base64.binascii.Error` → `import binascii; binascii.Error`
+  - Fix imap `result: list[int] = []` var-annotated

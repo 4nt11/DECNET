@@ -8,8 +8,10 @@ received messages as JSON.
 
 import asyncio
 import base64
+import binascii
 import os
 import struct
+from typing import cast
 
 import instance_seed as _seed
 from syslog_bridge import syslog_line, write_syslog_file, forward_syslog
@@ -197,6 +199,9 @@ def _log(event_type: str, severity: int = 6, **kwargs) -> None:
 
 
 class MongoDBProtocol(asyncio.Protocol):
+    _transport: asyncio.Transport | None = None
+    _peer: tuple[str, int] | None = None
+
     def __init__(self):
         self._transport = None
         self._peer = None
@@ -207,12 +212,13 @@ class MongoDBProtocol(asyncio.Protocol):
         self._sasl_username: str | None = None
         self._sasl_mechanism: str | None = None
 
-    def connection_made(self, transport):
-        self._transport = transport
-        self._peer = transport.get_extra_info("peername", ("?", 0))
+    def connection_made(self, transport: asyncio.BaseTransport) -> None:
+        self._transport = cast(asyncio.Transport, transport)
+        self._peer = cast(tuple[str, int], self._transport.get_extra_info("peername", ("?", 0)))
         _log("connect", src=self._peer[0], src_port=self._peer[1])
 
-    def data_received(self, data):
+    def data_received(self, data: bytes) -> None:
+        assert self._transport is not None
         self._buf += data
         while len(self._buf) >= 16:
             msg_len = struct.unpack("<I", self._buf[:4])[0]
@@ -226,7 +232,9 @@ class MongoDBProtocol(asyncio.Protocol):
             self._buf = self._buf[msg_len:]
             self._handle_message(msg)
 
-    def _handle_message(self, msg: bytes):
+    def _handle_message(self, msg: bytes) -> None:
+        assert self._transport is not None
+        assert self._peer is not None
         if len(msg) < 16:
             return
         request_id = struct.unpack("<I", msg[4:8])[0]
@@ -285,6 +293,7 @@ class MongoDBProtocol(asyncio.Protocol):
             self._transport.write(_op_reply(request_id, reply_doc))
 
     def _handle_command(self, cmd: dict) -> None:
+        assert self._peer is not None
         """Parse a single MongoDB command document for SCRAM auth.
 
         saslStart  — client-first-message in payload. Extract
@@ -318,7 +327,7 @@ class MongoDBProtocol(asyncio.Protocol):
                 return
             try:
                 proof_raw = base64.b64decode(proof_b64, validate=True)
-            except (ValueError, base64.binascii.Error):
+            except (ValueError, binascii.Error):
                 return
             mech = (self._sasl_mechanism or "").upper()
             if "SHA-256" in mech or "SHA256" in mech:

@@ -11,6 +11,7 @@ import base64
 import itertools
 import os
 import struct
+from typing import cast
 
 import instance_seed as _seed
 from syslog_bridge import syslog_line, write_syslog_file, forward_syslog
@@ -74,6 +75,9 @@ def _log(event_type: str, severity: int = 6, **kwargs) -> None:
 
 
 class MySQLProtocol(asyncio.Protocol):
+    _transport: asyncio.Transport | None = None
+    _peer: tuple[str, int] | None = None
+
     def __init__(self):
         self._transport = None
         self._peer = None
@@ -84,15 +88,16 @@ class MySQLProtocol(asyncio.Protocol):
         # same decky never present identical auth challenges.
         self._salt = _seed.fresh_bytes(20)
 
-    def connection_made(self, transport):
-        self._transport = transport
-        self._peer = transport.get_extra_info("peername", ("?", 0))
+    def connection_made(self, transport: asyncio.BaseTransport) -> None:
+        self._transport = cast(asyncio.Transport, transport)
+        self._peer = cast(tuple[str, int], self._transport.get_extra_info("peername", ("?", 0)))
         _log("connect", src=self._peer[0], src_port=self._peer[1],
              connection_id=self._conn_id)
-        transport.write(_make_packet(_build_greeting(self._conn_id, self._salt), seq=0))
+        self._transport.write(_make_packet(_build_greeting(self._conn_id, self._salt), seq=0))
         self._greeted = True
 
-    def data_received(self, data):
+    def data_received(self, data: bytes) -> None:
+        assert self._transport is not None
         self._buf += data
         # MySQL packets: 3-byte length + 1-byte seq + payload
         while len(self._buf) >= 4:
@@ -107,7 +112,8 @@ class MySQLProtocol(asyncio.Protocol):
             self._buf = self._buf[4 + length:]
             self._handle_packet(payload)
 
-    def _handle_packet(self, payload: bytes):
+    def _handle_packet(self, payload: bytes) -> None:
+        assert self._peer is not None
         if not payload:
             return
         # Login packet: capability flags (4), max_packet (4), charset (1),

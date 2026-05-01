@@ -331,6 +331,7 @@ async def _upgrade_to_tls_and_capture(
     # into a StreamReader/StreamWriter pair the rest of the handler can use.
     new_reader = asyncio.StreamReader(loop=loop)
     new_protocol = asyncio.StreamReaderProtocol(new_reader, loop=loop)
+    assert new_transport is not None
     new_transport.set_protocol(new_protocol)
     new_protocol.connection_made(new_transport)
     new_writer = asyncio.StreamWriter(new_transport, new_protocol, new_reader, loop)

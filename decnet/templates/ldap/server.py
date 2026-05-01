@@ -8,6 +8,7 @@ invalidCredentials error. Logs all interactions as JSON.
 import asyncio
 import os
 import re
+from typing import cast
 
 import instance_seed as _seed
 from syslog_bridge import (
@@ -137,14 +138,17 @@ def _bind_error_response(message_id: int, result_code: int = 49, error_text: str
 
 
 class LDAPProtocol(asyncio.Protocol):
+    _transport: asyncio.Transport | None = None
+    _peer: tuple[str, int] | None = None
+
     def __init__(self):
         self._transport = None
         self._peer = None
         self._buf = b""
 
-    def connection_made(self, transport):
-        self._transport = transport
-        self._peer = transport.get_extra_info("peername", ("?", 0))
+    def connection_made(self, transport: asyncio.BaseTransport) -> None:
+        self._transport = cast(asyncio.Transport, transport)
+        self._peer = cast(tuple[str, int], self._transport.get_extra_info("peername", ("?", 0)))
         _log("connect", src=self._peer[0], src_port=self._peer[1])
 
     def data_received(self, data):
@@ -171,7 +175,9 @@ class LDAPProtocol(asyncio.Protocol):
             self._buf = self._buf[msg_len:]
             self._handle_message(msg)
 
-    def _handle_message(self, msg: bytes):
+    def _handle_message(self, msg: bytes) -> None:
+        assert self._transport is not None
+        assert self._peer is not None
         # Extract messageID for the response
         try:
             message_id = msg[4] if len(msg) > 4 else 1

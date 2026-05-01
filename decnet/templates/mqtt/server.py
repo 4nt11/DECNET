@@ -12,6 +12,7 @@ import json
 import os
 import random
 import struct
+from typing import cast
 
 import instance_seed as _seed
 from syslog_bridge import (
@@ -209,6 +210,9 @@ def _generate_topics() -> dict:
 
 
 class MQTTProtocol(asyncio.Protocol):
+    _transport: asyncio.Transport | None = None
+    _peer: tuple[str, int] | None = None
+
     def __init__(self):
         self._transport = None
         self._peer = None
@@ -216,9 +220,9 @@ class MQTTProtocol(asyncio.Protocol):
         self._auth = False
         self._topics = _generate_topics()
 
-    def connection_made(self, transport):
-        self._transport = transport
-        self._peer = transport.get_extra_info("peername", ("?", 0))
+    def connection_made(self, transport: asyncio.BaseTransport) -> None:
+        self._transport = cast(asyncio.Transport, transport)
+        self._peer = cast(tuple[str, int], self._transport.get_extra_info("peername", ("?", 0)))
         _log("connect", src=self._peer[0], src_port=self._peer[1])
 
     def data_received(self, data):
@@ -231,6 +235,8 @@ class MQTTProtocol(asyncio.Protocol):
                 self._transport.close()
 
     def _process(self):
+        assert self._transport is not None
+        assert self._peer is not None
         while len(self._buf) >= 2:
             pkt_byte = self._buf[0]
             pkt_type = (pkt_byte >> 4) & 0x0f

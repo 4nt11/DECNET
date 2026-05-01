@@ -13,6 +13,7 @@ import asyncio
 import os
 import time
 from pathlib import Path
+from typing import cast
 from syslog_bridge import (
     SEVERITY_WARNING,
     encode_secret,
@@ -238,6 +239,9 @@ def _log(event_type: str, severity: int = 6, **kwargs) -> None:
 # ── Protocol ──────────────────────────────────────────────────────────────────
 
 class POP3Protocol(asyncio.Protocol):
+    _transport: asyncio.Transport | None = None
+    _peer: tuple[str, int]
+
     def __init__(self):
         self._transport    = None
         self._peer         = ("?", 0)
@@ -246,14 +250,14 @@ class POP3Protocol(asyncio.Protocol):
         self._current_user: str | None = None
         self._deleted: set[int] = set()   # 0-based indices of DELE'd messages
 
-    def connection_made(self, transport):
-        self._transport = transport
-        self._peer = transport.get_extra_info("peername", ("?", 0))
+    def connection_made(self, transport: asyncio.BaseTransport) -> None:
+        self._transport = cast(asyncio.Transport, transport)
+        self._peer = self._transport.get_extra_info("peername", ("?", 0))
         _log("connect", src=self._peer[0], src_port=self._peer[1])
         banner = POP3_BANNER if POP3_BANNER.endswith("\r\n") else POP3_BANNER + "\r\n"
         if not banner.startswith("+OK"):
             banner = "+OK " + banner
-        transport.write(banner.encode())
+        self._transport.write(banner.encode())
 
     def data_received(self, data):
         self._buf += data
@@ -267,6 +271,7 @@ class POP3Protocol(asyncio.Protocol):
     # ── Command dispatch ──────────────────────────────────────────────────────
 
     def _handle_line(self, line: str) -> None:
+        assert self._transport is not None
         parts = line.split(None, 1)
         if not parts:
             return
@@ -314,6 +319,7 @@ class POP3Protocol(asyncio.Protocol):
     # ── Command implementations ───────────────────────────────────────────────
 
     def _cmd_user(self, args: str) -> None:
+        assert self._transport is not None
         if self._state != "AUTHORIZATION":
             self._transport.write(b"-ERR Already authenticated\r\n")
             return
@@ -321,6 +327,7 @@ class POP3Protocol(asyncio.Protocol):
         self._transport.write(b"+OK User name accepted, password please\r\n")
 
     def _cmd_pass(self, args: str) -> None:
+        assert self._transport is not None
         if self._state != "AUTHORIZATION":
             self._transport.write(b"-ERR Already authenticated\r\n")
             return
@@ -342,6 +349,7 @@ class POP3Protocol(asyncio.Protocol):
             self._transport.write(b"-ERR Authentication failed.\r\n")
 
     def _require_transaction(self) -> bool:
+        assert self._transport is not None
         if self._state != "TRANSACTION":
             self._transport.write(b"-ERR Not authenticated\r\n")
             return False
@@ -356,6 +364,7 @@ class POP3Protocol(asyncio.Protocol):
         ]
 
     def _cmd_stat(self) -> None:
+        assert self._transport is not None
         if not self._require_transaction():
             return
         msgs = self._active_messages()
@@ -363,6 +372,7 @@ class POP3Protocol(asyncio.Protocol):
         self._transport.write(f"+OK {len(msgs)} {total}\r\n".encode())
 
     def _cmd_list(self, args: str) -> None:
+        assert self._transport is not None
         if not self._require_transaction():
             return
         emails = _get_emails()
@@ -386,6 +396,7 @@ class POP3Protocol(asyncio.Protocol):
             self._transport.write(b".\r\n")
 
     def _cmd_retr(self, args: str) -> None:
+        assert self._transport is not None
         if not self._require_transaction():
             return
         try:
@@ -407,6 +418,7 @@ class POP3Protocol(asyncio.Protocol):
             self._transport.write(b"-ERR Invalid argument\r\n")
 
     def _cmd_top(self, args: str) -> None:
+        assert self._transport is not None
         if not self._require_transaction():
             return
         try:
@@ -436,6 +448,7 @@ class POP3Protocol(asyncio.Protocol):
             self._transport.write(b"-ERR Invalid arguments\r\n")
 
     def _cmd_uidl(self, args: str) -> None:
+        assert self._transport is not None
         if not self._require_transaction():
             return
         if args:
@@ -455,6 +468,7 @@ class POP3Protocol(asyncio.Protocol):
             self._transport.write(b".\r\n")
 
     def _cmd_dele(self, args: str) -> None:
+        assert self._transport is not None
         if not self._require_transaction():
             return
         try:
@@ -470,6 +484,7 @@ class POP3Protocol(asyncio.Protocol):
             self._transport.write(b"-ERR Invalid argument\r\n")
 
     def _cmd_rset(self) -> None:
+        assert self._transport is not None
         if not self._require_transaction():
             return
         self._deleted.clear()

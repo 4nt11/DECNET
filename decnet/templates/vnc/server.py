@@ -9,6 +9,7 @@ failed". Logs the raw response for offline cracking.
 import asyncio
 import os
 import base64 as _base64
+from typing import cast
 from syslog_bridge import syslog_line, write_syslog_file, forward_syslog
 
 NODE_NAME = os.environ.get("NODE_NAME", "desktop")
@@ -26,24 +27,29 @@ def _log(event_type: str, severity: int = 6, **kwargs) -> None:
 
 
 class VNCProtocol(asyncio.Protocol):
+    _transport: asyncio.Transport | None = None
+    _peer: tuple[str, int] | None = None
+
     def __init__(self):
         self._transport = None
         self._peer = None
         self._buf = b""
         self._state = "version"
 
-    def connection_made(self, transport):
-        self._transport = transport
-        self._peer = transport.get_extra_info("peername", ("?", 0))
+    def connection_made(self, transport: asyncio.BaseTransport) -> None:
+        self._transport = cast(asyncio.Transport, transport)
+        self._peer = cast(tuple[str, int], self._transport.get_extra_info("peername", ("?", 0)))
         _log("connect", src=self._peer[0], src_port=self._peer[1])
         # Send RFB version
-        transport.write(b"RFB 003.008\n")
+        self._transport.write(b"RFB 003.008\n")
 
     def data_received(self, data):
         self._buf += data
         self._process()
 
-    def _process(self):
+    def _process(self) -> None:
+        assert self._transport is not None
+        assert self._peer is not None
         if self._state == "version":
             if b"\n" not in self._buf:
                 return

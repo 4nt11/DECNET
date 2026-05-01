@@ -7,6 +7,7 @@ KEYS, and arbitrary commands. Logs every command and argument as JSON.
 
 import asyncio
 import os
+from typing import cast
 
 import instance_seed as _seed
 from syslog_bridge import (
@@ -203,15 +204,18 @@ def _config_get(pattern: str) -> bytes:
 
 
 class RedisProtocol(asyncio.Protocol):
+    _transport: asyncio.Transport | None = None
+    _peer: tuple[str, int] | None = None
+
     def __init__(self):
         self._transport = None
         self._peer = None
         self._parser = RESPParser()
         self._authed = not _REQUIREPASS  # auth satisfied iff no password set
 
-    def connection_made(self, transport):
-        self._transport = transport
-        self._peer = transport.get_extra_info("peername", ("?", 0))
+    def connection_made(self, transport: asyncio.BaseTransport) -> None:
+        self._transport = cast(asyncio.Transport, transport)
+        self._peer = cast(tuple[str, int], self._transport.get_extra_info("peername", ("?", 0)))
         _log("connect", src=self._peer[0], src_port=self._peer[1])
 
     def data_received(self, data):
@@ -228,7 +232,8 @@ class RedisProtocol(asyncio.Protocol):
         if self._transport and not self._transport.is_closing():
             self._transport.write(payload)
 
-    def _handle_command(self, parts):
+    def _handle_command(self, parts) -> None:
+        assert self._peer is not None
         if not parts:
             return
         verb = parts[0].upper()
