@@ -25,10 +25,13 @@ from __future__ import annotations
 import asyncio
 import secrets
 from datetime import datetime, timezone
-from typing import Callable, Optional
+from typing import TYPE_CHECKING, Callable, Optional
 
 from decnet.logging import get_logger
 from decnet.realism.taxonomy import ContentClass
+
+if TYPE_CHECKING:
+    from decnet.realism.personas import EmailPersona
 
 log = get_logger("realism.bodies")
 
@@ -242,7 +245,7 @@ def make_body(
 
 async def make_body_with_llm(
     content_class: ContentClass,
-    persona,  # EmailPersona — typed loosely to avoid an import cycle
+    persona: "EmailPersona",
     *,
     llm=None,  # LLMBackend | None
     breaker=None,  # LLMCircuitBreaker | None
