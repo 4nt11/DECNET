@@ -2263,6 +2263,8 @@ Contracts ship in this order, one commit per step:
 
 **E.1.3 — Tagger ABC** (`decnet/ttp/base.py`)
 
+**Status:** ✅ done.
+
 - `class TaggerEvent(NamedTuple)` — the input shape: source_kind,
   source_id, attacker_uuid, identity_uuid, session_id, decky_id,
   payload (opaque dict).
@@ -2275,6 +2277,8 @@ Contracts ship in this order, one commit per step:
   base class*, not on trust.
 
 **E.1.4 — Tagger factory** (`decnet/ttp/factory.py`)
+
+**Status:** ✅ done.
 
 - `get_tagger() -> Tagger` reading `DECNET_TTP_TAGGER_TYPE` env
   var. Mirrors `decnet.intel.factory` and `decnet.clustering.factory`.
