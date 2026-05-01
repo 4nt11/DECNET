@@ -1,0 +1,2 @@
+{"source_kind": "intel", "payload": {"verdict": "malicious", "provider": "abuseipdb", "categories": [18, 22]}, "expected_rule_ids": ["R0054"], "label": "abuseipdb_brute"}
+{"source_kind": "intel", "payload": {"verdict": "benign", "provider": "greynoise", "tags": []}, "expected_rule_ids": [], "label": "negative_benign"}

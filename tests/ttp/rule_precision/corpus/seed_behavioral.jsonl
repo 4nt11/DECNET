@@ -1,0 +1,2 @@
+{"source_kind": "session", "payload": {"beacon_interval_s": 60, "beacon_jitter_pct": 0.05}, "expected_rule_ids": ["R0031"], "label": "low_jitter_beacon"}
+{"source_kind": "session", "payload": {"beacon_interval_s": 0, "beacon_jitter_pct": 0}, "expected_rule_ids": [], "label": "negative_no_beacon"}

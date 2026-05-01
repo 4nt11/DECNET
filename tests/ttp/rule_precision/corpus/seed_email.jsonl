@@ -1,0 +1,3 @@
+{"source_kind": "email", "payload": {"subject": "Urgent wire transfer needed", "from": "ceo@victim.example", "return_path": "evil@bad.example", "rcpt_count": 1, "body": "Please send $50k to the attached account immediately."}, "expected_rule_ids": ["R0047"], "label": "bec_wire"}
+{"source_kind": "email", "payload": {"subject": "Newsletter", "from": "marketing@legit.example", "rcpt_count": 1, "body": "Hello world."}, "expected_rule_ids": [], "label": "negative_newsletter"}
+{"source_kind": "email", "payload": {"subject": "Win a prize", "from": "promo@evil.example", "rcpt_count": 250, "body": "Click here http://evil.example/win"}, "expected_rule_ids": ["R0042"], "label": "mass_phish"}

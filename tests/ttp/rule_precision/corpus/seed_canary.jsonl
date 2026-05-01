@@ -1,0 +1,2 @@
+{"source_kind": "canary_fingerprint", "payload": {"ua_signature": "HeadlessChrome/119", "navigator_webdriver": true}, "expected_rule_ids": ["R0049"], "label": "webdriver_flag"}
+{"source_kind": "canary_fingerprint", "payload": {"ua_signature": "Mozilla/5.0", "navigator_webdriver": false}, "expected_rule_ids": [], "label": "negative_browser"}

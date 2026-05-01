@@ -57,3 +57,9 @@ deps.txt
 # build/deploy time.
 node_modules/
 package-lock.json
+
+# TTP rule-precision corpus pulled from prod sqlite. Real attacker
+# payloads — operator-only artifact. The synthetic ``seed_*.jsonl``
+# files alongside ARE committed and exercise the harness in CI.
+tests/ttp/rule_precision/corpus/*.jsonl
+!tests/ttp/rule_precision/corpus/seed_*.jsonl
