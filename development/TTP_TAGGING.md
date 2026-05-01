@@ -2909,11 +2909,13 @@ Order:
 
 1. **Schema** — fill `compute_tag_uuid()`. Run `pytest
    tests/ttp/test_schema.py tests/ttp/test_idempotency.py`. Both
-   green.
+   green. ✅ done.
 2. **Bus constants + wiki** — already content-only at contract
    phase; this step is just verifying naming tests are green
    (including the new `ttp.rule.reloaded.*` and `ttp.rule.state.*`
-   per-rule topic format).
+   per-rule topic format). ✅ done (per-rule reloaded/state topics
+   land with E.3.5/E.3.6 RuleStore — see comment at
+   `decnet/bus/topics.py:281-283`).
 3. **Repository** — implement `insert_tags`, the listing methods.
    `test_ttp_repo.py` green on both backends.
 4. **API endpoints** — fill in handlers reading from repo. Empty
