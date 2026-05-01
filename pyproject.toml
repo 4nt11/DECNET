@@ -83,7 +83,9 @@ dev = [
     "pymongo>=4.16.0",
     "locust>=2.29",
     "gevent>=24.0",
-    "pydeps>=3.0.3"
+    "pydeps>=3.0.3",
+    "types-PyYAML>=6.0",
+    "mypy>=1.16,<1.20"
 ]
 
 [project.scripts]
@@ -141,3 +143,14 @@ decnet = [
 exclude_dirs = [
     "decnet/templates",
 ]
+
+[tool.mypy]
+plugins = [
+  "pydantic.mypy"
+]
+python_version = "3.11"
+strict = false
+ignore_missing_imports = true
+check_untyped_defs = true
+warn_redundant_casts = true
+warn_unused_ignores = true
