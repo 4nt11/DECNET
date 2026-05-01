@@ -2548,6 +2548,8 @@ lands; PII rule §6 type assertion is GREEN today).
 
 **E.2.4 — Tagger ABC conformance** (`tests/ttp/test_base.py`)
 
+**Status:** ✅ done.
+
 - A subclass that doesn't override `tag()` cannot be instantiated.
 - `TolerantTagger.tag()` swallows `Exception` from the underlying
   `_tag_impl()` and returns `[]`. Hypothesis fuzz with raised
