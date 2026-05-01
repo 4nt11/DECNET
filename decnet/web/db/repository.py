@@ -29,14 +29,32 @@ class BaseRepository(ABC):
         self,
         limit: int = 50,
         offset: int = 0,
-        search: Optional[str] = None
+        search: Optional[str] = None,
+        start_time: Optional[str] = None,
+        end_time: Optional[str] = None,
     ) -> list[dict[str, Any]]:
         """Retrieve paginated log entries."""
         pass
 
     @abstractmethod
-    async def get_total_logs(self, search: Optional[str] = None) -> int:
+    async def get_total_logs(
+        self,
+        search: Optional[str] = None,
+        start_time: Optional[str] = None,
+        end_time: Optional[str] = None,
+    ) -> int:
         """Retrieve the total count of logs, optionally filtered by search."""
+        pass
+
+    @abstractmethod
+    async def get_log_histogram(
+        self,
+        search: Optional[str] = None,
+        start_time: Optional[str] = None,
+        end_time: Optional[str] = None,
+        interval_minutes: int = 15,
+    ) -> list[dict[str, Any]]:
+        """Return bucketed log counts for histogram display."""
         pass
 
     @abstractmethod
@@ -234,7 +252,14 @@ class BaseRepository(ABC):
         pass
 
     @abstractmethod
-    async def get_logs_after_id(self, last_id: int, limit: int = 500) -> list[dict[str, Any]]:
+    async def get_logs_after_id(
+        self,
+        last_id: int,
+        limit: int = 500,
+        search: Optional[str] = None,
+        start_time: Optional[str] = None,
+        end_time: Optional[str] = None,
+    ) -> list[dict[str, Any]]:
         """Return logs with id > last_id, ordered by id ASC, up to limit."""
         pass
 
@@ -735,7 +760,12 @@ class BaseRepository(ABC):
     async def list_topologies_needing_resync(self) -> list[dict[str, Any]]:
         raise NotImplementedError
 
-    async def add_lan(self, data: dict[str, Any]) -> str:
+    async def add_lan(
+        self,
+        data: dict[str, Any],
+        *,
+        expected_version: Optional[int] = None,
+    ) -> str:
         raise NotImplementedError
 
     async def update_lan(
@@ -753,7 +783,12 @@ class BaseRepository(ABC):
     ) -> list[dict[str, Any]]:
         raise NotImplementedError
 
-    async def add_topology_decky(self, data: dict[str, Any]) -> str:
+    async def add_topology_decky(
+        self,
+        data: dict[str, Any],
+        *,
+        expected_version: Optional[int] = None,
+    ) -> str:
         raise NotImplementedError
 
     async def update_topology_decky(
@@ -771,7 +806,12 @@ class BaseRepository(ABC):
     ) -> list[dict[str, Any]]:
         raise NotImplementedError
 
-    async def add_topology_edge(self, data: dict[str, Any]) -> str:
+    async def add_topology_edge(
+        self,
+        data: dict[str, Any],
+        *,
+        expected_version: Optional[int] = None,
+    ) -> str:
         raise NotImplementedError
 
     async def list_topology_edges(
@@ -1217,4 +1257,31 @@ class BaseRepository(ABC):
         Used by the realism planner's ``action="edit"`` branch
         (stage 3b).
         """
+        raise NotImplementedError
+
+    # -------------------- tarpit rules --------------------
+
+    async def set_tarpit_rule(self, data: dict[str, Any]) -> None:
+        raise NotImplementedError
+
+    async def get_tarpit_rule(self, decky_name: str) -> Optional[dict[str, Any]]:
+        raise NotImplementedError
+
+    async def delete_tarpit_rule(self, decky_name: str) -> bool:
+        raise NotImplementedError
+
+    async def list_tarpit_rules(self) -> list[dict[str, Any]]:
+        raise NotImplementedError
+
+    # -------------------- attacker export --------------------
+
+    async def get_all_attackers_for_export(self) -> list[dict[str, Any]]:
+        raise NotImplementedError
+
+    # -------------------- fleet helpers --------------------
+
+    async def get_fleet_decky_by_name(self, name: str) -> Optional[dict[str, Any]]:
+        raise NotImplementedError
+
+    async def count_probe_relays(self, attacker_ip: str, decky: str) -> int:
         raise NotImplementedError
