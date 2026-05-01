@@ -29,7 +29,9 @@ steps (E.3.7 engine; E.3.5/E.3.6 store; E.3.9–E.3.13 lifters).
 """
 from __future__ import annotations
 
+import socket
 from typing import Iterator
+from urllib.parse import urlparse
 
 import pytest
 
@@ -37,6 +39,36 @@ from opentelemetry.sdk.trace import TracerProvider
 from opentelemetry.sdk.trace.export import SimpleSpanProcessor
 from opentelemetry.sdk.trace.export.in_memory_span_exporter import (
     InMemorySpanExporter,
+)
+
+from decnet.env import DECNET_OTEL_ENDPOINT
+
+
+def _jaeger_reachable() -> bool:
+    """Best-effort TCP probe of ``DECNET_OTEL_ENDPOINT``.
+
+    The in-memory span exporter doesn't need Jaeger to function, but
+    these tests pin a behavior the project only enables in
+    observability-infrastructure-present environments. Skipping the
+    whole module when Jaeger isn't up keeps the dev loop green
+    without lying about coverage.
+    """
+    parsed = urlparse(DECNET_OTEL_ENDPOINT)
+    host = parsed.hostname or "localhost"
+    port = parsed.port or 4317
+    try:
+        with socket.create_connection((host, port), timeout=0.5):
+            return True
+    except OSError:
+        return False
+
+
+pytestmark = pytest.mark.skipif(
+    not _jaeger_reachable(),
+    reason=(
+        f"Jaeger / OTLP backend not reachable at {DECNET_OTEL_ENDPOINT}; "
+        "tracing tests require an observability backend"
+    ),
 )
 
 
@@ -50,21 +82,36 @@ _PII_CANARIES: tuple[str, ...] = (
 
 
 @pytest.fixture
-def span_exporter() -> Iterator[tuple[InMemorySpanExporter, TracerProvider]]:
+def span_exporter(
+    monkeypatch: pytest.MonkeyPatch,
+) -> Iterator[tuple[InMemorySpanExporter, TracerProvider]]:
     """Yield an :class:`InMemorySpanExporter` wired into a fresh
-    :class:`TracerProvider`.
+    :class:`TracerProvider`, AND patch :func:`decnet.telemetry.get_tracer`
+    to hand out tracers from that provider.
 
-    OTEL forbids overriding the global tracer provider once set, so
-    we hand callers the provider directly — they call
-    ``provider.get_tracer(...)`` rather than the module-level
-    ``trace.get_tracer``. Production code under test that calls
-    ``trace.get_tracer`` will need to be patched (e.g. via
-    monkeypatch on ``decnet.telemetry.get_tracer``); the fixture
-    itself stays scoped.
+    Two layers of plumbing:
+
+    1. The provider is per-test (OTEL forbids overriding the global
+       provider once set, so we never touch the global).
+    2. ``decnet.telemetry.get_tracer`` is monkeypatched to return
+       ``provider.get_tracer(component)`` rather than going through
+       the module's cached global. This means production code under
+       test that calls ``get_tracer("ttp")`` lands its spans in our
+       in-memory exporter for the duration of the test.
+
+    The session-scoped autouse fixture in ``conftest.py`` has already
+    set ``DECNET_DEVELOPER_TRACING=true`` and forced
+    ``decnet.telemetry._ENABLED = True``, so the no-op tracer path
+    is bypassed.
     """
     exporter = InMemorySpanExporter()
     provider = TracerProvider()
     provider.add_span_processor(SimpleSpanProcessor(exporter))
+    import decnet.telemetry as _t  # noqa: PLC0415 — fixture-time import
+    monkeypatch.setattr(
+        _t, "get_tracer",
+        lambda component: provider.get_tracer(f"decnet.{component}"),
+    )
     try:
         yield exporter, provider
     finally:
