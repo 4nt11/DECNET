@@ -1,0 +1,23 @@
+rule_id: R0044
+rule_version: 1
+name: idn_homoglyph_url
+description: |
+  IDN / Punycode (xn--) URL in email body. Two emits: masquerade
+  (T1036.005) and credential-harvest landing-page (T1566.002).
+applies_to:
+  - email
+match:
+  kind: lifter:email_idn_url
+  punycode_prefix: 'xn--'
+emits:
+  - tactic: TA0005
+    technique_id: T1036
+    sub_technique_id: T1036.005
+    confidence: 0.9
+  - tactic: TA0001
+    technique_id: T1566
+    sub_technique_id: T1566.002
+    confidence: 0.9
+evidence_fields:
+  - matched_url
+  - decoded_idn

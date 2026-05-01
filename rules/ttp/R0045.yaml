@@ -1,0 +1,25 @@
+rule_id: R0045
+rule_version: 1
+name: sender_masquerade
+description: |
+  From / Return-Path / MAIL FROM domain mismatch, or DKIM/SPF
+  fail signal in Authentication-Results. Lifter composes the three
+  header signals into a single masquerade verdict.
+applies_to:
+  - email
+match:
+  kind: lifter:email_sender_masquerade
+  signals:
+    - from_returnpath_mismatch
+    - from_mailfrom_mismatch
+    - dkim_fail
+    - spf_fail
+emits:
+  - tactic: TA0005
+    technique_id: T1036
+    confidence: 0.85
+evidence_fields:
+  - from_domain
+  - return_path_domain
+  - mail_from_domain
+  - auth_results

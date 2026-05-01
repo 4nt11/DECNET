@@ -1,0 +1,24 @@
+rule_id: R0041
+rule_version: 1
+name: open_relay_abuse
+description: |
+  High RCPT count with a foreign From — abuse of an open relay to
+  push outbound mail. EmailLifter (E.3.12).
+applies_to:
+  - email
+match:
+  kind: lifter:open_relay
+  rcpt_threshold: 10
+  require_foreign_from: true
+emits:
+  - tactic: TA0040
+    technique_id: T1496
+    confidence: 0.85
+  - tactic: TA0042
+    technique_id: T1586
+    sub_technique_id: T1586.002
+    confidence: 0.85
+evidence_fields:
+  - rcpt_count
+  - from_domain
+  - mail_from_domain
