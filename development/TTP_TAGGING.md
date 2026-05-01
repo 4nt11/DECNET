@@ -2288,6 +2288,8 @@ Contracts ship in this order, one commit per step:
 
 **E.1.5 — RuleEngine contract** (`decnet/ttp/impl/rule_engine.py`)
 
+**Status:** ✅ done.
+
 - `class CompiledRule(NamedTuple)`: rule_id, rule_version, name,
   applies_to, match_spec, emits, evidence_fields, **state**
   (`RuleState`).
