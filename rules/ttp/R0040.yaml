@@ -1,0 +1,23 @@
+rule_id: R0040
+rule_version: 1
+name: tftp_router_config_retrieval
+description: |
+  TFTP RRQ for a router-config-shaped filename (*-confg, *.cfg,
+  startup-config, running-config). Per Appendix A.4.
+applies_to:
+  - session
+match:
+  kind: lifter:tftp_router_config
+  filename_patterns:
+    - '.*-confg$'
+    - '.*\\.cfg$'
+    - 'startup-config'
+    - 'running-config'
+emits:
+  - tactic: TA0009
+    technique_id: T1602
+    sub_technique_id: T1602.002
+    confidence: 0.9
+evidence_fields:
+  - tftp_filename
+  - source_host

@@ -1,0 +1,19 @@
+rule_id: R0039
+rule_version: 1
+name: llmnr_poisoning
+description: |
+  Responder-style LLMNR/NBT-NS spoofed reply pattern observed
+  on the network sniffer. BehavioralLifter (E.3.9) reads the
+  network-event aggregate.
+applies_to:
+  - session
+match:
+  kind: lifter:llmnr_poisoning
+emits:
+  - tactic: TA0009
+    technique_id: T1557
+    sub_technique_id: T1557.001
+    confidence: 0.9
+evidence_fields:
+  - poisoned_query
+  - victim_host

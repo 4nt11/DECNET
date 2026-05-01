@@ -1,0 +1,24 @@
+rule_id: R0032
+rule_version: 1
+name: data_destruction
+description: |
+  Mass destructive ops: Redis FLUSHALL, SQL DROP DATABASE, MongoDB
+  dropDatabase(), bulk DELETE without WHERE. Cross-event because we
+  want to confirm the verb landed on real data, not just a parse.
+applies_to:
+  - session
+match:
+  kind: lifter:data_destruction
+  patterns:
+    - 'FLUSHALL'
+    - 'DROP\\s+DATABASE'
+    - 'TRUNCATE\\s+TABLE'
+    - 'dropDatabase\\(\\)'
+    - 'DELETE\\s+/\\_all'
+emits:
+  - tactic: TA0040
+    technique_id: T1485
+    confidence: 0.95
+evidence_fields:
+  - matched_op
+  - target

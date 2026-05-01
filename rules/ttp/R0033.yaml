@@ -1,0 +1,26 @@
+rule_id: R0033
+rule_version: 1
+name: ransom_note_pattern
+description: |
+  Bitcoin/Monero address + payment-demand language inserted into a
+  honeydoc, mail body, or DB collection. EmailLifter (R0033 fires
+  from email_body too) and BehavioralLifter share the same rule_id.
+applies_to:
+  - session
+  - email
+match:
+  kind: lifter:ransom_note
+  require_btc_or_xmr: true
+  payment_keywords:
+    - bitcoin
+    - btc
+    - monero
+    - ransom
+    - decrypt
+emits:
+  - tactic: TA0040
+    technique_id: T1486
+    confidence: 0.9
+evidence_fields:
+  - btc_address
+  - matched_keywords
