@@ -48,7 +48,7 @@ def _send_syn(
     Craft a TCP SYN with common options and send it. Returns the
     SYN-ACK response packet or None on timeout/failure.
     """
-    from scapy.all import IP, TCP, conf, sr1
+    from scapy.all import IP, TCP, conf, sr1  # type: ignore[attr-defined]
 
     # Suppress scapy's noisy output
     conf.verb = 0
@@ -83,7 +83,7 @@ def _send_syn(
         return None
 
     # Verify it's a SYN-ACK (flags == 0x12)
-    from scapy.all import TCP as TCPLayer
+    from scapy.all import TCP as TCPLayer  # type: ignore[attr-defined]
     if not resp.haslayer(TCPLayer):
         return None
     if resp[TCPLayer].flags != 0x12:  # SYN-ACK
@@ -103,7 +103,7 @@ def _send_rst(
 ) -> None:
     """Send RST to clean up the half-open connection."""
     try:
-        from scapy.all import IP, TCP, send
+        from scapy.all import IP, TCP, send  # type: ignore[attr-defined]
         rst = (
             IP(dst=host)
             / TCP(
@@ -124,7 +124,7 @@ def _parse_synack(resp: Any) -> dict[str, Any]:
     """
     Extract fingerprint fields from a scapy SYN-ACK response packet.
     """
-    from scapy.all import IP, TCP
+    from scapy.all import IP, TCP  # type: ignore[attr-defined]
 
     ip_layer = resp[IP]
     tcp_layer = resp[TCP]
