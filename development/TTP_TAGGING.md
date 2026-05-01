@@ -2306,6 +2306,8 @@ Contracts ship in this order, one commit per step:
 
 **E.1.6 — Per-lifter contracts** (one file each, all empty bodies)
 
+**Status:** ✅ done.
+
 - `decnet/ttp/impl/behavioral_lifter.py` — `BehavioralLifter(TolerantTagger)`.
 - `decnet/ttp/impl/intel_lifter.py` — `IntelLifter(TolerantTagger)`.
 - `decnet/ttp/impl/email_lifter.py` — `EmailLifter(TolerantTagger)`.
