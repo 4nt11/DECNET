@@ -50,10 +50,10 @@ from typing import TYPE_CHECKING, Any, Final, Type
 
 import yaml
 
+from decnet import telemetry as _telemetry
 from decnet.bus import topics as _topics
 from decnet.bus.publish import publish_safely
 from decnet.logging import get_logger
-from decnet.telemetry import get_tracer
 from decnet.ttp.impl.rule_engine import CompiledRule, RuleSchema
 from decnet.ttp.store.base import RuleChange, RuleState, RuleStore
 
@@ -62,7 +62,13 @@ if TYPE_CHECKING:
 
 
 _log = get_logger("ttp.store.filesystem")
-_tracer = get_tracer("ttp.store")
+
+
+def _tracer() -> Any:
+    # Late binding: tests monkeypatch ``decnet.telemetry.get_tracer``
+    # at fixture setup; capturing the tracer at import time would freeze
+    # the no-op tracer into the module forever.
+    return _telemetry.get_tracer("ttp.store")
 
 
 # ── Filename allowlist ──────────────────────────────────────────────
@@ -324,7 +330,7 @@ class FilesystemRuleStore(RuleStore):
         # Operational state changes are NOT a tolerated-absence path.
         # Failures here MUST raise rather than silently drop — the
         # E.2.14b conformance test pins this.
-        with _tracer.start_as_current_span("ttp.rule.state.change") as span:
+        with _tracer().start_as_current_span("ttp.rule.state.change") as span:
             # Defensive set_attribute: real OTEL spans accept str/int/etc;
             # the no-op tracer's _NoOpSpan ignores attributes silently. A
             # caller-side wrapper keeps both paths green without leaking
@@ -336,10 +342,10 @@ class FilesystemRuleStore(RuleStore):
                 set_by=set_by,
             )
             stamped = replace(state, set_by=set_by, set_at=_utcnow())
-            with _tracer.start_as_current_span("ttp.store.write_state"):
+            with _tracer().start_as_current_span("ttp.store.write_state"):
                 self._state[rule_id] = stamped
                 self._restamp_compiled(rule_id, stamped)
-            with _tracer.start_as_current_span("ttp.rule.publish"):
+            with _tracer().start_as_current_span("ttp.rule.publish"):
                 await self._emit_change(
                     RuleChange("state", rule_id, stamped),
                     bus_topic=_topics.ttp_rule_state(rule_id),

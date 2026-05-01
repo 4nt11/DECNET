@@ -40,6 +40,8 @@ import pytest
 from decnet.ttp.impl.rule_engine import CompiledRule
 from decnet.ttp.store.base import RuleChange, RuleState, RuleStore
 
+from .conftest import seed_rule
+
 
 _RULE_YAML = """\
 rule_id: {rule_id}
@@ -51,18 +53,6 @@ match:
 emits:
   - technique_id: T1110
 """
-
-
-def _xfail_db_until_e36(rule_store: RuleStore) -> None:
-    """Skip a parametrized run for the database backend.
-
-    The conformance contract is identical across backends, but the
-    DB backend's persistence path lands at E.3.6. Per-test xfail
-    rather than a module-level skip so the FS-backend run still
-    exercises the assertion today.
-    """
-    if type(rule_store).__name__ == "DatabaseRuleStore":
-        pytest.xfail("impl phase E.3.6 — DatabaseRuleStore not implemented")
 
 
 # ── Surface (GREEN today) ───────────────────────────────────────────
@@ -99,14 +89,7 @@ def test_rule_change_namedtuple_shape() -> None:
 
 async def test_get_state_unknown_returns_default(rule_store: RuleStore) -> None:
     """``get_state`` for a never-set ``rule_id`` returns the default
-    ``RuleState`` — never raises, never returns ``None``.
-
-    GREEN for :class:`FilesystemRuleStore` (the impl already returns
-    ``RuleState()`` for an empty cache; covered in the contract
-    file). xfail for :class:`DatabaseRuleStore` until E.3.6 lands.
-    """
-    if type(rule_store).__name__ == "DatabaseRuleStore":
-        pytest.xfail("impl phase E.3.6 — DatabaseRuleStore.get_state")
+    ``RuleState`` — never raises, never returns ``None``."""
     state = await rule_store.get_state("R0001_unknown_rule")
     assert state == RuleState()
     assert state.state == "enabled"
@@ -123,14 +106,8 @@ async def test_load_compiled_corpus_identical_across_backends(
     cross-backend property requires running the same fixture against
     both — pinned here as a single test that the parametrize fans
     out over both backends."""
-    _xfail_db_until_e36(rule_store)
-    rules_dir: Path = rule_store._rules_dir  # type: ignore[attr-defined]
-    (rules_dir / "R0001.yaml").write_text(
-        _RULE_YAML.format(rule_id="R0001"), encoding="utf-8",
-    )
-    (rules_dir / "R0002.yaml").write_text(
-        _RULE_YAML.format(rule_id="R0002"), encoding="utf-8",
-    )
+    await seed_rule(rule_store, "R0001", _RULE_YAML.format(rule_id="R0001"))
+    await seed_rule(rule_store, "R0002", _RULE_YAML.format(rule_id="R0002"))
     compiled = await rule_store.load_compiled()
     assert {c.rule_id for c in compiled} == {"R0001", "R0002"}
     for c in compiled:
@@ -143,7 +120,6 @@ async def test_load_compiled_corpus_identical_across_backends(
 async def test_set_state_isolates_rules(rule_store: RuleStore) -> None:
     """``set_state(A, ...)`` does not perturb the state read by
     ``get_state(B)``."""
-    _xfail_db_until_e36(rule_store)
     await rule_store.set_state(
         "R0001", RuleState(state="disabled", reason="A"), set_by="op",
     )
@@ -156,7 +132,6 @@ async def test_set_state_then_get_state_round_trips(
 ) -> None:
     """``set_state`` followed by ``get_state`` returns the value
     that was set. No translation, no field drop."""
-    _xfail_db_until_e36(rule_store)
     new_state = RuleState(
         state="clipped", confidence_max=0.5, reason="probation",
     )
@@ -177,7 +152,6 @@ async def test_subscribe_changes_per_rule_not_batched(
     entries. The bus per-rule fan-out
     (``ttp.rule.reloaded.{rule_id}``) inherits its granularity from
     this iterator."""
-    _xfail_db_until_e36(rule_store)
     sub = rule_store.subscribe_changes()
     for i in range(5):
         await rule_store.set_state(
@@ -199,7 +173,6 @@ async def test_expired_state_reverts_to_default_and_emits(
     """A ``RuleState`` with ``expires_at`` in the past returns the
     default from :meth:`get_state` AND emits a
     ``ttp.rule.state.{rule_id}`` auto-revert event."""
-    _xfail_db_until_e36(rule_store)
     past = datetime.now(tz=timezone.utc) - timedelta(seconds=5)
     sub = rule_store.subscribe_changes()
     await rule_store.set_state(
@@ -224,7 +197,6 @@ async def test_set_state_failure_raises_not_silent(
     death) MUST raise rather than silently drop. Operational state
     changes are NOT a tolerated-absence path — state drift would be
     silent and dangerous."""
-    _xfail_db_until_e36(rule_store)
 
     class _BoomQueue:
         async def put(self, _item: object) -> None:

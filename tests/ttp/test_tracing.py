@@ -159,16 +159,38 @@ def test_rule_fire_spans_carry_rule_and_technique_attrs(
 # ── set_state span hierarchy (xfail until E.3.5/E.3.6) ──────────────
 
 
-@pytest.mark.xfail(
-    strict=True,
-    reason="impl phase E.3.5/E.3.6 — set_state() span hierarchy lands "
-    "with the rule-store implementations",
-)
-def test_set_state_span_hierarchy(span_exporter: tuple[InMemorySpanExporter, TracerProvider]) -> None:
+def test_set_state_span_hierarchy(
+    span_exporter: tuple[InMemorySpanExporter, TracerProvider],
+) -> None:
     """``RuleStore.set_state`` produces a ``ttp.rule.state.change``
     parent with ``ttp.store.write_state`` + ``ttp.rule.publish``
     children — operator state changes are auditable."""
-    pytest.fail("set_state spans not yet emitted")
+    import asyncio
+    import sys
+
+    if sys.platform != "linux":  # pragma: no cover
+        pytest.skip("FilesystemRuleStore is Linux-only (inotify dep)")
+
+    from decnet.ttp.store.base import RuleState
+    from decnet.ttp.store.impl.filesystem import FilesystemRuleStore
+
+    exporter, _provider = span_exporter
+
+    async def _run() -> None:
+        import tempfile
+
+        with tempfile.TemporaryDirectory() as td:
+            from pathlib import Path
+            store = FilesystemRuleStore(rules_dir=Path(td))
+            await store.set_state(
+                "R0001", RuleState(state="disabled"), set_by="anti",
+            )
+
+    asyncio.run(_run())
+    names = [span.name for span in exporter.get_finished_spans()]
+    assert "ttp.rule.state.change" in names
+    assert "ttp.store.write_state" in names
+    assert "ttp.rule.publish" in names
 
 
 # ── No-PII property (xfail until E.3.7+) ────────────────────────────

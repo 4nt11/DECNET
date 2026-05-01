@@ -2944,7 +2944,13 @@ Order:
    variant. `ttp_rule` and `ttp_rule_state` tables created via
    SQLModel. Master-side filesystem→DB sync. Worker-side DB
    tail. Conformance tests green on both backends in parallel
-   (filesystem vs database) using the parametrized fixture.
+   (filesystem vs database) using the parametrized fixture. ✅ done.
+   Lazy in-memory SQLite repo for unconfigured construction (so
+   the conformance fixture works without test plumbing).
+   `sync_from_filesystem(fs_store)` master helper subscribes to a
+   `FilesystemRuleStore` and projects each `RuleChange` onto a
+   `ttp_rule` upsert/delete; `tail_db()` is the worker-side
+   watermark poll.
 7. **RuleEngine** — implement engine consuming from `RuleStore`.
    Atomic per-rule swap on `RuleChange`. State applied
    after-parsing via `RuleState` join. `test_rule_engine.py`
