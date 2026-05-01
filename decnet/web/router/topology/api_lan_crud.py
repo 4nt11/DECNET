@@ -73,11 +73,11 @@ async def api_create_lan(
         raise map_repo_exception(exc) from exc
 
     rows = await repo.list_lans_for_topology(topology_id)
-    row = next((r for r in rows if r["id"] == lan_id), None)
+    row = next((r for r in rows if r.id == lan_id), None)
     if row is None:  # pragma: no cover — would mean insert vanished
         raise HTTPException(status_code=500, detail="LAN insert vanished")
 
-    return LANRow(**row)
+    return row
 
 
 @router.patch(
@@ -115,10 +115,10 @@ async def api_update_lan(
         raise HTTPException(status_code=404, detail=str(exc)) from exc
 
     rows = await repo.list_lans_for_topology(topology_id)
-    row = next((r for r in rows if r["id"] == lan_id), None)
+    row = next((r for r in rows if r.id == lan_id), None)
     if row is None:
         raise HTTPException(status_code=404, detail="LAN not found")
-    return LANRow(**row)
+    return row
 
 
 @router.delete(
@@ -142,7 +142,7 @@ async def api_delete_lan(
     await assert_pending_or_409(topology_id)
 
     rows = await repo.list_lans_for_topology(topology_id)
-    if not any(r["id"] == lan_id for r in rows):
+    if not any(r.id == lan_id for r in rows):
         raise HTTPException(status_code=404, detail="LAN not found")
 
     try:

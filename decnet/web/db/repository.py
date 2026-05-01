@@ -1,6 +1,8 @@
 from abc import ABC, abstractmethod
 from typing import Any, Optional
 
+from decnet.web.db.models.topology import DeckyRow, EdgeRow, LANRow, TopologySummary
+
 
 class BaseRepository(ABC):
     """Abstract base class for DECNET web dashboard data storage."""
@@ -699,7 +701,7 @@ class BaseRepository(ABC):
     async def create_topology(self, data: dict[str, Any]) -> str:
         raise NotImplementedError
 
-    async def get_topology(self, topology_id: str) -> Optional[dict[str, Any]]:
+    async def get_topology(self, topology_id: str) -> Optional[TopologySummary]:
         raise NotImplementedError
 
     async def list_topologies(
@@ -707,7 +709,7 @@ class BaseRepository(ABC):
         status: Optional[str] = None,
         limit: Optional[int] = None,
         offset: Optional[int] = None,
-    ) -> list[dict[str, Any]]:
+    ) -> list[TopologySummary]:
         raise NotImplementedError
 
     async def count_topologies(self, status: Optional[str] = None) -> int:
@@ -732,7 +734,7 @@ class BaseRepository(ABC):
     ) -> bool:
         raise NotImplementedError
 
-    async def list_topologies_needing_resync(self) -> list[dict[str, Any]]:
+    async def list_topologies_needing_resync(self) -> list[TopologySummary]:
         raise NotImplementedError
 
     async def add_lan(self, data: dict[str, Any]) -> str:
@@ -750,7 +752,7 @@ class BaseRepository(ABC):
 
     async def list_lans_for_topology(
         self, topology_id: str
-    ) -> list[dict[str, Any]]:
+    ) -> list[LANRow]:
         raise NotImplementedError
 
     async def add_topology_decky(self, data: dict[str, Any]) -> str:
@@ -768,7 +770,7 @@ class BaseRepository(ABC):
 
     async def list_topology_deckies(
         self, topology_id: str
-    ) -> list[dict[str, Any]]:
+    ) -> list[DeckyRow]:
         raise NotImplementedError
 
     async def add_topology_edge(self, data: dict[str, Any]) -> str:
@@ -776,7 +778,7 @@ class BaseRepository(ABC):
 
     async def list_topology_edges(
         self, topology_id: str
-    ) -> list[dict[str, Any]]:
+    ) -> list[EdgeRow]:
         raise NotImplementedError
 
     async def list_topology_status_events(

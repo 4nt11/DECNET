@@ -63,11 +63,11 @@ async def api_deploy_topology(
     topo = await repo.get_topology(topology_id)
     if topo is None:
         raise HTTPException(status_code=404, detail="Topology not found")
-    if topo["status"] != TopologyStatus.PENDING:
+    if topo.status != TopologyStatus.PENDING:
         raise HTTPException(
             status_code=409,
             detail=(
-                f"Topology is {topo['status']!r}; only 'pending' topologies "
+                f"Topology is {topo.status!r}; only 'pending' topologies "
                 f"can be deployed."
             ),
         )

@@ -164,13 +164,13 @@ async def api_next_ip(
     if await repo.get_topology(topology_id) is None:
         raise HTTPException(status_code=404, detail="Topology not found")
     lans = await repo.list_lans_for_topology(topology_id)
-    lan = next((ln for ln in lans if ln["id"] == lan_id), None)
+    lan = next((ln for ln in lans if ln.id == lan_id), None)
     if lan is None:
         raise HTTPException(status_code=404, detail="LAN not found")
     deckies = await repo.list_topology_deckies(topology_id)
-    alloc = IPAllocator(subnet=lan["subnet"])
+    alloc = IPAllocator(subnet=lan.subnet)
     for d in deckies:
-        ip = (d.get("decky_config") or {}).get("ips_by_lan", {}).get(lan["name"])
+        ip = (d.decky_config or {}).get("ips_by_lan", {}).get(lan.name)
         if ip:
             try:
                 alloc.reserve(ip)
@@ -180,4 +180,4 @@ async def api_next_ip(
         ip = alloc.next_free()
     except AllocatorExhausted as e:
         raise HTTPException(status_code=409, detail=str(e))
-    return NextIPResponse(subnet=lan["subnet"], ip=ip)
+    return NextIPResponse(subnet=lan.subnet, ip=ip)

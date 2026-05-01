@@ -8,6 +8,7 @@ from typing import Any, Optional
 from sqlalchemy import asc, select, text, update
 
 from decnet.web.db.models import TopologyDecky
+from decnet.web.db.models.topology import DeckyRow
 from decnet.web.db.sqlmodel_repo._helpers import (
     _deserialize_json_fields,
     _serialize_json_fields,
@@ -110,7 +111,7 @@ class TopologyDeckiesMixin:
 
     async def list_topology_deckies(
         self, topology_id: str
-    ) -> list[dict[str, Any]]:
+    ) -> list[DeckyRow]:
         async with self._session() as session:
             result = await session.execute(
                 select(TopologyDecky)
@@ -118,8 +119,10 @@ class TopologyDeckiesMixin:
                 .order_by(asc(TopologyDecky.name))
             )
             return [
-                _deserialize_json_fields(
-                    r.model_dump(mode="json"), ("services", "decky_config")
+                DeckyRow.model_validate(
+                    _deserialize_json_fields(
+                        r.model_dump(mode="json"), ("services", "decky_config")
+                    )
                 )
                 for r in result.scalars().all()
             ]

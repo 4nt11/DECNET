@@ -63,11 +63,11 @@ async def api_enqueue_mutation(
     _admin: dict = Depends(require_admin),
 ) -> MutationEnqueueResponse:
     topo = await get_topology_or_404(topology_id)
-    if topo["status"] not in _MUTATABLE:
+    if topo.status not in _MUTATABLE:
         raise HTTPException(
             status_code=409,
             detail=(
-                f"Topology is {topo['status']!r}; the mutation queue is "
+                f"Topology is {topo.status!r}; the mutation queue is "
                 f"only open for 'active' or 'degraded' topologies.  Use "
                 f"child-CRUD endpoints while pending."
             ),

@@ -162,7 +162,7 @@ async def test_deploy_aborts_on_validation_error(repo, tmp_path, monkeypatch):
     from sqlmodel import select
     from decnet.web.db.models import LAN
     async with repo._session() as s:
-        row = (await s.execute(select(LAN).where(LAN.id == lan["id"]))).scalar_one()
+        row = (await s.execute(select(LAN).where(LAN.id == lan.id))).scalar_one()
         row.is_dmz = False
         s.add(row)
         await s.commit()
@@ -176,7 +176,7 @@ async def test_deploy_aborts_on_validation_error(repo, tmp_path, monkeypatch):
             await deploy_topology(repo, tid)
 
     topo = await repo.get_topology(tid)
-    assert topo["status"] == TopologyStatus.PENDING
+    assert topo.status == TopologyStatus.PENDING
 
 
 # --------------------------------------------------------------------- gateway-in-dmz

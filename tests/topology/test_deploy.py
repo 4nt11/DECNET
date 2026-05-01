@@ -60,7 +60,7 @@ async def test_dry_run_writes_compose_and_preserves_pending(repo, tmp_path, monk
     assert compose_path.exists(), "dry run must emit a compose file"
 
     topo = await repo.get_topology(tid)
-    assert topo["status"] == TopologyStatus.PENDING, (
+    assert topo.status == TopologyStatus.PENDING, (
         "dry run must not transition status"
     )
 
@@ -85,7 +85,7 @@ async def test_deploy_failure_transitions_to_failed(repo, tmp_path, monkeypatch)
             await deploy_topology(repo, tid)
 
     topo = await repo.get_topology(tid)
-    assert topo["status"] == TopologyStatus.FAILED
+    assert topo.status == TopologyStatus.FAILED
 
     events = await repo.list_topology_status_events(tid)
     # Events are returned newest-first.
@@ -149,7 +149,7 @@ async def test_deploy_failure_rolls_back_created_networks(repo, tmp_path, monkey
     assert set(fake.removed) == set(fake.created)
 
     topo = await repo.get_topology(tid)
-    assert topo["status"] == TopologyStatus.FAILED
+    assert topo.status == TopologyStatus.FAILED
 
 
 @pytest.mark.anyio
@@ -172,7 +172,7 @@ async def test_teardown_from_failed_marks_torn_down(repo, tmp_path, monkeypatch)
         await teardown_topology(repo, tid)
 
     topo = await repo.get_topology(tid)
-    assert topo["status"] == TopologyStatus.TORN_DOWN
+    assert topo.status == TopologyStatus.TORN_DOWN
 
 
 def test_teardown_order_is_stable():

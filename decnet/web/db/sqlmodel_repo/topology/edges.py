@@ -6,6 +6,7 @@ from typing import Any, Optional
 from sqlalchemy import desc, select, text
 
 from decnet.web.db.models import TopologyEdge, TopologyStatusEvent
+from decnet.web.db.models.topology import EdgeRow
 
 
 class TopologyEdgesMixin:
@@ -60,12 +61,12 @@ class TopologyEdgesMixin:
 
     async def list_topology_edges(
         self, topology_id: str
-    ) -> list[dict[str, Any]]:
+    ) -> list[EdgeRow]:
         async with self._session() as session:
             result = await session.execute(
                 select(TopologyEdge).where(TopologyEdge.topology_id == topology_id)
             )
-            return [r.model_dump(mode="json") for r in result.scalars().all()]
+            return [EdgeRow.model_validate(r.model_dump(mode="json")) for r in result.scalars().all()]
 
     async def list_topology_status_events(
         self, topology_id: str, limit: int = 100

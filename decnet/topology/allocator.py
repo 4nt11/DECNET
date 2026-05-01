@@ -14,8 +14,8 @@ from __future__ import annotations
 from ipaddress import IPv4Network
 from typing import Iterable
 
+from decnet.topology.repository import TopologyRepository
 from decnet.topology.status import TopologyStatus
-from decnet.web.db.repository import BaseRepository
 
 
 class AllocatorExhausted(RuntimeError):
@@ -150,13 +150,12 @@ _SUBNET_CLAIMING_STATES: frozenset[str] = frozenset(
 )
 
 
-async def reserved_subnets(repo: BaseRepository) -> set[str]:
+async def reserved_subnets(repo: TopologyRepository) -> set[str]:
     """All LAN subnets currently claimed by non-torn-down topologies."""
     out: set[str] = set()
     for status in _SUBNET_CLAIMING_STATES:
         for topo in await repo.list_topologies(status=status):
-            for lan in await repo.list_lans_for_topology(topo["id"]):
-                subnet = lan.get("subnet")
-                if subnet:
-                    out.add(subnet)
+            for lan in await repo.list_lans_for_topology(topo.id):
+                if lan.subnet:
+                    out.add(lan.subnet)
     return out

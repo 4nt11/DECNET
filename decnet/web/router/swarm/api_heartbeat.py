@@ -135,8 +135,8 @@ async def _reconcile_topology_report(
     reported_hash = (reported or {}).get("applied_version_hash")
 
     for topo in mine:
-        tid = topo["id"]
-        if topo.get("needs_resync"):
+        tid = topo.id
+        if topo.needs_resync:
             continue
         expected: Optional[str] = None
         if reported_id == tid and reported_hash:

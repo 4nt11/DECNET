@@ -69,7 +69,7 @@ async def api_topology_events(
     # GET /topologies/{id}/mutations). Adding a new event family here
     # requires a threat-model review for F6/I (role leakage).
     topo = await get_topology_or_404(topology_id)
-    snapshot_status = topo["status"]
+    snapshot_status = topo.status
     in_flight: list[dict] = []
     for state in _IN_FLIGHT_STATES:
         in_flight.extend(await repo.list_topology_mutations(topology_id, state=state))

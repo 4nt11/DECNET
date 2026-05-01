@@ -121,10 +121,10 @@ async def _materialise_lan_change(
     topology = await repo.get_topology(topology_id)
     if topology is None:
         return
-    status = topology.get("status")
+    status = topology.status
     if status not in ("active", "degraded"):
         return
-    if topology.get("target_host_uuid"):
+    if topology.target_host_uuid:
         _log.info(
             "live LAN op skipped (agent-pinned topology=%s); next agent push will reconcile",
             topology_id,
@@ -291,9 +291,9 @@ async def _live_topology_or_none(
     topology = await repo.get_topology(topology_id)
     if topology is None:
         return None
-    if topology.get("status") not in ("active", "degraded"):
+    if topology.status not in ("active", "degraded"):
         return None
-    if topology.get("target_host_uuid"):
+    if topology.target_host_uuid:
         _log.info(
             "live decky op skipped (agent-pinned topology=%s); "
             "next agent push will reconcile",
@@ -1019,7 +1019,7 @@ async def apply_update_lan(
         return
 
     topology = await repo.get_topology(topology_id)
-    is_live = bool(topology) and topology.get("status") in ("active", "degraded")
+    is_live = bool(topology) and topology.status in ("active", "degraded")
     if is_live:
         hostile = {"subnet", "is_dmz"} & fields.keys()
         if hostile:

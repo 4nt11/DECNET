@@ -6,6 +6,7 @@ from typing import Any, Optional
 from sqlalchemy import asc, select, text, update
 
 from decnet.web.db.models import LAN, TopologyEdge
+from decnet.web.db.models.topology import LANRow
 
 
 class LansMixin:
@@ -117,9 +118,9 @@ class LansMixin:
 
     async def list_lans_for_topology(
         self, topology_id: str
-    ) -> list[dict[str, Any]]:
+    ) -> list[LANRow]:
         async with self._session() as session:
             result = await session.execute(
                 select(LAN).where(LAN.topology_id == topology_id).order_by(asc(LAN.name))
             )
-            return [r.model_dump(mode="json") for r in result.scalars().all()]
+            return [LANRow.model_validate(r.model_dump(mode="json")) for r in result.scalars().all()]

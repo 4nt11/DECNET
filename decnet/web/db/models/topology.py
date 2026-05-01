@@ -237,6 +237,8 @@ class TopologySummary(BaseModel):
     needs_resync: bool = False
     created_at: datetime
     status_changed_at: Optional[datetime] = None
+    email_personas: str = "[]"
+    language_default: str = "en"
 
 
 class TopologyListResponse(BaseModel):
