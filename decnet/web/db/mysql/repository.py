@@ -15,10 +15,11 @@ from __future__ import annotations
 from typing import Any, List, Optional
 
 from sqlalchemy import func, select, text, literal_column
+from sqlalchemy.dialects.mysql import insert as mysql_insert
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
 
-from decnet.web.db.models import Log
+from decnet.web.db.models import Log, TTPTag
 from decnet.web.db.mysql.database import get_async_engine
 from decnet.web.db.sqlmodel_repo import SQLModelRepository
 
@@ -150,6 +151,26 @@ class MySQLRepository(SQLModelRepository):
         # MySQL 5.7+ exposes JSON_EXTRACT; quoted string result returned for
         # TEXT-stored JSON, same behavior we rely on in SQLite.
         return text(f"JSON_UNQUOTE(JSON_EXTRACT(fields, '$.{key}')) = :val")
+
+    async def _insert_tags_or_ignore(self, rows: list[TTPTag]) -> int:
+        """Bulk-insert with MySQL's ``INSERT IGNORE`` on the ``uuid`` PK.
+
+        ``rowcount`` returns the number of NEW rows; duplicates are
+        silently ignored (matching the SQLite ``ON CONFLICT DO NOTHING``
+        contract).
+        """
+        if not rows:
+            return 0
+        payload = [r.model_dump() for r in rows]
+        stmt = (
+            mysql_insert(TTPTag.__table__)  # type: ignore[attr-defined]
+            .values(payload)
+            .prefix_with("IGNORE")
+        )
+        async with self._session() as session:
+            result = await session.execute(stmt)
+            await session.commit()
+            return int(result.rowcount or 0)
 
     async def get_log_histogram(
         self,

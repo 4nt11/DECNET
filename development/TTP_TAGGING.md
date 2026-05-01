@@ -2917,7 +2917,12 @@ Order:
    land with E.3.5/E.3.6 RuleStore — see comment at
    `decnet/bus/topics.py:281-283`).
 3. **Repository** — implement `insert_tags`, the listing methods.
-   `test_ttp_repo.py` green on both backends.
+   `test_ttp_repo.py` green on both backends. ✅ done. Dialect-split
+   bulk-insert hook lives on `SQLiteRepository._insert_tags_or_ignore`
+   (sqlite `ON CONFLICT DO NOTHING`) and
+   `MySQLRepository._insert_tags_or_ignore` (`INSERT IGNORE`).
+   Confidence-floor drop (`< 0.3`) applied at mixin layer before the
+   dialect hook fires.
 4. **API endpoints** — fill in handlers reading from repo. Empty
    store still returns empty lists; `test_*.py` shape tests green.
 5. **RuleStore — FilesystemRuleStore** — implement YAML parse,

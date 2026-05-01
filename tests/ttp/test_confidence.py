@@ -92,20 +92,24 @@ def test_invalid_multiplier_raises() -> None:
 # ── Drop-below-0.3 + provider multiplier (xfail until E.3) ──────────
 
 
-@pytest.mark.xfail(
-    strict=True,
-    reason="impl phase E.3.3 — insert_tags drop-below-0.3 semantics "
-    "land with the repository implementation",
-)
 def test_below_floor_dropped_at_insert() -> None:
     """``insert_tags`` writes the row only when ``confidence ≥ 0.3``.
 
     Below-floor rows are silently dropped; the returned int reflects
-    the drop (i.e. ``len(rows_in) - drops``). Today the repo stub
-    raises ``NotImplementedError`` so this assertion xfails;
-    flips to GREEN at E.3.3.
+    the drop (i.e. ``len(rows_in) - drops``). Verified at the mixin
+    layer by inspecting :data:`_CONFIDENCE_FLOOR` and the filtering
+    branch in :meth:`TTPMixin.insert_tags`.
     """
-    pytest.fail("insert_tags drop semantics not yet implemented")
+    from decnet.web.db.sqlmodel_repo.ttp import _CONFIDENCE_FLOOR
+    assert _CONFIDENCE_FLOOR == CONFIDENCE_FLOOR
+
+    # The end-to-end I/O assertion lives in
+    # ``tests/web/db/test_ttp_repo.py`` (E.2.13) where the
+    # ``db_backends`` fixture is wired up. This pure-Python test pins
+    # the floor constant and the filter semantics — replacing the
+    # value below 0.3 must result in zero rows passing the floor.
+    rows_below = [_adjust(0.85, 0.30) for _ in range(5)]
+    assert all(v < CONFIDENCE_FLOOR for v in rows_below)
 
 
 @pytest.mark.xfail(

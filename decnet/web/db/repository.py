@@ -2,6 +2,12 @@ from abc import ABC, abstractmethod
 from typing import Any, Optional
 
 from decnet.web.db.models.topology import DeckyRow, EdgeRow, LANRow, TopologySummary
+from decnet.web.db.models import (
+    CampaignTechniqueRow,
+    IdentityTechniqueRow,
+    TechniqueRollupRow,
+    TTPTag,
+)
 
 
 class BaseRepository(ABC):
@@ -1299,4 +1305,50 @@ class BaseRepository(ABC):
         raise NotImplementedError
 
     async def count_probe_relays(self, attacker_ip: str, decky: str) -> int:
+        raise NotImplementedError
+
+    # -------------------- TTP tagging (E.3.3) --------------------
+
+    @abstractmethod
+    async def insert_tags(self, rows: list[TTPTag]) -> int:
+        """Bulk-upsert ``ttp_tag`` rows with ``INSERT OR IGNORE`` semantics.
+
+        Drops rows with ``confidence < 0.3`` (the floor pinned in
+        ``tests/ttp/test_confidence.py``). Returns the count of rows
+        actually written. Idempotent — replaying the same source events
+        converges to the same tag set without duplicates.
+        """
+        raise NotImplementedError
+
+    @abstractmethod
+    async def list_techniques_by_identity(
+        self, uuid: str,
+    ) -> list[IdentityTechniqueRow]:
+        """Per-Identity TTP rollup (joins through ``Attacker.identity_id``)."""
+        raise NotImplementedError
+
+    @abstractmethod
+    async def list_techniques_by_attacker(
+        self, uuid: str,
+    ) -> list[IdentityTechniqueRow]:
+        """Per-Attacker (per-IP) TTP rollup; excludes identity-rollup tags."""
+        raise NotImplementedError
+
+    @abstractmethod
+    async def list_techniques_by_campaign(
+        self, uuid: str,
+    ) -> list[CampaignTechniqueRow]:
+        """Campaign-wide TTP rollup across member identities."""
+        raise NotImplementedError
+
+    @abstractmethod
+    async def list_techniques_by_session(
+        self, sid: str,
+    ) -> list[IdentityTechniqueRow]:
+        """Session-scoped TTP timeline."""
+        raise NotImplementedError
+
+    @abstractmethod
+    async def list_distinct_techniques(self) -> list[TechniqueRollupRow]:
+        """Fleet-wide distinct-technique rollup."""
         raise NotImplementedError
