@@ -8,7 +8,9 @@ from sqlalchemy import asc, select, text, update
 from decnet.web.db.models import SwarmHost
 
 
-class SwarmMixin:
+from decnet.web.db.sqlmodel_repo._helpers import _MixinBase
+
+class SwarmMixin(_MixinBase):
     """Mixin: composed onto ``SQLModelRepository``. Expects ``self._session()``."""
 
     async def add_swarm_host(self, data: dict[str, Any]) -> None:

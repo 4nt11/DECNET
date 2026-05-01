@@ -15,13 +15,16 @@ from typing import Any, List, Optional
 
 import orjson
 from sqlalchemy import asc, desc, func, or_, select, text
+from sqlmodel import col
 from sqlmodel.sql.expression import SelectOfScalar
 
 from decnet.config import load_state
 from decnet.web.db.models import Log, TopologyDecky
 
 
-class LogsMixin:
+from decnet.web.db.sqlmodel_repo._helpers import _MixinBase
+
+class LogsMixin(_MixinBase):
     """Mixin: composed onto ``SQLModelRepository``."""
 
     @staticmethod
@@ -61,9 +64,9 @@ class LogsMixin:
         end_time: Optional[str],
     ) -> SelectOfScalar:
         if start_time:
-            statement = statement.where(Log.timestamp >= start_time)
+            statement = statement.where(col(Log.timestamp) >= start_time)
         if end_time:
-            statement = statement.where(Log.timestamp <= end_time)
+            statement = statement.where(col(Log.timestamp) <= end_time)
 
         if search:
             try:
@@ -95,10 +98,10 @@ class LogsMixin:
                     lk = f"%{token}%"
                     statement = statement.where(
                         or_(
-                            Log.raw_line.like(lk),
-                            Log.decky.like(lk),
-                            Log.service.like(lk),
-                            Log.attacker_ip.like(lk),
+                            col(Log.raw_line).like(lk),
+                            col(Log.decky).like(lk),
+                            col(Log.service).like(lk),
+                            col(Log.attacker_ip).like(lk),
                         )
                     )
         return statement
@@ -148,7 +151,7 @@ class LogsMixin:
         end_time: Optional[str] = None,
     ) -> List[dict]:
         statement = (
-            select(Log).where(Log.id > last_id).order_by(asc(Log.id)).limit(limit)
+            select(Log).where(col(Log.id) > last_id).order_by(asc(Log.id)).limit(limit)
         )
         statement = self._apply_filters(statement, search, start_time, end_time)
 

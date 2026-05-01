@@ -9,7 +9,9 @@ from decnet.web.db.models import TopologyEdge, TopologyStatusEvent
 from decnet.web.db.models.topology import EdgeRow
 
 
-class TopologyEdgesMixin:
+from decnet.web.db.sqlmodel_repo._helpers import _MixinBase
+
+class TopologyEdgesMixin(_MixinBase):
     """``self._assert_pending`` / ``self._check_and_bump_version`` resolve
     through ``TopologyCoreMixin`` via MRO."""
 

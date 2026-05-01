@@ -138,7 +138,7 @@ def traced(fn: F) -> F: ...
 def traced(name: str) -> Callable[[F], F]: ...
 
 
-def traced(fn: Any = None, *, name: str | None = None) -> Any:
+def traced(fn: Any = None, *, name: str | None = None) -> Any:  # type: ignore[misc]
     """Decorator that wraps a function in an OTEL span.
 
     Usage::
@@ -168,9 +168,9 @@ def traced(fn: Any = None, *, name: str | None = None) -> Any:
         # Called as @traced (no arguments)
         return _wrap(fn, None)
     # Fallback: @traced() with no args
-    def decorator(f: F) -> F:
+    def _fallback_decorator(f: F) -> F:
         return _wrap(f, name)
-    return decorator
+    return _fallback_decorator
 
 
 def _wrap(fn: F, span_name: str | None) -> F:

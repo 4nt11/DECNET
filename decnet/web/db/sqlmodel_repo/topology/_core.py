@@ -9,10 +9,15 @@ from sqlalchemy import desc, func, select, text
 
 from decnet.web.db.models import Topology, TopologyStatusEvent
 from decnet.web.db.models.topology import TopologySummary
-from decnet.web.db.sqlmodel_repo._helpers import _serialize_json_fields
+from sqlmodel import col
+
+from decnet.web.db.sqlmodel_repo._helpers import (
+    _MixinBase,
+    _serialize_json_fields
+)
 
 
-class TopologyCoreMixin:
+class TopologyCoreMixin(_MixinBase):
     """Topologies CRUD + ``_assert_pending`` / ``_check_and_bump_version``.
 
     The two private helpers live here because every other topology
@@ -184,8 +189,8 @@ class TopologyCoreMixin:
         """Return ids of topologies currently in ``active|degraded``."""
         async with self._session() as session:
             result = await session.execute(
-                select(Topology.id).where(
-                    Topology.status.in_(["active", "degraded"])
+                select(col(Topology.id)).where(
+                    col(Topology.status).in_(["active", "degraded"])
                 )
             )
             return [r for r in result.scalars().all()]

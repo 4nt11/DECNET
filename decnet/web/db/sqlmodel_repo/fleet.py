@@ -8,10 +8,13 @@ import orjson
 from sqlalchemy import asc, select, text, update
 
 from decnet.web.db.models import DeckyShard, FleetDecky, LOCAL_HOST_SENTINEL
-from decnet.web.db.sqlmodel_repo._helpers import _deserialize_json_fields
+from decnet.web.db.sqlmodel_repo._helpers import (
+    _MixinBase,
+    _deserialize_json_fields
+)
 
 
-class FleetMixin:
+class FleetMixin(_MixinBase):
     """Mixin: composed onto ``SQLModelRepository``.
 
     ``list_running_deckies`` aggregates topology + fleet + swarm-shard

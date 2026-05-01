@@ -10,12 +10,13 @@ from sqlalchemy import asc, select, text, update
 from decnet.web.db.models import TopologyDecky
 from decnet.web.db.models.topology import DeckyRow
 from decnet.web.db.sqlmodel_repo._helpers import (
+    _MixinBase,
     _deserialize_json_fields,
     _serialize_json_fields,
 )
 
 
-class TopologyDeckiesMixin:
+class TopologyDeckiesMixin(_MixinBase):
     """``self._assert_pending`` / ``self._check_and_bump_version`` resolve
     through ``TopologyCoreMixin`` via MRO."""
 

@@ -8,7 +8,9 @@ from sqlalchemy import select, update
 from decnet.web.db.models import User
 
 
-class AuthMixin:
+from decnet.web.db.sqlmodel_repo._helpers import _MixinBase
+
+class AuthMixin(_MixinBase):
     """Mixin: composed onto ``SQLModelRepository``. Expects ``self._session()``.
 
     ``_ensure_admin_user`` stays in the package ``__init__`` so the

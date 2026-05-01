@@ -7,11 +7,14 @@ from typing import Any, Optional
 
 from sqlalchemy import delete as sa_delete
 from sqlalchemy import desc, func, or_, select
+from sqlmodel import col
 
 from decnet.web.db.models import OrchestratorEmail, OrchestratorEvent
 
 
-class OrchestratorMixin:
+from decnet.web.db.sqlmodel_repo._helpers import _MixinBase
+
+class OrchestratorMixin(_MixinBase):
     """Mixin: composed onto ``SQLModelRepository``."""
 
     async def record_orchestrator_event(self, data: dict[str, Any]) -> str:
@@ -62,11 +65,11 @@ class OrchestratorMixin:
         deleted = 0
         async with self._session() as session:
             dst_rows = await session.execute(
-                select(OrchestratorEvent.dst_decky_uuid).distinct()
+                select(col(OrchestratorEvent.dst_decky_uuid)).distinct()
             )
             for (dst,) in dst_rows.all():
                 keep = await session.execute(
-                    select(OrchestratorEvent.uuid)
+                    select(col(OrchestratorEvent.uuid))
                     .where(OrchestratorEvent.dst_decky_uuid == dst)
                     .order_by(desc(OrchestratorEvent.ts))
                     .limit(per_dst_cap)
@@ -76,7 +79,7 @@ class OrchestratorMixin:
                     continue
                 stmt = sa_delete(OrchestratorEvent).where(
                     OrchestratorEvent.dst_decky_uuid == dst,
-                    OrchestratorEvent.uuid.notin_(keep_uuids),
+                    col(OrchestratorEvent.uuid).notin_(keep_uuids),
                 )
                 res = await session.execute(stmt)
                 deleted += res.rowcount or 0
@@ -156,7 +159,7 @@ class OrchestratorMixin:
                         (OrchestratorEmail.sender_email == recipient_email)
                         & (OrchestratorEmail.recipient_email == sender_email),
                     ),
-                    OrchestratorEmail.success.is_(True),
+                    col(OrchestratorEmail.success).is_(True),
                 )
                 .order_by(desc(OrchestratorEmail.ts))
                 .limit(limit)
@@ -169,11 +172,11 @@ class OrchestratorMixin:
         deleted = 0
         async with self._session() as session:
             decky_rows = await session.execute(
-                select(OrchestratorEmail.mail_decky_uuid).distinct()
+                select(col(OrchestratorEmail.mail_decky_uuid)).distinct()
             )
             for (mail_uuid,) in decky_rows.all():
                 keep = await session.execute(
-                    select(OrchestratorEmail.uuid)
+                    select(col(OrchestratorEmail.uuid))
                     .where(OrchestratorEmail.mail_decky_uuid == mail_uuid)
                     .order_by(desc(OrchestratorEmail.ts))
                     .limit(per_decky_cap)
@@ -183,7 +186,7 @@ class OrchestratorMixin:
                     continue
                 stmt = sa_delete(OrchestratorEmail).where(
                     OrchestratorEmail.mail_decky_uuid == mail_uuid,
-                    OrchestratorEmail.uuid.notin_(keep_uuids),
+                    col(OrchestratorEmail.uuid).notin_(keep_uuids),
                 )
                 res = await session.execute(stmt)
                 deleted += res.rowcount or 0

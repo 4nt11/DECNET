@@ -11,7 +11,9 @@ from sqlalchemy import select
 from decnet.web.db.models import TarpitRule
 
 
-class TarpitMixin:
+from decnet.web.db.sqlmodel_repo._helpers import _MixinBase
+
+class TarpitMixin(_MixinBase):
     """Mixin: composed onto ``SQLModelRepository``."""
 
     async def set_tarpit_rule(self, data: dict[str, Any]) -> None:

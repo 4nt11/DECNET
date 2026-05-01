@@ -12,11 +12,14 @@ import uuid as _uuid
 from typing import Any, List, Optional
 
 from sqlalchemy import desc, func, outerjoin, select
+from sqlmodel import col
 
 from decnet.web.db.models import Attacker, AttackerIntel
 
 
-class AttackersCoreMixin:
+from decnet.web.db.sqlmodel_repo._helpers import _MixinBase
+
+class AttackersCoreMixin(_MixinBase):
     @staticmethod
     def _deserialize_attacker(d: dict[str, Any]) -> dict[str, Any]:
         for key in ("services", "deckies", "fingerprints", "commands"):
@@ -63,16 +66,16 @@ class AttackersCoreMixin:
         sort_by: str = "recent",
         service: Optional[str] = None,
     ) -> List[dict[str, Any]]:
-        order = {
+        order: Any = {
             "active": desc(Attacker.event_count),
             "traversals": desc(Attacker.is_traversal),
         }.get(sort_by, desc(Attacker.last_seen))
 
         statement = select(Attacker).order_by(order).offset(offset).limit(limit)
         if search:
-            statement = statement.where(Attacker.ip.like(f"%{search}%"))
+            statement = statement.where(col(Attacker.ip).like(f"%{search}%"))
         if service:
-            statement = statement.where(Attacker.services.like(f'%"{service}"%'))
+            statement = statement.where(col(Attacker.services).like(f'%"{service}"%'))
 
         async with self._session() as session:
             result = await session.execute(statement)
@@ -121,9 +124,9 @@ class AttackersCoreMixin:
     ) -> int:
         statement = select(func.count()).select_from(Attacker)
         if search:
-            statement = statement.where(Attacker.ip.like(f"%{search}%"))
+            statement = statement.where(col(Attacker.ip).like(f"%{search}%"))
         if service:
-            statement = statement.where(Attacker.services.like(f'%"{service}"%'))
+            statement = statement.where(col(Attacker.services).like(f'%"{service}"%'))
 
         async with self._session() as session:
             result = await session.execute(statement)

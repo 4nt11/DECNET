@@ -7,11 +7,14 @@ from datetime import datetime, timezone
 from typing import Any, Optional
 
 from sqlalchemy import select
+from sqlmodel import col
 
 from decnet.web.db.models import Attacker, AttackerBehavior
 
 
-class AttackerBehaviorMixin:
+from decnet.web.db.sqlmodel_repo._helpers import _MixinBase
+
+class AttackerBehaviorMixin(_MixinBase):
     async def upsert_attacker_behavior(
         self,
         attacker_uuid: str,
@@ -56,9 +59,9 @@ class AttackerBehaviorMixin:
             return {}
         async with self._session() as session:
             result = await session.execute(
-                select(Attacker.ip, AttackerBehavior)
+                select(col(Attacker.ip), AttackerBehavior)
                 .join(AttackerBehavior, Attacker.uuid == AttackerBehavior.attacker_uuid)
-                .where(Attacker.ip.in_(ips))
+                .where(col(Attacker.ip).in_(ips))
             )
             out: dict[str, dict[str, Any]] = {}
             for ip, row in result.all():

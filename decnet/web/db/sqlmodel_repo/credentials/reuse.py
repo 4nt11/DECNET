@@ -9,11 +9,14 @@ from datetime import datetime, timezone
 from typing import Any, List, Optional
 
 from sqlalchemy import desc, func, select
+from sqlmodel import col
 
 from decnet.web.db.models import Credential, CredentialReuse
 
 
-class CredentialReuseMixin:
+from decnet.web.db.sqlmodel_repo._helpers import _MixinBase
+
+class CredentialReuseMixin(_MixinBase):
     @staticmethod
     def _merge_unique(existing_json: str, value: Optional[str]) -> tuple[str, bool]:
         """Append ``value`` to a JSON list[str] column if not present.
@@ -117,7 +120,7 @@ class CredentialReuseMixin:
                         Credential.secret_sha256 == secret_sha256,
                         Credential.secret_kind == secret_kind,
                         (Credential.principal == principal) if principal is not None
-                        else Credential.principal.is_(None),
+                        else col(Credential.principal).is_(None),
                     )
                 )
                 target_count = (await session.execute(stmt)).scalar() or 0
@@ -150,7 +153,7 @@ class CredentialReuseMixin:
         ).label("target_count")
         async with self._session() as session:
             group_stmt = (
-                select(
+                select(  # type: ignore[call-overload]
                     Credential.secret_sha256,
                     Credential.secret_kind,
                     Credential.principal,
@@ -171,7 +174,7 @@ class CredentialReuseMixin:
                     Credential.secret_kind == kind,
                     (Credential.principal == principal)
                     if principal is not None
-                    else Credential.principal.is_(None),
+                    else col(Credential.principal).is_(None),
                 )
                 rows = (await session.execute(cred_stmt)).scalars().all()
                 out.append({
@@ -253,13 +256,13 @@ class CredentialReuseMixin:
         sha_set = {r["secret_sha256"] for r in rows}
         if not sha_set:
             return
-        stmt = select(
+        stmt = select(  # type: ignore[call-overload]
             Credential.secret_sha256,
             Credential.secret_kind,
             Credential.principal,
             Credential.secret_printable,
             Credential.secret_b64,
-        ).where(Credential.secret_sha256.in_(sha_set))
+        ).where(col(Credential.secret_sha256).in_(sha_set))
         secret_map: dict[
             tuple[str, str, Optional[str]],
             tuple[Optional[str], Optional[str]],

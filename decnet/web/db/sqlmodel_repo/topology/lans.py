@@ -9,7 +9,9 @@ from decnet.web.db.models import LAN, TopologyEdge
 from decnet.web.db.models.topology import LANRow
 
 
-class LansMixin:
+from decnet.web.db.sqlmodel_repo._helpers import _MixinBase
+
+class LansMixin(_MixinBase):
     """``self._assert_pending`` / ``self._check_and_bump_version`` resolve
     through ``TopologyCoreMixin`` via MRO."""
 

@@ -10,11 +10,14 @@ import json
 from typing import Any, Optional
 
 from sqlalchemy import desc, func, select
+from sqlmodel import col
 
 from decnet.web.db.models import Attacker, Bounty, Log
 
 
-class AttackerActivityMixin:
+from decnet.web.db.sqlmodel_repo._helpers import _MixinBase
+
+class AttackerActivityMixin(_MixinBase):
     async def get_attacker_commands(
         self,
         uuid: str,
@@ -24,7 +27,7 @@ class AttackerActivityMixin:
     ) -> dict[str, Any]:
         async with self._session() as session:
             result = await session.execute(
-                select(Attacker.commands).where(Attacker.uuid == uuid)
+                select(col(Attacker.commands)).where(Attacker.uuid == uuid)
             )
             raw = result.scalar_one_or_none()
             if raw is None:
@@ -52,13 +55,13 @@ class AttackerActivityMixin:
         """
         async with self._session() as session:
             ip_res = await session.execute(
-                select(Attacker.ip).where(Attacker.uuid == attacker_uuid)
+                select(col(Attacker.ip)).where(Attacker.uuid == attacker_uuid)
             )
             ip = ip_res.scalar_one_or_none()
             if not ip:
                 return []
             rows = await session.execute(
-                select(Log.service, Log.event_type)
+                select(col(Log.service), col(Log.event_type))
                 .where(Log.attacker_ip == ip)
                 .distinct()
             )
@@ -75,7 +78,7 @@ class AttackerActivityMixin:
         rotation detection."""
         async with self._session() as session:
             ip_res = await session.execute(
-                select(Attacker.ip).where(Attacker.uuid == attacker_uuid)
+                select(col(Attacker.ip)).where(Attacker.uuid == attacker_uuid)
             )
             ip = ip_res.scalar_one_or_none()
             if not ip:
@@ -104,7 +107,7 @@ class AttackerActivityMixin:
         """Cheap COUNT(*) for XFF-rotation detection."""
         async with self._session() as session:
             ip_res = await session.execute(
-                select(Attacker.ip).where(Attacker.uuid == attacker_uuid)
+                select(col(Attacker.ip)).where(Attacker.uuid == attacker_uuid)
             )
             ip = ip_res.scalar_one_or_none()
             if not ip:
@@ -126,7 +129,7 @@ class AttackerActivityMixin:
         """
         async with self._session() as session:
             ip_res = await session.execute(
-                select(Attacker.ip).where(Attacker.uuid == uuid)
+                select(col(Attacker.ip)).where(Attacker.uuid == uuid)
             )
             ip = ip_res.scalar_one_or_none()
             if not ip:
@@ -150,7 +153,7 @@ class AttackerActivityMixin:
         """
         async with self._session() as session:
             ip_res = await session.execute(
-                select(Attacker.ip).where(Attacker.uuid == uuid)
+                select(col(Attacker.ip)).where(Attacker.uuid == uuid)
             )
             ip = ip_res.scalar_one_or_none()
             if not ip:
@@ -176,7 +179,7 @@ class AttackerActivityMixin:
             rows = await session.execute(
                 select(Log)
                 .where(Log.event_type == "session_recorded")
-                .where(Log.fields.contains(needle))
+                .where(col(Log.fields).contains(needle))
                 .limit(1)
             )
             row = rows.scalars().first()
@@ -192,7 +195,7 @@ class AttackerActivityMixin:
         """
         async with self._session() as session:
             ip_res = await session.execute(
-                select(Attacker.ip).where(Attacker.uuid == uuid)
+                select(col(Attacker.ip)).where(Attacker.uuid == uuid)
             )
             ip = ip_res.scalar_one_or_none()
             if not ip:

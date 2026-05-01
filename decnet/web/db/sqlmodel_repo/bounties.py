@@ -7,12 +7,15 @@ from typing import Any, List, Optional
 
 import orjson
 from sqlalchemy import asc, desc, func, or_, select, text
+from sqlmodel import col
 from sqlmodel.sql.expression import SelectOfScalar
 
 from decnet.web.db.models import Bounty
 
 
-class BountiesMixin:
+from decnet.web.db.sqlmodel_repo._helpers import _MixinBase
+
+class BountiesMixin(_MixinBase):
     """Mixin: composed onto ``SQLModelRepository``."""
 
     async def purge_logs_and_bounties(self) -> dict[str, int]:
@@ -40,7 +43,7 @@ class BountiesMixin:
 
         async with self._session() as session:
             dup = await session.execute(
-                select(Bounty.id).where(
+                select(col(Bounty.id)).where(
                     Bounty.bounty_type == data.get("bounty_type"),
                     Bounty.attacker_ip == data.get("attacker_ip"),
                     Bounty.payload == data.get("payload"),
@@ -63,10 +66,10 @@ class BountiesMixin:
             lk = f"%{search}%"
             statement = statement.where(
                 or_(
-                    Bounty.decky.like(lk),
-                    Bounty.service.like(lk),
-                    Bounty.attacker_ip.like(lk),
-                    Bounty.payload.like(lk),
+                    col(Bounty.decky).like(lk),
+                    col(Bounty.service).like(lk),
+                    col(Bounty.attacker_ip).like(lk),
+                    col(Bounty.payload).like(lk),
                 )
             )
         return statement
@@ -126,7 +129,7 @@ class BountiesMixin:
     async def get_bounties_for_ips(self, ips: set[str]) -> dict[str, List[dict[str, Any]]]:
         async with self._session() as session:
             result = await session.execute(
-                select(Bounty).where(Bounty.attacker_ip.in_(ips)).order_by(asc(Bounty.timestamp))
+                select(Bounty).where(col(Bounty.attacker_ip).in_(ips)).order_by(asc(Bounty.timestamp))
             )
             grouped: dict[str, List[dict[str, Any]]] = defaultdict(list)
             for item in result.scalars().all():

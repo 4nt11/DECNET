@@ -6,12 +6,15 @@ from datetime import datetime, timezone
 from typing import Any, List, Optional
 
 from sqlalchemy import desc, func, or_, select, update
+from sqlmodel import col
 from sqlmodel.sql.expression import SelectOfScalar
 
 from decnet.web.db.models import Credential
 
 
-class CredentialsCoreMixin:
+from decnet.web.db.sqlmodel_repo._helpers import _MixinBase
+
+class CredentialsCoreMixin(_MixinBase):
     async def upsert_credential(self, data: dict[str, Any]) -> int:
         """Upsert a credential attempt; returns the row id.
 
@@ -37,7 +40,7 @@ class CredentialsCoreMixin:
                 Credential.secret_sha256 == payload["secret_sha256"],
                 # NULL == NULL is False under SQL — branch the predicate.
                 (Credential.principal == principal) if principal is not None
-                else Credential.principal.is_(None),
+                else col(Credential.principal).is_(None),
             )
             existing = (await session.execute(stmt)).scalar_one_or_none()
             now = datetime.now(timezone.utc)
@@ -48,7 +51,7 @@ class CredentialsCoreMixin:
                     existing.outcome = payload["outcome"]
                 session.add(existing)
                 await session.commit()
-                return existing.id  # type: ignore[return-value]
+                return existing.id
             row = Credential(
                 attacker_ip=payload["attacker_ip"],
                 decky_name=payload["decky_name"],
@@ -84,10 +87,10 @@ class CredentialsCoreMixin:
             lk = f"%{search}%"
             statement = statement.where(
                 or_(
-                    Credential.decky_name.like(lk),
-                    Credential.service.like(lk),
-                    Credential.principal.like(lk),
-                    Credential.secret_printable.like(lk),
+                    col(Credential.decky_name).like(lk),
+                    col(Credential.service).like(lk),
+                    col(Credential.principal).like(lk),
+                    col(Credential.secret_printable).like(lk),
                 )
             )
         return statement
@@ -188,7 +191,7 @@ class CredentialsCoreMixin:
                 update(Credential)
                 .where(
                     Credential.attacker_ip == attacker_ip,
-                    Credential.attacker_uuid.is_(None),
+                    col(Credential.attacker_uuid).is_(None),
                 )
                 .values(attacker_uuid=attacker_uuid)
             )

@@ -10,7 +10,9 @@ from sqlalchemy import desc, func, select
 from decnet.web.db.models import SmtpTarget
 
 
-class SmtpTargetsMixin:
+from decnet.web.db.sqlmodel_repo._helpers import _MixinBase
+
+class SmtpTargetsMixin(_MixinBase):
     async def increment_smtp_target(self, attacker_uuid: str, domain: str) -> None:
         """Upsert an (attacker_uuid, domain) pair and bump count + last_seen.
 

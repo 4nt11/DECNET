@@ -11,11 +11,14 @@ from datetime import datetime, timezone
 from typing import Any, Optional
 
 from sqlalchemy import desc, func, select, update
+from sqlmodel import col
 
 from decnet.web.db.models import AttackerIdentity, Campaign
 
 
-class CampaignsMixin:
+from decnet.web.db.sqlmodel_repo._helpers import _MixinBase
+
+class CampaignsMixin(_MixinBase):
     """Mixin: composed onto ``SQLModelRepository``."""
 
     async def get_campaign_by_uuid(self, uuid: str) -> Optional[dict[str, Any]]:
@@ -41,7 +44,7 @@ class CampaignsMixin:
     ) -> list[dict[str, Any]]:
         statement = (
             select(Campaign)
-            .where(Campaign.merged_into_uuid.is_(None))
+            .where(col(Campaign.merged_into_uuid).is_(None))
             .order_by(desc(Campaign.updated_at))
             .offset(offset)
             .limit(limit)
@@ -54,7 +57,7 @@ class CampaignsMixin:
         statement = (
             select(func.count())
             .select_from(Campaign)
-            .where(Campaign.merged_into_uuid.is_(None))
+            .where(col(Campaign.merged_into_uuid).is_(None))
         )
         async with self._session() as session:
             result = await session.execute(statement)
@@ -91,7 +94,7 @@ class CampaignsMixin:
         # graph reads. Narrow on purpose — future denormalised
         # projections (commands_by_phase from log mining, decky-set
         # aggregates) can land here without churning callers.
-        statement = select(
+        statement = select(  # type: ignore[call-overload, misc]
             AttackerIdentity.uuid,
             AttackerIdentity.campaign_id,
             AttackerIdentity.merged_into_uuid,

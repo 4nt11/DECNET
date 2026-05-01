@@ -11,11 +11,14 @@ from datetime import datetime, timezone
 from typing import Any, Optional
 
 from sqlalchemy import desc, func, select, update
+from sqlmodel import col
 
 from decnet.web.db.models import Attacker, AttackerIdentity
 
 
-class IdentitiesMixin:
+from decnet.web.db.sqlmodel_repo._helpers import _MixinBase
+
+class IdentitiesMixin(_MixinBase):
     """Mixin: composed onto ``SQLModelRepository``.
 
     ``self._deserialize_attacker`` resolves through ``AttackersMixin``
@@ -51,7 +54,7 @@ class IdentitiesMixin:
         # and a future "merged into" endpoint when we need it.
         statement = (
             select(AttackerIdentity)
-            .where(AttackerIdentity.merged_into_uuid.is_(None))
+            .where(col(AttackerIdentity.merged_into_uuid).is_(None))
             .order_by(desc(AttackerIdentity.updated_at))
             .offset(offset)
             .limit(limit)
@@ -64,7 +67,7 @@ class IdentitiesMixin:
         statement = (
             select(func.count())
             .select_from(AttackerIdentity)
-            .where(AttackerIdentity.merged_into_uuid.is_(None))
+            .where(col(AttackerIdentity.merged_into_uuid).is_(None))
         )
         async with self._session() as session:
             result = await session.execute(statement)
@@ -105,7 +108,7 @@ class IdentitiesMixin:
         # joined from logs, c2 endpoints aggregated from sessions) can
         # land here without churning every caller. ``fingerprints`` is
         # the raw JSON list — the clusterer parses for JA3 / HASSH.
-        statement = select(
+        statement = select(  # type: ignore[call-overload]
             Attacker.uuid, Attacker.asn, Attacker.identity_id, Attacker.fingerprints,
         ).order_by(Attacker.first_seen)
         if limit is not None:

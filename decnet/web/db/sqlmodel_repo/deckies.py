@@ -11,7 +11,9 @@ from sqlalchemy import asc, select, text
 from decnet.web.db.models import DeckyShard
 
 
-class DeckiesMixin:
+from decnet.web.db.sqlmodel_repo._helpers import _MixinBase
+
+class DeckiesMixin(_MixinBase):
     """Mixin: composed onto ``SQLModelRepository``."""
 
     async def upsert_decky_shard(self, data: dict[str, Any]) -> None:

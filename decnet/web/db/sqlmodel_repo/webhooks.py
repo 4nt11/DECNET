@@ -5,11 +5,14 @@ from datetime import datetime, timezone
 from typing import Any, Optional
 
 from sqlalchemy import select, update
+from sqlmodel import col
 
 from decnet.web.db.models import WebhookSubscription
 
 
-class WebhooksMixin:
+from decnet.web.db.sqlmodel_repo._helpers import _MixinBase
+
+class WebhooksMixin(_MixinBase):
     """Mixin: composed onto ``SQLModelRepository``."""
 
     async def create_webhook_subscription(self, data: dict[str, Any]) -> None:
@@ -43,7 +46,7 @@ class WebhooksMixin:
         async with self._session() as session:
             stmt = select(WebhookSubscription)
             if enabled_only:
-                stmt = stmt.where(WebhookSubscription.enabled.is_(True))
+                stmt = stmt.where(col(WebhookSubscription.enabled).is_(True))
             stmt = stmt.order_by(WebhookSubscription.created_at)
             result = await session.execute(stmt)
             return [r.model_dump() for r in result.scalars().all()]
@@ -100,7 +103,7 @@ class WebhooksMixin:
             # the counter informs the circuit-breaker heuristic, not a
             # correctness invariant.
             result = await session.execute(
-                select(WebhookSubscription.consecutive_failures).where(
+                select(col(WebhookSubscription.consecutive_failures)).where(
                     WebhookSubscription.uuid == uuid
                 )
             )

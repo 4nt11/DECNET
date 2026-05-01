@@ -10,7 +10,9 @@ from sqlalchemy import desc, func, select, update
 from decnet.web.db.models import CanaryBlob, CanaryToken, CanaryTrigger
 
 
-class CanaryMixin:
+from decnet.web.db.sqlmodel_repo._helpers import _MixinBase
+
+class CanaryMixin(_MixinBase):
     """Mixin: composed onto ``SQLModelRepository``."""
 
     async def upsert_canary_blob(self, data: dict[str, Any]) -> dict[str, Any]:
