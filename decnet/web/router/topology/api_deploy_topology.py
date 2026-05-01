@@ -73,4 +73,4 @@ async def api_deploy_topology(
         )
 
     background.add_task(_run_deploy, topology_id)
-    return TopologySummary(**topo)
+    return topo

@@ -74,4 +74,6 @@ async def api_create_topology(
             ) from exc
         raise
     row = await repo.get_topology(topology_id)
-    return TopologySummary(**row)
+    if row is None:  # pragma: no cover — create then vanish
+        raise HTTPException(status_code=500, detail="topology insert vanished")
+    return row

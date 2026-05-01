@@ -76,4 +76,4 @@ async def api_teardown_topology(
         )
 
     background.add_task(_run_teardown, topology_id)
-    return TopologySummary(**topo)
+    return topo

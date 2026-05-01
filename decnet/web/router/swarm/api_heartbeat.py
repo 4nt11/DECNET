@@ -16,6 +16,7 @@ from __future__ import annotations
 import hashlib
 import json
 from datetime import datetime, timezone
+from collections.abc import MutableMapping
 from typing import Any, Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Request
@@ -38,7 +39,7 @@ class HeartbeatRequest(BaseModel):
     topology: Optional[dict[str, Any]] = None
 
 
-def _extract_peer_fingerprint(scope: dict[str, Any]) -> Optional[str]:
+def _extract_peer_fingerprint(scope: MutableMapping[str, Any]) -> Optional[str]:
     """Pull the peer cert's SHA-256 fingerprint from an ASGI scope.
 
     Tries two extraction paths because uvicorn has historically stashed
@@ -123,7 +124,7 @@ async def _reconcile_topology_report(
     except Exception:
         log.exception("heartbeat: could not list active topologies")
         return
-    mine = [t for t in topos if t.get("target_host_uuid") == host_uuid]
+    mine = [t for t in topos if t.target_host_uuid == host_uuid]
     if not mine:
         return
 

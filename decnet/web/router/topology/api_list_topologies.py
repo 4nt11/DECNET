@@ -6,7 +6,7 @@ from typing import Optional
 from fastapi import APIRouter, Depends, Query
 
 from decnet.telemetry import traced as _traced
-from decnet.web.db.models import TopologyListResponse, TopologySummary
+from decnet.web.db.models import TopologyListResponse
 from decnet.web.dependencies import repo, require_viewer
 
 router = APIRouter()
@@ -35,5 +35,5 @@ async def api_list_topologies(
         total=total,
         limit=limit,
         offset=offset,
-        data=[TopologySummary(**r) for r in rows],
+        data=rows,
     )
