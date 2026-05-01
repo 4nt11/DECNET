@@ -107,6 +107,8 @@ def _parse_weights(
         if not isinstance(entry, dict):
             raise ValueError("each weight entry must be an object")
         cls_name = entry.get("content_class")
+        if not isinstance(cls_name, str):
+            raise ValueError(f"content_class must be a string, got {cls_name!r}")
         weight = entry.get("weight")
         if not isinstance(weight, int) or weight < 0:
             raise ValueError(

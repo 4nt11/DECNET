@@ -150,6 +150,8 @@ async def api_create_token(
         instrumenter_name = None
     else:
         # Upload-driven token.
+        if req.blob_uuid is None:
+            raise HTTPException(status_code=400, detail="blob_uuid required")
         blob = await repo.get_canary_blob(req.blob_uuid)
         if blob is None:
             raise HTTPException(status_code=404, detail="blob not found")
@@ -189,6 +191,8 @@ async def api_create_token(
         token_uuid=token_uuid, repo=repo, container=container,
     )
     row = await repo.get_canary_token(token_uuid)
+    if row is None:
+        raise HTTPException(status_code=500, detail="token insert succeeded but row not found")
     return _row_to_response(row)
 
 

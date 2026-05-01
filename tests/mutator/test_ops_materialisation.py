@@ -114,7 +114,7 @@ async def test_add_decky_spawns_base_and_service_containers(repo, stubs):
     tid = await _make_active(repo)
     # Pick an existing LAN to attach to.
     lans = await repo.list_lans_for_topology(tid)
-    home_lan = lans[0]["name"]
+    home_lan = lans[0].name
 
     await apply_add_decky(repo, tid, {
         "name": "newbox",
@@ -135,7 +135,7 @@ async def test_add_decky_flips_state_to_running_after_spawn(repo, stubs):
     """Without this the dashboard's ACTIVE DECKIES count reads 0/N."""
     tid = await _make_active(repo)
     lans = await repo.list_lans_for_topology(tid)
-    home_lan = lans[0]["name"]
+    home_lan = lans[0].name
 
     await apply_add_decky(repo, tid, {
         "name": "newrunner",
@@ -143,8 +143,8 @@ async def test_add_decky_flips_state_to_running_after_spawn(repo, stubs):
         "services": [],
     })
     rows = await repo.list_topology_deckies(tid)
-    new = next(r for r in rows if r["name"] == "newrunner")
-    assert new["state"] == "running"
+    new = next(r for r in rows if r.name == "newrunner")
+    assert new.state == "running"
 
 
 @pytest.mark.anyio
@@ -157,7 +157,7 @@ async def test_add_decky_skips_materialisation_when_pending(repo, stubs):
     lans = await repo.list_lans_for_topology(tid)
     await apply_add_decky(repo, tid, {
         "name": "ghost",
-        "lan": lans[0]["name"],
+        "lan": lans[0].name,
         "services": ["ssh"],
     })
 
@@ -172,7 +172,7 @@ async def test_remove_decky_stops_and_removes_containers(repo, stubs):
     tid = await _make_active(repo)
     deckies = await repo.list_topology_deckies(tid)
     target = deckies[0]
-    target_name = target["decky_config"]["name"]
+    target_name = (target.decky_config or {})["name"]
 
     await apply_remove_decky(repo, tid, {"decky": target_name})
 
@@ -195,16 +195,16 @@ async def test_attach_decky_calls_network_connect(repo, stubs):
     deckies = await repo.list_topology_deckies(tid)
     lans = await repo.list_lans_for_topology(tid)
     target = deckies[0]
-    target_name = target["decky_config"]["name"]
+    target_name = (target.decky_config or {})["name"]
     # Pick a LAN the decky isn't already on.
-    home_lan = next(iter(target["decky_config"]["ips_by_lan"]))
-    other_lan = next((l for l in lans if l["name"] != home_lan), None)
+    home_lan = next(iter((target.decky_config or {})["ips_by_lan"]))
+    other_lan = next((l for l in lans if l.name != home_lan), None)
     if other_lan is None:
         pytest.skip("topology has only one LAN; can't multi-home")
 
     await apply_attach_decky(repo, tid, {
         "decky": target_name,
-        "lan": other_lan["name"],
+        "lan": other_lan.name,
     })
 
     stubs["network"].connect.assert_called_once()
@@ -221,22 +221,22 @@ async def test_detach_decky_calls_network_disconnect(repo, stubs):
     deckies = await repo.list_topology_deckies(tid)
     lans = await repo.list_lans_for_topology(tid)
     target = deckies[0]
-    target_name = target["decky_config"]["name"]
-    home_lan = next(iter(target["decky_config"]["ips_by_lan"]))
-    other_lan = next((l for l in lans if l["name"] != home_lan), None)
+    target_name = (target.decky_config or {})["name"]
+    home_lan = next(iter((target.decky_config or {})["ips_by_lan"]))
+    other_lan = next((l for l in lans if l.name != home_lan), None)
     if other_lan is None:
         pytest.skip("topology has only one LAN")
 
     # Multi-home first so there's something to detach.
     await apply_attach_decky(repo, tid, {
         "decky": target_name,
-        "lan": other_lan["name"],
+        "lan": other_lan.name,
     })
     stubs["network"].connect.reset_mock()
 
     await apply_detach_decky(repo, tid, {
         "decky": target_name,
-        "lan": other_lan["name"],
+        "lan": other_lan.name,
     })
 
     stubs["network"].disconnect.assert_called_once()
@@ -250,8 +250,8 @@ async def test_update_decky_services_diff_targets_only_changed(repo, stubs):
     tid = await _make_active(repo)
     deckies = await repo.list_topology_deckies(tid)
     target = deckies[0]
-    target_name = target["decky_config"]["name"]
-    new_services = list(target["services"]) + ["http"]
+    target_name = (target.decky_config or {})["name"]
+    new_services = list(target.services) + ["http"]
 
     await apply_update_decky(repo, tid, {
         "decky": target_name,
@@ -277,7 +277,7 @@ async def test_update_decky_forwards_l3_flip_requires_force(repo, stubs):
     tid = await _make_active(repo)
     deckies = await repo.list_topology_deckies(tid)
     target = deckies[0]
-    target_name = target["decky_config"]["name"]
+    target_name = (target.decky_config or {})["name"]
 
     with pytest.raises(MutationError, match="force=true"):
         await apply_update_decky(repo, tid, {
@@ -298,7 +298,7 @@ async def test_update_decky_forwards_l3_flip_with_force_recreates_base(
     # DMZ; both deckies home there, so promoting deckies[0] to gateway
     # is valid (passes the DMZ-homing guard).
     target = deckies[0]
-    target_name = target["decky_config"]["name"]
+    target_name = (target.decky_config or {})["name"]
 
     await apply_update_decky(repo, tid, {
         "decky": target_name,
@@ -327,7 +327,7 @@ async def test_add_decky_falls_back_to_legacy_builder_on_buildx_wedge(
 
     tid = await _make_active(repo)
     lans = await repo.list_lans_for_topology(tid)
-    home_lan = lans[0]["name"]
+    home_lan = lans[0].name
 
     calls: list[dict] = []
 
@@ -402,7 +402,7 @@ async def test_update_lan_rejects_subnet_change_on_active(repo, stubs):
     lans = await repo.list_lans_for_topology(tid)
     with pytest.raises(MutationError, match="subnet"):
         await apply_update_lan(repo, tid, {
-            "name": lans[0]["name"],
+            "name": lans[0].name,
             "patch": {"subnet": "10.99.99.0/24"},
         })
 
@@ -413,7 +413,7 @@ async def test_update_lan_allows_coord_change_on_active(repo, stubs):
     lans = await repo.list_lans_for_topology(tid)
     # Coord-only update — should pass through without error.
     await apply_update_lan(repo, tid, {
-        "name": lans[0]["name"],
+        "name": lans[0].name,
         "x": 42.0,
         "y": 84.0,
     })

@@ -83,7 +83,7 @@ def peer_cn(ssl_object: Optional[ssl.SSLObject]) -> str:
     try:
         cert = x509.load_der_x509_certificate(der)
         attrs = cert.subject.get_attributes_for_oid(NameOID.COMMON_NAME)
-        return attrs[0].value if attrs else "unknown"
+        return str(attrs[0].value) if attrs else "unknown"
     except Exception:  # nosec B110 — provenance is best-effort
         return "unknown"
 

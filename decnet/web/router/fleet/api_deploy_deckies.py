@@ -62,7 +62,7 @@ async def api_deploy_deckies(req: DeployIniRequest, admin: dict = Depends(requir
         # because DecnetConfig.deckies has min_length=1.
         try:
             iface = ini.interface or detect_interface()
-            subnet_cidr, gateway = ini.subnet, ini.gateway
+            subnet_cidr, gateway = ini.subnet or "", ini.gateway or ""
             if not subnet_cidr or not gateway:
                 detected_subnet, detected_gateway = detect_subnet(iface)
                 subnet_cidr = subnet_cidr or detected_subnet

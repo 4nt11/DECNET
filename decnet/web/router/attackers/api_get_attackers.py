@@ -78,6 +78,7 @@ async def get_attackers(
     _ips = {row["ip"] for row in _data if row.get("ip")}
     _behaviors = await repo.get_behaviors_for_ips(_ips) if _ips else {}
     for row in _data:
-        row["behavior"] = _behaviors.get(row.get("ip"))
+        _ip: str | None = row.get("ip")
+        row["behavior"] = _behaviors.get(_ip) if _ip is not None else None
 
     return {"total": _total, "limit": limit, "offset": offset, "data": _data}
