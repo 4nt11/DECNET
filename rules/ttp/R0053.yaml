@@ -1,0 +1,19 @@
+rule_id: R0053
+rule_version: 1
+name: platform_inconsistency
+description: |
+  navigator.platform / userAgent / WebGL renderer disagree —
+  classic hand-built crawler with mismatched stealth shimming.
+applies_to:
+  - canary_fingerprint
+match:
+  kind: lifter:canary_platform_inconsistency
+emits:
+  - tactic: TA0005
+    technique_id: T1036
+    confidence: 0.8
+evidence_fields:
+  - navigator_platform
+  - user_agent
+  - webgl_renderer
+  - mismatch_pairs

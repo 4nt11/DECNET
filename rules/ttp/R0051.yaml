@@ -1,0 +1,21 @@
+rule_id: R0051
+rule_version: 1
+name: webrtc_ip_leak
+description: |
+  WebRTC-discovered private IP doesn't match the source-IP geo —
+  classic VPN/proxy obfuscation tell. CanaryFingerprintLifter
+  composes the leak with the IP geo lookup.
+applies_to:
+  - canary_fingerprint
+match:
+  kind: lifter:canary_webrtc_leak
+  require_geo_mismatch: true
+emits:
+  - tactic: TA0011
+    technique_id: T1090
+    confidence: 0.85
+evidence_fields:
+  - webrtc_local_ip
+  - source_ip
+  - source_country
+  - leak_country
