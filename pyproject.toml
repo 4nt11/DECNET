@@ -42,6 +42,11 @@ dependencies = [
     "Pillow>=12.2.0",
     "lxml>=6.1.0",
     "pikepdf>=10.5.1",
+    # Linux-only inotify watch for FilesystemRuleStore (decnet/ttp/store).
+    # The store's __init__ refuses to construct on non-Linux, so the
+    # platform-marker keeps macOS/Windows installs from pulling a
+    # never-imported wheel.
+    "asyncinotify>=4.0 ; sys_platform == 'linux'",
 ]
 
 [project.optional-dependencies]

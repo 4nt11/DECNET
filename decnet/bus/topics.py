@@ -278,12 +278,15 @@ EMAIL_RECEIVED = "received"
 #                                    or the rule's RuleState was disabled).
 #                                    Observability signal for the dashboard.
 #
-# Per-rule reload + state-change topics (``ttp.rule.reloaded.{rule_id}`` /
-# ``ttp.rule.state.{rule_id}``) ship in the RuleStore contract step — they
-# are co-located with the producer.
+# Per-rule reload + state-change topics. Built via
+# :func:`ttp_rule_reloaded` / :func:`ttp_rule_state`; SIEM consumers
+# subscribe to ``ttp.rule.reloaded.>`` (every rule) or
+# ``ttp.rule.reloaded.R0001`` (one rule) at their preferred granularity.
 TTP_TAGGED = "tagged"
 TTP_RULE_FIRED = "rule.fired"
 TTP_RULE_SUPPRESSED = "rule.suppressed"
+TTP_RULE_RELOADED = "rule.reloaded"
+TTP_RULE_STATE = "rule.state"
 
 
 # ─── Builders ────────────────────────────────────────────────────────────────
@@ -483,6 +486,36 @@ def ttp_rule_fired(technique_id: str) -> str:
     """
     _reject_tokens(technique_id)
     return f"{TTP}.rule.fired.{technique_id}"
+
+
+def ttp_rule_reloaded(rule_id: str) -> str:
+    """Build ``ttp.rule.reloaded.<rule_id>``.
+
+    Per-rule fan-out fired by the :class:`~decnet.ttp.store.base.RuleStore`
+    when a rule's *definition* changes (YAML edit on the filesystem
+    backend, ``ttp_rule`` row update on the database backend). One event
+    per per-rule edit — never batched (the "incremental, never batched"
+    property in TTP_TAGGING.md §"Bus topics" inherits its granularity
+    from :meth:`RuleStore.subscribe_changes`).
+
+    Subscribers: ``ttp.rule.reloaded.>`` for every rule,
+    ``ttp.rule.reloaded.R0001`` for one. *rule_id* is validated as a
+    single segment.
+    """
+    _reject_tokens(rule_id)
+    return f"{TTP}.{TTP_RULE_RELOADED}.{rule_id}"
+
+
+def ttp_rule_state(rule_id: str) -> str:
+    """Build ``ttp.rule.state.<rule_id>``.
+
+    Per-rule fan-out fired by the :class:`~decnet.ttp.store.base.RuleStore`
+    when a rule's *operational state* changes (operator hits the disable
+    button, an ``expires_at`` TTL fires and auto-reverts the state).
+    *rule_id* is validated as a single segment.
+    """
+    _reject_tokens(rule_id)
+    return f"{TTP}.{TTP_RULE_STATE}.{rule_id}"
 
 
 def _reject_tokens(*parts: str) -> None:

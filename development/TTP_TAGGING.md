@@ -2933,7 +2933,13 @@ Order:
    Pydantic validation, inotify watch, in-process state cache,
    `subscribe_changes()` async iterator yielding per-rule events.
    Test bus-event fan-out under a 5-file edit produces exactly 5
-   events. `test_*.py` for the filesystem backend green.
+   events. `test_*.py` for the filesystem backend green. ✅ done.
+   `asyncinotify` added to runtime deps (Linux-only marker). Bus
+   topic builders `ttp_rule_reloaded(rule_id)` and
+   `ttp_rule_state(rule_id)` shipped alongside the store. Content-hash
+   dedup in the inotify handler so a single write firing
+   `IN_CREATE` + `IN_CLOSE_WRITE` produces exactly one
+   `RuleChange`.
 6. **RuleStore — DatabaseRuleStore** — implement DB-backed
    variant. `ttp_rule` and `ttp_rule_state` tables created via
    SQLModel. Master-side filesystem→DB sync. Worker-side DB

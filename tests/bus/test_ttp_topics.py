@@ -21,6 +21,8 @@ def test_ttp_leaf_constants() -> None:
     assert topics.TTP_TAGGED == "tagged"
     assert topics.TTP_RULE_FIRED == "rule.fired"
     assert topics.TTP_RULE_SUPPRESSED == "rule.suppressed"
+    assert topics.TTP_RULE_RELOADED == "rule.reloaded"
+    assert topics.TTP_RULE_STATE == "rule.state"
 
 
 def test_email_received_is_one_nats_token() -> None:
@@ -46,6 +48,28 @@ def test_ttp_rule_fired_per_technique() -> None:
     assert topics.ttp_rule_fired("T1059") == "ttp.rule.fired.T1059"
 
 
+def test_ttp_rule_reloaded_per_rule() -> None:
+    assert topics.ttp_rule_reloaded("R0001") == "ttp.rule.reloaded.R0001"
+    assert topics.ttp_rule_reloaded("R9999") == "ttp.rule.reloaded.R9999"
+
+
+def test_ttp_rule_state_per_rule() -> None:
+    assert topics.ttp_rule_state("R0001") == "ttp.rule.state.R0001"
+    assert topics.ttp_rule_state("R0042") == "ttp.rule.state.R0042"
+
+
+@pytest.mark.parametrize("bad", ["", "has.dot", "has*wild", "has>wild", "with space"])
+def test_ttp_rule_reloaded_rejects_bad_segments(bad: str) -> None:
+    with pytest.raises(ValueError):
+        topics.ttp_rule_reloaded(bad)
+
+
+@pytest.mark.parametrize("bad", ["", "has.dot", "has*wild", "has>wild", "with space"])
+def test_ttp_rule_state_rejects_bad_segments(bad: str) -> None:
+    with pytest.raises(ValueError):
+        topics.ttp_rule_state(bad)
+
+
 def test_email_topic_builder() -> None:
     assert topics.email_topic(topics.EMAIL_RECEIVED) == "email.received"
 
@@ -63,9 +87,21 @@ def test_ttp_builder_rejects_empty() -> None:
     "ttp.rule.fired",
     "ttp.rule.fired.T1110",
     "ttp.rule.suppressed",
+    "ttp.rule.reloaded.R0001",
+    "ttp.rule.state.R0001",
 ])
 def test_ttp_wildcard_matches_every_documented_topic(topic: str) -> None:
     assert matches("ttp.>", topic) is True
+
+
+def test_ttp_rule_reloaded_wildcard_per_rule() -> None:
+    assert matches("ttp.rule.reloaded.>", "ttp.rule.reloaded.R0001") is True
+    assert matches("ttp.rule.reloaded.>", "ttp.rule.reloaded") is False
+
+
+def test_ttp_rule_state_wildcard_per_rule() -> None:
+    assert matches("ttp.rule.state.>", "ttp.rule.state.R0001") is True
+    assert matches("ttp.rule.state.>", "ttp.rule.state") is False
 
 
 def test_ttp_wildcard_excludes_root() -> None:

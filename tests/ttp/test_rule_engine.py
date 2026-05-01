@@ -20,6 +20,7 @@ from __future__ import annotations
 
 import asyncio
 import inspect
+import sys
 from typing import Any
 
 import pytest
@@ -172,19 +173,23 @@ def test_e25_malformed_yaml_fails_at_schema_validation() -> None:
         RuleSchema.model_validate(bad)
 
 
-@pytest.mark.xfail(
-    strict=True,
-    reason="impl phase E.3.5: RuleStore.load_compiled raises on malformed YAML",
-)
-def test_e25_malformed_yaml_fails_at_compile_not_evaluate() -> None:
-    """Once the store contract lands (E.1.11) and impl ships (E.3.5),
-    feeding the store a malformed YAML document must raise during
-    :meth:`RuleStore.load_compiled` (the deploy-time hook) — never at
-    :meth:`RuleEngine.evaluate` time. The trip-wire fires when impl
-    surfaces ``RuleStore`` and stores accept malformed input.
-    """
-    from decnet.ttp.store.base import RuleStore  # noqa: F401
-    raise AssertionError("E.3.5 will pin this once RuleStore lands")
+def test_e25_malformed_yaml_fails_at_compile_not_evaluate(tmp_path: Any) -> None:
+    """Feeding the store a malformed YAML document raises during
+    :meth:`RuleStore.load_compiled` — the deploy-time hook — never at
+    :meth:`RuleEngine.evaluate` time. Pinned at E.3.5 once the
+    filesystem store implementation lands."""
+    if sys.platform != "linux":  # pragma: no cover
+        pytest.skip("FilesystemRuleStore is Linux-only (inotify dep)")
+    from decnet.ttp.store.impl.filesystem import FilesystemRuleStore
+
+    bad = tmp_path / "R0001.yaml"
+    bad.write_text(
+        "rule_id: R0001\nrule_version: 1\nname: broken\n",
+        encoding="utf-8",
+    )
+    store = FilesystemRuleStore(rules_dir=tmp_path)
+    with pytest.raises((ValidationError, ValueError)):
+        asyncio.run(store.load_compiled())
 
 
 def test_e25_evaluate_unknown_source_kind_returns_empty() -> None:
