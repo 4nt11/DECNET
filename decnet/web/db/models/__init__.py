@@ -185,6 +185,16 @@ from .tarpit import (
     TarpitRuleResponse,
     TarpitStatusResponse,
 )
+from .ttp import (
+    CanaryFingerprintEvidence,
+    CommandEvidence,
+    EmailEvidence,
+    IntelEvidence,
+    TTPRule,
+    TTPRuleState,
+    TTPTag,
+    compute_tag_uuid,
+)
 
 __all__ = [
     # _base
@@ -345,4 +355,13 @@ __all__ = [
     "TarpitRule",
     "TarpitRuleResponse",
     "TarpitStatusResponse",
+    # ttp
+    "CanaryFingerprintEvidence",
+    "CommandEvidence",
+    "EmailEvidence",
+    "IntelEvidence",
+    "TTPRule",
+    "TTPRuleState",
+    "TTPTag",
+    "compute_tag_uuid",
 ]

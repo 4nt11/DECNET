@@ -2221,6 +2221,8 @@ Contracts ship in this order, one commit per step:
 
 **E.1.1 — Schema contract** (`decnet/web/db/models/ttp.py`)
 
+**Status:** ✅ done.
+
 - `TTPTag` SQLModel with the schema from "Schema" section above,
   including: `evidence` as `dict[str, Any]` over a SQLAlchemy JSON
   column (`Column(JSON, nullable=False)`); `attack_release` as
