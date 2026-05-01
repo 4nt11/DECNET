@@ -405,11 +405,11 @@ async def run_watch_loop(repo: BaseRepository, poll_interval_secs: int = 10) -> 
             t.cancel()
         if heartbeat_task is not None:
             heartbeat_task.cancel()
-        for t in (*wake_tasks, heartbeat_task):
-            if t is None:
+        for task in (*wake_tasks, heartbeat_task):
+            if task is None:
                 continue
             with contextlib.suppress(asyncio.CancelledError, Exception):
-                await t
+                await task
         if bus is not None:
             with contextlib.suppress(Exception):
                 await bus.close()
