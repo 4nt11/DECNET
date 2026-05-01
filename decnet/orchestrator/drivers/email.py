@@ -176,7 +176,7 @@ class EmailDriver(ActivityDriver):
         """Convenience accessor for telemetry / logging."""
         return self._llm.model
 
-    async def run(self, action: EmailAction) -> ActivityResult:
+    async def run(self, action: EmailAction) -> ActivityResult:  # type: ignore[override]
         return await self._run_email(action)
 
     async def _run_email(self, action: EmailAction) -> ActivityResult:

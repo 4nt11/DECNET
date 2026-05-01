@@ -303,7 +303,7 @@ async def _pick_action(
             )
         elif kind == "email":
             try:
-                action = await email_scheduler.pick(repo, rand=rng)
+                action = await email_scheduler.pick(repo, rand=rng)  # type: ignore[assignment]
             except Exception as exc:  # noqa: BLE001
                 logger.debug("orchestrator: email pick failed: %s", exc)
                 action = None

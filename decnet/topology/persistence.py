@@ -195,20 +195,20 @@ def _backfill_decky_configs(
             alloc = _alloc(lan_id)
             if alloc is None:
                 continue
-            ip: str | None = None
+            assigned_ip: str | None = None
             if primary_ip:
                 try:
                     if (
                         IPv4Address(primary_ip) in IPv4Network(lan["subnet"])
                         and alloc.is_free(primary_ip)
                     ):
-                        ip = primary_ip
-                        alloc.reserve(ip)
+                        assigned_ip = primary_ip
+                        alloc.reserve(assigned_ip)
                 except (ValueError, TypeError):
                     pass
-            if ip is None:
-                ip = alloc.next_free()
-            ips_by_lan[lan["name"]] = ip
+            if assigned_ip is None:
+                assigned_ip = alloc.next_free()
+            ips_by_lan[lan["name"]] = assigned_ip
         cfg["ips_by_lan"] = ips_by_lan
         decky["decky_config"] = cfg
 

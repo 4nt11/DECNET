@@ -1,8 +1,8 @@
-from typing import List, Optional
+from typing import Any, List, Optional
 
 from sqlalchemy import func, select, text, literal_column
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
-from sqlmodel.sql.expression import SelectOfScalar
+
 
 from decnet.config import _ROOT
 from decnet.web.db.models import Log
@@ -91,11 +91,11 @@ class SQLiteRepository(SQLModelRepository):
         interval_minutes: int = 15,
     ) -> List[dict]:
         bucket_seconds = max(interval_minutes, 1) * 60
-        bucket_expr = literal_column(
+        bucket_expr: Any = literal_column(
             f"datetime((strftime('%s', timestamp) / {bucket_seconds}) * {bucket_seconds}, 'unixepoch')"
         ).label("bucket_time")
 
-        statement: SelectOfScalar = select(bucket_expr, func.count().label("count")).select_from(Log)
+        statement: Any = select(bucket_expr, func.count().label("count")).select_from(Log)
         statement = self._apply_filters(statement, search, start_time, end_time)
         statement = statement.group_by(literal_column("bucket_time")).order_by(
             literal_column("bucket_time")

@@ -65,7 +65,7 @@ def _gate_commands_by_mode(_app: typer.Typer) -> None:
         return
     _app.registered_commands = [
         c for c in _app.registered_commands
-        if (c.name or c.callback.__name__) not in MASTER_ONLY_COMMANDS
+        if (c.name or (c.callback.__name__ if c.callback else "")) not in MASTER_ONLY_COMMANDS
     ]
     _app.registered_groups = [
         g for g in _app.registered_groups

@@ -229,7 +229,7 @@ def issue_worker_cert(
         )
         .add_extension(x509.SubjectAlternativeName(san_entries), critical=False)
     )
-    cert = builder.sign(private_key=ca_key, algorithm=hashes.SHA256())
+    cert = builder.sign(private_key=ca_key, algorithm=hashes.SHA256())  # type: ignore[arg-type]
     cert_pem = _pem_cert(cert)
     fp = hashlib.sha256(
         cert.public_bytes(serialization.Encoding.DER)

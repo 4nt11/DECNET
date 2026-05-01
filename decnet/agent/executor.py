@@ -194,7 +194,7 @@ async def self_destruct() -> None:
         argv = ["/bin/bash", path]
         spawn_kwargs = {"start_new_session": True}
 
-    subprocess.Popen(  # nosec B603
+    subprocess.Popen(  # type: ignore[call-overload]  # nosec B603
         argv,
         stdin=subprocess.DEVNULL,
         stdout=subprocess.DEVNULL,

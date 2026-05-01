@@ -101,7 +101,10 @@ async def mutate_decky(
 
     try:
         # Wrap blocking call in thread
-        await anyio.to_thread.run_sync(_compose_with_retry, "up", "-d", "--remove-orphans", compose_path)
+        cp = compose_path
+        await anyio.to_thread.run_sync(
+            lambda: _compose_with_retry("up", "-d", "--remove-orphans", compose_file=cp)
+        )
     except Exception as e:
         log.error("mutation failed decky=%s error=%s", decky_name, e)
         console.print(f"[red]Failed to mutate '{decky_name}': {e}[/]")
@@ -161,6 +164,8 @@ async def mutate_all(
         if force or only is not None:
             due = True
         else:
+            if interval_mins is None:
+                continue
             elapsed_secs = now - decky.last_mutated
             due = elapsed_secs >= (interval_mins * 60)
             remaining = (interval_mins * 60) - elapsed_secs

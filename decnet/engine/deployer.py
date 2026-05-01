@@ -393,6 +393,8 @@ def _compose_with_retry(
                 console.print(f"[red]{result.stderr.strip()}[/]")
                 log.error("docker compose %s failed after %d attempts: %s",
                           " ".join(args), retries, result.stderr.strip())
+    if last_exc is None:  # pragma: no cover — retries=0 is not a supported call
+        raise RuntimeError("_compose_with_retry exhausted retries without capturing an error")
     raise last_exc
 
 

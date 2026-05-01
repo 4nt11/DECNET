@@ -4,7 +4,7 @@ from __future__ import annotations
 import json
 import secrets
 from datetime import datetime, timezone
-from typing import Any
+from typing import Any, cast
 
 from fastapi import APIRouter, Depends, HTTPException
 
@@ -66,7 +66,7 @@ async def api_create_webhook(
     req: WebhookCreateRequest,
     admin: dict = Depends(require_admin),
 ) -> WebhookCreateResponse:
-    patterns = merge_patterns(req.simple_events, req.topic_patterns)
+    patterns = merge_patterns(cast(list[str], req.simple_events), req.topic_patterns)
     if not patterns:
         raise HTTPException(
             status_code=400,
@@ -188,7 +188,7 @@ async def api_update_webhook(
         # to clear all patterns must explicitly pass both as empty lists.
         simple = req.simple_events if req.simple_events is not None else []
         raw = req.topic_patterns if req.topic_patterns is not None else []
-        patterns = merge_patterns(simple, raw)
+        patterns = merge_patterns(cast(list[str], simple), raw)
         if not patterns:
             raise HTTPException(
                 status_code=400,

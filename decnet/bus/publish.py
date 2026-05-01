@@ -58,7 +58,7 @@ def make_thread_safe_publisher(
     contract the rest of this module already upholds.
     """
     if bus is None:
-        return lambda _topic, _payload, _event_type="": None
+        return lambda _topic, _payload, _event_type="": None  # type: ignore[misc]
 
     def _publish(topic: str, payload: dict[str, Any], event_type: str = "") -> None:
         # Stream threads may keep draining after the bus owner closed it
