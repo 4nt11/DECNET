@@ -70,7 +70,7 @@ async def run_reuse_loop(
         wake_tasks.append(asyncio.create_task(
             _run_control_listener_signal(bus, "reuse-correlator"),
         ))
-    except Exception as exc:  # noqa: BLE001
+    except Exception as exc:
         log.warning(
             "reuse correlator: bus unavailable, running in poll-only mode: %s",
             exc,
@@ -86,7 +86,7 @@ async def run_reuse_loop(
                 results = await engine.correlate_credential_reuse(
                     repo, min_targets=min_targets,
                 )
-            except Exception:  # noqa: BLE001
+            except Exception:
                 log.exception("reuse correlator: tick failed")
                 results = []
 
@@ -143,7 +143,7 @@ async def _wake_on(bus: BaseBus, wake: asyncio.Event, pattern: str) -> None:
                 wake.set()
     except asyncio.CancelledError:
         raise
-    except Exception as exc:  # noqa: BLE001
+    except Exception as exc:
         log.warning(
             "reuse correlator: subscriber for %s died (%s); falling back to poll",
             pattern, exc,

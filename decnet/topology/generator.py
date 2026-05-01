@@ -23,7 +23,9 @@ from decnet.topology.config import (
     _PlannedLAN,
 )
 
-# Range of services per randomly assigned decky (matches decnet.fleet).
+# Per-decky service count bounds. 1 minimum keeps every decky functional;
+# 3 maximum balances service diversity against subnet IP utilization — the
+# full non-singleton service pool (~28 entries) makes higher counts wasteful.
 _SVC_MIN = 1
 _SVC_MAX = 3
 
