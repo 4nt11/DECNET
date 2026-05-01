@@ -296,8 +296,12 @@ def check_gateway_homed_in_dmz(h: dict[str, Any]) -> list[ValidationIssue]:
     legitimately.  The semantic is "this decky is the front door" —
     only meaningful when the LAN is the DMZ.
 
-    Errors out the validator so the live ``forwards_l3`` flip path
-    catches this before recreating the base.
+    Not in ``_RULES``: ``forwards_l3`` encodes two semantics — internal
+    bridge routing (generator-assigned, legitimately on non-DMZ LANs) and
+    DMZ gateway publication (operator-assigned, must be DMZ-homed).
+    Standing validation cannot distinguish them; this check is therefore
+    path-specific and called only on the explicit operator flip path
+    (``forwards_l3: False → True`` via ``apply_update_decky``).
     """
     if not h.get("deckies"):
         return []
@@ -408,23 +412,8 @@ _RULES: list[Callable[[dict[str, Any]], list[ValidationIssue]]] = [
     check_services_known,
     check_service_config_shape,
 ]
-# NOTE: ``check_gateway_homed_in_dmz`` is intentionally NOT in _RULES.
-# The codebase uses ``forwards_l3=True`` for two distinct semantics:
-#
-#   1. Generic L3 forwarding (internal bridge deckies: enable
-#      net.ipv4.ip_forward so the decky can route between its multi-home
-#      LANs).  The generator writes this on internal bridges via
-#      ``bridge_forward_probability``; those bridges legitimately home
-#      in non-DMZ LANs.
-#   2. DMZ gateway (host-port publisher: the decky exposes its services
-#      on the host's public IP).  Only meaningful when the home LAN is
-#      the DMZ.
-#
-# Standing validation can't enforce DMZ-homing without breaking case 1.
-# Instead, the rule fires only on the explicit user-driven flip path
-# (apply_update_decky setting forwards_l3 from False → True), where the
-# operator's intent is unambiguously "make this a gateway".  Generator
-# output and bridge-decky paths bypass this check.
+# check_gateway_homed_in_dmz is intentionally absent — it is path-specific
+# (forwards_l3 overloads two semantics). See its docstring.
 
 
 def validate(hydrated: dict[str, Any]) -> list[ValidationIssue]:
