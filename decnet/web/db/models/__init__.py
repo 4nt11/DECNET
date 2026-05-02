@@ -200,6 +200,7 @@ from .ttp import (
     TTPRule,
     TTPRuleState,
     TTPTag,
+    TTPTagDetailRow,
     TechniqueRollupRow,
     compute_tag_uuid,
 )
@@ -369,6 +370,7 @@ __all__ = [
     "CommandEvidence",
     "EmailEvidence",
     "IdentityTechniqueRow",
+    "TTPTagDetailRow",
     "IntelEvidence",
     "NavigatorLayer",
     "NavigatorTechnique",

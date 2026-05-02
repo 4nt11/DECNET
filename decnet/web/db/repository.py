@@ -1378,6 +1378,25 @@ class BaseRepository(ABC):
         raise NotImplementedError
 
     @abstractmethod
+    async def list_tags_by_scope_and_technique(
+        self,
+        *,
+        scope: str,
+        uuid: str,
+        technique_id: str,
+        sub_technique_id: Optional[str] = None,
+        limit: int = 200,
+    ) -> list[dict[str, Any]]:
+        """Raw ``ttp_tag`` rows backing the operator inspector.
+
+        Surfaces evidence + rule_id / source_kind / source_id so the
+        UI can show *why* the engine flagged a technique. Filtered by
+        scope (identity / attacker / session) + technique
+        (+ optional sub_technique). Newest-first.
+        """
+        raise NotImplementedError
+
+    @abstractmethod
     async def list_distinct_techniques(self) -> list[TechniqueRollupRow]:
         """Fleet-wide distinct-technique rollup."""
         raise NotImplementedError

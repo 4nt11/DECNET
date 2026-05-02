@@ -25,6 +25,7 @@ BY_ATTACKER = _BASE + "/by-attacker/{attacker_uuid}"
 BY_CAMPAIGN = _BASE + "/by-campaign/{campaign_uuid}"
 BY_SESSION = _BASE + "/by-session/{session_id}"
 RULES = f"{_BASE}/rules"
+TAG_DETAILS = _BASE + "/tags/by-{scope}/{uuid}/{technique_id}"
 NAVIGATOR = f"{_BASE}/export/navigator"
 NAVIGATOR_IDENTITY = _BASE + "/export/navigator/identity/{uuid}"
 

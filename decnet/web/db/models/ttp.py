@@ -270,6 +270,32 @@ class IdentityTechniqueRow(BaseModel):
     confidence_max: float
 
 
+class TTPTagDetailRow(BaseModel):
+    """One row of ``GET /api/v1/ttp/tags/by-{scope}/{uuid}/{technique_id}`` —
+    a single ``ttp_tag`` row exposing the rule-engine's reasoning
+    (rule_id / source_kind / source_id / evidence) so the operator UI
+    can show *why* the engine flagged a technique, not just *that* it
+    did. Mirrors the persisted shape of :class:`TTPTag` minus the
+    NULL-anchor guard fields the consumer doesn't need."""
+
+    uuid: str
+    source_kind: str
+    source_id: str
+    attacker_uuid: Optional[str] = None
+    identity_uuid: Optional[str] = None
+    session_id: Optional[str] = None
+    decky_id: Optional[str] = None
+    tactic: str
+    technique_id: str
+    sub_technique_id: Optional[str] = None
+    confidence: float
+    rule_id: str
+    rule_version: int
+    evidence: dict[str, Any] = Field(default_factory=dict)
+    attack_release: str
+    created_at: datetime
+
+
 class CampaignTechniqueRow(BaseModel):
     """One row of /api/v1/ttp/by-campaign/{uuid} — a technique observed
     across at least one Identity rolled up into the campaign."""

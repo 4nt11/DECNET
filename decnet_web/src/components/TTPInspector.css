@@ -1,0 +1,140 @@
+/*
+ * TTPInspector — sidebar drawer that explains *why* the rule engine
+ * flagged a technique. Mirrors CredentialReuseInspector / BountyInspector
+ * geometry and tokens; only the colour accent differs (violet for the
+ * TTP family).
+ */
+
+.ttp-drawer-backdrop {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.6);
+  display: flex;
+  justify-content: flex-end;
+  z-index: 1000;
+  animation: ttp-fade 0.15s ease;
+}
+@keyframes ttp-fade { from { opacity: 0; } to { opacity: 1; } }
+
+.ttp-drawer {
+  width: min(680px, 100%);
+  height: 100%;
+  background: var(--bg);
+  border-left: 1px solid var(--violet);
+  box-shadow: -12px 0 40px rgba(155, 135, 245, 0.12);
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  animation: ttp-slide 0.2s ease;
+}
+@keyframes ttp-slide {
+  from { transform: translateX(30px); opacity: 0.6; }
+  to   { transform: none; opacity: 1; }
+}
+
+.ttp-drawer .bd-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 16px 20px;
+  border-bottom: 1px solid var(--border);
+}
+.ttp-drawer .bd-head h3 {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 0.9rem;
+  letter-spacing: 3px;
+  color: var(--violet);
+  margin: 0;
+}
+.ttp-drawer .close-btn {
+  background: transparent;
+  border: 1px solid var(--border);
+  color: var(--matrix);
+  display: flex;
+  padding: 4px;
+  cursor: pointer;
+}
+.ttp-drawer .close-btn:hover { border-color: var(--accent); }
+
+.ttp-drawer .bd-body {
+  padding: 16px 20px;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.ttp-drawer .type-label {
+  font-size: 0.7rem;
+  letter-spacing: 2px;
+  color: var(--dim-color);
+  text-transform: uppercase;
+  margin-bottom: 6px;
+}
+
+.ttp-tag-card {
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  padding: 10px 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  background: rgba(255, 255, 255, 0.015);
+}
+
+.ttp-tag-card .ttp-card-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 8px;
+  font-size: 0.78rem;
+}
+
+.ttp-tag-card .ttp-rule-id {
+  color: var(--violet);
+  letter-spacing: 1px;
+}
+
+.ttp-tag-card .ttp-confidence {
+  font-variant-numeric: tabular-nums;
+  color: var(--matrix);
+}
+
+.ttp-tag-card .ttp-meta {
+  display: grid;
+  grid-template-columns: 110px 1fr;
+  gap: 4px 12px;
+  font-size: 0.75rem;
+}
+.ttp-tag-card .ttp-meta .k {
+  color: var(--dim-color);
+  text-transform: uppercase;
+  letter-spacing: 1.5px;
+  font-size: 0.7rem;
+}
+.ttp-tag-card .ttp-meta .v {
+  word-break: break-all;
+}
+
+.ttp-evidence {
+  background: rgba(0, 0, 0, 0.35);
+  border: 1px solid var(--border);
+  border-radius: 3px;
+  padding: 8px 10px;
+  font-family: var(--mono, ui-monospace, monospace);
+  font-size: 0.72rem;
+  white-space: pre-wrap;
+  word-break: break-all;
+  color: var(--matrix);
+  max-height: 280px;
+  overflow-y: auto;
+}
+
+.ttp-empty {
+  padding: 24px;
+  text-align: center;
+  color: var(--dim-color);
+  font-size: 0.8rem;
+  letter-spacing: 1px;
+}

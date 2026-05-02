@@ -2,6 +2,7 @@ import React, { useEffect, useState } from 'react';
 import { Crosshair, Download, Target } from '../icons';
 import api from '../utils/api';
 import EmptyState from './EmptyState/EmptyState';
+import TTPInspector from './TTPInspector';
 
 /*
  * TTPsObservedSection — shared between IdentityDetail (primary) and
@@ -59,6 +60,7 @@ const TTPsObservedSection: React.FC<Props> = ({ scope, uuid }) => {
   const [rows, setRows] = useState<TechniqueRow[]>([]);
   const [loaded, setLoaded] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [selected, setSelected] = useState<TechniqueRow | null>(null);
 
   useEffect(() => {
     let cancelled = false;
@@ -141,7 +143,11 @@ const TTPsObservedSection: React.FC<Props> = ({ scope, uuid }) => {
                 </div>
                 <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
                   {byTactic[tid].map((r) => (
-                    <TechniqueBar key={`${r.technique_id}-${r.sub_technique_id ?? ''}`} row={r} />
+                    <TechniqueBar
+                      key={`${r.technique_id}-${r.sub_technique_id ?? ''}`}
+                      row={r}
+                      onClick={() => setSelected(r)}
+                    />
                   ))}
                 </div>
               </div>
@@ -149,11 +155,26 @@ const TTPsObservedSection: React.FC<Props> = ({ scope, uuid }) => {
           </div>
         )}
       </div>
+      {selected && (
+        <TTPInspector
+          scope={scope}
+          uuid={uuid}
+          techniqueId={selected.technique_id}
+          subTechniqueId={selected.sub_technique_id}
+          tactic={selected.tactic}
+          count={selected.count}
+          confidenceMax={selected.confidence_max}
+          onClose={() => setSelected(null)}
+        />
+      )}
     </div>
   );
 };
 
-const TechniqueBar: React.FC<{ row: TechniqueRow }> = ({ row }) => {
+const TechniqueBar: React.FC<{
+  row: TechniqueRow;
+  onClick: () => void;
+}> = ({ row, onClick }) => {
   // Confidence bar: 0..1 mapped to 0..100% width. Values below 0.3
   // can never appear (repo confidence floor) so the bar always shows
   // some non-trivial fill.
@@ -161,12 +182,27 @@ const TechniqueBar: React.FC<{ row: TechniqueRow }> = ({ row }) => {
   const label = row.sub_technique_id ?? row.technique_id;
   return (
     <div
+      role="button"
+      tabIndex={0}
+      onClick={onClick}
+      onKeyDown={(e) => {
+        if (e.key === 'Enter' || e.key === ' ') {
+          e.preventDefault();
+          onClick();
+        }
+      }}
+      title="Click to inspect underlying tags + evidence"
       style={{
         display: 'grid',
         gridTemplateColumns: '160px 1fr 60px',
         gap: 8,
         alignItems: 'center',
+        cursor: 'pointer',
+        padding: '2px 4px',
+        borderRadius: 2,
       }}
+      onMouseEnter={(e) => { e.currentTarget.style.background = 'rgba(155,135,245,0.06)'; }}
+      onMouseLeave={(e) => { e.currentTarget.style.background = 'transparent'; }}
     >
       <span className="matrix-text">{label}</span>
       <div

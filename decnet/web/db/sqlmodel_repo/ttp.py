@@ -279,6 +279,55 @@ class TTPMixin(_MixinBase):
                 for r in res.all()
             ]
 
+    async def list_tags_by_scope_and_technique(
+        self,
+        *,
+        scope: str,
+        uuid: str,
+        technique_id: str,
+        sub_technique_id: str | None = None,
+        limit: int = 200,
+    ) -> list[dict[str, Any]]:
+        """Return raw ``ttp_tag`` rows for a scope + technique pair.
+
+        Powers the operator-facing inspector that explains *why* the
+        rule engine flagged a technique. Three scopes:
+
+        * ``scope="identity"`` — tags directly anchored on the identity
+          AND tags on Attackers projecting up to the identity.
+        * ``scope="attacker"`` — tags anchored on this attacker_uuid.
+        * ``scope="session"`` — tags anchored on this session_id.
+
+        Newest-first; capped at ``limit`` rows so a heavily-tagged
+        attacker doesn't sink the inspector.
+        """
+        async with self._session() as session:
+            stmt: Any = select(TTPTag)
+            if scope == "identity":
+                attacker_uuids_subq = (
+                    select(col(Attacker.uuid))
+                    .where(col(Attacker.identity_id) == uuid)
+                    .scalar_subquery()
+                )
+                stmt = stmt.where(
+                    (col(TTPTag.identity_uuid) == uuid)
+                    | (col(TTPTag.attacker_uuid).in_(attacker_uuids_subq))
+                )
+            elif scope == "attacker":
+                stmt = stmt.where(col(TTPTag.attacker_uuid) == uuid)
+            elif scope == "session":
+                stmt = stmt.where(col(TTPTag.session_id) == uuid)
+            else:
+                raise ValueError(f"unknown scope: {scope!r}")
+            stmt = stmt.where(col(TTPTag.technique_id) == technique_id)
+            if sub_technique_id is not None:
+                stmt = stmt.where(
+                    col(TTPTag.sub_technique_id) == sub_technique_id,
+                )
+            stmt = stmt.order_by(col(TTPTag.created_at).desc()).limit(limit)
+            res = await session.execute(stmt)
+            return [r.model_dump(mode="json") for r in res.scalars().all()]
+
     # ── Backfill iterators (E.4) ────────────────────────────────────
     #
     # Read-only iterators consumed by ``decnet ttp backfill`` to replay

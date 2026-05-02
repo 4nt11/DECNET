@@ -59,6 +59,7 @@ from .ttp.api_get_by_attacker import router as ttp_by_attacker_router
 from .ttp.api_get_by_campaign import router as ttp_by_campaign_router
 from .ttp.api_get_by_session import router as ttp_by_session_router
 from .ttp.api_get_rules import router as ttp_rules_router
+from .ttp.api_get_tag_details import router as ttp_tag_details_router
 from .ttp.api_export_navigator import router as ttp_navigator_router
 
 api_router = APIRouter(
@@ -180,4 +181,5 @@ api_router.include_router(ttp_by_attacker_router)
 api_router.include_router(ttp_by_campaign_router)
 api_router.include_router(ttp_by_session_router)
 api_router.include_router(ttp_rules_router)
+api_router.include_router(ttp_tag_details_router)
 api_router.include_router(ttp_navigator_router)
