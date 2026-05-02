@@ -45,24 +45,60 @@ stays YAML-only.
 Trigger: v0 precision targets met + at least one downstream user
 who needs it.
 
-### `attacker.email.received` producer — wire when SMTP-receive
-### persistence lands
+### `attacker.email.received` producer — PAID 2026-05-02
 
-The TTP worker subscribes to `email.received` for the EmailLifter
-(R0041–R0048), but no upstream component publishes the topic today.
-The honeypot SMTP-relay path (`decnet/services/smtp_relay.py`) does
-not persist received emails to a DB table the way ingester /
-collector persist log events, so there is no source row to fan out
-on. See `development/TTP_TAGGING.md` §"Bus topics → Producer
-wiring" for the full producer audit.
+Originally deferred under the premise that "the honeypot SMTP-relay
+path does not persist received emails to a DB table." That was wrong
+— SMTPProtocol persists every received message as a Bounty artifact
+(`bounty_type="artifact"`, `payload.kind="mail"`) at
+`decnet/web/ingester.py:596–615`, and the `_summarize_message` helper
+already extracts the headers + per-attachment metadata.
 
-**STALE PREMISE (2026-05-02):** ANTI noted during the intel audit
-that the SMTP honeypots DO persist all received messages today.
-Re-triage this entry — the gating premise above may no longer
-hold and the producer wiring may be paydown-able directly. Map
-the actual SMTP-receive persistence to `ReceivedEmail` (or its
-extant analogue), then wire the publisher.
+The producer was wired in the same commit that struck this entry.
+The TTP worker subscribes to `email.received` (per
+`decnet/ttp/worker.py:66`) and dispatches to the EmailLifter
+(R0041–R0048). After paydown the channel is live for R0041 /
+R0043 / R0044 / R0045, and partial for R0046 (extension lane only).
 
-Trigger: SMTP-receive persistence model lands (a `ReceivedEmail`
-SQLModel + ingest path). Wire the publisher in the same PR.
+The remaining R0042 / R0046-deep / R0047 / R0048 lanes ride on the
+heavyweight extraction follow-up below.
+
+### EmailLifter heavyweight feature extraction — R0042 / R0046 / R0047 / R0048
+
+The cheap header / domain / extension extractions landed with the
+2026-05-02 producer paydown above. These predicates still need
+deeper signal before they fire:
+
+- **R0042 (mass phish)** — needs `body_simhash`. A near-duplicate
+  hash (simhash / minhash) over the body lets the lifter score
+  "same template fanned out to many recipients." The extractor is
+  decky-side; the wire field is a single string.
+- **R0046 (malicious attachment)** — extension lane fires today.
+  The remaining lanes need:
+  - `attachment_macros: bool` — Office macro detection (oletools or
+    a minimal VBA-stream sniff inside the .ole / .docx zip).
+  - `attachment_password_protected: bool` — encrypted-archive
+    detection across .zip / .7z / .rar.
+  - `html_smuggling: bool` — heuristic over HTML body parts looking
+    for the canonical `<a download>` + base64-blob / Blob() pattern.
+  - `mal_hash_match: bool` — match against a curated bad-hash feed
+    (provider TBD; could ride on the same enrich worker as
+    AttackerIntel).
+- **R0047 (BEC) / R0048 (encoded payload)** — both predicates read
+  `body_text`. We deliberately do NOT ship raw body text on the bus
+  today: PII concerns, payload size, and the EmailLifter's evidence
+  filter strips it anyway. The wire-up needs either (a) a hashed /
+  truncated body projection, (b) the lifter reaching back to fetch
+  the .eml off disk on the same host, or (c) a privacy-safe
+  intermediate (BEC-keyword presence flags, base64 byte counts)
+  that satisfies the predicates without leaking raw text. Pick one
+  before the extractor work.
+
+Field map per rule: `development/TTP_TAGGING.md` §"Bus topics →
+Producer wiring" + `decnet/ttp/impl/email_lifter.py` predicates.
+
+Trigger: any of these rules generates enough signal in production
+to justify the extractor cost, OR a bad-hash feed becomes available
+and unblocks R0046's mal_hash_match lane in particular.
 Owner: TBD.
+Filed: 2026-05-02 alongside the DEBT #3 paydown.
