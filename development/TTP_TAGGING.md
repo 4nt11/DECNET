@@ -1509,9 +1509,82 @@ Mitigation:
   AbuseIPDB category nobody has mapped yet is silently ignored
   rather than tagged as some "generic abuse" technique. False
   silence is recoverable; false labels poison the SOC.
-- **Quarterly review.** Add a note to DEBT.md to re-walk each
-  provider's category catalogue every quarter post-v1, until the
-  mapping tables stabilise.
+- **Quarterly review.** Re-walk each provider's catalogue every
+  quarter, tracked in `DEBT.md`. Each rule YAML carries its own
+  `last_reviewed` / `next_review` markers as the canonical record;
+  `DEBT.md` is just the calendar reminder.
+
+#### Drift-check runbook
+
+The audit takes ~20 minutes when nothing has drifted, longer when
+mappings need updating. Order matters: the upstream catalogue is
+authoritative, the lifter enum mirrors it, and the rule YAML
+emits list MUST be a superset of every technique the predicate can
+emit (the 2026-05-02 ship-time audit caught this exact cascade
+silently dropping more than half of v1's intel tag emissions).
+
+Per-provider source of truth:
+
+| Provider   | Category catalogue                                                  | Authentication  |
+|------------|---------------------------------------------------------------------|-----------------|
+| AbuseIPDB  | https://www.abuseipdb.com/categories                                | none (public)   |
+| GreyNoise  | https://docs.greynoise.io/docs/understanding-greynoise-classifications + tags reference | Community endpoint returns `classification` + `name` only — tags require a non-Community plan |
+| ThreatFox  | `POST https://threatfox-api.abuse.ch/api/v1/` body `{"query":"types"}` | `Auth-Key` header (`DECNET_THREATFOX_API_KEY`) |
+| Feodo      | https://feodotracker.abuse.ch/blocklist/ — feed-driven, no enum     | none (public)   |
+
+For each provider:
+
+1. **Fetch the upstream catalogue** (URL above). For ThreatFox use
+   `curl -s -X POST https://threatfox-api.abuse.ch/api/v1/ -H "Auth-Key: $DECNET_THREATFOX_API_KEY" -H 'Content-Type: application/json' -d '{"query":"types"}'`.
+2. **Diff against the lifter's enum** in
+   `decnet/ttp/impl/intel_lifter.py` (`_ABUSEIPDB_CATEGORY_TO_TECHNIQUES`,
+   `_GREYNOISE_TAG_TO_TECHNIQUES`,
+   `_THREATFOX_THREAT_TYPE_TO_TECHNIQUES`). Note also the AbuseIPDB
+   numeric codes — the v1 ship-time bug was a code-vs-name mix-up
+   (cat 10 was treated as DDoS when it's Web Spam), so confirm
+   names match codes when re-checking.
+3. **For each new entry** the upstream introduces, decide whether
+   the signal warrants an ATT&CK technique. Default is "do not
+   map" — a category we cannot pin to a technique stays silent
+   rather than firing a generic tag.
+4. **Drift found:**
+   - Update the lifter enum.
+   - If the new technique is not already in the rule's `emits`
+     list (`rules/ttp/R005{4..7}.yaml`), **add it there** — the
+     `_emit_filtered` machinery silently drops emits absent from
+     the YAML list. This is the cascade bug to watch for.
+   - If the new technique is not already in
+     `decnet/ttp/attack_catalog.py`, **add it there** — the
+     `test_every_rule_pack_technique_has_a_catalogue_entry` guard
+     fails the build otherwise.
+   - Bump `rule_version` on the affected YAML(s).
+   - Add a positive emit test in `tests/ttp/test_intel_lifter.py`.
+   - Commit with subject `feat(ttp): drift R0054-* — <provider> +
+     <category>`.
+5. **No drift:** bump `last_reviewed` / `next_review` on each
+   touched rule YAML. No rule_version bump. Commit with subject
+   `chore(ttp): R0054-R0058 quarterly drift review (no changes)`.
+
+The intel pipeline is end-to-end fragile — a working enum is
+necessary but not sufficient. Pre-shipping any change here, run
+`pytest tests/intel/ tests/ttp/ -k 'intel'` to exercise the full
+provider → AttackerIntel → bus payload → IntelLifter → emit chain.
+
+##### Ship-time audit log
+
+- **2026-05-02** — initial v1 audit (commit forthcoming). Found
+  three classes of bug: (1) AbuseIPDB code typos (10/17 → 4/13)
+  in both code and design doc; (2) `emits`-list cascade silently
+  dropped majority of predicate techniques across R0054 / R0055 /
+  R0057; (3) ThreatFox keyed on `ioc_type` when the canonical
+  taxonomy field is `threat_type`. Also wired
+  `AttackerIntel.{abuseipdb_categories, greynoise_tags,
+  greynoise_name, feodo_malware_family, threatfox_*_types,
+  threatfox_malware_families}` columns and the matching producer
+  parsing — without these, R0054 / R0055 / R0057 fired zero tags
+  in production despite passing unit tests. Added
+  `last_reviewed` / `next_review` markers on all R0054–R0058
+  YAMLs; next review 2026-08-02.
 
 ### 10. When to graduate from filesystem store to database store
 
@@ -2010,11 +2083,23 @@ engines produced.
 AbuseIPDB returns up to two categories per report plus an aggregate
 abuse-confidence score (0–100). Per-category mapping:
 
+Mapping table (v2 — corrected by the 2026-05-02 ship-time audit;
+AbuseIPDB code numbers verified against
+https://www.abuseipdb.com/categories on review date):
+
 | AbuseIPDB category                          | Tactic | Technique | Sub-tech | Conf  |
 |----------------------------------------------|--------|-----------|----------|-------|
+| 5 — FTP Brute-Force                          | TA0006 | T1110     | (none)   | H     |
+| 7 — Phishing                                 | TA0001 | T1566     | (none)   | M     |
+| 9 — Open Proxy                               | TA0011 | T1090     | (none)   | M     |
+| 11 — Email Spam                              | TA0040 | T1496     | (none)   | M     |
+| 11 — Email Spam (high score, ≥80)            | TA0001 | T1566     | (none)   | M     |
+| 13 — VPN IP                                  | TA0011 | T1090     | (none)   | M     |
 | 14 — Port Scan                               | TA0007 | T1046     | (none)   | H     |
 | 14 — Port Scan                               | TA0043 | T1595     | T1595.001| H     |
 | 15 — Hacking                                 | TA0001 | T1190     | (none)   | M     |
+| 16 — SQL Injection                           | TA0001 | T1190     | (none)   | H     |
+| 17 — Spoofing (email-sender)                 | TA0001 | T1566     | (none)   | M     |
 | 18 — Brute-Force                             | TA0006 | T1110     | (none)   | H     |
 | 18 + service=SSH                             | TA0006 | T1110     | T1110.001| H     |
 | 19 — Bad Web Bot                             | TA0043 | T1595     | T1595.002| M     |
@@ -2022,13 +2107,9 @@ abuse-confidence score (0–100). Per-category mapping:
 | 21 — Web App Attack                          | TA0001 | T1190     | (none)   | H     |
 | 22 — SSH                                     | TA0006 | T1110     | (none)   | M     |
 | 23 — IoT Targeted                            | TA0001 | T1190     | (none)   | M     |
-| 11 — Email Spam                              | TA0040 | T1496     | (none)   | M     |
-| 11 — Email Spam (high score, ≥80)            | TA0001 | T1566     | (none)   | M     |
-| 10 — DDoS                                    | TA0040 | T1498     | (none)   | L     |
-| 5 — FTP Brute-Force                          | TA0006 | T1110     | (none)   | H     |
-| 17 — VPN IP                                  | TA0011 | T1090     | (none)   | M     |
-| 9 — Open Proxy                               | TA0011 | T1090     | (none)   | M     |
-| 4 — DDoS (untyped)                           | (drop — too muddy for v0)             |       |
+| 1 / 2 / 3 / 6 / 8 / 12 — DNS / Fraud / Ping / VoIP / Blog Spam | (intentionally unmapped — low IP-layer signal) | | |
+| 4 — DDoS Attack                              | (drop — too muddy at IP layer for v0; revisit when service-aware) | | |
+| 10 — Web Spam                                | (drop — CMS / referer spam has no clean ATT&CK fit at the IP layer) | | |
 
 Final tag confidence = listed band × `abuseipdb_score / 100`.
 
@@ -2036,7 +2117,7 @@ Final tag confidence = listed band × `abuseipdb_score / 100`.
 
 | GreyNoise signal                            | Tactic | Technique | Sub-tech  | Conf  |
 |----------------------------------------------|--------|-----------|-----------|-------|
-| classification = "malicious"                 | (no tag alone — needs tag) |        |
+| classification = "malicious" (no recognised tag) | TA0011 | T1071 | (none) | M (0.5×) |
 | classification = "benign"                    | (no tag — confidence-decrement existing tags) |
 | classification = "scanner"                   | TA0043 | T1595     | T1595.002 | H     |
 | tag matches "tor_exit_node"                  | TA0011 | T1090     | T1090.003 | H     |
@@ -2045,11 +2126,15 @@ Final tag confidence = listed band × `abuseipdb_score / 100`.
 | tag matches "ssh_bruteforcer"                | TA0006 | T1110     | T1110.001 | H     |
 | tag matches "web_crawler" (non-Google)       | TA0043 | T1595     | T1595.002 | M     |
 
-Final confidence = listed band × 1.0 (GreyNoise has no per-verdict
-score; classification is binary). Apply the "benign" decrement
-*only* to confidence-bumpable existing tags, never to identity-
-rollup or behavioral-lifter tags (those have independent
-substantiation).
+Final confidence = listed band × multiplier; the bare-malicious
+lane uses a 0.5× multiplier (audit decision 2026-05-02 — the
+verdict is real but unspecific). All tag-driven lanes use 1.0×.
+
+The Community endpoint does not surface tags today; the tag-driven
+emits become live only when an operator wires a non-Community
+provider plan that does. Apply the "benign" decrement *only* to
+confidence-bumpable existing tags, never to identity-rollup or
+behavioral-lifter tags (those have independent substantiation).
 
 #### abuse.ch Feodo Tracker
 
@@ -2065,21 +2150,32 @@ for ThreatFox where the IOC type genuinely varies.
 
 #### abuse.ch ThreatFox
 
-ThreatFox returns IOC type + malware family. Per-IOC-type mapping:
+ThreatFox returns a list of matches per queried IP. Each match has
+a `threat_type` (the canonical taxonomy field, ∈ {`botnet_cc`,
+`payload_delivery`, `payload`, `cc_skimming`}) and an `ioc_type`
+(the indicator format — `url` / `domain` / `ip:port` / `md5_hash`
+/ `sha256_hash` / `sha3_384_hash` / `sha1_hash` / `envelope_from`
+/ `body_from`). The 2026-05-02 ship-time audit corrected v1's
+inversion of these fields; ATT&CK dispatch keys on `threat_type`,
+`ioc_type` is evidence-only.
 
-| ThreatFox IOC type                          | Tactic | Technique | Sub-tech  | Conf  |
+Per-`threat_type` mapping (v2):
+
+| ThreatFox threat_type                       | Tactic | Technique | Sub-tech  | Conf  |
 |----------------------------------------------|--------|-----------|-----------|-------|
 | `botnet_cc`                                  | TA0011 | T1071     | T1071.001 | H     |
 | `botnet_cc`                                  | TA0042 | T1588     | T1588.001 | H     |
 | `payload_delivery`                           | TA0011 | T1105     | (none)    | H     |
 | `payload_delivery`                           | TA0042 | T1588     | T1588.001 | H     |
-| `c2_server`                                  | TA0011 | T1071     | T1071.001 | H     |
-| `download_url`                               | TA0011 | T1105     | (none)    | H     |
+| `payload`                                    | TA0042 | T1588     | T1588.001 | H     |
+| `cc_skimming`                                | TA0009 | T1056     | (none)    | M     |
 
-Family name (e.g. "cobalt_strike", "sliver", "havoc",
-"asyncrat") is carried in `evidence.malware_family` for downstream
-attribution. ThreatFox-derived tags carry the highest base
-confidence in v0 (0.95) — the IOC database is curated.
+Family names (e.g. "Cobalt Strike", "Sliver", "Havoc",
+"AsyncRAT", "Emotet") are carried in
+`evidence.malware_families` for downstream attribution. The
+`ioc_type` set rides in `evidence.ioc_types` for SIEM context.
+ThreatFox-derived tags carry the highest base confidence in v0 —
+the IOC database is curated.
 
 ---
 

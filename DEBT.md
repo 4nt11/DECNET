@@ -14,11 +14,22 @@ Feodo Tracker catalogues for new categories or classification changes.
 Reconcile against `rules/ttp/R0054..R0058` (the intel-verdict rule
 pack) and bump rule versions for any drift. See
 `development/TTP_TAGGING.md` §"Hard parts §9 Intel provider drift" for
-the operational rationale.
+the operational runbook.
 
 Owner: TTP rule maintainer (currently ANTI).
 Cadence: every quarter, first week of the month.
-Trigger: calendar reminder; no automated probe today.
+Trigger: rule YAML `next_review` markers (canonical), with a
+calendar reminder as backup.
+
+Last reviewed: **2026-05-02** (ship-time audit — see
+`development/TTP_TAGGING.md` §9 "Ship-time audit log"; corrected
+two AbuseIPDB code typos, expanded the R0054/R0055/R0057 emits
+lists to cover the full predicate technique universe, repointed
+ThreatFox dispatch from `ioc_type` to `threat_type`, wired the
+`AttackerIntel.{abuseipdb_categories, greynoise_tags,
+greynoise_name, feodo_malware_family, threatfox_*_types,
+threatfox_malware_families}` columns + producer parsing).
+Next review: **2026-08-02**.
 
 ## One-shot
 
@@ -44,6 +55,13 @@ not persist received emails to a DB table the way ingester /
 collector persist log events, so there is no source row to fan out
 on. See `development/TTP_TAGGING.md` §"Bus topics → Producer
 wiring" for the full producer audit.
+
+**STALE PREMISE (2026-05-02):** ANTI noted during the intel audit
+that the SMTP honeypots DO persist all received messages today.
+Re-triage this entry — the gating premise above may no longer
+hold and the producer wiring may be paydown-able directly. Map
+the actual SMTP-receive persistence to `ReceivedEmail` (or its
+extant analogue), then wire the publisher.
 
 Trigger: SMTP-receive persistence model lands (a `ReceivedEmail`
 SQLModel + ingest path). Wire the publisher in the same PR.
