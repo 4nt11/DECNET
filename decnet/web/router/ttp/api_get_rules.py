@@ -45,8 +45,34 @@ router = APIRouter()
 async def api_list_rules(
     user: dict[str, Any] = Depends(require_viewer),
 ) -> list[RuleCatalogueRow]:
-    """Operator-facing rule catalogue. Empty at contract phase."""
-    return []
+    """Operator-facing rule catalogue.
+
+    Reads from the active :class:`RuleStore` (filesystem or database
+    per ``DECNET_TTP_RULE_STORE_TYPE``). Each row is a compiled rule
+    plus the operational state the store has stamped on it; rules that
+    never had a state set come back as the default ``enabled``.
+    """
+    from decnet.ttp.store.factory import get_rule_store  # noqa: PLC0415
+
+    store = get_rule_store()
+    compiled = await store.load_compiled()
+    rows: list[RuleCatalogueRow] = []
+    for rule in compiled:
+        state = rule.state
+        rows.append(RuleCatalogueRow(
+            rule_id=rule.rule_id,
+            rule_version=rule.rule_version,
+            name=rule.name,
+            description=rule.description,
+            state=state.state,
+            confidence_max=state.confidence_max,
+            expires_at=state.expires_at,
+            reason=state.reason,
+            set_by=state.set_by,
+            set_at=state.set_at,
+        ))
+    rows.sort(key=lambda r: r.rule_id)
+    return rows
 
 
 @router.post(

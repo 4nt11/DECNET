@@ -105,6 +105,7 @@ def test_compiled_rule_is_namedtuple_with_documented_fields() -> None:
         "emits",
         "evidence_fields",
         "state",
+        "description",
     )
 
 

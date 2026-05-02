@@ -122,6 +122,11 @@ class CompiledRule(NamedTuple):
     evidence_fields: tuple[str, ...]
     #: Operational state stamped in by the store at compile time.
     state: "RuleState"
+    #: Human-readable description from the YAML rule. Surfaced in the
+    #: ``GET /api/v1/ttp/rules`` catalogue. Default empty so existing
+    #: callers constructing ``CompiledRule`` (lifter unit tests) keep
+    #: working without churn.
+    description: str = ""
 
 
 class RuleSchema(BaseModel):
@@ -137,6 +142,7 @@ class RuleSchema(BaseModel):
     rule_id: str
     rule_version: int
     name: str
+    description: str = ""
     applies_to: list[str]
     match: dict[str, Any]
     #: ``[{"tactic": "TA0007", "technique_id": "T1083",

@@ -181,6 +181,7 @@ def _compile_one(parsed: RuleSchema, state: RuleState) -> CompiledRule:
         emits=tuple(emits),
         evidence_fields=tuple(parsed.evidence_fields),
         state=state,
+        description=parsed.description,
     )
 
 
