@@ -1352,3 +1352,25 @@ class BaseRepository(ABC):
     async def list_distinct_techniques(self) -> list[TechniqueRollupRow]:
         """Fleet-wide distinct-technique rollup."""
         raise NotImplementedError
+
+    async def list_ttp_decky_phases(
+        self, identity_uuid: str,
+    ) -> list[dict[str, Any]]:
+        """Per-decky tag observations for the campaign-clusterer's UKC
+        bridge (E.3.15).
+
+        Returns every ``ttp_tag`` row for *identity_uuid* (and the IPs
+        rolling up to it) carrying a non-NULL ``decky_id`` and
+        ``tactic``, projected to ``{decky_id, tactic, created_at_ts}``.
+        Callers project ``tactic`` → :class:`UKCPhase` via
+        :func:`decnet.clustering.ukc.tactic_to_ukc_phase` to populate
+        :class:`IdentityFeatures.first_phase_per_decky` /
+        ``last_phase_per_decky`` / ``first_seen_per_decky`` /
+        ``last_seen_per_decky`` so the production phase-handoff edge
+        can finally fire.
+
+        Default body returns ``[]`` so legacy mocks / non-SQLModel
+        repos remain valid; the real implementation lives on the
+        SQLModel TTP mixin.
+        """
+        return []

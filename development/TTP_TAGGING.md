@@ -3056,7 +3056,21 @@ Order:
     from `ttp_tag`. Validate that production phase-handoff edge
     weights now fire (previously dormant — the phase-handoff
     test's `xfail` flips to `xpass`, which is the moment we know
-    this whole project paid off).
+    this whole project paid off). ✅ done.
+    `tactic_to_ukc_phase` + `OBSERVABLE_PHASES` were already
+    shipped in earlier work — this step adds
+    `BaseRepository.list_ttp_decky_phases(identity_uuid)` and
+    rewrites `from_identity_row()` to populate the four
+    phase-handoff maps (`first_phase_per_decky`,
+    `last_phase_per_decky`, `first_seen_per_decky`,
+    `last_seen_per_decky`) from real `ttp_tag` rows.
+    `commands_by_phase_on_decky` itself stays empty on the
+    production path — the phase-handoff edge does not consume
+    it; the four phase-maps drive the F5 signal. Synthetic
+    fixtures continue to populate the commands map directly.
+    `tests/clustering/test_ttp_phase_handoff.py` pins the
+    production-row pair clearing `CAMPAIGN_EDGE_THRESHOLD` —
+    the trip-wire that says the whole project paid off.
 16. **Frontend** — `IdentityDetail` "TTPs Observed" section,
     `AttackerDetail` per-IP slice, Navigator export buttons,
     rule-state controls (disable / clip / TTL) backed by the

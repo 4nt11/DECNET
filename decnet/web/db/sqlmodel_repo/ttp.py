@@ -231,6 +231,50 @@ class TTPMixin(_MixinBase):
                 for r in res.all()
             ]
 
+    async def list_ttp_decky_phases(
+        self, identity_uuid: str,
+    ) -> list[dict[str, Any]]:
+        """Per-decky tag observations for the UKC bridge (E.3.15).
+
+        Includes (a) tags directly anchored on this identity and
+        (b) tags anchored on Attackers whose ``identity_id`` projects
+        up to this identity — same scope as
+        :meth:`list_techniques_by_identity`.
+        """
+        async with self._session() as session:
+            attacker_uuids_subq = (
+                select(col(Attacker.uuid))
+                .where(col(Attacker.identity_id) == identity_uuid)
+                .scalar_subquery()
+            )
+            stmt: Any = (
+                select(
+                    col(TTPTag.decky_id),
+                    col(TTPTag.tactic),
+                    col(TTPTag.created_at),
+                )
+                .where(
+                    (
+                        (col(TTPTag.identity_uuid) == identity_uuid)
+                        | (col(TTPTag.attacker_uuid).in_(attacker_uuids_subq))
+                    )
+                    & (col(TTPTag.decky_id).is_not(None))
+                )
+                .order_by(col(TTPTag.created_at))
+            )
+            res = await session.execute(stmt)
+            return [
+                {
+                    "decky_id": r.decky_id,
+                    "tactic": r.tactic,
+                    "created_at_ts": (
+                        r.created_at.timestamp()
+                        if r.created_at is not None else 0.0
+                    ),
+                }
+                for r in res.all()
+            ]
+
     async def list_distinct_techniques(self) -> list[TechniqueRollupRow]:
         """Fleet-wide distinct-technique rollup with counts +
         most-recent-seen timestamps.

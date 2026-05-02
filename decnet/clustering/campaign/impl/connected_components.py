@@ -66,7 +66,10 @@ def cluster_identities(
     return {f.identity_uuid: f"cmp-{find(f.identity_uuid)}" for f in feat_list}
 
 
-def from_identity_row(row: dict[str, Any]) -> IdentityFeatures:
+def from_identity_row(
+    row: dict[str, Any],
+    ttp_decky_phases: list[dict[str, Any]] | None = None,
+) -> IdentityFeatures:
     """Project an ``AttackerIdentity`` projection row dict into an
     :class:`IdentityFeatures`.
 
@@ -75,20 +78,59 @@ def from_identity_row(row: dict[str, Any]) -> IdentityFeatures:
     ja3_hashes / hassh_hashes / payload_simhashes / c2_endpoints
     (JSON list[str] or null).
 
-    Phase-handoff fields stay empty until the production-row adapter
-    learns to mine logs for per-decky phase sequences (TODO.md
-    "production-side payload + C2 + commands joins"). Without those,
-    the campaign clusterer falls back to shared-infra + temporal
-    overlap + cohort signals on production data; the fixture path
-    exercises the full feature set via :func:`from_synthetic_identity`.
+    *ttp_decky_phases* is the optional per-identity payload from
+    :meth:`BaseRepository.list_ttp_decky_phases` — one row per
+    ``ttp_tag`` carrying ``(decky_id, tactic, created_at_ts)``. When
+    provided, the adapter projects ``tactic`` → :class:`UKCPhase` and
+    populates :attr:`IdentityFeatures.first_phase_per_decky` /
+    ``last_phase_per_decky`` / ``first_seen_per_decky`` /
+    ``last_seen_per_decky` so the production phase-handoff edge
+    finally fires. The synthetic fixture path
+    (:func:`from_synthetic_identity`) is unchanged — fixtures keep
+    emitting UKC directly.
     """
+    from decnet.clustering.ukc import tactic_to_ukc_phase  # noqa: PLC0415
+
     payload_hashes = _parse_json_list(row.get("payload_simhashes"))
     c2_endpoints = _parse_json_list(row.get("c2_endpoints"))
+
+    first_phase_per_decky: dict[str, str] = {}
+    last_phase_per_decky: dict[str, str] = {}
+    first_seen_per_decky: dict[str, float] = {}
+    last_seen_per_decky: dict[str, float] = {}
+    decky_set: set[str] = set()
+
+    # Rows arrive ordered by ``created_at``; ``setdefault`` preserves
+    # the FIRST observation per decky, plain assignment captures the
+    # LAST. Tags whose tactic is outside the ATT&CK→UKC map (or whose
+    # phase is pre-target / unobservable) are dropped — they should
+    # not be assigned by any rule per TTP_TAGGING.md §UKC bridge.
+    for entry in ttp_decky_phases or []:
+        decky = entry.get("decky_id")
+        tactic = entry.get("tactic")
+        created_at_ts = entry.get("created_at_ts")
+        if not isinstance(decky, str) or not isinstance(tactic, str):
+            continue
+        phase = tactic_to_ukc_phase(tactic)
+        if phase is None:
+            continue
+        ts = float(created_at_ts) if isinstance(
+            created_at_ts, (int, float)) else 0.0
+        decky_set.add(decky)
+        first_phase_per_decky.setdefault(decky, phase.value)
+        last_phase_per_decky[decky] = phase.value
+        first_seen_per_decky.setdefault(decky, ts)
+        last_seen_per_decky[decky] = ts
 
     return IdentityFeatures(
         identity_uuid=row["uuid"],
         payload_hashes=frozenset(payload_hashes),
         c2_endpoints=frozenset(c2_endpoints),
+        decky_set=frozenset(decky_set),
+        first_phase_per_decky=first_phase_per_decky,
+        last_phase_per_decky=last_phase_per_decky,
+        first_seen_per_decky=first_seen_per_decky,
+        last_seen_per_decky=last_seen_per_decky,
     )
 
 
@@ -132,8 +174,26 @@ class ConnectedComponentsCampaignClusterer(CampaignClusterer):
         # merged out — their winner is the active row and gets clustered
         # on its own.  This keeps the campaign graph from double-counting.
         active_rows = [r for r in rows if not r.get("merged_into_uuid")]
+        # Pull TTP-derived per-decky phase observations per identity
+        # (E.3.15). Failures here are non-fatal — the clusterer falls
+        # back to the empty phase-handoff signal, same as the legacy
+        # behavior, so a partial repo doesn't take the worker down.
+        decky_phases_by_identity: dict[str, list[dict[str, Any]]] = {}
+        for r in active_rows:
+            try:
+                decky_phases_by_identity[r["uuid"]] = (
+                    await repo.list_ttp_decky_phases(r["uuid"])
+                )
+            except Exception:  # noqa: BLE001
+                log.warning(
+                    "campaign clusterer: list_ttp_decky_phases failed "
+                    "for identity %s; phase-handoff edge inert",
+                    r["uuid"],
+                )
+                decky_phases_by_identity[r["uuid"]] = []
         feature_list: list[IdentityFeatures] = [
-            from_identity_row(r) for r in active_rows
+            from_identity_row(r, decky_phases_by_identity.get(r["uuid"]))
+            for r in active_rows
         ]
         row_by_uuid: dict[str, dict[str, Any]] = {
             r["uuid"]: r for r in active_rows
