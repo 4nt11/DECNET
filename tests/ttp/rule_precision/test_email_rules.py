@@ -48,7 +48,41 @@ async def test_lifter_bound_inert_in_v0(
     )
 
 
+def _build_lifter() -> "EmailLifter":
+    from decnet.ttp.impl.email_lifter import EmailLifter
+    from tests.ttp._stub_store import StubRuleStore
+
+    rules = [
+        _parse_and_compile(Path("rules/ttp") / f"{rid}.yaml", RuleState())
+        for rid in _RULE_IDS
+    ]
+    lifter = EmailLifter(StubRuleStore(compiled=rules))
+    for rule in rules:
+        lifter._index.install(rule)
+    return lifter
+
+
 @pytest.mark.parametrize("rule_id", _RULE_IDS)
-@pytest.mark.xfail(strict=True, reason="impl phase E.3.12 (EmailLifter)")
-def test_email_rule_precision(rule_id: str) -> None:
-    pytest.fail(f"{rule_id}: EmailLifter not yet shipped (E.3.12)")
+def test_email_rule_precision(
+    rule_id: str,
+    corpus_loader: CohortLoader,
+) -> None:
+    """E.3.12 — drive EmailLifter over the labelled corpus and assert
+    per-rule precision. R0041–R0048 are all H-band (≥0.85) → ≥95%.
+    """
+    import asyncio
+
+    from tests.ttp.rule_precision.conftest import precision_for
+
+    rows = corpus_loader("email")
+    if not rows:
+        pytest.skip("no email corpus available")
+    lifter = _build_lifter()
+    fired: dict[str, list[str]] = {}
+    for row in rows:
+        tags = asyncio.run(lifter.tag(make_event(row)))
+        fired[row.label] = [tag.rule_id for tag in tags]
+    precision, _tp, _fp = precision_for(rule_id, rows, fired)
+    assert precision >= 0.95, (
+        f"{rule_id} precision {precision:.2f} < 0.95 on email corpus"
+    )
