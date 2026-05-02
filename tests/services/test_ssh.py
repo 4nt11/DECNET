@@ -203,6 +203,44 @@ def test_dockerfile_prompt_command_logger():
     assert "logger" in df
 
 
+def test_prompt_command_lives_in_etc_environment_not_root_bashrc():
+    """Operator-side stealth: PROMPT_COMMAND used to live in
+    /root/.bashrc, which is the FIRST file an attacker greps after
+    landing root. Move it to /etc/environment (read by pam_env at
+    session open, much less obvious) and define the helper function
+    in /etc/bash.bashrc so user-level shells can't unset it without
+    tripping the readonly guard."""
+    df = _dockerfile_text()
+    # /etc/environment carries the assignment (just the function
+    # name — pam_env doesn't run shell expansion, so the value is a
+    # literal token bash later evaluates per-prompt).
+    assert "PROMPT_COMMAND=__bash_history_sync" in df
+    # System-wide bashrc carries the function body.
+    assert "/etc/bash.bashrc" in df
+    assert "__bash_history_sync()" in df
+    # /root/.bashrc must NOT carry the PROMPT_COMMAND line anymore —
+    # that's the original tell.
+    assert ">> /root/.bashrc" in df  # unrelated bashrc lines still ok
+    # Specifically: no PROMPT_COMMAND line tail-piped into /root/.bashrc.
+    for line in df.splitlines():
+        if "PROMPT_COMMAND" in line and "/root/.bashrc" in line:
+            raise AssertionError(
+                "PROMPT_COMMAND must not live in /root/.bashrc; "
+                f"found tell-line: {line!r}"
+            )
+
+
+def test_prompt_command_is_readonly_so_export_blank_fails():
+    """ANTI's bypass: `export PROMPT_COMMAND=""` silently disables
+    capture. Counter: mark PROMPT_COMMAND readonly in /etc/bash.bashrc
+    so the bypass fails with "readonly variable" instead. This is
+    mitigation, not airtight — bash --norc still bypasses — but a
+    passive `export` no longer works."""
+    df = _dockerfile_text()
+    assert "readonly PROMPT_COMMAND" in df
+    assert "readonly -f __bash_history_sync" in df
+
+
 def test_entrypoint_has_no_named_pipe():
     # Named pipes in the container are a liability — readable and writable
     # by any root process. The log bridge must not rely on one.

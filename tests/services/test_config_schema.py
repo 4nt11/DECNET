@@ -173,6 +173,22 @@ def test_telnet_default_non_root_user():
     assert env["TELNET_USER_PASSWORD"] == "admin"
 
 
+def test_telnet_prompt_command_moved_out_of_root_bashrc():
+    """Mirror of test_ssh.test_prompt_command_lives_in_etc_environment.
+    Telnet had the same /root/.bashrc tell — moved to
+    /etc/environment + readonly guard."""
+    df = (TelnetService().dockerfile_context() / "Dockerfile").read_text()
+    assert "PROMPT_COMMAND=__bash_history_sync" in df
+    assert "__bash_history_sync()" in df
+    assert "readonly PROMPT_COMMAND" in df
+    for line in df.splitlines():
+        if "PROMPT_COMMAND" in line and "/root/.bashrc" in line:
+            raise AssertionError(
+                "PROMPT_COMMAND must not live in /root/.bashrc; "
+                f"found tell-line: {line!r}"
+            )
+
+
 def test_rdp_schema_matches_and_bool_coerces():
     assert {f.key for f in RDPService.config_schema} == {"nla"}
     svc = RDPService()

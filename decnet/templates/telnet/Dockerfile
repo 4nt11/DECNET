@@ -82,8 +82,21 @@ RUN mkdir -p /root/scripts /root/backups && \
     printf 'DB_HOST=10.0.0.5\nDB_USER=admin\nDB_PASS=changeme123\n' > /root/.env && \
     printf 'alias ll="ls -alF"\nalias la="ls -A"\nexport HISTSIZE=1000\n' >> /root/.bashrc
 
-# Log bash commands via syslog
-RUN echo 'PROMPT_COMMAND='"'"'logger --rfc5424 --msgid command -p user.info -t bash "CMD uid=$UID pwd=$PWD cmd=$(history 1 | sed "s/^ *[0-9]* *//")";'"'" >> /root/.bashrc
+# Command-event capture. PROMPT_COMMAND is set in /etc/environment
+# (read by pam_env at /bin/login session open, before any shell rc
+# fires) and pinned readonly via /etc/bash.bashrc — `export
+# PROMPT_COMMAND=""` fails with "readonly variable" instead of
+# silently disabling capture. Function name is generic so a casual
+# `set | grep PROMPT` doesn't surface DECNET branding.
+RUN printf 'PROMPT_COMMAND=__bash_history_sync\n' >> /etc/environment \
+ && printf '%s\n' \
+    '# bash history → syslog, system-wide.' \
+    '__bash_history_sync() {' \
+    '    logger --rfc5424 --msgid command -p user.info -t bash "CMD uid=$UID pwd=$PWD cmd=$(history 1 | sed '"'"'s/^ *[0-9]* *//'"'"')"' \
+    '}' \
+    'readonly -f __bash_history_sync 2>/dev/null || true' \
+    'readonly PROMPT_COMMAND 2>/dev/null || true' \
+    >> /etc/bash.bashrc
 
 COPY entrypoint.sh /entrypoint.sh
 RUN chmod +x /entrypoint.sh

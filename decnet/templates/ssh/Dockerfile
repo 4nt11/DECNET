@@ -108,8 +108,24 @@ RUN echo 'alias ll="ls -alF"' >> /root/.bashrc && \
     echo 'alias la="ls -A"'   >> /root/.bashrc && \
     echo 'alias l="ls -CF"'   >> /root/.bashrc && \
     echo 'export HISTSIZE=1000' >> /root/.bashrc && \
-    echo 'export HISTFILESIZE=2000' >> /root/.bashrc && \
-    echo 'PROMPT_COMMAND='"'"'logger --rfc5424 --msgid command -p user.info -t bash "CMD uid=$UID user=$USER src=${SSH_CLIENT%% *} pwd=$PWD cmd=$(history 1 | sed "s/^ *[0-9]* *//")";'"'" >> /root/.bashrc
+    echo 'export HISTFILESIZE=2000' >> /root/.bashrc
+
+# Command-event capture. PROMPT_COMMAND is set in /etc/environment
+# (read by pam_env at session open, before any shell rc fires) and
+# pinned readonly via /etc/bash.bashrc — `export PROMPT_COMMAND=""`
+# fails with "readonly variable" instead of silently disabling the
+# capture. Function name is generic ("__bash_history_sync") so a
+# casual `set | grep PROMPT` doesn't surface DECNET branding; the
+# logger invocation looks like a stock bash housekeeping helper.
+RUN printf 'PROMPT_COMMAND=__bash_history_sync\n' >> /etc/environment \
+ && printf '%s\n' \
+    '# bash history → syslog, system-wide.' \
+    '__bash_history_sync() {' \
+    '    logger --rfc5424 --msgid command -p user.info -t bash "CMD uid=$UID user=$USER src=${SSH_CLIENT%% *} pwd=$PWD cmd=$(history 1 | sed '"'"'s/^ *[0-9]* *//'"'"')"' \
+    '}' \
+    'readonly -f __bash_history_sync 2>/dev/null || true' \
+    'readonly PROMPT_COMMAND 2>/dev/null || true' \
+    >> /etc/bash.bashrc
 
 # Fake project files to look lived-in
 RUN mkdir -p /root/projects /root/backups /var/www/html && \
