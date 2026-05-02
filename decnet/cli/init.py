@@ -764,6 +764,13 @@ def register(app: typer.Typer) -> None:
             (pfx / _install_rel, 0o755, user, group),
             (pfx / "var/lib/decnet", 0o750, user, group),
             (pfx / "var/lib/decnet/geoip", 0o755, user, group),
+            # DEBT-035 / DEBT-047: artifact root carries setgid (the
+            # 0o2... bit) so every file written under it inherits the
+            # decnet group regardless of which container's uid created
+            # it. Group-write (0o2775) lets the API process and the
+            # local TTP worker read each other's outputs without a
+            # manual chown after every fresh deploy.
+            (pfx / "var/lib/decnet/artifacts", 0o2775, user, group),
             (pfx / "var/log/decnet", 0o750, user, group),
             (etc_decnet, 0o755, "root", group),
             (pfx / "run/decnet", 0o755, "root", group),

@@ -241,6 +241,27 @@ def test_init_persists_api_user_group_to_decnet_ini(
     assert "api-group = decoygrp" in body
 
 
+def test_init_creates_artifacts_dir_with_setgid_and_group_write(
+    monkeypatch: Any, tmp_path: Path, subprocess_calls: List[List[str]],
+    no_missing_tools: None, missing_user_and_group: None,
+) -> None:
+    """DEBT-035: `/var/lib/decnet/artifacts` must come up with
+    setgid (0o2000) + group-write (0o0070) so every file written
+    by a decoy container inherits the decnet group, regardless of
+    which container's uid did the creating."""
+    _seed_deploy(monkeypatch, tmp_path)
+    prefix = tmp_path / "root"
+    r = runner.invoke(app, ["init", "--no-start", "--prefix", str(prefix)])
+    assert r.exit_code == 0, r.output
+
+    artifacts = prefix / "var/lib/decnet/artifacts"
+    assert artifacts.is_dir(), "artifacts dir must be created at init time"
+    mode = artifacts.stat().st_mode & 0o7777
+    assert mode == 0o2775, (
+        f"expected 0o2775 (setgid + 0o775), got {oct(mode)}"
+    )
+
+
 def test_init_decnet_ini_loads_via_config_ini(
     monkeypatch: Any, tmp_path: Path, subprocess_calls: List[List[str]],
     no_missing_tools: None, missing_user_and_group: None,
