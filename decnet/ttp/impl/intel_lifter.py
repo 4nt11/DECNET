@@ -29,23 +29,29 @@ from decnet.web.db.models.ttp import TTPTag, compute_tag_uuid
 
 
 # AbuseIPDB category → set of technique_ids that fire on it. Derived
-# from TTP_TAGGING.md Appendix A.10. Multiple categories can map to the
-# same technique (18 + 22 both → T1110); a category may map to multiple
-# techniques (14 → T1046 + T1595).
+# from TTP_TAGGING.md Appendix A.10 (post 2026-05-02 ship-time audit).
+# Category code names are AbuseIPDB's canonical taxonomy at
+# https://www.abuseipdb.com/categories — kept verbatim in the comment so
+# the next quarterly drift check (per DEBT.md) can diff cheaply. Cat 4
+# (DDoS Attack) and 10 (Web Spam) and 12 (Blog Spam) are intentionally
+# unmapped — design doc §A.10 marks DDoS-without-protocol as too muddy
+# for v0, and CMS spam has no clean ATT&CK fit at the IP layer.
 _ABUSEIPDB_CATEGORY_TO_TECHNIQUES: Final[dict[int, frozenset[str]]] = {
-    14: frozenset({"T1046", "T1595"}),       # Port Scan
+    5: frozenset({"T1110"}),                  # FTP Brute-Force
+    7: frozenset({"T1566"}),                  # Phishing
+    9: frozenset({"T1090"}),                  # Open Proxy
+    11: frozenset({"T1496", "T1566"}),        # Email Spam (T1566 high-score only)
+    13: frozenset({"T1090"}),                 # VPN IP
+    14: frozenset({"T1046", "T1595"}),        # Port Scan
     15: frozenset({"T1190"}),                 # Hacking
+    16: frozenset({"T1190"}),                 # SQL Injection
+    17: frozenset({"T1566"}),                 # Spoofing (email-sender)
     18: frozenset({"T1110"}),                 # Brute-Force
     19: frozenset({"T1595"}),                 # Bad Web Bot
     20: frozenset({"T1078"}),                 # Exploited Host
     21: frozenset({"T1190"}),                 # Web App Attack
     22: frozenset({"T1110"}),                 # SSH
     23: frozenset({"T1190"}),                 # IoT Targeted
-    11: frozenset({"T1496", "T1566"}),        # Email Spam (T1566 high-score only)
-    10: frozenset({"T1498"}),                 # DDoS
-    5: frozenset({"T1110"}),                  # FTP Brute-Force
-    17: frozenset({"T1090"}),                 # VPN IP
-    9: frozenset({"T1090"}),                  # Open Proxy
 }
 
 # Categories where a technique only fires above a confidence-score
@@ -55,7 +61,10 @@ _ABUSEIPDB_HIGH_SCORE_GATED: Final[dict[int, dict[str, int]]] = {
 }
 
 
-# GreyNoise tag → set of technique_ids the tag warrants.
+# GreyNoise tag → set of technique_ids the tag warrants. Note: the
+# Community endpoint does not return tags today — these fire only when
+# operators wire a non-Community provider that does. Kept canonical so
+# the upgrade path is just a column populate, not a code change.
 _GREYNOISE_TAG_TO_TECHNIQUES: Final[dict[str, frozenset[str]]] = {
     "tor_exit_node": frozenset({"T1090"}),
     "ssh_bruteforcer": frozenset({"T1110"}),
@@ -66,12 +75,22 @@ _GREYNOISE_TAG_TO_TECHNIQUES: Final[dict[str, frozenset[str]]] = {
     "havoc": frozenset({"T1071", "T1588"}),
 }
 
-# ThreatFox IOC type → set of technique_ids per A.10.
-_THREATFOX_IOC_TO_TECHNIQUES: Final[dict[str, frozenset[str]]] = {
+# Confidence multiplier when GreyNoise reports ``classification ==
+# "malicious"`` without a specific tag we recognise. The bare
+# classification is real signal but weaker than a tag — half-confidence
+# keeps the floor honest.
+_GREYNOISE_MALICIOUS_BARE_MULT: Final[float] = 0.5
+
+# ThreatFox THREAT TYPE (NOT ioc_type — that was the v1 ship-time bug)
+# → set of technique_ids. Per ThreatFox's API the canonical taxonomy
+# field is ``threat_type`` ∈ {botnet_cc, payload_delivery, payload,
+# cc_skimming}; ``ioc_type`` is the indicator format (url, domain,
+# md5_hash, …) and carries no ATT&CK signal.
+_THREATFOX_THREAT_TYPE_TO_TECHNIQUES: Final[dict[str, frozenset[str]]] = {
     "botnet_cc": frozenset({"T1071", "T1588"}),
-    "c2_server": frozenset({"T1071"}),
     "payload_delivery": frozenset({"T1105", "T1588"}),
-    "download_url": frozenset({"T1105"}),
+    "payload": frozenset({"T1588"}),
+    "cc_skimming": frozenset({"T1056"}),
 }
 
 
@@ -117,25 +136,54 @@ def _abuseipdb_decisions(
 def _greynoise_decisions(
     _spec: dict[str, Any], payload: dict[str, Any],
 ) -> EmitDecision:
+    """Decide GreyNoise emissions.
+
+    Three signal lanes:
+    * ``classification == "scanner"`` — full-strength T1595 (kept for
+      compatibility with non-Community provider plans that surface
+      this verdict; the Community endpoint reports {malicious, benign,
+      suspicious, unknown} only).
+    * Specific recognised tag → its mapped technique(s) at 1.0×.
+    * Bare ``classification == "malicious"`` with no recognised tag →
+      T1071 at half multiplier (post-audit decision: the verdict is
+      real but unspecific). The bare-malicious lane is suppressed when
+      a tag already fired on T1071 to avoid double-stamping.
+    """
     classification = payload.get("greynoise_classification")
     tags_raw = payload.get("greynoise_tags") or []
-    triggered: dict[str, list[str]] = {}
+    # Per-technique evidence accumulator — maps technique_id to the
+    # signals that triggered it AND the multiplier to apply (max wins
+    # if multiple lanes hit the same technique).
+    triggered: dict[str, tuple[float, list[str]]] = {}
+
+    def _bump(tech: str, mult: float, signal: str) -> None:
+        existing = triggered.get(tech)
+        if existing is None:
+            triggered[tech] = (mult, [signal])
+            return
+        old_mult, signals = existing
+        signals.append(signal)
+        if mult > old_mult:
+            triggered[tech] = (mult, signals)
+
     if classification == "scanner":
-        triggered.setdefault("T1595", []).append("scanner")
+        _bump("T1595", 1.0, "scanner")
     if isinstance(tags_raw, list):
         for tag in tags_raw:
             if not isinstance(tag, str):
                 continue
             for tech in _GREYNOISE_TAG_TO_TECHNIQUES.get(tag, frozenset()):
-                triggered.setdefault(tech, []).append(tag)
+                _bump(tech, 1.0, tag)
+    if classification == "malicious" and "T1071" not in triggered:
+        _bump("T1071", _GREYNOISE_MALICIOUS_BARE_MULT, "malicious")
     if not triggered:
         return []
     return [
-        (tech, 1.0, {
+        (tech, mult, {
             "greynoise_classification": classification,
             "greynoise_tags": signals,
         })
-        for tech, signals in triggered.items()
+        for tech, (mult, signals) in triggered.items()
     ]
 
 
@@ -144,7 +192,10 @@ def _feodo_decisions(
 ) -> EmitDecision:
     if payload.get("feodo_listed") is not True:
         return []
-    family = payload.get("malware_family")
+    family = (
+        payload.get("feodo_malware_family")
+        or payload.get("malware_family")
+    )
     extra: dict[str, Any] = {"feodo_listed": True}
     if isinstance(family, str) and family:
         extra["malware_family"] = family
@@ -158,17 +209,55 @@ def _feodo_decisions(
 def _threatfox_decisions(
     _spec: dict[str, Any], payload: dict[str, Any],
 ) -> EmitDecision:
-    ioc_type = payload.get("ioc_type")
-    if not isinstance(ioc_type, str):
+    """ThreatFox dispatch keys on ``threat_type`` (canonical taxonomy)
+    not ``ioc_type`` — the v1 ship-time mapping had it backwards.
+
+    Accepts either ``threatfox_threat_types`` (list, preferred — comes
+    from the bus payload built by the intel worker) or a singular
+    ``threat_type``/``ioc_type`` field for legacy callers and tests.
+    The lifter is tolerant by contract; missing inputs produce zero
+    emissions, never an error.
+    """
+    threat_types_raw = (
+        payload.get("threatfox_threat_types")
+        or payload.get("threat_type")
+    )
+    threat_types: list[str] = []
+    if isinstance(threat_types_raw, list):
+        threat_types = [t for t in threat_types_raw if isinstance(t, str)]
+    elif isinstance(threat_types_raw, str) and threat_types_raw:
+        threat_types = [threat_types_raw]
+
+    triggered: dict[str, list[str]] = {}
+    for tt in threat_types:
+        for tech in _THREATFOX_THREAT_TYPE_TO_TECHNIQUES.get(tt, frozenset()):
+            triggered.setdefault(tech, []).append(tt)
+    if not triggered:
         return []
-    techs = _THREATFOX_IOC_TO_TECHNIQUES.get(ioc_type, frozenset())
-    if not techs:
-        return []
-    family = payload.get("malware_family")
-    extra: dict[str, Any] = {"ioc_type": ioc_type}
-    if isinstance(family, str) and family:
-        extra["malware_family"] = family
-    return [(tech, 1.0, extra) for tech in techs]
+
+    families_raw = (
+        payload.get("threatfox_malware_families")
+        or payload.get("malware_family")
+    )
+    families: list[str] = []
+    if isinstance(families_raw, list):
+        families = [f for f in families_raw if isinstance(f, str)]
+    elif isinstance(families_raw, str) and families_raw:
+        families = [families_raw]
+    ioc_types_raw = payload.get("threatfox_ioc_types")
+    ioc_types: list[str] = (
+        [i for i in ioc_types_raw if isinstance(i, str)]
+        if isinstance(ioc_types_raw, list) else []
+    )
+
+    return [
+        (tech, 1.0, {
+            "threat_types": signals,
+            **({"malware_families": families} if families else {}),
+            **({"ioc_types": ioc_types} if ioc_types else {}),
+        })
+        for tech, signals in triggered.items()
+    ]
 
 
 def _aggregate_bump_decisions(

@@ -35,6 +35,7 @@ TECHNIQUE_NAMES: Final[dict[str, str]] = {
     "T1046": "Network Service Discovery",
     "T1049": "System Network Connections Discovery",
     "T1053": "Scheduled Task/Job",
+    "T1056": "Input Capture",
     "T1059": "Command and Scripting Interpreter",
     "T1070": "Indicator Removal",
     "T1071": "Application Layer Protocol",
