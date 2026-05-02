@@ -37,6 +37,8 @@ from pydantic import BaseModel, Field
 from decnet import telemetry as _telemetry
 from decnet.logging import get_logger
 from decnet.ttp.base import TaggerEvent
+from decnet.ttp.impl._rule_index import RuleIndex
+from decnet.ttp.impl._state import apply_ceiling, is_active
 from decnet.web.db.models.ttp import TTPTag, compute_tag_uuid
 
 if TYPE_CHECKING:
@@ -163,14 +165,27 @@ class RuleEngine:
 
     def __init__(self, store: "RuleStore") -> None:
         self._store = store
-        # ``source_kind`` → list of compiled rules that claim it.
-        # Replaced wholesale on per-rule changes via watch_store(); the
-        # GIL-atomic dict assignment is the "atomic swap" pin from
-        # TTP_TAGGING.md §"Atomic swap" / E.2.14b.
-        self._by_kind: dict[str, list[CompiledRule]] = {}
-        # Mirror keyed by rule_id for definition+state restamping.
-        # Same atomicity contract: replacement, never in-place mutation.
-        self._by_rule: dict[str, CompiledRule] = {}
+        # Dispatch index extracted to RuleIndex so per-source lifters
+        # (E.3.9–E.3.13) reuse the same atomic-swap protocol. Legacy
+        # ``_by_kind`` / ``_by_rule`` properties below proxy to it for
+        # callers (and tests) that still poke the dispatch index directly.
+        self._index = RuleIndex()
+
+    @property
+    def _by_kind(self) -> dict[str, list[CompiledRule]]:
+        return self._index._by_kind
+
+    @_by_kind.setter
+    def _by_kind(self, value: dict[str, list[CompiledRule]]) -> None:
+        self._index._by_kind = value
+
+    @property
+    def _by_rule(self) -> dict[str, CompiledRule]:
+        return self._index._by_rule
+
+    @_by_rule.setter
+    def _by_rule(self, value: dict[str, CompiledRule]) -> None:
+        self._index._by_rule = value
 
     async def evaluate(self, event: TaggerEvent) -> list[TTPTag]:
         """Return zero or more tags produced by rules matching *event*.
@@ -184,7 +199,7 @@ class RuleEngine:
         states, but the engine double-checks ``expires_at`` as
         defense-in-depth.
         """
-        rules = self._by_kind.get(event.source_kind, [])
+        rules = self._index.by_kind(event.source_kind)
         if not rules:
             return []
         with _span(
@@ -198,101 +213,31 @@ class RuleEngine:
     async def watch_store(self) -> None:
         """Subscribe to per-rule changes and atomically swap them in.
 
-        Loads the initial corpus from :meth:`RuleStore.load_compiled`,
-        builds the dispatch index, then drains
-        :meth:`RuleStore.subscribe_changes` forever. Each ``definition``
-        change replaces the affected rule wholesale; each ``state``
-        change re-stamps the existing :class:`CompiledRule`'s ``state``
-        field via NamedTuple ``_replace`` (single dict assignment, no
-        in-place mutation).
+        Delegates to :meth:`RuleIndex.watch`: loads the initial corpus
+        from :meth:`RuleStore.load_compiled`, builds the dispatch
+        index, then drains :meth:`RuleStore.subscribe_changes` forever.
+        Each ``definition`` change replaces the affected rule wholesale;
+        each ``state`` change re-stamps the existing
+        :class:`CompiledRule`'s ``state`` field via NamedTuple
+        ``_replace`` (single dict assignment, no in-place mutation).
         """
-        # Forward import — avoids the contract-phase circular shape
-        # dependency captured by the TYPE_CHECKING block above.
-        from decnet.ttp.store.base import RuleState  # noqa: PLC0415
-
-        compiled = await self._store.load_compiled()
-        for rule in compiled:
-            self._install(rule)
-        async for change in self._store.subscribe_changes():
-            try:
-                self._apply_change(change, RuleState)
-            except Exception:  # noqa: BLE001
-                _log.exception(
-                    "ttp.engine: rule change apply failed rule_id=%s",
-                    change.rule_id,
-                )
+        await self._index.watch(self._store)
 
     # ── Internals ───────────────────────────────────────────────────
+    # Back-compat shims — the dispatch-index protocol moved into
+    # :class:`RuleIndex`. Existing callers / tests that poke at
+    # ``_install`` / ``_evict`` / ``_apply_change`` keep working.
 
     def _install(self, rule: CompiledRule) -> None:
-        """Atomic-swap install of one compiled rule.
-
-        Empty ``applies_to`` + empty ``emits`` is the deletion sentinel
-        used by both backends — drop the rule from the index instead of
-        adding a no-op entry.
-        """
-        if not rule.applies_to and not rule.emits:
-            self._evict(rule.rule_id)
-            return
-        self._by_rule[rule.rule_id] = rule
-        for kind in rule.applies_to:
-            current = self._by_kind.get(kind, [])
-            replaced = [r for r in current if r.rule_id != rule.rule_id]
-            replaced.append(rule)
-            # Single dict assignment — GIL-atomic to readers.
-            self._by_kind[kind] = replaced
+        self._index.install(rule)
 
     def _evict(self, rule_id: str) -> None:
-        existing = self._by_rule.pop(rule_id, None)
-        if existing is None:
-            return
-        for kind in existing.applies_to:
-            current = self._by_kind.get(kind, [])
-            replaced = [r for r in current if r.rule_id != rule_id]
-            self._by_kind[kind] = replaced
+        self._index.evict(rule_id)
 
     def _apply_change(
         self, change: "RuleChange", state_cls: type,
     ) -> None:
-        if change.change_kind == "definition":
-            value = change.new_value
-            if isinstance(value, CompiledRule):
-                self._install(value)
-            return
-        # state change
-        existing = self._by_rule.get(change.rule_id)
-        if existing is None or not isinstance(change.new_value, state_cls):
-            return
-        new_state = change.new_value  # narrowed by isinstance above
-        # NamedTuple._replace returns a fresh frozen tuple — single
-        # dict assignment swaps it in atomically.
-        restamped = existing._replace(state=new_state)  # type: ignore[arg-type]
-        self._by_rule[change.rule_id] = restamped
-        for kind in restamped.applies_to:
-            current = self._by_kind.get(kind, [])
-            replaced = [r for r in current if r.rule_id != change.rule_id]
-            replaced.append(restamped)
-            self._by_kind[kind] = replaced
-
-
-def _state_active(state: "RuleState") -> bool:
-    """A rule fires iff its state isn't ``disabled``. ``clipped`` rules
-    still fire — the clip caps confidence, doesn't suppress.
-    """
-    if state.state == "disabled":
-        return False
-    if state.expires_at is not None:
-        # Defense-in-depth: stores auto-revert expired states, but a
-        # racing read between expiry and revert must not fire a rule
-        # the operator told us was off.
-        from datetime import datetime, timezone  # noqa: PLC0415
-
-        expires = state.expires_at
-        if expires.tzinfo is None:
-            expires = expires.replace(tzinfo=timezone.utc)
-        if expires < datetime.now(tz=timezone.utc):
-            return False
-    return True
+        self._index.apply_change(change, state_cls)
 
 
 def _match_event(rule: CompiledRule, event: TaggerEvent) -> bool:
@@ -350,16 +295,10 @@ def _evaluate_rules(
 ) -> list[TTPTag]:
     out: list[TTPTag] = []
     for rule in rules:
-        if not _state_active(rule.state):
+        if not is_active(rule.state):
             continue
         if not _match_event(rule, event):
             continue
-        ceiling = (
-            rule.state.confidence_max
-            if rule.state.state == "clipped"
-            and rule.state.confidence_max is not None
-            else 1.0
-        )
         with _span(
             "ttp.rule.fire",
             rule_id=rule.rule_id,
@@ -371,7 +310,7 @@ def _evaluate_rules(
                         span.set_attribute("technique_id", technique_id)
                     except (TypeError, ValueError):
                         pass
-                confidence = min(base_conf, base_conf * ceiling) if ceiling < 1.0 else base_conf
+                confidence = apply_ceiling(base_conf, rule.state)
                 tag_uuid = compute_tag_uuid(
                     source_kind=event.source_kind,
                     source_id=event.source_id,
