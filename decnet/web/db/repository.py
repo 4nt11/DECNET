@@ -1,4 +1,6 @@
 from abc import ABC, abstractmethod
+from collections.abc import AsyncIterator
+from datetime import datetime
 from typing import Any, Optional
 
 from decnet.web.db.models.topology import DeckyRow, EdgeRow, LANRow, TopologySummary
@@ -1318,6 +1320,24 @@ class BaseRepository(ABC):
         actually written. Idempotent — replaying the same source events
         converges to the same tag set without duplicates.
         """
+        raise NotImplementedError
+
+    @abstractmethod
+    def iter_attacker_commands_since(
+        self, since: "datetime",
+    ) -> "AsyncIterator[tuple[Any, list[dict[str, Any]]]]":
+        """Yield (Attacker, decoded_commands) pairs since *since*.
+
+        Used by ``decnet ttp backfill`` (E.4) to replay shell-command
+        history through the live tagger. Read-only.
+        """
+        raise NotImplementedError
+
+    @abstractmethod
+    def iter_canary_triggers_since(
+        self, since: "datetime",
+    ) -> "AsyncIterator[Any]":
+        """Yield ``CanaryTrigger`` rows since *since*. Used by backfill."""
         raise NotImplementedError
 
     @abstractmethod

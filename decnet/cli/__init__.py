@@ -39,6 +39,7 @@ from . import (
     swarm,
     swarmctl,
     topology,
+    ttp,
     updater,
     web,
     webhook,
@@ -59,7 +60,7 @@ for _mod in (
     swarm,
     deploy, lifecycle, workers, inventory,
     web, profiler, orchestrator, realism, reconciler, sniffer, db,
-    topology, bus, geoip, init, webhook, canary,
+    topology, bus, geoip, init, webhook, canary, ttp,
 ):
     _mod.register(app)
 

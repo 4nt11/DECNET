@@ -12,6 +12,9 @@ per-dialect ``SQLiteRepository`` / ``MySQLRepository`` subclasses
 """
 from __future__ import annotations
 
+import json
+from collections.abc import AsyncIterator
+from datetime import datetime
 from typing import Any
 
 from sqlalchemy import func, select
@@ -25,6 +28,7 @@ from decnet.web.db.models import (
     TechniqueRollupRow,
     TTPTag,
 )
+from decnet.web.db.models.canary import CanaryTrigger
 from decnet.web.db.sqlmodel_repo._helpers import _MixinBase
 
 
@@ -274,6 +278,55 @@ class TTPMixin(_MixinBase):
                 }
                 for r in res.all()
             ]
+
+    # ── Backfill iterators (E.4) ────────────────────────────────────
+    #
+    # Read-only iterators consumed by ``decnet ttp backfill`` to replay
+    # historical events through the live :class:`CompositeTagger`. The
+    # CLI builds :class:`TaggerEvent` objects from these and persists
+    # results via :meth:`insert_tags` — same idempotent path the bus
+    # worker uses, no bus publish.
+    #
+    # Per TTP_TAGGING.md §"Order of work" / §"Bus topics" the historical
+    # replay deliberately bypasses bus publish so SIEM/webhook fan-out
+    # does not re-fire on already-attributed events.
+
+    async def iter_attacker_commands_since(
+        self, since: datetime,
+    ) -> AsyncIterator[tuple[Attacker, list[dict[str, Any]]]]:
+        """Yield ``(Attacker, decoded_commands)`` pairs since *since*.
+
+        Walks every :class:`Attacker` whose ``last_seen >= since`` and
+        decodes the JSON ``commands`` blob; non-list / malformed
+        payloads are skipped silently (the JSON column is best-effort
+        per the model docstring).
+        """
+        async with self._session() as session:
+            stmt: Any = (
+                select(Attacker).where(col(Attacker.last_seen) >= since)
+            )
+            res = await session.execute(stmt)
+            for row in res.scalars().all():
+                try:
+                    decoded = json.loads(row.commands or "[]")
+                except (ValueError, TypeError):
+                    continue
+                if not isinstance(decoded, list):
+                    continue
+                yield row, [c for c in decoded if isinstance(c, dict)]
+
+    async def iter_canary_triggers_since(
+        self, since: datetime,
+    ) -> AsyncIterator[CanaryTrigger]:
+        """Yield :class:`CanaryTrigger` rows fired since *since*."""
+        async with self._session() as session:
+            stmt: Any = (
+                select(CanaryTrigger)
+                .where(col(CanaryTrigger.occurred_at) >= since)
+            )
+            res = await session.execute(stmt)
+            for row in res.scalars().all():
+                yield row
 
     async def list_distinct_techniques(self) -> list[TechniqueRollupRow]:
         """Fleet-wide distinct-technique rollup with counts +
