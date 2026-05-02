@@ -3,6 +3,7 @@ FROM ${BASE_IMAGE}
 
 RUN apt-get update && apt-get install -y --no-install-recommends \
     python3 \
+    python3-lxml \
     && rm -rf /var/lib/apt/lists/*
 
 COPY syslog_bridge.py /opt/syslog_bridge.py

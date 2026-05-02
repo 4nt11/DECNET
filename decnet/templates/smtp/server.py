@@ -20,17 +20,25 @@ The DATA state machine (and the 502-per-line bug) is fixed in both modes.
 
 import asyncio
 import base64
+import binascii
 import hashlib
+import io
 import json
 import os
 import random as _rand
 import re
 import time
+import zipfile
 from datetime import datetime, timezone
 from email import message_from_bytes
 from email.header import decode_header, make_header
 from email.message import Message
 from typing import cast
+
+try:
+    from lxml import html as _lxml_html
+except Exception:  # pragma: no cover — defensive when lxml unavailable
+    _lxml_html = None
 
 import instance_seed as _seed
 from syslog_bridge import (
@@ -133,6 +141,32 @@ _URL_RE = re.compile(r"https?://[^\s<>\"'\)\]]+")
 # not key on them.
 _DKIM_PASS_RE = re.compile(r"\bdkim\s*=\s*pass\b", re.IGNORECASE)
 _SPF_PASS_RE  = re.compile(r"\bspf\s*=\s*pass\b",  re.IGNORECASE)
+# Base64 chunk detector. Mirrors the regex the EmailLifter uses
+# (`decnet/ttp/impl/email_lifter.py:_BASE64_RE`) so the decky-side
+# precompute and the lifter's fallback agree on chunk boundaries.
+_BASE64_RE = re.compile(r"[A-Za-z0-9+/]{32,}={0,2}")
+# Token boundary for body simhash. Lower-cased and word-class only so
+# whitespace mutations and punctuation flips don't fragment the token
+# stream.
+_SIMHASH_TOKEN_RE = re.compile(r"\w+", re.UNICODE)
+# HTML-smuggling regex fallback, used when lxml is unavailable or fails
+# to parse a malformed body. Combines the three structural signals into
+# one OR-combined regex; FP rate is higher than the lxml path so it is
+# only the second-pass safety net.
+_HTML_SMUGGLE_RE = re.compile(
+    r"<a\s+[^>]*\bdownload\b[^>]*>"
+    r"|new\s+Blob\s*\("
+    r"|new\s+Uint8Array\s*\("
+    r"|window\.URL\.createObjectURL\s*\(",
+    re.IGNORECASE,
+)
+# Magic-bytes for the encrypted-archive bool. Compared after stripping
+# leading whitespace; first 8 bytes is enough for every format we
+# recognise. ZIP / docx / xlsx round-trip via the central directory's
+# encryption flag and aren't here.
+_MAGIC_7Z   = b"7z\xBC\xAF\x27\x1C"
+_MAGIC_RAR  = b"Rar!\x1A\x07"
+_MAGIC_CFBF = b"\xD0\xCF\x11\xE0\xA1\xB1\x1A\xE1"
 
 
 def _empty_summary() -> dict:
@@ -142,7 +176,189 @@ def _empty_summary() -> dict:
         "return_path": "", "x_mailer": "",
         "dkim_signed": False, "spf_pass": False,
         "attachments": [], "urls": [],
+        "body_simhash": "", "body_base64_bytes": 0,
+        "html_smuggling": False,
     }
+
+
+def _body_simhash(body_text: str) -> str:
+    """Charikar 64-bit simhash over word tokens, hex-encoded.
+
+    Inlined rather than pulling the ``simhash`` PyPI dep (which
+    transitively brings numpy ~50 MB into a slim decky container) —
+    the algorithm is ~15 lines and fully equivalent for this use.
+    Token weighting is by frequency; per-token hash is md5[:8] for
+    speed (this is a content fingerprint, not a security primitive).
+
+    Returns a 16-hex-char string, or ``""`` on empty/no-token input
+    (the lifter's ``_p_mass_phish`` predicate accepts str|int and
+    rejects non-strings, so the empty case is "no signal" — exactly
+    what we want when a multipart message has no usable text body).
+    """
+    tokens = _SIMHASH_TOKEN_RE.findall(body_text.lower()) if body_text else []
+    if not tokens:
+        return ""
+    counts: dict[str, int] = {}
+    for tok in tokens:
+        counts[tok] = counts.get(tok, 0) + 1
+    bits = [0] * 64
+    for tok, weight in counts.items():
+        h = int.from_bytes(
+            hashlib.md5(tok.encode("utf-8", errors="replace")).digest()[:8],  # noqa: S324
+            "big",
+        )
+        for i in range(64):
+            if h & (1 << i):
+                bits[i] += weight
+            else:
+                bits[i] -= weight
+    out = 0
+    for i in range(64):
+        if bits[i] > 0:
+            out |= (1 << i)
+    return format(out, "016x")
+
+
+def _body_base64_bytes(body_text: str) -> int:
+    """Largest decoded base64 chunk's byte count in the body, or 0.
+
+    Mirrors the EmailLifter's ``_p_encoded_payload`` fallback exactly:
+    iterate ``_BASE64_RE`` matches, attempt strict decode, return the
+    largest decoded length seen. Computed once decky-side so the
+    lifter never has to scan body text — R0048 fires from this
+    scalar alone.
+    """
+    if not body_text:
+        return 0
+    largest = 0
+    for m in _BASE64_RE.finditer(body_text):
+        chunk = m.group(0)
+        try:
+            decoded = base64.b64decode(chunk, validate=True)
+        except (binascii.Error, ValueError):
+            continue
+        if len(decoded) > largest:
+            largest = len(decoded)
+    return largest
+
+
+def _attachment_macro_indicator(payload: bytes, filename: str) -> bool:
+    """True if the attachment is an OOXML container with a VBA macro
+    stream (``vbaProject.bin``).
+
+    Modern macro-bearing Office files (.docm / .xlsm / .pptm and
+    .docx with injected macros) are zip containers carrying a
+    ``word/vbaProject.bin`` (or analogous) entry. Catches ~95% of
+    in-the-wild macro phishing. Legacy .xls (CFBF, not zip) is a
+    follow-up — see DEBT entry.
+    """
+    if not payload or len(payload) < 4 or payload[:2] != b"PK":
+        return False
+    try:
+        with zipfile.ZipFile(io.BytesIO(payload)) as zf:
+            for name in zf.namelist():
+                if name.endswith("vbaProject.bin"):
+                    return True
+    except (zipfile.BadZipFile, OSError, ValueError):
+        return False
+    return False
+
+
+def _attachment_encrypted(payload: bytes, filename: str) -> bool:
+    """True if the attachment is an encrypted/password-protected
+    archive or Office container.
+
+    ZIP / OOXML: read the central directory's encryption bit
+    (``flag_bits & 0x1`` on any entry).
+    7z / RAR: file-magic match.
+    Encrypted Office (XLSX-with-password): wrapped in a CFBF
+    container (magic ``D0 CF 11 E0``) — catch on filename hint.
+    """
+    if not payload or len(payload) < 8:
+        return False
+    head = payload[:8]
+    if head.startswith(_MAGIC_7Z) or head.startswith(_MAGIC_RAR):
+        return True
+    if head.startswith(_MAGIC_CFBF):
+        # Naked CFBF without an Office filename is rare; treat any
+        # CFBF as potentially encrypted Office for the bool flag.
+        return True
+    if payload[:2] == b"PK":
+        try:
+            with zipfile.ZipFile(io.BytesIO(payload)) as zf:
+                for info in zf.infolist():
+                    if info.flag_bits & 0x1:
+                        return True
+        except (zipfile.BadZipFile, OSError, ValueError):
+            return False
+    return False
+
+
+def _html_smuggling(msg: Message) -> bool:
+    """True if any text/html part exhibits the HTML-smuggling shape.
+
+    Structural lxml parse first: walk anchors and scripts, fire when
+    an ``<a>`` carries a ``download`` attribute AND a sibling /
+    near-ancestor ``<script>`` references one of the canonical
+    blob-builder primitives (``new Blob(``, ``new Uint8Array(``,
+    ``URL.createObjectURL(``). Real-world phish HTML is often
+    malformed enough to break lxml; on parse failure we fall back
+    to a regex pass that combines the same indicators in one body
+    (higher FP rate, but catches the malformed cases lxml drops).
+    """
+    for part in msg.walk():
+        if part.is_multipart():
+            continue
+        if (part.get_content_type() or "").lower() != "text/html":
+            continue
+        try:
+            raw = part.get_payload(decode=True) or b""
+            text = raw.decode("utf-8", errors="replace") if isinstance(raw, bytes) else ""
+        except Exception:
+            text = ""
+        if not text:
+            continue
+        if _lxml_html is not None:
+            try:
+                tree = _lxml_html.fromstring(text)
+            except Exception:
+                tree = None
+            if tree is not None:
+                anchors_with_download = tree.xpath(
+                    "//a[@download or @*[name()='download']]",
+                )
+                if anchors_with_download:
+                    scripts = tree.xpath("//script")
+                    blob_re = re.compile(
+                        r"new\s+Blob\s*\("
+                        r"|new\s+Uint8Array\s*\("
+                        r"|URL\.createObjectURL\s*\(",
+                        re.IGNORECASE,
+                    )
+                    for script in scripts:
+                        script_text = (script.text or "") + (script.tail or "")
+                        if blob_re.search(script_text):
+                            return True
+                # Fall through to regex if lxml found no smoking gun
+                # — malformed HTML may have lost structure during
+                # parse-and-serialize.
+        if _HTML_SMUGGLE_RE.search(text):
+            # Pair check: at least two distinct indicator classes
+            # must hit so a stray ``<a download>`` link in a
+            # legitimate "click to download our report" mail does
+            # not fire on its own.
+            anchor_hit = re.search(
+                r"<a\s+[^>]*\bdownload\b", text, re.IGNORECASE,
+            )
+            blob_hit = re.search(
+                r"new\s+Blob\s*\("
+                r"|new\s+Uint8Array\s*\("
+                r"|window\.URL\.createObjectURL\s*\(",
+                text, re.IGNORECASE,
+            )
+            if anchor_hit and blob_hit:
+                return True
+    return False
 
 
 def _extract_urls(msg: Message) -> list[str]:
@@ -210,16 +426,39 @@ def _summarize_message(body: bytes, msg_id: str) -> dict:
             payload: bytes = _raw if isinstance(_raw, bytes) else b""
         except Exception:
             payload = b""
+        decoded_filename = _decode_header(filename) or ""
         attachments.append({
-            "filename": _decode_header(filename) or "",
+            "filename": decoded_filename,
             "content_type": part.get_content_type(),
             "size": len(payload),
             "sha256": hashlib.sha256(payload).hexdigest() if payload else "",
+            "macro_indicator": _attachment_macro_indicator(payload, decoded_filename),
+            "encrypted": _attachment_encrypted(payload, decoded_filename),
         })
 
     auth_results = " | ".join(
         v for v in msg.get_all("Authentication-Results") or [] if v
     )
+    # Concatenate all text/* body parts for simhash + base64-bytes
+    # computation. The simhash should be order-independent across
+    # multipart alternatives (text/plain + text/html), so we treat
+    # the union as one document — different attackers' templates
+    # will diverge in word distribution regardless of the multipart
+    # arrangement.
+    body_text_parts: list[str] = []
+    for part in msg.walk():
+        if part.is_multipart():
+            continue
+        if not (part.get_content_type() or "").lower().startswith("text/"):
+            continue
+        try:
+            raw = part.get_payload(decode=True) or b""
+            text = raw.decode("utf-8", errors="replace") if isinstance(raw, bytes) else ""
+        except Exception:
+            text = ""
+        if text:
+            body_text_parts.append(text)
+    body_text = "\n".join(body_text_parts)
     return {
         "subject": _decode_header(msg.get("Subject")),
         "from_hdr": _decode_header(msg.get("From")),
@@ -233,6 +472,9 @@ def _summarize_message(body: bytes, msg_id: str) -> dict:
         "spf_pass": bool(_SPF_PASS_RE.search(auth_results)),
         "attachments": attachments,
         "urls": _extract_urls(msg),
+        "body_simhash": _body_simhash(body_text),
+        "body_base64_bytes": _body_base64_bytes(body_text),
+        "html_smuggling": _html_smuggling(msg),
     }
 
 
@@ -361,15 +603,29 @@ class SMTPProtocol(asyncio.Protocol):
                         dkim_signed=int(summary["dkim_signed"]),
                         spf_pass=int(summary["spf_pass"]),
                         attachment_count=len(summary["attachments"]),
-                        # Full manifest (filename/sha256/size/content_type)
-                        # rides as a compact JSON blob — the SD-value escape
-                        # in syslog_bridge handles the quotes and brackets.
+                        # Full manifest (filename/sha256/size/content_type
+                        # + macro_indicator/encrypted booleans) rides as
+                        # a compact JSON blob — the SD-value escape in
+                        # syslog_bridge handles the quotes and brackets.
+                        # Per-attachment booleans are reduced to top-
+                        # level flags by the master ingester at publish
+                        # time.
                         attachments_json=json.dumps(summary["attachments"], separators=(",", ":")),
                         # URL list extracted from text/* body parts;
                         # capped at 64 entries to bound the syslog SD
                         # value. Spam kits with hundreds of unique URLs
                         # are rare and the cap is loud-friendly.
                         urls_json=json.dumps(summary["urls"][:64], separators=(",", ":")),
+                        # Heavyweight Layer-2 body signals consumed by
+                        # EmailLifter R0042 / R0046 / R0048. Booleans
+                        # ride as 0/1 ints because syslog SD-values are
+                        # strings; the ingester coerces back at publish
+                        # time. body_simhash is a 16-hex-char string;
+                        # body_base64_bytes is the largest decoded
+                        # base64 chunk's byte count (0 if none).
+                        body_simhash=summary["body_simhash"],
+                        body_base64_bytes=summary["body_base64_bytes"],
+                        html_smuggling=int(summary["html_smuggling"]),
                     )
                 # Real MTAs take tens of ms to queue; instantaneous replies
                 # on DATA are a tell.
