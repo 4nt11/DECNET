@@ -1,11 +1,11 @@
 # DECNET — Technical Debt Register
 
-> Last updated: 2026-05-02 — merged the rogue root-level `DEBT.md`
-> back into this canonical register. New: DEBT-044 (✅ email producer
-> wiring), DEBT-045 (EmailLifter heavyweight, partial paid), DEBT-046
-> (mal-hash feed), DEBT-047 (R0047 BEC disk-reach), DEBT-048 (TTP
-> intel provider mapping review — recurring), DEBT-049 (Sigma adapter
-> post-v1).
+> Last updated: 2026-05-02 — DEBT-035 (artifacts uid/gid) RESOLVED
+> via setgid + group-write on the artifacts root; DEBT-047 (R0047
+> BEC disk-reach) filesystem-access blocker lifted accordingly.
+> Earlier same-day: merged the rogue root-level DEBT.md into this
+> canonical register; filed DEBT-044…DEBT-049 (email producer
+> wiring + EmailLifter follow-ups + TTP recurring + Sigma post-v1).
 > Severity: 🔴 Critical · 🟠 High · 🟡 Medium · 🟢 Low
 
 ---
@@ -320,35 +320,65 @@ All four signals fall out of the schema for free. CoV from `kd_iki_mean` + `kd_i
 
 **Status:** Open. Depends on the shard-scan fallback (shipped in `323077b`) and `SessionProfile` schema (shipped with session recording v1). The bus-trigger path depends on DEBT-031's deferred `attacker.session.started/ended` topics, but poll-driven ingestion works today and can ship first.
 
-### DEBT-035 — Artifacts written as the container uid, not the API's
-**Files:** `decnet/services/ssh.py`, `decnet/services/telnet.py`, `decnet/templates/{ssh,telnet}/{Dockerfile,entrypoint.sh}`, `decnet/composer.py` (wherever bind mounts for `/var/lib/decnet/artifacts/**` are generated), `decnet/web/router/transcripts/api_get_transcript.py` (consumer).
+### ~~DEBT-035 — Artifacts written as the container uid, not the API's~~ ✅ RESOLVED 2026-05-02
+**Files:** `decnet/cli/init.py`, `decnet/web/router/transcripts/api_get_transcript.py` (soft-fail kept as defence-in-depth).
 
-Every decoy container that produces artifacts (session recordings, captured uploads, credential dumps) writes into a host bind-mount under `/var/lib/decnet/artifacts/{decky}/{service}/...`. The writer is whatever uid is running inside the container — typically `root` (uid 0 inside the container, which maps to the host's `root` or the container's own unprivileged `decnet` uid depending on the template's `USER` directive). The API, on the other hand, runs under whatever `--user` was passed to `decnet init` — `anti` on dev boxes, `decnet` in production.
+The original recommendation was option 1 (compose `user:` directive
+sourcing the API uid/gid). On implementation that turned out to be
+infeasible for two of the artifact-producing templates: SSH and
+Telnet *fundamentally* need root inside the container because PAM
+authentication uses `setuid(2)` to switch to the target user during
+login, and a non-root `sshd` / `/bin/login` cannot do that. So
+option 1 doesn't generalise.
 
-On mismatch, the API process hits `PermissionError` the moment it tries to `stat()` the artifacts dir. The transcripts endpoint now soft-fails this into a 404 (shipped in `323077b`), which keeps the API up but still leaves the operator unable to view any session that was recorded before the mismatch was fixed by hand.
+Option 2 (setgid bit + shared group) does generalise, and after
+exploration it turned out to be **load-bearing on its own** — no
+compose `user:` directive is required:
 
-**Evidence (dev box, 2026-04-24):**
-```
-PermissionError: [Errno 13] Permission denied:
-  '/var/lib/decnet/artifacts/omega-decky/ssh/transcripts'
-```
-Workaround: `sudo chown -R anti:anti /var/lib/decnet/artifacts`. Every new decky re-creates the dir as whatever uid the container uses, so the workaround has to be re-run — which doesn't scale.
+1. `decnet init` now creates `/var/lib/decnet/artifacts` with mode
+   `0o2775` (setgid + group-write) owned by the DECNET-service
+   `user:group` (commit `b2733216`).
+2. Linux `mkdir(2)` propagates the setgid bit AND the parent's
+   group to every new subdirectory, so when Docker auto-creates
+   `/var/lib/decnet/artifacts/{decky}/{service}/...` for a bind-
+   mount, those subdirs come up with `group=decnet` and the setgid
+   bit set.
+3. Containers write files with default umask `0o022`, which yields
+   mode `0o644` (group-readable). The file's group is `decnet`
+   (inherited via setgid).
+4. The API process (and the local TTP worker on an agent) runs as
+   the DECNET-service user, whose primary group is `decnet` →
+   group-read on the file is satisfied → no manual chown.
 
-**Design options (pick one, not all):**
+`decnet/cli/init.py` also persists the resolved user / group as
+**names** under `[decnet] api-user` / `api-group` in `decnet.ini`
+(commit `39a298f6`). The kebab keys auto-translate to
+`DECNET_API_USER` / `DECNET_API_GROUP` env vars via
+`decnet/config_ini.py` at runtime, available to any future composer
+or worker that needs to resolve the local uid via `pwd.getpwnam`
+(deferred — not needed for this paydown, kept as the cleaner path
+if a stricter security model is wanted later).
 
-1. **Container runs as the host API's uid.** `compose_fragment()` for every artifact-producing service injects `user: "{host_uid}:{host_gid}"` into the compose snippet, sourcing the uid/gid from whatever `DECNET_API_UID` / `DECNET_API_GID` the master detected at init time (or `id -u` / `id -g` of the current process at compose time). This is the cleanest but has the most blast radius — bind mounts need to be pre-chowned to that uid before the container starts, and some templates have `entrypoint.sh` steps that assume root (e.g. `setcap`, `chmod` of system files during service setup).
+**Acceptance verified**: fresh `decnet init --user anti --group anti
+--prefix tmp` → `/var/lib/decnet/artifacts` lands at mode `0o2775`
+owned by `anti:anti`. Subsequent decoy auto-create propagates the
+group + setgid; files written 0o644 are readable by `anti`.
 
-2. **Setgid bit on the artifacts tree + shared group.** `mkdir -p /var/lib/decnet/artifacts && chmod 2775 /var/lib/decnet/artifacts && chgrp decnet /var/lib/decnet/artifacts`. Every new file inherits the `decnet` group; the API (member of `decnet`) can read regardless of which uid wrote. Still requires each container to `chmod g+r` its output — sessrec/emitter code would need a small change to `umask(0002)` or explicit `fchmod` calls. Less invasive but fragile: any writer that forgets the umask silently regresses.
+**Defence-in-depth retained**: the soft-fail path in
+`api_get_transcript.py` and `api_get_artifact.py` stays — option 2
+makes it never fire on a healthy install but a misconfigured deploy
+must still not 500 the API.
 
-3. **Sidecar post-processor.** A long-running daemon under the API's uid `inotify`-watches `/var/lib/decnet/artifacts/**`, re-chowns new files on creation. Works without touching any template, but adds a new process and a race window between "file created" and "file readable by API". Not a great shape for an already-worker-heavy architecture.
-
-**Recommendation:** option 1, with the init command handling the setup (mkdir the artifacts tree with mode 0775, group = `--group`, then propagate the uid/gid into the compose generator). Option 2 as a fallback where option 1 can't land (e.g. templates that genuinely need root inside the container, like the conpot ICS template).
-
-**Acceptance:**
-- A fresh `decnet init --user anti --group anti` → deploy a decky → exercise a recorded session → the API (running as `anti`) can read `/var/lib/decnet/artifacts/.../transcripts/sessions-*.jsonl` **without any manual chown**.
-- The soft-fail path shipped in `323077b` stays as defence-in-depth — the API must never 500 on a permission mismatch, but it also shouldn't *need* to soft-fail on a healthy install.
-
-**Status:** Open. Current workaround is `sudo chown -R <user>:<group> /var/lib/decnet/artifacts` after every new deploy; soft-fail in the transcripts endpoint keeps the API alive in the interim.
+**Out of scope (filed as separate follow-ups)**:
+- Compose `user:` directive injection per fragment (option 1).
+  Optional polish for the 24 templates that already drop to
+  `logrelay`. SSH and Telnet are blocked on PAM/setuid as noted
+  above. File as a fresh DEBT entry if a stricter "container uid
+  matches host uid" model is wanted.
+- `decnet ttp` master-only gate flip (`decnet/cli/gating.py:28–34`).
+  Required for DEBT-047 to land (TTP worker on agents reads `.eml`
+  files), but a separate one-line change with its own test. File
+  alongside the DEBT-047 disk-reach implementation.
 
 ### DEBT-037 — Webhook delivery guarantees beyond MVP
 **Files:** `decnet/webhook/` (**new**), `decnet/web/db/models/webhooks.py` (**new**), `decnet/web/router/webhooks/` (**new**).
@@ -562,7 +592,7 @@ loop.
 **Status:** Open. Owner TBD. Filed 2026-05-02 alongside DEBT-045.
 
 ### DEBT-047 — EmailLifter R0047 BEC unblock (artifact disk-reach)
-**Files:** `decnet/ttp/impl/email_lifter.py` (consumer), `decnet/web/ingester.py` (no producer change once unblocked).
+**Files:** `decnet/ttp/impl/email_lifter.py` (consumer), `decnet/cli/gating.py` (master-only gate flip).
 R0047's predicate (`_p_bec` at `email_lifter.py:244`) reads
 `body_text` and `subject`, substring-matching them against per-rule
 keyword lists. Shipping raw body text on the abstracted service bus
@@ -576,16 +606,25 @@ opens the `.eml` from the artifact tree at
 predicate against the body parsed in-process. Bus carries only the
 artifact pointer; raw body text never leaves the host disk
 boundary.
-**Blocked by DEBT-035** (artifacts uid/gid mismatch) — `decnet ttp`
-running on agents cannot read artifact files written by deckies on
-the same host because of the permission mismatch. The legacy
-`_p_bec` body_text path remains in place untouched, so when
-disk-reach lands the predicate works without any code change.
-**Trigger:** DEBT-035 paid (artifacts uid/gid aligned). Then add a
-disk-reach helper to the EmailLifter that opens the `.eml` lazily
-when a body-aware predicate runs.
-**Status:** Open, gated on DEBT-035. Owner TBD. Filed 2026-05-02
-alongside DEBT-045.
+**Filesystem access UNBLOCKED 2026-05-02 by DEBT-035 paydown** —
+`/var/lib/decnet/artifacts` carries setgid + `decnet:decnet`, so
+files written by SMTP decoys are group-readable by the local
+DECNET-service user (which is what `decnet ttp` runs as on
+agents). The legacy `_p_bec` body_text path remains in place
+untouched, so when the disk-reach helper lands the predicate
+works without any code change.
+**Remaining work**:
+- Flip the `decnet ttp` master-only gate at
+  `decnet/cli/gating.py:28–34` so agents can run the worker.
+- Add a disk-reach helper to the EmailLifter that opens the
+  `.eml` lazily when a body-aware predicate (R0047 or R0048
+  fallback) runs. Resolve `stored_as` to the artifact path via
+  the existing `_resolve_artifact_path` helper at
+  `decnet/web/router/artifacts/api_get_artifact.py:48` (factor
+  to a shared module for the lifter to import).
+**Status:** Open. Owner TBD. Filed 2026-05-02 alongside DEBT-045.
+Filesystem-access blocker resolved by DEBT-035 paydown
+(2026-05-02).
 
 ### DEBT-048 — TTP intel provider mapping review (quarterly recurring)
 **Files:** `rules/ttp/R0054.yaml`–`R0058.yaml`, `decnet/ttp/impl/intel_lifter.py`, `development/TTP_TAGGING.md` §"Hard parts §9 Intel provider drift".
@@ -664,7 +703,7 @@ user who needs it.
 | ~~DEBT-031~~ | ✅ | Workers / Bus integration | resolved |
 | DEBT-032 | 🟡 Medium | Correlation / Prober | open |
 | DEBT-033 | 🟡 Medium | Storage / Session recording | open |
-| DEBT-035 | 🟡 Medium | Artifacts / Filesystem perms | open |
+| ~~DEBT-035~~ | ✅ | Artifacts / Filesystem perms | resolved 2026-05-02 |
 | DEBT-036 | 🟡 Medium | Correlation / Keystroke dynamics | open |
 | DEBT-037 | 🟡 Medium | Integration / Webhooks | open (tracks MVP follow-ups) |
 | DEBT-038 | 🟡 Medium | Honeypot / SSH cred capture | open (document-only) |
@@ -676,9 +715,9 @@ user who needs it.
 | ~~DEBT-044~~ | ✅ | TTP / Email producer wiring | resolved 2026-05-02 |
 | DEBT-045 | 🟡 Medium | TTP / EmailLifter heavyweight extraction | partial paid 2026-05-02 |
 | DEBT-046 | 🟡 Medium | TTP / EmailLifter mal-hash feed integration | open |
-| DEBT-047 | 🟡 Medium | TTP / EmailLifter R0047 BEC (disk-reach) | open (gated on DEBT-035) |
+| DEBT-047 | 🟡 Medium | TTP / EmailLifter R0047 BEC (disk-reach) | open (FS-access unblocked 2026-05-02; remaining: gate flip + lifter helper) |
 | DEBT-048 | 🟡 Medium | TTP / Intel provider mapping review (recurring) | open / recurring |
 | DEBT-049 | 🟡 Medium | TTP / Sigma adapter (post-v1) | open |
 
-**Remaining open:** DEBT-011 (Alembic), DEBT-023 (image pinning), DEBT-026 (modular mailboxes), DEBT-027 (Dynamic bait store), DEBT-028 (deploy endpoint tests), DEBT-032 (fingerprint rotation detection), DEBT-033 (transcript shard rotation), DEBT-035 (artifacts uid/gid alignment), DEBT-036 (session-profile ingester), DEBT-037 (webhook delivery hardening), DEBT-038 (SSH PAM cred-capture limitations — document-only), DEBT-042 (orchestrator failure-count window), DEBT-043 (frontend test framework), DEBT-045 (EmailLifter heavyweight — partial paid; carved-out follow-ups remain), DEBT-046 (mal-hash feed), DEBT-047 (R0047 BEC disk-reach — gated on DEBT-035), DEBT-048 (TTP intel provider mapping review — recurring quarterly), DEBT-049 (TTP Sigma adapter — post-v1).
+**Remaining open:** DEBT-011 (Alembic), DEBT-023 (image pinning), DEBT-026 (modular mailboxes), DEBT-027 (Dynamic bait store), DEBT-028 (deploy endpoint tests), DEBT-032 (fingerprint rotation detection), DEBT-033 (transcript shard rotation), DEBT-036 (session-profile ingester), DEBT-037 (webhook delivery hardening), DEBT-038 (SSH PAM cred-capture limitations — document-only), DEBT-042 (orchestrator failure-count window), DEBT-043 (frontend test framework), DEBT-045 (EmailLifter heavyweight — partial paid; carved-out follow-ups remain), DEBT-046 (mal-hash feed), DEBT-047 (R0047 BEC disk-reach — filesystem unblocked 2026-05-02; remaining: gate flip + lifter helper), DEBT-048 (TTP intel provider mapping review — recurring quarterly), DEBT-049 (TTP Sigma adapter — post-v1).
 **Estimated remaining effort:** ~21 hours plus the new EmailLifter / TTP follow-ups. DEBT-030 Phase B (optimistic staged-buffer editor) is a follow-up, not debt.
