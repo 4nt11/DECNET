@@ -145,6 +145,27 @@ _RFC5424_RE = re.compile(
     r"(\S+) "       # 4: MSGID (event_type)
     r"(.+)$",       # 5: SD element + optional MSG
 )
+
+# Honeypot SSH containers export a ``PROMPT_COMMAND`` that calls
+# ``logger --rfc5424 --msgid command -p user.info -t bash "CMD …"``.
+# That inner RFC 5424 line lands on the container's stdout, where the
+# Docker stream reader prepends ANOTHER RFC 5424 envelope (PRI=14,
+# HOSTNAME=<decky>, APP-NAME=1, MSGID=NIL). The outer parse therefore
+# sees ``event_type == "-"`` while the real MSGID (``command``) is
+# inside the body. We detect that case and re-extract the inner
+# ``HOSTNAME APP-NAME PROCID MSGID rest`` so downstream consumers see
+# ``event_type == "command"`` plus the real source hostname.
+#
+# Anchored on an ISO-8601 timestamp at the head of the body so we
+# don't false-match free-form prose like "Connection from 1.2.3.4".
+_INNER_RFC5424_RE = re.compile(
+    r"^(\d{4}-\d{2}-\d{2}T\S+)\s+"  # 1: inner TIMESTAMP
+    r"(\S+)\s+"                       # 2: inner HOSTNAME
+    r"(\S+)\s+"                       # 3: inner APP-NAME
+    r"\S+\s+"                         # PROCID (NIL or PID)
+    r"(\S+)\s+"                       # 4: inner MSGID
+    r"(.+)$",                         # 5: inner SD/MSG remainder
+)
 _SD_BLOCK_RE = re.compile(r'\[relay@55555\s+(.*?)\]', re.DOTALL)
 _PARAM_RE = re.compile(r'(\w+)="((?:[^"\\]|\\.)*)"')
 _IP_FIELDS = ("src_ip", "src", "client_ip", "remote_ip", "remote_addr", "target_ip", "ip")
@@ -184,8 +205,23 @@ def parse_rfc5424(line: str) -> Optional[dict[str, Any]]:
     ts_raw, decky, service, event_type, sd_rest = m.groups()
 
     fields: dict[str, str] = {}
-    msg: str = ""
 
+    # Honeypot SSH PROMPT_COMMAND lines are double-wrapped (Docker
+    # stdout envelope around the inner ``logger --msgid command`` line).
+    # Outer MSGID is NIL; the real MSGID is inside the body. Detect
+    # the inner shape and re-extract HOSTNAME / APP-NAME / MSGID /
+    # remainder so downstream extraction sees the real header.
+    if event_type == "-" and sd_rest.startswith("-"):
+        body = sd_rest[1:].lstrip()
+        inner = _INNER_RFC5424_RE.match(body)
+        if inner is not None:
+            _i_ts, i_host, i_app, i_msgid, i_rest = inner.groups()
+            decky = i_host
+            service = i_app
+            event_type = i_msgid
+            sd_rest = i_rest
+
+    msg: str = ""
     if sd_rest.startswith("-"):
         msg = sd_rest[1:].lstrip()
     elif sd_rest.startswith("["):
@@ -193,9 +229,14 @@ def parse_rfc5424(line: str) -> Optional[dict[str, Any]]:
         if block:
             for k, v in _PARAM_RE.findall(block.group(1)):
                 fields[k] = v.replace('\\"', '"').replace("\\\\", "\\").replace("\\]", "]")
-            msg_match = re.search(r'\]\s+(.+)$', sd_rest)
-            if msg_match:
-                msg = msg_match.group(1).strip()
+        # Always recover the post-SD message tail, even when the SD
+        # block isn't ``relay@55555`` (e.g. the ``timeQuality`` block
+        # syslog auto-emits on bash CMD lines). Without this the body
+        # of unwrapped PROMPT_COMMAND lines stays empty and the
+        # attacker_ip kv-fallback below has nothing to scan.
+        msg_match = re.search(r'\]\s+(.+)$', sd_rest)
+        if msg_match:
+            msg = msg_match.group(1).strip()
     else:
         msg = sd_rest
 

@@ -32,6 +32,21 @@ _RFC5424_RE = re.compile(
     r"(.+)$",       # 5: SD element + optional MSG
 )
 
+# Honeypot SSH PROMPT_COMMAND lines arrive double-wrapped: the
+# Docker-stdout collector envelope wraps the inner ``logger
+# --rfc5424 --msgid command -t bash …`` line. Outer MSGID is NIL,
+# real MSGID lives in the body. Mirrors the unwrap logic in
+# ``decnet.collector.worker._INNER_RFC5424_RE`` — the two parsers
+# read the same on-wire format.
+_INNER_RFC5424_RE = re.compile(
+    r"^(\d{4}-\d{2}-\d{2}T\S+)\s+"  # 1: inner TIMESTAMP
+    r"(\S+)\s+"                       # 2: inner HOSTNAME
+    r"(\S+)\s+"                       # 3: inner APP-NAME
+    r"\S+\s+"                         # PROCID (NIL or PID)
+    r"(\S+)\s+"                       # 4: inner MSGID
+    r"(.+)$",                         # 5: inner SD/MSG remainder
+)
+
 # Structured data block: [relay@55555 k="v" ...]
 _SD_BLOCK_RE = re.compile(r'\[relay@55555\s+(.*?)\]', re.DOTALL)
 
@@ -120,6 +135,21 @@ def parse_line(line: str) -> LogEvent | None:
         return None
 
     ts_raw, decky, service, event_type, sd_rest = m.groups()
+
+    # Unwrap double-wrapped Docker-stdout envelopes around bash
+    # PROMPT_COMMAND lines. See ``_INNER_RFC5424_RE`` and the matching
+    # logic in ``decnet.collector.worker.parse_rfc5424``. Must run
+    # before the decky/service NIL-guard below — the OUTER decky is
+    # the docker host, the inner header carries the real source.
+    if event_type == "-" and sd_rest.startswith("-"):
+        body = sd_rest[1:].lstrip()
+        inner = _INNER_RFC5424_RE.match(body)
+        if inner is not None:
+            _i_ts, i_host, i_app, i_msgid, i_rest = inner.groups()
+            decky = i_host
+            service = i_app
+            event_type = i_msgid
+            sd_rest = i_rest
 
     if decky == "-" or service == "-":
         return None
