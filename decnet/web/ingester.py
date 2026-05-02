@@ -613,11 +613,165 @@ async def _extract_bounty(
                 "content_type": _fields.get("content_type"),
             },
         })
+        # Fan the captured email out to the TTP worker — same hook
+        # ``attacker.intel.enriched`` uses, but for the EmailLifter
+        # (R0041–R0048). Always fires for both relay and non-relay
+        # services; the TTP path doesn't care which mode the decky was
+        # in. Best-effort — bus-down or unresolved attacker UUID
+        # downgrades to a no-op silently.
+        await _publish_email_received(repo, log_data, _fields)
         # Signal the realism worker to forward this as a probe if it's the
         # first message from this IP on an smtp_relay decky. The worker has
         # real internet access (the container is on MACVLAN and doesn't).
         if log_data.get("service") == "smtp_relay":
             await _publish_probe_pending(log_data, _fields)
+
+
+_RCPT_SPLIT_RE = re.compile(r"[,\s]+")
+_ADDR_AT_RE = re.compile(r"@([A-Za-z0-9.\-]+)")
+
+
+def _domain_of(addr_or_header: str | None) -> str | None:
+    """Extract the trailing domain from an address-like string.
+
+    Tolerant of full RFC 5322 headers (``"Name" <a@b.com>``), bare
+    addresses (``a@b.com``), and angle-bracketed envelope values
+    (``<a@b.com>``). Returns the domain lowercased, or ``None`` when
+    no ``@``-delimited domain is present. The EmailLifter expects
+    just the domain — display names and local-parts ride in the
+    artifact, not on the bus.
+    """
+    if not addr_or_header:
+        return None
+    match = _ADDR_AT_RE.search(addr_or_header)
+    if not match:
+        return None
+    domain = match.group(1).strip(".").lower()
+    return domain or None
+
+
+def _rcpt_projection(rcpt_to_field: str | None) -> tuple[int, list[str]]:
+    """Split the comma-or-whitespace-separated RCPT TO blob into
+    ``(count, unique_domains_first_seen_order)``."""
+    if not rcpt_to_field:
+        return 0, []
+    parts = [p for p in _RCPT_SPLIT_RE.split(rcpt_to_field) if p]
+    domains: dict[str, None] = {}
+    for part in parts:
+        domain = _domain_of(part)
+        if domain:
+            domains.setdefault(domain, None)
+    return len(parts), list(domains.keys())
+
+
+def _attachment_extensions(manifest: list[dict]) -> list[str]:
+    """Return unique lowercased file extensions (with dot) from the
+    attachment manifest, preserving first-seen order. ``"payload.exe"``
+    → ``".exe"``; missing / dotless filenames are skipped."""
+    seen: dict[str, None] = {}
+    for entry in manifest:
+        if not isinstance(entry, dict):
+            continue
+        filename = entry.get("filename") or ""
+        if not isinstance(filename, str):
+            continue
+        idx = filename.rfind(".")
+        if idx < 0 or idx == len(filename) - 1:
+            continue
+        ext = filename[idx:].lower()
+        seen.setdefault(ext, None)
+    return list(seen.keys())
+
+
+async def _publish_email_received(
+    repo: BaseRepository, log_data: dict, fields: dict,
+) -> None:
+    """Project the SMTP capture event onto the EmailLifter wire contract.
+
+    Mirrors :func:`_publish_probe_pending`: a fresh bus connection per
+    publish, fire-and-forget, all exceptions swallowed (the bus is the
+    notification layer, not the source of truth). Producer for
+    ``email.received`` per the 2026-05-02 DEBT #3 paydown.
+    """
+    attacker_ip = log_data.get("attacker_ip")
+    try:
+        attacker_uuid = (
+            await repo.get_attacker_uuid_by_ip(attacker_ip)
+            if attacker_ip else None
+        )
+    except Exception as exc:  # noqa: BLE001
+        logger.debug("email_received: attacker resolve failed: %s", exc)
+        attacker_uuid = None
+    if not attacker_uuid:
+        # Without an attacker_uuid the TTP worker cannot anchor the
+        # tags to a row. Drop rather than emit an orphan event.
+        return
+
+    rcpt_count, rcpt_domains = _rcpt_projection(fields.get("rcpt_to"))
+    try:
+        attachment_manifest = json.loads(fields.get("attachments_json") or "[]")
+    except (TypeError, ValueError):
+        attachment_manifest = []
+    if not isinstance(attachment_manifest, list):
+        attachment_manifest = []
+    attachment_sha256s = [
+        entry.get("sha256") for entry in attachment_manifest
+        if isinstance(entry, dict) and isinstance(entry.get("sha256"), str)
+        and entry.get("sha256")
+    ]
+    try:
+        urls = json.loads(fields.get("urls_json") or "[]")
+    except (TypeError, ValueError):
+        urls = []
+    if not isinstance(urls, list):
+        urls = []
+
+    # The decky writes ``dkim_signed`` / ``spf_pass`` as 0/1 ints
+    # because syslog SD-values are strings; coerce back to the bool
+    # the EmailLifter predicates check with ``is True`` / ``is False``.
+    def _to_bool(raw: Any) -> bool:
+        if isinstance(raw, bool):
+            return raw
+        if isinstance(raw, (int, float)):
+            return raw != 0
+        if isinstance(raw, str):
+            return raw.strip() in {"1", "true", "True", "yes"}
+        return False
+
+    payload: dict[str, Any] = {
+        "source_id": fields.get("msg_id") or fields.get("stored_as"),
+        "attacker_uuid": attacker_uuid,
+        "attacker_ip": attacker_ip,
+        "decky_id": log_data.get("decky"),
+        "service": log_data.get("service"),
+        "subject": fields.get("subject"),
+        "from_domain": _domain_of(fields.get("from_hdr")),
+        "mail_from_domain": _domain_of(fields.get("mail_from")),
+        "return_path_domain": _domain_of(fields.get("return_path")),
+        "rcpt_count": rcpt_count,
+        "rcpt_domains": rcpt_domains,
+        "x_mailer": fields.get("x_mailer") or None,
+        "dkim_signed": _to_bool(fields.get("dkim_signed")),
+        "spf_pass": _to_bool(fields.get("spf_pass")),
+        "urls": [u for u in urls if isinstance(u, str)],
+        "attachment_count": fields.get("attachment_count"),
+        "attachment_sha256s": attachment_sha256s,
+        "attachment_extensions": _attachment_extensions(attachment_manifest),
+        "stored_as": fields.get("stored_as"),
+        "body_sha256": fields.get("sha256"),
+    }
+    try:
+        bus = get_bus(client_name="ingester-email")
+        await bus.connect()
+        await publish_safely(
+            bus,
+            _topics.email_topic(_topics.EMAIL_RECEIVED),
+            payload,
+            event_type=_topics.EMAIL_RECEIVED,
+        )
+        await bus.close()
+    except Exception as exc:  # noqa: BLE001
+        logger.debug("email.received publish failed: %s", exc)
 
 
 async def _publish_probe_pending(log_data: dict, fields: dict) -> None:

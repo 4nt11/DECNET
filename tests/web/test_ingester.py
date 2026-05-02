@@ -155,6 +155,160 @@ class TestExtractBounty:
         assert bounty["payload"]["mail_from"] == "spammer@spammer.example"
 
     @pytest.mark.asyncio
+    async def test_message_stored_publishes_email_received(self):
+        """SMTP message_stored persists the artifact AND publishes
+        ``email.received`` with the EmailLifter wire contract: domains,
+        rcpt_count + rcpt_domains, attachment shas + extensions, urls,
+        dkim/spf bools, x_mailer."""
+        from decnet.web import ingester as _ing
+        from decnet.web.ingester import _extract_bounty
+        mock_repo = MagicMock()
+        mock_repo.add_bounty = AsyncMock()
+        mock_repo.upsert_credential = AsyncMock()
+        mock_repo.get_attacker_uuid_by_ip = AsyncMock(return_value="att-7")
+
+        published: list = []
+
+        async def fake_publish(_bus, topic, payload, event_type=""):
+            published.append((topic, payload, event_type))
+
+        fake_bus = MagicMock()
+        fake_bus.connect = AsyncMock()
+        fake_bus.close = AsyncMock()
+
+        with patch.object(_ing, "get_bus", return_value=fake_bus), \
+             patch.object(_ing, "publish_safely", side_effect=fake_publish):
+            await _extract_bounty(mock_repo, {
+                "decky": "mail-decky",
+                "service": "smtp",
+                "attacker_ip": "203.0.113.7",
+                "event_type": "message_stored",
+                "fields": {
+                    "msg_id": "ABCD1234",
+                    "stored_as": "2026-04-28T12:00:00Z_abc_msg.eml",
+                    "sha256": "cafebabe" * 8,
+                    "size": "8192",
+                    "subject": "URGENT: invoice",
+                    "from_hdr": '"CEO" <ceo@bigcorp.com>',
+                    "to_hdr": "victim@target.tld",
+                    "mail_from": "<spammer@evil.example>",
+                    "rcpt_to": (
+                        "victim1@target.tld, victim2@target.tld, "
+                        "victim3@other.tld"
+                    ),
+                    "return_path": "<bounce@kit.evil>",
+                    "x_mailer": "PHPMailer 6.0.7",
+                    "dkim_signed": "1",
+                    "spf_pass": "0",
+                    "attachment_count": "2",
+                    "attachments_json": (
+                        '[{"filename":"payload.exe","sha256":"deadbeef",'
+                        '"size":12,"content_type":"application/octet-stream"},'
+                        '{"filename":"resume.docx","sha256":"feedface",'
+                        '"size":34,"content_type":"application/msword"}]'
+                    ),
+                    "urls_json": (
+                        '["https://xn--80ak6aa92e.example/login",'
+                        '"http://kit.evil/payload.bin"]'
+                    ),
+                    "content_type": "multipart/mixed",
+                },
+            })
+
+        # Bounty still lands.
+        mock_repo.add_bounty.assert_awaited_once()
+        # And exactly one email.received publish.
+        email_publishes = [
+            p for p in published
+            if p[0].endswith("email.received")
+        ]
+        assert len(email_publishes) == 1
+        topic, payload, event_type = email_publishes[0]
+        assert event_type == "received"
+        assert topic == "email.received"
+        assert payload["attacker_uuid"] == "att-7"
+        assert payload["from_domain"] == "bigcorp.com"
+        assert payload["mail_from_domain"] == "evil.example"
+        assert payload["return_path_domain"] == "kit.evil"
+        assert payload["rcpt_count"] == 3
+        assert payload["rcpt_domains"] == ["target.tld", "other.tld"]
+        assert payload["x_mailer"] == "PHPMailer 6.0.7"
+        assert payload["dkim_signed"] is True
+        assert payload["spf_pass"] is False
+        assert payload["urls"] == [
+            "https://xn--80ak6aa92e.example/login",
+            "http://kit.evil/payload.bin",
+        ]
+        assert payload["attachment_sha256s"] == ["deadbeef", "feedface"]
+        assert payload["attachment_extensions"] == [".exe", ".docx"]
+        assert payload["source_id"] == "ABCD1234"
+
+    @pytest.mark.asyncio
+    async def test_message_stored_skips_publish_when_attacker_unresolved(self):
+        """If get_attacker_uuid_by_ip returns None, no orphan
+        email.received event lands."""
+        from decnet.web import ingester as _ing
+        from decnet.web.ingester import _extract_bounty
+        mock_repo = MagicMock()
+        mock_repo.add_bounty = AsyncMock()
+        mock_repo.upsert_credential = AsyncMock()
+        mock_repo.get_attacker_uuid_by_ip = AsyncMock(return_value=None)
+
+        with patch.object(_ing, "get_bus") as p_bus, \
+             patch.object(_ing, "publish_safely", new=AsyncMock()) as p_pub:
+            await _extract_bounty(mock_repo, {
+                "decky": "d",
+                "service": "smtp",
+                "attacker_ip": "10.0.0.1",
+                "event_type": "message_stored",
+                "fields": {
+                    "stored_as": "x.eml",
+                    "sha256": "h",
+                    "size": "1",
+                    "subject": "s",
+                    "from_hdr": "a@b.c",
+                    "to_hdr": "v@t.t",
+                    "mail_from": "a@b.c",
+                    "rcpt_to": "v@t.t",
+                    "attachment_count": "0",
+                    "content_type": "text/plain",
+                },
+            })
+            mock_repo.add_bounty.assert_awaited_once()
+            p_bus.assert_not_called()
+            p_pub.assert_not_called()
+
+    def test_domain_of_handles_common_shapes(self):
+        from decnet.web.ingester import _domain_of
+        assert _domain_of('"CEO" <ceo@bigcorp.com>') == "bigcorp.com"
+        assert _domain_of("ceo@bigcorp.com") == "bigcorp.com"
+        assert _domain_of("<a@b.com>") == "b.com"
+        assert _domain_of("BIGCORP@EXAMPLE.COM") == "example.com"
+        assert _domain_of("") is None
+        assert _domain_of(None) is None
+        assert _domain_of("no-at-sign-here") is None
+
+    def test_attachment_extensions_unique_first_seen(self):
+        from decnet.web.ingester import _attachment_extensions
+        manifest = [
+            {"filename": "a.EXE"},
+            {"filename": "b.exe"},  # dedup'd against ".EXE"->".exe"
+            {"filename": "noext"},
+            {"filename": "report.pdf"},
+            {"filename": "trailing."},  # dotless tail → skip
+        ]
+        assert _attachment_extensions(manifest) == [".exe", ".pdf"]
+
+    def test_rcpt_projection_dedups_domains(self):
+        from decnet.web.ingester import _rcpt_projection
+        count, domains = _rcpt_projection(
+            "a@x.com, b@x.com, c@y.com d@y.com",
+        )
+        # Whitespace-and-comma split gives 4 raw rcpts; domain set is 2.
+        assert count == 4
+        assert domains == ["x.com", "y.com"]
+
+    @pytest.mark.asyncio
     async def test_no_secret_b64_no_credential(self):
         """The native branch keys off `secret_b64`. Fields lacking it
         produce no Credential row — even if username/password keys
