@@ -10,7 +10,7 @@ match:
   kind: lifter:behavioral_tftp_router_config
   filename_patterns:
     - '.*-confg$'
-    - '.*\\.cfg$'
+    - '.*\.cfg$'
     - 'startup-config'
     - 'running-config'
 emits:

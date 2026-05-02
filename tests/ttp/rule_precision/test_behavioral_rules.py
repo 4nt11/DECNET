@@ -1,32 +1,37 @@
 """R0031-R0040 — behavioral / cross-event cohort.
 
-Every rule here is consumed by the BehavioralLifter (or an
-identity-rollup variant) at E.3.9. The v0 :class:`RuleEngine` has no
-counter / aggregator — it can only regex over a single event
-payload — so these rules cannot fire from the engine alone. Their
-``match.kind`` keys (``lifter:beaconing`` etc.) are inert to the
-regex matcher by design.
+Every rule here is consumed by the :class:`BehavioralLifter` (E.3.9).
+The v0 :class:`RuleEngine` has no counter / aggregator — it can only
+regex over a single event payload — so these rules cannot fire from
+the engine alone. Their ``match.kind`` prefix ``lifter:behavioral_``
+is inert to the regex matcher by design.
 
 This file asserts:
 
 * every R003N has a YAML on disk that compiles
 * the v0 engine NEVER fires any of them (regression guard against a
   YAML drifting into a regex match)
-* the precision target test is :pyfunc:`pytest.xfail`-gated until
-  the BehavioralLifter ships, matching the CDD pattern at
-  ``development/TTP_TAGGING.md:2450``.
+* the lifter achieves the per-rule precision target on the labelled
+  corpus.
 """
 from __future__ import annotations
 
+import asyncio
 from collections.abc import Callable
 from pathlib import Path
 
 import pytest
 
+from decnet.ttp.impl.behavioral_lifter import BehavioralLifter
 from decnet.ttp.impl.rule_engine import RuleEngine
 from decnet.ttp.store.base import RuleState
 from decnet.ttp.store.impl.filesystem import _parse_and_compile
-from tests.ttp.rule_precision.conftest import CorpusRow, make_event
+from tests.ttp._stub_store import StubRuleStore
+from tests.ttp.rule_precision.conftest import (
+    CorpusRow,
+    make_event,
+    precision_for,
+)
 
 CohortLoader = Callable[[str], list[CorpusRow]]
 
@@ -63,15 +68,44 @@ async def test_lifter_bound_inert_in_v0(
     )
 
 
-@pytest.mark.parametrize("rule_id", _RULE_IDS)
-@pytest.mark.xfail(strict=True, reason="impl phase E.3.9 (BehavioralLifter)")
-def test_behavioral_rule_precision(rule_id: str) -> None:
-    """Will live once the BehavioralLifter ships at E.3.9.
+def _all_rule_ids() -> list[str]:
+    return _RULE_IDS
 
-    The lifter consumes ``AttackerBehavior`` / session aggregates and
-    emits one tag per matching rule_id. This test will then load the
-    behavioral corpus, drive the lifter, and assert the per-rule
-    precision target. Until that day this xfails strict so the suite
-    flips green automatically when E.3.9 wires it up.
+
+def _build_lifter() -> BehavioralLifter:
+    rules_dir = Path("rules/ttp")
+    rules = [
+        _parse_and_compile(rules_dir / f"{rid}.yaml", RuleState())
+        for rid in _all_rule_ids()
+    ]
+    lifter = BehavioralLifter(StubRuleStore(compiled=rules))
+    for rule in rules:
+        lifter._index.install(rule)
+    return lifter
+
+
+@pytest.mark.parametrize("rule_id", _RULE_IDS)
+def test_behavioral_rule_precision(
+    rule_id: str,
+    corpus_loader: CohortLoader,
+) -> None:
+    """Drive the lifter over the behavioral corpus and assert precision.
+
+    H-band (≥0.85 confidence) → ≥95% precision. v0 ships with a small
+    synthetic seed corpus; precision_for() returns 1.0 when no rows
+    match, so the assertion exercises the FP-guard rather than the
+    recall property (recall is intentionally not a v1 target — see
+    TTP_TAGGING.md Appendix C).
     """
-    pytest.fail(f"{rule_id}: BehavioralLifter not yet shipped (E.3.9)")
+    rows = corpus_loader("behavioral")
+    if not rows:
+        pytest.skip("no behavioral corpus available")
+    lifter = _build_lifter()
+    fired: dict[str, list[str]] = {}
+    for row in rows:
+        tags = asyncio.run(lifter.tag(make_event(row)))
+        fired[row.label] = [tag.rule_id for tag in tags]
+    precision, _tp, _fp = precision_for(rule_id, rows, fired)
+    assert precision >= 0.95, (
+        f"{rule_id} precision {precision:.2f} < 0.95 on behavioral corpus"
+    )

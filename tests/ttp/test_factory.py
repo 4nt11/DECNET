@@ -28,12 +28,16 @@ def _ev(source_kind: str) -> TaggerEvent:
     )
 
 
-def test_default_returns_composite_with_empty_lifters(monkeypatch):
+def test_default_returns_composite_with_shipped_lifters(monkeypatch):
+    """E.3.9 onward: the default composite is wired with each shipped
+    lifter. Empty-lifters was the contract-phase shape; once a lifter
+    impl lands the composite carries it.
+    """
     monkeypatch.delenv("DECNET_TTP_TAGGER_TYPE", raising=False)
     t = get_tagger()
     assert isinstance(t, CompositeTagger)
     assert t.name == "composite"
-    assert t._lifters == []
+    assert len(t._lifters) >= 1
 
 
 def test_explicit_composite(monkeypatch):

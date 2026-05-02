@@ -20,6 +20,13 @@ from decnet.ttp.impl.credential_lifter import CredentialLifter
 from decnet.ttp.impl.email_lifter import EmailLifter
 from decnet.ttp.impl.identity_lifter import IdentityLifter
 from decnet.ttp.impl.intel_lifter import IntelLifter
+from tests.ttp._stub_store import StubRuleStore
+
+
+def _instantiate(cls: type[TolerantTagger]) -> TolerantTagger:
+    if cls is BehavioralLifter:
+        return cls(StubRuleStore())  # type: ignore[call-arg]
+    return cls()
 
 ALL_LIFTERS = [
     BehavioralLifter,
@@ -65,7 +72,7 @@ def test_lifter_names_are_unique_and_non_empty():
 
 @pytest.mark.parametrize("cls", ALL_LIFTERS)
 def test_lifter_tag_returns_empty_list_for_handled_event(cls):
-    lifter = cls()
+    lifter = _instantiate(cls)
     kind = next(iter(cls.HANDLES))
     out = asyncio.run(lifter.tag(_ev(kind)))
     assert out == []
@@ -74,7 +81,7 @@ def test_lifter_tag_returns_empty_list_for_handled_event(cls):
 @pytest.mark.parametrize("cls", ALL_LIFTERS)
 def test_lifter_instantiable(cls):
     # No abstract methods left — concrete subclass must be constructible.
-    cls()
+    _instantiate(cls)
 
 
 # ── E.2.6 deferred absence-tolerance behavior ──────────────────────
@@ -85,6 +92,10 @@ def test_e26_intel_lifter_partial_provider_nulls():
     raise AssertionError("not yet implemented")
 
 
-@pytest.mark.xfail(strict=True, reason="impl phase E.3 — BehavioralLifter empty join")
 def test_e26_behavioral_lifter_no_attacker_behavior_row():
-    raise AssertionError("not yet implemented")
+    """E.3.9: a session event with no AttackerBehavior fields populated
+    must produce zero tags and zero errors. Was xfail-strict before
+    BehavioralLifter shipped; now a real assertion."""
+    lifter = BehavioralLifter(StubRuleStore())
+    out = asyncio.run(lifter.tag(_ev("session")))
+    assert out == []

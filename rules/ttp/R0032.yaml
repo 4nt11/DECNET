@@ -11,10 +11,10 @@ match:
   kind: lifter:behavioral_data_destruction
   patterns:
     - 'FLUSHALL'
-    - 'DROP\\s+DATABASE'
-    - 'TRUNCATE\\s+TABLE'
-    - 'dropDatabase\\(\\)'
-    - 'DELETE\\s+/\\_all'
+    - 'DROP\s+DATABASE'
+    - 'TRUNCATE\s+TABLE'
+    - 'dropDatabase\(\)'
+    - 'DELETE\s+/\_all'
 emits:
   - tactic: TA0040
     technique_id: T1485

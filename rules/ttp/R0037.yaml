@@ -11,7 +11,7 @@ match:
   kind: lifter:behavioral_k8s_sa_token
   paths:
     - '/api/v1/namespaces/[^/]+/secrets'
-    - '/var/run/secrets/kubernetes\\.io/serviceaccount'
+    - '/var/run/secrets/kubernetes\.io/serviceaccount'
 emits:
   - tactic: TA0006
     technique_id: T1552

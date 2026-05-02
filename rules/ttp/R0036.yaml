@@ -11,11 +11,11 @@ applies_to:
 match:
   kind: lifter:behavioral_credentials_in_files
   paths:
-    - '\\.env'
-    - '\\.git/config'
-    - '\\.aws/credentials'
-    - '\\.ssh/id_rsa'
-    - 'wp-config\\.php'
+    - '\.env'
+    - '\.git/config'
+    - '\.aws/credentials'
+    - '\.ssh/id_rsa'
+    - 'wp-config\.php'
 emits:
   - tactic: TA0006
     technique_id: T1552

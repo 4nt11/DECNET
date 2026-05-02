@@ -106,13 +106,18 @@ class CompositeTagger(Tagger):
 def get_tagger() -> Tagger:
     """Return the configured tagger instance.
 
-    Lazy package layout: the composite is constructed with an empty
-    lifter list during the contract phase. E.1.6 will replace this
-    with explicit lifter wiring; callers don't change.
+    Synchronous construction: each shipped lifter takes the shared
+    :class:`RuleStore` reference, but the per-lifter watch loops are
+    started by the worker (E.3.14), not by this factory. Tests that
+    instantiate via this path get an idle composite — exercising the
+    watch loop is the worker's contract.
     """
     name = os.environ.get("DECNET_TTP_TAGGER_TYPE", _DEFAULT).strip().lower()
     if name == "composite":
-        return CompositeTagger(lifters=[])
+        from decnet.ttp.impl.behavioral_lifter import BehavioralLifter
+        from decnet.ttp.store.factory import get_rule_store
+        store = get_rule_store()
+        return CompositeTagger(lifters=[BehavioralLifter(store)])
     raise ValueError(
         f"Unknown tagger: {name!r}. Known: {_KNOWN}"
     )

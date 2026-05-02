@@ -33,6 +33,18 @@ from decnet.ttp.impl.credential_lifter import CredentialLifter
 from decnet.ttp.impl.email_lifter import EmailLifter
 from decnet.ttp.impl.identity_lifter import IdentityLifter
 from decnet.ttp.impl.intel_lifter import IntelLifter
+from tests.ttp._stub_store import StubRuleStore
+
+
+def _make_lifter(cls: type[TolerantTagger]) -> TolerantTagger:
+    """Construct a lifter with whatever its current signature wants.
+
+    Implemented lifters (E.3.9–E.3.12) take a :class:`RuleStore`; the
+    still-empty IdentityLifter / CredentialLifter (E.3.13) take no args.
+    """
+    if cls is BehavioralLifter:
+        return cls(StubRuleStore())  # type: ignore[call-arg]
+    return cls()
 
 
 def _ev(source_kind: str, payload: dict[str, Any] | None = None) -> TaggerEvent:
@@ -77,7 +89,7 @@ def test_lifter_tolerates_absence(
 ) -> None:
     caplog.clear()
     caplog.set_level(logging.DEBUG)
-    lifter = lifter_cls()
+    lifter = _make_lifter(lifter_cls)
     out = asyncio.run(lifter.tag(_ev(source_kind, payload)))
     assert out == []
     # The load-bearing property: no ERROR-or-above records. WARNING
