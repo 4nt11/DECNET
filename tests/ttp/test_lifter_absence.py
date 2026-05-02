@@ -42,7 +42,7 @@ def _make_lifter(cls: type[TolerantTagger]) -> TolerantTagger:
     Implemented lifters (E.3.9–E.3.12) take a :class:`RuleStore`; the
     still-empty IdentityLifter / CredentialLifter (E.3.13) take no args.
     """
-    if cls is BehavioralLifter:
+    if cls in {BehavioralLifter, IntelLifter}:
         return cls(StubRuleStore())  # type: ignore[call-arg]
     return cls()
 
@@ -134,7 +134,7 @@ def test_intel_lifter_partial_null_returns_no_error(
 ) -> None:
     caplog.clear()
     caplog.set_level(logging.DEBUG)
-    out = asyncio.run(IntelLifter().tag(_ev("intel", payload)))
+    out = asyncio.run(IntelLifter(StubRuleStore()).tag(_ev("intel", payload)))
     # Every partial-null shape produces zero tags today and zero
     # ERROR records — the contract this commit pins. (When E.3.6
     # ships, only the "all populated" shape graduates to non-empty;
@@ -143,18 +143,30 @@ def test_intel_lifter_partial_null_returns_no_error(
     assert not [r for r in caplog.records if r.levelno >= logging.ERROR]
 
 
-@pytest.mark.xfail(
-    strict=True,
-    reason="impl phase E.3.6: intel_lifter does not yet emit tags",
-)
 def test_intel_lifter_all_populated_emits_tags() -> None:
-    """When AbuseIPDB AND GreyNoise both return verdicts, intel_lifter
-    must emit at least one tag. Strict-xfail today; flips when impl
-    lands."""
+    """E.3.10: when a populated AbuseIPDB row carries actionable
+    categories AND GreyNoise classifies as scanner, the lifter emits
+    at least one tag. Real rule pack loaded from disk so the test
+    catches a regression in either the YAML or the predicate.
+    """
+    from pathlib import Path
+
+    from decnet.ttp.store.base import RuleState
+    from decnet.ttp.store.impl.filesystem import _parse_and_compile
+
+    rules_dir = Path("rules/ttp")
+    rules = [
+        _parse_and_compile(rules_dir / f"R{n:04d}.yaml", RuleState())
+        for n in (54, 55, 56, 57, 58)
+    ]
+    lifter = IntelLifter(StubRuleStore(compiled=rules))
+    for rule in rules:
+        lifter._index.install(rule)
     payload = {
         "attacker_uuid": "att1",
         "abuseipdb_score": 95,
-        "greynoise_classification": "malicious",
+        "abuseipdb_categories": [18, 22],
+        "greynoise_classification": "scanner",
     }
-    out = asyncio.run(IntelLifter().tag(_ev("intel", payload)))
+    out = asyncio.run(lifter.tag(_ev("intel", payload)))
     assert len(out) >= 1

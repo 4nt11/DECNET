@@ -24,7 +24,7 @@ from tests.ttp._stub_store import StubRuleStore
 
 
 def _instantiate(cls: type[TolerantTagger]) -> TolerantTagger:
-    if cls is BehavioralLifter:
+    if cls in {BehavioralLifter, IntelLifter}:
         return cls(StubRuleStore())  # type: ignore[call-arg]
     return cls()
 
@@ -87,9 +87,12 @@ def test_lifter_instantiable(cls):
 # ── E.2.6 deferred absence-tolerance behavior ──────────────────────
 
 
-@pytest.mark.xfail(strict=True, reason="impl phase E.3 — IntelLifter null patterns")
 def test_e26_intel_lifter_partial_provider_nulls():
-    raise AssertionError("not yet implemented")
+    """E.3.10: with no actionable per-provider signal (e.g. score set
+    but categories absent), IntelLifter returns []. No errors."""
+    lifter = IntelLifter(StubRuleStore())
+    out = asyncio.run(lifter.tag(_ev("intel")))
+    assert out == []
 
 
 def test_e26_behavioral_lifter_no_attacker_behavior_row():

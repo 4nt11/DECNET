@@ -67,7 +67,45 @@ def test_r0058_is_bump_only() -> None:
     )
 
 
+def _build_lifter() -> "IntelLifter":
+    from decnet.ttp.impl.intel_lifter import IntelLifter
+    from tests.ttp._stub_store import StubRuleStore
+
+    rules = [
+        _parse_and_compile(Path("rules/ttp") / f"{rid}.yaml", RuleState())
+        for rid in _RULE_IDS
+    ]
+    lifter = IntelLifter(StubRuleStore(compiled=rules))
+    for rule in rules:
+        lifter._index.install(rule)
+    return lifter
+
+
 @pytest.mark.parametrize("rule_id", _RULE_IDS)
-@pytest.mark.xfail(strict=True, reason="impl phase E.3.10 (IntelLifter)")
-def test_intel_rule_precision(rule_id: str) -> None:
-    pytest.fail(f"{rule_id}: IntelLifter not yet shipped (E.3.10)")
+def test_intel_rule_precision(
+    rule_id: str,
+    corpus_loader: CohortLoader,
+) -> None:
+    """E.3.10: drive IntelLifter over the labelled corpus and assert
+    per-rule precision. R0058 (bump-only) is excluded — it intentionally
+    never emits a tag, so vacuous precision is irrelevant.
+    """
+    import asyncio
+
+    from tests.ttp.rule_precision.conftest import precision_for
+
+    if rule_id == "R0058":
+        pytest.skip("R0058 is bump-only; no precision target")
+    rows = corpus_loader("intel")
+    if not rows:
+        pytest.skip("no intel corpus available")
+    lifter = _build_lifter()
+    fired: dict[str, list[str]] = {}
+    for row in rows:
+        tags = asyncio.run(lifter.tag(make_event(row)))
+        fired[row.label] = [tag.rule_id for tag in tags]
+    precision, _tp, _fp = precision_for(rule_id, rows, fired)
+    # R0054/R0055/R0056/R0057 are H-band per Appendix C → ≥95%.
+    assert precision >= 0.95, (
+        f"{rule_id} precision {precision:.2f} < 0.95 on intel corpus"
+    )

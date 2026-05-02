@@ -1,2 +1,8 @@
-{"source_kind": "intel", "payload": {"verdict": "malicious", "provider": "abuseipdb", "categories": [18, 22]}, "expected_rule_ids": ["R0054"], "label": "abuseipdb_brute"}
-{"source_kind": "intel", "payload": {"verdict": "benign", "provider": "greynoise", "tags": []}, "expected_rule_ids": [], "label": "negative_benign"}
+{"source_kind": "intel", "payload": {"abuseipdb_score": 95, "abuseipdb_categories": [18, 22], "provider": "abuseipdb"}, "expected_rule_ids": ["R0054"], "label": "abuseipdb_brute"}
+{"source_kind": "intel", "payload": {"greynoise_classification": "scanner"}, "expected_rule_ids": ["R0055"], "label": "greynoise_scanner"}
+{"source_kind": "intel", "payload": {"greynoise_classification": "malicious", "greynoise_tags": ["cobalt_strike"]}, "expected_rule_ids": ["R0055"], "label": "greynoise_c2_tag"}
+{"source_kind": "intel", "payload": {"feodo_listed": true, "malware_family": "Emotet"}, "expected_rule_ids": ["R0056"], "label": "feodo_emotet"}
+{"source_kind": "intel", "payload": {"ioc_type": "botnet_cc", "malware_family": "sliver"}, "expected_rule_ids": ["R0057"], "label": "threatfox_botnet_cc"}
+{"source_kind": "intel", "payload": {"ioc_type": "payload_delivery", "malware_family": "asyncrat"}, "expected_rule_ids": ["R0057"], "label": "threatfox_payload"}
+{"source_kind": "intel", "payload": {"verdict": "benign", "provider": "greynoise", "greynoise_classification": "benign", "greynoise_tags": []}, "expected_rule_ids": [], "label": "negative_benign"}
+{"source_kind": "intel", "payload": {}, "expected_rule_ids": [], "label": "negative_empty"}

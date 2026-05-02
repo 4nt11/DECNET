@@ -115,9 +115,13 @@ def get_tagger() -> Tagger:
     name = os.environ.get("DECNET_TTP_TAGGER_TYPE", _DEFAULT).strip().lower()
     if name == "composite":
         from decnet.ttp.impl.behavioral_lifter import BehavioralLifter
+        from decnet.ttp.impl.intel_lifter import IntelLifter
         from decnet.ttp.store.factory import get_rule_store
         store = get_rule_store()
-        return CompositeTagger(lifters=[BehavioralLifter(store)])
+        return CompositeTagger(lifters=[
+            BehavioralLifter(store),
+            IntelLifter(store),
+        ])
     raise ValueError(
         f"Unknown tagger: {name!r}. Known: {_KNOWN}"
     )
