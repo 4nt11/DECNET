@@ -738,6 +738,29 @@ async def _publish_email_received(
             return raw.strip() in {"1", "true", "True", "yes"}
         return False
 
+    # Reduce per-attachment booleans (added by the decky's
+    # _summarize_message Layer-2 extension) to top-level rule fields.
+    # OR across all attachments — R0046 fires on a single positive.
+    attachment_macros = any(
+        bool(entry.get("macro_indicator"))
+        for entry in attachment_manifest
+        if isinstance(entry, dict)
+    )
+    attachment_password_protected = any(
+        bool(entry.get("encrypted"))
+        for entry in attachment_manifest
+        if isinstance(entry, dict)
+    )
+
+    body_base64_bytes_raw = fields.get("body_base64_bytes")
+    try:
+        body_base64_bytes = (
+            int(body_base64_bytes_raw)
+            if body_base64_bytes_raw is not None else 0
+        )
+    except (TypeError, ValueError):
+        body_base64_bytes = 0
+
     payload: dict[str, Any] = {
         "source_id": fields.get("msg_id") or fields.get("stored_as"),
         "attacker_uuid": attacker_uuid,
@@ -757,6 +780,18 @@ async def _publish_email_received(
         "attachment_count": fields.get("attachment_count"),
         "attachment_sha256s": attachment_sha256s,
         "attachment_extensions": _attachment_extensions(attachment_manifest),
+        # Heavyweight Layer-2 fields consumed by R0042 / R0046 / R0048.
+        # body_simhash is a 16-hex-char string per the decky's
+        # _body_simhash; ``""`` when no body text was extractable —
+        # the lifter's _p_mass_phish predicate rejects non-strings, so
+        # an empty string is the right "no signal" value (predicate
+        # accepts str|int and treats "" as falsy via the rcpt threshold
+        # gate fallback).
+        "body_simhash": fields.get("body_simhash") or "",
+        "body_base64_bytes": body_base64_bytes,
+        "attachment_macros": attachment_macros,
+        "attachment_password_protected": attachment_password_protected,
+        "html_smuggling": _to_bool(fields.get("html_smuggling")),
         "stored_as": fields.get("stored_as"),
         "body_sha256": fields.get("sha256"),
     }

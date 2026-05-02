@@ -244,6 +244,128 @@ class TestExtractBounty:
         assert payload["source_id"] == "ABCD1234"
 
     @pytest.mark.asyncio
+    async def test_message_stored_projects_heavyweight_fields(self):
+        """Layer-2 heavyweight fields land on the bus payload:
+        body_simhash + body_base64_bytes (R0042 / R0048),
+        attachment_macros + attachment_password_protected
+        (R0046 macro / password lanes), html_smuggling (R0046 smuggling
+        lane). Per-attachment manifest booleans reduce to top-level
+        flags via OR."""
+        from decnet.web import ingester as _ing
+        from decnet.web.ingester import _extract_bounty
+        mock_repo = MagicMock()
+        mock_repo.add_bounty = AsyncMock()
+        mock_repo.upsert_credential = AsyncMock()
+        mock_repo.get_attacker_uuid_by_ip = AsyncMock(return_value="att-9")
+
+        published: list = []
+
+        async def fake_publish(_bus, topic, payload, event_type=""):
+            published.append((topic, payload, event_type))
+
+        fake_bus = MagicMock()
+        fake_bus.connect = AsyncMock()
+        fake_bus.close = AsyncMock()
+
+        with patch.object(_ing, "get_bus", return_value=fake_bus), \
+             patch.object(_ing, "publish_safely", side_effect=fake_publish):
+            await _extract_bounty(mock_repo, {
+                "decky": "mail-decky",
+                "service": "smtp",
+                "attacker_ip": "203.0.113.7",
+                "event_type": "message_stored",
+                "fields": {
+                    "msg_id": "ABCD9999",
+                    "stored_as": "2026-04-28T12:00:00Z_def_msg.eml",
+                    "sha256": "babecafe" * 8,
+                    "size": "12345",
+                    "subject": "invoice",
+                    "from_hdr": "ceo@bigcorp.com",
+                    "to_hdr": "victim@target.tld",
+                    "mail_from": "<spammer@evil.example>",
+                    "rcpt_to": "victim@target.tld",
+                    "attachment_count": "2",
+                    "attachments_json": (
+                        '[{"filename":"r.docm","sha256":"a","size":1,'
+                        '"content_type":"application/vnd.ms-word.document.macroEnabled.12",'
+                        '"macro_indicator":true,"encrypted":false},'
+                        '{"filename":"s.zip","sha256":"b","size":2,'
+                        '"content_type":"application/zip",'
+                        '"macro_indicator":false,"encrypted":true}]'
+                    ),
+                    "urls_json": "[]",
+                    "body_simhash": "deadbeefcafebabe",
+                    "body_base64_bytes": 8192,
+                    "html_smuggling": "1",
+                    "content_type": "multipart/mixed",
+                },
+            })
+
+        email_publishes = [
+            p for p in published if p[0].endswith("email.received")
+        ]
+        assert len(email_publishes) == 1
+        _topic, payload, _event_type = email_publishes[0]
+        assert payload["body_simhash"] == "deadbeefcafebabe"
+        assert payload["body_base64_bytes"] == 8192
+        assert payload["attachment_macros"] is True
+        assert payload["attachment_password_protected"] is True
+        assert payload["html_smuggling"] is True
+
+    @pytest.mark.asyncio
+    async def test_message_stored_heavyweight_fields_safe_when_absent(self):
+        """A pre-Layer-2 message_stored event (no simhash, no
+        per-attachment booleans, no html_smuggling) projects to safe
+        defaults: empty simhash, zero base64-bytes, all bools False."""
+        from decnet.web import ingester as _ing
+        from decnet.web.ingester import _extract_bounty
+        mock_repo = MagicMock()
+        mock_repo.add_bounty = AsyncMock()
+        mock_repo.upsert_credential = AsyncMock()
+        mock_repo.get_attacker_uuid_by_ip = AsyncMock(return_value="att-10")
+
+        published: list = []
+
+        async def fake_publish(_bus, topic, payload, event_type=""):
+            published.append((topic, payload, event_type))
+
+        fake_bus = MagicMock()
+        fake_bus.connect = AsyncMock()
+        fake_bus.close = AsyncMock()
+
+        with patch.object(_ing, "get_bus", return_value=fake_bus), \
+             patch.object(_ing, "publish_safely", side_effect=fake_publish):
+            await _extract_bounty(mock_repo, {
+                "decky": "old-decky",
+                "service": "smtp",
+                "attacker_ip": "10.0.0.99",
+                "event_type": "message_stored",
+                "fields": {
+                    "stored_as": "x.eml",
+                    "sha256": "h",
+                    "size": "1",
+                    "subject": "s",
+                    "from_hdr": "a@b.c",
+                    "to_hdr": "v@t.t",
+                    "mail_from": "a@b.c",
+                    "rcpt_to": "v@t.t",
+                    "attachment_count": "0",
+                    "content_type": "text/plain",
+                    # No body_simhash / body_base64_bytes /
+                    # html_smuggling / per-attachment manifest booleans.
+                },
+            })
+
+        _topic, payload, _ = next(
+            p for p in published if p[0].endswith("email.received")
+        )
+        assert payload["body_simhash"] == ""
+        assert payload["body_base64_bytes"] == 0
+        assert payload["attachment_macros"] is False
+        assert payload["attachment_password_protected"] is False
+        assert payload["html_smuggling"] is False
+
+    @pytest.mark.asyncio
     async def test_message_stored_skips_publish_when_attacker_unresolved(self):
         """If get_attacker_uuid_by_ip returns None, no orphan
         email.received event lands."""
