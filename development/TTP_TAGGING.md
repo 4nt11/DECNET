@@ -2986,15 +2986,42 @@ Order:
 9. **BehavioralLifter** — read `AttackerBehavior` /
    `Credential` / `CredentialReuse`, emit per Appendix A behavior
    tables. Tests in `test_lifter_absence.py` and a new
-   `test_behavioral_lifter.py` green.
+   `test_behavioral_lifter.py` green. ✅ done. Prerequisite refactor:
+   dispatch index pulled into `decnet/ttp/impl/_rule_index.py`
+   (`RuleIndex`); state helpers into `decnet/ttp/impl/_state.py`. Each
+   lifter holds its own `RuleIndex` watching the same `RuleStore` —
+   the `subscribe_changes()` multi-subscriber fan-out (already
+   supported by both backends) means operator disable / clip / TTL
+   reaches lifter-bound rules through the same atomic-swap path the
+   engine uses, not a future composite-rebuild compromise. Lifter
+   ownership keyed on `match.kind` prefix `lifter:<owner>_`; YAMLs
+   normalised in a separate refactor commit.
 10. **IntelLifter** — read `AttackerIntel`, emit per Appendix A.10.
-    Per-provider null tolerance tests green.
+    Per-provider null tolerance tests green. ✅ done. Per-provider
+    technique fan-out (AbuseIPDB categories → techniques, GreyNoise
+    classification + tags, Feodo, ThreatFox IOC types) lives in code
+    with the YAML carrying the universe of possible emits; the
+    predicate selects the firing subset and scales confidence by
+    `score / 100` for AbuseIPDB. R0058 aggregate-bump is a no-op in
+    v0 (cross-tag bump deferred to E.3.14 worker bootstrap).
 11. **CanaryFingerprintLifter** — parse fingerprint payload,
-    evaluate against derivation rules per Appendix A.9.
+    evaluate against derivation rules per Appendix A.9. ✅ done.
+    Evidence shape pinned to `CanaryFingerprintEvidence` (`metric` +
+    `matched_signature`); raw fingerprint blobs explicitly NOT
+    carried. The composite `fp.id` hash matching across IPs stays an
+    identity-merge signal upstream, NOT a TTP — preserved.
 12. **EmailLifter** — full SMTP message parser + header / body /
     attachment evaluators per Appendix A.6. Largest single impl
     step; consider splitting along header / body / attachment lines
-    if the diff balloons past ~600 lines.
+    if the diff balloons past ~600 lines. ✅ done (single commit;
+    diff stayed under threshold). PII discipline enforced at the
+    lifter layer via `_filter_evidence()`: emitted evidence is
+    restricted to the EmailEvidence allowlist + PII-safe match
+    discriminators. Raw addresses, raw body bytes, full URLs, and
+    decoded base64 previews never appear in evidence — defense-in-
+    depth over the YAML `evidence_fields` hint. R0042 mass-phish
+    requires `body_simhash` (campaign signal); high-RCPT alone is
+    open-relay (R0041) territory.
 13. **IdentityLifter + CredentialLifter** — cross-Attacker rollups.
     Bus-wake on `identity.formed` / `identity.merged` /
     `credential.reuse.detected`.
