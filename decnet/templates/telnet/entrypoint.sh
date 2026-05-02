@@ -5,6 +5,23 @@ set -e
 ROOT_PASSWORD="${TELNET_ROOT_PASSWORD:-admin}"
 echo "root:${ROOT_PASSWORD}" | chpasswd
 
+# Non-root user — gives the decoy a realistic "telnet user@host"
+# surface so enumeration scripts that only try common usernames find
+# a plausible second account, AND so post-login `su -` privesc flows
+# through the existing PAM auth-helper. Login shell is the sessrec
+# wrapper so the user's pty session is recorded in the same shape
+# as root's. TELNET_USER blank disables the second account; the
+# compose fragment defaults TELNET_USER to "ubuntu" so this branch
+# is the live path on fresh deploys.
+TELNET_USER="${TELNET_USER:-}"
+TELNET_USER_PASSWORD="${TELNET_USER_PASSWORD:-admin}"
+if [ -n "${TELNET_USER}" ] && [ "${TELNET_USER}" != "root" ]; then
+    if ! id -u "${TELNET_USER}" >/dev/null 2>&1; then
+        useradd -m -s /usr/libexec/login-session "${TELNET_USER}"
+    fi
+    echo "${TELNET_USER}:${TELNET_USER_PASSWORD}" | chpasswd
+fi
+
 # Optional: override hostname inside container
 if [ -n "$TELNET_HOSTNAME" ]; then
     echo "$TELNET_HOSTNAME" > /etc/hostname

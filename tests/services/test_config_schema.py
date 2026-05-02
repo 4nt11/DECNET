@@ -96,10 +96,10 @@ def test_field_to_json_omits_unused_enum():
 
 
 def test_ssh_schema_keys_match_compose_reads():
-    # SSHService.compose_fragment reads cfg.get("password") and cfg.get("hostname")
-    # — the schema must expose exactly those.
+    # SSHService.compose_fragment reads password / user / user_password /
+    # hostname — the schema must expose exactly those.
     keys = {f.key for f in SSHService.config_schema}
-    assert keys == {"password", "hostname"}
+    assert keys == {"password", "user", "user_password", "hostname"}
 
 
 def test_ssh_compose_round_trip_through_validator():
@@ -144,16 +144,33 @@ def test_https_schema_includes_tls_fields():
 
 
 def test_telnet_schema_keys_match_compose_reads():
-    assert {f.key for f in TelnetService.config_schema} == {"password", "hostname"}
+    assert {f.key for f in TelnetService.config_schema} == {
+        "password", "user", "user_password", "hostname",
+    }
 
 
 def test_telnet_compose_round_trip():
     svc = TelnetService()
-    cfg = svc.validate_cfg({"password": "hunter2", "hostname": "mail-01"})
+    cfg = svc.validate_cfg({
+        "password": "hunter2", "hostname": "mail-01",
+        "user": "deploy", "user_password": "Tr0ub4dor",
+    })
     frag = svc.compose_fragment("decky-test", service_cfg=cfg)
     env = frag["environment"]
     assert env["TELNET_ROOT_PASSWORD"] == "hunter2"
     assert env["TELNET_HOSTNAME"] == "mail-01"
+    assert env["TELNET_USER"] == "deploy"
+    assert env["TELNET_USER_PASSWORD"] == "Tr0ub4dor"
+
+
+def test_telnet_default_non_root_user():
+    """Defaults to ubuntu/admin so a fresh decoy lures `telnet
+    ubuntu@host` enumeration scripts without operator setup."""
+    svc = TelnetService()
+    frag = svc.compose_fragment("decky-test", service_cfg={})
+    env = frag["environment"]
+    assert env["TELNET_USER"] == "ubuntu"
+    assert env["TELNET_USER_PASSWORD"] == "admin"
 
 
 def test_rdp_schema_matches_and_bool_coerces():

@@ -5,6 +5,26 @@ set -e
 ROOT_PASSWORD="${SSH_ROOT_PASSWORD:-admin}"
 echo "root:${ROOT_PASSWORD}" | chpasswd
 
+# Non-root user — gives the decoy a realistic "ssh user@host" surface
+# so attackers running enumeration scripts find a plausible second
+# account, AND so post-login privesc (sudo) flows through the
+# existing sudo-log capture pipe. SSH_USER blank means "no second
+# user" (legacy single-account behaviour); the compose fragment
+# defaults SSH_USER to "ubuntu" so this branch is the live path on
+# fresh deploys.
+SSH_USER="${SSH_USER:-}"
+SSH_USER_PASSWORD="${SSH_USER_PASSWORD:-admin}"
+if [ -n "${SSH_USER}" ] && [ "${SSH_USER}" != "root" ]; then
+    if ! id -u "${SSH_USER}" >/dev/null 2>&1; then
+        # Login shell points at the same sessrec wrapper root uses,
+        # so the new user's pty session is recorded — privesc and
+        # network-enum behaviour ride the existing capture pipe
+        # without a parallel implementation.
+        useradd -m -s /usr/libexec/login-session -G sudo "${SSH_USER}"
+    fi
+    echo "${SSH_USER}:${SSH_USER_PASSWORD}" | chpasswd
+fi
+
 # Optional: override hostname inside container
 if [ -n "$SSH_HOSTNAME" ]; then
     echo "$SSH_HOSTNAME" > /etc/hostname

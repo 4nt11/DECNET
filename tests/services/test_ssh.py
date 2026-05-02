@@ -123,6 +123,36 @@ def test_no_log_target_in_env():
     assert "LOG_TARGET" not in _fragment(log_target="10.0.0.1:5140").get("environment", {})
 
 
+def test_default_non_root_user_and_password():
+    """The compose fragment defaults SSH_USER to "ubuntu" and
+    SSH_USER_PASSWORD to "admin" — privesc + network-enum lure on
+    every fresh deploy without an operator intervention."""
+    env = _fragment()["environment"]
+    assert env["SSH_USER"] == "ubuntu"
+    assert env["SSH_USER_PASSWORD"] == "admin"
+
+
+def test_custom_non_root_user_and_password():
+    env = _fragment(service_cfg={
+        "user": "deploy",
+        "user_password": "Tr0ub4dor",
+    })["environment"]
+    assert env["SSH_USER"] == "deploy"
+    assert env["SSH_USER_PASSWORD"] == "Tr0ub4dor"
+
+
+def test_non_root_user_independent_of_root_password():
+    """User account password must be a distinct knob from the root
+    password — operators routinely set them to different values to
+    exercise multi-credential capture."""
+    env = _fragment(service_cfg={
+        "password": "rootpw",
+        "user_password": "userpw",
+    })["environment"]
+    assert env["SSH_ROOT_PASSWORD"] == "rootpw"
+    assert env["SSH_USER_PASSWORD"] == "userpw"
+
+
 # ---------------------------------------------------------------------------
 # Logging pipeline wiring (Dockerfile + entrypoint)
 # ---------------------------------------------------------------------------

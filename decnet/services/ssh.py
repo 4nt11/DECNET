@@ -17,8 +17,11 @@ class SSHService(BaseService):
     RFC 5424 via the rsyslog bridge baked into the image.
 
     service_cfg keys:
-        password      Root password (default: "admin")
-        hostname      Override container hostname
+        password         Root password (default: "admin")
+        user             Non-root user name (default: "ubuntu") for
+                         realistic "ssh user@host" lures + privesc capture
+        user_password    Non-root user's password (default: "admin")
+        hostname         Override container hostname
     """
 
     name = "ssh"
@@ -33,6 +36,33 @@ class SSHService(BaseService):
             default="admin",
             secret=True,
             help="Plaintext root password for the in-container sshd.",
+        ),
+        ServiceConfigField(
+            key="user",
+            label="Non-root user",
+            type="string",
+            default="ubuntu",
+            help=(
+                "Username for the second account on the decoy. Real Linux "
+                "boxes (especially Ubuntu cloud images) ship a non-root "
+                "admin user — having one makes the decoy more lifelike, "
+                "captures attackers who try `ssh user@host` for network "
+                "enumeration, and surfaces sudo/privesc behaviour the root-"
+                "only path misses."
+            ),
+        ),
+        ServiceConfigField(
+            key="user_password",
+            label="Non-root user password",
+            type="password",
+            default="admin",
+            secret=True,
+            help=(
+                "Password for the non-root user. Captured at PAM auth time "
+                "via the same auth-helper that handles root logins. The "
+                "user is in the `sudo` group; subsequent privesc attempts "
+                "fan out through the existing sudo-log capture."
+            ),
         ),
         ServiceConfigField(
             key="hostname",
@@ -55,6 +85,13 @@ class SSHService(BaseService):
         cfg = service_cfg or {}
         env: dict = {
             "SSH_ROOT_PASSWORD": cfg.get("password", "admin"),
+            # Non-root user account — created at runtime by the entrypoint
+            # iff SSH_USER is non-empty. Defaults to "ubuntu"/"admin" so
+            # `ssh ubuntu@<decky>` works out of the box (the conventional
+            # cloud-init account on Ubuntu cloud images, very low-friction
+            # for attackers running ssh enumeration scripts).
+            "SSH_USER": cfg.get("user", "ubuntu"),
+            "SSH_USER_PASSWORD": cfg.get("user_password", "admin"),
             # NODE_NAME is the authoritative decky identifier for log
             # attribution — matches the host path used for the artifacts
             # bind mount below. The container hostname (optionally overridden
