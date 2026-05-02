@@ -71,6 +71,8 @@ class GreyNoiseProvider(IntelProvider):
                 verdict="unknown",
                 column_updates={
                     "greynoise_classification": "unknown",
+                    "greynoise_name": None,
+                    "greynoise_tags": "[]",
                     "greynoise_raw": json.dumps({"message": "not seen"}),
                     "greynoise_queried_at": datetime.now(timezone.utc),
                 },
@@ -88,11 +90,24 @@ class GreyNoiseProvider(IntelProvider):
 
         classification = (data.get("classification") or "unknown").lower()
         verdict = _CLASSIFICATION_TO_VERDICT.get(classification, "unknown")
+        # The Community endpoint surfaces an actor ``name`` (e.g. "Tor",
+        # "Censys") but no behavioral tag list — the tag taxonomy is
+        # paid-tier only. Persist whatever we got; a future non-Community
+        # provider may populate ``greynoise_tags``.
+        name_obj = data.get("name")
+        name = name_obj if isinstance(name_obj, str) and name_obj else None
+        tags_obj = data.get("tags")
+        tags: list[str] = (
+            [t for t in tags_obj if isinstance(t, str)]
+            if isinstance(tags_obj, list) else []
+        )
         return IntelResult(
             provider=self.name,
             verdict=verdict,
             column_updates={
                 "greynoise_classification": classification,
+                "greynoise_name": name,
+                "greynoise_tags": json.dumps(tags),
                 "greynoise_raw": json.dumps(data),
                 "greynoise_queried_at": datetime.now(timezone.utc),
             },

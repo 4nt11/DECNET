@@ -45,8 +45,15 @@ class AttackerIntel(SQLModel, table=True):
     schema_version: int = Field(default=1)
 
     # ── GreyNoise Community ─────────────────────────────────────────────
-    # classification ∈ {"benign", "malicious", "suspicious", "unknown"}
+    # classification ∈ {"benign", "malicious", "suspicious", "unknown"}.
+    # The Community endpoint does not return tags; ``greynoise_tags`` stays
+    # empty unless an operator wires a non-Community provider that does.
     greynoise_classification: Optional[str] = Field(default=None, max_length=32)
+    greynoise_name: Optional[str] = Field(default=None, max_length=128)
+    greynoise_tags: str = Field(
+        default="[]",
+        sa_column=Column("greynoise_tags", _BIG_TEXT, nullable=False, default="[]"),
+    )  # JSON list[str] — behavioral / actor tags
     greynoise_raw: str = Field(
         default="{}",
         sa_column=Column("greynoise_raw", _BIG_TEXT, nullable=False, default="{}"),
@@ -56,6 +63,12 @@ class AttackerIntel(SQLModel, table=True):
     # ── AbuseIPDB ────────────────────────────────────────────────────────
     # 0..100 abuse confidence score
     abuseipdb_score: Optional[int] = Field(default=None)
+    abuseipdb_categories: str = Field(
+        default="[]",
+        sa_column=Column(
+            "abuseipdb_categories", _BIG_TEXT, nullable=False, default="[]",
+        ),
+    )  # JSON list[int] — flattened set of categories across recent reports
     abuseipdb_raw: str = Field(
         default="{}",
         sa_column=Column("abuseipdb_raw", _BIG_TEXT, nullable=False, default="{}"),
@@ -64,6 +77,7 @@ class AttackerIntel(SQLModel, table=True):
 
     # ── abuse.ch Feodo Tracker ───────────────────────────────────────────
     feodo_listed: Optional[bool] = Field(default=None)
+    feodo_malware_family: Optional[str] = Field(default=None, max_length=64)
     feodo_raw: str = Field(
         default="{}",
         sa_column=Column("feodo_raw", _BIG_TEXT, nullable=False, default="{}"),
@@ -71,7 +85,31 @@ class AttackerIntel(SQLModel, table=True):
     feodo_queried_at: Optional[datetime] = Field(default=None)
 
     # ── abuse.ch ThreatFox ───────────────────────────────────────────────
+    # ThreatFox returns a list of matches for a queried IP. Each match has
+    # a ``threat_type`` (botnet_cc / payload_delivery / payload /
+    # cc_skimming) and an ``ioc_type`` (url / domain / ip:port / hash
+    # variants). We flatten the unique sets across all matches; the
+    # IntelLifter keys ATT&CK techniques on ``threat_type``, the canonical
+    # taxonomy field per ThreatFox's API.
     threatfox_listed: Optional[bool] = Field(default=None)
+    threatfox_threat_types: str = Field(
+        default="[]",
+        sa_column=Column(
+            "threatfox_threat_types", _BIG_TEXT, nullable=False, default="[]",
+        ),
+    )  # JSON list[str]
+    threatfox_ioc_types: str = Field(
+        default="[]",
+        sa_column=Column(
+            "threatfox_ioc_types", _BIG_TEXT, nullable=False, default="[]",
+        ),
+    )  # JSON list[str]
+    threatfox_malware_families: str = Field(
+        default="[]",
+        sa_column=Column(
+            "threatfox_malware_families", _BIG_TEXT, nullable=False, default="[]",
+        ),
+    )  # JSON list[str]
     threatfox_raw: str = Field(
         default="{}",
         sa_column=Column("threatfox_raw", _BIG_TEXT, nullable=False, default="{}"),

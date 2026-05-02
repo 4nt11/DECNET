@@ -101,6 +101,61 @@ async def test_unexpected_status_is_error():
 
 
 @pytest.mark.anyio
+async def test_threat_types_and_ioc_types_flattened(monkeypatch):
+    """Post-2026-05-02 audit: provider must extract the union of
+    ``threat_type`` / ``ioc_type`` / ``malware`` across all matches.
+    The IntelLifter dispatches ATT&CK on threat_type."""
+    monkeypatch.delenv("DECNET_THREATFOX_API_KEY", raising=False)
+
+    async def handler(request: httpx.Request) -> httpx.Response:
+        return httpx.Response(
+            200,
+            json={"query_status": "ok", "data": [
+                {
+                    "ioc_type": "ip:port",
+                    "threat_type": "botnet_cc",
+                    "malware": "Sliver",
+                },
+                {
+                    "ioc_type": "url",
+                    "threat_type": "payload_delivery",
+                    "malware_printable": "Emotet",
+                },
+                {
+                    "ioc_type": "ip:port",  # duplicate, dedup'd
+                    "threat_type": "botnet_cc",  # duplicate
+                    "malware": "Sliver",  # duplicate
+                },
+                "not a dict — silently skipped",
+            ]},
+        )
+
+    _install_transport(handler)
+    provider = ThreatFoxProvider()
+    result = await provider.lookup("1.2.3.4")
+    cu = result.column_updates
+    assert json.loads(cu["threatfox_threat_types"]) == [
+        "botnet_cc", "payload_delivery",
+    ]
+    assert json.loads(cu["threatfox_ioc_types"]) == ["ip:port", "url"]
+    assert json.loads(cu["threatfox_malware_families"]) == ["Emotet", "Sliver"]
+
+
+@pytest.mark.anyio
+async def test_no_result_clears_taxonomy_columns():
+    async def handler(request: httpx.Request) -> httpx.Response:
+        return httpx.Response(200, json={"query_status": "no_result"})
+
+    _install_transport(handler)
+    provider = ThreatFoxProvider()
+    result = await provider.lookup("8.8.8.8")
+    cu = result.column_updates
+    assert cu["threatfox_threat_types"] == "[]"
+    assert cu["threatfox_ioc_types"] == "[]"
+    assert cu["threatfox_malware_families"] == "[]"
+
+
+@pytest.mark.anyio
 async def test_http_error_surfaces():
     async def handler(request: httpx.Request) -> httpx.Response:
         return httpx.Response(502)

@@ -124,6 +124,45 @@ async def test_429_returns_error_no_writes():
 
 
 @pytest.mark.anyio
+async def test_actor_name_and_tags_persisted_when_present():
+    """Post-2026-05-02 audit: ``name`` (actor label) and any ``tags``
+    list returned by the upstream survive into ``column_updates``.
+
+    The Community endpoint does not return ``tags`` in practice; the
+    test seeds the field anyway so non-Community provider plans that
+    do (paid / Enterprise) work without further code changes.
+    """
+    async def handler(request: httpx.Request) -> httpx.Response:
+        return httpx.Response(
+            200,
+            json={
+                "classification": "malicious",
+                "name": "Tor",
+                "tags": ["tor_exit_node", "ssh_bruteforcer"],
+            },
+        )
+
+    provider = GreyNoiseProvider()
+    _install_transport(provider, handler)
+    result = await provider.lookup("1.2.3.4")
+    assert result.column_updates["greynoise_name"] == "Tor"
+    tags = json.loads(result.column_updates["greynoise_tags"])
+    assert tags == ["tor_exit_node", "ssh_bruteforcer"]
+
+
+@pytest.mark.anyio
+async def test_404_clears_actor_and_tags():
+    async def handler(request: httpx.Request) -> httpx.Response:
+        return httpx.Response(404, json={"message": "not seen"})
+
+    provider = GreyNoiseProvider()
+    _install_transport(provider, handler)
+    result = await provider.lookup("10.0.0.5")
+    assert result.column_updates["greynoise_name"] is None
+    assert result.column_updates["greynoise_tags"] == "[]"
+
+
+@pytest.mark.anyio
 async def test_network_failure_becomes_error():
     async def handler(request: httpx.Request) -> httpx.Response:
         raise httpx.ConnectError("upstream unreachable")

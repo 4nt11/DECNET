@@ -93,15 +93,21 @@ class FeodoProvider(IntelProvider):
                 verdict=None,  # absence ≠ "benign", let other providers speak
                 column_updates={
                     "feodo_listed": False,
+                    "feodo_malware_family": None,
                     "feodo_raw": "{}",
                     "feodo_queried_at": datetime.now(timezone.utc),
                 },
             )
+        family_obj = entry.get("malware")
+        family = (
+            family_obj if isinstance(family_obj, str) and family_obj else None
+        )
         return IntelResult(
             provider=self.name,
             verdict="malicious",
             column_updates={
                 "feodo_listed": True,
+                "feodo_malware_family": family,
                 "feodo_raw": json.dumps(entry),
                 "feodo_queried_at": datetime.now(timezone.utc),
             },

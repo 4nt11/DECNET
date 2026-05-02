@@ -93,11 +93,24 @@ class AbuseIPDBProvider(IntelProvider):
         data = payload.get("data") or {}
         score = int(data.get("abuseConfidenceScore") or 0)
         verdict = _score_to_verdict(score)
+        # AbuseIPDB returns ``data.reports[*].categories`` — a list of
+        # int codes per report. Flatten the union across all recent
+        # reports so the IntelLifter sees the full activity profile,
+        # not just the most-recent report's categories. Sorted for
+        # determinism (matters for tests + for the bus payload diff).
+        categories: set[int] = set()
+        for report in data.get("reports") or []:
+            if not isinstance(report, dict):
+                continue
+            for cat in report.get("categories") or []:
+                if isinstance(cat, int):
+                    categories.add(cat)
         return IntelResult(
             provider=self.name,
             verdict=verdict,
             column_updates={
                 "abuseipdb_score": score,
+                "abuseipdb_categories": json.dumps(sorted(categories)),
                 "abuseipdb_raw": json.dumps(data),
                 "abuseipdb_queried_at": datetime.now(timezone.utc),
             },

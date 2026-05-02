@@ -88,6 +88,31 @@ async def test_unlisted_ip_returns_no_verdict():
 
 
 @pytest.mark.anyio
+async def test_listed_ip_persists_malware_family():
+    """Post-2026-05-02 audit: IntelLifter reads
+    ``feodo_malware_family`` for evidence; persist it as a typed
+    column rather than only inside ``feodo_raw``."""
+    async def handler(request: httpx.Request) -> httpx.Response:
+        return httpx.Response(200, json=_FEED)
+
+    _install_transport(handler)
+    provider = FeodoProvider(refresh_interval_s=999.0)
+    result = await provider.lookup("9.9.9.9")
+    assert result.column_updates["feodo_malware_family"] == "TrickBot"
+
+
+@pytest.mark.anyio
+async def test_unlisted_ip_clears_family():
+    async def handler(request: httpx.Request) -> httpx.Response:
+        return httpx.Response(200, json=_FEED)
+
+    _install_transport(handler)
+    provider = FeodoProvider(refresh_interval_s=999.0)
+    result = await provider.lookup("1.2.3.4")
+    assert result.column_updates["feodo_malware_family"] is None
+
+
+@pytest.mark.anyio
 async def test_feed_failure_reports_error():
     async def handler(request: httpx.Request) -> httpx.Response:
         return httpx.Response(503)

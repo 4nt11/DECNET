@@ -96,6 +96,50 @@ async def test_low_score_maps_to_benign(monkeypatch):
 
 
 @pytest.mark.anyio
+async def test_categories_flattened_from_reports(monkeypatch):
+    """Post-2026-05-02 audit: provider must extract the union of
+    ``data.reports[*].categories`` so the IntelLifter can dispatch
+    ATT&CK techniques. Sorted for deterministic test + bus diff."""
+    monkeypatch.setenv("DECNET_ABUSEIPDB_API_KEY", "k3y")
+
+    async def handler(request: httpx.Request) -> httpx.Response:
+        return httpx.Response(
+            200,
+            json={"data": {
+                "abuseConfidenceScore": 80,
+                "reports": [
+                    {"categories": [18, 22]},
+                    {"categories": [22, 14]},
+                    {"categories": []},
+                    {"not_a_dict": True},
+                    {"categories": [21]},
+                ],
+            }},
+        )
+
+    _install_transport(handler)
+    provider = AbuseIPDBProvider()
+    result = await provider.lookup("1.2.3.4")
+    cats = json.loads(result.column_updates["abuseipdb_categories"])
+    assert cats == [14, 18, 21, 22]
+
+
+@pytest.mark.anyio
+async def test_categories_empty_when_no_reports(monkeypatch):
+    monkeypatch.setenv("DECNET_ABUSEIPDB_API_KEY", "k3y")
+
+    async def handler(request: httpx.Request) -> httpx.Response:
+        return httpx.Response(
+            200, json={"data": {"abuseConfidenceScore": 5}},
+        )
+
+    _install_transport(handler)
+    provider = AbuseIPDBProvider()
+    result = await provider.lookup("8.8.8.8")
+    assert json.loads(result.column_updates["abuseipdb_categories"]) == []
+
+
+@pytest.mark.anyio
 async def test_429_returns_error(monkeypatch):
     monkeypatch.setenv("DECNET_ABUSEIPDB_API_KEY", "k3y")
 
