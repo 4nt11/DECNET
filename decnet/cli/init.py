@@ -44,6 +44,12 @@ _CONFIG_PLACEHOLDER = """\
 # EnvironmentFile= — never in a group-readable INI.
 
 [decnet]
+# DECNET-service user/group as configured at `decnet init` time.
+# Resolved to a uid/gid on each host at deploy time via pwd.getpwnam,
+# so the same user name can have different numeric uids on master vs
+# agents without breaking artifact ownership.
+api-user = {api_user}
+api-group = {api_group}
 # mode = master                          # or "agent"
 
 # [api]
@@ -198,14 +204,17 @@ def _ensure_dir(
     return f"skip: {path} already present" if existed else "ok"
 
 
-def _ensure_config(path: Path, group: str, *, dry_run: bool) -> str:
+def _ensure_config(
+    path: Path, group: str, *, user: str, dry_run: bool,
+) -> str:
     if path.exists():
         return f"skip: {path} already present"
     if dry_run:
         console.print(f"  [dim]would write:[/] {path}")
         return "ok"
     path.parent.mkdir(parents=True, exist_ok=True)
-    path.write_text(_CONFIG_PLACEHOLDER)
+    rendered = _CONFIG_PLACEHOLDER.format(api_user=user, api_group=group)
+    path.write_text(rendered)
     try:
         os.chmod(path, 0o640)
         gid = grp.getgrnam(group).gr_gid
@@ -781,7 +790,10 @@ def register(app: typer.Typer) -> None:
             )
         _step(
             f"write {etc_decnet / 'decnet.ini'}",
-            lambda: _ensure_config(etc_decnet / "decnet.ini", group, dry_run=dry_run),
+            lambda: _ensure_config(
+                etc_decnet / "decnet.ini", group,
+                user=user, dry_run=dry_run,
+            ),
         )
         _step(
             "install systemd units",

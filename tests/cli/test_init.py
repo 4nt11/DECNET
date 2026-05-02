@@ -7,6 +7,7 @@ into a pytest ``tmp_path``.
 """
 from __future__ import annotations
 
+import os
 from pathlib import Path
 from typing import Any, List
 
@@ -215,6 +216,55 @@ def test_init_writes_decnet_ini_not_config_ini(
                    "[bus]", "[swarm]", "[logging]", "[ingester]",
                    "[tracing]", "[agent]"):
         assert header in body, f"placeholder missing {header} example"
+
+
+def test_init_persists_api_user_group_to_decnet_ini(
+    monkeypatch: Any, tmp_path: Path, subprocess_calls: List[List[str]],
+    no_missing_tools: None, missing_user_and_group: None,
+) -> None:
+    """DEBT-035: `decnet init --user X --group Y` must persist the
+    DECNET-service user/group **as names** to decnet.ini under
+    `[decnet] api-user` / `api-group`. Resolution to numeric uid/gid
+    happens at deploy time on whichever host runs the deploy — names
+    survive across master/agent uid namespaces while raw numbers
+    would mismatch."""
+    _seed_deploy(monkeypatch, tmp_path)
+    prefix = tmp_path / "root"
+    r = runner.invoke(app, [
+        "init", "--no-start", "--prefix", str(prefix),
+        "--user", "decoyman", "--group", "decoygrp",
+    ])
+    assert r.exit_code == 0, r.output
+
+    body = (prefix / "etc/decnet/decnet.ini").read_text()
+    assert "api-user = decoyman" in body
+    assert "api-group = decoygrp" in body
+
+
+def test_init_decnet_ini_loads_via_config_ini(
+    monkeypatch: Any, tmp_path: Path, subprocess_calls: List[List[str]],
+    no_missing_tools: None, missing_user_and_group: None,
+) -> None:
+    """Defence-in-depth: round-trip the rendered ini through
+    `decnet.config_ini.load_ini_config` and confirm that
+    DECNET_API_USER / DECNET_API_GROUP appear in os.environ. The
+    composer reads those env vars at deploy time."""
+    from decnet.config_ini import load_ini_config
+
+    _seed_deploy(monkeypatch, tmp_path)
+    prefix = tmp_path / "root"
+    r = runner.invoke(app, [
+        "init", "--no-start", "--prefix", str(prefix),
+        "--user", "deckyowner", "--group", "deckygroup",
+    ])
+    assert r.exit_code == 0, r.output
+
+    ini = prefix / "etc/decnet/decnet.ini"
+    monkeypatch.delenv("DECNET_API_USER", raising=False)
+    monkeypatch.delenv("DECNET_API_GROUP", raising=False)
+    load_ini_config(ini)
+    assert os.environ.get("DECNET_API_USER") == "deckyowner"
+    assert os.environ.get("DECNET_API_GROUP") == "deckygroup"
 
 
 def test_install_dir_renders_into_service_units(
