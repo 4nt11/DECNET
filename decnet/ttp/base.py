@@ -17,7 +17,7 @@ from __future__ import annotations
 
 import logging
 from abc import ABC, abstractmethod
-from typing import Any, Final, NamedTuple
+from typing import Any, Final, NamedTuple, Protocol, runtime_checkable
 
 from decnet.web.db.models.ttp import TTPTag
 
@@ -130,9 +130,28 @@ class TolerantTagger(Tagger):
         """Real tagging logic — subclasses override this, not :meth:`tag`."""
 
 
+@runtime_checkable
+class WatchableTagger(Protocol):
+    """Structural protocol for taggers that hot-reload from a RuleStore.
+
+    Each per-source lifter (and :class:`RuleEngineTagger`) holds its
+    own :class:`~decnet.ttp.impl._rule_index.RuleIndex` and exposes an
+    ``async def watch_store()`` coroutine that loads the initial
+    corpus and drains store change events forever. The worker
+    (E.3.14) starts one task per ``WatchableTagger`` so dispatch
+    indexes hydrate at startup; without this the indexes stay empty
+    and no rule fires. ``runtime_checkable`` so the worker can fan
+    out via :func:`isinstance` without leaking the protocol into the
+    abstract :class:`Tagger` base.
+    """
+
+    async def watch_store(self) -> None: ...
+
+
 __all__ = [
     "KNOWN_SOURCE_KINDS",
     "TaggerEvent",
     "Tagger",
     "TolerantTagger",
+    "WatchableTagger",
 ]

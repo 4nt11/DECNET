@@ -40,7 +40,7 @@ from decnet.bus.publish import (
 )
 from decnet.logging import get_logger
 from decnet.ttp.base import Tagger, TaggerEvent
-from decnet.ttp.factory import get_tagger
+from decnet.ttp.factory import CompositeTagger, get_tagger
 from decnet.web.db.models.ttp import TTPTag
 from decnet.web.db.repository import BaseRepository
 
@@ -186,8 +186,23 @@ async def run_ttp_worker_loop(
     owned_bus = False
     queue: asyncio.Queue[tuple[str, Event] | None] = asyncio.Queue()
     pump_tasks: list[asyncio.Task[None]] = []
+    watch_tasks: list[asyncio.Task[None]] = []
     heartbeat_task: Optional[asyncio.Task[None]] = None
     control_task: Optional[asyncio.Task[None]] = None
+
+    # Hydrate per-lifter rule indexes. Each WatchableTagger
+    # (CompositeTagger children + the RuleEngineTagger) owns its own
+    # RuleIndex and drains store change events forever via
+    # `watch_store`. Without these tasks every dispatch index stays
+    # empty and no rule fires — the bus subscriptions work, the
+    # pump tasks run, and tagger.tag() returns [] every call. Tasks
+    # are independent of the bus, so this fan-out runs even in
+    # poll-only mode.
+    if isinstance(tagger, CompositeTagger):
+        for watchable in tagger.iter_watchables():
+            watch_tasks.append(asyncio.create_task(
+                _run_watch(watchable),
+            ))
     try:
         if bus is None:
             try:
@@ -237,11 +252,16 @@ async def run_ttp_worker_loop(
     finally:
         for task in pump_tasks:
             task.cancel()
+        for task in watch_tasks:
+            task.cancel()
         if heartbeat_task is not None:
             heartbeat_task.cancel()
         if control_task is not None:
             control_task.cancel()
         for task in pump_tasks:
+            with contextlib.suppress(asyncio.CancelledError, Exception):
+                await task
+        for task in watch_tasks:
             with contextlib.suppress(asyncio.CancelledError, Exception):
                 await task
         for opt in (heartbeat_task, control_task):
@@ -339,6 +359,26 @@ async def _publish_tagged(bus: BaseBus, tags: list[TTPTag]) -> None:
             _topics.ttp_rule_fired(technique_id),
             per_tech_payload,
             event_type=_topics.TTP_RULE_FIRED,
+        )
+
+
+async def _run_watch(watchable: Any) -> None:
+    """Drive one lifter's ``watch_store()`` coroutine forever.
+
+    Mirrors :func:`_pump`'s tolerance contract: a transient store error
+    logs and exits the watch task without taking the worker down. The
+    main loop's poll-interval fallback continues to heartbeat; a
+    subsequent worker restart re-runs the watch fan-out and rehydrates.
+    """
+    name = getattr(watchable, "name", watchable.__class__.__name__)
+    try:
+        await watchable.watch_store()
+    except asyncio.CancelledError:
+        raise
+    except Exception as exc:  # noqa: BLE001
+        log.warning(
+            "ttp worker: watch_store for %s died (%s); index will not "
+            "hot-reload until next worker restart", name, exc,
         )
 
 

@@ -23,7 +23,14 @@ import logging
 import os
 from typing import Final
 
-from decnet.ttp.base import KNOWN_SOURCE_KINDS, Tagger, TaggerEvent
+from collections.abc import Iterator
+
+from decnet.ttp.base import (
+    KNOWN_SOURCE_KINDS,
+    Tagger,
+    TaggerEvent,
+    WatchableTagger,
+)
 from decnet.web.db.models.ttp import TTPTag
 
 _log = logging.getLogger(__name__)
@@ -65,6 +72,19 @@ class CompositeTagger(Tagger):
         # rate-limiter once production traffic shapes are known.
         self._warned_known: set[str] = set()
         self._informed_unknown: set[str] = set()
+
+    def iter_watchables(self) -> Iterator[WatchableTagger]:
+        """Yield every child lifter that hot-reloads from a RuleStore.
+
+        The worker (E.3.14) starts one ``asyncio.Task`` per yielded
+        lifter so its dispatch index hydrates at startup; without this
+        every index stays empty and no rule fires in production.
+        Filtering on the structural :class:`WatchableTagger` protocol
+        keeps the worker free of per-lifter type knowledge.
+        """
+        for lifter in self._lifters:
+            if isinstance(lifter, WatchableTagger):
+                yield lifter
 
     async def tag(self, event: TaggerEvent) -> list[TTPTag]:
         lifters = self._by_kind.get(event.source_kind, [])
