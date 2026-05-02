@@ -383,6 +383,15 @@ class BaseRepository(ABC):
         pass
 
     @abstractmethod
+    async def get_attacker_uuid_by_ip(self, ip: str) -> Optional[str]:
+        """Return the :class:`Attacker` UUID for *ip*, or ``None``.
+
+        Used by the TTP worker to resolve ``attacker_uuid`` from the
+        ``attacker_ip`` carried by collector-side bus events.
+        """
+        raise NotImplementedError
+
+    @abstractmethod
     async def get_attackers(
         self,
         limit: int = 50,

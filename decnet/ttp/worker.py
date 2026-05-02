@@ -344,6 +344,47 @@ async def run_ttp_worker_loop(
                 await bus.close()
 
 
+async def _resolve_attacker_uuid(
+    repo: BaseRepository, payload: dict[str, Any],
+) -> dict[str, Any] | None:
+    """Inject ``attacker_uuid`` into *payload* via repo lookup if missing.
+
+    Collector-side producers (notably ``attacker.session.ended`` from
+    the session aggregator) carry ``attacker_ip`` but cannot fill
+    ``attacker_uuid`` because the collector doesn't talk to the DB.
+    The TTP worker resolves it here so ``compute_tag_uuid`` and the
+    ``ttp_tag_has_anchor`` model invariant always have something to
+    work with.
+
+    Returns the (possibly mutated) payload, or ``None`` if neither
+    ``attacker_uuid`` nor ``identity_uuid`` could be set — emitting a
+    tag with both NULL would raise inside :class:`TTPTag.__init__`.
+    """
+    if payload.get("attacker_uuid") or payload.get("identity_uuid"):
+        return payload
+    ip = payload.get("attacker_ip")
+    if not isinstance(ip, str) or not ip or ip == "Unknown":
+        log.debug(
+            "ttp worker: dropping event with no anchor "
+            "(no attacker_uuid / identity_uuid / attacker_ip)",
+        )
+        return None
+    try:
+        resolved = await repo.get_attacker_uuid_by_ip(ip)
+    except Exception:  # noqa: BLE001
+        log.exception(
+            "ttp worker: get_attacker_uuid_by_ip(%r) failed", ip,
+        )
+        return None
+    if not resolved:
+        log.info(
+            "ttp worker: no Attacker row for ip=%r yet; "
+            "skipping until profiler catches up", ip,
+        )
+        return None
+    return {**payload, "attacker_uuid": resolved}
+
+
 async def _process_event(
     topic: str,
     event: Event,
@@ -358,7 +399,14 @@ async def _process_event(
     replay of the same upstream event hits the idempotent
     ``INSERT OR IGNORE`` and writes zero rows → publishes zero events.
     """
-    tagger_events = _build_events(topic, event.payload)
+    payload = await _resolve_attacker_uuid(repo, event.payload)
+    if payload is None:
+        # Both attacker_uuid and identity_uuid are missing and we
+        # couldn't resolve from attacker_ip — the TTPTag invariant
+        # requires at least one anchor, so emitting any tag would
+        # raise. Drop the event with one log line per cold IP.
+        return
+    tagger_events = _build_events(topic, payload)
     if not tagger_events:
         return
     # Aggregate tags across the session-level event AND any per-command

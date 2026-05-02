@@ -48,6 +48,20 @@ class AttackersCoreMixin(_MixinBase):
             await session.commit()
             return row_uuid
 
+    async def get_attacker_uuid_by_ip(self, ip: str) -> Optional[str]:
+        """Return the :class:`Attacker` UUID for *ip*, or ``None``.
+
+        Used by the TTP worker to resolve ``attacker_uuid`` from the
+        ``attacker_ip`` carried by collector-side bus events
+        (``attacker.session.ended`` etc.). Cheaper than
+        :meth:`get_attacker_by_uuid` because it scalars a single column.
+        """
+        async with self._session() as session:
+            result = await session.execute(
+                select(col(Attacker.uuid)).where(Attacker.ip == ip)
+            )
+            return result.scalar_one_or_none()
+
     async def get_attacker_by_uuid(self, uuid: str) -> Optional[dict[str, Any]]:
         async with self._session() as session:
             result = await session.execute(
