@@ -118,7 +118,9 @@ def get_tagger() -> Tagger:
         from decnet.ttp.impl.canary_fingerprint_lifter import (
             CanaryFingerprintLifter,
         )
+        from decnet.ttp.impl.credential_lifter import CredentialLifter
         from decnet.ttp.impl.email_lifter import EmailLifter
+        from decnet.ttp.impl.identity_lifter import IdentityLifter
         from decnet.ttp.impl.intel_lifter import IntelLifter
         from decnet.ttp.store.factory import get_rule_store
         store = get_rule_store()
@@ -127,6 +129,8 @@ def get_tagger() -> Tagger:
             IntelLifter(store),
             CanaryFingerprintLifter(store),
             EmailLifter(store),
+            IdentityLifter(store),
+            CredentialLifter(store),
         ])
     raise ValueError(
         f"Unknown tagger: {name!r}. Known: {_KNOWN}"

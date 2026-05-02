@@ -94,14 +94,16 @@ def test_ttp_registered_in_known_workers():
     assert "ttp" in KNOWN_WORKERS
 
 
-# ── E.2.12 deferred bus-integration assertions ─────────────────────
+# ── E.2.12 bus-integration smokes ───────────────────────────────────
+# The behavioral assertions live in tests/ttp/test_worker_bus.py against
+# a real FakeBus. Keep these as non-xfail markers pointing to the
+# integration coverage so a future contributor doesn't re-introduce the
+# xfail and lose the trail.
 
 
-@pytest.mark.xfail(strict=True, reason="impl phase E.3 — fan-out invokes engine")
-def test_e212_session_ended_invokes_rule_engine():
-    raise AssertionError("not yet implemented")
+def test_e212_session_ended_invokes_rule_engine() -> None:
+    """See ``test_worker_bus.test_session_ended_invokes_engine``."""
 
 
-@pytest.mark.xfail(strict=True, reason="impl phase E.3 — loop-prevention invariant")
-def test_e212_idempotent_re_evaluation_publishes_zero_events():
-    raise AssertionError("not yet implemented")
+def test_e212_idempotent_re_evaluation_publishes_zero_events() -> None:
+    """See ``test_worker_bus.test_loop_prevention_no_re_fire``."""

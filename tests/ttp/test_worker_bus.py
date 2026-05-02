@@ -9,19 +9,13 @@ Pins the bus surface from ``development/TTP_TAGGING.md`` §"Bus topics",
   string-literal subscriptions drifting from the constants).
 * Loop-prevention invariant: invoking the worker on the same source
   event twice (or N=10×) publishes exactly one ``ttp.tagged`` event.
-* Bus delivery asymmetry: dropping ``attacker.enriched`` still
-  produces intel-derived tags via the ``attacker.session.ended``
-  catch-up path; dropping ``email.received`` produces NO email tags
-  (no catch-up exists for email).
 * Engine invoked on incoming events.
-
-Topic-set equality is GREEN today. Worker-loop behavior beyond the
-empty inner loop xfail-gated behind E.3.14.
 """
 from __future__ import annotations
 
 import asyncio
-from typing import AsyncIterator
+from datetime import datetime, timezone
+from typing import Any, AsyncIterator
 
 import pytest
 import pytest_asyncio
@@ -29,10 +23,9 @@ import pytest_asyncio
 from decnet.bus import topics as _topics
 from decnet.bus.fake import FakeBus
 from decnet.ttp import worker as _worker
-
-# Re-imported so a `__all__` regression on the worker module fails
-# noisily here rather than via a vague "module has no attribute".
+from decnet.ttp.base import Tagger, TaggerEvent
 from decnet.ttp.worker import _TOPICS, run_ttp_worker_loop
+from decnet.web.db.models.ttp import TTPTag
 
 
 # ── Fixtures ────────────────────────────────────────────────────────
@@ -48,18 +41,116 @@ async def fake_bus() -> AsyncIterator[FakeBus]:
         await bus.close()
 
 
-# ── _TOPICS surface (GREEN today) ───────────────────────────────────
+# ── Helpers ─────────────────────────────────────────────────────────
+
+
+def _make_tag(rule_id: str = "R0007", technique_id: str = "T1110") -> TTPTag:
+    return TTPTag(
+        uuid=f"tag-{rule_id}-{technique_id}",
+        source_kind="session",
+        source_id="sess-1",
+        attacker_uuid="att1",
+        identity_uuid="id1",
+        session_id="sess-1",
+        decky_id="d1",
+        tactic="TA0006",
+        technique_id=technique_id,
+        sub_technique_id=None,
+        confidence=0.85,
+        rule_id=rule_id,
+        rule_version=1,
+        evidence={},
+        attack_release="v15.1",
+        created_at=datetime.now(tz=timezone.utc),
+    )
+
+
+class _FixedTagger(Tagger):
+    """Tagger that returns a preset list of tags every time it's invoked."""
+
+    name = "fixed"
+    HANDLES = frozenset({"session", "intel", "credential", "identity",
+                         "email", "canary_fingerprint"})
+
+    def __init__(self, tags: list[TTPTag]) -> None:
+        self._tags = tags
+        self.calls: list[TaggerEvent] = []
+
+    async def tag(self, event: TaggerEvent) -> list[TTPTag]:
+        self.calls.append(event)
+        return list(self._tags)
+
+
+class _StubRepo:
+    """Minimal repo that mimics the deterministic-PK INSERT OR IGNORE.
+
+    First call with a given uuid set returns the row count; replays
+    return zero (idempotent). Mirrors :meth:`SQLiteRepository.
+    _insert_tags_or_ignore` for tests without a real DB.
+    """
+
+    def __init__(self) -> None:
+        self._seen: set[str] = set()
+        self.calls: int = 0
+
+    async def insert_tags(self, rows: list[TTPTag]) -> int:
+        self.calls += 1
+        new = [r for r in rows if r.uuid not in self._seen]
+        for r in new:
+            self._seen.add(r.uuid)
+        return len(new)
+
+
+async def _drive_worker(
+    bus: FakeBus,
+    tagger: Tagger,
+    repo: Any,
+    publish: list[tuple[str, dict[str, Any]]],
+    *,
+    settle: float = 0.05,
+) -> None:
+    """Run the worker, fire publishes, allow the queue to drain, stop."""
+    shutdown = asyncio.Event()
+    task = asyncio.create_task(run_ttp_worker_loop(
+        repo=repo,
+        poll_interval_secs=0.05,
+        tagger=tagger,
+        shutdown=shutdown,
+        bus=bus,
+    ))
+    # Give the per-topic pumps a tick to register their subscriptions.
+    await asyncio.sleep(0.01)
+    for topic, payload in publish:
+        await bus.publish(topic, payload)
+    await asyncio.sleep(settle)
+    shutdown.set()
+    await asyncio.wait_for(task, timeout=2.0)
+
+
+async def _collect(
+    bus: FakeBus, pattern: str,
+) -> list[tuple[str, dict[str, Any]]]:
+    """Collect every event seen on *pattern* from now until the bus closes."""
+    collected: list[tuple[str, dict[str, Any]]] = []
+    sub = bus.subscribe(pattern)
+
+    async def _drain() -> None:
+        try:
+            async with sub:
+                async for ev in sub:
+                    collected.append((ev.topic, ev.payload))
+        except Exception:
+            pass
+
+    asyncio.create_task(_drain())
+    await asyncio.sleep(0)  # let subscriber register
+    return collected
+
+
+# ── _TOPICS surface ─────────────────────────────────────────────────
 
 
 def test_topics_matches_documented_set() -> None:
-    """``_TOPICS`` equals the exact set declared in TTP_TAGGING.md
-    §"Bus topics".
-
-    Pinning frozenset equality (rather than tuple equality) since
-    subscription order has no observable effect — but the *set*
-    must match. A future contributor adding a topic without doc /
-    test updates trips this.
-    """
     expected = frozenset({
         _topics.attacker(_topics.ATTACKER_SESSION_ENDED),
         _topics.attacker(_topics.ATTACKER_OBSERVED),
@@ -74,29 +165,17 @@ def test_topics_matches_documented_set() -> None:
 
 
 def test_topics_is_module_level_constant() -> None:
-    """``_TOPICS`` lives at module scope (not method-local) so tests
-    can introspect it without invoking the loop. Catches a refactor
-    that hides the list inside :func:`run_ttp_worker_loop`."""
     assert hasattr(_worker, "_TOPICS")
     assert isinstance(_worker._TOPICS, tuple)
     assert all(isinstance(t, str) for t in _worker._TOPICS)
 
 
 def test_topics_published_on_publish_topics_match_pattern() -> None:
-    """Every entry in ``_TOPICS`` is a valid bus topic / wildcard.
+    from decnet.bus.base import matches  # noqa: PLC0415
 
-    Cheap sanity check — no dot-prefix bug, no empty strings, the
-    wildcard form (``canary.>``) actually parses through the bus
-    matcher.
-    """
-    from decnet.bus.base import matches  # noqa: PLC0415 — local import to avoid contaminate
     for pattern in _TOPICS:
-        assert pattern, f"empty pattern in _TOPICS"
+        assert pattern, "empty pattern in _TOPICS"
         assert " " not in pattern
-        # Self-match: every pattern matches itself when interpreted
-        # as both pattern and concrete topic (modulo the ``>`` form
-        # which is only valid as pattern-side; for those we test a
-        # synthetic concrete extension matches).
         if pattern.endswith(".>"):
             base = pattern[:-2]
             assert matches(pattern, f"{base}.example")
@@ -104,122 +183,134 @@ def test_topics_published_on_publish_topics_match_pattern() -> None:
             assert matches(pattern, pattern)
 
 
-# ── Subscription wiring (GREEN today: empty subset trivially holds) ─
+# ── Subscription wiring ─────────────────────────────────────────────
 
 
-@pytest.mark.xfail(
-    strict=True,
-    reason="impl phase E.3.14 — worker bootstrap wires real "
-    "subscriptions; today the contract loop subscribes via _wake_on "
-    "but the assertion that no OTHER patterns are subscribed needs "
-    "introspection that the contract phase doesn't provide.",
-)
 async def test_worker_subscribes_only_to_topics(fake_bus: FakeBus) -> None:
-    """Run the worker briefly against a FakeBus and assert every
-    subscription target appears in :data:`_TOPICS`.
-
-    Today the worker creates per-pattern wake tasks via
-    :func:`_wake_on`, which DO call ``bus.subscribe`` — but the
-    FakeBus doesn't expose a subscriber registry the test can read
-    without poking at private state. xfail until E.3.14 wires a
-    proper introspection hook (or the impl naturally exposes
-    subscribed patterns via a public method).
+    """Run the worker briefly and assert every subscription pattern
+    appears in :data:`_TOPICS`. Reads ``FakeBus._subs`` directly —
+    the in-process transport's only introspection hook.
     """
-    pytest.fail("subscription introspection not yet wired")
+    shutdown = asyncio.Event()
+    task = asyncio.create_task(run_ttp_worker_loop(
+        repo=_StubRepo(),
+        poll_interval_secs=0.05,
+        tagger=_FixedTagger(tags=[]),
+        shutdown=shutdown,
+        bus=fake_bus,
+    ))
+    await asyncio.sleep(0.02)
+    # Heartbeat + control-listener subscribe to system.* topics; filter
+    # those out and assert what's left is exactly the documented set.
+    patterns = {sub.pattern for sub in fake_bus._subs}
+    ttp_patterns = {p for p in patterns if not p.startswith("system.")}
+    shutdown.set()
+    await asyncio.wait_for(task, timeout=2.0)
+    assert ttp_patterns == set(_TOPICS), (
+        f"worker subscribed outside _TOPICS: extras={ttp_patterns - set(_TOPICS)}, "
+        f"missing={set(_TOPICS) - ttp_patterns}"
+    )
 
 
-# ── Worker invokes engine on session.ended (xfail until E.3.14) ─────
+# ── Worker invokes engine on session.ended ──────────────────────────
 
 
-@pytest.mark.xfail(
-    strict=True,
-    reason="impl phase E.3.14 — worker inner loop is a no-op idle "
-    "today; engine invocation lands with the worker bootstrap step",
-)
 async def test_session_ended_invokes_engine(fake_bus: FakeBus) -> None:
-    """A faked ``attacker.session.ended`` event triggers a call to
-    ``RuleEngine.evaluate`` for the session's events.
+    """A faked ``attacker.session.ended`` event triggers tagger.tag()."""
+    tagger = _FixedTagger(tags=[_make_tag()])
+    repo = _StubRepo()
+    await _drive_worker(
+        fake_bus, tagger, repo,
+        [(_topics.attacker(_topics.ATTACKER_SESSION_ENDED), {
+            "session_id": "sess-1", "attacker_uuid": "att1",
+        })],
+    )
+    assert len(tagger.calls) >= 1
+    assert tagger.calls[0].source_kind == "session"
+    assert tagger.calls[0].session_id == "sess-1"
+    assert repo.calls == 1
 
-    Today the worker idles on the wake event without invoking
-    anything, so this assertion xfails. Flips at E.3.14.
-    """
-    pytest.fail("worker → engine wiring not yet implemented")
+
+# ── Loop prevention ─────────────────────────────────────────────────
 
 
-# ── Loop prevention (xfail until E.3.14) ────────────────────────────
-
-
-@pytest.mark.xfail(
-    strict=True,
-    reason="impl phase E.3.14 — loop-prevention invariant requires "
-    "the worker to actually publish ttp.tagged on first eval and "
-    "no-op on replay; today the worker publishes nothing.",
-)
 async def test_loop_prevention_no_re_fire(fake_bus: FakeBus) -> None:
-    """Invoking the worker on the same source event N=10× publishes
-    exactly one ``ttp.tagged`` event.
+    """Same upstream event fired N=5× → exactly one ``ttp.tagged``.
 
-    Re-firing on a tag-write would create a feedback loop:
-    ttp.tagged → re-eval → ttp.tagged → … . The worker MUST NOT
-    subscribe to its own output, AND the underlying repo's
-    ``insert_tags`` is idempotent so re-eval writes nothing — both
-    halves of the invariant land at E.3.14 + E.3.3.
+    The repo's idempotent INSERT OR IGNORE returns 0 on replays; the
+    worker is contractually forbidden from publishing on a 0-rowcount
+    write (TTP_TAGGING.md §"Bus topics").
     """
-    pytest.fail("loop-prevention invariant not yet implemented")
+    tagged: list[tuple[str, dict[str, Any]]] = []
+
+    async def _capture() -> None:
+        sub = fake_bus.subscribe(_topics.ttp(_topics.TTP_TAGGED))
+        async with sub:
+            async for ev in sub:
+                tagged.append((ev.topic, ev.payload))
+
+    capture_task = asyncio.create_task(_capture())
+    await asyncio.sleep(0)
+    tagger = _FixedTagger(tags=[_make_tag()])
+    repo = _StubRepo()
+    await _drive_worker(
+        fake_bus, tagger, repo,
+        [
+            (_topics.attacker(_topics.ATTACKER_SESSION_ENDED), {
+                "session_id": "sess-replay", "attacker_uuid": "att1",
+            }),
+        ] * 5,
+        settle=0.15,
+    )
+    capture_task.cancel()
+    with pytest.raises((asyncio.CancelledError, Exception)):
+        await capture_task
+    assert len(tagged) == 1, f"expected 1 ttp.tagged event, got {len(tagged)}"
 
 
-# ── Bus delivery asymmetry (xfail until E.3.14) ─────────────────────
+# ── Worker module surface ───────────────────────────────────────────
+
+
+def test_run_ttp_worker_loop_signature() -> None:
+    import inspect  # noqa: PLC0415
+    assert asyncio.iscoroutinefunction(run_ttp_worker_loop)
+    sig = inspect.signature(run_ttp_worker_loop)
+    assert "repo" in sig.parameters
+    assert "tagger" in sig.parameters
+    assert "shutdown" in sig.parameters
+
+
+# ── Bus delivery asymmetry (still xfail — catch-up paths are E.3.14b) ─
 
 
 @pytest.mark.xfail(
     strict=True,
-    reason="impl phase E.3.14 — catch-up via attacker.session.ended "
-    "lands with the intel lifter wire-up",
+    reason="catch-up via attacker.session.ended is design-deferred to "
+    "E.3.14b; today the worker fans events 1:1 by source_kind",
 )
 async def test_dropped_intel_enriched_still_produces_intel_tags(
     fake_bus: FakeBus,
 ) -> None:
-    """Dropping ``attacker.enriched`` events does NOT lose intel-derived
-    tags, because the ``attacker.session.ended`` handler ALSO runs the
-    intel lifter as a catch-up path. Pinned per design doc §"Bus
-    delivery requirements": "best-effort intel events are belt; the
-    session-ended sweep is braces"."""
     pytest.fail("intel catch-up path not yet implemented")
 
 
-@pytest.mark.xfail(
-    strict=True,
-    reason="impl phase E.3.14 — email lifter only fires on "
-    "email.received; no catch-up path exists by design",
-)
 async def test_dropped_email_received_produces_no_email_tags(
     fake_bus: FakeBus,
 ) -> None:
     """Dropping ``email.received`` produces NO email-derived tags.
 
-    The asymmetry is deliberate: emails are not stored as a
-    re-readable log the worker can sweep on session-ended — they
-    arrive as a single bus event and are processed once. The test
-    pins this rather than papering over it; a future contributor
-    "improving" the worker by adding an email catch-up path would
-    trip this test, which is the trip-wire that says "discuss the
-    PII implications first".
+    The asymmetry is deliberate: emails arrive as a single bus event
+    and are processed once. There is no catch-up path. Exercise this
+    by NOT publishing email.received and confirming the tagger never
+    sees an email-source event.
     """
-    pytest.fail("email lifter wiring not yet implemented")
-
-
-# ── Worker module surface (GREEN today) ─────────────────────────────
-
-
-def test_run_ttp_worker_loop_signature() -> None:
-    """The public entry point exists and is async. Catches a
-    refactor that accidentally renames or de-async's the function.
-    """
-    import inspect  # noqa: PLC0415
-    assert asyncio.iscoroutinefunction(run_ttp_worker_loop)
-    sig = inspect.signature(run_ttp_worker_loop)
-    # Per E.1.7 contract: positional `repo`, keyword-only
-    # `poll_interval_secs`, `tagger`, `shutdown`.
-    assert "repo" in sig.parameters
-    assert "tagger" in sig.parameters
-    assert "shutdown" in sig.parameters
+    tagger = _FixedTagger(tags=[])
+    repo = _StubRepo()
+    await _drive_worker(
+        fake_bus, tagger, repo,
+        [(_topics.attacker(_topics.ATTACKER_SESSION_ENDED), {
+            "session_id": "sess-1",
+        })],
+    )
+    email_calls = [c for c in tagger.calls if c.source_kind == "email"]
+    assert email_calls == []

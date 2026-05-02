@@ -3036,7 +3036,20 @@ Order:
 14. **Worker bootstrap** — wire up the loop, the
     `CompositeTagger`, the bus subscriptions, the `RuleEngine`
     watching the `RuleStore`. `test_worker_bus.py` green
-    end-to-end.
+    end-to-end. ✅ done. Inner loop drains a per-process queue
+    populated by one pump task per topic, dispatches each event
+    through `CompositeTagger.tag()`, persists via
+    `repo.insert_tags()` (which already drops sub-0.3 confidence
+    and ON-CONFLICT-DO-NOTHING via the dialect hook), and
+    publishes `ttp.tagged` plus per-technique `ttp.rule.fired.*`
+    only when the insert returned a non-zero rowcount —
+    enforcing the loop-prevention invariant. CompositeTagger
+    seeded with all six lifters (Behavioral, Intel,
+    CanaryFingerprint, Email, Identity, Credential). The
+    intel-catch-up via `attacker.session.ended` is intentionally
+    deferred to E.3.14b — today the worker is 1:1 source-kind →
+    lifter; the catch-up rewrite needs a session→intel join the
+    repo doesn't expose yet.
 15. **UKC bridge** — implement `tactic_to_ukc_phase` and inverse.
     Rewrite the campaign clusterer's
     `IdentityFeatures.commands_by_phase_on_decky` adapter to read
