@@ -132,6 +132,157 @@ def _reset_rate_limiter() -> None:
     with _rl_lock:
         _rl_last.clear()
 
+
+# ─── Session aggregator (TTP `attacker.session.ended` producer) ──────────────
+#
+# The TTP worker subscribes to ``attacker.session.ended`` and turns each
+# emitted command into a ``source_kind="command"`` :class:`TaggerEvent`
+# (see ``decnet/ttp/worker._build_events``). No upstream worker was
+# producing that topic — the rule pack therefore never fired on live
+# traffic. The aggregator below indexes shell-command events
+# per-attacker_ip and emits one ``attacker.session.ended`` envelope
+# whenever the SSH ``sessrec`` worker publishes ``session_recorded``.
+#
+# Memory bound: each attacker_ip's deque is capped by a TTL eviction
+# (default 3600 s). Override via ``DECNET_COLLECTOR_SESSION_AGG_TTL_SEC``.
+
+_SESSION_AGG_TTL_SEC: float = _parse_float_env(
+    "DECNET_COLLECTOR_SESSION_AGG_TTL_SEC", 3600.0,
+)
+
+
+def _parse_iso_ts(value: str) -> Optional[datetime]:
+    """Best-effort ISO-8601 parse for parsed event timestamps.
+
+    The collector's parser stamps ``timestamp`` either as the original
+    ISO-8601 string (when ``datetime.fromisoformat`` failed) or as the
+    reformatted ``%Y-%m-%d %H:%M:%S`` string. Both round-trip through
+    ``fromisoformat`` after a space→T swap. Returns None if neither
+    shape parses — the aggregator skips events it can't time-stamp.
+    """
+    if not value:
+        return None
+    candidates = (value, value.replace(" ", "T"))
+    for cand in candidates:
+        try:
+            return datetime.fromisoformat(cand)
+        except ValueError:
+            continue
+    return None
+
+
+class _SessionAggregator:
+    """Per-attacker_ip command index that emits ``attacker.session.ended``.
+
+    Thread-safe — :meth:`add_event` is called from the per-container
+    stream threads. Internal state is protected by a single lock; the
+    publish fan-out happens inside the lock for simplicity (the
+    downstream publish_fn is the thread-safe marshaller from
+    :mod:`decnet.bus.publish`, which is non-blocking).
+    """
+
+    def __init__(
+        self,
+        publish_fn: Callable[[str, dict[str, Any], str], None],
+        *,
+        ttl_sec: float = _SESSION_AGG_TTL_SEC,
+    ) -> None:
+        self._publish = publish_fn
+        self._ttl = ttl_sec
+        self._lock = threading.Lock()
+        # attacker_ip → list of (timestamp, parsed_event) tuples.
+        # Stored as a list rather than a deque so the ``in_window``
+        # filter can index linearly; the per-attacker volume is
+        # bounded by the TTL and by typical session size (≤ a few
+        # hundred commands) so this stays cheap.
+        self._cmds: dict[str, list[tuple[datetime, dict[str, Any]]]] = {}
+
+    def add_event(self, parsed: dict[str, Any]) -> None:
+        """Index a parsed event. Emits on ``session_recorded``."""
+        event_type = parsed.get("event_type", "")
+        attacker_ip = parsed.get("attacker_ip") or ""
+        if not attacker_ip or attacker_ip == "Unknown":
+            return
+        ts = _parse_iso_ts(str(parsed.get("timestamp", "")))
+        if ts is None:
+            return
+        with self._lock:
+            self._evict_expired(ts)
+            if event_type == "command":
+                self._cmds.setdefault(attacker_ip, []).append((ts, parsed))
+                return
+            if event_type == "session_recorded":
+                self._emit_session(parsed, attacker_ip, ts)
+
+    def _evict_expired(self, now: datetime) -> None:
+        """Drop commands older than ``self._ttl`` seconds."""
+        cutoff = now.timestamp() - self._ttl
+        for ip, entries in list(self._cmds.items()):
+            kept = [(t, p) for t, p in entries if t.timestamp() >= cutoff]
+            if kept:
+                self._cmds[ip] = kept
+            else:
+                del self._cmds[ip]
+
+    def _emit_session(
+        self, parsed: dict[str, Any], attacker_ip: str, ended_at: datetime,
+    ) -> None:
+        """Build an ``attacker.session.ended`` envelope and publish it.
+
+        Slices the per-IP deque to commands whose timestamp falls
+        inside ``[ended_at - duration_s, ended_at]``. Commands stay in
+        the deque after the slice — the TTL eviction is the only path
+        that drops them, so two back-to-back sessions for the same IP
+        share the visible window without losing rows.
+        """
+        fields = parsed.get("fields", {}) or {}
+        duration_raw = fields.get("duration_s") or "0"
+        try:
+            duration_s = float(duration_raw)
+        except (TypeError, ValueError):
+            duration_s = 0.0
+        sid = str(fields.get("sid") or "")
+        service = str(fields.get("service") or parsed.get("service") or "")
+        decky = parsed.get("decky") or ""
+
+        commands_window = self._cmds.get(attacker_ip, [])
+        cutoff_lo = ended_at.timestamp() - max(duration_s, 0.0)
+        commands: list[dict[str, Any]] = []
+        for idx, (cmd_ts, cmd_parsed) in enumerate(commands_window):
+            if cmd_ts.timestamp() < cutoff_lo:
+                continue
+            cmd_fields = cmd_parsed.get("fields", {}) or {}
+            cmd_text = (
+                cmd_fields.get("command")
+                or cmd_fields.get("cmd")
+                or cmd_parsed.get("msg", "")
+            )
+            commands.append({
+                "id": f"{sid}#{idx}" if sid else f"{attacker_ip}-{cmd_ts.isoformat()}",
+                "command_text": str(cmd_text),
+                "ts": cmd_ts.isoformat(),
+                "decky": cmd_parsed.get("decky", ""),
+                "service": cmd_parsed.get("service", ""),
+            })
+
+        payload: dict[str, Any] = {
+            "session_id": sid or None,
+            "attacker_uuid": None,  # consumer resolves via repo
+            "attacker_ip": attacker_ip,
+            "decky_id": decky,
+            "service": service,
+            "ended_at": ended_at.isoformat(),
+            "duration_s": duration_s,
+            "commands": commands,
+        }
+        topic = _topics.attacker(_topics.ATTACKER_SESSION_ENDED)
+        try:
+            self._publish(topic, payload, _topics.ATTACKER_SESSION_ENDED)
+        except Exception as exc:  # noqa: BLE001
+            logger.debug(
+                "collector: session.ended publish failed: %s", exc,
+            )
+
 # ─── RFC 5424 parser ──────────────────────────────────────────────────────────
 
 _RFC5424_RE = re.compile(
@@ -479,12 +630,17 @@ def _make_system_log_publisher(
     thread can call it unconditionally.  Otherwise each call is marshalled
     onto *loop* (the asyncio event loop that owns the bus socket) via
     ``make_thread_safe_publisher``.
+
+    The same call also feeds a :class:`_SessionAggregator` so shell
+    commands are indexed per-attacker_ip and ``attacker.session.ended``
+    fires whenever the SSH ``sessrec`` worker logs ``session_recorded``.
     """
     raw_publish = make_thread_safe_publisher(bus, loop) if bus is not None else None
     if raw_publish is None:
         return lambda _parsed: None
 
     topic = _topics.system(_topics.SYSTEM_LOG)
+    aggregator = _SessionAggregator(raw_publish)
 
     def _publish(parsed: dict[str, Any]) -> None:
         event_type = parsed.get("event_type", "")
@@ -499,6 +655,7 @@ def _make_system_log_publisher(
             },
             event_type,
         )
+        aggregator.add_event(parsed)
 
     return _publish
 
