@@ -33,3 +33,18 @@ stays YAML-only.
 
 Trigger: v0 precision targets met + at least one downstream user
 who needs it.
+
+### `attacker.email.received` producer — wire when SMTP-receive
+### persistence lands
+
+The TTP worker subscribes to `email.received` for the EmailLifter
+(R0041–R0048), but no upstream component publishes the topic today.
+The honeypot SMTP-relay path (`decnet/services/smtp_relay.py`) does
+not persist received emails to a DB table the way ingester /
+collector persist log events, so there is no source row to fan out
+on. See `development/TTP_TAGGING.md` §"Bus topics → Producer
+wiring" for the full producer audit.
+
+Trigger: SMTP-receive persistence model lands (a `ReceivedEmail`
+SQLModel + ingest path). Wire the publisher in the same PR.
+Owner: TBD.
