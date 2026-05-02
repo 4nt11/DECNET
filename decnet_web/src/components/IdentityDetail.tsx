@@ -3,6 +3,7 @@ import { useParams, useNavigate } from 'react-router-dom';
 import { ArrowLeft, Crosshair, Filter, Fingerprint, Globe, Radio } from '../icons';
 import api from '../utils/api';
 import EmptyState from './EmptyState/EmptyState';
+import TTPsObservedSection from './TTPsObservedSection';
 import { useIdentityStream } from './useIdentityStream';
 import './Dashboard.css';
 
@@ -194,6 +195,8 @@ const IdentityDetail: React.FC = () => {
           </span>
         </div>
       </div>
+
+      <TTPsObservedSection scope="identity" uuid={identity.uuid} />
 
       {(ja3List.length > 0 || hasshList.length > 0 || c2List.length > 0) && (
         <div className="logs-section">

@@ -3075,7 +3075,16 @@ Order:
     `AttackerDetail` per-IP slice, Navigator export buttons,
     rule-state controls (disable / clip / TTL) backed by the
     `set_state()` API. UI smoke tests via the existing dev-server
-    flow per project convention.
+    flow per project convention. ✅ done.
+    `TTPsObservedSection.tsx` is the shared analyst-facing
+    component (scope=`identity`|`attacker`); the Identity scope
+    carries the Navigator export button. `RuleStateControls.tsx`
+    is the admin-only operational panel — server-gated by
+    `require_admin` AND client-gated on `/config?.role` so a
+    non-admin never sees the controls. Wired into Config.tsx as
+    a new "TTP RULES" admin tab. Empty state literal "NO
+    TECHNIQUES OBSERVED YET" per the design doc — no spinner.
+    `tsc --noEmit` + `vite build` clean.
 17. **Schemathesis pass** — full API fuzz including the new TTP
     routes. Document any new 4xx codes per the project's
     "POST/PUT/PATCH 400" convention.

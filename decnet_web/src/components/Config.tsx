@@ -2,6 +2,7 @@ import React, { useEffect, useState } from 'react';
 import api from '../utils/api';
 import { Settings, Users, Sliders, Trash2, UserPlus, Key, Save, Shield, AlertTriangle, Palette, Activity, Square, RefreshCw, Play } from '../icons';
 import { useToast } from './Toasts/useToast';
+import RuleStateControls from './RuleStateControls';
 import './Dashboard.css';
 import './Config.css';
 
@@ -238,6 +239,7 @@ const Config: React.FC = () => {
     { key: 'globals', label: 'GLOBAL VALUES', icon: <Settings size={14} /> },
     { key: 'appearance', label: 'APPEARANCE', icon: <Palette size={14} /> },
     ...(isAdmin ? [{ key: 'workers', label: 'WORKERS', icon: <Activity size={14} /> }] : []),
+    ...(isAdmin ? [{ key: 'ttp', label: 'TTP RULES', icon: <Shield size={14} /> }] : []),
   ];
 
   return (
@@ -492,6 +494,12 @@ const Config: React.FC = () => {
       {/* WORKERS TAB (admin only, server-gated too) */}
       {activeTab === 'workers' && isAdmin && (
         <WorkersPanel pushToast={pushToast} />
+      )}
+
+      {/* TTP RULES TAB — admin only. RuleStateControls also self-gates
+          on /config?.role so a state leak can't render it. */}
+      {activeTab === 'ttp' && isAdmin && (
+        <RuleStateControls />
       )}
 
       {/* APPEARANCE TAB */}

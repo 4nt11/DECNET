@@ -6,6 +6,7 @@ import ArtifactDrawer from './ArtifactDrawer';
 import MailDrawer from './MailDrawer';
 import SessionDrawer from './SessionDrawer';
 import EmptyState from './EmptyState/EmptyState';
+import TTPsObservedSection from './TTPsObservedSection';
 import { useIdentityStream } from './useIdentityStream';
 import './Dashboard.css';
 
@@ -1582,6 +1583,9 @@ const AttackerDetail: React.FC = () => {
           </div>
         </div>
       )}
+
+      {/* TTPs Observed (per-IP slice) — see TTP_TAGGING.md §"UI surface" */}
+      <TTPsObservedSection scope="attacker" uuid={attacker.uuid} />
 
       {/* Timestamps */}
       <Section title="TIMELINE" open={openSections.timeline} onToggle={() => toggle('timeline')}>
