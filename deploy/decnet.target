@@ -18,6 +18,7 @@ Wants=decnet-bus.service \
       decnet-enrich.service \
       decnet-clusterer.service \
       decnet-campaign-clusterer.service \
+      decnet-ttp.service \
       decnet-webhook.service \
       decnet-canary.service \
       decnet-orchestrator.service

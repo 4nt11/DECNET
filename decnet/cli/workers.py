@@ -295,3 +295,57 @@ def register(app: typer.Typer) -> None:
             asyncio.run(_run())
         except KeyboardInterrupt:
             console.print("\n[yellow]Campaign clusterer stopped.[/]")
+
+    @app.command(name="ttp")
+    def ttp(
+        poll_interval_secs: float = typer.Option(
+            60.0, "--poll-interval", "-i",
+            help="Slow-tick fallback when the bus is idle or unavailable (seconds)",
+        ),
+        daemon: bool = typer.Option(
+            False, "--daemon", "-d",
+            help="Detach to background as a daemon process",
+        ),
+    ) -> None:
+        """TTP-tagging worker — MITRE ATT&CK technique tagging.
+
+        Bus-woken on ``attacker.session.ended`` / ``attacker.observed``
+        / ``attacker.intel.enriched`` / ``identity.formed`` /
+        ``identity.merged`` / ``credential.reuse.detected`` /
+        ``email.received`` / ``canary.>``. Dispatches each event
+        through the :class:`CompositeTagger` (RuleEngine +
+        Behavioral / Intel / Email / CanaryFingerprint / Identity /
+        Credential lifters), persists ``ttp_tag`` rows via the
+        idempotent ``INSERT OR IGNORE`` write, and publishes
+        ``ttp.tagged`` + per-technique ``ttp.rule.fired.*`` only when
+        the insert returned a non-zero rowcount (loop-prevention
+        invariant from TTP_TAGGING.md §"Bus topics").
+        """
+        import asyncio
+        from decnet.cli.gating import _require_master_mode
+        from decnet.ttp.worker import run_ttp_worker_loop
+        from decnet.web.dependencies import repo
+
+        _require_master_mode("ttp")
+
+        if daemon:
+            log.info("ttp daemonizing poll=%s", poll_interval_secs)
+            _utils._daemonize()
+
+        log.info("ttp command invoked poll=%s", poll_interval_secs)
+        console.print(
+            f"[bold cyan]TTP tagging worker starting[/] "
+            f"poll={poll_interval_secs}s"
+        )
+        console.print("[dim]Press Ctrl+C to stop[/]")
+
+        async def _run() -> None:
+            await repo.initialize()
+            await run_ttp_worker_loop(
+                repo, poll_interval_secs=poll_interval_secs,
+            )
+
+        try:
+            asyncio.run(_run())
+        except KeyboardInterrupt:
+            console.print("\n[yellow]TTP tagging worker stopped.[/]")

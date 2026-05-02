@@ -3050,6 +3050,14 @@ Order:
     deferred to E.3.14b — today the worker is 1:1 source-kind →
     lifter; the catch-up rewrite needs a session→intel join the
     repo doesn't expose yet.
+    Worker registration: `decnet ttp` CLI command lands in
+    `decnet/cli/workers.py` (master-only, gated through
+    `MASTER_ONLY_COMMANDS` in `decnet/cli/gating.py`); the
+    rendered systemd unit at `deploy/decnet-ttp.service.j2`
+    sits one layer above the identity / intel / reuse-correlator
+    workers via `After=` deps and is included in
+    `deploy/decnet.target`. `ProtectHome=read-only` suffices —
+    FilesystemRuleStore only reads `./rules/ttp/`.
 15. **UKC bridge** — implement `tactic_to_ukc_phase` and inverse.
     Rewrite the campaign clusterer's
     `IdentityFeatures.commands_by_phase_on_decky` adapter to read
@@ -3087,7 +3095,19 @@ Order:
     `tsc --noEmit` + `vite build` clean.
 17. **Schemathesis pass** — full API fuzz including the new TTP
     routes. Document any new 4xx codes per the project's
-    "POST/PUT/PATCH 400" convention.
+    "POST/PUT/PATCH 400" convention. ✅ done.
+    `POST /ttp/rules/{rule_id}/state` already documents 400
+    (manual-parse for malformed JSON, per
+    `feedback_schemathesis_400.md`); the GET rollups
+    (by-identity / by-attacker / by-campaign / by-session /
+    techniques / rules / export-navigator{,/identity})
+    uniformly document 401 + 403 per the auth-gated convention.
+    `wiki-checkout/Service-Bus.md` updated to flip the TTP
+    worker topics from "_reserved (TTP worker)_" to actual
+    publisher attribution (`decnet.ttp.worker`) now that the
+    worker bootstrap publishes them. Suppression-event publish
+    stays deferred per the v0 contract — the repo drops
+    sub-floor confidence directly, no bus event.
 
 ### E.4 Out-of-band tasks (not gated on the above)
 
