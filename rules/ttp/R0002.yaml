@@ -3,11 +3,11 @@ rule_version: 1
 name: password_guessing
 description: |
   Multiple passwords tried against a single account in a window.
-  Cross-event; BehavioralLifter (E.3.9).
+  Cross-event; CredentialLifter (E.3.13).
 applies_to:
   - auth_attempt
 match:
-  kind: lifter:password_guessing
+  kind: lifter:credential_password_guessing
   pw_threshold: 5
   window_minutes: 5
 emits:

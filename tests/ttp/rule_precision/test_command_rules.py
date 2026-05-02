@@ -38,12 +38,12 @@ CohortLoader = Callable[[str], list[CorpusRow]]
 
 # Lifter-bound rules: cannot fire from the v0 engine.
 _LIFTER_BOUND: dict[str, str] = {
-    "R0001": "impl phase E.3.9 (BehavioralLifter — auth brute count)",
-    "R0002": "impl phase E.3.9 (BehavioralLifter — password guessing)",
+    "R0001": "impl phase E.3.13 (CredentialLifter — auth brute count)",
+    "R0002": "impl phase E.3.13 (CredentialLifter — password guessing)",
     "R0003": "impl phase E.3.13 (IdentityLifter — password spraying)",
     "R0004": "impl phase E.3.13 (CredentialLifter — credential reuse)",
-    "R0005": "impl phase E.3.9 (BehavioralLifter — valid account use)",
-    "R0006": "impl phase E.3.9 (BehavioralLifter — default creds)",
+    "R0005": "impl phase E.3.13 (CredentialLifter — valid account use)",
+    "R0006": "impl phase E.3.13 (CredentialLifter — default creds)",
     "R0030": "impl phase E.3.9 (BehavioralLifter — JARM/HASSH match)",
 }
 

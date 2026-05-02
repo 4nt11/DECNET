@@ -39,14 +39,9 @@ from tests.ttp._stub_store import StubRuleStore
 def _make_lifter(cls: type[TolerantTagger]) -> TolerantTagger:
     """Construct a lifter with whatever its current signature wants.
 
-    Implemented lifters (E.3.9–E.3.12) take a :class:`RuleStore`; the
-    still-empty IdentityLifter / CredentialLifter (E.3.13) take no args.
+    Every shipped lifter (E.3.9–E.3.13) takes a :class:`RuleStore`.
     """
-    if cls in {
-        BehavioralLifter, IntelLifter, CanaryFingerprintLifter, EmailLifter,
-    }:
-        return cls(StubRuleStore())  # type: ignore[call-arg]
-    return cls()
+    return cls(StubRuleStore())  # type: ignore[call-arg]
 
 
 def _ev(source_kind: str, payload: dict[str, Any] | None = None) -> TaggerEvent:

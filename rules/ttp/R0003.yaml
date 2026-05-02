@@ -7,7 +7,7 @@ description: |
 applies_to:
   - identity
 match:
-  kind: lifter:password_spraying
+  kind: lifter:identity_password_spraying
   account_threshold: 3
 emits:
   - tactic: TA0006

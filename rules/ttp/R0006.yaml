@@ -3,12 +3,12 @@ rule_version: 1
 name: default_credentials
 description: |
   Login attempt with a known default credential pair (root/root,
-  admin/admin, etc.). BehavioralLifter (E.3.9) reads credentials
+  admin/admin, etc.). CredentialLifter (E.3.13) reads credentials
   table.
 applies_to:
   - auth_attempt
 match:
-  kind: lifter:default_credentials
+  kind: lifter:credential_default_credentials
   pairs:
     - [root, root]
     - [admin, admin]

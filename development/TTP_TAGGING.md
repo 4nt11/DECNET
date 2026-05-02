@@ -3024,7 +3024,15 @@ Order:
     open-relay (R0041) territory.
 13. **IdentityLifter + CredentialLifter** — cross-Attacker rollups.
     Bus-wake on `identity.formed` / `identity.merged` /
-    `credential.reuse.detected`.
+    `credential.reuse.detected`. ✅ done. IdentityLifter owns
+    `lifter:identity_*` (R0003 password spraying); CredentialLifter
+    owns `lifter:credential_*` (R0001 generic auth brute, R0002
+    password guessing, R0004 reuse, R0005 valid-account use, R0006
+    default credentials). Identity-rollup tags null `attacker_uuid`
+    on emit so the worked-example invariant holds. R0001/R0002/R0005/
+    R0006 YAML kinds were normalised to the `lifter:credential_`
+    prefix in this commit (the doc-promised "YAMLs normalised in a
+    separate refactor commit" lands here, not in E.3.9).
 14. **Worker bootstrap** — wire up the loop, the
     `CompositeTagger`, the bus subscriptions, the `RuleEngine`
     watching the `RuleStore`. `test_worker_bus.py` green

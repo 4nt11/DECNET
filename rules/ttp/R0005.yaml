@@ -3,11 +3,11 @@ rule_version: 1
 name: valid_account_use
 description: |
   Successful authentication on a previously-brute-forced account.
-  BehavioralLifter (E.3.9).
+  CredentialLifter (E.3.13).
 applies_to:
   - auth_attempt
 match:
-  kind: lifter:valid_account_use
+  kind: lifter:credential_valid_account_use
   require_prior_brute: true
 emits:
   - tactic: TA0001

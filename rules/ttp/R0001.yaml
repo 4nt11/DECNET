@@ -3,12 +3,12 @@ rule_version: 1
 name: generic_auth_brute
 description: |
   Repeated failed auth across services/accounts. Cross-event;
-  emitted by the BehavioralLifter (E.3.9) — v0 RuleEngine cannot
+  emitted by the CredentialLifter (E.3.13) — v0 RuleEngine cannot
   count.
 applies_to:
   - auth_attempt
 match:
-  kind: lifter:auth_brute_generic
+  kind: lifter:credential_auth_brute_generic
   fail_threshold: 5
   window_minutes: 5
 emits:

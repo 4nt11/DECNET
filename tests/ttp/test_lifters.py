@@ -24,11 +24,8 @@ from tests.ttp._stub_store import StubRuleStore
 
 
 def _instantiate(cls: type[TolerantTagger]) -> TolerantTagger:
-    if cls in {
-        BehavioralLifter, IntelLifter, CanaryFingerprintLifter, EmailLifter,
-    }:
-        return cls(StubRuleStore())  # type: ignore[call-arg]
-    return cls()
+    """Every shipped lifter (E.3.9–E.3.13) takes a :class:`RuleStore`."""
+    return cls(StubRuleStore())  # type: ignore[call-arg]
 
 ALL_LIFTERS = [
     BehavioralLifter,
