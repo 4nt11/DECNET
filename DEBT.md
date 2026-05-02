@@ -63,42 +63,92 @@ R0043 / R0044 / R0045, and partial for R0046 (extension lane only).
 The remaining R0042 / R0046-deep / R0047 / R0048 lanes ride on the
 heavyweight extraction follow-up below.
 
-### EmailLifter heavyweight feature extraction — R0042 / R0046 / R0047 / R0048
+### EmailLifter heavyweight feature extraction — PARTIAL PAID 2026-05-02
 
-The cheap header / domain / extension extractions landed with the
-2026-05-02 producer paydown above. These predicates still need
-deeper signal before they fire:
+The Layer-2 extractors for R0042 / R0046 (macro / password /
+smuggling lanes) / R0048 landed in commits `291b78c1` (decky
+`_summarize_message` extension) and the follow-up ingester producer
+projection. After paydown the bus payload carries:
 
-- **R0042 (mass phish)** — needs `body_simhash`. A near-duplicate
-  hash (simhash / minhash) over the body lets the lifter score
-  "same template fanned out to many recipients." The extractor is
-  decky-side; the wire field is a single string.
-- **R0046 (malicious attachment)** — extension lane fires today.
-  The remaining lanes need:
-  - `attachment_macros: bool` — Office macro detection (oletools or
-    a minimal VBA-stream sniff inside the .ole / .docx zip).
-  - `attachment_password_protected: bool` — encrypted-archive
-    detection across .zip / .7z / .rar.
-  - `html_smuggling: bool` — heuristic over HTML body parts looking
-    for the canonical `<a download>` + base64-blob / Blob() pattern.
-  - `mal_hash_match: bool` — match against a curated bad-hash feed
-    (provider TBD; could ride on the same enrich worker as
-    AttackerIntel).
-- **R0047 (BEC) / R0048 (encoded payload)** — both predicates read
-  `body_text`. We deliberately do NOT ship raw body text on the bus
-  today: PII concerns, payload size, and the EmailLifter's evidence
-  filter strips it anyway. The wire-up needs either (a) a hashed /
-  truncated body projection, (b) the lifter reaching back to fetch
-  the .eml off disk on the same host, or (c) a privacy-safe
-  intermediate (BEC-keyword presence flags, base64 byte counts)
-  that satisfies the predicates without leaking raw text. Pick one
-  before the extractor work.
+- `body_simhash` — inlined 64-bit Charikar simhash for R0042
+- `body_base64_bytes` — largest decoded base64 chunk size for R0048
+- `attachment_macros` — OOXML `vbaProject.bin` sniff for R0046
+- `attachment_password_protected` — ZIP encryption flag + 7z / RAR
+  / CFBF magic-byte match for R0046
+- `html_smuggling` — lxml structural parse (with regex fallback) for
+  R0046's HTML-smuggling lane
 
-Field map per rule: `development/TTP_TAGGING.md` §"Bus topics →
-Producer wiring" + `decnet/ttp/impl/email_lifter.py` predicates.
+R0042 / R0046 (three lanes) / R0048 fire end-to-end after the
+2026-05-02 paydown. The remaining lanes are split into two narrower
+follow-up entries below: `R0046 mal_hash_match` (needs a curated
+bad-hash feed — feed integration, not extraction) and `R0047 BEC`
+(needs body_text on the wire, blocked on the agent UID/GID DEBT
+entry that gates artifact disk-reach).
 
-Trigger: any of these rules generates enough signal in production
-to justify the extractor cost, OR a bad-hash feed becomes available
-and unblocks R0046's mal_hash_match lane in particular.
+### EmailLifter mal-hash feed integration — R0046 mal_hash_match
+
+R0046's `mal_hash_match` lane stays gated until DECNET has a
+curated bad-hash feed it can lookup attachment SHA-256s against.
+Until then the producer ships
+`attachment_sha256s: list[str]` on the bus (already does as of the
+2026-05-02 paydown) but no producer or worker resolves a
+`mal_hash_match: bool` against a feed.
+
+Design sketch (mirrors the Feodo bulk-feed pattern at
+`decnet/intel/feodo.py`):
+
+- **Feed source**: MalwareBazaar's public SHA-256 dump as the v0
+  candidate (free, daily refresh, ~100 MB compressed). Operators
+  with paid VT subscriptions can swap the provider behind the same
+  factory.
+- **Storage**: in-memory set keyed by sha256, TTL-cached on a slow
+  refresh loop. Mirror `FeodoProvider`'s `_ensure_fresh` /
+  `_refresh` shape exactly — the same trade-offs apply (free at
+  call-site, one network round-trip per refresh window).
+- **Wiring**: ingester reads each `attachment_sha256` in the
+  manifest at `_publish_email_received` time, checks against the
+  cached feed, sets `mal_hash_match: bool` on the bus payload.
+- **Rule pack**: no rule changes. `_p_malicious_attachment` already
+  reads `payload.get("mal_hash_match")` — silent today because the
+  field is absent.
+
+Trigger: a curated feed source is selected (MalwareBazaar dump or
+better) and the operator has bandwidth / disk for a fresh refresh
+loop.
 Owner: TBD.
-Filed: 2026-05-02 alongside the DEBT #3 paydown.
+Filed: 2026-05-02 alongside the heavyweight paydown.
+
+### EmailLifter R0047 BEC — unblock when artifact disk-reach lands
+
+R0047's predicate (`_p_bec` at
+`decnet/ttp/impl/email_lifter.py:244`) reads `body_text` and
+`subject`, substring-matching them against per-rule keyword lists.
+Shipping raw body text on the abstracted service bus is the wrong
+privacy stance — the bus transport is abstracted (the UNIX-socket
+implementation today may swap to a networked transport tomorrow),
+and treating "loopback today" as a license to ship PII would bite
+the moment that swap happens.
+
+The right solution is **disk-reach**: the EmailLifter on tag-time
+opens the `.eml` from the artifact tree at
+`/var/lib/decnet/artifacts/{decky}/smtp/{stored_as}` and runs the
+predicate against the body parsed in-process. Bus carries only the
+artifact pointer; raw body text never leaves the host disk
+boundary.
+
+This is currently **blocked** by an unresolved UID/GID DEBT entry
+— `decnet ttp` will run on agents but cannot read artifact files
+written by the SMTP decky even on the same host because of the
+permission mismatch. R0047 stays gated until that resolves; the
+legacy `_p_bec` body_text path remains in place untouched, so
+when disk-reach lands the predicate works without any code
+change.
+
+Trigger: the agent UID/GID DEBT entry is paid, allowing
+`decnet ttp` to read artifacts written by deckies. Then add a
+disk-reach helper to the EmailLifter that opens the `.eml` lazily
+when a body-aware predicate runs.
+Owner: TBD.
+Cross-reference: this entry is gated on the agent UID/GID DEBT
+entry. Resolution of that unblocks R0047 BEC immediately.
+Filed: 2026-05-02 alongside the heavyweight paydown.

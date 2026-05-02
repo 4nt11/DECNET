@@ -674,7 +674,7 @@ debugging silent rule-engine output.
 | `credential.reuse.detected` | `decnet/correlation/reuse_worker.py` | Per-finding publish; gated on `min_targets ≥ 2`. |
 | `attacker.session.ended` | `decnet/collector/worker.py:_SessionAggregator` | Indexes shell `command` events per `attacker_ip` and emits one envelope per `session_recorded` log event. |
 | `canary.{token}.triggered` | `decnet/canary/planter.py` | Per-token canary callbacks. |
-| `email.received` | **none** | No producer in tree (DEBT — wire when SMTP-receive persistence lands). |
+| `email.received` | `decnet/web/ingester.py:_publish_email_received` | Per-message publish after `repo.add_bounty(...)` for `bounty_type="artifact" payload.kind="mail"`. Gated on `repo.get_attacker_uuid_by_ip` resolving — orphans are dropped, never published. |
 
 **`attacker.session.ended` payload shape** (commit-1 of the
 collector producer wiring):
@@ -700,6 +700,69 @@ collector producer wiring):
 DB; the TTP worker resolves it from `attacker_ip` on the consume
 side. `id` per command is `f"{sid}#{idx}"` so the deterministic
 `compute_tag_uuid` collapses on replay (loop-prevention).
+
+**`email.received` payload shape** (Layer-2 paydown 2026-05-02 —
+both cheap projections from commit `e9324aca` and heavyweight
+projections from commit `291b78c1`):
+
+```json
+{
+  "source_id": "<msg_id or stored_as>",
+  "attacker_uuid": "att-7",
+  "attacker_ip": "203.0.113.7",
+  "decky_id": "mail-decky",
+  "service": "smtp",
+  "subject": "URGENT: invoice",
+  "from_domain": "bigcorp.com",
+  "mail_from_domain": "evil.example",
+  "return_path_domain": "kit.evil",
+  "rcpt_count": 3,
+  "rcpt_domains": ["target.tld", "other.tld"],
+  "x_mailer": "PHPMailer 6.0.7",
+  "dkim_signed": true,
+  "spf_pass": false,
+  "urls": ["https://xn--80ak6aa92e.example/login"],
+  "attachment_count": "2",
+  "attachment_sha256s": ["...", "..."],
+  "attachment_extensions": [".docm", ".zip"],
+  "body_simhash": "deadbeefcafebabe",
+  "body_base64_bytes": 8192,
+  "attachment_macros": true,
+  "attachment_password_protected": true,
+  "html_smuggling": false,
+  "stored_as": "<.eml basename in artifact tree>",
+  "body_sha256": "<full .eml hash>"
+}
+```
+
+The bus payload is intentionally **body-text-free**. Per the bus
+transport's abstract-factory model, sensitive content must hold up
+under any future networked transport, not just today's UNIX-socket
+implementation. R0047 BEC and R0048 encoded-payload predicates that
+need raw body text are handled differently:
+
+- **R0048** fires from `body_base64_bytes` — precomputed by the
+  decky during the same parse pass that builds the attachments
+  manifest. The lifter's `_p_encoded_payload:289–298` body_text
+  fallback becomes dead in normal operation but stays in place for
+  tests and unusual payload shapes.
+- **R0047** is **deferred**. The intended solution is disk-reach:
+  the EmailLifter on tag-time opens the `.eml` from the artifact
+  tree using the bus-shipped `stored_as`, parses the body in-
+  process, and runs `_p_bec` against it. Bus carries only the
+  pointer; raw body text never leaves the host disk boundary.
+  Currently blocked by an unresolved agent UID/GID DEBT entry —
+  `decnet ttp` running on agents cannot read artifacts written by
+  deckies on the same host because of the permission mismatch. See
+  DEBT.md "EmailLifter R0047 BEC — unblock when artifact disk-reach
+  lands" for the cross-reference.
+
+Per-attachment booleans (`macro_indicator`, `encrypted`) ride
+inside the decky's `attachments_json` manifest and are reduced to
+top-level OR-flags by `_publish_email_received` at publish time —
+R0046's `_p_malicious_attachment` predicate fires on a single
+positive lane, so the OR-reduction matches the rule's semantics
+exactly.
 
 ### Producer–consumer health checks
 
