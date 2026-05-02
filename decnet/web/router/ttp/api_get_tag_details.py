@@ -25,6 +25,7 @@ from typing import Any, Literal
 from fastapi import APIRouter, Depends, HTTPException, status
 
 from decnet.telemetry import traced as _traced
+from decnet.ttp.attack_catalog import technique_name as _technique_name
 from decnet.web.db.models import TTPTagDetailRow
 from decnet.web.dependencies import repo, require_viewer
 
@@ -71,4 +72,11 @@ async def api_ttp_tag_details(
         sub_technique_id=sub_technique_id,
         limit=limit,
     )
-    return [TTPTagDetailRow(**row) for row in rows]
+    return [
+        TTPTagDetailRow(
+            **row,
+            technique_name=_technique_name(row.get("technique_id")),
+            sub_technique_name=_technique_name(row.get("sub_technique_id")),
+        )
+        for row in rows
+    ]

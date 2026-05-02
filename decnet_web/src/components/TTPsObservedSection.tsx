@@ -18,7 +18,9 @@ import TTPInspector from './TTPInspector';
 
 interface TechniqueRow {
   technique_id: string;
+  technique_name: string | null;
   sub_technique_id: string | null;
+  sub_technique_name: string | null;
   tactic: string;
   count: number;
   first_seen: string;
@@ -161,6 +163,8 @@ const TTPsObservedSection: React.FC<Props> = ({ scope, uuid }) => {
           uuid={uuid}
           techniqueId={selected.technique_id}
           subTechniqueId={selected.sub_technique_id}
+          techniqueName={selected.technique_name}
+          subTechniqueName={selected.sub_technique_name}
           tactic={selected.tactic}
           count={selected.count}
           confidenceMax={selected.confidence_max}
@@ -179,7 +183,12 @@ const TechniqueBar: React.FC<{
   // can never appear (repo confidence floor) so the bar always shows
   // some non-trivial fill.
   const pct = Math.round(Math.max(0, Math.min(1, row.confidence_max)) * 100);
-  const label = row.sub_technique_id ?? row.technique_id;
+  // Prefer the sub-technique label if present (more specific). Each
+  // half is "T#### — Name" when the catalogue has a name, falling
+  // back to the bare ID for techniques not yet catalogued.
+  const id = row.sub_technique_id ?? row.technique_id;
+  const name = row.sub_technique_name ?? row.technique_name;
+  const label = name ? `${id} — ${name}` : id;
   return (
     <div
       role="button"
@@ -194,8 +203,8 @@ const TechniqueBar: React.FC<{
       title="Click to inspect underlying tags + evidence"
       style={{
         display: 'grid',
-        gridTemplateColumns: '160px 1fr 60px',
-        gap: 8,
+        gridTemplateColumns: 'minmax(280px, 2fr) 1fr 60px',
+        gap: 10,
         alignItems: 'center',
         cursor: 'pointer',
         padding: '2px 4px',
@@ -204,7 +213,15 @@ const TechniqueBar: React.FC<{
       onMouseEnter={(e) => { e.currentTarget.style.background = 'rgba(155,135,245,0.06)'; }}
       onMouseLeave={(e) => { e.currentTarget.style.background = 'transparent'; }}
     >
-      <span className="matrix-text">{label}</span>
+      <span
+        className="matrix-text"
+        style={{
+          whiteSpace: 'nowrap',
+          overflow: 'hidden',
+          textOverflow: 'ellipsis',
+        }}
+        title={label}
+      >{label}</span>
       <div
         style={{
           height: 6,

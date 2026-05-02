@@ -250,7 +250,9 @@ class TechniqueRollupRow(BaseModel):
     across the fleet with a count and a most-recent-seen timestamp."""
 
     technique_id: str
+    technique_name: Optional[str] = None
     sub_technique_id: Optional[str] = None
+    sub_technique_name: Optional[str] = None
     tactic: str
     count: int
     last_seen: datetime
@@ -259,10 +261,18 @@ class TechniqueRollupRow(BaseModel):
 class IdentityTechniqueRow(BaseModel):
     """One row of the by-identity / by-attacker / by-session endpoints —
     a distinct (technique, sub_technique) tuple within the requested
-    scope, with an aggregate count and first/last-seen timestamps."""
+    scope, with an aggregate count and first/last-seen timestamps.
+
+    ``technique_name`` / ``sub_technique_name`` come from
+    :mod:`decnet.ttp.attack_catalog` (canonical ATT&CK labels for the
+    pinned release). ``None`` when the ID isn't in the catalogue —
+    the UI falls back to showing the bare ID.
+    """
 
     technique_id: str
+    technique_name: Optional[str] = None
     sub_technique_id: Optional[str] = None
+    sub_technique_name: Optional[str] = None
     tactic: str
     count: int
     first_seen: datetime
@@ -287,7 +297,9 @@ class TTPTagDetailRow(BaseModel):
     decky_id: Optional[str] = None
     tactic: str
     technique_id: str
+    technique_name: Optional[str] = None
     sub_technique_id: Optional[str] = None
+    sub_technique_name: Optional[str] = None
     confidence: float
     rule_id: str
     rule_version: int
@@ -301,7 +313,9 @@ class CampaignTechniqueRow(BaseModel):
     across at least one Identity rolled up into the campaign."""
 
     technique_id: str
+    technique_name: Optional[str] = None
     sub_technique_id: Optional[str] = None
+    sub_technique_name: Optional[str] = None
     tactic: str
     count: int
     identity_count: int

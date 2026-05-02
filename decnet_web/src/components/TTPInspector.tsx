@@ -26,7 +26,9 @@ export interface TTPTagDetailRow {
   decky_id: string | null;
   tactic: string;
   technique_id: string;
+  technique_name: string | null;
   sub_technique_id: string | null;
+  sub_technique_name: string | null;
   confidence: number;
   rule_id: string;
   rule_version: number;
@@ -42,6 +44,8 @@ interface Props {
   uuid: string;
   techniqueId: string;
   subTechniqueId: string | null;
+  techniqueName: string | null;
+  subTechniqueName: string | null;
   tactic: string;
   count: number;
   confidenceMax: number;
@@ -49,7 +53,8 @@ interface Props {
 }
 
 const TTPInspector: React.FC<Props> = ({
-  scope, uuid, techniqueId, subTechniqueId, tactic, count, confidenceMax, onClose,
+  scope, uuid, techniqueId, subTechniqueId, techniqueName, subTechniqueName,
+  tactic, count, confidenceMax, onClose,
 }) => {
   const panelRef = useRef<HTMLDivElement | null>(null);
   useEscapeKey(onClose, true);
@@ -90,7 +95,9 @@ const TTPInspector: React.FC<Props> = ({
     return () => { cancelled = true; };
   }, [scope, uuid, techniqueId, subTechniqueId]);
 
-  const label = subTechniqueId ?? techniqueId;
+  const id = subTechniqueId ?? techniqueId;
+  const name = subTechniqueName ?? techniqueName;
+  const headerLabel = name ? `${id} — ${name}` : id;
 
   return (
     <div
@@ -101,7 +108,7 @@ const TTPInspector: React.FC<Props> = ({
         <div className="bd-head">
           <h3>
             <Crosshair size={14} />
-            <span>{label}</span>
+            <span>{headerLabel}</span>
           </h3>
           <button className="close-btn" onClick={onClose} aria-label="Close">
             <X size={16} />
@@ -117,7 +124,14 @@ const TTPInspector: React.FC<Props> = ({
             <div className="k" style={{ color: 'var(--dim-color)' }}>TACTIC</div>
             <div className="v">{tactic}</div>
             <div className="k" style={{ color: 'var(--dim-color)' }}>TECHNIQUE</div>
-            <div className="v">{techniqueId}{subTechniqueId ? ` / ${subTechniqueId}` : ''}</div>
+            <div className="v">
+              {techniqueId}{techniqueName ? ` — ${techniqueName}` : ''}
+              {subTechniqueId && (
+                <div style={{ marginTop: 2 }}>
+                  ↳ {subTechniqueId}{subTechniqueName ? ` — ${subTechniqueName}` : ''}
+                </div>
+              )}
+            </div>
             <div className="k" style={{ color: 'var(--dim-color)' }}>FIRES</div>
             <div className="v">{count}</div>
             <div className="k" style={{ color: 'var(--dim-color)' }}>MAX CONF</div>
