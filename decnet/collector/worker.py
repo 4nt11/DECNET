@@ -151,6 +151,33 @@ _SESSION_AGG_TTL_SEC: float = _parse_float_env(
 )
 
 
+# Body of a bash PROMPT_COMMAND CMD line:
+#   ``CMD uid=0 user=root src=192.168.1.5 pwd=/root cmd=ls /var/www/html``
+# Splits into the structured fields the inspector renders + the
+# residual ``cmd=`` value (which may itself contain spaces — preserve
+# everything after ``cmd=`` as one token, do NOT word-split).
+_CMD_BODY_HEAD_KV_RE = re.compile(r'(\w+)=(\S+)')
+
+
+def _parse_cmd_msg(msg: str) -> dict[str, str]:
+    """Split a bash CMD msg body into ``{uid, user, src, pwd, command}``.
+
+    Returns the empty dict on a non-CMD msg. ``command`` carries the
+    full post-``cmd=`` rest, including any embedded whitespace —
+    tools like ``nmap -p- 192.168.1.0/24`` would otherwise lose
+    everything after the first space.
+    """
+    if not msg.startswith("CMD "):
+        return {}
+    head, sep, cmd_rest = msg[4:].partition("cmd=")
+    out: dict[str, str] = {}
+    for k, v in _CMD_BODY_HEAD_KV_RE.findall(head):
+        out[k] = v
+    if sep:
+        out["command"] = cmd_rest
+    return out
+
+
 def _parse_iso_ts(value: str) -> Optional[datetime]:
     """Best-effort ISO-8601 parse for parsed event timestamps.
 
@@ -252,18 +279,30 @@ class _SessionAggregator:
             if cmd_ts.timestamp() < cutoff_lo:
                 continue
             cmd_fields = cmd_parsed.get("fields", {}) or {}
+            # Pull structured uid/user/src/pwd/command from the bash
+            # msg body. The inspector renders these as separate
+            # key/value rows, which is much friendlier than dumping
+            # the raw ``CMD uid=0 user=... cmd=...`` string into a
+            # single ``command_text`` blob.
+            parsed_kv = _parse_cmd_msg(str(cmd_parsed.get("msg", "")))
             cmd_text = (
                 cmd_fields.get("command")
                 or cmd_fields.get("cmd")
+                or parsed_kv.get("command")
                 or cmd_parsed.get("msg", "")
             )
-            commands.append({
+            entry: dict[str, Any] = {
                 "id": f"{sid}#{idx}" if sid else f"{attacker_ip}-{cmd_ts.isoformat()}",
                 "command_text": str(cmd_text),
                 "ts": cmd_ts.isoformat(),
                 "decky": cmd_parsed.get("decky", ""),
                 "service": cmd_parsed.get("service", ""),
-            })
+            }
+            for key in ("uid", "user", "src", "pwd"):
+                value = parsed_kv.get(key) or cmd_fields.get(key)
+                if value is not None:
+                    entry[key] = value
+            commands.append(entry)
 
         payload: dict[str, Any] = {
             "session_id": sid or None,

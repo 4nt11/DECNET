@@ -296,6 +296,21 @@ _DEFAULT_MATCH_FIELD: dict[str, str] = {
 }
 
 
+# Per-``source_kind`` auxiliary evidence fields that the engine
+# auto-promotes onto every emitted tag, on top of the rule's
+# explicit ``evidence_fields`` list. The point is operator UX: when
+# a shell rule fires on ``cat /etc/shadow``, the inspector should
+# show *who* ran it (``user``), *where from* (``src``), *as whom*
+# (``uid``), and the working directory (``pwd``) — without forcing
+# every rule author to add the same four fields to every shell
+# rule's ``evidence_fields`` list. Engine-controlled, not per-rule:
+# adding a new aux field is a one-line edit here, not a 30-rule
+# YAML sweep.
+_AUX_EVIDENCE_FIELDS: dict[str, tuple[str, ...]] = {
+    "command": ("uid", "user", "src", "pwd"),
+}
+
+
 def _evaluate_rules(
     rules: list[CompiledRule], event: TaggerEvent,
 ) -> list[TTPTag]:
@@ -330,6 +345,12 @@ def _evaluate_rules(
                     for field in rule.evidence_fields
                     if field in event.payload
                 }
+                # Engine-controlled auxiliary fields per source_kind —
+                # added on top of the rule's explicit list so the
+                # inspector always sees uid/user/src/pwd on shell tags.
+                for aux in _AUX_EVIDENCE_FIELDS.get(event.source_kind, ()):
+                    if aux in event.payload and aux not in evidence:
+                        evidence[aux] = event.payload.get(aux)
                 out.append(TTPTag(
                     uuid=tag_uuid,
                     source_kind=event.source_kind,

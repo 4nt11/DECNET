@@ -120,6 +120,65 @@ def test_get_tagger_includes_rule_engine_tagger_first(
     assert names[0] == "rule_engine"
 
 
+@pytest.mark.asyncio
+async def test_engine_auto_promotes_uid_user_src_pwd_into_evidence() -> None:
+    """Shell-rule evidence should always carry uid/user/src/pwd.
+
+    The rule's ``evidence_fields: [command_text]`` is unchanged; the
+    engine adds the four shell-aux keys when ``source_kind="command"``
+    so the inspector renders structured rows without forcing every
+    rule author to repeat the same evidence_fields list.
+    """
+    rule = _rule(match_spec={"field": "command_text", "pattern": r"\bcat\b"})
+    store = StubRuleStore(compiled=[rule])
+    tagger = RuleEngineTagger(store)
+    await tagger._engine._index.hydrate_from(store, predicate=_is_engine_owned)
+    event = TaggerEvent(
+        source_kind="command",
+        source_id="cmd-1",
+        attacker_uuid="att-1",
+        identity_uuid=None,
+        session_id="sess-1",
+        decky_id="omega-decky",
+        payload={
+            "command_text": "cat /etc/shadow",
+            "uid": "0",
+            "user": "root",
+            "src": "192.168.1.5",
+            "pwd": "/root",
+        },
+    )
+    tags = await tagger.tag(event)
+    assert len(tags) == 1
+    ev = tags[0].evidence
+    assert ev["command_text"] == "cat /etc/shadow"
+    assert ev["uid"] == "0"
+    assert ev["user"] == "root"
+    assert ev["src"] == "192.168.1.5"
+    assert ev["pwd"] == "/root"
+
+
+@pytest.mark.asyncio
+async def test_engine_aux_fields_skip_missing_payload_keys() -> None:
+    """Missing aux keys don't appear in evidence (no ``None`` values)."""
+    rule = _rule(match_spec={"field": "command_text", "pattern": r"\bcat\b"})
+    store = StubRuleStore(compiled=[rule])
+    tagger = RuleEngineTagger(store)
+    await tagger._engine._index.hydrate_from(store, predicate=_is_engine_owned)
+    event = TaggerEvent(
+        source_kind="command",
+        source_id="cmd-1",
+        attacker_uuid="att-1",
+        identity_uuid=None,
+        session_id=None,
+        decky_id=None,
+        payload={"command_text": "cat /etc/shadow"},
+    )
+    tags = await tagger.tag(event)
+    ev = tags[0].evidence
+    assert ev == {"command_text": "cat /etc/shadow"}
+
+
 def test_rule_engine_tagger_is_in_iter_watchables() -> None:
     store = StubRuleStore()
     engine_tagger = RuleEngineTagger(store)

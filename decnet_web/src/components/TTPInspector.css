@@ -131,6 +131,36 @@
   overflow-y: auto;
 }
 
+.ttp-evidence-kvs {
+  background: rgba(0, 0, 0, 0.35);
+  border: 1px solid var(--border);
+  border-radius: 3px;
+  padding: 8px 10px;
+  font-family: var(--mono, ui-monospace, monospace);
+  font-size: 0.74rem;
+  display: grid;
+  grid-template-columns: 60px 1fr;
+  column-gap: 12px;
+  row-gap: 3px;
+  max-height: 320px;
+  overflow-y: auto;
+}
+
+.ttp-evidence-k {
+  color: var(--dim-color);
+  letter-spacing: 1px;
+  text-transform: uppercase;
+  font-size: 0.66rem;
+  align-self: baseline;
+  padding-top: 2px;
+}
+
+.ttp-evidence-v {
+  color: var(--matrix);
+  word-break: break-all;
+  white-space: pre-wrap;
+}
+
 .ttp-empty {
   padding: 24px;
   text-align: center;

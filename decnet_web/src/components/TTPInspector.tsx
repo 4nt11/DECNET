@@ -158,8 +158,63 @@ const TTPInspector: React.FC<Props> = ({
   );
 };
 
+// Evidence keys we promote to the top of the per-card key/value
+// table for shell-command tags. Order matters — these render in
+// the listed order; everything else goes after, alphabetically.
+const _EVIDENCE_PRIMARY_ORDER = [
+  'uid', 'user', 'src', 'pwd', 'cmd', 'command', 'command_text',
+];
+
+const _EVIDENCE_LABEL: Record<string, string> = {
+  uid: 'UID',
+  user: 'USER',
+  src: 'SRC',
+  pwd: 'PWD',
+  cmd: 'CMD',
+  command: 'CMD',
+  command_text: 'CMD',
+};
+
+interface EvidenceRow {
+  key: string;
+  label: string;
+  value: string;
+}
+
+function flattenEvidence(evidence: Record<string, unknown>): EvidenceRow[] {
+  const seen = new Set<string>();
+  const rows: EvidenceRow[] = [];
+  const stringify = (v: unknown): string => {
+    if (v === null || v === undefined) return '—';
+    if (typeof v === 'string') return v;
+    if (typeof v === 'number' || typeof v === 'boolean') return String(v);
+    return JSON.stringify(v);
+  };
+  for (const k of _EVIDENCE_PRIMARY_ORDER) {
+    if (k in evidence && !seen.has(k)) {
+      seen.add(k);
+      rows.push({
+        key: k,
+        label: _EVIDENCE_LABEL[k] ?? k.toUpperCase(),
+        value: stringify(evidence[k]),
+      });
+    }
+  }
+  const remaining = Object.keys(evidence)
+    .filter((k) => !seen.has(k))
+    .sort();
+  for (const k of remaining) {
+    rows.push({
+      key: k,
+      label: _EVIDENCE_LABEL[k] ?? k.toUpperCase(),
+      value: stringify(evidence[k]),
+    });
+  }
+  return rows;
+}
+
 const TTPTagCard: React.FC<{ row: TTPTagDetailRow }> = ({ row }) => {
-  const evidenceText = JSON.stringify(row.evidence ?? {}, null, 2);
+  const evidenceRows = flattenEvidence(row.evidence ?? {});
   return (
     <div className="ttp-tag-card">
       <div className="ttp-card-head">
@@ -186,7 +241,18 @@ const TTPTagCard: React.FC<{ row: TTPTagDetailRow }> = ({ row }) => {
         <div className="k">ATT&CK</div>
         <div className="v">{row.attack_release}</div>
       </div>
-      <pre className="ttp-evidence">{evidenceText}</pre>
+      {evidenceRows.length === 0 ? (
+        <div className="ttp-empty" style={{ padding: '8px' }}>—</div>
+      ) : (
+        <div className="ttp-evidence-kvs">
+          {evidenceRows.map((r) => (
+            <React.Fragment key={r.key}>
+              <div className="ttp-evidence-k">{r.label}</div>
+              <div className="ttp-evidence-v">{r.value}</div>
+            </React.Fragment>
+          ))}
+        </div>
+      )}
     </div>
   );
 };

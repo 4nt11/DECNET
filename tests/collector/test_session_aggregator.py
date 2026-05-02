@@ -31,6 +31,25 @@ def _cmd(ts_iso: str, text: str) -> dict[str, Any]:
     }
 
 
+def _raw_cmd(ts_iso: str, msg: str) -> dict[str, Any]:
+    """Parsed event whose bash CMD body is in ``msg``, fields={}.
+
+    Mirrors what the unmodified collector parser produces for
+    PROMPT_COMMAND lines (the parser deliberately keeps fields empty
+    so the frontend pill rendering doesn't double-up). The aggregator
+    now extracts uid/user/src/pwd/command from that msg body.
+    """
+    return {
+        "timestamp": ts_iso,
+        "decky": "SRV-DELTA-77",
+        "service": "bash",
+        "event_type": "command",
+        "attacker_ip": _ATTACKER_IP,
+        "fields": {},
+        "msg": msg,
+    }
+
+
 def _session_recorded(
     ts_iso: str, sid: str, duration_s: float = 60.0,
 ) -> dict[str, Any]:
@@ -194,6 +213,36 @@ def test_ttl_eviction_drops_old_commands() -> None:
         for _, p in agg._cmds[_ATTACKER_IP]
     ]
     assert remaining == ["fresh"]
+
+
+def test_session_emits_structured_uid_user_src_pwd_when_msg_carries_them(
+    aggregator: _SessionAggregator,
+    captured_publishes: list[tuple[str, dict[str, Any], str]],
+) -> None:
+    """The bash PROMPT_COMMAND msg body splits into structured fields.
+
+    Pins the "inspector wants UID/SRC/PWD/CMD on separate rows"
+    contract. Without this the inspector sees one big
+    ``CMD uid=0 user=root src=… cmd=…`` string and operators have to
+    eyeball the cmd= portion out of the prefix garbage.
+    """
+    aggregator.add_event(_raw_cmd(
+        "2026-05-02T06:22:48",
+        "CMD uid=0 user=root src=192.168.1.5 pwd=/root "
+        "cmd=nmap -p- 192.168.1.0/24",
+    ))
+    aggregator.add_event(_session_recorded(
+        "2026-05-02T06:23:00", sid="sess-x", duration_s=120.0,
+    ))
+    payload = captured_publishes[0][1]
+    cmd = payload["commands"][0]
+    assert cmd["uid"] == "0"
+    assert cmd["user"] == "root"
+    assert cmd["src"] == "192.168.1.5"
+    assert cmd["pwd"] == "/root"
+    # ``command_text`` is the cmd= value, NOT the full "CMD uid=…" line.
+    # nmap's command line carries spaces — we must preserve them.
+    assert cmd["command_text"] == "nmap -p- 192.168.1.0/24"
 
 
 def test_publish_failure_is_swallowed() -> None:
