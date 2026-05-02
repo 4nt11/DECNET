@@ -1,2 +1,7 @@
 {"source_kind": "canary_fingerprint", "payload": {"ua_signature": "HeadlessChrome/119", "navigator_webdriver": true}, "expected_rule_ids": ["R0049"], "label": "webdriver_flag"}
+{"source_kind": "canary_fingerprint", "payload": {"canvas_audio_hash_match": "puppeteer"}, "expected_rule_ids": ["R0050"], "label": "puppeteer_canvas"}
+{"source_kind": "canary_fingerprint", "payload": {"canvas_audio_hash_match": "selenium"}, "expected_rule_ids": ["R0050"], "label": "selenium_canvas"}
+{"source_kind": "canary_fingerprint", "payload": {"webrtc_geo_mismatch": true}, "expected_rule_ids": ["R0051"], "label": "webrtc_leak"}
+{"source_kind": "canary_fingerprint", "payload": {"tz_mismatch_zones": 7}, "expected_rule_ids": ["R0052"], "label": "tz_mismatch"}
+{"source_kind": "canary_fingerprint", "payload": {"platform_ua_inconsistent": true}, "expected_rule_ids": ["R0053"], "label": "platform_inconsistent"}
 {"source_kind": "canary_fingerprint", "payload": {"ua_signature": "Mozilla/5.0", "navigator_webdriver": false}, "expected_rule_ids": [], "label": "negative_browser"}

@@ -44,9 +44,45 @@ async def test_lifter_bound_inert_in_v0(
     assert rule_id not in fired
 
 
+def _build_lifter() -> "CanaryFingerprintLifter":
+    from decnet.ttp.impl.canary_fingerprint_lifter import (
+        CanaryFingerprintLifter,
+    )
+    from tests.ttp._stub_store import StubRuleStore
+
+    rules = [
+        _parse_and_compile(Path("rules/ttp") / f"{rid}.yaml", RuleState())
+        for rid in _RULE_IDS
+    ]
+    lifter = CanaryFingerprintLifter(StubRuleStore(compiled=rules))
+    for rule in rules:
+        lifter._index.install(rule)
+    return lifter
+
+
 @pytest.mark.parametrize("rule_id", _RULE_IDS)
-@pytest.mark.xfail(
-    strict=True, reason="impl phase E.3.11 (CanaryFingerprintLifter)",
-)
-def test_canary_rule_precision(rule_id: str) -> None:
-    pytest.fail(f"{rule_id}: CanaryFingerprintLifter not yet shipped (E.3.11)")
+def test_canary_rule_precision(
+    rule_id: str,
+    corpus_loader: CohortLoader,
+) -> None:
+    """E.3.11 — drive CanaryFingerprintLifter over the labelled corpus
+    and assert per-rule precision (H-band rules → ≥95%, M-band → ≥80%).
+    R0052 is M-band (0.7 confidence); the rest are H-band.
+    """
+    import asyncio
+
+    from tests.ttp.rule_precision.conftest import precision_for
+
+    rows = corpus_loader("canary")
+    if not rows:
+        pytest.skip("no canary corpus available")
+    lifter = _build_lifter()
+    fired: dict[str, list[str]] = {}
+    for row in rows:
+        tags = asyncio.run(lifter.tag(make_event(row)))
+        fired[row.label] = [tag.rule_id for tag in tags]
+    precision, _tp, _fp = precision_for(rule_id, rows, fired)
+    threshold = 0.80 if rule_id == "R0052" else 0.95
+    assert precision >= threshold, (
+        f"{rule_id} precision {precision:.2f} < {threshold} on canary corpus"
+    )

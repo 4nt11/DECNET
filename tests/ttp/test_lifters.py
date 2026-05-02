@@ -24,7 +24,7 @@ from tests.ttp._stub_store import StubRuleStore
 
 
 def _instantiate(cls: type[TolerantTagger]) -> TolerantTagger:
-    if cls in {BehavioralLifter, IntelLifter}:
+    if cls in {BehavioralLifter, IntelLifter, CanaryFingerprintLifter}:
         return cls(StubRuleStore())  # type: ignore[call-arg]
     return cls()
 

@@ -42,7 +42,7 @@ def _make_lifter(cls: type[TolerantTagger]) -> TolerantTagger:
     Implemented lifters (E.3.9–E.3.12) take a :class:`RuleStore`; the
     still-empty IdentityLifter / CredentialLifter (E.3.13) take no args.
     """
-    if cls in {BehavioralLifter, IntelLifter}:
+    if cls in {BehavioralLifter, IntelLifter, CanaryFingerprintLifter}:
         return cls(StubRuleStore())  # type: ignore[call-arg]
     return cls()
 
