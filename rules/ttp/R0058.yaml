@@ -1,5 +1,7 @@
 rule_id: R0058
 rule_version: 1
+last_reviewed: "2026-05-02"
+next_review: "2026-08-02"
 name: aggregate_malicious_verdict_bump
 description: |
   Aggregate intel verdict = "malicious" with no specific provider

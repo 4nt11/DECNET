@@ -1,10 +1,20 @@
 rule_id: R0055
-rule_version: 1
+rule_version: 2
+last_reviewed: "2026-05-02"
+next_review: "2026-08-02"
 name: greynoise_classification
 description: |
   GreyNoise classification + tag → ATT&CK technique per A.10.
   IntelLifter reads AttackerIntel.greynoise_classification and
-  greynoise_tags.
+  greynoise_tags. Note: the Community endpoint does not return tags;
+  the tag-driven emits become live only when an operator wires a
+  non-Community provider plan that does.
+
+  v2 (2026-05-02 ship-time audit): expanded ``emits`` to cover
+  T1090 (tor_exit_node), T1110 (ssh_bruteforcer), T1588 (C2-framework
+  tags' second emit) — v1 silently dropped all three. Bare
+  ``classification == "malicious"`` now lights T1071 at half
+  multiplier when no recognised tag fires.
 applies_to:
   - intel
 match:
@@ -18,6 +28,16 @@ emits:
   - tactic: TA0011
     technique_id: T1071
     confidence: 0.7
+  - tactic: TA0011
+    technique_id: T1090
+    confidence: 0.7
+  - tactic: TA0006
+    technique_id: T1110
+    confidence: 0.7
+  - tactic: TA0042
+    technique_id: T1588
+    confidence: 0.7
 evidence_fields:
   - greynoise_classification
   - greynoise_tags
+  - greynoise_name

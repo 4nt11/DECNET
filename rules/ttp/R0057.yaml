@@ -1,9 +1,20 @@
 rule_id: R0057
-rule_version: 1
-name: threatfox_ioc
+rule_version: 2
+last_reviewed: "2026-05-02"
+next_review: "2026-08-02"
+name: threatfox_threat_type
 description: |
-  abuse.ch ThreatFox IOC type → ATT&CK technique mapping with
+  abuse.ch ThreatFox ``threat_type`` → ATT&CK technique mapping with
   family attribution.
+
+  v2 (2026-05-02 ship-time audit): keys on ``threat_type`` (the
+  canonical ThreatFox taxonomy) instead of ``ioc_type`` — v1 had it
+  backwards, ``ioc_type`` is the indicator format (url / domain /
+  hash) and carries no ATT&CK signal. Also expanded ``emits`` to
+  include T1105 (payload_delivery) and T1056 (cc_skimming) which v1
+  silently dropped, and the lifter now reads from the bus payload
+  fields ``threatfox_threat_types`` (list) populated by the intel
+  worker.
 applies_to:
   - intel
 match:
@@ -17,7 +28,13 @@ emits:
     technique_id: T1588
     sub_technique_id: T1588.001
     confidence: 0.8
+  - tactic: TA0011
+    technique_id: T1105
+    confidence: 0.75
+  - tactic: TA0009
+    technique_id: T1056
+    confidence: 0.7
 evidence_fields:
-  - ioc_type
-  - malware_family
-  - threat_type
+  - threatfox_threat_types
+  - threatfox_ioc_types
+  - threatfox_malware_families
