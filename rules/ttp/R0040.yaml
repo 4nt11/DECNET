@@ -7,7 +7,7 @@ description: |
 applies_to:
   - session
 match:
-  kind: lifter:tftp_router_config
+  kind: lifter:behavioral_tftp_router_config
   filename_patterns:
     - '.*-confg$'
     - '.*\\.cfg$'

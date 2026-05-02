@@ -8,7 +8,7 @@ description: |
 applies_to:
   - session
 match:
-  kind: lifter:docker_escape
+  kind: lifter:behavioral_docker_escape
   signals:
     - 'privileged:true'
     - 'bind:/:/'

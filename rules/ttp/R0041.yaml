@@ -7,7 +7,7 @@ description: |
 applies_to:
   - email
 match:
-  kind: lifter:open_relay
+  kind: lifter:email_open_relay
   rcpt_threshold: 10
   require_foreign_from: true
 emits:

@@ -9,7 +9,7 @@ applies_to:
   - session
   - email
 match:
-  kind: lifter:ransom_note
+  kind: lifter:behavioral_ransom_note
   require_btc_or_xmr: true
   payment_keywords:
     - bitcoin

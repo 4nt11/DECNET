@@ -8,7 +8,7 @@ description: |
 applies_to:
   - session
 match:
-  kind: lifter:db_mass_read
+  kind: lifter:behavioral_db_mass_read
   min_rows: 10000
   min_bytes: 5242880
 emits:

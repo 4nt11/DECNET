@@ -8,7 +8,7 @@ applies_to:
   - session
   - http_request
 match:
-  kind: lifter:k8s_sa_token
+  kind: lifter:behavioral_k8s_sa_token
   paths:
     - '/api/v1/namespaces/[^/]+/secrets'
     - '/var/run/secrets/kubernetes\\.io/serviceaccount'

@@ -8,7 +8,7 @@ description: |
 applies_to:
   - session
 match:
-  kind: lifter:data_destruction
+  kind: lifter:behavioral_data_destruction
   patterns:
     - 'FLUSHALL'
     - 'DROP\\s+DATABASE'

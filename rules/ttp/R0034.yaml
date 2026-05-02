@@ -8,7 +8,7 @@ description: |
 applies_to:
   - session
 match:
-  kind: lifter:exfil_over_web
+  kind: lifter:behavioral_exfil_over_web
   min_payload_bytes: 1048576
   request_threshold: 50
 emits:

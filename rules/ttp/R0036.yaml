@@ -9,7 +9,7 @@ applies_to:
   - session
   - http_request
 match:
-  kind: lifter:credentials_in_files
+  kind: lifter:behavioral_credentials_in_files
   paths:
     - '\\.env'
     - '\\.git/config'

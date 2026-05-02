@@ -8,7 +8,7 @@ description: |
 applies_to:
   - session
 match:
-  kind: lifter:llmnr_poisoning
+  kind: lifter:behavioral_llmnr_poisoning
 emits:
   - tactic: TA0009
     technique_id: T1557

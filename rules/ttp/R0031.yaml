@@ -8,7 +8,7 @@ description: |
 applies_to:
   - session
 match:
-  kind: lifter:beaconing
+  kind: lifter:behavioral_beaconing
   max_jitter_pct: 0.15
   min_interval_s: 10
 emits:
