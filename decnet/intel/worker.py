@@ -20,6 +20,7 @@ from __future__ import annotations
 
 import asyncio
 import contextlib
+import json
 from datetime import datetime, timedelta, timezone
 from typing import Any, Optional
 
@@ -57,6 +58,63 @@ def _aggregate(verdicts: list[Optional[str]]) -> Optional[str]:
         if tier in seen:
             return tier
     return None
+
+
+def _decode_json_list(value: Any) -> list[Any]:
+    if isinstance(value, list):
+        return value
+    if isinstance(value, str) and value:
+        try:
+            decoded = json.loads(value)
+        except (json.JSONDecodeError, TypeError):
+            return []
+        return decoded if isinstance(decoded, list) else []
+    return []
+
+
+def _build_intel_event_payload(
+    attacker_uuid: str,
+    ip: str,
+    row: dict[str, Any],
+    providers: list[IntelProvider],
+) -> dict[str, Any]:
+    """Project the AttackerIntel row into the bus event the TTP worker
+    consumes as ``source_kind="intel"``.
+
+    The TTP worker forwards the payload verbatim to the IntelLifter.
+    Per-provider taxonomy fields (categories, tags, threat_types) are
+    decoded back to native lists here so the lifter does not have to
+    care that the storage layer JSON-encodes them.
+    """
+    return {
+        "attacker_uuid": attacker_uuid,
+        "attacker_ip": ip,
+        "aggregate_verdict": row.get("aggregate_verdict"),
+        "providers": [p.name for p in providers],
+        # AbuseIPDB
+        "abuseipdb_score": row.get("abuseipdb_score"),
+        "abuseipdb_categories": _decode_json_list(
+            row.get("abuseipdb_categories"),
+        ),
+        # GreyNoise
+        "greynoise_classification": row.get("greynoise_classification"),
+        "greynoise_name": row.get("greynoise_name"),
+        "greynoise_tags": _decode_json_list(row.get("greynoise_tags")),
+        # Feodo
+        "feodo_listed": row.get("feodo_listed"),
+        "feodo_malware_family": row.get("feodo_malware_family"),
+        # ThreatFox
+        "threatfox_listed": row.get("threatfox_listed"),
+        "threatfox_threat_types": _decode_json_list(
+            row.get("threatfox_threat_types"),
+        ),
+        "threatfox_ioc_types": _decode_json_list(
+            row.get("threatfox_ioc_types"),
+        ),
+        "threatfox_malware_families": _decode_json_list(
+            row.get("threatfox_malware_families"),
+        ),
+    }
 
 
 async def _enrich_one(
@@ -172,12 +230,9 @@ async def run_intel_loop(
                         await publish_safely(
                             bus,
                             _topics.attacker(_topics.ATTACKER_INTEL_ENRICHED),
-                            {
-                                "attacker_uuid": attacker_uuid,
-                                "attacker_ip": ip,
-                                "aggregate_verdict": row.get("aggregate_verdict"),
-                                "providers": [p.name for p in providers],
-                            },
+                            _build_intel_event_payload(
+                                attacker_uuid, ip, row, providers,
+                            ),
                             event_type=_topics.ATTACKER_INTEL_ENRICHED,
                         )
                     except Exception:  # noqa: BLE001

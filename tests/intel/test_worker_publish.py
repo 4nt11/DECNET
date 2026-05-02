@@ -95,3 +95,49 @@ async def test_intel_worker_publishes_intel_enriched(
     assert payload["attacker_ip"] == "192.168.1.5"
     assert payload["aggregate_verdict"] == "malicious"
     assert "fake" in payload["providers"]
+
+
+def test_build_intel_event_payload_projects_taxonomy_fields() -> None:
+    """Post-2026-05-02 audit: the bus payload now carries the per-
+    provider taxonomy fields the IntelLifter needs (categories, tags,
+    threat_types). JSON-string columns are decoded back to native
+    lists so the consumer does not have to know about storage shape.
+    """
+    import json as _json
+
+    row = {
+        "aggregate_verdict": "malicious",
+        "abuseipdb_score": 87,
+        "abuseipdb_categories": _json.dumps([14, 18, 22]),
+        "greynoise_classification": "malicious",
+        "greynoise_name": "Mirai",
+        "greynoise_tags": _json.dumps(["ssh_bruteforcer"]),
+        "feodo_listed": True,
+        "feodo_malware_family": "Emotet",
+        "threatfox_listed": True,
+        "threatfox_threat_types": _json.dumps(["botnet_cc"]),
+        "threatfox_ioc_types": _json.dumps(["ip:port"]),
+        "threatfox_malware_families": _json.dumps(["Sliver"]),
+    }
+    payload = _iw._build_intel_event_payload(
+        "att-2", "203.0.113.7", row, [_FakeProvider()],
+    )
+    assert payload["abuseipdb_categories"] == [14, 18, 22]
+    assert payload["greynoise_tags"] == ["ssh_bruteforcer"]
+    assert payload["greynoise_name"] == "Mirai"
+    assert payload["feodo_malware_family"] == "Emotet"
+    assert payload["threatfox_threat_types"] == ["botnet_cc"]
+    assert payload["threatfox_ioc_types"] == ["ip:port"]
+    assert payload["threatfox_malware_families"] == ["Sliver"]
+
+
+def test_build_intel_event_payload_tolerates_absent_columns() -> None:
+    """A pre-enrichment row should produce a payload with empty lists
+    rather than raising — the IntelLifter contract is to absorb
+    absence silently."""
+    payload = _iw._build_intel_event_payload(
+        "att-3", "10.0.0.1", {}, [],
+    )
+    assert payload["abuseipdb_categories"] == []
+    assert payload["greynoise_tags"] == []
+    assert payload["threatfox_threat_types"] == []
