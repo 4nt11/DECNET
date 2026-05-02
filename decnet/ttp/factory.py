@@ -142,9 +142,16 @@ def get_tagger() -> Tagger:
         from decnet.ttp.impl.email_lifter import EmailLifter
         from decnet.ttp.impl.identity_lifter import IdentityLifter
         from decnet.ttp.impl.intel_lifter import IntelLifter
+        from decnet.ttp.impl.rule_engine import RuleEngineTagger
         from decnet.ttp.store.factory import get_rule_store
         store = get_rule_store()
+        # RuleEngineTagger first so generic pattern rules dispatch
+        # before the per-source lifters' cross-event logic. Order is
+        # observational — every tagger sees every event for its
+        # `HANDLES` set; tags from all of them aggregate into a single
+        # `ttp.tagged` envelope at the worker.
         return CompositeTagger(lifters=[
+            RuleEngineTagger(store),
             BehavioralLifter(store),
             IntelLifter(store),
             CanaryFingerprintLifter(store),

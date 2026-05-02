@@ -36,7 +36,7 @@ from pydantic import BaseModel, Field
 
 from decnet import telemetry as _telemetry
 from decnet.logging import get_logger
-from decnet.ttp.base import TaggerEvent
+from decnet.ttp.base import Tagger, TaggerEvent
 from decnet.ttp.impl._rule_index import RuleIndex
 from decnet.ttp.impl._state import apply_ceiling, is_active
 from decnet.web.db.models.ttp import TTPTag, compute_tag_uuid
@@ -344,8 +344,66 @@ def _evaluate_rules(
     return out
 
 
+def _is_engine_owned(rule: CompiledRule) -> bool:
+    """Predicate: rule belongs to the generic RuleEngine, not a lifter.
+
+    Per-source lifters (Behavioral, Intel, …) tag their rules with
+    ``match.kind: lifter:<name>_*``. The :class:`RuleEngineTagger`
+    claims everything else — pure ``pattern`` rules whose semantics
+    are "regex against a payload field" with no cross-event state.
+    """
+    kind = rule.match_spec.get("kind", "")
+    if isinstance(kind, str) and kind.startswith("lifter:"):
+        return False
+    return True
+
+
+class RuleEngineTagger(Tagger):
+    """Tagger adapter that wires :class:`RuleEngine` into the composite.
+
+    The composite tagger fans events out to its children by
+    ``HANDLES``; without this adapter the canonical rule-based engine
+    from §"Tagging engines, layered §1" of TTP_TAGGING.md never sees
+    any traffic. This class is intentionally thin — all dispatch and
+    hot-reload logic lives in :class:`RuleEngine` / :class:`RuleIndex`;
+    we only translate between the ``Tagger.tag`` ABC and
+    :meth:`RuleEngine.evaluate`, and route ``watch_store()`` through a
+    predicate that excludes lifter-owned rules so the engine's
+    dispatch index doesn't hold rules another tagger already claims.
+
+    ``HANDLES`` enumerates the source kinds whose YAML rules typically
+    live outside any per-source lifter — shell command rules
+    (``command``), HTTP request pattern rules (``http_request``),
+    auth attempts handled by raw regex rather than the
+    :class:`CredentialLifter` cross-event counter, and generic
+    ``payload`` matches. The composite uses this for routing; the
+    engine itself filters by ``applies_to`` from the YAML.
+    """
+
+    name = "rule_engine"
+    HANDLES = frozenset({"command", "http_request", "auth_attempt", "payload"})
+
+    def __init__(self, store: "RuleStore") -> None:
+        self._engine = RuleEngine(store)
+        self._store = store
+
+    async def tag(self, event: TaggerEvent) -> list[TTPTag]:
+        return await self._engine.evaluate(event)
+
+    async def watch_store(self) -> None:
+        # Filter to engine-owned rules so the dispatch index stays
+        # disjoint from per-lifter ownership. Without the predicate
+        # the engine would carry every lifter's rules too — they would
+        # never match (no `pattern` operator), but they would inflate
+        # the index and confuse tooling.
+        await self._engine._index.watch(
+            self._store, predicate=_is_engine_owned,
+        )
+
+
 __all__ = [
     "CompiledRule",
     "RuleEngine",
+    "RuleEngineTagger",
     "RuleSchema",
 ]
