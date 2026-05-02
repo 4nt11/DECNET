@@ -1,6 +1,11 @@
 # DECNET — Technical Debt Register
 
-> Last updated: 2026-04-26 — Orchestrator UI shipped; logged DEBT-042 (failure-count window) and DEBT-043 (no FE test framework).
+> Last updated: 2026-05-02 — merged the rogue root-level `DEBT.md`
+> back into this canonical register. New: DEBT-044 (✅ email producer
+> wiring), DEBT-045 (EmailLifter heavyweight, partial paid), DEBT-046
+> (mal-hash feed), DEBT-047 (R0047 BEC disk-reach), DEBT-048 (TTP
+> intel provider mapping review — recurring), DEBT-049 (Sigma adapter
+> post-v1).
 > Severity: 🔴 Critical · 🟠 High · 🟡 Medium · 🟢 Low
 
 ---
@@ -497,6 +502,129 @@ unless caught by manual smoke testing.
 listed-but-skipped tests for `Orchestrator.tsx` (renders empty state,
 filter toggling, mocked-EventSource prepend) as the seed suite.
 
+### ~~DEBT-044 — `attacker.email.received` producer not wired~~ ✅ RESOLVED
+**Files:** `decnet/web/ingester.py`, `decnet/templates/smtp/server.py`
+The TTP worker subscribed to `email.received` for the EmailLifter
+(R0041–R0048) but no upstream component published the topic.
+Originally deferred under the wrong premise that the SMTP-relay path
+did not persist received emails to a DB table — in fact
+`SMTPProtocol` persists every received message as a Bounty artifact
+(`bounty_type="artifact" payload.kind="mail"`) at `ingester.py:596–615`
+and `_summarize_message` already extracts headers + per-attachment
+metadata.
+Resolved 2026-05-02 in commits `e9324aca` (decky-side cheap
+extractions: X-Mailer / Return-Path / Authentication-Results dkim+spf
+/ URLs) and `fb857627` (ingester producer at
+`_publish_email_received`). After paydown R0041 / R0043 / R0044 /
+R0045 fire end-to-end; R0046 partial (extension lane). Heavyweight
+follow-ups carved into DEBT-046 and DEBT-047.
+
+### DEBT-045 — EmailLifter heavyweight feature extraction (R0042 / R0046 / R0048) — PARTIAL PAID 2026-05-02
+**Files:** `decnet/templates/smtp/server.py`, `decnet/web/ingester.py`
+Layer-2 extractors for R0042 / R0046 (macro / password / smuggling
+lanes) / R0048 landed 2026-05-02 in commits `291b78c1` (decky
+`_summarize_message` extension: inlined Charikar simhash, base64
+byte counter, OOXML `vbaProject.bin` sniff, ZIP / 7z / RAR / CFBF
+encrypted-archive detection, lxml structural HTML-smuggling parse
+with regex fallback) and `c7149410` (ingester producer projection,
+OR-reducing per-attachment booleans into top-level rule fields).
+After paydown the bus payload carries `body_simhash`,
+`body_base64_bytes`, `attachment_macros`,
+`attachment_password_protected`, `html_smuggling`. R0042 / R0046
+(three lanes) / R0048 fire end-to-end. The two remaining lanes
+ride on DEBT-046 (mal_hash_match — needs a feed) and DEBT-047
+(R0047 BEC — gated on artifact disk-reach, see DEBT-035).
+**Status:** Partial. Closed except for the carved-out follow-ups.
+
+### DEBT-046 — EmailLifter mal-hash feed integration (R0046 mal_hash_match)
+**Files:** `decnet/intel/feodo.py` (template), `decnet/web/ingester.py` (consumer wiring), **new** `decnet/intel/mal_hash.py`
+R0046's `mal_hash_match` lane stays gated until DECNET has a curated
+bad-hash feed it can lookup attachment SHA-256s against. The
+producer ships `attachment_sha256s: list[str]` on the bus today
+(commit `c7149410`) but no provider resolves a `mal_hash_match: bool`.
+**Design sketch** (mirrors `decnet/intel/feodo.py`'s bulk-feed pattern):
+- Feed source: MalwareBazaar's public SHA-256 dump as the v0
+  candidate (free, daily refresh, ~100 MB compressed). Operators
+  with paid VT subscriptions can swap the provider behind the same
+  factory.
+- Storage: in-memory set keyed by sha256, TTL-cached on a slow
+  refresh loop. Mirror `FeodoProvider`'s `_ensure_fresh` /
+  `_refresh` shape exactly.
+- Wiring: ingester reads each `attachment_sha256` in the manifest
+  at `_publish_email_received` time, checks against the cached
+  feed, sets `mal_hash_match: bool` on the bus payload.
+- Rule pack: no rule changes. `_p_malicious_attachment` already
+  reads `payload.get("mal_hash_match")` — silent today only because
+  the field is absent.
+**Trigger:** a curated feed source is selected (MalwareBazaar dump
+or better) and the operator has bandwidth / disk for a fresh refresh
+loop.
+**Status:** Open. Owner TBD. Filed 2026-05-02 alongside DEBT-045.
+
+### DEBT-047 — EmailLifter R0047 BEC unblock (artifact disk-reach)
+**Files:** `decnet/ttp/impl/email_lifter.py` (consumer), `decnet/web/ingester.py` (no producer change once unblocked).
+R0047's predicate (`_p_bec` at `email_lifter.py:244`) reads
+`body_text` and `subject`, substring-matching them against per-rule
+keyword lists. Shipping raw body text on the abstracted service bus
+is the wrong privacy stance — the bus transport is abstracted (the
+UNIX-socket implementation today may swap to a networked transport
+tomorrow), and treating "loopback today" as a license to ship PII
+would bite the moment that swap happens.
+The right solution is **disk-reach**: the EmailLifter on tag-time
+opens the `.eml` from the artifact tree at
+`/var/lib/decnet/artifacts/{decky}/smtp/{stored_as}` and runs the
+predicate against the body parsed in-process. Bus carries only the
+artifact pointer; raw body text never leaves the host disk
+boundary.
+**Blocked by DEBT-035** (artifacts uid/gid mismatch) — `decnet ttp`
+running on agents cannot read artifact files written by deckies on
+the same host because of the permission mismatch. The legacy
+`_p_bec` body_text path remains in place untouched, so when
+disk-reach lands the predicate works without any code change.
+**Trigger:** DEBT-035 paid (artifacts uid/gid aligned). Then add a
+disk-reach helper to the EmailLifter that opens the `.eml` lazily
+when a body-aware predicate runs.
+**Status:** Open, gated on DEBT-035. Owner TBD. Filed 2026-05-02
+alongside DEBT-045.
+
+### DEBT-048 — TTP intel provider mapping review (quarterly recurring)
+**Files:** `rules/ttp/R0054.yaml`–`R0058.yaml`, `decnet/ttp/impl/intel_lifter.py`, `development/TTP_TAGGING.md` §"Hard parts §9 Intel provider drift".
+AbuseIPDB occasionally adds new abuse categories. GreyNoise revises
+its classification taxonomy. ThreatFox extends `threat_type` /
+`ioc_type` enums. The intel_lifter's mapping tables are static
+catalogues; they will fall behind reality unless re-walked on a
+cadence. Each rule YAML carries `last_reviewed` / `next_review`
+markers as the canonical record.
+**Cadence:** every quarter, first week of the month. Trigger: rule
+YAML `next_review` markers (canonical), with a calendar reminder
+as backup.
+**Operational runbook:** `development/TTP_TAGGING.md` §"Hard parts
+§9 Intel provider drift" — provider URLs, ThreatFox auth-key curl
+invocation, rule_version + emits + attack_catalog co-evolution
+rules, drift-found vs no-drift commit shapes.
+**Last reviewed:** **2026-05-02** (ship-time audit — see
+`development/TTP_TAGGING.md` §9 "Ship-time audit log"; corrected
+two AbuseIPDB code typos, expanded R0054 / R0055 / R0057 emits
+lists to cover the full predicate technique universe, repointed
+ThreatFox dispatch from `ioc_type` to `threat_type`, wired the
+`AttackerIntel.{abuseipdb_categories, greynoise_tags,
+greynoise_name, feodo_malware_family, threatfox_*_types,
+threatfox_malware_families}` columns + producer parsing).
+**Next review:** **2026-08-02**.
+**Status:** Recurring. Owner: TTP rule maintainer (currently ANTI).
+
+### DEBT-049 — TTP Sigma adapter — post-v1
+**Files:** `decnet/ttp/impl/` (new engine), `rules/ttp/` (new rule subtree).
+The Sigma rule format adapter is deferred to post-v1 per
+`development/TTP_TAGGING.md` §"Tagging engines, layered §5". Lands
+once v0 ships and the rule-precision targets stabilize so we have
+a calibration reference for translated rules. Until then,
+`decnet/ttp/impl/` does not gain a Sigma engine and `rules/ttp/`
+stays YAML-only.
+**Trigger:** v0 precision targets met + at least one downstream
+user who needs it.
+**Status:** Open. Owner TBD.
+
 ---
 
 ## Summary
@@ -545,6 +673,12 @@ filter toggling, mocked-EventSource prepend) as the seed suite.
 | ~~DEBT-041~~ | ✅ | API / UI / Threat-intel keying | resolved |
 | DEBT-042 | 🟢 Low | UI / Orchestrator failure-count window | open |
 | DEBT-043 | 🟡 Medium | Frontend test framework missing | open |
+| ~~DEBT-044~~ | ✅ | TTP / Email producer wiring | resolved 2026-05-02 |
+| DEBT-045 | 🟡 Medium | TTP / EmailLifter heavyweight extraction | partial paid 2026-05-02 |
+| DEBT-046 | 🟡 Medium | TTP / EmailLifter mal-hash feed integration | open |
+| DEBT-047 | 🟡 Medium | TTP / EmailLifter R0047 BEC (disk-reach) | open (gated on DEBT-035) |
+| DEBT-048 | 🟡 Medium | TTP / Intel provider mapping review (recurring) | open / recurring |
+| DEBT-049 | 🟡 Medium | TTP / Sigma adapter (post-v1) | open |
 
-**Remaining open:** DEBT-011 (Alembic), DEBT-023 (image pinning), DEBT-026 (modular mailboxes), DEBT-027 (Dynamic bait store), DEBT-028 (deploy endpoint tests), DEBT-032 (fingerprint rotation detection), DEBT-033 (transcript shard rotation), DEBT-035 (artifacts uid/gid alignment), DEBT-036 (session-profile ingester), DEBT-037 (webhook delivery hardening), DEBT-038 (SSH PAM cred-capture limitations — document-only), DEBT-042 (orchestrator failure-count window), DEBT-043 (frontend test framework).
-**Estimated remaining effort:** ~21 hours. DEBT-030 Phase B (optimistic staged-buffer editor) is a follow-up, not debt.
+**Remaining open:** DEBT-011 (Alembic), DEBT-023 (image pinning), DEBT-026 (modular mailboxes), DEBT-027 (Dynamic bait store), DEBT-028 (deploy endpoint tests), DEBT-032 (fingerprint rotation detection), DEBT-033 (transcript shard rotation), DEBT-035 (artifacts uid/gid alignment), DEBT-036 (session-profile ingester), DEBT-037 (webhook delivery hardening), DEBT-038 (SSH PAM cred-capture limitations — document-only), DEBT-042 (orchestrator failure-count window), DEBT-043 (frontend test framework), DEBT-045 (EmailLifter heavyweight — partial paid; carved-out follow-ups remain), DEBT-046 (mal-hash feed), DEBT-047 (R0047 BEC disk-reach — gated on DEBT-035), DEBT-048 (TTP intel provider mapping review — recurring quarterly), DEBT-049 (TTP Sigma adapter — post-v1).
+**Estimated remaining effort:** ~21 hours plus the new EmailLifter / TTP follow-ups. DEBT-030 Phase B (optimistic staged-buffer editor) is a follow-up, not debt.

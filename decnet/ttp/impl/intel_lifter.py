@@ -32,10 +32,11 @@ from decnet.web.db.models.ttp import TTPTag, compute_tag_uuid
 # from TTP_TAGGING.md Appendix A.10 (post 2026-05-02 ship-time audit).
 # Category code names are AbuseIPDB's canonical taxonomy at
 # https://www.abuseipdb.com/categories — kept verbatim in the comment so
-# the next quarterly drift check (per DEBT.md) can diff cheaply. Cat 4
-# (DDoS Attack) and 10 (Web Spam) and 12 (Blog Spam) are intentionally
-# unmapped — design doc §A.10 marks DDoS-without-protocol as too muddy
-# for v0, and CMS spam has no clean ATT&CK fit at the IP layer.
+# the next quarterly drift check (development/DEBT.md DEBT-048) can
+# diff cheaply. Cat 4 (DDoS Attack) and 10 (Web Spam) and 12 (Blog
+# Spam) are intentionally unmapped — design doc §A.10 marks
+# DDoS-without-protocol as too muddy for v0, and CMS spam has no clean
+# ATT&CK fit at the IP layer.
 _ABUSEIPDB_CATEGORY_TO_TECHNIQUES: Final[dict[int, frozenset[str]]] = {
     5: frozenset({"T1110"}),                  # FTP Brute-Force
     7: frozenset({"T1566"}),                  # Phishing
