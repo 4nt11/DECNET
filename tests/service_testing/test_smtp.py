@@ -605,6 +605,66 @@ class TestMessageCapture:
         assert manifest[0]["sha256"] == _hashlib.sha256(payload).hexdigest()
         assert manifest[0]["size"] == len(payload)
 
+    def test_message_stored_carries_layer2_signals(self, tmp_path):
+        """Cheap Layer 2 fields the EmailLifter consumes (R0043 / R0044 /
+        R0045): X-Mailer, Return-Path, Authentication-Results dkim/spf
+        verdicts, and URLs lifted from text body parts."""
+        mod = _load_smtp_with_quarantine(str(tmp_path))
+        proto, _, _ = _make_protocol(mod)
+        _send(
+            proto,
+            "EHLO x.com",
+            "MAIL FROM:<spoof@evil.com>",
+            "RCPT TO:<victim@target.com>",
+            "DATA",
+            "Subject: phish",
+            "From: ceo@bigcorp.com",
+            "Return-Path: <mailer@kit.evil>",
+            "X-Mailer: PHPMailer 6.0.7",
+            "Authentication-Results: relay.example; dkim=pass header.d=evil.com; spf=pass smtp.mailfrom=mailer@kit.evil",
+            "",
+            "Click https://xn--80ak6aa92e.example/login. and also http://safe.test/ok",
+            ".",
+        )
+        events = _logged_events(mod)
+        stored = [f for t, f in events if t == "message_stored"]
+        assert len(stored) == 1
+        rec = stored[0]
+        assert rec["x_mailer"] == "PHPMailer 6.0.7"
+        assert rec["return_path"] == "<mailer@kit.evil>"
+        assert rec["dkim_signed"] == 1
+        assert rec["spf_pass"] == 1
+        import json as _json
+        urls = _json.loads(rec["urls_json"])
+        assert "https://xn--80ak6aa92e.example/login" in urls
+        assert "http://safe.test/ok" in urls
+
+    def test_message_stored_dkim_spf_default_false_when_no_auth_header(
+        self, tmp_path,
+    ):
+        mod = _load_smtp_with_quarantine(str(tmp_path))
+        proto, _, _ = _make_protocol(mod)
+        _send(
+            proto,
+            "EHLO x.com",
+            "MAIL FROM:<a@b.com>",
+            "RCPT TO:<c@d.com>",
+            "DATA",
+            "Subject: bare",
+            "",
+            "no auth header here",
+            ".",
+        )
+        events = _logged_events(mod)
+        stored = [f for t, f in events if t == "message_stored"]
+        rec = stored[0]
+        assert rec["dkim_signed"] == 0
+        assert rec["spf_pass"] == 0
+        assert rec["x_mailer"] == ""
+        assert rec["return_path"] == ""
+        import json as _json
+        assert _json.loads(rec["urls_json"]) == []
+
     def test_capture_disabled_when_dir_unset(self, tmp_path, relay_mod):
         """With SMTP_QUARANTINE_DIR unset, message_accepted fires but no
         message_stored event and no files are written."""
