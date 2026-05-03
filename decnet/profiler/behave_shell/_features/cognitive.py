@@ -15,6 +15,7 @@ from decnet_behave_core.spec.envelope import Observation
 from decnet.profiler.behave_shell._ctx import SessionContext
 from decnet.profiler.behave_shell._features._emit import make_observation
 from decnet.profiler.behave_shell._thresholds import (
+    BRANCH_DIVERSITY_LINEAR_MIN,
     INTER_CMD_DELIBERATE_MAX,
     INTER_CMD_INSTANT_MAX,
     INTER_CMD_LLM_HEAVYWEIGHT_MAX,
@@ -58,4 +59,44 @@ def inter_command_latency_class(ctx: SessionContext) -> Iterator[Observation]:
         primitive="cognitive.inter_command_latency_class",
         value=bucket,
         confidence=confidence,
+    )
+
+
+def command_branch_diversity(ctx: SessionContext) -> Iterator[Observation]:
+    """Emit ``cognitive.command_branch_diversity``.
+
+    Content-based discriminator (no timing): unique first-token ratio
+    over total commands. Splits CLAUDE-FF (linear_playbook) from
+    CLAUDE-CL (adaptive_branching). The empirical anchor on
+    2026-05-02: fire-and-forget runs ~10 distinct tools; closed-loop
+    runs 5-6 with ``curl`` re-invoked as the operator chases threads.
+    """
+    n = len(ctx.commands)
+    if n == 0:
+        # No commands at all → nothing honest to say. Skip emission.
+        return
+    if n < MIN_COMMANDS_FOR_FULL_CONFIDENCE:
+        # Registry admits "unknown"; absence of *enough* data is itself
+        # a high-confidence answer.
+        yield make_observation(
+            ctx,
+            primitive="cognitive.command_branch_diversity",
+            value="unknown",
+            confidence=1.0,
+        )
+        return
+    unique = len({c.first_token_hash for c in ctx.commands})
+    ratio = unique / n
+    if ratio >= BRANCH_DIVERSITY_LINEAR_MIN:
+        value = "linear_playbook"
+    else:
+        # Anything below the linear floor is treated as adaptive — the
+        # operator is reusing tools, the discriminative signal we
+        # actually want.
+        value = "adaptive_branching"
+    yield make_observation(
+        ctx,
+        primitive="cognitive.command_branch_diversity",
+        value=value,
+        confidence=0.80,
     )
