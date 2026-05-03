@@ -1,11 +1,15 @@
 # DECNET — Technical Debt Register
 
-> Last updated: 2026-05-02 — DEBT-035 (artifacts uid/gid) RESOLVED
-> via setgid + group-write on the artifacts root; DEBT-047 (R0047
-> BEC disk-reach) filesystem-access blocker lifted accordingly.
-> Earlier same-day: merged the rogue root-level DEBT.md into this
-> canonical register; filed DEBT-044…DEBT-049 (email producer
-> wiring + EmailLifter follow-ups + TTP recurring + Sigma post-v1).
+> Last updated: 2026-05-03 — DEBT-047 (R0047 BEC disk-reach)
+> RESOLVED: shared `decnet/artifacts/paths.py` helper extracted,
+> EmailLifter now disk-reaches `.eml` bodies in-process so the
+> abstracted bus only carries `(decky_id, stored_as)`, and `decnet
+> ttp` is unlocked on agents. 2026-05-02: DEBT-035 (artifacts
+> uid/gid) RESOLVED via setgid + group-write on the artifacts root,
+> which lifted the DEBT-047 filesystem-access blocker. Same-day:
+> merged the rogue root-level DEBT.md into this canonical register;
+> filed DEBT-044…DEBT-049 (email producer wiring + EmailLifter
+> follow-ups + TTP recurring + Sigma post-v1).
 > Severity: 🔴 Critical · 🟠 High · 🟡 Medium · 🟢 Low
 
 ---
@@ -591,8 +595,11 @@ or better) and the operator has bandwidth / disk for a fresh refresh
 loop.
 **Status:** Open. Owner TBD. Filed 2026-05-02 alongside DEBT-045.
 
-### DEBT-047 — EmailLifter R0047 BEC unblock (artifact disk-reach)
-**Files:** `decnet/ttp/impl/email_lifter.py` (consumer), `decnet/cli/gating.py` (master-only gate flip).
+### ~~DEBT-047~~ — EmailLifter R0047 BEC unblock (artifact disk-reach) ✅ RESOLVED 2026-05-03
+**Files:** `decnet/artifacts/paths.py` (new shared helper),
+`decnet/ttp/impl/email_lifter.py` (`_load_body_text` + `_extract_body_text`),
+`decnet/web/router/artifacts/api_get_artifact.py` (refactored to import the
+shared helper), `decnet/cli/gating.py` + `decnet/cli/ttp.py` (gate flipped).
 R0047's predicate (`_p_bec` at `email_lifter.py:244`) reads
 `body_text` and `subject`, substring-matching them against per-rule
 keyword lists. Shipping raw body text on the abstracted service bus
@@ -613,18 +620,29 @@ DECNET-service user (which is what `decnet ttp` runs as on
 agents). The legacy `_p_bec` body_text path remains in place
 untouched, so when the disk-reach helper lands the predicate
 works without any code change.
-**Remaining work**:
-- Flip the `decnet ttp` master-only gate at
-  `decnet/cli/gating.py:28–34` so agents can run the worker.
-- Add a disk-reach helper to the EmailLifter that opens the
-  `.eml` lazily when a body-aware predicate (R0047 or R0048
-  fallback) runs. Resolve `stored_as` to the artifact path via
-  the existing `_resolve_artifact_path` helper at
-  `decnet/web/router/artifacts/api_get_artifact.py:48` (factor
-  to a shared module for the lifter to import).
-**Status:** Open. Owner TBD. Filed 2026-05-02 alongside DEBT-045.
-Filesystem-access blocker resolved by DEBT-035 paydown
-(2026-05-02).
+**Resolution (2026-05-03):**
+- Extracted `resolve_artifact_path` + `ArtifactPathError` into the new
+  `decnet/artifacts/paths.py` package, shared by the admin-gated
+  download endpoint and the lifter. Symlink-escape check, regex
+  validation, and `ARTIFACTS_ROOT` env override all live in the
+  shared module.
+- Added `_load_body_text(payload)` to `email_lifter.py`. When the
+  bus payload omits `body_text` but carries `decky_id` + `stored_as`,
+  the helper opens the `.eml` via stdlib `email` with
+  `policy=email.policy.default` and walks parts (text/plain →
+  text/html fallback). Decoded body is memoized into the payload
+  dict so multiple body-aware predicates on the same event open
+  the file once. Both `_p_bec` (R0047) and `_p_encoded_payload`
+  route through the helper; the legacy inline `body_text` path is
+  preserved as a fast path.
+- Removed `"ttp"` from `MASTER_ONLY_COMMANDS` in `cli/gating.py`
+  and dropped `_require_master_mode("ttp")` in `cli/ttp.py`.
+  `ttp-backfill` (master DB walker) stays master-only.
+- Tests: `tests/artifacts/test_paths.py`,
+  `tests/ttp/test_email_lifter_disk_reach.py`,
+  `tests/cli/test_gating_ttp_agent.py`.
+**Status:** Resolved. Filed 2026-05-02 alongside DEBT-045; closed
+2026-05-03.
 
 ### DEBT-048 — TTP intel provider mapping review (quarterly recurring)
 **Files:** `rules/ttp/R0054.yaml`–`R0058.yaml`, `decnet/ttp/impl/intel_lifter.py`, `development/TTP_TAGGING.md` §"Hard parts §9 Intel provider drift".
@@ -715,9 +733,9 @@ user who needs it.
 | ~~DEBT-044~~ | ✅ | TTP / Email producer wiring | resolved 2026-05-02 |
 | DEBT-045 | 🟡 Medium | TTP / EmailLifter heavyweight extraction | partial paid 2026-05-02 |
 | DEBT-046 | 🟡 Medium | TTP / EmailLifter mal-hash feed integration | open |
-| DEBT-047 | 🟡 Medium | TTP / EmailLifter R0047 BEC (disk-reach) | open (FS-access unblocked 2026-05-02; remaining: gate flip + lifter helper) |
+| ~~DEBT-047~~ | ✅ | TTP / EmailLifter R0047 BEC (disk-reach) | resolved 2026-05-03 |
 | DEBT-048 | 🟡 Medium | TTP / Intel provider mapping review (recurring) | open / recurring |
 | DEBT-049 | 🟡 Medium | TTP / Sigma adapter (post-v1) | open |
 
-**Remaining open:** DEBT-011 (Alembic), DEBT-023 (image pinning), DEBT-026 (modular mailboxes), DEBT-027 (Dynamic bait store), DEBT-028 (deploy endpoint tests), DEBT-032 (fingerprint rotation detection), DEBT-033 (transcript shard rotation), DEBT-036 (session-profile ingester), DEBT-037 (webhook delivery hardening), DEBT-038 (SSH PAM cred-capture limitations — document-only), DEBT-042 (orchestrator failure-count window), DEBT-043 (frontend test framework), DEBT-045 (EmailLifter heavyweight — partial paid; carved-out follow-ups remain), DEBT-046 (mal-hash feed), DEBT-047 (R0047 BEC disk-reach — filesystem unblocked 2026-05-02; remaining: gate flip + lifter helper), DEBT-048 (TTP intel provider mapping review — recurring quarterly), DEBT-049 (TTP Sigma adapter — post-v1).
+**Remaining open:** DEBT-011 (Alembic), DEBT-023 (image pinning), DEBT-026 (modular mailboxes), DEBT-027 (Dynamic bait store), DEBT-028 (deploy endpoint tests), DEBT-032 (fingerprint rotation detection), DEBT-033 (transcript shard rotation), DEBT-036 (session-profile ingester), DEBT-037 (webhook delivery hardening), DEBT-038 (SSH PAM cred-capture limitations — document-only), DEBT-042 (orchestrator failure-count window), DEBT-043 (frontend test framework), DEBT-045 (EmailLifter heavyweight — partial paid; carved-out follow-ups remain), DEBT-046 (mal-hash feed), DEBT-048 (TTP intel provider mapping review — recurring quarterly), DEBT-049 (TTP Sigma adapter — post-v1).
 **Estimated remaining effort:** ~21 hours plus the new EmailLifter / TTP follow-ups. DEBT-030 Phase B (optimistic staged-buffer editor) is a follow-up, not debt.
