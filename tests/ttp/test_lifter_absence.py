@@ -2,7 +2,7 @@
 
 Every per-source lifter is allowed (and expected) to encounter
 events whose required join is missing — no ``AttackerIntel`` row,
-no ``SessionProfile``, no ``AttackerBehavior``, no canary record,
+no ``ObservationRow``, no ``AttackerBehavior``, no canary record,
 no identity row, no ``CredentialReuse`` entry. Absence is the
 steady state, not the exception. The contract pinned here:
 

@@ -24,7 +24,7 @@ class AttackerIntel(SQLModel, table=True):
     ``schema_version`` is committed to storage from day one — federation
     gossip in v2/v3 requires cross-operator compatibility, and
     retrofitting a version column after rows exist is painful. Mirrors
-    the rationale on :class:`SessionProfile`.
+    the rationale on :class:`AttackerIdentity`'s ``schema_version``.
     """
 
     __tablename__ = "attacker_intel"

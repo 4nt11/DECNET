@@ -191,18 +191,19 @@ async def test_migrate_column_types_default_clause_per_column():
 
 @pytest.mark.asyncio
 async def test_mysql_initialize_calls_migrate_column_types():
-    """MySQLRepository.initialize() must invoke every migration helper in
-    the right order: attackers first, then session_profile (DEBT-036),
-    then column types, then seed the admin user."""
+    """MySQLRepository.initialize() must invoke every migration helper
+    in the right order: attackers first, then column types, then seed
+    the admin user.
+
+    The legacy ``_migrate_session_profile_table`` step (DEBT-036) was
+    dropped when SessionProfile was deleted in favour of the
+    ``observations`` table — see DEBT-050 / BEHAVE-INTEGRATION.md."""
     repo = _make_repo()
 
     call_order: list[str] = []
 
     async def fake_migrate_attackers():
         call_order.append("migrate_attackers")
-
-    async def fake_migrate_session_profile():
-        call_order.append("migrate_session_profile")
 
     async def fake_migrate_column_types():
         call_order.append("migrate_column_types")
@@ -211,7 +212,6 @@ async def test_mysql_initialize_calls_migrate_column_types():
         call_order.append("ensure_admin")
 
     repo._migrate_attackers_table       = fake_migrate_attackers
-    repo._migrate_session_profile_table = fake_migrate_session_profile
     repo._migrate_column_types          = fake_migrate_column_types
     repo._ensure_admin_user             = fake_ensure_admin
 
@@ -228,7 +228,6 @@ async def test_mysql_initialize_calls_migrate_column_types():
 
     assert call_order == [
         "migrate_attackers",
-        "migrate_session_profile",
         "migrate_column_types",
         "ensure_admin",
     ], f"Unexpected call order: {call_order}"

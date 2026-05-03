@@ -38,8 +38,6 @@ class DummyRepo(BaseRepository):
     async def upsert_attacker_behavior(self, u, d): await super().upsert_attacker_behavior(u, d)
     async def get_attacker_behavior(self, u): await super().get_attacker_behavior(u)
     async def get_behaviors_for_ips(self, ips): await super().get_behaviors_for_ips(ips)
-    async def upsert_session_profile(self, sid, data): await super().upsert_session_profile(sid, data)
-    async def get_session_profile(self, sid): await super().get_session_profile(sid)
     # BEHAVE-SHELL observations (DEBT-050 / BEHAVE-INTEGRATION.md Phase 1)
     async def upsert_observation(self, data): await super().upsert_observation(data); return ""
     async def latest_observation_per_primitive(self, attacker_uuid): await super().latest_observation_per_primitive(attacker_uuid); return {}
@@ -129,8 +127,6 @@ async def test_base_repo_coverage():
     await dr.upsert_attacker_behavior("a", {})
     await dr.get_attacker_behavior("a")
     await dr.get_behaviors_for_ips({"1.1.1.1"})
-    await dr.upsert_session_profile("sid", {})
-    await dr.get_session_profile("sid")
     await dr.upsert_observation({})
     await dr.latest_observation_per_primitive("a")
     await dr.observations_time_series("a", "motor.input_modality")

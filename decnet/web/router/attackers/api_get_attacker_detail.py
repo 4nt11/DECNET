@@ -41,4 +41,13 @@ async def get_attacker_detail(
     # a ROTATION DETECTED badge when the count crosses a threshold.
     attacker["ip_leaks"] = await repo.get_attacker_ip_leaks(uuid, limit=10)
     attacker["ip_leaks_total"] = await repo.count_attacker_ip_leaks(uuid)
+    # BEHAVE-SHELL observations — latest value per primitive for this
+    # attacker. Empty dict (rendered as empty list) until the
+    # extractor (DEBT-050) lands and starts writing rows. The frontend
+    # panel that consumes this ships in BEHAVE-INTEGRATION.md Phase 5.
+    latest_per_primitive = await repo.latest_observation_per_primitive(uuid)
+    attacker["observations"] = [
+        {"primitive": primitive, **payload}
+        for primitive, payload in sorted(latest_per_primitive.items())
+    ]
     return attacker

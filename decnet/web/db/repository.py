@@ -303,16 +303,6 @@ class BaseRepository(ABC):
         """Bulk-fetch behavior rows keyed by attacker IP (JOIN to attackers)."""
         pass
 
-    @abstractmethod
-    async def upsert_session_profile(self, sid: str, data: dict[str, Any]) -> None:
-        """Insert or update the keystroke-dynamics profile row for a session."""
-        pass
-
-    @abstractmethod
-    async def get_session_profile(self, sid: str) -> Optional[dict[str, Any]]:
-        """Retrieve the keystroke-dynamics profile row for a session."""
-        pass
-
     # ─── BEHAVE-SHELL observations ─────────────────────────────────────
     # See development/BEHAVE-INTEGRATION.md §"Storage" for the full
     # schema rationale. Every observation envelope emitted by the

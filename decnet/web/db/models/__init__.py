@@ -48,7 +48,6 @@ from .attackers import (
     AttackerFingerprintState,
     AttackerIdentity,
     AttackersResponse,
-    SessionProfile,
     SmtpTarget,
 )
 from .attacker_intel import (
@@ -255,7 +254,6 @@ __all__ = [
     "AttackersResponse",
     "ObservationRow",
     "ObservedAttachment",
-    "SessionProfile",
     "SmtpTarget",
     # campaigns
     "Campaign",

@@ -97,7 +97,6 @@ class SQLModelRepository(
         """Create tables if absent and seed the admin user."""
         from sqlmodel import SQLModel
         await self._migrate_attackers_table()
-        await self._migrate_session_profile_table()
         async with self.engine.begin() as conn:
             await conn.run_sync(SQLModel.metadata.create_all)
         await self._ensure_admin_user()
@@ -135,11 +134,6 @@ class SQLModelRepository(
 
     async def _migrate_attackers_table(self) -> None:
         """Legacy-schema cleanup. Override per dialect (DDL introspection is non-portable)."""
-        return None
-
-    async def _migrate_session_profile_table(self) -> None:
-        """Add DEBT-036 keystroke-dynamics columns to existing session_profile
-        rows. Override per dialect — DDL introspection is non-portable."""
         return None
 
     async def get_deckies(self) -> List[dict]:
