@@ -35,3 +35,46 @@ MODALITY_TYPED_MAX: float = 0.05
 # habit signal, input_modality is the dominant-channel signal.
 PASTE_RATE_HABITUAL_MIN: float = 0.50
 PASTE_RATE_OCCASIONAL_MIN: float = 0.10
+
+# ── cognitive.inter_command_latency_class (Step 5) ──────────────────────────
+# Bucket edges (seconds) for the median inter-command IAT. Prototype
+# values; v0.2 splits the original llm_roundtrip 2-8s band into
+# llm_lightweight (orchestrated agents w/ small models / terse prompts) and
+# llm_heavyweight (reasoning-class agents in tool loops with text
+# generation between calls). Empirical anchor: Claude Opus driving recon
+# via tmux send-keys produced a median of 15.5s.
+INTER_CMD_INSTANT_MAX: float = 0.30
+INTER_CMD_TYPING_MAX: float = 1.50
+INTER_CMD_DELIBERATE_MAX: float = 2.00
+INTER_CMD_LLM_LIGHTWEIGHT_MAX: float = 8.00
+INTER_CMD_LLM_HEAVYWEIGHT_MAX: float = 30.00
+
+# Sample-size floor for inter-command IAT primitives. Below this we
+# halve the confidence per BEHAVE-EXTRACTOR.md "sample-size honesty".
+MIN_COMMANDS_FOR_FULL_CONFIDENCE: int = 5
+
+# ── cognitive.command_branch_diversity (Step 6) ─────────────────────────────
+# unique_first_tokens / total_commands ratio. Empirical (CLAUDE-FF vs
+# CLAUDE-CL on 2026-05-02): fire-and-forget runs ~10 distinct tools (ratio
+# near 1.0) → linear_playbook; closed-loop runs ~5-6 tools with the same
+# tool re-invoked → adaptive_branching.
+BRANCH_DIVERSITY_LINEAR_MIN: float = 0.80   # >= → linear_playbook
+BRANCH_DIVERSITY_ADAPTIVE_MAX: float = 0.60  # <= → adaptive_branching
+# Between is the ambiguous middle band — bias toward adaptive (the
+# operator is reusing tools).
+
+# ── cognitive.feedback_loop_engagement (Step 7) ─────────────────────────────
+# Pearson r threshold for "the operator's pause grew with the volume of
+# preceding output". |r| > this → significant; sign carries direction.
+FEEDBACK_CORRELATION_MIN: float = 0.30
+# Need at least this many (output_bytes, next_pause) pairs to even
+# attempt a correlation. Below this the answer is "unknown".
+FEEDBACK_MIN_PAIRS: int = 5
+
+# ── cognitive.inter_command_consistency (Step 8) ────────────────────────────
+# CV (stdev / mean) of inter-command IATs. Empirical (this corpus):
+# human session CV=0.94 → variable; LLM-simulated CV=0.24 → metronomic;
+# anything beyond 1.5 is heuristically "bimodal" (real bimodal detection
+# via Hartigan dip is filed for v0.2).
+PAUSE_CV_METRONOMIC_MAX: float = 0.40
+PAUSE_CV_BIMODAL_MIN: float = 1.50
