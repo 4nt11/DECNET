@@ -627,17 +627,17 @@ A single page you can paste into a TODO and tick off. **Every box
 unchecked = no v0 tag.**
 
 ### Phase A — Calibration floor (Steps 0–10)
-- [ ] Step 0 — Scaffold + smoke test
-- [ ] Step 1 — Asciinema parser + paste-burst detector
-- [ ] Step 2 — `motor.input_modality` (FIRST PRIMITIVE)
-- [ ] Step 3 — `motor.paste_burst_rate`
-- [ ] Step 4 — Command segmentation in `SessionContext`
-- [ ] Step 5 — `cognitive.inter_command_latency_class`
-- [ ] Step 6 — `cognitive.command_branch_diversity`
-- [ ] Step 7 — `cognitive.feedback_loop_engagement`
-- [ ] Step 8 — `cognitive.inter_command_consistency`
-- [ ] Step 9 — Calibration grid lockdown (the gate)
-- [ ] Step 10 — Phase A complete: floor green
+- [x] Step 0 — Scaffold + smoke test
+- [x] Step 1 — Asciinema parser + paste-burst detector
+- [x] Step 2 — `motor.input_modality` (FIRST PRIMITIVE)
+- [x] Step 3 — `motor.paste_burst_rate`
+- [x] Step 4 — Command segmentation in `SessionContext`
+- [x] Step 5 — `cognitive.inter_command_latency_class`
+- [x] Step 6 — `cognitive.command_branch_diversity`
+- [x] Step 7 — `cognitive.feedback_loop_engagement`
+- [x] Step 8 — `cognitive.inter_command_consistency`
+- [x] Step 9 — Calibration grid lockdown (the gate)
+- [x] Step 10 — Phase A complete: floor green
 
 ### Phase B — `motor.*` completion
 - [ ] B.1 `motor.keystroke_cadence`
@@ -694,6 +694,39 @@ unchecked = no v0 tag.**
 
 **44 boxes. 37 primitives. 1 v0.** Each box is a commit + tests in
 the same commit.
+
+---
+
+## Phase A completion log
+
+Closed in 11 commits across one session. Six primitives emit; the
+five-class calibration grid is the binding regression test for
+every subsequent phase.
+
+| Primitive | Confidence | Empirical anchor (2026-05-02 corpus) |
+|---|---|---|
+| `motor.input_modality` | 0.70 / 0.75 | YOU-sim 47.6% paste → ``pasted``; HUMAN <5% → ``typed`` |
+| `motor.paste_burst_rate` | 0.70 / 0.80 | LW-sim / CLAUDE-FF / CLAUDE-CL ≥50% → ``habitual`` |
+| `cognitive.inter_command_latency_class` | 0.40 / 0.80 | CLAUDE-FF 15.5s median → ``llm_heavyweight`` |
+| `cognitive.command_branch_diversity` | 0.80 / 1.00 | CLAUDE-CL ≈0.55-0.60 → ``adaptive_branching``; threshold 0.70 |
+| `cognitive.feedback_loop_engagement` | 0.75 / 1.00 | CLAUDE-FF flat r → ``fire_and_forget``; r > 0.30 → ``closed_loop`` |
+| `cognitive.inter_command_consistency` | 0.40 / 0.75 | LLM CV≈0.24 → ``metronomic``; HUMAN CV≈0.94 → ``variable`` |
+
+The hard gate (every Phase A primitive must fire per shard) is in
+``tests/profiler/behave_shell/test_calibration_grid.py`` and skips
+cleanly when ``BEHAVE_CALIBRATION_DIR`` is unset.
+
+Per-class **value** pinning (e.g. HUMAN must emit
+``inter_command_consistency=bimodal``) is intentionally NOT a hard
+gate at this milestone — v0.1 thresholds put real human sessions
+in ``variable``, and true bimodal detection (Hartigan dip /
+two-peak) is registry-flagged for v0.2. Tighter pinning lands as
+the corpus grows.
+
+**Worker unblocked:** ``BEHAVE-INTEGRATION.md`` Phase 4 can now wire
+the per-session producer against the Phase A engine; the Tier-A
+corpus continues to grow under Phases B-G without changing the
+worker's interface.
 
 ---
 
