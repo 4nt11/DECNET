@@ -19,11 +19,16 @@ from __future__ import annotations
 
 import base64
 import binascii
+import email
+import email.errors
+import email.message
+import email.policy
 import hashlib
 import re
 from collections.abc import Callable
 from typing import Any, Final
 
+from decnet.artifacts.paths import ArtifactPathError, resolve_artifact_path
 from decnet.ttp.base import TaggerEvent, TolerantTagger
 from decnet.ttp.impl._emit import emit_tags
 from decnet.ttp.impl._rule_index import RuleIndex
@@ -241,12 +246,78 @@ def _p_malicious_attachment(
     return None
 
 
+def _extract_body_text(msg: email.message.EmailMessage) -> str | None:
+    """Best-effort plain-text body extraction from a parsed email.
+
+    Prefers ``text/plain``. Falls back to ``text/html`` (raw — predicates
+    here are substring-matchers, no need to de-tag). Returns None when
+    the message has no readable text part. Requires the message to have
+    been parsed with ``policy=email.policy.default`` so parts are
+    ``EmailMessage`` instances (``get_content`` is policy-conditional).
+    """
+    candidates: list[email.message.EmailMessage] = list(msg.walk())
+    for content_type in ("text/plain", "text/html"):
+        for part in candidates:
+            if part.get_content_type() != content_type:
+                continue
+            try:
+                content = part.get_content()
+            except (LookupError, ValueError, KeyError):
+                continue
+            if isinstance(content, str):
+                return content
+    return None
+
+
+def _load_body_text(payload: dict[str, Any]) -> str | None:
+    """Return the email body text for predicates that need it.
+
+    If the bus payload already carries ``body_text`` (older deployments
+    or master-side producers), use it. Otherwise disk-reach: open the
+    ``.eml`` from ``/var/lib/decnet/artifacts/{decky_id}/smtp/{stored_as}``
+    and parse the body in-process.
+
+    The decoded body is memoized back into the payload dict so the next
+    predicate on the same event reuses it without re-opening the file.
+    The bus envelope only carries the artifact pointer (``decky_id`` +
+    ``stored_as``); raw body bytes never cross the host boundary
+    (DEBT-047). Returns None on any failure — predicates then short
+    circuit to no-match, matching pre-disk-reach behavior when fields
+    were absent.
+    """
+    existing = payload.get("body_text")
+    if isinstance(existing, str):
+        return existing
+    decky_id = payload.get("decky_id")
+    stored_as = payload.get("stored_as")
+    if not isinstance(decky_id, str) or not isinstance(stored_as, str):
+        return None
+    try:
+        path = resolve_artifact_path(decky_id, stored_as, "smtp")
+    except ArtifactPathError:
+        return None
+    try:
+        with open(path, "rb") as fh:
+            msg = email.message_from_binary_file(
+                fh, policy=email.policy.default,
+            )
+    except (OSError, email.errors.MessageError):
+        return None
+    body = _extract_body_text(msg)
+    if body is None:
+        return None
+    payload["body_text"] = body
+    return body
+
+
 def _p_bec(
     spec: dict[str, Any], payload: dict[str, Any],
 ) -> dict[str, Any] | None:
     subject = payload.get("subject")
-    body_text = payload.get("body_text")
-    if not isinstance(subject, str) or not isinstance(body_text, str):
+    if not isinstance(subject, str):
+        return None
+    body_text = _load_body_text(payload)
+    if body_text is None:
         return None
     subj_kws = spec.get("subject_keywords", [])
     body_kws = spec.get("body_action_keywords", [])
@@ -278,8 +349,8 @@ def _p_encoded_payload(
     spec: dict[str, Any], payload: dict[str, Any],
 ) -> dict[str, Any] | None:
     min_bytes = int(spec.get("min_bytes", 4096))
-    body_text = payload.get("body_text")
-    if not isinstance(body_text, str) or not body_text:
+    body_text = _load_body_text(payload)
+    if not body_text:
         return None
     # Upstream may pre-compute the largest decoded base64 length.
     body_b64_bytes = payload.get("body_base64_bytes")
