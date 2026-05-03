@@ -13,7 +13,12 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from typing import Iterable
 
-from decnet.profiler.behave_shell._parse import AsciinemaEvent, PasteBurst
+from decnet.profiler.behave_shell._parse import (
+    AsciinemaEvent,
+    Command,
+    PasteBurst,
+    hash_token,
+)
 from decnet.profiler.behave_shell._thresholds import (
     PASTE_BURST_MAX_IAT_S,
     PASTE_MIN_CHARS_PER_EVENT,
@@ -36,6 +41,11 @@ class SessionContext:
     iats: tuple[float, ...] = field(default_factory=tuple)
     paste_bursts: tuple[PasteBurst, ...] = field(default_factory=tuple)
     paste_event_count: int = 0
+
+    # Step 4 derivations — command segmentation
+    commands: tuple[Command, ...] = field(default_factory=tuple)
+    inter_cmd_iats: tuple[float, ...] = field(default_factory=tuple)
+    output_per_cmd: tuple[int, ...] = field(default_factory=tuple)
 
 
 def _detect_paste_bursts(
@@ -92,6 +102,48 @@ def _detect_paste_bursts(
     return tuple(bursts), paste_count
 
 
+def _segment_commands(inputs: list[AsciinemaEvent]) -> tuple[Command, ...]:
+    """Walk input events, splitting on ``\\r`` / ``\\n`` into commands.
+
+    PII discipline: only the first whitespace-delimited token is
+    retained, and only as a sha256 hash. Buffer contents are dropped
+    on every command boundary; an unterminated trailing buffer (no
+    final newline) yields no command.
+    """
+    cmds: list[Command] = []
+    buf_chars: list[str] = []
+    buf_start_ts: float | None = None
+
+    for t, _kind, data in inputs:
+        for c in data:
+            if c in ("\r", "\n"):
+                if buf_chars:
+                    text = "".join(buf_chars).strip()
+                    first_token = text.split(maxsplit=1)[0] if text else ""
+                    cmds.append(Command(
+                        start_ts=buf_start_ts if buf_start_ts is not None else t,
+                        end_ts=t,
+                        first_token_hash=hash_token(first_token),
+                    ))
+                buf_chars = []
+                buf_start_ts = None
+            else:
+                if not buf_chars:
+                    buf_start_ts = t
+                buf_chars.append(c)
+
+    return tuple(cmds)
+
+
+def _output_bytes_between(
+    outputs: list[AsciinemaEvent],
+    start: float,
+    end: float,
+) -> int:
+    """Total ``len(d)`` of output events with ``start <= t < end``."""
+    return sum(len(d) for t, _k, d in outputs if start <= t < end)
+
+
 def build_session_context(
     events: Iterable[AsciinemaEvent],
     *,
@@ -127,6 +179,15 @@ def build_session_context(
         max(0.0, inputs[i][0] - inputs[i - 1][0]) for i in range(1, len(inputs))
     )
     paste_bursts, paste_count = _detect_paste_bursts(inputs)
+    commands = _segment_commands(inputs)
+    inter_cmd_iats = tuple(
+        max(0.0, commands[i + 1].start_ts - commands[i].end_ts)
+        for i in range(len(commands) - 1)
+    )
+    output_per_cmd = tuple(
+        _output_bytes_between(outputs, commands[i].end_ts, commands[i + 1].start_ts)
+        for i in range(len(commands) - 1)
+    )
 
     return SessionContext(
         sid=sid,
@@ -140,4 +201,7 @@ def build_session_context(
         iats=iats,
         paste_bursts=paste_bursts,
         paste_event_count=paste_count,
+        commands=commands,
+        inter_cmd_iats=inter_cmd_iats,
+        output_per_cmd=output_per_cmd,
     )
