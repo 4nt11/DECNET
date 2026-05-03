@@ -512,15 +512,21 @@ have the badge call it on the same cadence the page already polls.
 Trigger: first time the count visibly diverges from a hand-checked
 DB query, or fleet size ≥ 10 active deckies.
 
-### DEBT-043 — No frontend test framework configured
-**Files:** `decnet_web/package.json`
-The repo has no vitest/jest/RTL setup. Frontend changes (Orchestrator
-page, useOrchestratorStream hook, identity/campaign pages) ship with
-backend-only coverage. Component-level regressions land in production
-unless caught by manual smoke testing.
-**Remediation:** add vitest + @testing-library/react, write the
-listed-but-skipped tests for `Orchestrator.tsx` (renders empty state,
-filter toggling, mocked-EventSource prepend) as the seed suite.
+### ~~DEBT-043 — No frontend test framework configured~~ ✅ RESOLVED 2026-05-03
+**Files:** `decnet_web/package.json`, `decnet_web/vite.config.ts`,
+`decnet_web/src/test/setup.ts`, `decnet_web/src/components/Orchestrator.test.tsx`.
+vitest 4 + jsdom + @testing-library/{react,jest-dom,user-event} +
+@vitest/coverage-v8 wired through `vite.config.ts` (using
+`defineConfig` from `vitest/config` so the `test` block type-checks).
+`src/test/setup.ts` registers jest-dom matchers and runs RTL
+`cleanup` after each test. `tsconfig.app.json` picks up
+`vitest/globals` + `@testing-library/jest-dom` types. New scripts:
+`npm test` (watch), `npm run test:run` (one-shot), `npm run coverage`.
+Seed suite (`Orchestrator.test.tsx`) exercises the three regressions
+called out in the original entry: empty-state render, kind-filter
+toggling triggers a scoped refetch, and a mocked stream callback
+prepends a row to the table. Future component tests land alongside
+`*.tsx` as `*.test.tsx`.
 
 ### ~~DEBT-044 — `attacker.email.received` producer not wired~~ ✅ RESOLVED
 **Files:** `decnet/web/ingester.py`, `decnet/templates/smtp/server.py`
@@ -715,7 +721,7 @@ user who needs it.
 | ~~DEBT-040~~ | ✅ | Honeypot / RDP+SMB cred framers | resolved |
 | ~~DEBT-041~~ | ✅ | API / UI / Threat-intel keying | resolved |
 | DEBT-042 | 🟢 Low | UI / Orchestrator failure-count window | open |
-| DEBT-043 | 🟡 Medium | Frontend test framework missing | open |
+| ~~DEBT-043~~ | ✅ | Frontend test framework missing | resolved 2026-05-03 |
 | ~~DEBT-044~~ | ✅ | TTP / Email producer wiring | resolved 2026-05-02 |
 | DEBT-045 | 🟡 Medium | TTP / EmailLifter heavyweight extraction | partial paid 2026-05-02 |
 | DEBT-046 | 🟡 Medium | TTP / EmailLifter mal-hash feed integration | open |
@@ -723,5 +729,5 @@ user who needs it.
 | DEBT-048 | 🟡 Medium | TTP / Intel provider mapping review (recurring) | open / recurring |
 | DEBT-049 | 🟡 Medium | TTP / Sigma adapter (post-v1) | open |
 
-**Remaining open:** DEBT-011 (Alembic), DEBT-027 (Dynamic bait store), DEBT-028 (deploy endpoint tests), DEBT-033 (transcript shard rotation), DEBT-036 (session-profile ingester), DEBT-037 (webhook delivery hardening), DEBT-038 (SSH PAM cred-capture limitations — document-only), DEBT-042 (orchestrator failure-count window), DEBT-043 (frontend test framework), DEBT-045 (EmailLifter heavyweight — partial paid; carved-out follow-ups remain), DEBT-046 (mal-hash feed), DEBT-048 (TTP intel provider mapping review — recurring quarterly), DEBT-049 (TTP Sigma adapter — post-v1).
+**Remaining open:** DEBT-011 (Alembic), DEBT-027 (Dynamic bait store), DEBT-028 (deploy endpoint tests), DEBT-033 (transcript shard rotation), DEBT-036 (session-profile ingester), DEBT-037 (webhook delivery hardening), DEBT-038 (SSH PAM cred-capture limitations — document-only), DEBT-042 (orchestrator failure-count window), DEBT-045 (EmailLifter heavyweight — partial paid; carved-out follow-ups remain), DEBT-046 (mal-hash feed), DEBT-048 (TTP intel provider mapping review — recurring quarterly), DEBT-049 (TTP Sigma adapter — post-v1).
 **Estimated remaining effort:** ~21 hours plus the new EmailLifter / TTP follow-ups. DEBT-030 Phase B (optimistic staged-buffer editor) is a follow-up, not debt.
