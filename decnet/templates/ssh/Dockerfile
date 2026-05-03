@@ -1,10 +1,10 @@
-ARG BASE_IMAGE=debian:bookworm-slim
+ARG BASE_IMAGE=debian:bookworm-slim@sha256:f9c6a2fd2ddbc23e336b6257a5245e31f996953ef06cd13a59fa0a1df2d5c252
 
 # ── Stage 1: build the static auth-helper credential-capture binary ──────────
 # Compiled against musl so the resulting binary is fully static — runs on
 # any glibc/musl Linux without a libc version match. Stripped at link
 # time via -s so `file /usr/sbin/auth-helper` reports a generic ELF.
-FROM debian:bookworm-slim AS auth-helper-build
+FROM debian:bookworm-slim@sha256:f9c6a2fd2ddbc23e336b6257a5245e31f996953ef06cd13a59fa0a1df2d5c252 AS auth-helper-build
 RUN apt-get update && apt-get install -y --no-install-recommends musl-tools \
     && rm -rf /var/lib/apt/lists/*
 COPY auth-helper/auth-helper.c /tmp/auth-helper.c

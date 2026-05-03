@@ -24,7 +24,8 @@ import yaml
 
 from decnet.services.registry import get_service
 
-_DEFAULT_BASE_IMAGE = "debian:bookworm-slim"
+# Pinned by digest; refresh procedure documented in decnet/distros.py.
+_DEFAULT_BASE_IMAGE = "debian:bookworm-slim@sha256:f9c6a2fd2ddbc23e336b6257a5245e31f996953ef06cd13a59fa0a1df2d5c252"
 
 # 8 chars matches the git short-SHA convention; collision-safe within
 # a single deployment's network namespace.

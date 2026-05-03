@@ -25,7 +25,7 @@ class ConpotService(BaseService):
         return {
             "build": {
                 "context": str(self.dockerfile_context()),
-                "args": {"BASE_IMAGE": "honeynet/conpot:latest"},
+                "args": {"BASE_IMAGE": "honeynet/conpot:latest@sha256:cd93e88d9e44b020db691fc4c75cb29e76b5e90ddbc408aca26e6c78c5646976"},
             },
             "container_name": f"{decky_name}-conpot",
             "restart": "unless-stopped",

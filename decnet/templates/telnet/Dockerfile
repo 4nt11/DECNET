@@ -1,11 +1,11 @@
-ARG BASE_IMAGE=debian:bookworm-slim
+ARG BASE_IMAGE=debian:bookworm-slim@sha256:f9c6a2fd2ddbc23e336b6257a5245e31f996953ef06cd13a59fa0a1df2d5c252
 
 # ── Stage 1: build the static auth-helper credential-capture binary ──────────
 # Same source the SSH template builds — generic over PAM service. Wired
 # into /etc/pam.d/login below so every busybox-telnetd → /bin/login auth
 # attempt is captured before pam_unix runs. Static + musl: ~38 KB ELF,
 # zero libc version coupling, runs anywhere.
-FROM debian:bookworm-slim AS auth-helper-build
+FROM debian:bookworm-slim@sha256:f9c6a2fd2ddbc23e336b6257a5245e31f996953ef06cd13a59fa0a1df2d5c252 AS auth-helper-build
 RUN apt-get update && apt-get install -y --no-install-recommends musl-tools \
     && rm -rf /var/lib/apt/lists/*
 COPY auth-helper/auth-helper.c /tmp/auth-helper.c

@@ -494,10 +494,9 @@ The prober already computes JARM (`worker.py:286`), HASSH (`worker.py:334`), and
 ### ~~DEBT-022 — Debug `print()` in correlation engine~~ ✅ CLOSED (false positive)
 `decnet/correlation/engine.py:20` — The `print()` call is inside the module docstring as a usage example, not in executable code. No production code path affected.
 
-### DEBT-023 — Unpinned base Docker images
-**Files:** All `templates/*/Dockerfile`  
-`debian:bookworm-slim` and similar tags are used without digest pinning. Image contents can silently change on `docker pull`, breaking reproducibility and supply-chain integrity.  
-**Status:** Deferred — requires `docker pull` access to resolve current digests for each base image.
+### ~~DEBT-023 — Unpinned base Docker images~~ ✅ RESOLVED
+**Files:** `decnet/distros.py`, `decnet/models.py`, `decnet/topology/compose.py`, `decnet/services/conpot.py`, all `decnet/templates/*/Dockerfile`
+Resolved 2026-05-03. All base images now carry `image:tag@sha256:<digest>` references. Tags retained for human readability; `@sha256` is what Docker actually resolves, so a registry-side rebuild can no longer swap content under us. Pinned: `debian:bookworm-slim`, `ubuntu:22.04`, `ubuntu:20.04`, `rockylinux:9-minimal`, `centos:7`, `alpine:3.19`, `fedora:39`, `kalilinux/kali-rolling`, `archlinux:latest`, `honeynet/conpot:latest`. Refresh procedure documented at the top of `decnet/distros.py` (`docker pull <tag>` + `docker inspect --format '{{index .RepoDigests 0}}' <tag>`).
 
 ### ~~DEBT-024 — Stale service version hardcoded in Redis template~~ ✅ RESOLVED
 ~~**File:** `templates/redis/server.py:15`~~  
@@ -705,7 +704,7 @@ user who needs it.
 | ~~DEBT-020~~ | ✅ | Docs | resolved |
 | ~~DEBT-021~~ | ✅ | Architecture | resolved `de84cc6` |
 | ~~DEBT-022~~ | ✅ | Code Quality | closed (false positive) |
-| DEBT-023 | 🟢 Low | Infra | deferred (needs docker pull) |
+| ~~DEBT-023~~ | ✅ | Infra | resolved 2026-05-03 |
 | ~~DEBT-024~~ | ✅ | Infra | resolved |
 | ~~DEBT-025~~ | ✅ | Build | resolved |
 | ~~DEBT-026~~ | ✅ | Features | resolved 2026-05-03 |
@@ -732,5 +731,5 @@ user who needs it.
 | DEBT-048 | 🟡 Medium | TTP / Intel provider mapping review (recurring) | open / recurring |
 | DEBT-049 | 🟡 Medium | TTP / Sigma adapter (post-v1) | open |
 
-**Remaining open:** DEBT-011 (Alembic), DEBT-023 (image pinning), DEBT-027 (Dynamic bait store), DEBT-028 (deploy endpoint tests), DEBT-032 (fingerprint rotation detection), DEBT-033 (transcript shard rotation), DEBT-036 (session-profile ingester), DEBT-037 (webhook delivery hardening), DEBT-038 (SSH PAM cred-capture limitations — document-only), DEBT-042 (orchestrator failure-count window), DEBT-043 (frontend test framework), DEBT-045 (EmailLifter heavyweight — partial paid; carved-out follow-ups remain), DEBT-046 (mal-hash feed), DEBT-048 (TTP intel provider mapping review — recurring quarterly), DEBT-049 (TTP Sigma adapter — post-v1).
+**Remaining open:** DEBT-011 (Alembic), DEBT-027 (Dynamic bait store), DEBT-028 (deploy endpoint tests), DEBT-032 (fingerprint rotation detection), DEBT-033 (transcript shard rotation), DEBT-036 (session-profile ingester), DEBT-037 (webhook delivery hardening), DEBT-038 (SSH PAM cred-capture limitations — document-only), DEBT-042 (orchestrator failure-count window), DEBT-043 (frontend test framework), DEBT-045 (EmailLifter heavyweight — partial paid; carved-out follow-ups remain), DEBT-046 (mal-hash feed), DEBT-048 (TTP intel provider mapping review — recurring quarterly), DEBT-049 (TTP Sigma adapter — post-v1).
 **Estimated remaining effort:** ~21 hours plus the new EmailLifter / TTP follow-ups. DEBT-030 Phase B (optimistic staged-buffer editor) is a follow-up, not debt.
