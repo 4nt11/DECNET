@@ -11,10 +11,14 @@ from typing import Callable, Iterable
 from decnet_behave_core.spec.envelope import Observation
 
 from decnet.profiler.behave_shell._ctx import SessionContext
-from decnet.profiler.behave_shell._features.motor import input_modality
+from decnet.profiler.behave_shell._features.motor import (
+    input_modality,
+    paste_burst_rate,
+)
 
 FeatureFn = Callable[[SessionContext], Iterable[Observation]]
 
 FEATURES: tuple[FeatureFn, ...] = (
     input_modality,
+    paste_burst_rate,
 )
