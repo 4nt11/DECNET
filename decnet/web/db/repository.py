@@ -1131,6 +1131,17 @@ class BaseRepository(ABC):
         """Total orchestrator-event rows, optionally filtered by kind."""
         raise NotImplementedError
 
+    async def count_orchestrator_failures(
+        self,
+        *,
+        since_ts: Any,
+        kind: Optional[str] = None,
+    ) -> int:
+        """Count failed orchestrator activity since *since_ts*, across
+        both event + email tables. Backs the dashboard's failure-count
+        badge (DEBT-042)."""
+        raise NotImplementedError
+
     async def prune_orchestrator_events(self, per_dst_cap: int = 10000) -> int:
         """Trim per-``dst_decky_uuid`` rows to a cap. Returns deleted count.
 

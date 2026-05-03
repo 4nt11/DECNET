@@ -32,6 +32,7 @@ from .campaigns.api_list_campaign_identities import router as campaign_identitie
 from .campaigns.api_events import router as campaign_events_router
 from .orchestrator.api_list_events import router as orchestrator_list_router
 from .orchestrator.api_events import router as orchestrator_events_router
+from .orchestrator.api_event_stats import router as orchestrator_stats_router
 from .realism.api_config import router as realism_config_router
 from .realism.api_personas import router as realism_personas_router
 from .realism.api_synthetic_files import router as realism_synthetic_files_router
@@ -123,6 +124,7 @@ api_router.include_router(campaign_identities_router)
 api_router.include_router(campaign_events_router)
 api_router.include_router(orchestrator_list_router)
 api_router.include_router(orchestrator_events_router)
+api_router.include_router(orchestrator_stats_router)
 
 # Realism — global persona pool CRUD for the dashboard's
 # "Persona Generation" page.  The orchestrator reads from the same

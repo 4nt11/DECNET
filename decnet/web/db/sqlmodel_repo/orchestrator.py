@@ -60,6 +60,46 @@ class OrchestratorMixin(_MixinBase):
             result = await session.execute(stmt)
             return result.scalar() or 0
 
+    async def count_orchestrator_failures(
+        self,
+        *,
+        since_ts: datetime,
+        kind: Optional[str] = None,
+    ) -> int:
+        """Count failed orchestrator activity since *since_ts*, across
+        both ``orchestrator_events`` (traffic / file) and
+        ``orchestrator_emails`` (email).
+
+        Backs the dashboard's failure-count badge — see DEBT-042. The
+        in-memory window the badge previously computed against was
+        bounded by the SSE-buffer + paginated page, so failures older
+        than the local window read low. This is the authoritative count.
+        """
+        async with self._session() as session:
+            ev_stmt = (
+                select(func.count()).select_from(OrchestratorEvent)
+                .where(
+                    col(OrchestratorEvent.success).is_(False),
+                    OrchestratorEvent.ts >= since_ts,
+                )
+            )
+            if kind in ("traffic", "file"):
+                ev_stmt = ev_stmt.where(OrchestratorEvent.kind == kind)
+            em_stmt = (
+                select(func.count()).select_from(OrchestratorEmail)
+                .where(
+                    col(OrchestratorEmail.success).is_(False),
+                    OrchestratorEmail.ts >= since_ts,
+                )
+            )
+            ev_count = 0
+            em_count = 0
+            if kind in (None, "traffic", "file"):
+                ev_count = (await session.execute(ev_stmt)).scalar() or 0
+            if kind in (None, "email"):
+                em_count = (await session.execute(em_stmt)).scalar() or 0
+            return ev_count + em_count
+
     async def prune_orchestrator_events(self, per_dst_cap: int = 10000) -> int:
         """Trim per-dst rows to *per_dst_cap*, oldest-first. Returns deleted count."""
         deleted = 0

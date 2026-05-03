@@ -26,6 +26,26 @@ vi.mock('./useOrchestratorStream', () => ({
 import api from '../utils/api';
 const apiGet = api.get as ReturnType<typeof vi.fn>;
 
+/** Two endpoints fire at mount — events list + failure-count stats.
+ *  This dispatcher maps URLs to canned responses so per-test cases stay
+ *  focused on the path they care about. */
+const buildApiResponder = (overrides: {
+  events?: { data: unknown[]; total: number };
+  failures?: number;
+} = {}) => {
+  const events = overrides.events ?? { data: [], total: 0 };
+  const failures = overrides.failures ?? 0;
+  return (url: string) => {
+    if (url.startsWith('/orchestrator/events/stats')) {
+      return Promise.resolve({ data: { count: failures } });
+    }
+    if (url.startsWith('/orchestrator/events')) {
+      return Promise.resolve({ data: events });
+    }
+    return Promise.resolve({ data: {} });
+  };
+};
+
 const renderPage = () =>
   render(
     <MemoryRouter initialEntries={['/orchestrator']}>
@@ -40,7 +60,7 @@ describe('Orchestrator', () => {
   });
 
   it('renders the empty state when the API returns no events', async () => {
-    apiGet.mockResolvedValueOnce({ data: { data: [], total: 0 } });
+    apiGet.mockImplementation(buildApiResponder());
 
     renderPage();
 
@@ -50,11 +70,14 @@ describe('Orchestrator', () => {
   });
 
   it('switches the kind filter and refetches scoped to that kind', async () => {
-    apiGet.mockResolvedValue({ data: { data: [], total: 0 } });
+    apiGet.mockImplementation(buildApiResponder());
 
     renderPage();
-    await waitFor(() => expect(apiGet).toHaveBeenCalledTimes(1));
-    expect(apiGet.mock.calls[0][0]).toMatch(/^\/orchestrator\/events\?limit=50&offset=0$/);
+    await waitFor(() =>
+      expect(
+        apiGet.mock.calls.some((c) => /^\/orchestrator\/events\?limit=50&offset=0$/.test(c[0])),
+      ).toBe(true),
+    );
 
     await userEvent.click(screen.getByRole('tab', { name: /^email$/ }));
 
@@ -65,7 +88,7 @@ describe('Orchestrator', () => {
   });
 
   it('prepends a row when the live stream pushes a traffic event', async () => {
-    apiGet.mockResolvedValueOnce({ data: { data: [], total: 0 } });
+    apiGet.mockImplementation(buildApiResponder());
 
     renderPage();
     await waitFor(() => expect(capturedOnEvent).not.toBeNull());
@@ -89,5 +112,32 @@ describe('Orchestrator', () => {
     expect(await screen.findByText('GET /admin')).toBeInTheDocument();
     // 1 event shown after a single push.
     expect(screen.getByText(/1 EVENTS SHOWN/i)).toBeInTheDocument();
+  });
+
+  it('renders the failure-count badge from the stats endpoint (DEBT-042)', async () => {
+    apiGet.mockImplementation(buildApiResponder({ failures: 42 }));
+
+    renderPage();
+
+    expect(await screen.findByText(/42 FAILURES \/ 1H/i)).toBeInTheDocument();
+    // Stats endpoint is the authoritative source — verify it was actually queried.
+    expect(
+      apiGet.mock.calls.some((c) =>
+        /\/orchestrator\/events\/stats\?since=1h&success=false/.test(c[0]),
+      ),
+    ).toBe(true);
+  });
+
+  it('hides the failure-count badge when the stats endpoint reports zero', async () => {
+    apiGet.mockImplementation(buildApiResponder({ failures: 0 }));
+
+    renderPage();
+    await waitFor(() =>
+      expect(
+        apiGet.mock.calls.some((c) => /\/orchestrator\/events\/stats/.test(c[0])),
+      ).toBe(true),
+    );
+
+    expect(screen.queryByText(/FAILURES \/ 1H/i)).not.toBeInTheDocument();
   });
 });

@@ -36,7 +36,6 @@ type KindFilter = 'all' | 'traffic' | 'file' | 'email';
 type StreamStatus = 'connecting' | 'live' | 'error';
 
 const ROW_CAP = 500;
-const HOUR_MS = 60 * 60 * 1000;
 const FRESH_MS = 5_000;
 
 const timeAgo = (dateStr: string | null): string => {
@@ -64,6 +63,7 @@ const Orchestrator: React.FC = () => {
   const [paused, setPaused] = useState(false);
   const [now, setNow] = useState(Date.now());
   const [selected, setSelected] = useState<OrchestratorEntry | null>(null);
+  const [failuresLastHour, setFailuresLastHour] = useState(0);
 
   const limit = 50;
   const pausedRef = useRef(paused);
@@ -73,6 +73,27 @@ const Orchestrator: React.FC = () => {
   useEffect(() => {
     const t = setInterval(() => setNow(Date.now()), 5_000);
     return () => clearInterval(t);
+  }, []);
+
+  // Authoritative failure count from the DB — see DEBT-042. The
+  // in-memory derivation it replaced was bounded by the SSE buffer +
+  // one paginated page, so failures older than the local window were
+  // silently excluded and the badge read low on busy fleets.
+  useEffect(() => {
+    let cancelled = false;
+    const fetchStats = async () => {
+      try {
+        const res = await api.get(
+          '/orchestrator/events/stats?since=1h&success=false',
+        );
+        if (!cancelled) setFailuresLastHour(res.data?.count ?? 0);
+      } catch {
+        // Silent: the badge is a hint, missing data shouldn't blow up the page.
+      }
+    };
+    fetchStats();
+    const t = setInterval(fetchStats, 30_000);
+    return () => { cancelled = true; clearInterval(t); };
   }, []);
 
   const fetchEvents = async () => {
@@ -162,13 +183,6 @@ const Orchestrator: React.FC = () => {
     if (kindParam === 'all') return merged;
     return merged.filter((r) => r.kind === kindParam);
   }, [streamRows, rows, kindParam]);
-
-  const failuresLastHour = useMemo(() => {
-    const cutoff = now - HOUR_MS;
-    return [...streamRows, ...rows].filter(
-      (r) => !r.success && new Date(r.ts).getTime() >= cutoff,
-    ).length;
-  }, [streamRows, rows, now]);
 
   const statusLabel =
     status === 'live' ? 'LIVE'

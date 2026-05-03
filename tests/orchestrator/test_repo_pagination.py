@@ -98,6 +98,55 @@ async def test_kind_filter_narrows(tmp_path):
 
 
 @pytest.mark.asyncio
+async def test_count_failures_window_and_kind(tmp_path):
+    """count_orchestrator_failures must:
+    - count both tables (events + emails) when kind is None
+    - respect the since_ts cutoff
+    - skip success=True rows
+    - narrow to a single source table when kind is set"""
+    from datetime import datetime, timedelta, timezone
+
+    repo = await _make_repo(tmp_path, "failures.db")
+    dst = await _seed_decky(repo, "decky-A")
+
+    # 2 fresh failures + 1 fresh success on the events table.
+    for i in range(2):
+        await repo.record_orchestrator_event({
+            "kind": "traffic", "protocol": "ssh",
+            "action": f"fail:{i}", "src_decky_uuid": None,
+            "dst_decky_uuid": dst, "success": False, "payload": {},
+        })
+    await repo.record_orchestrator_event({
+        "kind": "traffic", "protocol": "ssh",
+        "action": "ok", "src_decky_uuid": None,
+        "dst_decky_uuid": dst, "success": True, "payload": {},
+    })
+
+    # 1 fresh email failure.
+    await repo.record_orchestrator_email({
+        "ts": datetime.now(timezone.utc),
+        "subject": "boom", "sender_email": "a@x", "recipient_email": "b@y",
+        "mail_decky_uuid": "mh", "language": "en",
+        "thread_id": "t1", "message_id": "<m1@x>", "in_reply_to": None,
+        "eml_path": "/tmp/m1.eml",
+        "success": False, "payload": "{}",
+    })
+
+    cutoff = datetime.now(timezone.utc) - timedelta(hours=1)
+
+    assert await repo.count_orchestrator_failures(since_ts=cutoff) == 3
+    assert (
+        await repo.count_orchestrator_failures(since_ts=cutoff, kind="traffic")
+    ) == 2
+    assert (
+        await repo.count_orchestrator_failures(since_ts=cutoff, kind="email")
+    ) == 1
+    # Future cutoff → nothing matches.
+    future = datetime.now(timezone.utc) + timedelta(hours=1)
+    assert await repo.count_orchestrator_failures(since_ts=future) == 0
+
+
+@pytest.mark.asyncio
 async def test_prune_caps_per_dst(tmp_path):
     repo = await _make_repo(tmp_path, "prune.db")
     await _seed(repo, n=10)

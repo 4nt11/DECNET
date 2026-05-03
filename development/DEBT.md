@@ -498,19 +498,21 @@ Resolved 2026-05-03. All base images now carry `image:tag@sha256:<digest>` refer
 ~~**Files:** Project root~~  
 `requirements.lock` generated via `pip freeze`. Reproducible installs now available via `pip install -r requirements.lock`.
 
-### DEBT-042 — Orchestrator failure-count badge is window-bound
-**File:** `decnet_web/src/components/Orchestrator.tsx`
-The "X failures / 1h" header badge is computed from the in-memory SSE
-window (capped at 500 rows merged with one paginated server page). On
-busy fleets — many deckies × dense activity — failures older than the
-local window or beyond the visible page are silently excluded, so the
-badge can read low. Acceptable for MVP; the badge is a hint, not a
-metric.
-**Remediation:** add a dedicated count endpoint
-(`GET /api/v1/orchestrator/events/stats?since=1h&success=false`) and
-have the badge call it on the same cadence the page already polls.
-Trigger: first time the count visibly diverges from a hand-checked
-DB query, or fleet size ≥ 10 active deckies.
+### ~~DEBT-042 — Orchestrator failure-count badge is window-bound~~ ✅ RESOLVED 2026-05-03
+**Files:** `decnet/web/router/orchestrator/api_event_stats.py` (new),
+`decnet/web/db/sqlmodel_repo/orchestrator.py`, `decnet/web/db/repository.py`,
+`decnet_web/src/components/Orchestrator.tsx`.
+New `GET /api/v1/orchestrator/events/stats?since=1h&success=false&kind=...`
+endpoint backed by `repo.count_orchestrator_failures(since_ts, kind)`,
+which counts failed rows across both `orchestrator_events` and
+`orchestrator_emails` since the cutoff. The badge polls the endpoint
+on mount + every 30 s and renders the authoritative DB-derived count
+instead of deriving from the SSE buffer + one paginated page. Window
+parser accepts `^\d+[smhd]$`, capped at 7d. Today only `success=false`
+is accepted on this surface (the only consumer); other modes are
+rejected so the endpoint isn't accidentally repurposed before the
+next consumer is properly designed. Repo + endpoint + badge tests
+land in the same commit.
 
 ### ~~DEBT-043 — No frontend test framework configured~~ ✅ RESOLVED 2026-05-03
 **Files:** `decnet_web/package.json`, `decnet_web/vite.config.ts`,
@@ -720,7 +722,7 @@ user who needs it.
 | ~~DEBT-039~~ | ✅ | Honeypot / Cred emitters | resolved |
 | ~~DEBT-040~~ | ✅ | Honeypot / RDP+SMB cred framers | resolved |
 | ~~DEBT-041~~ | ✅ | API / UI / Threat-intel keying | resolved |
-| DEBT-042 | 🟢 Low | UI / Orchestrator failure-count window | open |
+| ~~DEBT-042~~ | ✅ | UI / Orchestrator failure-count window | resolved 2026-05-03 |
 | ~~DEBT-043~~ | ✅ | Frontend test framework missing | resolved 2026-05-03 |
 | ~~DEBT-044~~ | ✅ | TTP / Email producer wiring | resolved 2026-05-02 |
 | DEBT-045 | 🟡 Medium | TTP / EmailLifter heavyweight extraction | partial paid 2026-05-02 |
@@ -729,5 +731,5 @@ user who needs it.
 | DEBT-048 | 🟡 Medium | TTP / Intel provider mapping review (recurring) | open / recurring |
 | DEBT-049 | 🟡 Medium | TTP / Sigma adapter (post-v1) | open |
 
-**Remaining open:** DEBT-011 (Alembic), DEBT-027 (Dynamic bait store), DEBT-028 (deploy endpoint tests), DEBT-033 (transcript shard rotation), DEBT-036 (session-profile ingester), DEBT-037 (webhook delivery hardening), DEBT-038 (SSH PAM cred-capture limitations — document-only), DEBT-042 (orchestrator failure-count window), DEBT-045 (EmailLifter heavyweight — partial paid; carved-out follow-ups remain), DEBT-046 (mal-hash feed), DEBT-048 (TTP intel provider mapping review — recurring quarterly), DEBT-049 (TTP Sigma adapter — post-v1).
+**Remaining open:** DEBT-011 (Alembic), DEBT-027 (Dynamic bait store), DEBT-028 (deploy endpoint tests), DEBT-033 (transcript shard rotation), DEBT-036 (session-profile ingester), DEBT-037 (webhook delivery hardening), DEBT-038 (SSH PAM cred-capture limitations — document-only), DEBT-045 (EmailLifter heavyweight — partial paid; carved-out follow-ups remain), DEBT-046 (mal-hash feed), DEBT-048 (TTP intel provider mapping review — recurring quarterly), DEBT-049 (TTP Sigma adapter — post-v1).
 **Estimated remaining effort:** ~21 hours plus the new EmailLifter / TTP follow-ups. DEBT-030 Phase B (optimistic staged-buffer editor) is a follow-up, not debt.
