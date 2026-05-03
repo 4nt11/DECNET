@@ -313,6 +313,27 @@ class BaseRepository(ABC):
         """Retrieve the keystroke-dynamics profile row for a session."""
         pass
 
+    async def upsert_observed_attachment(
+        self,
+        *,
+        sha256: str,
+        decky_uuid: Optional[str],
+        attacker_uuid: Optional[str],
+        extension: Optional[str],
+        subject: Optional[str],
+        mal_hash_match: Optional[bool],
+        mal_hash_match_provider: Optional[str],
+    ) -> str:
+        """Record one observation of *sha256* against ``observed_attachments``.
+
+        Returns the row UUID. Verdict semantics: ``True`` is sticky;
+        once set, subsequent ``False`` / ``None`` observations don't
+        downgrade. See :class:`ObservedAttachment` for the full column
+        list and the rationale (DECNET as a honeypot platform — every
+        delivered hash is intel, even before any provider classifies).
+        """
+        raise NotImplementedError
+
     @abstractmethod
     async def upsert_attacker_intel(self, data: dict[str, Any]) -> str:
         """Insert or update the threat-intel row for an attacker UUID.

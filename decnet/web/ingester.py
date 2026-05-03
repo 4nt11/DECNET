@@ -714,10 +714,12 @@ async def _publish_email_received(
         attachment_manifest = []
     if not isinstance(attachment_manifest, list):
         attachment_manifest = []
-    attachment_sha256s = [
-        entry.get("sha256") for entry in attachment_manifest
-        if isinstance(entry, dict) and isinstance(entry.get("sha256"), str)
-        and entry.get("sha256")
+    attachment_sha256s: list[str] = [
+        sha for sha in (
+            entry.get("sha256") for entry in attachment_manifest
+            if isinstance(entry, dict)
+        )
+        if isinstance(sha, str) and sha
     ]
     try:
         urls = json.loads(fields.get("urls_json") or "[]")
@@ -761,6 +763,60 @@ async def _publish_email_received(
     except (TypeError, ValueError):
         body_base64_bytes = 0
 
+    # Per-hash mal-hash lookup + ObservedAttachment persistence. The
+    # boolean drops onto the bus payload as ``mal_hash_match`` so
+    # EmailLifter R0046's ``mal_hash_match`` lane fires; the per-hash
+    # observations land in ``observed_attachments`` for cross-attacker
+    # correlation independent of the rule's view. Field is omitted from
+    # the payload entirely on hash-less mail so the predicate stays
+    # silent (matches today's behavior).
+    mal_hash_match: Optional[bool] = None
+    if attachment_sha256s:
+        mal_hash_match = False
+        try:
+            from decnet.intel.factory import get_mal_hash_provider
+            provider = get_mal_hash_provider()
+        except Exception as exc:  # noqa: BLE001
+            logger.debug("mal_hash provider unavailable: %s", exc)
+            provider = None
+        provider_name = provider.name if provider is not None else None
+        for sha in attachment_sha256s:
+            verdict: Optional[bool] = None
+            if provider is not None:
+                try:
+                    verdict = await provider.is_known_bad(sha)
+                except Exception as exc:  # noqa: BLE001
+                    logger.debug("mal_hash lookup failed for %s: %s", sha, exc)
+                    verdict = None
+            if verdict is True:
+                mal_hash_match = True
+            ext = next(
+                (
+                    str(entry.get("extension") or "").lower()
+                    for entry in attachment_manifest
+                    if isinstance(entry, dict)
+                    and entry.get("sha256") == sha
+                    and entry.get("extension")
+                ),
+                None,
+            )
+            try:
+                await repo.upsert_observed_attachment(
+                    sha256=sha,
+                    decky_uuid=log_data.get("decky"),
+                    attacker_uuid=attacker_uuid,
+                    extension=ext or None,
+                    subject=fields.get("subject"),
+                    mal_hash_match=verdict,
+                    mal_hash_match_provider=(
+                        provider_name if verdict is not None else None
+                    ),
+                )
+            except Exception as exc:  # noqa: BLE001
+                logger.debug(
+                    "observed_attachments upsert failed for %s: %s", sha, exc,
+                )
+
     payload: dict[str, Any] = {
         "source_id": fields.get("msg_id") or fields.get("stored_as"),
         "attacker_uuid": attacker_uuid,
@@ -795,6 +851,8 @@ async def _publish_email_received(
         "stored_as": fields.get("stored_as"),
         "body_sha256": fields.get("sha256"),
     }
+    if mal_hash_match is not None:
+        payload["mal_hash_match"] = mal_hash_match
     try:
         bus = get_bus(client_name="ingester-email")
         await bus.connect()

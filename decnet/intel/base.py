@@ -78,3 +78,33 @@ class IntelProvider(ABC):
         entire IP. Implementations should also respect
         ``self._semaphore`` to bound in-flight calls.
         """
+
+
+class MalHashProvider(ABC):
+    """Abstract bad-hash lookup provider.
+
+    Sibling to :class:`IntelProvider` — different keyspace (file SHA-256
+    vs IP), different consumer (the email ingester at observation time,
+    not the IP-keyed intel-worker fan-out). Kept as a separate ABC so
+    the ``lookup(ip)`` semantics on ``IntelProvider`` stay honest.
+
+    Concrete impls today:
+
+    * :class:`decnet.intel.mal_hash.MalwareBazaarProvider` — bulk-feed
+      shape mirroring :class:`decnet.intel.feodo.FeodoProvider`.
+
+    Future impls (paid VirusTotal subscription, in-house allowlist) plug
+    in behind the same factory in :func:`decnet.intel.factory.get_mal_hash_provider`.
+    """
+
+    name: str
+
+    @abstractmethod
+    async def is_known_bad(self, sha256: str) -> bool:
+        """Return whether *sha256* is on this provider's bad-hash list.
+
+        MUST NOT raise — return ``False`` on any error (the caller is the
+        ingester, not a worker; an exception here would taint a totally
+        unrelated bus payload). The provider is responsible for logging
+        its own errors.
+        """

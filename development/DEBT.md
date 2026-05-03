@@ -564,30 +564,31 @@ ride on DEBT-046 (mal_hash_match — needs a feed) and DEBT-047
 (R0047 BEC — gated on artifact disk-reach, see DEBT-035).
 **Status:** Partial. Closed except for the carved-out follow-ups.
 
-### DEBT-046 — EmailLifter mal-hash feed integration (R0046 mal_hash_match)
-**Files:** `decnet/intel/feodo.py` (template), `decnet/web/ingester.py` (consumer wiring), **new** `decnet/intel/mal_hash.py`
-R0046's `mal_hash_match` lane stays gated until DECNET has a curated
-bad-hash feed it can lookup attachment SHA-256s against. The
-producer ships `attachment_sha256s: list[str]` on the bus today
-(commit `c7149410`) but no provider resolves a `mal_hash_match: bool`.
-**Design sketch** (mirrors `decnet/intel/feodo.py`'s bulk-feed pattern):
-- Feed source: MalwareBazaar's public SHA-256 dump as the v0
-  candidate (free, daily refresh, ~100 MB compressed). Operators
-  with paid VT subscriptions can swap the provider behind the same
-  factory.
-- Storage: in-memory set keyed by sha256, TTL-cached on a slow
-  refresh loop. Mirror `FeodoProvider`'s `_ensure_fresh` /
-  `_refresh` shape exactly.
-- Wiring: ingester reads each `attachment_sha256` in the manifest
-  at `_publish_email_received` time, checks against the cached
-  feed, sets `mal_hash_match: bool` on the bus payload.
-- Rule pack: no rule changes. `_p_malicious_attachment` already
-  reads `payload.get("mal_hash_match")` — silent today only because
-  the field is absent.
-**Trigger:** a curated feed source is selected (MalwareBazaar dump
-or better) and the operator has bandwidth / disk for a fresh refresh
-loop.
-**Status:** Open. Owner TBD. Filed 2026-05-02 alongside DEBT-045.
+### ~~DEBT-046 — EmailLifter mal-hash feed integration (R0046 mal_hash_match)~~ ✅ RESOLVED 2026-05-03
+**Files:** `decnet/intel/mal_hash.py` (new), `decnet/intel/base.py`,
+`decnet/intel/factory.py`, `decnet/web/db/models/attachments.py` (new),
+`decnet/web/db/sqlmodel_repo/observed_attachments.py` (new),
+`decnet/web/db/repository.py`, `decnet/web/ingester.py`.
+`MalwareBazaarProvider` mirrors `FeodoProvider`'s bulk-feed shape: one
+HTTP fetch every 24h via `_ensure_fresh` / `_refresh`, in-memory
+`set[str]` of hex-lowercased SHA-256s (~30 MB at 900K MalwareBazaar
+entries), set-membership lookup. New sibling ABC `MalHashProvider` on
+`decnet/intel/base.py` so the `IntelProvider.lookup(ip)` contract stays
+honest about its keyspace. Auth-keyed via
+`DECNET_MALWAREBAZAAR_AUTH_KEY`; absent key → silent no-op (a single
+warning at first refresh attempt) with the predicate's existing
+`is True` check leaving R0046's `mal_hash_match` lane absent — same
+behavior as pre-paydown.
+**Storage paydown:** every observed attachment hash now lands in a
+new `observed_attachments` table (UUID PK, sha256 UNIQUE, first/last
+seen, observation_count, extensions JSON, mal_hash_match verdict +
+provider + at). DECNET is a honeypot _platform_; we keep the hashes
+regardless of whether anyone classified them, seeding future
+cross-attacker correlation and federation work without locking us in
+today. Verdict is sticky: once any provider says True, subsequent
+None/False observations don't downgrade. Out of scope for this
+paydown: API surface for reading the table, federation export,
+retention policy. They get their own debt entries when they bite.
 
 ### ~~DEBT-047~~ — EmailLifter R0047 BEC unblock (artifact disk-reach) ✅ RESOLVED 2026-05-03
 **Files:** `decnet/artifacts/paths.py` (new shared helper),
@@ -726,10 +727,10 @@ user who needs it.
 | ~~DEBT-043~~ | ✅ | Frontend test framework missing | resolved 2026-05-03 |
 | ~~DEBT-044~~ | ✅ | TTP / Email producer wiring | resolved 2026-05-02 |
 | DEBT-045 | 🟡 Medium | TTP / EmailLifter heavyweight extraction | partial paid 2026-05-02 |
-| DEBT-046 | 🟡 Medium | TTP / EmailLifter mal-hash feed integration | open |
+| ~~DEBT-046~~ | ✅ | TTP / EmailLifter mal-hash feed integration | resolved 2026-05-03 |
 | ~~DEBT-047~~ | ✅ | TTP / EmailLifter R0047 BEC (disk-reach) | resolved 2026-05-03 |
 | DEBT-048 | 🟡 Medium | TTP / Intel provider mapping review (recurring) | open / recurring |
 | DEBT-049 | 🟡 Medium | TTP / Sigma adapter (post-v1) | open |
 
-**Remaining open:** DEBT-011 (Alembic), DEBT-027 (Dynamic bait store), DEBT-028 (deploy endpoint tests), DEBT-033 (transcript shard rotation), DEBT-036 (session-profile ingester), DEBT-037 (webhook delivery hardening), DEBT-038 (SSH PAM cred-capture limitations — document-only), DEBT-045 (EmailLifter heavyweight — partial paid; carved-out follow-ups remain), DEBT-046 (mal-hash feed), DEBT-048 (TTP intel provider mapping review — recurring quarterly), DEBT-049 (TTP Sigma adapter — post-v1).
+**Remaining open:** DEBT-011 (Alembic), DEBT-027 (Dynamic bait store), DEBT-028 (deploy endpoint tests), DEBT-033 (transcript shard rotation), DEBT-036 (session-profile ingester), DEBT-037 (webhook delivery hardening), DEBT-038 (SSH PAM cred-capture limitations — document-only), DEBT-045 (EmailLifter heavyweight — partial paid; carved-out follow-ups remain), DEBT-048 (TTP intel provider mapping review — recurring quarterly), DEBT-049 (TTP Sigma adapter — post-v1).
 **Estimated remaining effort:** ~21 hours plus the new EmailLifter / TTP follow-ups. DEBT-030 Phase B (optimistic staged-buffer editor) is a follow-up, not debt.

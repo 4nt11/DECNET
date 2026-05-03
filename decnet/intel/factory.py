@@ -21,7 +21,7 @@ from __future__ import annotations
 import os
 from typing import List
 
-from decnet.intel.base import IntelProvider
+from decnet.intel.base import IntelProvider, MalHashProvider
 
 _KNOWN_PROVIDERS = ("greynoise", "abuseipdb", "feodo", "threatfox")
 
@@ -35,6 +35,40 @@ def _provider_list() -> list[str]:
         "DECNET_INTEL_PROVIDERS", ",".join(_KNOWN_PROVIDERS),
     )
     return [p.strip().lower() for p in raw.split(",") if p.strip()]
+
+
+_mal_hash_singleton: MalHashProvider | None = None
+_mal_hash_initialized: bool = False
+
+
+def get_mal_hash_provider() -> MalHashProvider | None:
+    """Return the configured malware-hash lookup provider singleton.
+
+    Sibling factory to :func:`get_intel_providers` — different keyspace
+    (file SHA-256 vs IP), different consumer (the email ingester at
+    observation time, not the IP-keyed intel-worker fan-out). Returns
+    ``None`` only if intel is disabled wholesale; otherwise returns a
+    provider whose :meth:`is_known_bad` self-disables to a no-op when
+    ``DECNET_MALWAREBAZAAR_AUTH_KEY`` is unset, so the ingester never
+    has to special-case "no provider configured."
+    """
+    global _mal_hash_singleton, _mal_hash_initialized
+    if _mal_hash_initialized:
+        return _mal_hash_singleton
+    _mal_hash_initialized = True
+    if not _enabled():
+        _mal_hash_singleton = None
+        return None
+    from decnet.intel.mal_hash import MalwareBazaarProvider
+    _mal_hash_singleton = MalwareBazaarProvider()
+    return _mal_hash_singleton
+
+
+def _reset_mal_hash_provider_for_testing() -> None:
+    """Test hook — drop the singleton so the next call re-reads env."""
+    global _mal_hash_singleton, _mal_hash_initialized
+    _mal_hash_singleton = None
+    _mal_hash_initialized = False
 
 
 def get_intel_providers() -> List[IntelProvider]:
