@@ -30,7 +30,10 @@ MASTER_ONLY_COMMANDS: frozenset[str] = frozenset({
     "mutate", "listener", "profiler",
     "services", "distros", "correlate", "archetypes", "web",
     "db-reset", "init", "webhook", "clusterer", "campaign-clusterer",
-    "ttp", "ttp-backfill",
+    # `ttp` runs on agents — local SMTP decoys persist .eml files into the
+    # agent's artifacts tree and the EmailLifter disk-reaches them in-process
+    # (DEBT-047). `ttp-backfill` stays master-only: it walks the master DB.
+    "ttp-backfill",
 })
 MASTER_ONLY_GROUPS: frozenset[str] = frozenset(
     {"swarm", "topology", "geoip", "realism"}

@@ -55,11 +55,8 @@ def register(app: typer.Typer) -> None:
         ),
     ) -> None:
         """TTP-tagging worker — MITRE ATT&CK technique tagging."""
-        from decnet.cli.gating import _require_master_mode
         from decnet.ttp.worker import run_ttp_worker_loop
         from decnet.web.dependencies import repo
-
-        _require_master_mode("ttp")
 
         if daemon:
             log.info("ttp daemonizing poll=%s", poll_interval_secs)
