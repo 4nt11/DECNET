@@ -54,14 +54,11 @@ INTER_CMD_LLM_HEAVYWEIGHT_MAX: float = 30.00
 MIN_COMMANDS_FOR_FULL_CONFIDENCE: int = 5
 
 # ── cognitive.command_branch_diversity (Step 6) ─────────────────────────────
-# unique_first_tokens / total_commands ratio. Empirical (CLAUDE-FF vs
-# CLAUDE-CL on 2026-05-02): fire-and-forget runs ~10 distinct tools (ratio
-# near 1.0) → linear_playbook; closed-loop runs ~5-6 tools with the same
-# tool re-invoked → adaptive_branching.
-BRANCH_DIVERSITY_LINEAR_MIN: float = 0.80   # >= → linear_playbook
-BRANCH_DIVERSITY_ADAPTIVE_MAX: float = 0.60  # <= → adaptive_branching
-# Between is the ambiguous middle band — bias toward adaptive (the
-# operator is reusing tools).
+# unique_first_tokens / total_commands ratio. Prototype's empirical
+# split (sessions-2026-05-02-* corpus): CLAUDE-CL chasing one finding
+# ≈ 0.55-0.60 (adaptive), HUMAN exploring filesystem ≈ 0.65-0.70
+# (adaptive), YOU-sim / CLAUDE-FF scripted recon ≈ 0.75+ (linear).
+BRANCH_DIVERSITY_LINEAR_MIN: float = 0.70   # >= → linear_playbook
 
 # ── cognitive.feedback_loop_engagement (Step 7) ─────────────────────────────
 # Pearson r threshold for "the operator's pause grew with the volume of

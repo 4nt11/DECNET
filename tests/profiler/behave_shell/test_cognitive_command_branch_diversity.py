@@ -45,11 +45,10 @@ def test_repeated_first_tokens_emit_adaptive_branching() -> None:
     assert obs.value == "adaptive_branching"
 
 
-def test_middle_band_biases_to_adaptive() -> None:
-    # 7 commands, 5 unique → ratio ≈ 0.71 — between 0.60 and 0.80.
-    # The doc instructs us to bias to adaptive in the ambiguous middle.
-    tokens = ["a", "b", "c", "d", "e", "a", "b"]
-    out = list(extract_session(_commands(tokens), sid="bd-mid"))
+def test_just_below_linear_threshold_emits_adaptive() -> None:
+    # 7 commands, 4 unique → ratio ≈ 0.57 — below the 0.70 linear floor.
+    tokens = ["a", "b", "c", "d", "a", "b", "c"]
+    out = list(extract_session(_commands(tokens), sid="bd-just-adaptive"))
     obs = _of(out, "cognitive.command_branch_diversity")
     assert obs.value == "adaptive_branching"
 
