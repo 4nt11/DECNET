@@ -93,8 +93,45 @@ class Attacker(SQLModel, table=True):
     # private/loopback addresses never resolve.  256 chars matches
     # RFC 1035 max hostname length.
     ptr_record: Optional[str] = Field(default=None, max_length=256)
+    # Substrate-rotation telemetry, maintained by
+    # ``decnet.correlation.fingerprint_rotation.record_fingerprint`` whenever
+    # the prober observes a new hash for an (attacker, port, probe_type)
+    # triple it has seen before.  Lets the dashboard render "rotated 3×
+    # last 24h" without joining to AttackerFingerprintState.
+    rotation_count: int = Field(default=0)
+    last_rotation_at: Optional[datetime] = Field(default=None, index=True)
     updated_at: datetime = Field(
         default_factory=lambda: datetime.now(timezone.utc), index=True
+    )
+
+
+class AttackerFingerprintState(SQLModel, table=True):
+    """Per-(attacker, port, probe_type) latest-hash row.
+
+    Sole purpose: give the prober memory across runs so it can detect when
+    an attacker's HASSH/JARM/TCP fingerprint flips for the same port — i.e.
+    they rotated their VPS, rebuilt their SSH server, swapped their TLS
+    cert.  Diff detection lives in
+    ``decnet.correlation.fingerprint_rotation``; the prober calls into
+    that library inline at each emit site and this table is the only
+    persistence it needs.
+
+    Bounded by ``attackers × probe families × ports`` — small in practice;
+    a busy fleet sees O(thousands) of rows, not O(millions).
+    """
+    __tablename__ = "attacker_fingerprint_state"
+    uuid: str = Field(primary_key=True)
+    attacker_uuid: str = Field(foreign_key="attackers.uuid", index=True)
+    port: int
+    probe_type: str = Field(max_length=16)  # "jarm" | "hassh" | "tcpfp"
+    last_hash: str = Field(max_length=128)
+    last_seen: datetime = Field(index=True)
+    rotation_count: int = Field(default=0)
+    __table_args__ = (
+        UniqueConstraint(
+            "attacker_uuid", "port", "probe_type",
+            name="uq_attacker_fingerprint_state_natural",
+        ),
     )
 
 

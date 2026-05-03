@@ -27,6 +27,9 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Callable
 
+from sqlalchemy.engine import Engine
+from sqlmodel import Session
+
 from decnet.bus import topics as _topics
 from decnet.bus.base import BaseBus
 from decnet.bus.factory import get_bus
@@ -34,6 +37,10 @@ from decnet.bus.publish import (
     make_thread_safe_publisher,
     run_control_listener,
     run_health_heartbeat,
+)
+from decnet.correlation.fingerprint_rotation import (
+    ProbeType,
+    record_fingerprint,
 )
 from decnet.logging import get_logger
 from decnet.prober.hassh import hassh_server
@@ -43,6 +50,21 @@ from decnet.prober.tlscert import fetch_leaf_cert
 from decnet.telemetry import traced as _traced
 
 logger = get_logger("prober")
+
+
+def _build_sync_engine() -> Engine:
+    """Construct a sync SQLite engine for rotation-detection state.
+
+    Used inline by the prober; it lives outside the async repository
+    layer because rotation detection is a sync hook on a sync probe
+    path.  Honors the same defaulting as
+    ``decnet.web.db.sqlite.repository.SQLiteRepository``.
+    """
+    import os
+    from decnet.config import _ROOT
+    from decnet.web.db.sqlite.database import get_sync_engine
+    db_path = os.environ.get("DECNET_DB_PATH", str(_ROOT / "decnet.db"))
+    return get_sync_engine(db_path)
 
 # ─── Default ports per probe type ───────────────────────────────────────────
 
@@ -233,6 +255,14 @@ def _discover_attackers(json_path: Path, position: int) -> tuple[set[str], int]:
 
 ProbePublishFn = Callable[[str, dict[str, Any]], None]
 
+# Rotation recorder: takes (attacker_ip, port, probe_type, new_hash) and
+# performs the rotation-detection upsert + derived-event emission for the
+# DEBT-032 substrate-fingerprint flow.  Optional; when None the prober
+# behaves exactly as before (raw fingerprint emit only, no rotation
+# detection).  Construction lives at worker startup so phase functions
+# don't have to know about the DB engine.
+RotationRecorderFn = Callable[[str, int, "ProbeType", str], None]
+
 
 @_traced("prober.probe_cycle")
 def _probe_cycle(
@@ -245,6 +275,7 @@ def _probe_cycle(
     json_path: Path,
     timeout: float = 5.0,
     publish_fn: ProbePublishFn | None = None,
+    record_rotation: RotationRecorderFn | None = None,
 ) -> None:
     """
     Probe all known attacker IPs with JARM, HASSH, and TCP/IP fingerprinting.
@@ -263,13 +294,13 @@ def _probe_cycle(
         ip_probed = probed.setdefault(ip, {})
 
         # Phase 1: JARM (TLS fingerprinting)
-        _jarm_phase(ip, ip_probed, jarm_ports, log_path, json_path, timeout, publish_fn)
+        _jarm_phase(ip, ip_probed, jarm_ports, log_path, json_path, timeout, publish_fn, record_rotation)
 
         # Phase 2: HASSHServer (SSH fingerprinting)
-        _hassh_phase(ip, ip_probed, ssh_ports, log_path, json_path, timeout, publish_fn)
+        _hassh_phase(ip, ip_probed, ssh_ports, log_path, json_path, timeout, publish_fn, record_rotation)
 
         # Phase 3: TCP/IP stack fingerprinting
-        _tcpfp_phase(ip, ip_probed, tcpfp_ports, log_path, json_path, timeout, publish_fn)
+        _tcpfp_phase(ip, ip_probed, tcpfp_ports, log_path, json_path, timeout, publish_fn, record_rotation)
 
 
 @_traced("prober.jarm_phase")
@@ -281,6 +312,7 @@ def _jarm_phase(
     json_path: Path,
     timeout: float,
     publish_fn: ProbePublishFn | None = None,
+    record_rotation: RotationRecorderFn | None = None,
 ) -> None:
     """JARM-fingerprint an IP on the given TLS ports."""
     done = ip_probed.setdefault("jarm", set())
@@ -301,6 +333,8 @@ def _jarm_phase(
                 msg=f"JARM {ip}:{port} = {h}",
             )
             logger.info("prober: JARM %s:%d = %s", ip, port, h)
+            if record_rotation is not None:
+                record_rotation(ip, port, "jarm", h)
             if publish_fn is not None:
                 publish_fn(
                     "jarm",
@@ -387,6 +421,7 @@ def _hassh_phase(
     json_path: Path,
     timeout: float,
     publish_fn: ProbePublishFn | None = None,
+    record_rotation: RotationRecorderFn | None = None,
 ) -> None:
     """HASSHServer-fingerprint an IP on the given SSH ports."""
     done = ip_probed.setdefault("hassh", set())
@@ -412,6 +447,8 @@ def _hassh_phase(
                 msg=f"HASSH {ip}:{port} = {result['hassh_server']}",
             )
             logger.info("prober: HASSH %s:%d = %s", ip, port, result["hassh_server"])
+            if record_rotation is not None:
+                record_rotation(ip, port, "hassh", result["hassh_server"])
             if publish_fn is not None:
                 publish_fn(
                     "hassh",
@@ -445,6 +482,7 @@ def _tcpfp_phase(
     json_path: Path,
     timeout: float,
     publish_fn: ProbePublishFn | None = None,
+    record_rotation: RotationRecorderFn | None = None,
 ) -> None:
     """TCP/IP stack fingerprint an IP on the given ports."""
     done = ip_probed.setdefault("tcpfp", set())
@@ -478,6 +516,8 @@ def _tcpfp_phase(
                 msg=f"TCPFP {ip}:{port} = {result['tcpfp_hash']}",
             )
             logger.info("prober: TCPFP %s:%d = %s", ip, port, result["tcpfp_hash"])
+            if record_rotation is not None:
+                record_rotation(ip, port, "tcpfp", result["tcpfp_hash"])
             if publish_fn is not None:
                 publish_fn(
                     "tcpfp",
@@ -586,6 +626,61 @@ async def prober_worker(
             event_type,
         )
 
+    # Substrate-rotation detection (DEBT-032) — open a sync engine for
+    # the prober's lifetime; recorder closes a session per call so we
+    # never hold a connection across phase boundaries.  Failure to
+    # connect is non-fatal: probes continue, rotation detection is
+    # silently disabled.
+    rotation_engine: Engine | None = None
+    record_rotation: RotationRecorderFn | None = None
+    try:
+        rotation_engine = _build_sync_engine()
+    except Exception as exc:  # noqa: BLE001
+        logger.warning(
+            "prober: rotation-detection DB unavailable, "
+            "running with rotation detection disabled: %s", exc,
+        )
+
+    if rotation_engine is not None:
+        def _publish_rotation(event_type: str, payload: dict[str, Any]) -> None:
+            raw_publish(
+                _topics.attacker(_topics.ATTACKER_FINGERPRINT_ROTATED),
+                payload,
+                event_type,
+            )
+
+        def _syslog_rotation(event_type: str, payload: dict[str, Any]) -> None:
+            _write_event(
+                log_path, json_path,
+                "fingerprint_rotated",
+                target_ip=payload["attacker_ip"],
+                target_port=str(payload["port"]),
+                probe_type=payload["probe_type"],
+                old_hash=payload.get("old_hash") or "",
+                new_hash=payload["new_hash"],
+                rotation_count=str(payload["rotation_count"]),
+                msg=(
+                    f"FP rotation {payload['attacker_ip']}:{payload['port']} "
+                    f"{payload['probe_type']} {payload.get('old_hash')} → "
+                    f"{payload['new_hash']}"
+                ),
+            )
+
+        def record_rotation(
+            ip: str, port: int, probe_type: ProbeType, new_hash: str,
+        ) -> None:
+            with Session(rotation_engine) as session:
+                record_fingerprint(
+                    session,
+                    attacker_ip=ip,
+                    port=port,
+                    probe_type=probe_type,
+                    new_hash=new_hash,
+                    ts=datetime.now(timezone.utc),
+                    publish_fn=_publish_rotation,
+                    syslog_fn=_syslog_rotation,
+                )
+
     shutdown = asyncio.Event()
     heartbeat_task = asyncio.create_task(run_health_heartbeat(bus, "prober"))
     control_task = asyncio.create_task(
@@ -612,6 +707,7 @@ async def prober_worker(
                     jarm_ports, hassh_ports, tcp_ports,
                     log_path, json_path, timeout,
                     _publish_attacker,
+                    record_rotation,
                 )
 
             try:
@@ -626,3 +722,6 @@ async def prober_worker(
         if bus is not None:
             with contextlib.suppress(Exception):
                 await bus.close()
+        if rotation_engine is not None:
+            with contextlib.suppress(Exception):
+                rotation_engine.dispose()

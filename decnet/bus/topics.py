@@ -114,6 +114,14 @@ ATTACKER_SCORED = "scored"
 # Distinct from ``observed`` which is the correlator's first-sight signal —
 # a fingerprint is additional evidence about an already-observed attacker.
 ATTACKER_FINGERPRINTED = "fingerprinted"
+# Published when the prober observes a NEW hash for an
+# (attacker_ip, port, probe_type) triple it has seen before — i.e. the
+# attacker rotated their VPS, rebuilt their SSH server, swapped their
+# TLS cert.  Distinct from ``fingerprinted`` which fires on every probe
+# result; ``fingerprint_rotated`` fires only on diff and carries both
+# old_hash + new_hash.  Producer: prober (via the rotation library);
+# consumers: dashboard, forensics, attribution clustering.
+ATTACKER_FINGERPRINT_ROTATED = "fingerprint_rotated"
 ATTACKER_SESSION_STARTED = "session.started"
 ATTACKER_SESSION_ENDED = "session.ended"
 # Published by the ``decnet enrich`` worker after an enrichment pass
