@@ -16,6 +16,8 @@ from decnet.profiler.behave_shell._ctx import SessionContext
 from decnet.profiler.behave_shell._features._emit import make_observation
 from decnet.profiler.behave_shell._thresholds import (
     BRANCH_DIVERSITY_LINEAR_MIN,
+    FEEDBACK_CORRELATION_MIN,
+    FEEDBACK_MIN_PAIRS,
     INTER_CMD_DELIBERATE_MAX,
     INTER_CMD_INSTANT_MAX,
     INTER_CMD_LLM_HEAVYWEIGHT_MAX,
@@ -99,4 +101,54 @@ def command_branch_diversity(ctx: SessionContext) -> Iterator[Observation]:
         primitive="cognitive.command_branch_diversity",
         value=value,
         confidence=0.80,
+    )
+
+
+def feedback_loop_engagement(ctx: SessionContext) -> Iterator[Observation]:
+    """Emit ``cognitive.feedback_loop_engagement``.
+
+    Pearson correlation between ``output_per_cmd[i]`` (bytes the
+    operator saw before the next command) and
+    ``inter_cmd_iats[i]`` (the pause that followed). closed_loop
+    operators read more before pausing more; fire_and_forget operators
+    pace independently of output. CUTS ACROSS the LLM/human axis —
+    closed-loop LLMs and reading humans both score closed_loop.
+
+    First primitive that depends on output events: zero output events
+    in the shard → emit ``unknown`` at confidence 1.0 (no honest
+    correlation possible) and exit.
+    """
+    pairs = list(zip(ctx.output_per_cmd, ctx.inter_cmd_iats))
+    if not ctx.output_events or len(pairs) < FEEDBACK_MIN_PAIRS:
+        if not ctx.commands:
+            return
+        yield make_observation(
+            ctx,
+            primitive="cognitive.feedback_loop_engagement",
+            value="unknown",
+            confidence=1.0,
+        )
+        return
+    xs = [float(p[0]) for p in pairs]
+    ys = [float(p[1]) for p in pairs]
+    try:
+        r = statistics.correlation(xs, ys)
+    except statistics.StatisticsError:
+        # Constant series on either axis — correlation undefined.
+        yield make_observation(
+            ctx,
+            primitive="cognitive.feedback_loop_engagement",
+            value="unknown",
+            confidence=1.0,
+        )
+        return
+    if r > FEEDBACK_CORRELATION_MIN:
+        value = "closed_loop"
+    else:
+        value = "fire_and_forget"
+    yield make_observation(
+        ctx,
+        primitive="cognitive.feedback_loop_engagement",
+        value=value,
+        confidence=0.75,
     )
