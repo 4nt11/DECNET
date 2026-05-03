@@ -24,6 +24,8 @@ from decnet.profiler.behave_shell._thresholds import (
     INTER_CMD_LLM_LIGHTWEIGHT_MAX,
     INTER_CMD_TYPING_MAX,
     MIN_COMMANDS_FOR_FULL_CONFIDENCE,
+    PAUSE_CV_BIMODAL_MIN,
+    PAUSE_CV_METRONOMIC_MAX,
 )
 
 
@@ -151,4 +153,41 @@ def feedback_loop_engagement(ctx: SessionContext) -> Iterator[Observation]:
         primitive="cognitive.feedback_loop_engagement",
         value=value,
         confidence=0.75,
+    )
+
+
+def inter_command_consistency(ctx: SessionContext) -> Iterator[Observation]:
+    """Emit ``cognitive.inter_command_consistency``.
+
+    CV (stdev / mean) of inter-command IATs.
+
+    * ``metronomic`` (CV < 0.40) → LLM-pure. Empirical anchor:
+      LLM-simulated session CV ≈ 0.24 in this corpus.
+    * ``variable`` (0.40 ≤ CV < 1.50) → human. Empirical anchor:
+      human session CV ≈ 0.94.
+    * ``bimodal`` (CV ≥ 1.50) → LLM-assisted human, heuristic. v0.1
+      uses CV-only; true bimodal detection (Hartigan dip / two-peak)
+      is filed for v0.2 per the registry's ``notes:`` field.
+    """
+    iats = ctx.inter_cmd_iats
+    if len(iats) < 2:
+        return
+    mean = statistics.fmean(iats)
+    if mean <= 0.0:
+        return
+    cv = statistics.stdev(iats) / mean
+    if cv < PAUSE_CV_METRONOMIC_MAX:
+        value = "metronomic"
+    elif cv >= PAUSE_CV_BIMODAL_MIN:
+        value = "bimodal"
+    else:
+        value = "variable"
+    confidence = (
+        0.40 if len(ctx.commands) < MIN_COMMANDS_FOR_FULL_CONFIDENCE else 0.75
+    )
+    yield make_observation(
+        ctx,
+        primitive="cognitive.inter_command_consistency",
+        value=value,
+        confidence=confidence,
     )
