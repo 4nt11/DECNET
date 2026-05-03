@@ -10,7 +10,9 @@ Credentials via IMAP_USERS env var (shared with IMAP service).
 """
 
 import asyncio
+import json
 import os
+import sys
 import time
 from pathlib import Path
 from typing import cast
@@ -33,11 +35,13 @@ VALID_USERS: dict[str, str] = {
     u: p for part in _RAW_USERS.split(",") if ":" in part for u, p in [part.split(":", 1)]
 }
 
-# Path to a directory of ``*.eml`` files dropped by the orchestrator
-# emailgen worker (``/var/spool/decnet-emails/`` by convention).  When
-# set and populated, those EMLs replace the hardcoded fallback list
-# below — same semantics as the IMAP template.  Empty / missing falls
-# back so a fresh deployment is never silent.
+# Operator/realism-engine email seed source.  Two shapes accepted:
+#   1. Directory: walked recursively for ``*.eml`` (RFC 822 on disk —
+#      what the realism-engine emailgen worker drops in) and ``*.json``
+#      (operator-curated lists of dicts; each dict formatted into RFC
+#      5322 on load).
+#   2. Single ``*.json`` or ``*.eml`` file.
+# Loaded entries are CONCATENATED with ``_BAIT_EMAILS`` — never replace.
 _EMAIL_SEED_PATH = os.environ.get("POP3_EMAIL_SEED", "")
 _SEED_RESCAN_INTERVAL = float(os.environ.get("POP3_EMAIL_SEED_RESCAN", "5"))
 
@@ -172,60 +176,128 @@ _BAIT_EMAILS: list[str] = [
 
 
 # ── Spool-backed email loader ─────────────────────────────────────────────────
-# POP3 stores each message as a single str (full RFC 822 text); when the
-# emailgen spool is configured, we read every *.eml in it and serve the
-# raw bytes as the corpus.  Same caching strategy as the IMAP template.
+# POP3 stores each message as a single str (full RFC 822 text).  Seeded
+# entries CONCATENATE onto ``_BAIT_EMAILS`` (never replace).  Both .eml
+# and .json sources are accepted — JSON dicts are formatted into RFC
+# 5322 on load.  Caching strategy matches the IMAP template.
 
 _seed_cache: list[str] | None = None
-_seed_cache_dir_mtime: float = 0.0
+_seed_cache_path_mtime: float = 0.0
 _seed_cache_loaded_at: float = 0.0
 
+_SEED_JSON_REQUIRED = ("from_addr", "to_addr", "subject", "body")
 
-def _scan_seed_dir(path: Path) -> list[str]:
-    """Walk *path* recursively and return each .eml's raw text content,
-    sorted by mtime so older threads get lower indices."""
-    eml_paths: list[Path] = []
+
+def _seed_dict_to_rfc822(entry: dict) -> str | None:
+    """Format a JSON-supplied dict into a full RFC 5322 message string.
+
+    Required keys: from_addr, to_addr, subject, body.  Optional: date,
+    from_name.  Returns None for malformed entries (caller skips + logs).
+    """
+    if not isinstance(entry, dict):
+        return None
+    for key in _SEED_JSON_REQUIRED:
+        if not isinstance(entry.get(key), str) or not entry[key]:
+            return None
+    from_addr = entry["from_addr"]
+    from_name = str(entry.get("from_name") or from_addr.split("@", 1)[0])
+    date = str(entry.get("date") or "")
+    body = entry["body"]
+    if "\r\n\r\n" in body or "\n\n" in body:
+        return body  # already a full RFC 822 message
+    return (
+        f"Date: {date}\r\n"
+        f"From: {from_name} <{from_addr}>\r\n"
+        f"To: {entry['to_addr']}\r\n"
+        f"Subject: {entry['subject']}\r\n"
+        "\r\n"
+        f"{body}"
+    )
+
+
+def _load_seed_json(path: Path) -> list[str]:
+    """Load a JSON list of dicts → list of RFC 822 strings."""
     try:
-        for p in path.rglob("*.eml"):
-            if p.is_file():
-                eml_paths.append(p)
+        raw = path.read_text(encoding="utf-8")
+        data = json.loads(raw)
+    except (OSError, ValueError) as exc:
+        print(f"pop3: seed json {path} unreadable: {exc}", file=sys.stderr)
+        return []
+    if not isinstance(data, list):
+        print(f"pop3: seed json {path} must be a list", file=sys.stderr)
+        return []
+    out: list[str] = []
+    for i, entry in enumerate(data):
+        formatted = _seed_dict_to_rfc822(entry)
+        if formatted is None:
+            print(f"pop3: seed json {path}[{i}] missing required keys", file=sys.stderr)
+            continue
+        out.append(formatted)
+    return out
+
+
+def _scan_seed(path: Path) -> list[str]:
+    """Resolve *path* into RFC 822 strings (.eml direct, .json formatted)."""
+    out: list[str] = []
+    try:
+        if path.is_dir():
+            eml_paths = sorted(
+                (p for p in path.rglob("*.eml") if p.is_file()),
+                key=lambda p: p.stat().st_mtime,
+            )
+            for p in eml_paths:
+                try:
+                    out.append(p.read_text(encoding="utf-8", errors="replace"))
+                except OSError:
+                    continue
+            for jp in sorted(p for p in path.rglob("*.json") if p.is_file()):
+                out.extend(_load_seed_json(jp))
+        elif path.suffix.lower() == ".json" and path.is_file():
+            out.extend(_load_seed_json(path))
+        elif path.suffix.lower() == ".eml" and path.is_file():
+            try:
+                out.append(path.read_text(encoding="utf-8", errors="replace"))
+            except OSError:
+                pass
     except OSError:
         return []
-    eml_paths.sort(key=lambda p: p.stat().st_mtime)
-    out: list[str] = []
-    for p in eml_paths:
-        try:
-            out.append(p.read_text(encoding="utf-8", errors="replace"))
-        except OSError:
-            continue
     return out
 
 
 def _get_emails() -> list[str]:
-    """Return the active corpus.  Same fallback rules as IMAP template."""
-    global _seed_cache, _seed_cache_dir_mtime, _seed_cache_loaded_at
+    """Return ``_BAIT_EMAILS`` concatenated with seed entries.
+
+    Empty / missing seed → just ``_BAIT_EMAILS``.  Hardcoded baits keep
+    indices 1..10; seeded messages start at 11.
+    """
+    global _seed_cache, _seed_cache_path_mtime, _seed_cache_loaded_at
+
     if not _EMAIL_SEED_PATH:
         return _BAIT_EMAILS
-    seed_dir = Path(_EMAIL_SEED_PATH)
+
+    seed_path = Path(_EMAIL_SEED_PATH)
     try:
-        dir_stat = seed_dir.stat()
+        path_stat = seed_path.stat()
     except OSError:
         return _BAIT_EMAILS
+
     now = time.monotonic()
     fresh_enough = (
         _seed_cache is not None
         and (now - _seed_cache_loaded_at) < _SEED_RESCAN_INTERVAL
-        and dir_stat.st_mtime == _seed_cache_dir_mtime
+        and path_stat.st_mtime == _seed_cache_path_mtime
     )
     if fresh_enough:
-        return _seed_cache or _BAIT_EMAILS
-    scanned = _scan_seed_dir(seed_dir)
-    if not scanned:
+        seed = _seed_cache or []
+    else:
+        seed = _scan_seed(seed_path)
+        _seed_cache = seed
+        _seed_cache_path_mtime = path_stat.st_mtime
+        _seed_cache_loaded_at = now
+
+    if not seed:
         return _BAIT_EMAILS
-    _seed_cache = scanned
-    _seed_cache_dir_mtime = dir_stat.st_mtime
-    _seed_cache_loaded_at = now
-    return scanned
+    return list(_BAIT_EMAILS) + seed
 
 
 # ── Logging ───────────────────────────────────────────────────────────────────

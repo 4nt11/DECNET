@@ -1,11 +1,18 @@
-"""Spool-backed email loading for the POP3 template."""
+"""Seed-backed email loading for the POP3 template.
+
+Concat semantics: hardcoded ``_BAIT_EMAILS`` + .eml/.json from the seed
+path.  Mirrors the IMAP test file.
+"""
 from __future__ import annotations
 
 import importlib.util
+import json
 import sys
 from pathlib import Path
 from types import ModuleType
 from unittest.mock import MagicMock, patch
+
+_HARDCODED = 10  # length of templates/pop3/server.py::_BAIT_EMAILS
 
 
 _EML_TEMPLATE = (
@@ -61,25 +68,54 @@ def _seed(tmp_path: Path, n: int) -> Path:
 
 def test_falls_back_when_seed_unset(tmp_path):
     mod = _load_pop3({})
-    assert len(mod._get_emails()) == 10  # hardcoded fallback
+    assert len(mod._get_emails()) == _HARDCODED  # baseline only
 
 
 def test_falls_back_when_seed_dir_missing(tmp_path):
     mod = _load_pop3({"POP3_EMAIL_SEED": str(tmp_path / "nope")})
-    assert len(mod._get_emails()) == 10
+    assert len(mod._get_emails()) == _HARDCODED
 
 
-def test_loads_emls_from_spool(tmp_path):
+def test_seed_concatenates_with_hardcoded(tmp_path):
     spool = _seed(tmp_path, n=3)
     mod = _load_pop3({"POP3_EMAIL_SEED": str(spool)})
     emails = mod._get_emails()
-    assert len(emails) == 3
-    # POP3 stores raw RFC 822 strings; verify content round-trips.
-    assert any("Topic 0" in e for e in emails)
-    assert all(e.startswith("From:") for e in emails)
+    # Hardcoded baseline + 3 spooled .eml.
+    assert len(emails) == _HARDCODED + 3
+    # Hardcoded entries unchanged at the head.
+    assert "AWS credentials rotation" in emails[0]
+    # Seeded entries at the tail.
+    assert any("Topic 0" in e for e in emails[_HARDCODED:])
+    assert all(e.startswith("From:") for e in emails[_HARDCODED:])
 
 
-def test_stat_reflects_spool_size(tmp_path):
+def test_json_seed_file_loaded(tmp_path):
+    seed = tmp_path / "seed.json"
+    seed.write_text(json.dumps([
+        {
+            "from_addr": "ceo@corp.com",
+            "from_name": "CEO",
+            "to_addr": "admin@corp.com",
+            "subject": "Q4 numbers",
+            "date": "Mon, 27 Apr 2026 09:00:00 +0000",
+            "body": "Please review attached.",
+        },
+        {
+            # Missing 'subject' — skipped, not fatal.
+            "from_addr": "ghost@corp.com",
+            "to_addr": "admin@corp.com",
+            "body": "no subject",
+        },
+    ]))
+    mod = _load_pop3({"POP3_EMAIL_SEED": str(seed)})
+    emails = mod._get_emails()
+    assert len(emails) == _HARDCODED + 1
+    seeded = emails[-1]
+    assert "Subject: Q4 numbers" in seeded
+    assert "From: CEO <ceo@corp.com>" in seeded
+
+
+def test_stat_reflects_concatenated_count(tmp_path):
     spool = _seed(tmp_path, n=2)
     mod = _load_pop3({"POP3_EMAIL_SEED": str(spool)})
     proto = mod.POP3Protocol()
@@ -93,4 +129,5 @@ def test_stat_reflects_spool_size(tmp_path):
     written.clear()
     proto.data_received(b"STAT\r\n")
     out = b"".join(written)
-    assert out.startswith(b"+OK 2 ")
+    expected = _HARDCODED + 2
+    assert out.startswith(f"+OK {expected} ".encode())

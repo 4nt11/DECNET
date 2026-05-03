@@ -1,18 +1,23 @@
-"""Spool-backed email loading for the IMAP template.
+"""Seed-backed email loading for the IMAP template.
 
-Verifies that when ``IMAP_EMAIL_SEED`` points at a directory of .eml
-files, the IMAP server serves those (replacing the hardcoded
-``_BAIT_EMAILS`` fallback).  Empty / missing dir falls back gracefully.
+Verifies that when ``IMAP_EMAIL_SEED`` points at a directory of .eml /
+.json (or a single .json / .eml), the IMAP server CONCATENATES those
+entries onto the hardcoded ``_BAIT_EMAILS`` baseline.  Empty / missing
+input falls back to the baseline alone — the realism-engine output and
+operator-curated seeds are additive, never replacing.
 """
 from __future__ import annotations
 
 import importlib.util
+import json
 import sys
 from pathlib import Path
 from types import ModuleType
 from unittest.mock import MagicMock, patch
 
 import pytest
+
+_HARDCODED = 10  # length of templates/imap/server.py::_BAIT_EMAILS
 
 
 _EML_TEMPLATE = (
@@ -78,41 +83,47 @@ def _seed(tmp_path: Path, n: int = 3) -> Path:
 def test_falls_back_to_hardcoded_when_seed_unset(tmp_path):
     mod = _load_imap({})
     emails = mod._get_emails()
-    # The shipped fallback ships exactly 10 entries.
-    assert len(emails) == 10
+    # The shipped baseline is exactly 10 entries.
+    assert len(emails) == _HARDCODED
     assert emails[0]["from_addr"] == "devops@company.internal"
 
 
 def test_falls_back_when_seed_dir_missing(tmp_path):
     mod = _load_imap({"IMAP_EMAIL_SEED": str(tmp_path / "does-not-exist")})
     emails = mod._get_emails()
-    assert len(emails) == 10  # fallback
+    assert len(emails) == _HARDCODED  # baseline only
 
 
 def test_falls_back_when_seed_dir_empty(tmp_path):
     (tmp_path / "spool").mkdir()
     mod = _load_imap({"IMAP_EMAIL_SEED": str(tmp_path / "spool")})
-    assert len(mod._get_emails()) == 10  # fallback (no .eml files)
+    assert len(mod._get_emails()) == _HARDCODED  # baseline only
 
 
-def test_loads_eml_files_from_spool(tmp_path):
+def test_seed_concatenates_with_hardcoded(tmp_path):
     spool = _seed(tmp_path, n=3)
     mod = _load_imap({"IMAP_EMAIL_SEED": str(spool)})
     emails = mod._get_emails()
-    assert len(emails) == 3
-    senders = {e["from_addr"] for e in emails}
+    # Hardcoded 10 + 3 spooled = 13.
+    assert len(emails) == _HARDCODED + 3
+    # Hardcoded baseline keeps original UIDs 1..10.
+    assert emails[0]["uid"] == 1
+    assert emails[0]["from_addr"] == "devops@company.internal"
+    assert emails[9]["uid"] == 10
+    # Seeded entries pick up at UID 11.
+    assert {e["uid"] for e in emails[10:]} == {11, 12, 13}
+    senders = {e["from_addr"] for e in emails[10:]}
     assert senders == {"sender0@corp.com", "sender1@corp.com", "sender2@corp.com"}
-    # UIDs are 1-based and unique.
-    assert {e["uid"] for e in emails} == {1, 2, 3}
 
 
 def test_loaded_eml_carries_full_rfc822_body(tmp_path):
     spool = _seed(tmp_path, n=1)
     mod = _load_imap({"IMAP_EMAIL_SEED": str(spool)})
     emails = mod._get_emails()
-    assert "From:" in emails[0]["body"]
-    assert "Subject: Topic 0" in emails[0]["body"]
-    assert "Body of message 0." in emails[0]["body"]
+    seeded = emails[_HARDCODED]
+    assert "From:" in seeded["body"]
+    assert "Subject: Topic 0" in seeded["body"]
+    assert "Body of message 0." in seeded["body"]
 
 
 def test_corrupt_eml_skipped_not_fatal(tmp_path):
@@ -127,11 +138,56 @@ def test_corrupt_eml_skipped_not_fatal(tmp_path):
     (spool / "broken.eml").mkdir()
     mod = _load_imap({"IMAP_EMAIL_SEED": str(spool)})
     emails = mod._get_emails()
-    assert len(emails) == 1
-    assert emails[0]["from_addr"] == "good@corp.com"
+    assert len(emails) == _HARDCODED + 1
+    assert emails[-1]["from_addr"] == "good@corp.com"
 
 
-def test_select_inbox_reflects_spool_count(tmp_path):
+def test_json_seed_file_loaded(tmp_path):
+    seed = tmp_path / "seed.json"
+    seed.write_text(json.dumps([
+        {
+            "from_addr": "ceo@corp.com",
+            "from_name": "CEO",
+            "to_addr": "admin@corp.com",
+            "subject": "Q4 numbers",
+            "date": "Mon, 27 Apr 2026 09:00:00 +0000",
+            "body": "Please review attached.",
+        },
+        {
+            # Missing 'subject' — must be skipped, not crash.
+            "from_addr": "ghost@corp.com",
+            "to_addr": "admin@corp.com",
+            "body": "no subject",
+        },
+    ]))
+    mod = _load_imap({"IMAP_EMAIL_SEED": str(seed)})
+    emails = mod._get_emails()
+    assert len(emails) == _HARDCODED + 1  # one valid, one dropped
+    seeded = emails[-1]
+    assert seeded["uid"] == _HARDCODED + 1
+    assert seeded["from_addr"] == "ceo@corp.com"
+    # JSON entry without RFC 822 headers gets wrapped into a full message.
+    assert "From: CEO <ceo@corp.com>" in seeded["body"]
+    assert "Subject: Q4 numbers" in seeded["body"]
+
+
+def test_dir_with_eml_and_json_concatenated(tmp_path):
+    spool = _seed(tmp_path, n=2)
+    (spool / "extra.json").write_text(json.dumps([
+        {
+            "from_addr": "ops@corp.com",
+            "to_addr": "admin@corp.com",
+            "subject": "extra",
+            "body": "hi",
+        },
+    ]))
+    mod = _load_imap({"IMAP_EMAIL_SEED": str(spool)})
+    emails = mod._get_emails()
+    # Hardcoded + 2 .eml + 1 .json
+    assert len(emails) == _HARDCODED + 3
+
+
+def test_select_inbox_reflects_concatenated_count(tmp_path):
     spool = _seed(tmp_path, n=4)
     mod = _load_imap({"IMAP_EMAIL_SEED": str(spool)})
     proto = mod.IMAPProtocol()
@@ -144,5 +200,6 @@ def test_select_inbox_reflects_spool_count(tmp_path):
     written.clear()
     proto.data_received(b"B0 SELECT INBOX\r\n")
     out = b"".join(written)
-    assert b"* 4 EXISTS" in out
-    assert b"[UIDNEXT 5]" in out
+    expected_total = _HARDCODED + 4
+    assert f"* {expected_total} EXISTS".encode() in out
+    assert f"[UIDNEXT {expected_total + 1}]".encode() in out

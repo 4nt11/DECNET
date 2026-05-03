@@ -110,14 +110,9 @@ All route decorators now declare `responses={401: {"description": "Not authentic
 ~~**File:** `decnet/web/sqlite_repository.py` (~400 lines)~~  
 Fully refactored to `decnet/web/db/` modular layout: `models.py` (SQLModel schema), `repository.py` (abstract base), `sqlite/repository.py` (SQLite implementation), `sqlite/database.py` (engine/session factory). Commit `de84cc6`.
 
-### DEBT-026 — IMAP/POP3 bait emails not configurable via service config
-**Files:** `templates/imap/server.py`, `templates/pop3/server.py`, `decnet/services/imap.py`, `decnet/services/pop3.py`  
-Bait emails are hardcoded. A stub env var `IMAP_EMAIL_SEED` is read but currently ignored. Full implementation requires:
-1. `IMAP_EMAIL_SEED` points to a JSON file with a list of `{from_, to, subject, date, body}` dicts.
-2. `templates/imap/server.py` loads and merges/replaces `_BAIT_EMAILS` from that file at startup.
-3. `decnet/services/imap.py` `compose_fragment()` reads `service_cfg["email_seed"]` and injects `IMAP_EMAIL_SEED` + a bind-mount for the seed file into the compose fragment.
-4. Same pattern for POP3 (`POP3_EMAIL_SEED`).  
-**Status:** Stub in place — full wiring deferred to next session.
+### ~~DEBT-026 — IMAP/POP3 bait emails not configurable via service config~~ ✅ RESOLVED
+**Files:** `templates/imap/server.py`, `templates/pop3/server.py`, `decnet/services/imap.py`, `decnet/services/pop3.py`
+Resolved 2026-05-03. `IMAP_EMAIL_SEED` / `POP3_EMAIL_SEED` now accept either a directory (rglob `*.eml` and `*.json`) or a single `.json` / `.eml` file. JSON entries are dicts with required keys `from_addr`, `to_addr`, `subject`, `body` (optional `from_name`, `date`, `flags`); bare-body entries are wrapped into RFC 5322 on load. Loaded entries CONCATENATE with `_BAIT_EMAILS` (additive to the realism-engine emailgen output — the hardcoded baits are no longer replaced). `compose_fragment()` reads `service_cfg["email_seed"]` and bind-mounts the host path read-only at `/var/spool/decnet-emails/seed`.
 
 ---
 
@@ -713,7 +708,7 @@ user who needs it.
 | DEBT-023 | 🟢 Low | Infra | deferred (needs docker pull) |
 | ~~DEBT-024~~ | ✅ | Infra | resolved |
 | ~~DEBT-025~~ | ✅ | Build | resolved |
-| DEBT-026 | 🟡 Medium | Features | deferred (out of scope) |
+| ~~DEBT-026~~ | ✅ | Features | resolved 2026-05-03 |
 | DEBT-027 | 🟡 Medium | Features | deferred (out of scope) |
 | DEBT-028 | 🟡 Medium | Testing | deferred (needs DinD CI) |
 | DEBT-029 | 🟡 Medium | Architecture / Bus | ✅ resolved |
@@ -737,5 +732,5 @@ user who needs it.
 | DEBT-048 | 🟡 Medium | TTP / Intel provider mapping review (recurring) | open / recurring |
 | DEBT-049 | 🟡 Medium | TTP / Sigma adapter (post-v1) | open |
 
-**Remaining open:** DEBT-011 (Alembic), DEBT-023 (image pinning), DEBT-026 (modular mailboxes), DEBT-027 (Dynamic bait store), DEBT-028 (deploy endpoint tests), DEBT-032 (fingerprint rotation detection), DEBT-033 (transcript shard rotation), DEBT-036 (session-profile ingester), DEBT-037 (webhook delivery hardening), DEBT-038 (SSH PAM cred-capture limitations — document-only), DEBT-042 (orchestrator failure-count window), DEBT-043 (frontend test framework), DEBT-045 (EmailLifter heavyweight — partial paid; carved-out follow-ups remain), DEBT-046 (mal-hash feed), DEBT-048 (TTP intel provider mapping review — recurring quarterly), DEBT-049 (TTP Sigma adapter — post-v1).
+**Remaining open:** DEBT-011 (Alembic), DEBT-023 (image pinning), DEBT-027 (Dynamic bait store), DEBT-028 (deploy endpoint tests), DEBT-032 (fingerprint rotation detection), DEBT-033 (transcript shard rotation), DEBT-036 (session-profile ingester), DEBT-037 (webhook delivery hardening), DEBT-038 (SSH PAM cred-capture limitations — document-only), DEBT-042 (orchestrator failure-count window), DEBT-043 (frontend test framework), DEBT-045 (EmailLifter heavyweight — partial paid; carved-out follow-ups remain), DEBT-046 (mal-hash feed), DEBT-048 (TTP intel provider mapping review — recurring quarterly), DEBT-049 (TTP Sigma adapter — post-v1).
 **Estimated remaining effort:** ~21 hours plus the new EmailLifter / TTP follow-ups. DEBT-030 Phase B (optimistic staged-buffer editor) is a follow-up, not debt.

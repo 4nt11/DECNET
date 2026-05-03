@@ -361,3 +361,39 @@ def test_telnet_no_cowrie_env_vars():
     """Ensure no Cowrie env vars bleed into the real telnet service."""
     env = _fragment("telnet").get("environment", {})
     assert not any(k.startswith("COWRIE_") for k in env)
+
+
+# IMAP / POP3 email_seed -----------------------------------------------------
+
+def test_imap_no_email_seed_by_default():
+    fragment = _fragment("imap")
+    assert "IMAP_EMAIL_SEED" not in fragment.get("environment", {})
+    assert "volumes" not in fragment
+
+
+def test_imap_email_seed_wires_env_and_volume(tmp_path):
+    seed_dir = tmp_path / "seed"
+    seed_dir.mkdir()
+    fragment = _fragment("imap", service_cfg={"email_seed": str(seed_dir)})
+    assert fragment["environment"]["IMAP_EMAIL_SEED"] == "/var/spool/decnet-emails/seed"
+    volumes = fragment.get("volumes") or []
+    assert len(volumes) == 1
+    assert volumes[0].endswith(":/var/spool/decnet-emails/seed:ro")
+    assert volumes[0].startswith(str(seed_dir))
+
+
+def test_pop3_no_email_seed_by_default():
+    fragment = _fragment("pop3")
+    assert "POP3_EMAIL_SEED" not in fragment.get("environment", {})
+    assert "volumes" not in fragment
+
+
+def test_pop3_email_seed_wires_env_and_volume(tmp_path):
+    seed_file = tmp_path / "seed.json"
+    seed_file.write_text("[]")
+    fragment = _fragment("pop3", service_cfg={"email_seed": str(seed_file)})
+    assert fragment["environment"]["POP3_EMAIL_SEED"] == "/var/spool/decnet-emails/seed"
+    volumes = fragment.get("volumes") or []
+    assert len(volumes) == 1
+    assert volumes[0].endswith(":/var/spool/decnet-emails/seed:ro")
+    assert volumes[0].startswith(str(seed_file))

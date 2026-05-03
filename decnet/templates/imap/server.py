@@ -13,7 +13,9 @@ Banner advertises Dovecot so nmap fingerprints correctly.
 import asyncio
 import email
 import email.policy
+import json
 import os
+import sys
 import time
 from email.utils import getaddresses
 from pathlib import Path
@@ -37,14 +39,14 @@ VALID_USERS: dict[str, str] = {
     u: p for part in _RAW_USERS.split(",") if ":" in part for u, p in [part.split(":", 1)]
 }
 
-# Path to a directory of ``*.eml`` files that the orchestrator emailgen
-# worker drops into the container (``/var/spool/decnet-emails/`` by
-# convention).  When set AND the directory contains parseable EMLs,
-# they replace the hardcoded ``_BAIT_EMAILS`` fallback below — meaning
-# every mail an attacker reads is the LLM-generated, persona-driven,
-# language-aware version, not the static credential-stuffed bait list.
-# Empty / missing / unparseable: the fallback list still serves so a
-# fresh deployment is never silent.
+# Operator/realism-engine email seed source.  Two shapes accepted:
+#   1. Directory: walked recursively for ``*.eml`` (RFC 822 on disk —
+#      what the realism-engine emailgen worker drops in) and ``*.json``
+#      (operator-curated lists of dicts, see _load_seed_json).
+#   2. Single ``*.json`` file: a list of dicts with the same shape.
+# Loaded entries are CONCATENATED with ``_BAIT_EMAILS`` — never replace.
+# The hardcoded list keeps a fresh deployment non-silent and serves as
+# the deterministic baseline the persona output stacks on top of.
 _EMAIL_SEED_PATH = os.environ.get("IMAP_EMAIL_SEED", "")
 # Re-scan the seed directory at most this often.  Cheap: walking a few
 # dozen .eml files is sub-millisecond, but caching keeps an attacker's
@@ -256,19 +258,17 @@ _MAILBOXES = ["INBOX", "Sent", "Drafts", "Archive"]
 
 
 # ── Spool-backed email loader ─────────────────────────────────────────────────
-# When IMAP_EMAIL_SEED points at a directory of .eml files the
-# orchestrator emailgen worker has dropped into the container, parse
-# them on demand and serve them as the INBOX.  Cached between requests
-# with a short TTL + mtime check so a hot mailbox doesn't pay the parse
-# cost on every IMAP command.
-#
-# Failure modes (missing dir, unparseable EMLs, empty dir) all return
-# the hardcoded fallback rather than 0 messages — a silent INBOX is a
-# stronger tell than a slightly-stale one.
+# When IMAP_EMAIL_SEED points at a directory (or a single .json file) the
+# realism-engine emailgen worker / operator has populated, parse it on
+# demand and CONCATENATE the result with the hardcoded ``_BAIT_EMAILS``.
+# Cached with a short TTL + mtime check so a hot mailbox doesn't pay the
+# parse cost on every IMAP command.
 
 _seed_cache: list[dict] | None = None
-_seed_cache_dir_mtime: float = 0.0
+_seed_cache_path_mtime: float = 0.0
 _seed_cache_loaded_at: float = 0.0
+
+_SEED_JSON_REQUIRED = ("from_addr", "to_addr", "subject", "body")
 
 
 def _split_addr(value: str) -> tuple[str, str]:
@@ -284,11 +284,12 @@ def _split_addr(value: str) -> tuple[str, str]:
     return (name or "").strip(), (addr or value).strip()
 
 
-def _eml_to_dict(path: Path, uid: int) -> dict | None:
+def _eml_to_dict(path: Path) -> dict | None:
     """Parse one .eml into the dict shape the rest of this server uses.
 
     Returns None when the file isn't parseable; callers skip + continue
-    so one corrupt EML does not kill the whole INBOX listing.
+    so one corrupt EML does not kill the whole INBOX listing.  ``uid``
+    is assigned by the caller after concatenation.
     """
     try:
         raw = path.read_bytes()
@@ -300,71 +301,155 @@ def _eml_to_dict(path: Path, uid: int) -> dict | None:
     subject = (msg.get("Subject") or "").strip()
     date = msg.get("Date") or ""
     return {
-        "uid": uid,
+        "uid": 0,
         "flags": [],     # never \Seen for spool emails — fresh delivery
-        "from_name": from_name or from_addr.split("@", 1)[0] if from_addr else "Unknown",
+        "from_name": from_name or (from_addr.split("@", 1)[0] if from_addr else "Unknown"),
         "from_addr": from_addr or "unknown@localhost",
         "to_addr": to_addr or "unknown@localhost",
         "subject": subject or "(no subject)",
         "date": date,
-        # The body field carries the full RFC 822 message — headers + body.
-        # That mirrors how the hardcoded _BAIT_EMAILS entries are shaped.
         "body": raw.decode("utf-8", errors="replace"),
     }
 
 
-def _scan_seed_dir(path: Path) -> list[dict]:
-    """Walk *path* recursively, parse every ``*.eml``, sort by mtime."""
-    eml_paths: list[Path] = []
+def _seed_dict_to_entry(entry: dict) -> dict | None:
+    """Validate and normalize a JSON-supplied dict into the bait shape.
+
+    Required keys: from_addr, to_addr, subject, body.  Optional: date,
+    from_name, flags.  Bad rows return None (caller skips + logs).
+    """
+    if not isinstance(entry, dict):
+        return None
+    for key in _SEED_JSON_REQUIRED:
+        if not isinstance(entry.get(key), str) or not entry[key]:
+            return None
+    from_addr = entry["from_addr"]
+    from_name = str(entry.get("from_name") or from_addr.split("@", 1)[0])
+    date = str(entry.get("date") or "")
+    flags = entry.get("flags") or []
+    if not isinstance(flags, list):
+        flags = []
+    body = entry["body"]
+    # If body is a bare string (no headers), wrap it into RFC 822 so
+    # IMAP BODY[]/RFC822 fetches return a complete message — matches
+    # the hardcoded _BAIT_EMAILS shape.
+    if "\r\n\r\n" not in body and "\n\n" not in body:
+        headers = (
+            f"Date: {date}\r\n"
+            f"From: {from_name} <{from_addr}>\r\n"
+            f"To: {entry['to_addr']}\r\n"
+            f"Subject: {entry['subject']}\r\n"
+            "\r\n"
+        )
+        body = headers + body
+    return {
+        "uid": 0,
+        "flags": list(flags),
+        "from_name": from_name,
+        "from_addr": from_addr,
+        "to_addr": entry["to_addr"],
+        "subject": entry["subject"],
+        "date": date,
+        "body": body,
+    }
+
+
+def _load_seed_json(path: Path) -> list[dict]:
+    """Load a JSON list of dicts into entries.  Bad rows logged + skipped."""
     try:
-        for p in path.rglob("*.eml"):
-            if p.is_file():
-                eml_paths.append(p)
+        raw = path.read_text(encoding="utf-8")
+        data = json.loads(raw)
+    except (OSError, ValueError) as exc:
+        print(f"imap: seed json {path} unreadable: {exc}", file=sys.stderr)
+        return []
+    if not isinstance(data, list):
+        print(f"imap: seed json {path} must be a list", file=sys.stderr)
+        return []
+    out: list[dict] = []
+    for i, entry in enumerate(data):
+        normalized = _seed_dict_to_entry(entry)
+        if normalized is None:
+            print(f"imap: seed json {path}[{i}] missing required keys", file=sys.stderr)
+            continue
+        out.append(normalized)
+    return out
+
+
+def _scan_seed(path: Path) -> list[dict]:
+    """Resolve *path* into seed entries.
+
+    - Directory: rglob ``*.eml`` (mtime-sorted) + every ``*.json`` (each
+      a list of dicts).
+    - File ending in ``.json``: that JSON list.
+    - File ending in ``.eml``: that single EML.
+    """
+    out: list[dict] = []
+    try:
+        if path.is_dir():
+            eml_paths = sorted(
+                (p for p in path.rglob("*.eml") if p.is_file()),
+                key=lambda p: p.stat().st_mtime,
+            )
+            for p in eml_paths:
+                d = _eml_to_dict(p)
+                if d is not None:
+                    out.append(d)
+            for jp in sorted(p for p in path.rglob("*.json") if p.is_file()):
+                out.extend(_load_seed_json(jp))
+        elif path.suffix.lower() == ".json" and path.is_file():
+            out.extend(_load_seed_json(path))
+        elif path.suffix.lower() == ".eml" and path.is_file():
+            d = _eml_to_dict(path)
+            if d is not None:
+                out.append(d)
     except OSError:
         return []
-    eml_paths.sort(key=lambda p: p.stat().st_mtime)
-    out: list[dict] = []
-    for i, p in enumerate(eml_paths, start=1):
-        d = _eml_to_dict(p, uid=i)
-        if d is not None:
-            out.append(d)
     return out
 
 
 def _get_emails() -> list[dict]:
-    """Return the active mailbox list.
+    """Return the active mailbox list: ``_BAIT_EMAILS`` concatenated
+    with seed entries (directory of .eml/.json or a single .json/.eml).
 
-    Resolution order:
-    1. ``IMAP_EMAIL_SEED`` set + dir exists + at least one parseable EML
-       → that list (rescan-throttled).
-    2. Else → the hardcoded ``_BAIT_EMAILS`` fallback.
+    UIDs are renumbered sequentially across the combined list so the
+    hardcoded baits keep their original UIDs (1..10) and seeded entries
+    pick up from len(_BAIT_EMAILS)+1.
     """
-    global _seed_cache, _seed_cache_dir_mtime, _seed_cache_loaded_at
+    global _seed_cache, _seed_cache_path_mtime, _seed_cache_loaded_at
+
     if not _EMAIL_SEED_PATH:
         return _BAIT_EMAILS
-    seed_dir = Path(_EMAIL_SEED_PATH)
+
+    seed_path = Path(_EMAIL_SEED_PATH)
     try:
-        dir_stat = seed_dir.stat()
+        path_stat = seed_path.stat()
     except OSError:
         return _BAIT_EMAILS
+
     now = time.monotonic()
     fresh_enough = (
         _seed_cache is not None
         and (now - _seed_cache_loaded_at) < _SEED_RESCAN_INTERVAL
-        and dir_stat.st_mtime == _seed_cache_dir_mtime
+        and path_stat.st_mtime == _seed_cache_path_mtime
     )
     if fresh_enough:
-        return _seed_cache or _BAIT_EMAILS
-    scanned = _scan_seed_dir(seed_dir)
-    if not scanned:
-        # Don't poison the cache with an empty list; a single early
-        # FETCH before emailgen has run would otherwise stick the
-        # mailbox at 0 for _SEED_RESCAN_INTERVAL seconds.
+        seed = _seed_cache or []
+    else:
+        seed = _scan_seed(seed_path)
+        _seed_cache = seed
+        _seed_cache_path_mtime = path_stat.st_mtime
+        _seed_cache_loaded_at = now
+
+    if not seed:
         return _BAIT_EMAILS
-    _seed_cache = scanned
-    _seed_cache_dir_mtime = dir_stat.st_mtime
-    _seed_cache_loaded_at = now
-    return scanned
+
+    combined: list[dict] = list(_BAIT_EMAILS)
+    base_uid = len(_BAIT_EMAILS)
+    for i, entry in enumerate(seed, start=1):
+        renumbered = dict(entry)
+        renumbered["uid"] = base_uid + i
+        combined.append(renumbered)
+    return combined
 
 
 # ── Logging ───────────────────────────────────────────────────────────────────
