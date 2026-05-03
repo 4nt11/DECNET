@@ -112,7 +112,7 @@ Fully refactored to `decnet/web/db/` modular layout: `models.py` (SQLModel schem
 
 ### ~~DEBT-026 — IMAP/POP3 bait emails not configurable via service config~~ ✅ RESOLVED
 **Files:** `templates/imap/server.py`, `templates/pop3/server.py`, `decnet/services/imap.py`, `decnet/services/pop3.py`
-Resolved 2026-05-03. `IMAP_EMAIL_SEED` / `POP3_EMAIL_SEED` now accept either a directory (rglob `*.eml` and `*.json`) or a single `.json` / `.eml` file. JSON entries are dicts with required keys `from_addr`, `to_addr`, `subject`, `body` (optional `from_name`, `date`, `flags`); bare-body entries are wrapped into RFC 5322 on load. Loaded entries CONCATENATE with `_BAIT_EMAILS` (additive to the realism-engine emailgen output — the hardcoded baits are no longer replaced). `compose_fragment()` reads `service_cfg["email_seed"]` and bind-mounts the host path read-only at `/var/spool/decnet-emails/seed`.
+Resolved 2026-05-03. `IMAP_EMAIL_SEED` / `POP3_EMAIL_SEED` now accept either a directory (rglob `*.eml` and `*.json`) or a single `.json` / `.eml` file. JSON entries are dicts with required keys `from_addr`, `to_addr`, `subject`, `body` (optional `from_name`, `date`, `flags`); bare-body entries are wrapped into RFC 5322 on load. Loaded entries CONCATENATE with `_BAIT_EMAILS` (additive to the realism-engine emailgen output — the hardcoded baits are no longer replaced). `compose_fragment()` reads `service_cfg["email_seed"]` and bind-mounts the host path read-only at `/var/spool/decnet-emails/seed`. When `email_seed` is unset, the compose fragment falls back to `$PROJROOT/bait/` if that directory exists — operators can drop a deployment-wide bait corpus there without touching per-decky config.
 
 ---
 

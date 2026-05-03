@@ -365,13 +365,16 @@ def test_telnet_no_cowrie_env_vars():
 
 # IMAP / POP3 email_seed -----------------------------------------------------
 
-def test_imap_no_email_seed_by_default():
+def test_imap_no_email_seed_when_no_default_and_no_cfg(monkeypatch, tmp_path):
+    """No service_cfg + missing $PROJROOT/bait → no env, no volume."""
+    from decnet.services import imap as imap_svc
+    monkeypatch.setattr(imap_svc, "_DEFAULT_SEED_DIR", tmp_path / "absent-bait")
     fragment = _fragment("imap")
     assert "IMAP_EMAIL_SEED" not in fragment.get("environment", {})
     assert "volumes" not in fragment
 
 
-def test_imap_email_seed_wires_env_and_volume(tmp_path):
+def test_imap_email_seed_explicit_cfg_wins(tmp_path):
     seed_dir = tmp_path / "seed"
     seed_dir.mkdir()
     fragment = _fragment("imap", service_cfg={"email_seed": str(seed_dir)})
@@ -382,13 +385,42 @@ def test_imap_email_seed_wires_env_and_volume(tmp_path):
     assert volumes[0].startswith(str(seed_dir))
 
 
-def test_pop3_no_email_seed_by_default():
+def test_imap_default_seed_dir_used_when_present(monkeypatch, tmp_path):
+    """$PROJROOT/bait/ exists + no service_cfg → mount the default."""
+    from decnet.services import imap as imap_svc
+    default_dir = tmp_path / "bait"
+    default_dir.mkdir()
+    monkeypatch.setattr(imap_svc, "_DEFAULT_SEED_DIR", default_dir)
+    fragment = _fragment("imap")
+    assert fragment["environment"]["IMAP_EMAIL_SEED"] == "/var/spool/decnet-emails/seed"
+    volumes = fragment.get("volumes") or []
+    assert len(volumes) == 1
+    assert volumes[0].startswith(str(default_dir))
+
+
+def test_imap_explicit_cfg_overrides_default(monkeypatch, tmp_path):
+    from decnet.services import imap as imap_svc
+    default_dir = tmp_path / "bait"
+    default_dir.mkdir()
+    explicit = tmp_path / "explicit"
+    explicit.mkdir()
+    monkeypatch.setattr(imap_svc, "_DEFAULT_SEED_DIR", default_dir)
+    fragment = _fragment("imap", service_cfg={"email_seed": str(explicit)})
+    volumes = fragment.get("volumes") or []
+    assert len(volumes) == 1
+    assert volumes[0].startswith(str(explicit))
+    assert str(default_dir) not in volumes[0]
+
+
+def test_pop3_no_email_seed_when_no_default_and_no_cfg(monkeypatch, tmp_path):
+    from decnet.services import pop3 as pop3_svc
+    monkeypatch.setattr(pop3_svc, "_DEFAULT_SEED_DIR", tmp_path / "absent-bait")
     fragment = _fragment("pop3")
     assert "POP3_EMAIL_SEED" not in fragment.get("environment", {})
     assert "volumes" not in fragment
 
 
-def test_pop3_email_seed_wires_env_and_volume(tmp_path):
+def test_pop3_email_seed_explicit_cfg_wins(tmp_path):
     seed_file = tmp_path / "seed.json"
     seed_file.write_text("[]")
     fragment = _fragment("pop3", service_cfg={"email_seed": str(seed_file)})
@@ -397,3 +429,15 @@ def test_pop3_email_seed_wires_env_and_volume(tmp_path):
     assert len(volumes) == 1
     assert volumes[0].endswith(":/var/spool/decnet-emails/seed:ro")
     assert volumes[0].startswith(str(seed_file))
+
+
+def test_pop3_default_seed_dir_used_when_present(monkeypatch, tmp_path):
+    from decnet.services import pop3 as pop3_svc
+    default_dir = tmp_path / "bait"
+    default_dir.mkdir()
+    monkeypatch.setattr(pop3_svc, "_DEFAULT_SEED_DIR", default_dir)
+    fragment = _fragment("pop3")
+    assert fragment["environment"]["POP3_EMAIL_SEED"] == "/var/spool/decnet-emails/seed"
+    volumes = fragment.get("volumes") or []
+    assert len(volumes) == 1
+    assert volumes[0].startswith(str(default_dir))
