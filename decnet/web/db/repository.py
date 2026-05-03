@@ -313,6 +313,44 @@ class BaseRepository(ABC):
         """Retrieve the keystroke-dynamics profile row for a session."""
         pass
 
+    # ─── BEHAVE-SHELL observations ─────────────────────────────────────
+    # See development/BEHAVE-INTEGRATION.md §"Storage" for the full
+    # schema rationale. Every observation envelope emitted by the
+    # BEHAVE-SHELL extractor lands in the ``observations`` table; this
+    # is the abstract surface the worker calls.
+
+    @abstractmethod
+    async def upsert_observation(self, data: dict[str, Any]) -> str:
+        """Insert or update an ``ObservationRow`` keyed on
+        ``(evidence_ref, primitive)``.
+
+        ``data`` MUST carry the BEHAVE envelope fields (``primitive``,
+        ``value``, ``confidence``, ``window_start_ts``,
+        ``window_end_ts``, ``source``, ``evidence_ref``,
+        ``envelope_v``, ``ts``) plus the DECNET-side ``attacker_uuid``
+        denorm. Returns the row ``id``.
+        """
+        raise NotImplementedError
+
+    @abstractmethod
+    async def latest_observation_per_primitive(
+        self, attacker_uuid: str,
+    ) -> dict[str, dict[str, Any]]:
+        """Return the latest observation per primitive for one attacker.
+
+        Empty dict when the attacker has no observations. Backs the
+        AttackerDetail "current state" panel.
+        """
+        raise NotImplementedError
+
+    @abstractmethod
+    async def observations_time_series(
+        self, attacker_uuid: str, primitive: str,
+    ) -> list[dict[str, Any]]:
+        """Every observation of ``primitive`` for ``attacker_uuid``,
+        ordered by ``ts`` ASC. Empty list when none."""
+        raise NotImplementedError
+
     async def upsert_observed_attachment(
         self,
         *,

@@ -57,6 +57,9 @@ from .attacker_intel import (
 from .attachments import (
     ObservedAttachment,
 )
+from .observations import (
+    ObservationRow,
+)
 from .campaigns import (
     Campaign,
     CampaignsResponse,
@@ -250,6 +253,7 @@ __all__ = [
     "AttackerIdentity",
     "AttackerIntel",
     "AttackersResponse",
+    "ObservationRow",
     "ObservedAttachment",
     "SessionProfile",
     "SmtpTarget",

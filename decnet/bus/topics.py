@@ -17,6 +17,7 @@ Token structure (NATS-style, dot-separated):
     attacker.scored
     attacker.session.started
     attacker.session.ended
+    attacker.observation.{primitive}
     identity.formed
     identity.observation.linked
     identity.merged
@@ -129,6 +130,19 @@ ATTACKER_SESSION_ENDED = "session.ended"
 # returned a verdict).  Payload carries the aggregate verdict + per-
 # provider summary so SIEM-bound webhooks don't need to re-query the DB.
 ATTACKER_INTEL_ENRICHED = "intel.enriched"
+# Per-primitive BEHAVE-SHELL observation. Full topic shape:
+#   attacker.observation.<primitive>
+# e.g. ``attacker.observation.motor.input_modality``.  Producer:
+# ``decnet/profiler/behave_shell/`` (extractor library called from the
+# profiler worker on ``attacker.session.ended``); consumers: dashboard
+# SSE relay, attribution engine state machine, federation gossip
+# (post-v0).  See development/BEHAVE-INTEGRATION.md §"Bus topics" for
+# the wire-format contract — the prefix is documentation + pattern
+# match only; bus auth is socket file perms (DEBT-029 §2), not
+# topic-level.  The ``primitive`` segment MAY contain dots
+# (``motor.shell_mastery.tab_completion``) — the same dotted-leaf
+# rule that ``attacker.session.ended`` uses.
+ATTACKER_OBSERVATION_PREFIX = "observation"
 
 # Identity-resolution event types (second/third tokens under ``identity``).
 # Published by the (future) clusterer worker — see
@@ -364,6 +378,28 @@ def attacker(event_type: str) -> str:
     if not event_type:
         raise ValueError("attacker topic requires a non-empty event_type")
     return f"{ATTACKER}.{event_type}"
+
+
+def attacker_observation(primitive: str) -> str:
+    """Build ``attacker.observation.<primitive>``.
+
+    *primitive* is the fully-qualified BEHAVE-SHELL primitive path
+    (e.g. ``motor.input_modality``,
+    ``cognitive.feedback_loop_engagement``,
+    ``motor.shell_mastery.tab_completion``).  Dotted primitives are
+    permitted — this matches the format
+    ``decnet_behave_shell.spec.event_adapter.event_topic_for`` produces
+    upstream, and DECNET's bus admits the dotted leaf the same way
+    :func:`attacker` does for ``session.started``.
+
+    Empty string is rejected so a downstream typo doesn't ship as
+    ``attacker.observation.``.
+    """
+    if not primitive:
+        raise ValueError(
+            "attacker_observation topic requires a non-empty primitive",
+        )
+    return f"{ATTACKER}.{ATTACKER_OBSERVATION_PREFIX}.{primitive}"
 
 
 def campaign(event_type: str) -> str:

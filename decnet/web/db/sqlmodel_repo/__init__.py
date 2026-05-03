@@ -44,6 +44,7 @@ from decnet.web.db.sqlmodel_repo.deckies import DeckiesMixin
 from decnet.web.db.sqlmodel_repo.fleet import FleetMixin
 from decnet.web.db.sqlmodel_repo.identities import IdentitiesMixin
 from decnet.web.db.sqlmodel_repo.logs import LogsMixin
+from decnet.web.db.sqlmodel_repo.observations import ObservationsMixin
 from decnet.web.db.sqlmodel_repo.observed_attachments import ObservedAttachmentsMixin
 from decnet.web.db.sqlmodel_repo.orchestrator import OrchestratorMixin
 from decnet.web.db.sqlmodel_repo.realism import RealismMixin
@@ -66,6 +67,7 @@ class SQLModelRepository(
     FleetMixin,
     IdentitiesMixin,
     LogsMixin,
+    ObservationsMixin,
     ObservedAttachmentsMixin,
     OrchestratorMixin,
     RealismMixin,
