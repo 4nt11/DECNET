@@ -24,8 +24,11 @@ from decnet.profiler.behave_shell._features import FEATURES
 from decnet.profiler.behave_shell._parse import AsciinemaEvent
 
 
-def test_features_tuple_is_empty_at_step_0() -> None:
-    assert FEATURES == ()
+def test_features_tuple_is_populated() -> None:
+    # Step 2+: at least one feature is registered. Exact membership is
+    # asserted in per-feature tests; this test only pins "the registry
+    # is non-empty" so the empty-FEATURES regression doesn't sneak back.
+    assert len(FEATURES) >= 1
 
 
 def test_default_source_is_canonical_path() -> None:
@@ -87,8 +90,7 @@ def test_extract_session_explicit_evidence_ref_overrides_default() -> None:
     assert ctx.evidence_ref == "shard:/var/log/d/sess-x.cast"
 
 
-def test_extract_session_with_features_still_empty() -> None:
-    """Until Step 2 lands, even a populated stream emits nothing."""
-    events: list[AsciinemaEvent] = [(t / 10.0, "i", c) for t, c in enumerate("hello\r")]
-    out = list(extract_session(events, sid="sess-features-empty"))
+def test_extract_session_zero_inputs_yields_nothing() -> None:
+    """No input events → no feature emits (input_modality skips on empty)."""
+    out = list(extract_session([(0.0, "o", "hi\r\n")], sid="sess-no-input"))
     assert out == []
