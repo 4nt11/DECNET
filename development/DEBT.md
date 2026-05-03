@@ -277,7 +277,17 @@ The Workers panel (Config → Workers) landed with bus-based STOP but every STAR
 
 **Status:** Open. Depends on the Workers panel (shipped) and `deploy/decnet-bus.service` pattern being extended to the other workers.
 
-### DEBT-036 — Session-profile ingester (keystroke-dynamics extraction from transcript shards)
+### DEBT-036 — Session-profile ingester (keystroke-dynamics extraction from transcript shards) — **STALE 2026-05-03, SUPERSEDED BY DEBT-050**
+
+> **Stale.** This entry was drafted before BEHAVE-SHELL existed. It bakes the
+> feature schema into hand-rolled `SessionProfile` columns (`kd_iki_mean`,
+> `kd_burst_ratio`, …), which duplicates the registry in
+> `BEHAVE/BEHAVE-SHELL/decnet_behave_shell/spec/primitives.py`, bypasses the
+> registry-validated `Observation` envelope, and skips the bus event adapter
+> (`event_topic_for` / `to_event_payload`) that already speaks DECNET's
+> `attacker.observation.*` topic shape. The replacement plan is **DEBT-050**
+> below. Original text preserved unchanged for context.
+
 **Files:** `decnet/web/ingester.py` (or new sibling under `decnet/session_profiler/`), `decnet/web/db/models/attackers.py:SessionProfile` (table already exists, ships empty), `decnet/templates/_shared/sessrec/sessrec.c` (emitter side — already done), `decnet/web/router/attackers/api_get_attacker_detail.py` (consumer — already joins SessionProfile when present).
 
 The `SessionProfile` SQLModel table has been committed to storage since session recording v1 landed (see `decnet/web/db/models/attackers.py:97-143`). Every column — `kd_iki_mean`, `kd_iki_stdev`, `kd_iki_p50`, `kd_iki_p95`, `kd_enter_latency_p50/p95`, `kd_burst_ratio`, `kd_think_ratio`, `kd_ctrl_backspace/wkill/ukill/abort/eof`, `kd_arrow_rate`, `kd_tab_rate`, `kd_digraph_simhash`, `total_keystrokes`, `session_duration_s` — is nullable by design because the **ingester that populates them does not exist yet** (documented as gap #2 in `SIGNAL_CAPTURE_AUDIT.md`). Every session that gets recorded lands an empty row (or, today, no row at all) while the `[t, "i", d]` event stream in the shard carries every signal those columns exist to capture.
@@ -317,7 +327,83 @@ All four signals fall out of the schema for free. CoV from `kd_iki_mean` + `kd_i
 - The motivating-case wget session produces CoV ≈ 0.74 ± 0.05 when the ingester processes it — sanity check against the manual analysis.
 - The AttackerDetail page surfaces at least `kd_iki_mean` + `kd_burst_ratio` somewhere in the keystroke-dynamics section, unblocking the "is this the same typist" hover story.
 
-**Status:** Open. Depends on the shard-scan fallback (shipped in `323077b`) and `SessionProfile` schema (shipped with session recording v1). The bus-trigger path depends on DEBT-031's deferred `attacker.session.started/ended` topics, but poll-driven ingestion works today and can ship first.
+**Status:** ⚠️ Stale — superseded by DEBT-050. Do not implement against this entry; the column-zoo design is the wrong shape now that BEHAVE-SHELL exists.
+
+### DEBT-050 — BEHAVE-SHELL session-profile ingester worker (replaces DEBT-036)
+**Files:** `decnet/session_profiler/worker.py` (**new**), `decnet/web/db/models/observations.py` (**new** — generic Observation table, see Storage), `decnet/web/db/models/attackers.py` (drop `SessionProfile` and its `kd_*` columns), `decnet/web/router/attackers/api_get_attacker_detail.py` (consumer surface — switch from SessionProfile join to per-primitive Observation latest-state query), `decnet/bus/topics.py` (admit `attacker.observation.*` prefix), `decnet/web/db/sqlmodel_repo/observations.py` (**new** — repository methods), `packaging/systemd/decnet-session-profiler.service` (**new**), `pyproject.toml` (pin `decnet-behave-core`, `decnet-behave-shell`), **BEHAVE repo (separate commit):** `BEHAVE/prototype_extractors/shell/extract.py` (refactor `__main__` into importable `extract_session()`).
+
+**Context.** ANTI built BEHAVE — an out-of-tree behavioural-observation framework with its own primitive registry, registry-validated `Observation` envelope, DECNET-bus event adapter, and a five-class calibration grid (HUMAN / YOU-sim / LW-sim / CLAUDE-FF / CLAUDE-CL). It is the right substrate for keystroke-dynamics extraction; the original DEBT-036 entry predates it and got the schema wrong by inventing parallel columns. BEHAVE is a **separate repo** (mirrors `wiki-checkout` discipline — two repos, two commits per change).
+
+**Design:**
+
+1. **New worker** `decnet/session_profiler/worker.py`. Sibling of `decnet/ingester/`, supervised by a new `packaging/systemd/decnet-session-profiler.service` unit (mirrors DEBT-034's pattern). One process per host, agent-or-master-agnostic.
+2. **Trigger.** Subscribe on the bus to `attacker.session.ended`; poll-fallback over `Log.event_type='session_recorded'` rows lacking a "profiled" marker (see Storage). Bus-optional per DEBT-031: `try get_bus(); except: warn-and-degrade-to-poll`.
+3. **Disk-reach** (per DEBT-047 precedent). For each `(decky, service, sid)`, resolve the shard via `_find_shard_with_sid` (already shipped in `323077b`), open the JSONL, walk the per-sid event slice. **No raw `d` values cross the worker→bus boundary** — BEHAVE's envelope rules prohibit it, and disk-reach keeps the input stream host-local.
+4. **Extraction.** Refactor `BEHAVE/prototype_extractors/shell/extract.py`'s `__main__` into an importable `extract_session(events: Iterable[AsciinemaEvent]) -> Iterable[Observation]`. Feed it the per-sid `[t,"i",d]` slice. Output is a stream of registry-validated `Observation`s, one per primitive that fired for the session. **Refactor lands in the BEHAVE repo as a separate commit** (two repos, two commits).
+5. **Bus emission.** For each `obs`: `bus.publish(event_topic_for(obs.primitive), to_event_payload(obs))`. The adapter is pure-stdlib, no DECNET imports — DECNET is the consumer of *its* contract, not the other way around. Topic prefix `attacker.observation.*` registered in `decnet/bus/topics.py`.
+6. **Storage — drop `SessionProfile`, new generic `Observation` table.** Schema mirrors the BEHAVE envelope 1:1 so persistence cannot drift from the wire format:
+
+   ```
+   observations (
+     id              UUID PRIMARY KEY,        -- BEHAVE Observation.id
+     attacker_uuid   UUID NOT NULL FK,        -- denormalised from identity_ref or join-resolved
+     identity_ref    UUID NULL,               -- raw envelope field, may be null pre-attribution
+     primitive       TEXT NOT NULL,           -- 'motor.keystroke_cadence' etc.
+     value           JSON NOT NULL,           -- envelope shape; SQLAlchemy JSON not JSONB (memory rule)
+     confidence      REAL NOT NULL,
+     window_start_ts REAL NOT NULL,
+     window_end_ts   REAL NOT NULL,
+     source          TEXT NOT NULL,
+     evidence_ref    TEXT NULL,               -- shard:sid pointer for disk-reach audit, never evidence itself
+     envelope_v      INTEGER NOT NULL,        -- BEHAVE Observation.v (currently 1)
+     ts              REAL NOT NULL,           -- emission ts
+     INDEX (attacker_uuid, primitive, ts DESC),
+     INDEX (primitive, ts DESC)
+   )
+   ```
+
+   AttackerDetail's "current state per primitive" view = `SELECT DISTINCT ON (primitive) … ORDER BY primitive, ts DESC` (or the SQLite equivalent via window function). `SessionProfile` and its `kd_*` columns are dropped outright — pre-v1, no users to mislead, no migration ceremony (DEBT-011 still deferred; just edit the SQLModel).
+7. **Packaging.** Pin `decnet-behave-core>=0.1.0,<0.2` and `decnet-behave-shell>=0.1.0,<0.2` in DECNET's `pyproject.toml`. Envelope schema is currently `v=1` (`https://behave.local/schema/observation/v1.json`); the `observations.envelope_v` column tracks it so a future `v=2` envelope can land alongside without a destructive migration. Local dev: `pip install -e ../BEHAVE/core ../BEHAVE/BEHAVE-SHELL`. CI installs the pinned wheels from a BEHAVE release tag — bump the cap when BEHAVE cuts `0.2.0`.
+
+**Non-negotiables:**
+- Registry validation is enforced at construction time by BEHAVE's `Observation` subclass — no DECNET-side primitive whitelist, no drift.
+- Extractor refactor must keep `extract.py --summary` and the calibration-grid CLI flow working; the library entry-point is *additive*.
+- `DECNET_BUS_ENABLED=false` keeps the worker functional in poll-only mode (mirrors DEBT-031).
+- Idempotent on re-run: same shard + same sid → same observation set (sort+dedupe by primitive before emitting).
+- PII discipline binds at the BEHAVE layer; DECNET does not get to "improve" the envelope by reading raw bodies into payloads.
+
+**Acceptance:**
+- Replay each of the five `BEHAVE/prototype_extractors/shell/sessions-2026-05-02-*.jsonl` calibration shards through the worker. Each session produces the BEHAVE-SHELL primitives that the README's class-signature column predicts (e.g. CLAUDE-FF: `motor.input_modality=pasted` + `motor.paste_burst_rate=habitual` + `cognitive.inter_command_latency_class=llm_heavyweight` + `cognitive.command_branch_diversity=linear_playbook` + `cognitive.feedback_loop_engagement=fire_and_forget`).
+- AttackerDetail surfaces at least `motor.input_modality`, `cognitive.feedback_loop_engagement`, and `cognitive.command_branch_diversity` for any attacker with a profiled session.
+- The five-class grid IS the regression test — any extractor change must keep all five sessions classifying within their expected primitive sets.
+
+**Out of scope (defer to DEBT-051+ as they bite):**
+- Attribution engine (consumes `attacker.observation.*`, emits `attribution.profile.candidate.*`). BEHAVE deliberately separates observation from attribution.
+- Federation gossip of observations across swarm hosts.
+- Backfill over historical shards.
+- Webhook export of observation streams (rides DEBT-037).
+
+**Status:** Open. Replaces DEBT-036. Depends on (a) BEHAVE-SHELL spec frozen at v0.x, (b) `extract.py` library refactor in the BEHAVE repo, (c) shard-scan fallback (shipped `323077b`).
+
+### DEBT-051 — Cross-session BEHAVE primitive aggregation (attribution engine)
+**Files:** `decnet/correlation/attribution/` (**new**), `decnet/web/db/models/attribution_state.py` (**new**), `decnet/bus/topics.py` (`attribution.profile.*` prefix), `decnet/web/router/attackers/api_get_attacker_detail.py` (state-badge wiring).
+
+`BEHAVE-INTEGRATION.md`'s Q3 settled the AttackerDetail "current state" surface as **latest-wins per primitive** for v0 — honest about being naïve. The harder question — *how do conflicting observations across sessions of the same attacker resolve into a stable view?* — is filed here.
+
+Concrete cases:
+- Session A says `motor.input_modality = typed`, session B says `pasted`. Mixed? Operator switched tooling? Different operator on shared creds?
+- `cognitive.feedback_loop_engagement` flips closed_loop ↔ fire_and_forget across sessions. Fatigue, handoff (`operational.multi_actor_indicators=handoff_detected`), or scripted takeover?
+- A short session emits `cognitive.command_branch_diversity=unknown`; a long one emits `adaptive_branching`. Latest-wins would collapse to `unknown` if the short one lands second — exactly the wrong answer.
+
+**This is genuinely an attribution-engine concern**, not an extraction concern (BEHAVE's bright line is firm on the split). The clean answer:
+
+1. DECNET stores all observations per-(sid, primitive). ✅ Substrate ships in DEBT-050.
+2. AttackerDetail's day-one query is latest-wins (Q3 above). ✅ Substrate ships in DEBT-050.
+3. The right answer ships as a derived per-(attacker, primitive) state machine emitting `attribution.profile.state_changed` events with explicit merge semantics: `stable / drifting / conflicted / multi_actor / unknown`.
+
+Full design in `development/ATTRIBUTION-ENGINE.md`. v0 scope: aggregation only over per-`attacker_uuid` proto-identities (sidesteps the still-deferred clusterer from `IDENTITY_RESOLUTION.md`); v1 widens to identity_uuid clustering; v2 federation gossip.
+
+**Status:** Open. Depends on DEBT-050 v0 in production for ≥ 1 month (so the engine has observation data to merge against) + a calibration corpus that exercises drift / multi-actor scenarios end-to-end.
 
 ### ~~DEBT-035 — Artifacts written as the container uid, not the API's~~ ✅ RESOLVED 2026-05-02
 **Files:** `decnet/cli/init.py`, `decnet/web/router/transcripts/api_get_transcript.py` (soft-fail kept as defence-in-depth).
@@ -717,7 +803,9 @@ user who needs it.
 | ~~DEBT-032~~ | ✅ | Correlation / Prober | resolved 2026-05-03 |
 | DEBT-033 | 🟡 Medium | Storage / Session recording | open |
 | ~~DEBT-035~~ | ✅ | Artifacts / Filesystem perms | resolved 2026-05-02 |
-| DEBT-036 | 🟡 Medium | Correlation / Keystroke dynamics | open |
+| DEBT-036 | ⚠️ Stale | Correlation / Keystroke dynamics | superseded by DEBT-050 |
+| DEBT-050 | 🟡 Medium | BEHAVE-SHELL session-profile ingester | open (replaces DEBT-036) |
+| DEBT-051 | 🟡 Medium | Attribution engine / cross-session aggregation | open (depends on DEBT-050) |
 | DEBT-037 | 🟡 Medium | Integration / Webhooks | open (tracks MVP follow-ups) |
 | DEBT-038 | 🟡 Medium | Honeypot / SSH cred capture | open (document-only) |
 | ~~DEBT-039~~ | ✅ | Honeypot / Cred emitters | resolved |
@@ -732,5 +820,5 @@ user who needs it.
 | DEBT-048 | 🟡 Medium | TTP / Intel provider mapping review (recurring) | open / recurring |
 | DEBT-049 | 🟡 Medium | TTP / Sigma adapter (post-v1) | open |
 
-**Remaining open:** DEBT-011 (Alembic), DEBT-027 (Dynamic bait store), DEBT-028 (deploy endpoint tests), DEBT-033 (transcript shard rotation), DEBT-036 (session-profile ingester), DEBT-037 (webhook delivery hardening), DEBT-038 (SSH PAM cred-capture limitations — document-only), DEBT-045 (EmailLifter heavyweight — partial paid; carved-out follow-ups remain), DEBT-048 (TTP intel provider mapping review — recurring quarterly), DEBT-049 (TTP Sigma adapter — post-v1).
+**Remaining open:** DEBT-011 (Alembic), DEBT-027 (Dynamic bait store), DEBT-028 (deploy endpoint tests), DEBT-033 (transcript shard rotation), DEBT-037 (webhook delivery hardening), DEBT-038 (SSH PAM cred-capture limitations — document-only), DEBT-045 (EmailLifter heavyweight — partial paid; carved-out follow-ups remain), DEBT-048 (TTP intel provider mapping review — recurring quarterly), DEBT-049 (TTP Sigma adapter — post-v1), DEBT-050 (BEHAVE-SHELL session-profile ingester — replaces DEBT-036), DEBT-051 (attribution engine / cross-session aggregation). DEBT-036 is stale.
 **Estimated remaining effort:** ~21 hours plus the new EmailLifter / TTP follow-ups. DEBT-030 Phase B (optimistic staged-buffer editor) is a follow-up, not debt.
