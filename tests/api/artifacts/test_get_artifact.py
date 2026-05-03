@@ -23,9 +23,10 @@ def artifacts_root(tmp_path, monkeypatch):
     (root / _DECKY / "ssh").mkdir(parents=True)
     (root / _DECKY / "ssh" / _VALID_STORED_AS).write_bytes(_PAYLOAD)
 
-    # Patch the module-level constant (captured at import time).
-    from decnet.web.router.artifacts import api_get_artifact
-    monkeypatch.setattr(api_get_artifact, "ARTIFACTS_ROOT", root)
+    # Patch the canonical module-level constant. Both the router and
+    # the EmailLifter resolve through decnet.artifacts.paths.
+    from decnet.artifacts import paths as artifact_paths
+    monkeypatch.setattr(artifact_paths, "ARTIFACTS_ROOT", root)
     return root
 
 
@@ -137,8 +138,8 @@ async def test_smtp_service_serves_from_smtp_subdir(
     (root / _DECKY / "smtp").mkdir(parents=True)
     eml = "2026-04-18T02:22:56Z_abc123def456_msg.eml"
     (root / _DECKY / "smtp" / eml).write_bytes(b"From: a\r\n\r\nhi")
-    from decnet.web.router.artifacts import api_get_artifact
-    monkeypatch.setattr(api_get_artifact, "ARTIFACTS_ROOT", root)
+    from decnet.artifacts import paths as artifact_paths
+    monkeypatch.setattr(artifact_paths, "ARTIFACTS_ROOT", root)
     res = await client.get(
         f"/api/v1/artifacts/{_DECKY}/{eml}?service=smtp",
         headers={"Authorization": f"Bearer {auth_token}"},
