@@ -75,3 +75,18 @@ FEEDBACK_MIN_PAIRS: int = 5
 # via Hartigan dip is filed for v0.2).
 PAUSE_CV_METRONOMIC_MAX: float = 0.40
 PAUSE_CV_BIMODAL_MIN: float = 1.50
+
+# ── motor.keystroke_cadence (Step B.1) ──────────────────────────────────────
+# Typing bursts split at gaps > IKI_THINK_MAX_S so think-pauses between
+# commands don't inflate the within-burst CV. Mirrors the prototype's
+# _split_into_bursts (BEHAVE/prototype_extractors/shell/extract.py:275-286).
+IKI_THINK_MAX_S: float = 1.50
+# Sub-human floor for the "machine" classification — only paired with a
+# pathologically uniform CV, since real humans never produce sub-5ms IATs
+# in a sustained burst.
+IKI_MACHINE_MAX_S: float = 0.005
+CV_MACHINE_MAX: float = 0.05
+CV_STEADY_MAX: float = 0.50
+CV_BURSTY_MAX: float = 1.50
+# Need this many input events before we'll claim a cadence at all.
+MIN_INPUTS_FOR_CADENCE: int = 5

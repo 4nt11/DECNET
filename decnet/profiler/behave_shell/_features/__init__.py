@@ -19,6 +19,7 @@ from decnet.profiler.behave_shell._features.cognitive import (
 )
 from decnet.profiler.behave_shell._features.motor import (
     input_modality,
+    keystroke_cadence,
     paste_burst_rate,
 )
 
@@ -27,6 +28,7 @@ FeatureFn = Callable[[SessionContext], Iterable[Observation]]
 FEATURES: tuple[FeatureFn, ...] = (
     input_modality,
     paste_burst_rate,
+    keystroke_cadence,
     inter_command_latency_class,
     command_branch_diversity,
     feedback_loop_engagement,

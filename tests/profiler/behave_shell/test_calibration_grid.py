@@ -31,13 +31,16 @@ from decnet.profiler.behave_shell import extract_session
 from decnet.profiler.behave_shell._parse import parse_shard_line
 
 
-PHASE_A_PRIMITIVES: frozenset[str] = frozenset({
+PHASE_AB_PRIMITIVES: frozenset[str] = frozenset({
+    # Phase A — calibration floor
     "motor.input_modality",
     "motor.paste_burst_rate",
     "cognitive.inter_command_latency_class",
     "cognitive.command_branch_diversity",
     "cognitive.feedback_loop_engagement",
     "cognitive.inter_command_consistency",
+    # Phase B — motor.* completion (lands one primitive per commit)
+    "motor.keystroke_cadence",
 })
 
 
@@ -105,7 +108,7 @@ def test_shard_emits_all_phase_a_primitives(
     obs = _all_observations(path)
     assert obs, f"{class_label}: extractor produced zero observations"
     seen = {o.primitive for o in obs}
-    missing = PHASE_A_PRIMITIVES - seen
+    missing = PHASE_AB_PRIMITIVES - seen
     assert not missing, (
         f"{class_label} ({shard_file}) missing primitives: "
         f"{sorted(missing)}"
@@ -142,7 +145,7 @@ def test_shards_are_discriminative_across_classes(
     # At least one primitive should produce different majority values
     # across the present classes.
     discriminative_primitives: list[str] = []
-    for prim in PHASE_A_PRIMITIVES:
+    for prim in PHASE_AB_PRIMITIVES:
         values = {by_class[c].get(prim) for c in by_class if prim in by_class[c]}
         if len(values) >= 2:
             discriminative_primitives.append(prim)

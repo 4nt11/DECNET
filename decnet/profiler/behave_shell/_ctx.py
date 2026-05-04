@@ -20,6 +20,7 @@ from decnet.profiler.behave_shell._parse import (
     hash_token,
 )
 from decnet.profiler.behave_shell._thresholds import (
+    IKI_THINK_MAX_S,
     PASTE_BURST_MAX_IAT_S,
     PASTE_MIN_CHARS_PER_EVENT,
 )
@@ -46,6 +47,9 @@ class SessionContext:
     commands: tuple[Command, ...] = field(default_factory=tuple)
     inter_cmd_iats: tuple[float, ...] = field(default_factory=tuple)
     output_per_cmd: tuple[int, ...] = field(default_factory=tuple)
+
+    # Step B.1 derivations — typing bursts (IATs split at think-pauses)
+    typing_bursts: tuple[tuple[float, ...], ...] = field(default_factory=tuple)
 
 
 def _detect_paste_bursts(
@@ -100,6 +104,22 @@ def _detect_paste_bursts(
 
     _close()
     return tuple(bursts), paste_count
+
+
+def _split_typing_bursts(iats: tuple[float, ...]) -> tuple[tuple[float, ...], ...]:
+    """Split a flat IAT sequence at gaps > IKI_THINK_MAX_S.
+
+    Drops bursts of fewer than 3 IATs — too short to compute a stable
+    CV. Mirrors BEHAVE prototype's ``_split_into_bursts``.
+    """
+    bursts: list[list[float]] = [[]]
+    for x in iats:
+        if x > IKI_THINK_MAX_S:
+            if bursts[-1]:
+                bursts.append([])
+        else:
+            bursts[-1].append(x)
+    return tuple(tuple(b) for b in bursts if len(b) >= 3)
 
 
 def _segment_commands(inputs: list[AsciinemaEvent]) -> tuple[Command, ...]:
@@ -179,6 +199,7 @@ def build_session_context(
         max(0.0, inputs[i][0] - inputs[i - 1][0]) for i in range(1, len(inputs))
     )
     paste_bursts, paste_count = _detect_paste_bursts(inputs)
+    typing_bursts = _split_typing_bursts(iats)
     commands = _segment_commands(inputs)
     inter_cmd_iats = tuple(
         max(0.0, commands[i + 1].start_ts - commands[i].end_ts)
@@ -204,4 +225,5 @@ def build_session_context(
         commands=commands,
         inter_cmd_iats=inter_cmd_iats,
         output_per_cmd=output_per_cmd,
+        typing_bursts=typing_bursts,
     )
