@@ -75,6 +75,24 @@ class PasteBurst:
 
 
 @dataclass(frozen=True, slots=True)
+class PromptLine:
+    """One PS1 prompt line detected in the output stream.
+
+    PII trade-off (ANTI-authorised at Phase F): ``raw_line`` retains
+    the ANSI-stripped text of the prompt — hostnames / usernames /
+    cwd / etc. — because F.1 / F.3 / E.4 read off it. Capped at
+    ``PROMPT_LINE_MAX_CHARS``. PromptLine instances live on
+    ``SessionContext.prompt_lines``; only derived primitive values
+    (``bash`` / ``en-US`` / ``present``) leave the engine.
+    """
+
+    ts: float
+    suffix_char: str   # one of $ # % >
+    raw_line: str      # ANSI stripped, capped at PROMPT_LINE_MAX_CHARS
+    is_root: bool      # suffix_char == '#'
+
+
+@dataclass(frozen=True, slots=True)
 class Command:
     """One command-line invocation, segmented from the input stream.
 
@@ -115,11 +133,79 @@ class Command:
     pipe_count: int = 0
     errored: bool = False
     output_bytes: int = 0
+    followed_by_prompt: bool = False
 
 
 def hash_token(token: str) -> str:
     """sha256-hex of a token; the only PII-safe handle on a command."""
     return hashlib.sha256(token.encode("utf-8")).hexdigest()
+
+
+# Prompt-line detection (Step F.0). A prompt line ends with one of
+# $/#/%/> followed by a space or end-of-line. The trailing space /
+# newline is what tells us this is a *prompt* not just a sentence
+# ending in those characters. We require either the space variant or
+# the EOL variant to be present right after the suffix.
+_PROMPT_LINE_RE = re.compile(
+    r"""
+    (?:^|\n)            # line start
+    (?P<line>           # capture the prompt line itself
+        [^\n]*?         # any line content (non-greedy)
+        (?P<suffix>[$\#%>])   # prompt suffix
+        \ ?             # optional trailing space (PS1 default has it)
+    )
+    (?=\n|\Z)           # at end of line / end of buffer
+    """,
+    re.VERBOSE,
+)
+
+
+def _detect_prompt_suffix(line: str) -> str | None:
+    """Return the suffix character if ``line`` looks like a PS1 prompt.
+
+    ``line`` is one logical output line, ANSI-stripped, trailing
+    whitespace included. The discriminating shape: any text ending in
+    one of ``$ # % >`` optionally followed by a single space. We require
+    the line to be non-empty and the suffix to be the rightmost
+    non-whitespace character.
+    """
+    stripped = line.rstrip()
+    if not stripped:
+        return None
+    last = stripped[-1]
+    return last if last in ("$", "#", "%", ">") else None
+
+
+def extract_prompt_lines(
+    text: str,
+    *,
+    base_ts: float,
+    max_chars: int,
+) -> Iterator[PromptLine]:
+    """Yield prompt lines detected in ``text`` (already ANSI-stripped).
+
+    All emitted prompts share ``base_ts`` — the caller is responsible
+    for slicing output by event window before calling. A given output
+    chunk yields **at most one prompt line** (the trailing one), but
+    multi-line chunks containing multiple distinct prompts (mid-stream
+    redraws) yield each. ``raw_line`` is capped at ``max_chars`` and
+    leading/trailing whitespace stripped (preserving internal layout).
+    """
+    if not text:
+        return
+    for raw in text.split("\n"):
+        suffix = _detect_prompt_suffix(raw)
+        if suffix is None:
+            continue
+        line = raw.strip()
+        if len(line) > max_chars:
+            line = line[-max_chars:]
+        yield PromptLine(
+            ts=base_ts,
+            suffix_char=suffix,
+            raw_line=line,
+            is_root=(suffix == "#"),
+        )
 
 
 def parse_shard_line(line: str) -> AsciinemaEvent | None:

@@ -18,7 +18,9 @@ from decnet.profiler.behave_shell._parse import (
     AsciinemaEvent,
     Command,
     PasteBurst,
+    PromptLine,
     detect_error_in_output,
+    extract_prompt_lines,
     hash_token,
     strip_ansi,
 )
@@ -26,6 +28,7 @@ from decnet.profiler.behave_shell._thresholds import (
     IKI_THINK_MAX_S,
     PASTE_BURST_MAX_IAT_S,
     PASTE_MIN_CHARS_PER_EVENT,
+    PROMPT_LINE_MAX_CHARS,
     SHORTCUT_CTRL_BYTES,
 )
 
@@ -62,6 +65,9 @@ class SessionContext:
 
     # Step B.4 derivations — per-command intra-typing IATs
     intra_command_iats: tuple[tuple[float, ...], ...] = field(default_factory=tuple)
+
+    # Step F.0 derivations — PS1 prompt lines detected in the output stream
+    prompt_lines: tuple[PromptLine, ...] = field(default_factory=tuple)
 
 
 def _detect_paste_bursts(
@@ -225,8 +231,14 @@ def _segment_commands(inputs: list[AsciinemaEvent]) -> tuple[Command, ...]:
 def _annotate_commands_with_output(
     commands: tuple[Command, ...],
     outputs: list[AsciinemaEvent],
-) -> tuple[Command, ...]:
-    """Re-emit ``commands`` with ``errored`` / ``output_bytes`` filled.
+) -> tuple[tuple[Command, ...], tuple[PromptLine, ...]]:
+    """Re-emit ``commands`` with output-derived fields filled.
+
+    Returns ``(commands, prompt_lines)``. Each ``Command`` gains
+    ``errored``, ``output_bytes``, and ``followed_by_prompt`` (Step
+    F.0). The flattened tuple of all detected ``PromptLine`` instances
+    across every command's window is returned alongside for the caller
+    to install on ``SessionContext.prompt_lines``.
 
     The output window for ``commands[i]`` spans from its ``end_ts``
     (the ``\\r``/``\\n`` that ran it) to the ``start_ts`` of the next
@@ -234,11 +246,13 @@ def _annotate_commands_with_output(
     so output events arriving at or after ``t_end`` are still captured.
     """
     if not commands:
-        return commands
+        return commands, ()
     annotated: list[Command] = []
+    all_prompts: list[PromptLine] = []
     for i, cmd in enumerate(commands):
         win_end = commands[i + 1].start_ts if i + 1 < len(commands) else math.inf
-        byte_count, errored = _output_window(outputs, cmd.end_ts, win_end)
+        byte_count, errored, prompts = _output_window(outputs, cmd.end_ts, win_end)
+        all_prompts.extend(prompts)
         annotated.append(Command(
             start_ts=cmd.start_ts,
             end_ts=cmd.end_ts,
@@ -248,8 +262,9 @@ def _annotate_commands_with_output(
             pipe_count=cmd.pipe_count,
             errored=errored,
             output_bytes=byte_count,
+            followed_by_prompt=bool(prompts),
         ))
-    return tuple(annotated)
+    return tuple(annotated), tuple(all_prompts)
 
 
 def _per_command_iats(
@@ -289,26 +304,37 @@ def _output_window(
     outputs: list[AsciinemaEvent],
     start: float,
     end: float,
-) -> tuple[int, bool]:
+) -> tuple[int, bool, tuple[PromptLine, ...]]:
     """Walk output events in ``[start, end)`` once.
 
-    Returns ``(byte_count, errored)``. ``byte_count`` is the raw byte
-    count (pre-strip); ``errored`` is the canonical-error-pattern match
-    over the ANSI-stripped concatenation. The stripped text is dropped
-    on return — PII discipline: only an int and a bool leave this
-    helper. The full output bytes never enter ``Command`` or the
-    ``SessionContext``.
+    Returns ``(byte_count, errored, prompt_lines)``. ``byte_count`` is
+    the raw byte count (pre-strip); ``errored`` is the canonical-error
+    -pattern match over the ANSI-stripped concatenation;
+    ``prompt_lines`` is the tuple of PS1 lines detected in the same
+    stripped text (Step F.0).
+
+    PII trade-off (Phase F): the stripped text itself is dropped on
+    return, but ``prompt_lines`` retains PS1 strings (capped at
+    ``PROMPT_LINE_MAX_CHARS``). Only derived values leave the engine
+    via observations; the prompt strings live on ``SessionContext``
+    so F.1 / F.3 / E.4 can read them.
     """
     chunks: list[str] = []
+    last_ts = start
     byte_count = 0
     for t, _k, d in outputs:
         if start <= t < end:
             byte_count += len(d)
             chunks.append(d)
+            last_ts = t
     if not chunks:
-        return 0, False
+        return 0, False, ()
     stripped = strip_ansi("".join(chunks))
-    return byte_count, detect_error_in_output(stripped)
+    errored = detect_error_in_output(stripped)
+    prompts = tuple(extract_prompt_lines(
+        stripped, base_ts=last_ts, max_chars=PROMPT_LINE_MAX_CHARS,
+    ))
+    return byte_count, errored, prompts
 
 
 def build_session_context(
@@ -349,7 +375,7 @@ def build_session_context(
     typing_bursts = _split_typing_bursts(iats)
     backspace_count, backspace_iats, kill_line_count = _scan_correction_signals(inputs)
     commands = _segment_commands(inputs)
-    commands = _annotate_commands_with_output(commands, outputs)
+    commands, prompt_lines = _annotate_commands_with_output(commands, outputs)
     inter_cmd_iats = tuple(
         max(0.0, commands[i + 1].start_ts - commands[i].end_ts)
         for i in range(len(commands) - 1)
@@ -380,4 +406,5 @@ def build_session_context(
         backspace_iats=backspace_iats,
         kill_line_count=kill_line_count,
         intra_command_iats=intra_command_iats,
+        prompt_lines=prompt_lines,
     )

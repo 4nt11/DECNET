@@ -218,6 +218,16 @@ LANDING_RITUAL_FIRST_N: int = 5
 LANDING_RITUAL_HIT_MIN: int = 2
 LANDING_RITUAL_MIN_COMMANDS: int = 3
 
+# ── F.0 prompt-line detector ──────────────────────────────────────────────
+# A prompt line in the output stream ends with one of these characters
+# followed by a space or EOL. ``$`` and ``#`` are sh/bash; ``%`` is zsh;
+# ``>`` is fish / cmd.exe / powershell (disambiguated by line content
+# at F.1 time). Capped at 256 chars to bound memory; ANTI authorised
+# retaining PS1 text on ctx (PII relaxation), but a malicious operator
+# inflating the prompt buffer is still bounded.
+PROMPT_SUFFIX_CHARS: frozenset[str] = frozenset({"$", "#", "%", ">"})
+PROMPT_LINE_MAX_CHARS: int = 256
+
 # ── motor.keystroke_cadence (Step B.1) ──────────────────────────────────────
 # Typing bursts split at gaps > IKI_THINK_MAX_S so think-pauses between
 # commands don't inflate the within-burst CV. Mirrors the prototype's
