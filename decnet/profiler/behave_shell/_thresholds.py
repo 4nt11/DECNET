@@ -238,6 +238,31 @@ SHELL_TYPE_MIN_PROMPTS: int = 3
 # noise and skip emission (a single 'C' or 'en' is too thin).
 LOCALE_MIN_VALUE_LENGTH: int = 2
 
+# ── environmental.keyboard_layout (Step F.4) ───────────────────────────────
+# ANTI authorised dropping the PII boundary for this primitive — typed
+# bigram/unigram histograms ride on SessionContext to feed two
+# independent layout signals:
+#
+#   1. English-bigram saturation (presumed-QWERTY signal)
+#   2. Layout-artefact unigram rates (q for AZERTY, z/y swap for QWERTZ)
+#
+# Sample-size floor; below this typed-letter-count we skip emission.
+LAYOUT_MIN_TYPED_LETTERS: int = 200
+# Cap on bigram histogram size — bound memory while keeping the top
+# bigrams that drive the saturation signal.
+LAYOUT_BIGRAM_TOP_N: int = 64
+# Top-10 English bigrams. Their summed frequency floor presumes QWERTY
+# (the dominant English-typing layout).
+LAYOUT_TOP_ENG_BIGRAMS: frozenset[str] = frozenset({
+    "th", "he", "in", "er", "an", "re", "on", "at", "nd", "ha",
+})
+# Layout-artefact thresholds. Fractions are over total ASCII-letter typed.
+LAYOUT_AZERTY_Q_MIN: float = 0.020      # high `q` rate (mistyping AZERTY's `a`)
+LAYOUT_AZERTY_ENG_MAX: float = 0.050    # AND low English saturation
+LAYOUT_QWERTZ_Z_MIN: float = 0.030      # high `z` rate (German content / QWERTZ)
+LAYOUT_QWERTZ_Y_MAX: float = 0.010      # AND `y` swap signature
+LAYOUT_QWERTY_ENG_MIN: float = 0.080    # English-bigram saturation floor
+
 # ── motor.keystroke_cadence (Step B.1) ──────────────────────────────────────
 # Typing bursts split at gaps > IKI_THINK_MAX_S so think-pauses between
 # commands don't inflate the within-burst CV. Mirrors the prototype's

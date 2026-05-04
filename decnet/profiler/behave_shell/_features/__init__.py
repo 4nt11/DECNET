@@ -25,6 +25,7 @@ from decnet.profiler.behave_shell._features.cognitive import (
     inter_command_latency_class,
 )
 from decnet.profiler.behave_shell._features.environmental import (
+    keyboard_layout,
     locale,
     shell_type,
     terminal_multiplexer,
@@ -75,4 +76,5 @@ FEATURES: tuple[FeatureFn, ...] = (
     shell_type,
     terminal_multiplexer,
     locale,
+    keyboard_layout,
 )

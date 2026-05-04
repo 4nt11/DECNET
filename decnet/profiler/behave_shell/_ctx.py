@@ -12,7 +12,7 @@ from __future__ import annotations
 
 import math
 from dataclasses import dataclass, field
-from typing import Iterable
+from typing import Iterable, Mapping
 
 from decnet.profiler.behave_shell._parse import (
     AsciinemaEvent,
@@ -26,6 +26,7 @@ from decnet.profiler.behave_shell._parse import (
 )
 from decnet.profiler.behave_shell._thresholds import (
     IKI_THINK_MAX_S,
+    LAYOUT_BIGRAM_TOP_N,
     PASTE_BURST_MAX_IAT_S,
     PASTE_MIN_CHARS_PER_EVENT,
     PROMPT_LINE_MAX_CHARS,
@@ -68,6 +69,12 @@ class SessionContext:
 
     # Step F.0 derivations — PS1 prompt lines detected in the output stream
     prompt_lines: tuple[PromptLine, ...] = field(default_factory=tuple)
+
+    # Step F.4 derivations — typed-only character histograms for keyboard
+    # layout fingerprinting (PII boundary lifted by ANTI for Phase F).
+    typed_unigram_counts: Mapping[str, int] = field(default_factory=dict)
+    typed_bigram_counts: Mapping[str, int] = field(default_factory=dict)
+    typed_letter_count: int = 0
 
 
 def _detect_paste_bursts(
@@ -300,6 +307,46 @@ def _output_bytes_between(
     return sum(len(d) for t, _k, d in outputs if start <= t < end)
 
 
+def _typed_char_histograms(
+    inputs: list[AsciinemaEvent],
+) -> tuple[Mapping[str, int], Mapping[str, int], int]:
+    """Walk input events, build typed-only unigram + bigram histograms.
+
+    Skip paste-class events (``len(data) >= PASTE_MIN_CHARS_PER_EVENT``)
+    — pasted text reveals nothing about the operator's keyboard. Letter
+    bigrams chain only across consecutive ASCII-letter chars; a digit
+    or punctuation character breaks the chain.
+
+    Returns ``(unigrams, bigrams, total_letters)``. The bigram dict is
+    truncated to the top ``LAYOUT_BIGRAM_TOP_N`` entries by count to
+    bound memory (the layout signals only need the head of the
+    distribution).
+    """
+    unigrams: dict[str, int] = {}
+    bigrams: dict[str, int] = {}
+    total_letters = 0
+    last_letter: str | None = None
+    for _t, _kind, data in inputs:
+        if len(data) >= PASTE_MIN_CHARS_PER_EVENT:
+            last_letter = None
+            continue
+        for c in data:
+            if c.isascii() and c.isalpha():
+                lower = c.lower()
+                unigrams[lower] = unigrams.get(lower, 0) + 1
+                total_letters += 1
+                if last_letter is not None:
+                    big = last_letter + lower
+                    bigrams[big] = bigrams.get(big, 0) + 1
+                last_letter = lower
+            else:
+                last_letter = None
+    if len(bigrams) > LAYOUT_BIGRAM_TOP_N:
+        top = sorted(bigrams.items(), key=lambda kv: -kv[1])[:LAYOUT_BIGRAM_TOP_N]
+        bigrams = dict(top)
+    return unigrams, bigrams, total_letters
+
+
 def _output_window(
     outputs: list[AsciinemaEvent],
     start: float,
@@ -385,6 +432,7 @@ def build_session_context(
         for i in range(len(commands) - 1)
     )
     intra_command_iats = _per_command_iats(commands, inputs)
+    typed_uni, typed_bi, typed_letters = _typed_char_histograms(inputs)
 
     return SessionContext(
         sid=sid,
@@ -407,4 +455,7 @@ def build_session_context(
         kill_line_count=kill_line_count,
         intra_command_iats=intra_command_iats,
         prompt_lines=prompt_lines,
+        typed_unigram_counts=typed_uni,
+        typed_bigram_counts=typed_bi,
+        typed_letter_count=typed_letters,
     )

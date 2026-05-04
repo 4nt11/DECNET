@@ -8,6 +8,7 @@ which F.1 / F.3 / E.4 read.
 Step F.1: ``environmental.shell_type``.
 Step F.2: ``environmental.terminal_multiplexer``.
 Step F.3: ``environmental.locale``.
+Step F.4: ``environmental.keyboard_layout``.
 """
 from __future__ import annotations
 
@@ -21,6 +22,13 @@ from decnet.profiler.behave_shell._ctx import SessionContext
 from decnet.profiler.behave_shell._features._emit import make_observation
 from decnet.profiler.behave_shell._parse import PromptLine, strip_ansi
 from decnet.profiler.behave_shell._thresholds import (
+    LAYOUT_AZERTY_ENG_MAX,
+    LAYOUT_AZERTY_Q_MIN,
+    LAYOUT_MIN_TYPED_LETTERS,
+    LAYOUT_QWERTY_ENG_MIN,
+    LAYOUT_QWERTZ_Y_MAX,
+    LAYOUT_QWERTZ_Z_MIN,
+    LAYOUT_TOP_ENG_BIGRAMS,
     LOCALE_MIN_VALUE_LENGTH,
     SHELL_TYPE_MIN_PROMPTS,
 )
@@ -227,4 +235,65 @@ def locale(ctx: SessionContext) -> Iterator[Observation]:
         primitive="environmental.locale",
         value=best_value,
         confidence=0.80,
+    )
+
+
+def keyboard_layout(ctx: SessionContext) -> Iterator[Observation]:
+    """Emit ``environmental.keyboard_layout``.
+
+    Two independent signals over the typed-only character histograms:
+
+    1. **English-bigram saturation** — fraction of typed bigrams that
+       hit the top-10 English bigrams. High → presumed QWERTY.
+    2. **Layout-artefact unigrams** — letters that are rare in English
+       but frequent on operators using a different layout:
+
+       * ``q`` rate above floor AND English saturation low → ``azerty``
+         (AZERTY's `a` is on QWERTY's `q` position; mistypes bleed `q`)
+       * ``z`` rate above floor AND ``y`` rate below floor → ``qwertz``
+         (QWERTZ swaps `y`/`z`)
+       * Else: English saturation above floor → ``qwerty``
+       * Else: → ``other``
+
+    Threshold ordering matters — layout-artefact checks fire before
+    QWERTY because AZERTY/QWERTZ operators may still hit some English
+    bigrams.
+
+    Skip emission when typed letter count below
+    ``LAYOUT_MIN_TYPED_LETTERS`` (200) — the histograms are too thin
+    to discriminate honestly.
+    """
+    if ctx.typed_letter_count < LAYOUT_MIN_TYPED_LETTERS:
+        return
+    uni = ctx.typed_unigram_counts
+    bi = ctx.typed_bigram_counts
+    total_letters = ctx.typed_letter_count
+    total_bigrams = sum(bi.values())
+
+    eng_saturation = (
+        sum(bi.get(b, 0) for b in LAYOUT_TOP_ENG_BIGRAMS) / total_bigrams
+        if total_bigrams > 0 else 0.0
+    )
+    q_rate = uni.get("q", 0) / total_letters
+    z_rate = uni.get("z", 0) / total_letters
+    y_rate = uni.get("y", 0) / total_letters
+
+    if q_rate > LAYOUT_AZERTY_Q_MIN and eng_saturation < LAYOUT_AZERTY_ENG_MAX:
+        value = "azerty"
+    elif z_rate > LAYOUT_QWERTZ_Z_MIN and y_rate < LAYOUT_QWERTZ_Y_MAX:
+        value = "qwertz"
+    elif eng_saturation >= LAYOUT_QWERTY_ENG_MIN:
+        value = "qwerty"
+    else:
+        value = "other"
+
+    if total_letters < 500:
+        confidence = 0.40
+    else:
+        confidence = 0.55
+    yield make_observation(
+        ctx,
+        primitive="environmental.keyboard_layout",
+        value=value,
+        confidence=confidence,
     )
