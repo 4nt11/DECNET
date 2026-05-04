@@ -15,11 +15,53 @@ from __future__ import annotations
 
 import hashlib
 import json
+import re
 from dataclasses import dataclass
 from typing import Iterable, Iterator, Literal, Tuple
 
 EventKind = Literal["i", "o"]
 AsciinemaEvent = Tuple[float, EventKind, str]
+
+
+# CSI / OSC / SGR / single-char escape sweeper. One pass, then we drop the
+# stripped text on the floor — only the boolean error verdict (and the byte
+# count, computed before stripping) leaves the helper. Full prompt-string
+# parsing lives in Phase F.0; this is the slice cognitive.error_resilience.*
+# needs to ship correctly.
+_ANSI_RE = re.compile(
+    r"""
+    \x1B            # ESC
+    (?:
+        \[ [0-?]* [ -/]* [@-~]   # CSI
+      | \] [^\x07\x1B]* (?:\x07|\x1B\\)?   # OSC, ST-or-BEL terminated
+      | [@-Z\\-_]                # 2-byte escapes (ESC followed by 0x40-0x5F)
+    )
+    """,
+    re.VERBOSE,
+)
+
+
+def strip_ansi(data: str) -> str:
+    """Remove ANSI escape sequences. Used pre-error-pattern match."""
+    return _ANSI_RE.sub("", data)
+
+
+# Canonical bash/sh error fingerprints. v0.1 heuristic — Phase F.0's prompt
+# parser will subsume this with PS1 + exit-code sniff. Any change here must
+# leave the calibration grid green.
+_OUTPUT_ERROR_PATTERNS: tuple[re.Pattern[str], ...] = (
+    re.compile(r"command not found"),
+    re.compile(r"No such file or directory"),
+    re.compile(r"Permission denied"),
+    re.compile(r": cannot "),
+    re.compile(r"Operation not permitted"),
+    re.compile(r"syntax error near unexpected token"),
+)
+
+
+def detect_error_in_output(stripped: str) -> bool:
+    """True if any canonical error fingerprint matches the stripped output."""
+    return any(p.search(stripped) for p in _OUTPUT_ERROR_PATTERNS)
 
 
 @dataclass(frozen=True, slots=True)
@@ -53,6 +95,16 @@ class Command:
     byte sweep. They feed the ``motor.shell_mastery.*`` primitives
     (Phase C). The raw bytes themselves are read once during the
     sweep and discarded — only the counters are retained.
+
+    ``errored`` (Step D.0) is set when the output stream between this
+    command and the next contains a canonical bash/sh error fingerprint
+    (see :func:`detect_error_in_output`). ``output_bytes`` is the byte
+    count of that same window. Both are populated in the segmentation
+    walk; the underlying output text is stripped of ANSI then matched,
+    and the stripped text is discarded — only the bool and the int
+    leave the segmentation pass. Drives the ``cognitive.error_resilience.*``
+    family (Phase D) and the ``error_rate`` term of
+    ``cognitive.cognitive_load``.
     """
 
     start_ts: float
@@ -61,6 +113,8 @@ class Command:
     tab_count: int = 0
     shortcut_count: int = 0
     pipe_count: int = 0
+    errored: bool = False
+    output_bytes: int = 0
 
 
 def hash_token(token: str) -> str:

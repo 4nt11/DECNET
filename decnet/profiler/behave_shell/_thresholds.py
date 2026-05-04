@@ -76,6 +76,17 @@ FEEDBACK_MIN_PAIRS: int = 5
 PAUSE_CV_METRONOMIC_MAX: float = 0.40
 PAUSE_CV_BIMODAL_MIN: float = 1.50
 
+# ── output error-signal helper (Step D.0) ──────────────────────────────────
+# The canonical bash/sh error fingerprints live in ``_parse.py`` as
+# ``_OUTPUT_ERROR_PATTERNS`` (compiled regexes). They're not threshold
+# numbers, so they live next to the helper that uses them rather than
+# here. This v0.1 heuristic will be subsumed by Phase F.0's prompt
+# parser (PS1 echo + exit-code sniff), at which point this comment and
+# the patterns block move to ``_parse.py``'s prompt section. Until then,
+# any drift in registry value definitions for ``error_resilience.*`` or
+# ``cognitive_load`` must be reflected by editing the patterns tuple
+# (not a constant, so no boundary-band logic applies).
+
 # ── motor.keystroke_cadence (Step B.1) ──────────────────────────────────────
 # Typing bursts split at gaps > IKI_THINK_MAX_S so think-pauses between
 # commands don't inflate the within-burst CV. Mirrors the prototype's

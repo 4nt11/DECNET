@@ -10,6 +10,7 @@ will fill ``commands`` / ``inter_cmd_iats`` / ``output_per_cmd``.
 """
 from __future__ import annotations
 
+import math
 from dataclasses import dataclass, field
 from typing import Iterable
 
@@ -17,7 +18,9 @@ from decnet.profiler.behave_shell._parse import (
     AsciinemaEvent,
     Command,
     PasteBurst,
+    detect_error_in_output,
     hash_token,
+    strip_ansi,
 )
 from decnet.profiler.behave_shell._thresholds import (
     IKI_THINK_MAX_S,
@@ -219,6 +222,36 @@ def _segment_commands(inputs: list[AsciinemaEvent]) -> tuple[Command, ...]:
     return tuple(cmds)
 
 
+def _annotate_commands_with_output(
+    commands: tuple[Command, ...],
+    outputs: list[AsciinemaEvent],
+) -> tuple[Command, ...]:
+    """Re-emit ``commands`` with ``errored`` / ``output_bytes`` filled.
+
+    The output window for ``commands[i]`` spans from its ``end_ts``
+    (the ``\\r``/``\\n`` that ran it) to the ``start_ts`` of the next
+    command. The last command's window is open-ended (``math.inf``)
+    so output events arriving at or after ``t_end`` are still captured.
+    """
+    if not commands:
+        return commands
+    annotated: list[Command] = []
+    for i, cmd in enumerate(commands):
+        win_end = commands[i + 1].start_ts if i + 1 < len(commands) else math.inf
+        byte_count, errored = _output_window(outputs, cmd.end_ts, win_end)
+        annotated.append(Command(
+            start_ts=cmd.start_ts,
+            end_ts=cmd.end_ts,
+            first_token_hash=cmd.first_token_hash,
+            tab_count=cmd.tab_count,
+            shortcut_count=cmd.shortcut_count,
+            pipe_count=cmd.pipe_count,
+            errored=errored,
+            output_bytes=byte_count,
+        ))
+    return tuple(annotated)
+
+
 def _per_command_iats(
     commands: tuple[Command, ...],
     inputs: list[AsciinemaEvent],
@@ -250,6 +283,32 @@ def _output_bytes_between(
 ) -> int:
     """Total ``len(d)`` of output events with ``start <= t < end``."""
     return sum(len(d) for t, _k, d in outputs if start <= t < end)
+
+
+def _output_window(
+    outputs: list[AsciinemaEvent],
+    start: float,
+    end: float,
+) -> tuple[int, bool]:
+    """Walk output events in ``[start, end)`` once.
+
+    Returns ``(byte_count, errored)``. ``byte_count`` is the raw byte
+    count (pre-strip); ``errored`` is the canonical-error-pattern match
+    over the ANSI-stripped concatenation. The stripped text is dropped
+    on return — PII discipline: only an int and a bool leave this
+    helper. The full output bytes never enter ``Command`` or the
+    ``SessionContext``.
+    """
+    chunks: list[str] = []
+    byte_count = 0
+    for t, _k, d in outputs:
+        if start <= t < end:
+            byte_count += len(d)
+            chunks.append(d)
+    if not chunks:
+        return 0, False
+    stripped = strip_ansi("".join(chunks))
+    return byte_count, detect_error_in_output(stripped)
 
 
 def build_session_context(
@@ -290,6 +349,7 @@ def build_session_context(
     typing_bursts = _split_typing_bursts(iats)
     backspace_count, backspace_iats, kill_line_count = _scan_correction_signals(inputs)
     commands = _segment_commands(inputs)
+    commands = _annotate_commands_with_output(commands, outputs)
     inter_cmd_iats = tuple(
         max(0.0, commands[i + 1].start_ts - commands[i].end_ts)
         for i in range(len(commands) - 1)
