@@ -155,6 +155,21 @@ PLANNING_REACTIVE_MIN: float = 0.50
 TOOL_VOCAB_NARROW_MAX: int = 3
 TOOL_VOCAB_BROAD_MIN: int = 10
 
+# ── cognitive.error_resilience.frustration_typing (Step D.6) ───────────────
+# Compare the median within-command IAT of commands *following* an
+# errored command against the same statistic for commands following a
+# successful command. The relative absolute delta:
+#
+#   delta = |median_post_error - median_post_success| / median_post_success
+#
+#   delta < FRUSTRATION_LOW_MAX        → low
+#   delta < FRUSTRATION_MODERATE_MAX   → moderate
+#   else                               → high
+#
+# v0.1; D.8 re-tunes.
+FRUSTRATION_LOW_MAX: float = 0.10
+FRUSTRATION_MODERATE_MAX: float = 0.30
+
 # ── motor.keystroke_cadence (Step B.1) ──────────────────────────────────────
 # Typing bursts split at gaps > IKI_THINK_MAX_S so think-pauses between
 # commands don't inflate the within-burst CV. Mirrors the prototype's

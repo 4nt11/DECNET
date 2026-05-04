@@ -25,6 +25,8 @@ from decnet.profiler.behave_shell._thresholds import (
     EXPLORATION_TARGETED_REP_MIN,
     FEEDBACK_CORRELATION_MIN,
     FEEDBACK_MIN_PAIRS,
+    FRUSTRATION_LOW_MAX,
+    FRUSTRATION_MODERATE_MAX,
     IKI_THINK_MAX_S,
     INTER_CMD_DELIBERATE_MAX,
     INTER_CMD_INSTANT_MAX,
@@ -183,6 +185,61 @@ def feedback_loop_engagement(ctx: SessionContext) -> Iterator[Observation]:
         primitive="cognitive.feedback_loop_engagement",
         value=value,
         confidence=0.75,
+    )
+
+
+def error_resilience_frustration_typing(ctx: SessionContext) -> Iterator[Observation]:
+    """Emit ``cognitive.error_resilience.frustration_typing``.
+
+    Compares median within-command IAT for commands *following* an
+    errored command against the same statistic for commands following
+    a successful command. A large relative delta indicates the operator
+    typed differently after a failure — speed-up (rage / fluency) or
+    slowdown (caution); both are signs of arousal.
+
+    Skip emission when either group is empty (no errors, or every
+    command errored — no clean baseline). Sample-size honesty drops
+    confidence below the floor.
+    """
+    post_err: list[float] = []
+    post_ok: list[float] = []
+    cmds = ctx.commands
+    intra = ctx.intra_command_iats
+    if len(cmds) < 2 or len(intra) != len(cmds):
+        return
+    for i in range(1, len(cmds)):
+        cmd_iats = intra[i]
+        if not cmd_iats:
+            continue
+        m = statistics.median(cmd_iats)
+        if cmds[i - 1].errored:
+            post_err.append(m)
+        else:
+            post_ok.append(m)
+    if not post_err or not post_ok:
+        return
+    median_err = statistics.median(post_err)
+    median_ok = statistics.median(post_ok)
+    if median_ok <= 0.0:
+        return
+    delta = abs(median_err - median_ok) / median_ok
+
+    if delta < FRUSTRATION_LOW_MAX:
+        value = "low"
+    elif delta < FRUSTRATION_MODERATE_MAX:
+        value = "moderate"
+    else:
+        value = "high"
+
+    if len(post_err) < MIN_COMMANDS_FOR_FULL_CONFIDENCE:
+        confidence = 0.40
+    else:
+        confidence = 0.60
+    yield make_observation(
+        ctx,
+        primitive="cognitive.error_resilience.frustration_typing",
+        value=value,
+        confidence=confidence,
     )
 
 
