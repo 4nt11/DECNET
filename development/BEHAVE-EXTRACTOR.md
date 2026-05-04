@@ -640,10 +640,10 @@ unchecked = no v0 tag.**
 - [x] Step 10 — Phase A complete: floor green
 
 ### Phase B — `motor.*` completion
-- [ ] B.1 `motor.keystroke_cadence`
-- [ ] B.2 `motor.motor_stability`
-- [ ] B.3 `motor.error_correction`
-- [ ] B.4 `motor.command_chunking`
+- [x] B.1 `motor.keystroke_cadence`
+- [x] B.2 `motor.motor_stability`
+- [x] B.3 `motor.error_correction`
+- [x] B.4 `motor.command_chunking`
 
 ### Phase C — `motor.shell_mastery.*`
 - [ ] C.1 `motor.shell_mastery.tab_completion`
@@ -727,6 +727,36 @@ the corpus grows.
 the per-session producer against the Phase A engine; the Tier-A
 corpus continues to grow under Phases B-G without changing the
 worker's interface.
+
+---
+
+## Phase B completion log
+
+Closed in 4 commits, one primitive per commit. The
+``motor.*`` family (minus ``shell_mastery``) now emits.
+
+| Primitive | Confidence | Source signal |
+|---|---|---|
+| `motor.keystroke_cadence` | 0.60 / 0.65 / 0.70 / 0.85 | median within-burst CV; bursts split at gaps > IKI_THINK_MAX_S; sub-5 ms mean + sub-0.05 CV → ``machine`` |
+| `motor.motor_stability` | 0.60 / 0.65 / 0.70 | tremor: ≥10% within-burst IATs below 30 ms (physiologically implausible double-press); else burst-CV picks steady vs variable |
+| `motor.error_correction` | 0.55 / 0.55 / 0.65 / 0.65 | backspace IAT to preceding key (≤500 ms = immediate); ^U/^W with no backspaces → route_around |
+| `motor.command_chunking` | 0.60 / 0.65 / 0.80 | median CV of per-command typed IATs; 1 command → ``single_command`` |
+
+Implementation note: B.2 and B.4 are first principled
+implementations — the prototype extractor doesn't ship them. B.3
+replaces the prototype's two-line "0 vs >0 backspaces" heuristic
+with a full-vocabulary classifier.
+
+PII discipline preserved across all four: only counts and timing
+aggregates leave the helper functions; no character data is
+retained or serialised. The PII regression for ``error_correction``
+is pinned by ``test_pii_no_command_bodies_in_observation``.
+
+**Calibration grid widened:** ``PHASE_AB_PRIMITIVES`` now contains
+10 names and is binding for every subsequent phase. All five
+class shards still emit every Phase A+B primitive at least once.
+
+Phase C (``motor.shell_mastery.*``, 3 primitives) lands next.
 
 ---
 
