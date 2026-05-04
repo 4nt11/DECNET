@@ -21,6 +21,8 @@ from decnet.profiler.behave_shell._thresholds import (
     COGNITIVE_LOAD_LOW_MAX,
     COGNITIVE_LOAD_MEDIUM_MAX,
     COGNITIVE_LOAD_PACE_REF_CV,
+    EXPLORATION_CHAOTIC_BACKTRACK_MIN,
+    EXPLORATION_TARGETED_REP_MIN,
     FEEDBACK_CORRELATION_MIN,
     FEEDBACK_MIN_PAIRS,
     INTER_CMD_DELIBERATE_MAX,
@@ -176,6 +178,65 @@ def feedback_loop_engagement(ctx: SessionContext) -> Iterator[Observation]:
         primitive="cognitive.feedback_loop_engagement",
         value=value,
         confidence=0.75,
+    )
+
+
+def exploration_style(ctx: SessionContext) -> Iterator[Observation]:
+    """Emit ``cognitive.exploration_style`` ∈ {methodical, chaotic, targeted}.
+
+    Two-axis classification over the first_token_hash sequence:
+
+    * **methodical** — low repetition, low backtracks. Operator marches
+      forward through new tools.
+    * **targeted** — high repetition (R ≥ EXPLORATION_TARGETED_REP_MIN).
+      Same tool re-invoked repeatedly; the operator is drilling.
+    * **chaotic** — high backtrack rate (J ≥ EXPLORATION_CHAOTIC_BACKTRACK_MIN).
+      Jumps among previously-used tools without a clear thread.
+
+    The registry doesn't permit ``unknown``; below the
+    MIN_COMMANDS_FOR_FULL_CONFIDENCE floor we emit at confidence 0.40
+    rather than skip — the engine has *some* signal, just less of it.
+    Skip emission only when there are no commands at all.
+    """
+    n = len(ctx.commands)
+    if n == 0:
+        return
+    hashes = [c.first_token_hash for c in ctx.commands]
+    unique = len(set(hashes))
+    repetition_rate = 0.0 if n == 0 else 1.0 - (unique / n)
+
+    # Backtrack: at position i, hashes[i] previously seen at index < i-1
+    # and not equal to hashes[i-1]. (Repeating the immediate predecessor
+    # is "drilling", picked up by repetition_rate; backtrack is the
+    # non-local jump signal.)
+    seen_before: set[str] = set()
+    backtracks = 0
+    transitions = 0
+    if hashes:
+        seen_before.add(hashes[0])
+    for i in range(1, n):
+        transitions += 1
+        if hashes[i] != hashes[i - 1] and hashes[i] in seen_before:
+            backtracks += 1
+        seen_before.add(hashes[i])
+    backtrack_rate = (backtracks / transitions) if transitions else 0.0
+
+    if backtrack_rate >= EXPLORATION_CHAOTIC_BACKTRACK_MIN:
+        value = "chaotic"
+    elif repetition_rate >= EXPLORATION_TARGETED_REP_MIN:
+        value = "targeted"
+    else:
+        value = "methodical"
+
+    if n < MIN_COMMANDS_FOR_FULL_CONFIDENCE:
+        confidence = 0.40
+    else:
+        confidence = 0.60
+    yield make_observation(
+        ctx,
+        primitive="cognitive.exploration_style",
+        value=value,
+        confidence=confidence,
     )
 
 

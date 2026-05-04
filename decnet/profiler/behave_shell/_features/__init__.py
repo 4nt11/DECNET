@@ -14,6 +14,7 @@ from decnet.profiler.behave_shell._ctx import SessionContext
 from decnet.profiler.behave_shell._features.cognitive import (
     cognitive_load,
     command_branch_diversity,
+    exploration_style,
     feedback_loop_engagement,
     inter_command_consistency,
     inter_command_latency_class,
@@ -47,4 +48,5 @@ FEATURES: tuple[FeatureFn, ...] = (
     feedback_loop_engagement,
     inter_command_consistency,
     cognitive_load,
+    exploration_style,
 )

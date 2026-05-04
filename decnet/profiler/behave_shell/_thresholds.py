@@ -108,6 +108,26 @@ COGNITIVE_LOAD_PACE_REF_CV: float = 1.50
 COGNITIVE_LOAD_LOW_MAX: float = 0.33
 COGNITIVE_LOAD_MEDIUM_MAX: float = 0.67
 
+# ── cognitive.exploration_style (Step D.2) ─────────────────────────────────
+# Two-axis classification over the first_token_hash sequence:
+#
+#   repetition_rate (R) = 1 - (unique_first_tokens / total_commands)
+#   backtrack_rate  (J) = transitions where commands[i+1].first_token_hash
+#                         appeared anywhere in commands[0..i-1] but is NOT
+#                         equal to commands[i].first_token_hash (jumping
+#                         back to an older tool, not just repeating).
+#
+#   J >= EXPLORATION_CHAOTIC_BACKTRACK_MIN  → chaotic
+#   else if R >= EXPLORATION_TARGETED_REP_MIN → targeted
+#   else                                    → methodical
+#
+# Methodical = low repetition, low backtracks (linear progression through
+# novel tools). Targeted = high repetition (drilling the same tool).
+# Chaotic = jumping between prior tools without a clear thread.
+# v0.1; D.8 re-tunes.
+EXPLORATION_TARGETED_REP_MIN: float = 0.50
+EXPLORATION_CHAOTIC_BACKTRACK_MIN: float = 0.30
+
 # ── motor.keystroke_cadence (Step B.1) ──────────────────────────────────────
 # Typing bursts split at gaps > IKI_THINK_MAX_S so think-pauses between
 # commands don't inflate the within-burst CV. Mirrors the prototype's
