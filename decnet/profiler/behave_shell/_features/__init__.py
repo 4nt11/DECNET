@@ -25,6 +25,7 @@ from decnet.profiler.behave_shell._features.cognitive import (
     inter_command_latency_class,
 )
 from decnet.profiler.behave_shell._features.temporal import (
+    escalation_pattern,
     session_duration,
 )
 from decnet.profiler.behave_shell._features.motor import (
@@ -63,4 +64,5 @@ FEATURES: tuple[FeatureFn, ...] = (
     error_resilience_frustration_typing,
     error_resilience_fallback_to_man,
     session_duration,
+    escalation_pattern,
 )

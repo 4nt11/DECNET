@@ -184,6 +184,32 @@ SESSION_DURATION_SHORT_MAX: float = 60.0
 SESSION_DURATION_MEDIUM_MAX: float = 600.0
 SESSION_DURATION_LONG_MAX: float = 3600.0
 
+# ── temporal.escalation_pattern (Step E.2) ─────────────────────────────────
+# Bin commands into non-overlapping windows. Width is dynamic:
+#
+#   width = max(ESCALATION_WINDOW_MIN_S, duration_s / ESCALATION_WINDOW_TARGET)
+#
+# so a 30s session uses 10s windows (3 windows) and a 1h session uses
+# 6min windows (10 windows). CV of per-window counts + zero-window
+# fraction classify:
+#
+#   zero_frac >= ESCALATION_BURSTY_ZERO_FRAC AND CV >= ESCALATION_BURSTY_CV
+#       → bursty       (silences then spikes)
+#   CV <  ESCALATION_SUSTAINED_CV
+#       → sustained    (steady cadence throughout)
+#   else
+#       → erratic      (variable but no real silence pattern)
+#
+# v0.1; corpus re-tune deferred. Sample-size honesty caps confidence
+# below ESCALATION_MIN_WINDOWS or ESCALATION_MIN_COMMANDS.
+ESCALATION_WINDOW_MIN_S: float = 10.0
+ESCALATION_WINDOW_TARGET: int = 10
+ESCALATION_BURSTY_ZERO_FRAC: float = 0.30
+ESCALATION_BURSTY_CV: float = 1.00
+ESCALATION_SUSTAINED_CV: float = 0.50
+ESCALATION_MIN_WINDOWS: int = 5
+ESCALATION_MIN_COMMANDS: int = 5
+
 # ── motor.keystroke_cadence (Step B.1) ──────────────────────────────────────
 # Typing bursts split at gaps > IKI_THINK_MAX_S so think-pauses between
 # commands don't inflate the within-burst CV. Mirrors the prototype's
