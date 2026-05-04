@@ -9,6 +9,7 @@ Step F.1: ``environmental.shell_type``.
 Step F.2: ``environmental.terminal_multiplexer``.
 Step F.3: ``environmental.locale``.
 Step F.4: ``environmental.keyboard_layout``.
+Step F.5: ``environmental.numpad_usage``.
 """
 from __future__ import annotations
 
@@ -30,6 +31,10 @@ from decnet.profiler.behave_shell._thresholds import (
     LAYOUT_QWERTZ_Z_MIN,
     LAYOUT_TOP_ENG_BIGRAMS,
     LOCALE_MIN_VALUE_LENGTH,
+    NUMPAD_FAST_IAT_S,
+    NUMPAD_MIN_TYPED_CHARS,
+    NUMPAD_RUN_MIN,
+    PASTE_MIN_CHARS_PER_EVENT,
     SHELL_TYPE_MIN_PROMPTS,
 )
 
@@ -296,4 +301,52 @@ def keyboard_layout(ctx: SessionContext) -> Iterator[Observation]:
         primitive="environmental.keyboard_layout",
         value=value,
         confidence=confidence,
+    )
+
+
+def numpad_usage(ctx: SessionContext) -> Iterator[Observation]:
+    """Emit ``environmental.numpad_usage`` ∈ {detected, not_detected}.
+
+    A digit run is ``NUMPAD_RUN_MIN`` (4) consecutive single-character
+    digit input events whose pairwise IATs are all
+    ≤ ``NUMPAD_FAST_IAT_S`` (50ms). Numpad muscle memory produces
+    faster digit cadence than touch-typing the top row.
+
+    Skip emission below ``NUMPAD_MIN_TYPED_CHARS`` (50) typed chars —
+    no honest signal in a tiny session. Confidence cap 0.50 (registry
+    flags as weak signal).
+    """
+    if not ctx.commands:
+        return
+
+    digit_events: list[float] = []
+    typed_count = 0
+    for t, _kind, data in ctx.input_events:
+        if len(data) >= PASTE_MIN_CHARS_PER_EVENT:
+            continue
+        typed_count += len(data)
+        if len(data) == 1 and data.isdigit():
+            digit_events.append(t)
+
+    if typed_count < NUMPAD_MIN_TYPED_CHARS:
+        return
+
+    detected = False
+    if len(digit_events) >= NUMPAD_RUN_MIN:
+        # Sliding window: any contiguous run of NUMPAD_RUN_MIN digit
+        # events whose internal IATs are ALL fast → numpad.
+        for i in range(len(digit_events) - NUMPAD_RUN_MIN + 1):
+            window_iats = [
+                digit_events[i + j + 1] - digit_events[i + j]
+                for j in range(NUMPAD_RUN_MIN - 1)
+            ]
+            if all(x <= NUMPAD_FAST_IAT_S for x in window_iats):
+                detected = True
+                break
+
+    yield make_observation(
+        ctx,
+        primitive="environmental.numpad_usage",
+        value="detected" if detected else "not_detected",
+        confidence=0.50,
     )

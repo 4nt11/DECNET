@@ -27,6 +27,7 @@ from decnet.profiler.behave_shell._features.cognitive import (
 from decnet.profiler.behave_shell._features.environmental import (
     keyboard_layout,
     locale,
+    numpad_usage,
     shell_type,
     terminal_multiplexer,
 )
@@ -77,4 +78,5 @@ FEATURES: tuple[FeatureFn, ...] = (
     terminal_multiplexer,
     locale,
     keyboard_layout,
+    numpad_usage,
 )

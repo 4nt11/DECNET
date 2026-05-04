@@ -263,6 +263,15 @@ LAYOUT_QWERTZ_Z_MIN: float = 0.030      # high `z` rate (German content / QWERTZ
 LAYOUT_QWERTZ_Y_MAX: float = 0.010      # AND `y` swap signature
 LAYOUT_QWERTY_ENG_MIN: float = 0.080    # English-bigram saturation floor
 
+# ── environmental.numpad_usage (Step F.5) ──────────────────────────────────
+# A digit run = NUMPAD_RUN_MIN consecutive single-char digit events
+# whose pairwise IATs are all ≤ NUMPAD_FAST_IAT_S. Numpad muscle memory
+# produces faster digit IATs than touch-typing on the top row.
+NUMPAD_FAST_IAT_S: float = 0.050
+NUMPAD_RUN_MIN: int = 4
+# Below this many typed chars total, skip emission (no honest signal).
+NUMPAD_MIN_TYPED_CHARS: int = 50
+
 # ── motor.keystroke_cadence (Step B.1) ──────────────────────────────────────
 # Typing bursts split at gaps > IKI_THINK_MAX_S so think-pauses between
 # commands don't inflate the within-burst CV. Mirrors the prototype's
