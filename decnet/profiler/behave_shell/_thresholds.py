@@ -109,3 +109,33 @@ BACKSPACE_IMMEDIATE_MAX_S: float = 0.50
 # Median CV of within-command IATs. Below this → fluent (steady within
 # each command); above → fragmented (operator pauses mid-command).
 CMD_CHUNKING_FLUENT_CV_MAX: float = 0.50
+
+# ── motor.shell_mastery.* (Phase C) ─────────────────────────────────────────
+# Readline control bytes counted toward ``shortcut_usage``. The seven
+# pinned by BEHAVE-EXTRACTOR.md §Phase C (line 472):
+#   ^A start-of-line  ^E end-of-line  ^W kill-prev-word
+#   ^U kill-line      ^R reverse-i-search  ^B back-char  ^F forward-char
+# v0.2 may extend to ^K/^Y/^L/^D/^P/^N once corpus calibration justifies it.
+# Note: ^U / ^W also feed ``motor.error_correction`` (Step B.3) via the
+# ``kill_line_count`` channel — these are independent measurements over
+# the same byte stream, not double-counting.
+SHORTCUT_CTRL_BYTES: frozenset[str] = frozenset({
+    "\x01", "\x05", "\x17", "\x15", "\x12", "\x02", "\x06",
+})
+
+# motor.shell_mastery.tab_completion — fraction of commands containing
+# at least one ``\t`` keystroke. Registry buckets per BEHAVE-EXTRACTOR.md
+# line 471: ``none`` (0%), ``occasional`` (<30%), ``habitual`` (≥50%).
+# The 30%-50% gap rounds down to ``occasional`` — the registry's own gap.
+TAB_COMPLETION_OCCASIONAL_MAX: float = 0.30
+TAB_COMPLETION_HABITUAL_MIN: float = 0.50
+
+# Sample-size floor below which Phase C primitives drop confidence to
+# 0.40 (sample-size honesty). Mirrors MIN_COMMANDS_FOR_FULL_CONFIDENCE
+# but is named separately so a future tune can move them independently.
+SHELL_MASTERY_MIN_COMMANDS: int = 5
+
+# Width of the "near a bucket boundary" band (relative to the boundary)
+# used by Phase C primitives. ±10% of the boundary value drops
+# confidence by 0.20 per BEHAVE-EXTRACTOR.md §"Threshold proximity".
+SHELL_MASTERY_BOUNDARY_BAND: float = 0.10

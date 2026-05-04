@@ -26,9 +26,23 @@ from decnet.profiler.behave_shell._thresholds import (
     MODALITY_TYPED_MAX,
     PASTE_RATE_HABITUAL_MIN,
     PASTE_RATE_OCCASIONAL_MIN,
+    SHELL_MASTERY_BOUNDARY_BAND,
+    SHELL_MASTERY_MIN_COMMANDS,
+    TAB_COMPLETION_HABITUAL_MIN,
+    TAB_COMPLETION_OCCASIONAL_MAX,
     TREMOR_FAST_FLOOR_S,
     TREMOR_RATE_MIN,
 )
+
+
+def _near(value: float, boundary: float) -> bool:
+    """True iff ``value`` is within ``SHELL_MASTERY_BOUNDARY_BAND`` of
+    ``boundary`` (relative to the boundary). Phase C uses this to drop
+    confidence when a measurement sits on a bucket fence.
+    """
+    if boundary == 0:
+        return abs(value) <= SHELL_MASTERY_BOUNDARY_BAND
+    return abs(value - boundary) / boundary <= SHELL_MASTERY_BOUNDARY_BAND
 
 
 def input_modality(ctx: SessionContext) -> Iterator[Observation]:
@@ -249,6 +263,56 @@ def command_chunking(ctx: SessionContext) -> Iterator[Observation]:
     yield make_observation(
         ctx,
         primitive="motor.command_chunking",
+        value=value,
+        confidence=confidence,
+    )
+
+
+def tab_completion(ctx: SessionContext) -> Iterator[Observation]:
+    """Emit ``motor.shell_mastery.tab_completion`` ∈ {none, occasional, habitual}.
+
+    Metric: fraction of commands containing at least one ``\\t`` keystroke.
+    A pasted full command line that happens to embed a tab still counts —
+    the operator chose to send the bytes — but in practice tab keystrokes
+    only arrive interactively, so this is dominated by typed sessions.
+
+    Confidence:
+    * < ``SHELL_MASTERY_MIN_COMMANDS`` → 0.40 (sample-size honesty).
+    * Within ±10% of either bucket boundary → 0.55 (threshold proximity).
+    * Otherwise → 0.75.
+
+    Skips emission when the session has no commands at all (no honest
+    ratio to report; the registry doesn't admit ``unknown`` here).
+    """
+    n = len(ctx.commands)
+    if n == 0:
+        return
+    commands_with_tab = sum(1 for c in ctx.commands if c.tab_count > 0)
+    ratio = commands_with_tab / n
+
+    if ratio == 0.0:
+        value = "none"
+    elif ratio < TAB_COMPLETION_OCCASIONAL_MAX:
+        value = "occasional"
+    elif ratio < TAB_COMPLETION_HABITUAL_MIN:
+        # Registry's own gap (30%-<50%) — round down rather than up.
+        value = "occasional"
+    else:
+        value = "habitual"
+
+    if n < SHELL_MASTERY_MIN_COMMANDS:
+        confidence = 0.40
+    elif (
+        _near(ratio, TAB_COMPLETION_OCCASIONAL_MAX)
+        or _near(ratio, TAB_COMPLETION_HABITUAL_MIN)
+    ):
+        confidence = 0.55
+    else:
+        confidence = 0.75
+
+    yield make_observation(
+        ctx,
+        primitive="motor.shell_mastery.tab_completion",
         value=value,
         confidence=confidence,
     )

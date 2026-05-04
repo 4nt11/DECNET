@@ -646,7 +646,7 @@ unchecked = no v0 tag.**
 - [x] B.4 `motor.command_chunking`
 
 ### Phase C — `motor.shell_mastery.*`
-- [ ] C.1 `motor.shell_mastery.tab_completion`
+- [x] C.1 `motor.shell_mastery.tab_completion`
 - [ ] C.2 `motor.shell_mastery.shortcut_usage`
 - [ ] C.3 `motor.shell_mastery.pipe_chaining_depth`
 

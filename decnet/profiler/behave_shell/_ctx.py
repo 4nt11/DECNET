@@ -23,6 +23,7 @@ from decnet.profiler.behave_shell._thresholds import (
     IKI_THINK_MAX_S,
     PASTE_BURST_MAX_IAT_S,
     PASTE_MIN_CHARS_PER_EVENT,
+    SHORTCUT_CTRL_BYTES,
 )
 
 
@@ -164,14 +165,26 @@ def _split_typing_bursts(iats: tuple[float, ...]) -> tuple[tuple[float, ...], ..
 def _segment_commands(inputs: list[AsciinemaEvent]) -> tuple[Command, ...]:
     """Walk input events, splitting on ``\\r`` / ``\\n`` into commands.
 
-    PII discipline: only the first whitespace-delimited token is
-    retained, and only as a sha256 hash. Buffer contents are dropped
-    on every command boundary; an unterminated trailing buffer (no
-    final newline) yields no command.
+    Retains only the first whitespace-delimited token as a sha256 hash
+    plus three integer counters needed for the Phase C
+    ``motor.shell_mastery.*`` primitives:
+
+    * ``tab_count``      — ``\\t`` (0x09) keystrokes in the command
+    * ``shortcut_count`` — readline control bytes from
+      :data:`SHORTCUT_CTRL_BYTES`
+    * ``pipe_count``     — ``|`` characters in the command (counted on
+      every byte; pasted pipelines still indicate pipeline fluency the
+      operator chose to execute)
+
+    Buffer contents are dropped on every command boundary; an
+    unterminated trailing buffer (no final newline) yields no command.
     """
     cmds: list[Command] = []
     buf_chars: list[str] = []
     buf_start_ts: float | None = None
+    tab_count = 0
+    shortcut_count = 0
+    pipe_count = 0
 
     for t, _kind, data in inputs:
         for c in data:
@@ -183,13 +196,25 @@ def _segment_commands(inputs: list[AsciinemaEvent]) -> tuple[Command, ...]:
                         start_ts=buf_start_ts if buf_start_ts is not None else t,
                         end_ts=t,
                         first_token_hash=hash_token(first_token),
+                        tab_count=tab_count,
+                        shortcut_count=shortcut_count,
+                        pipe_count=pipe_count,
                     ))
                 buf_chars = []
                 buf_start_ts = None
+                tab_count = 0
+                shortcut_count = 0
+                pipe_count = 0
             else:
                 if not buf_chars:
                     buf_start_ts = t
                 buf_chars.append(c)
+                if c == "\t":
+                    tab_count += 1
+                elif c == "|":
+                    pipe_count += 1
+                elif c in SHORTCUT_CTRL_BYTES:
+                    shortcut_count += 1
 
     return tuple(cmds)
 

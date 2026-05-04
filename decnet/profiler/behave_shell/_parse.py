@@ -47,11 +47,20 @@ class Command:
     ``end_ts`` is the timestamp of the ``\\r`` / ``\\n`` that
     terminated the command; ``start_ts`` is the first character typed
     or pasted into it.
+
+    ``tab_count`` / ``shortcut_count`` / ``pipe_count`` are integer
+    counters populated by the context builder during the per-command
+    byte sweep. They feed the ``motor.shell_mastery.*`` primitives
+    (Phase C). The raw bytes themselves are read once during the
+    sweep and discarded — only the counters are retained.
     """
 
     start_ts: float
     end_ts: float
     first_token_hash: str
+    tab_count: int = 0
+    shortcut_count: int = 0
+    pipe_count: int = 0
 
 
 def hash_token(token: str) -> str:

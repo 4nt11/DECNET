@@ -24,6 +24,7 @@ from decnet.profiler.behave_shell._features.motor import (
     keystroke_cadence,
     motor_stability,
     paste_burst_rate,
+    tab_completion,
 )
 
 FeatureFn = Callable[[SessionContext], Iterable[Observation]]
@@ -35,6 +36,7 @@ FEATURES: tuple[FeatureFn, ...] = (
     motor_stability,
     error_correction,
     command_chunking,
+    tab_completion,
     inter_command_latency_class,
     command_branch_diversity,
     feedback_loop_engagement,
