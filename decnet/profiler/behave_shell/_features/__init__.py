@@ -24,6 +24,9 @@ from decnet.profiler.behave_shell._features.cognitive import (
     inter_command_consistency,
     inter_command_latency_class,
 )
+from decnet.profiler.behave_shell._features.environmental import (
+    shell_type,
+)
 from decnet.profiler.behave_shell._features.temporal import (
     escalation_pattern,
     landing_ritual,
@@ -67,4 +70,5 @@ FEATURES: tuple[FeatureFn, ...] = (
     session_duration,
     escalation_pattern,
     landing_ritual,
+    shell_type,
 )

@@ -228,6 +228,11 @@ LANDING_RITUAL_MIN_COMMANDS: int = 3
 PROMPT_SUFFIX_CHARS: frozenset[str] = frozenset({"$", "#", "%", ">"})
 PROMPT_LINE_MAX_CHARS: int = 256
 
+# ── environmental.shell_type (Step F.1) ────────────────────────────────────
+# Below this many detected prompt-lines, drop confidence (sample-size
+# honesty). Above, the shell-type vote is robust.
+SHELL_TYPE_MIN_PROMPTS: int = 3
+
 # ── motor.keystroke_cadence (Step B.1) ──────────────────────────────────────
 # Typing bursts split at gaps > IKI_THINK_MAX_S so think-pauses between
 # commands don't inflate the within-burst CV. Mirrors the prototype's
