@@ -186,6 +186,59 @@ def feedback_loop_engagement(ctx: SessionContext) -> Iterator[Observation]:
     )
 
 
+def error_resilience_retry_tactic(ctx: SessionContext) -> Iterator[Observation]:
+    """Emit ``cognitive.error_resilience.retry_tactic``.
+
+    For each command with ``Command.errored=True``, classify the
+    operator's response by the *next* command:
+
+    * **rerun** — same first_token_hash as the errored command. The
+      operator re-invoked the same tool (often after fixing args
+      mid-edit, but we can't see args).
+    * **switch** — different first_token_hash. Pivoted to a different
+      tool.
+    * **abort** — no next command. Session ended after the error.
+
+    The session's reported tactic is the **modal** response across all
+    errored commands (with ties broken in registry order: rerun >
+    modify > switch > abort). Skip emission entirely when no commands
+    errored — the registry has no ``unknown`` here, and silence is the
+    most honest answer.
+
+    The ``modify`` value (edit-and-retry) requires within-command
+    diffing of arg tokens, which crosses the PII boundary the engine
+    holds (only ``first_token_hash`` is retained per command). v0.1
+    therefore never emits ``modify``; v0.2 will once the PII trade-off
+    is revisited against a real attacker corpus.
+    """
+    errored = [(i, c) for i, c in enumerate(ctx.commands) if c.errored]
+    if not errored:
+        return
+    counts = {"rerun": 0, "switch": 0, "abort": 0}
+    for i, cmd in errored:
+        if i + 1 >= len(ctx.commands):
+            counts["abort"] += 1
+        elif ctx.commands[i + 1].first_token_hash == cmd.first_token_hash:
+            counts["rerun"] += 1
+        else:
+            counts["switch"] += 1
+    # Registry-order tiebreak (rerun > modify > switch > abort).
+    # `modify` deferred — never increments here.
+    order = ("rerun", "switch", "abort")
+    value = max(order, key=lambda k: counts[k])
+
+    if len(errored) < MIN_COMMANDS_FOR_FULL_CONFIDENCE:
+        confidence = 0.40
+    else:
+        confidence = 0.65
+    yield make_observation(
+        ctx,
+        primitive="cognitive.error_resilience.retry_tactic",
+        value=value,
+        confidence=confidence,
+    )
+
+
 def tool_vocabulary(ctx: SessionContext) -> Iterator[Observation]:
     """Emit ``cognitive.tool_vocabulary`` ∈ {narrow, moderate, broad}.
 
