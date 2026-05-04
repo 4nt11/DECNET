@@ -651,14 +651,15 @@ unchecked = no v0 tag.**
 - [x] C.3 `motor.shell_mastery.pipe_chaining_depth`
 
 ### Phase D — `cognitive.*` completion
-- [ ] D.1 `cognitive.cognitive_load`
-- [ ] D.2 `cognitive.exploration_style`
-- [ ] D.3 `cognitive.planning_depth`
-- [ ] D.4 `cognitive.tool_vocabulary`
-- [ ] D.5 `cognitive.error_resilience.retry_tactic`
-- [ ] D.6 `cognitive.error_resilience.frustration_typing`
-- [ ] D.7 `cognitive.error_resilience.fallback_to_man`
-- [ ] D.8 cognitive.cognitive_load re-tune (gate)
+- [x] D.0 — output error-signal helper (F.0a reorder)
+- [x] D.1 `cognitive.cognitive_load`
+- [x] D.2 `cognitive.exploration_style`
+- [x] D.3 `cognitive.planning_depth`
+- [x] D.4 `cognitive.tool_vocabulary`
+- [x] D.5 `cognitive.error_resilience.retry_tactic`
+- [x] D.6 `cognitive.error_resilience.frustration_typing`
+- [x] D.7 `cognitive.error_resilience.fallback_to_man`
+- [x] D.8 cognitive.cognitive_load re-tune (gate)
 
 ### Phase E — `temporal.*` per-session
 - [ ] E.1 `temporal.session_duration`
@@ -791,6 +792,60 @@ from ``PHASE_AB_PRIMITIVES`` lands in C.1; downstream phases extend
 the same set without renaming again until v0.
 
 Phase D (``cognitive.*`` completion, 7+1 primitives) lands next.
+
+---
+
+## Phase D completion log
+
+Closed in 9 commits. Phase D opened with a reorder: rather than ship
+the four error-aware primitives (D.1's error-rate term, D.5–D.7) on a
+regex heuristic and re-tune at Phase F, the **error-signal slice of
+F.0 lifted forward** as a D.0 prelude. The full prompt-string parser
+(PS1 sniff, multiplexer escape, locale, layout) stays scoped to Phase
+F; D.0 ships only the ANSI-strip + canonical bash/sh error fingerprint
+match needed for ``Command.errored``.
+
+D.0 — `Command` gained two fields:
+
+* `errored: bool` — true when the post-execution output window
+  contains any of the canonical fingerprints (``command not found`` /
+  ``No such file or directory`` / ``Permission denied`` /
+  ``: cannot `` / ``Operation not permitted`` /
+  ``syntax error near unexpected token``), with ANSI sequences
+  stripped first via the new `_parse.strip_ansi` helper.
+* `output_bytes: int` — raw byte count of the same window (pre-strip).
+
+PII discipline preserved: `_output_window()` discards the stripped
+text on return; only the bool and the int leave the helper. Pinned by
+`test_pii_no_output_bodies_in_observations` in
+`tests/profiler/behave_shell/test_command_error_detection.py`.
+
+The seven Phase D primitives:
+
+| Primitive | Confidence | Source signal |
+|---|---|---|
+| `cognitive.cognitive_load` | 0.40 / 0.60 | composite of three [0,1]-clipped sub-signals (chunking CV, error rate from D.0, pace CV); components missing data drop out of the mean |
+| `cognitive.exploration_style` | 0.40 / 0.60 | repetition-rate vs backtrack-rate over `first_token_hash` sequence |
+| `cognitive.planning_depth` | 0.40 / 0.65 | distribution of inter-cmd IATs vs `IKI_THINK_MAX_S` (deep) and `INTER_CMD_INSTANT_MAX` (reactive) |
+| `cognitive.tool_vocabulary` | 0.40 / 0.70 | absolute distinct-`first_token_hash` count (≤3 narrow, ≥10 broad) |
+| `cognitive.error_resilience.retry_tactic` | 0.40 / 0.65 | modal post-error response: same-token rerun, different-token switch, no-next-command abort. `modify` deferred to v0.2 (PII boundary) |
+| `cognitive.error_resilience.frustration_typing` | 0.40 / 0.60 | relative delta of median within-command IAT post-error vs post-success |
+| `cognitive.error_resilience.fallback_to_man` | 0.40 / 0.65 | post-error `first_token_hash` ∈ {`man`, `help`, `info`} (precomputed at module load); `--help`/`-h` flag forms deferred to v0.2 |
+
+**Re-tune at D.8 (the "gate"):** without the calibration shards on
+disk in this checkout (`BEHAVE_CALIBRATION_DIR` unset), an empirical
+re-tune of `COGNITIVE_LOAD_*` thresholds is filed for the next
+calibration-shards run. The v0.1 thresholds ship; D.8 in this commit
+widens the calibration grid binding set
+(`PHASE_ABC_PRIMITIVES` → `PHASE_ABCD_PRIMITIVES`) and pins the four
+unconditional Phase D primitives as required-emission. The three
+`cognitive.error_resilience.*` primitives are **conditional** on
+errored commands existing in a shard — they're tracked in
+`PHASE_D_CONDITIONAL_PRIMITIVES` and excluded from the per-shard hard
+gate (a clean shard with zero errors can't honestly emit them).
+
+**Calibration grid widened:** the binding set now contains 17 names.
+Phase E (`temporal.*` per-session subset, 4 primitives) lands next.
 
 ---
 
