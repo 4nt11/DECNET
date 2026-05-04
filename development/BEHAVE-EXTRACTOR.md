@@ -516,9 +516,23 @@ is the most expensive single phase** — the prompt parser has to
 handle ANSI escape sequences, multi-line continuation, and
 custom prompts.
 
+**Carry-overs F.0 must unblock when it lands:**
+
+* **E.4** — `temporal.lifecycle_markers.exit_behavior` was held at
+  Phase E because abrupt-vs-cleanup classification needs exit-code
+  visibility (and `history -c`-style flag detection); F.0's prompt
+  parser is the planned source for both. E.4 ships with the F.0
+  commit (or a sibling F.0a commit) and joins the calibration grid
+  binding set at that point.
+* **D.0** — already landed as a forward-port. F.0 should *subsume*
+  the D.0 helpers (`strip_ansi`, `_OUTPUT_ERROR_PATTERNS`,
+  `detect_error_in_output`) into the prompt parser proper, replacing
+  the v0.1 regex heuristic with a PS1 + exit-code sniff. The
+  `Command.errored` field stays; only the population path moves.
+
 | Step | Primitive | Source | Cost |
 |---|---|---|---|
-| F.0 | Prompt-string parser (`_parse.py`) | shared utility, no primitive | HIGH |
+| F.0 | Prompt-string parser (`_parse.py`) — also: subsume D.0 ANSI/error helpers, unblock E.4 | shared utility, no primitive | HIGH |
 | F.1 | `environmental.shell_type` | prompt suffix sniff (`$`/`#`/`%`/`>`) + command syntax (bash / zsh / fish / cmd / powershell) | MEDIUM |
 | F.2 | `environmental.terminal_multiplexer` | tmux/screen-specific escape sequences in output stream | LOW |
 | F.3 | `environmental.locale` | `LANG`/`LC_*` envvars if attacker dumps env; output language sniff fallback (free string, BCP-47) | MEDIUM |
@@ -668,7 +682,7 @@ unchecked = no v0 tag.**
 - [ ] E.4 `temporal.lifecycle_markers.exit_behavior` — **HELD** pending Phase F.0's prompt/exit-code parser. abrupt-vs-cleanup needs exit-code visibility to be honest; first-token membership alone over-fires on benign `rm` / `clear` mid-session and under-fires on `history -c` (flag-detection crosses the v0.1 PII boundary).
 
 ### Phase F — `environmental.*` (output-stream block)
-- [ ] F.0 Prompt-string parser (shared utility)
+- [ ] F.0 Prompt-string parser (shared utility) — also unblocks **E.4** (held) and subsumes **D.0** ANSI/error helpers
 - [ ] F.1 `environmental.shell_type`
 - [ ] F.2 `environmental.terminal_multiplexer`
 - [ ] F.3 `environmental.locale`
