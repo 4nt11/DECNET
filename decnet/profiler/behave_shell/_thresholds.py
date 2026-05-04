@@ -170,6 +170,20 @@ TOOL_VOCAB_BROAD_MIN: int = 10
 FRUSTRATION_LOW_MAX: float = 0.10
 FRUSTRATION_MODERATE_MAX: float = 0.30
 
+# ── temporal.session_duration (Step E.1) ───────────────────────────────────
+# Bucket edges (seconds) for ``ctx.duration_s``:
+#
+#   duration_s <  SESSION_DURATION_SHORT_MAX     → short
+#   duration_s <  SESSION_DURATION_MEDIUM_MAX    → medium
+#   duration_s <  SESSION_DURATION_LONG_MAX      → long
+#   else                                         → marathon
+#
+# 60s / 600s / 3600s are the BEHAVE-EXTRACTOR.md defaults; D.8-equivalent
+# re-tune for E lands when calibration corpus is run.
+SESSION_DURATION_SHORT_MAX: float = 60.0
+SESSION_DURATION_MEDIUM_MAX: float = 600.0
+SESSION_DURATION_LONG_MAX: float = 3600.0
+
 # ── motor.keystroke_cadence (Step B.1) ──────────────────────────────────────
 # Typing bursts split at gaps > IKI_THINK_MAX_S so think-pauses between
 # commands don't inflate the within-burst CV. Mirrors the prototype's
