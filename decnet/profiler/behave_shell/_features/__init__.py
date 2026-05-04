@@ -14,6 +14,7 @@ from decnet.profiler.behave_shell._ctx import SessionContext
 from decnet.profiler.behave_shell._features.cognitive import (
     cognitive_load,
     command_branch_diversity,
+    error_resilience_fallback_to_man,
     error_resilience_frustration_typing,
     error_resilience_retry_tactic,
     exploration_style,
@@ -57,4 +58,5 @@ FEATURES: tuple[FeatureFn, ...] = (
     tool_vocabulary,
     error_resilience_retry_tactic,
     error_resilience_frustration_typing,
+    error_resilience_fallback_to_man,
 )

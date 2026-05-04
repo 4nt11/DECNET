@@ -15,6 +15,7 @@ from decnet_behave_core.spec.envelope import Observation
 
 from decnet.profiler.behave_shell._ctx import SessionContext
 from decnet.profiler.behave_shell._features._emit import make_observation
+from decnet.profiler.behave_shell._parse import hash_token
 from decnet.profiler.behave_shell._thresholds import (
     BRANCH_DIVERSITY_LINEAR_MIN,
     COGNITIVE_LOAD_CHUNKING_REF_CV,
@@ -41,6 +42,19 @@ from decnet.profiler.behave_shell._thresholds import (
     TOOL_VOCAB_BROAD_MIN,
     TOOL_VOCAB_NARROW_MAX,
 )
+
+
+# Precomputed at import time so the per-session hot loop is a set
+# membership check, not 3 sha256 ops per command. The ``--help`` /
+# ``-h`` flag forms can't be detected here — they're not first tokens
+# (PII discipline keeps only the *first* token's hash). v0.2 will
+# reconsider once corpus calibration justifies storing arg-token
+# hashes too.
+_HELP_FAMILY_HASHES: frozenset[str] = frozenset({
+    hash_token("man"),
+    hash_token("help"),
+    hash_token("info"),
+})
 
 
 def _clip01(x: float) -> float:
@@ -185,6 +199,46 @@ def feedback_loop_engagement(ctx: SessionContext) -> Iterator[Observation]:
         primitive="cognitive.feedback_loop_engagement",
         value=value,
         confidence=0.75,
+    )
+
+
+def error_resilience_fallback_to_man(ctx: SessionContext) -> Iterator[Observation]:
+    """Emit ``cognitive.error_resilience.fallback_to_man``.
+
+    For each errored command, check whether the operator's next
+    command is ``man`` / ``help`` / ``info`` — i.e. they reached for
+    the manual rather than re-trying or pivoting. If at least one
+    errored command triggered this fallback → ``present``; otherwise
+    ``absent``.
+
+    Skip emission when no commands errored — the registry's binary
+    has no ``unknown``, and emitting ``absent`` from no observation
+    at all would be dishonest.
+
+    The ``--help`` / ``-h`` flag forms can't fire this primitive in
+    v0.1: they aren't first tokens, and the engine only retains
+    ``first_token_hash`` per command (PII discipline). Filed for v0.2.
+    """
+    errored_indices = [i for i, c in enumerate(ctx.commands) if c.errored]
+    if not errored_indices:
+        return
+    fallback_count = 0
+    for i in errored_indices:
+        if i + 1 >= len(ctx.commands):
+            continue
+        if ctx.commands[i + 1].first_token_hash in _HELP_FAMILY_HASHES:
+            fallback_count += 1
+    value = "present" if fallback_count > 0 else "absent"
+
+    if len(errored_indices) < MIN_COMMANDS_FOR_FULL_CONFIDENCE:
+        confidence = 0.40
+    else:
+        confidence = 0.65
+    yield make_observation(
+        ctx,
+        primitive="cognitive.error_resilience.fallback_to_man",
+        value=value,
+        confidence=confidence,
     )
 
 
