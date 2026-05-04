@@ -8,6 +8,7 @@ and computed by the attribution engine, not the extractor.
 Step E.1: ``temporal.session_duration``.
 Step E.2: ``temporal.escalation_pattern``.
 Step E.3: ``temporal.lifecycle_markers.landing_ritual``.
+Step E.4: ``temporal.lifecycle_markers.exit_behavior`` (unblocked by F.0).
 """
 from __future__ import annotations
 
@@ -28,6 +29,7 @@ from decnet.profiler.behave_shell._thresholds import (
     ESCALATION_SUSTAINED_CV,
     ESCALATION_WINDOW_MIN_S,
     ESCALATION_WINDOW_TARGET,
+    EXIT_BEHAVIOR_LOOKBACK_K,
     LANDING_RITUAL_FIRST_N,
     LANDING_RITUAL_HIT_MIN,
     LANDING_RITUAL_MIN_COMMANDS,
@@ -35,6 +37,25 @@ from decnet.profiler.behave_shell._thresholds import (
     SESSION_DURATION_MEDIUM_MAX,
     SESSION_DURATION_SHORT_MAX,
 )
+
+
+# Precomputed at import time. ``graceful`` is operator-typed shutdown;
+# ``cleanup`` is the wipe-tracks vocabulary. Both expand to v0.2 once
+# the corpus shows what gets missed.
+_GRACEFUL_EXIT_HASHES: frozenset[str] = frozenset({
+    hash_token("exit"),
+    hash_token("logout"),
+    hash_token("quit"),
+    hash_token("logoff"),
+})
+_CLEANUP_TOKEN_HASHES: frozenset[str] = frozenset({
+    hash_token("history"),
+    hash_token("unset"),
+    hash_token("rm"),
+    hash_token("shred"),
+    hash_token("clear"),
+    hash_token("kill"),
+})
 
 
 # Precomputed at import time so the per-session check is a set lookup,
@@ -163,6 +184,54 @@ def landing_ritual(ctx: SessionContext) -> Iterator[Observation]:
     yield make_observation(
         ctx,
         primitive="temporal.lifecycle_markers.landing_ritual",
+        value=value,
+        confidence=confidence,
+    )
+
+
+def exit_behavior(ctx: SessionContext) -> Iterator[Observation]:
+    """Emit ``temporal.lifecycle_markers.exit_behavior`` ∈ {graceful, abrupt, cleanup}.
+
+    Resolution of the E.4 hold from Phase E. Now that F.0's
+    ``Command.followed_by_prompt`` gives us prompt-after-last-command
+    visibility — the exit-code proxy we couldn't get in Phase E:
+
+    1. Last command **lacks** a trailing prompt → ``abrupt`` (session
+       cut mid-output, custom PS1 swallowing, or genuinely interrupted).
+    2. Last command's first_token_hash ∈ ``_GRACEFUL_EXIT_HASHES``
+       (``exit`` / ``logout`` / ``quit`` / ``logoff``) → ``graceful``.
+    3. Any of the last ``EXIT_BEHAVIOR_LOOKBACK_K`` (3) commands'
+       first_token_hash ∈ ``_CLEANUP_TOKEN_HASHES`` (``history`` /
+       ``unset`` / ``rm`` / ``shred`` / ``clear`` / ``kill``) →
+       ``cleanup``.
+    4. Else → ``graceful`` (clean Ctrl-D / window close).
+
+    Skip emission when no commands.
+
+    Confidence 0.65 when the trailing prompt is clear; 0.45 for
+    ``abrupt`` (a custom PS1 suppressing prompt echo could also yield
+    ``followed_by_prompt=False``).
+    """
+    if not ctx.commands:
+        return
+    last = ctx.commands[-1]
+    if not last.followed_by_prompt:
+        value = "abrupt"
+        confidence = 0.45
+    elif last.first_token_hash in _GRACEFUL_EXIT_HASHES:
+        value = "graceful"
+        confidence = 0.65
+    else:
+        tail = ctx.commands[-EXIT_BEHAVIOR_LOOKBACK_K:]
+        if any(c.first_token_hash in _CLEANUP_TOKEN_HASHES for c in tail):
+            value = "cleanup"
+            confidence = 0.65
+        else:
+            value = "graceful"
+            confidence = 0.65
+    yield make_observation(
+        ctx,
+        primitive="temporal.lifecycle_markers.exit_behavior",
         value=value,
         confidence=confidence,
     )

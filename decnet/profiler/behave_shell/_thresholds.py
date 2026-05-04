@@ -272,6 +272,10 @@ NUMPAD_RUN_MIN: int = 4
 # Below this many typed chars total, skip emission (no honest signal).
 NUMPAD_MIN_TYPED_CHARS: int = 50
 
+# ── temporal.lifecycle_markers.exit_behavior (Step E.4, unblocked by F.0) ──
+# How many of the last commands to inspect for cleanup-family tokens.
+EXIT_BEHAVIOR_LOOKBACK_K: int = 3
+
 # ── motor.keystroke_cadence (Step B.1) ──────────────────────────────────────
 # Typing bursts split at gaps > IKI_THINK_MAX_S so think-pauses between
 # commands don't inflate the within-burst CV. Mirrors the prototype's

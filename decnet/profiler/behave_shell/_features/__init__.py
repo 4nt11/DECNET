@@ -33,6 +33,7 @@ from decnet.profiler.behave_shell._features.environmental import (
 )
 from decnet.profiler.behave_shell._features.temporal import (
     escalation_pattern,
+    exit_behavior,
     landing_ritual,
     session_duration,
 )
@@ -74,6 +75,7 @@ FEATURES: tuple[FeatureFn, ...] = (
     session_duration,
     escalation_pattern,
     landing_ritual,
+    exit_behavior,
     shell_type,
     terminal_multiplexer,
     locale,
