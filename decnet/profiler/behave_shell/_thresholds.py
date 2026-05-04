@@ -130,6 +130,18 @@ SHORTCUT_CTRL_BYTES: frozenset[str] = frozenset({
 TAB_COMPLETION_OCCASIONAL_MAX: float = 0.30
 TAB_COMPLETION_HABITUAL_MIN: float = 0.50
 
+# motor.shell_mastery.shortcut_usage — total readline ctrl-byte
+# keystrokes per command. Registry buckets are qualitative
+# (``none / moderate / heavy``); v0.1 thresholds are best-guesses
+# pinned for five-class corpus calibration. Re-tune once HUMAN /
+# YOU-sim / LW-sim / CLAUDE-FF / CLAUDE-CL data lands.
+#   0/cmd        → none
+#   <0.05/cmd    → none (counted shortcuts but rare; rounds down)
+#   0.05-0.30    → moderate
+#   ≥0.30/cmd    → heavy
+SHORTCUT_USAGE_MODERATE_MIN: float = 0.05
+SHORTCUT_USAGE_HEAVY_MIN: float = 0.30
+
 # Sample-size floor below which Phase C primitives drop confidence to
 # 0.40 (sample-size honesty). Mirrors MIN_COMMANDS_FOR_FULL_CONFIDENCE
 # but is named separately so a future tune can move them independently.

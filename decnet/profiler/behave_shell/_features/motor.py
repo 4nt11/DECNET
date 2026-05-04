@@ -28,6 +28,8 @@ from decnet.profiler.behave_shell._thresholds import (
     PASTE_RATE_OCCASIONAL_MIN,
     SHELL_MASTERY_BOUNDARY_BAND,
     SHELL_MASTERY_MIN_COMMANDS,
+    SHORTCUT_USAGE_HEAVY_MIN,
+    SHORTCUT_USAGE_MODERATE_MIN,
     TAB_COMPLETION_HABITUAL_MIN,
     TAB_COMPLETION_OCCASIONAL_MAX,
     TREMOR_FAST_FLOOR_S,
@@ -313,6 +315,54 @@ def tab_completion(ctx: SessionContext) -> Iterator[Observation]:
     yield make_observation(
         ctx,
         primitive="motor.shell_mastery.tab_completion",
+        value=value,
+        confidence=confidence,
+    )
+
+
+def shortcut_usage(ctx: SessionContext) -> Iterator[Observation]:
+    """Emit ``motor.shell_mastery.shortcut_usage`` ∈ {none, moderate, heavy}.
+
+    Metric: total readline ctrl-byte keystrokes (the seven in
+    :data:`SHORTCUT_CTRL_BYTES`) divided by command count. Registry
+    buckets are qualitative; v0.1 thresholds are pinned for corpus
+    calibration. Heavy users tend to be tmux/zsh/bash power operators
+    who edit lines in place rather than retyping.
+
+    Confidence:
+    * < ``SHELL_MASTERY_MIN_COMMANDS`` → 0.40.
+    * Within ±10% of either bucket boundary → 0.55.
+    * Otherwise → 0.65 (lower than tab_completion: thresholds are
+      not yet corpus-calibrated, mirrors ``motor_stability`` posture).
+
+    Skips emission when the session has no commands at all.
+    """
+    n = len(ctx.commands)
+    if n == 0:
+        return
+    total_shortcuts = sum(c.shortcut_count for c in ctx.commands)
+    rate = total_shortcuts / n
+
+    if total_shortcuts == 0 or rate < SHORTCUT_USAGE_MODERATE_MIN:
+        value = "none"
+    elif rate < SHORTCUT_USAGE_HEAVY_MIN:
+        value = "moderate"
+    else:
+        value = "heavy"
+
+    if n < SHELL_MASTERY_MIN_COMMANDS:
+        confidence = 0.40
+    elif (
+        _near(rate, SHORTCUT_USAGE_MODERATE_MIN)
+        or _near(rate, SHORTCUT_USAGE_HEAVY_MIN)
+    ):
+        confidence = 0.55
+    else:
+        confidence = 0.65
+
+    yield make_observation(
+        ctx,
+        primitive="motor.shell_mastery.shortcut_usage",
         value=value,
         confidence=confidence,
     )

@@ -647,7 +647,7 @@ unchecked = no v0 tag.**
 
 ### Phase C — `motor.shell_mastery.*`
 - [x] C.1 `motor.shell_mastery.tab_completion`
-- [ ] C.2 `motor.shell_mastery.shortcut_usage`
+- [x] C.2 `motor.shell_mastery.shortcut_usage`
 - [ ] C.3 `motor.shell_mastery.pipe_chaining_depth`
 
 ### Phase D — `cognitive.*` completion
