@@ -90,3 +90,11 @@ CV_STEADY_MAX: float = 0.50
 CV_BURSTY_MAX: float = 1.50
 # Need this many input events before we'll claim a cadence at all.
 MIN_INPUTS_FOR_CADENCE: int = 5
+
+# ── motor.motor_stability (Step B.2) ────────────────────────────────────────
+# Tremor proxy: fraction of within-burst IATs below TREMOR_FAST_FLOOR_S
+# (30 ms — physiologically implausible double-press floor; humans can't
+# reliably produce IATs below ~50 ms in sustained typing). High rate
+# of sub-floor IATs flags double-press / motor twitch / stuck-key.
+TREMOR_FAST_FLOOR_S: float = 0.030
+TREMOR_RATE_MIN: float = 0.10  # ≥10% sub-floor → tremor

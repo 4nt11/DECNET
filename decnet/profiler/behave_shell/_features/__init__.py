@@ -20,6 +20,7 @@ from decnet.profiler.behave_shell._features.cognitive import (
 from decnet.profiler.behave_shell._features.motor import (
     input_modality,
     keystroke_cadence,
+    motor_stability,
     paste_burst_rate,
 )
 
@@ -29,6 +30,7 @@ FEATURES: tuple[FeatureFn, ...] = (
     input_modality,
     paste_burst_rate,
     keystroke_cadence,
+    motor_stability,
     inter_command_latency_class,
     command_branch_diversity,
     feedback_loop_engagement,

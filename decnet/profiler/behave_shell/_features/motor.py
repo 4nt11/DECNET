@@ -24,6 +24,8 @@ from decnet.profiler.behave_shell._thresholds import (
     MODALITY_TYPED_MAX,
     PASTE_RATE_HABITUAL_MIN,
     PASTE_RATE_OCCASIONAL_MIN,
+    TREMOR_FAST_FLOOR_S,
+    TREMOR_RATE_MIN,
 )
 
 
@@ -123,6 +125,44 @@ def keystroke_cadence(ctx: SessionContext) -> Iterator[Observation]:
     yield make_observation(
         ctx,
         primitive="motor.keystroke_cadence",
+        value=value,
+        confidence=confidence,
+    )
+
+
+def motor_stability(ctx: SessionContext) -> Iterator[Observation]:
+    """Emit ``motor.motor_stability`` ∈ {steady, variable, tremor}.
+
+    First-pass tremor signal: fraction of within-typing-burst IATs
+    below ``TREMOR_FAST_FLOOR_S`` (30 ms — humans can't reliably
+    produce sustained sub-50 ms IATs). High sub-floor rate flags
+    double-press / motor twitch / stuck-key. Otherwise the same
+    median burst-CV used by ``keystroke_cadence`` decides
+    steady-vs-variable, with the cadence's CV_STEADY_MAX as the
+    boundary.
+    """
+    if not ctx.typing_bursts:
+        return
+    flat = list(chain.from_iterable(ctx.typing_bursts))
+    if len(flat) < 5:
+        return
+    fast_rate = sum(1 for x in flat if x < TREMOR_FAST_FLOOR_S) / len(flat)
+    if fast_rate >= TREMOR_RATE_MIN:
+        value, confidence = "tremor", 0.65
+    else:
+        burst_cvs: list[float] = []
+        for b in ctx.typing_bursts:
+            m = statistics.fmean(b)
+            if m > 0:
+                burst_cvs.append(statistics.pstdev(b) / m)
+        cv = statistics.median(burst_cvs) if burst_cvs else 0.0
+        if cv < CV_STEADY_MAX:
+            value, confidence = "steady", 0.70
+        else:
+            value, confidence = "variable", 0.60
+    yield make_observation(
+        ctx,
+        primitive="motor.motor_stability",
         value=value,
         confidence=confidence,
     )
