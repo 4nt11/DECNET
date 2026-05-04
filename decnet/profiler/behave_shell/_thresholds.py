@@ -87,6 +87,27 @@ PAUSE_CV_BIMODAL_MIN: float = 1.50
 # ``cognitive_load`` must be reflected by editing the patterns tuple
 # (not a constant, so no boundary-band logic applies).
 
+# ── cognitive.cognitive_load (Step D.1) ─────────────────────────────────────
+# Composite ∈ [0, 1] over three sub-signals (each clipped to [0, 1]):
+#
+#   A = chunking_load         = median_intra_cmd_cv / CHUNKING_REF_CV
+#   B = error_load            = errored_cmds / total_cmds
+#   C = pace_variability_load = (stdev / mean of inter_cmd_iats) / PACE_REF_CV
+#
+# load = mean(A, B, C); bucket:
+#   load <  COGNITIVE_LOAD_LOW_MAX     → low
+#   load <  COGNITIVE_LOAD_MEDIUM_MAX  → medium
+#   else                               → high
+#
+# v0.1 thresholds — D.8 re-tunes once D.1-D.7 are stable. The reference
+# CVs (CHUNKING_REF_CV / PACE_REF_CV) are the value at which that single
+# component saturates to a load contribution of 1.0; anything past
+# saturates the term but doesn't double-count.
+COGNITIVE_LOAD_CHUNKING_REF_CV: float = 1.00
+COGNITIVE_LOAD_PACE_REF_CV: float = 1.50
+COGNITIVE_LOAD_LOW_MAX: float = 0.33
+COGNITIVE_LOAD_MEDIUM_MAX: float = 0.67
+
 # ── motor.keystroke_cadence (Step B.1) ──────────────────────────────────────
 # Typing bursts split at gaps > IKI_THINK_MAX_S so think-pauses between
 # commands don't inflate the within-burst CV. Mirrors the prototype's

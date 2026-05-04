@@ -4,6 +4,7 @@ Step 5: ``cognitive.inter_command_latency_class``.
 Step 6: ``cognitive.command_branch_diversity``.
 Step 7: ``cognitive.feedback_loop_engagement``.
 Step 8: ``cognitive.inter_command_consistency``.
+Step D.1: ``cognitive.cognitive_load``.
 """
 from __future__ import annotations
 
@@ -16,6 +17,10 @@ from decnet.profiler.behave_shell._ctx import SessionContext
 from decnet.profiler.behave_shell._features._emit import make_observation
 from decnet.profiler.behave_shell._thresholds import (
     BRANCH_DIVERSITY_LINEAR_MIN,
+    COGNITIVE_LOAD_CHUNKING_REF_CV,
+    COGNITIVE_LOAD_LOW_MAX,
+    COGNITIVE_LOAD_MEDIUM_MAX,
+    COGNITIVE_LOAD_PACE_REF_CV,
     FEEDBACK_CORRELATION_MIN,
     FEEDBACK_MIN_PAIRS,
     INTER_CMD_DELIBERATE_MAX,
@@ -27,6 +32,24 @@ from decnet.profiler.behave_shell._thresholds import (
     PAUSE_CV_BIMODAL_MIN,
     PAUSE_CV_METRONOMIC_MAX,
 )
+
+
+def _clip01(x: float) -> float:
+    if x < 0.0:
+        return 0.0
+    if x > 1.0:
+        return 1.0
+    return x
+
+
+def _cv(xs: tuple[float, ...] | list[float]) -> float | None:
+    """Coefficient of variation; ``None`` if undefined (n<2 or mean==0)."""
+    if len(xs) < 2:
+        return None
+    mean = statistics.fmean(xs)
+    if mean <= 0.0:
+        return None
+    return statistics.stdev(xs) / mean
 
 
 def _bucket_inter_cmd_latency(median_iat: float) -> str:
@@ -153,6 +176,80 @@ def feedback_loop_engagement(ctx: SessionContext) -> Iterator[Observation]:
         primitive="cognitive.feedback_loop_engagement",
         value=value,
         confidence=0.75,
+    )
+
+
+def cognitive_load(ctx: SessionContext) -> Iterator[Observation]:
+    """Emit ``cognitive.cognitive_load`` ∈ {low, medium, high}.
+
+    Composite of three [0, 1]-clipped sub-signals, mean-aggregated:
+
+    * **chunking** — median CV of intra-command IATs / reference CV.
+      Fragmented mid-command typing → high contribution.
+    * **errors** — fraction of commands whose post-execution output
+      matched a canonical error fingerprint (``Command.errored`` from
+      Step D.0). Failures pile load.
+    * **pace variability** — CV of inter-command IATs / reference CV.
+      A spread of think-pause durations → unsettled cadence → load.
+
+    Components missing data contribute 0.0 (no penalty for an absent
+    signal), and the composite normalises by *available* component
+    count so a session with zero inter-command pauses isn't punished
+    for the silence. Skip emission entirely when no commands at all
+    exist — there's no honest answer.
+
+    v0.1 thresholds; D.8 re-tunes once the rest of Phase D is stable.
+    """
+    if not ctx.commands:
+        return
+
+    # Component A: chunking variance — median within-command CV
+    per_cmd_cvs: list[float] = []
+    for cmd_iats in ctx.intra_command_iats:
+        cv = _cv(cmd_iats)
+        if cv is not None:
+            per_cmd_cvs.append(cv)
+    if per_cmd_cvs:
+        chunking_load: float | None = _clip01(
+            statistics.median(per_cmd_cvs) / COGNITIVE_LOAD_CHUNKING_REF_CV
+        )
+    else:
+        chunking_load = None
+
+    # Component B: error rate
+    error_load: float = sum(1 for c in ctx.commands if c.errored) / len(ctx.commands)
+    error_load = _clip01(error_load)
+
+    # Component C: pace variability — CV of inter-command IATs
+    pace_cv = _cv(ctx.inter_cmd_iats)
+    if pace_cv is not None:
+        pace_load: float | None = _clip01(pace_cv / COGNITIVE_LOAD_PACE_REF_CV)
+    else:
+        pace_load = None
+
+    components = [c for c in (chunking_load, error_load, pace_load) if c is not None]
+    if not components:
+        return
+    load = sum(components) / len(components)
+
+    if load < COGNITIVE_LOAD_LOW_MAX:
+        value = "low"
+    elif load < COGNITIVE_LOAD_MEDIUM_MAX:
+        value = "medium"
+    else:
+        value = "high"
+
+    if len(ctx.commands) < MIN_COMMANDS_FOR_FULL_CONFIDENCE:
+        confidence = 0.40
+    else:
+        # Composite over three soft sub-signals — held below the
+        # cap of single-source primitives. D.8 re-tunes.
+        confidence = 0.60
+    yield make_observation(
+        ctx,
+        primitive="cognitive.cognitive_load",
+        value=value,
+        confidence=confidence,
     )
 
 

@@ -12,6 +12,7 @@ from decnet_behave_core.spec.envelope import Observation
 
 from decnet.profiler.behave_shell._ctx import SessionContext
 from decnet.profiler.behave_shell._features.cognitive import (
+    cognitive_load,
     command_branch_diversity,
     feedback_loop_engagement,
     inter_command_consistency,
@@ -45,4 +46,5 @@ FEATURES: tuple[FeatureFn, ...] = (
     command_branch_diversity,
     feedback_loop_engagement,
     inter_command_consistency,
+    cognitive_load,
 )
