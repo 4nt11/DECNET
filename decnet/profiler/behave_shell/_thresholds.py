@@ -233,6 +233,11 @@ PROMPT_LINE_MAX_CHARS: int = 256
 # honesty). Above, the shell-type vote is robust.
 SHELL_TYPE_MIN_PROMPTS: int = 3
 
+# ── environmental.locale (Step F.3) ────────────────────────────────────────
+# Below this many characters in the parsed locale value, treat as
+# noise and skip emission (a single 'C' or 'en' is too thin).
+LOCALE_MIN_VALUE_LENGTH: int = 2
+
 # ── motor.keystroke_cadence (Step B.1) ──────────────────────────────────────
 # Typing bursts split at gaps > IKI_THINK_MAX_S so think-pauses between
 # commands don't inflate the within-burst CV. Mirrors the prototype's

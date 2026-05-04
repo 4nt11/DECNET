@@ -7,11 +7,24 @@ which F.1 / F.3 / E.4 read.
 
 Step F.1: ``environmental.shell_type``.
 Step F.2: ``environmental.terminal_multiplexer``.
+Step F.3: ``environmental.locale``.
 """
 from __future__ import annotations
 
 import collections
+import re
 from typing import Iterator
+
+from decnet_behave_core.spec.envelope import Observation
+
+from decnet.profiler.behave_shell._ctx import SessionContext
+from decnet.profiler.behave_shell._features._emit import make_observation
+from decnet.profiler.behave_shell._parse import PromptLine, strip_ansi
+from decnet.profiler.behave_shell._thresholds import (
+    LOCALE_MIN_VALUE_LENGTH,
+    SHELL_TYPE_MIN_PROMPTS,
+)
+
 
 # Multiplexer fingerprints scanned over RAW output (multiplexer escapes
 # ARE ANSI sequences, so we must NOT strip-ANSI before searching).
@@ -31,14 +44,42 @@ _SCREEN_MARKERS: tuple[str, ...] = (
     "\x1b]83;",
 )
 
-from decnet_behave_core.spec.envelope import Observation
 
-from decnet.profiler.behave_shell._ctx import SessionContext
-from decnet.profiler.behave_shell._features._emit import make_observation
-from decnet.profiler.behave_shell._parse import PromptLine
-from decnet.profiler.behave_shell._thresholds import (
-    SHELL_TYPE_MIN_PROMPTS,
+# Locale envvar regex: matches `KEY=VALUE` where KEY is one of the
+# three locale envvars and VALUE is a POSIX locale name. The value
+# pattern is intentionally restrictive — letters, underscore for the
+# territory delimiter, optional codeset (.UTF-8 / .utf8), optional
+# modifier (@euro). The trailing `(?=[\s'\"\\$]|$)` anchors the
+# match against shell quoting and end-of-line.
+_LOCALE_VALUE_RE = re.compile(
+    r"(?P<key>LC_ALL|LANG|LC_CTYPE)=(?P<val>[A-Za-z]{2,3}"
+    r"(?:_[A-Za-z]{2,3})?(?:\.[A-Za-z0-9-]+)?(?:@[A-Za-z0-9]+)?|C|POSIX)"
 )
+_LOCALE_KEY_PRIORITY: dict[str, int] = {"LC_ALL": 3, "LANG": 2, "LC_CTYPE": 1}
+
+
+def _to_bcp47(posix_value: str) -> str | None:
+    """Normalise a POSIX locale value to a BCP-47 tag.
+
+    Returns:
+        ``None`` when the value is malformed (caller skips emission).
+        ``"und"`` for ``C`` / ``POSIX`` (BCP-47 'undetermined').
+        Otherwise ``language-REGION`` (e.g. ``en-US``, ``pt-BR``);
+        codeset / modifier suffixes dropped (BCP-47 doesn't carry them).
+    """
+    if posix_value in ("C", "POSIX"):
+        return "und"
+    base = posix_value.split(".", 1)[0].split("@", 1)[0]
+    parts = base.split("_")
+    if not parts or not parts[0].isalpha() or len(parts[0]) < 2:
+        return None
+    lang = parts[0].lower()
+    if len(parts) == 1:
+        return lang
+    region = parts[1]
+    if not region.isalpha():
+        return None
+    return f"{lang}-{region.upper()}"
 
 
 def _classify_shell_from_prompt(p: PromptLine) -> str:
@@ -138,4 +179,52 @@ def terminal_multiplexer(ctx: SessionContext) -> Iterator[Observation]:
         primitive="environmental.terminal_multiplexer",
         value=value,
         confidence=confidence,
+    )
+
+
+def locale(ctx: SessionContext) -> Iterator[Observation]:
+    """Emit ``environmental.locale`` (free-string BCP-47 tag).
+
+    Searches the ANSI-stripped output stream for ``LANG=``,
+    ``LC_ALL=``, or ``LC_CTYPE=`` substrings — emitted when the
+    operator runs ``env``, ``locale``, or ``printenv``. Highest-priority
+    key wins (``LC_ALL`` > ``LANG`` > ``LC_CTYPE``); the POSIX value is
+    normalised to BCP-47:
+
+    * ``en_US.UTF-8`` → ``en-US``
+    * ``pt_BR.UTF-8`` → ``pt-BR``
+    * ``C`` / ``POSIX`` → ``und``
+    * malformed → skip emission
+
+    Skip emission when no envvar dump is found in the output —
+    silence rather than fabricating a default.
+    """
+    if not ctx.commands:
+        return
+    # Concatenate output; strip ANSI once (locale values aren't escape
+    # sequences themselves so the strip is safe).
+    raw = "".join(d for _t, _k, d in ctx.output_events)
+    if not raw:
+        return
+    text = strip_ansi(raw)
+
+    best_priority = 0
+    best_value: str | None = None
+    for m in _LOCALE_VALUE_RE.finditer(text):
+        prio = _LOCALE_KEY_PRIORITY[m.group("key")]
+        if prio <= best_priority:
+            continue
+        bcp47 = _to_bcp47(m.group("val"))
+        if bcp47 is None or len(bcp47) < LOCALE_MIN_VALUE_LENGTH:
+            continue
+        best_priority = prio
+        best_value = bcp47
+
+    if best_value is None:
+        return
+    yield make_observation(
+        ctx,
+        primitive="environmental.locale",
+        value=best_value,
+        confidence=0.80,
     )
