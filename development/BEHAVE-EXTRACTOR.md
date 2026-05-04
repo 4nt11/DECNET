@@ -679,15 +679,15 @@ unchecked = no v0 tag.**
 - [x] E.1 `temporal.session_duration`
 - [x] E.2 `temporal.escalation_pattern`
 - [x] E.3 `temporal.lifecycle_markers.landing_ritual`
-- [ ] E.4 `temporal.lifecycle_markers.exit_behavior` — **HELD** pending Phase F.0's prompt/exit-code parser. abrupt-vs-cleanup needs exit-code visibility to be honest; first-token membership alone over-fires on benign `rm` / `clear` mid-session and under-fires on `history -c` (flag-detection crosses the v0.1 PII boundary).
+- [x] E.4 `temporal.lifecycle_markers.exit_behavior` — unblocked + landed in Phase F (uses `Command.followed_by_prompt` from F.0)
 
 ### Phase F — `environmental.*` (output-stream block)
-- [ ] F.0 Prompt-string parser (shared utility) — also unblocks **E.4** (held) and subsumes **D.0** ANSI/error helpers
-- [ ] F.1 `environmental.shell_type`
-- [ ] F.2 `environmental.terminal_multiplexer`
-- [ ] F.3 `environmental.locale`
-- [ ] F.4 `environmental.keyboard_layout`
-- [ ] F.5 `environmental.numpad_usage`
+- [x] F.0 Prompt-string parser (shared utility) — unblocked **E.4**; **D.0 enriched, not subsumed** (regex error helpers stay)
+- [x] F.1 `environmental.shell_type`
+- [x] F.2 `environmental.terminal_multiplexer`
+- [x] F.3 `environmental.locale`
+- [x] F.4 `environmental.keyboard_layout` (PII boundary lifted by ANTI; emits all 4 registry values)
+- [x] F.5 `environmental.numpad_usage`
 
 ### Phase G — `operational.*` + `emotional_valence.*` (soft block)
 - [ ] G.0 Command-intent lexicon (`_features/_intent.py`)
@@ -903,6 +903,56 @@ required primitive until Phase F.0 lands.
 
 Phase F (`environmental.*` output-stream block, 5 primitives plus
 F.0's prompt parser) lands next; E.4 picks up at the tail of Phase F.
+
+---
+
+## Phase F completion log
+
+Closed in 8 commits. The largest phase in the plan; the held E.4
+(`temporal.lifecycle_markers.exit_behavior`) lifted at the tail.
+
+**F.0 — prompt-line detector (no primitive).** PS1 prompt-line
+detection over ANSI-stripped output. New `PromptLine` dataclass on
+`SessionContext.prompt_lines` and `Command.followed_by_prompt`
+populated during the existing single-pass output-window walk. Capped
+at `PROMPT_LINE_MAX_CHARS = 256` to bound memory.
+
+**Reversal of the original BEHAVE-EXTRACTOR.md F.0 hint:** D.0 is
+**enriched, not subsumed**. The regex error fingerprints catch errors
+even when PS1 echo is suppressed (custom prompts, non-interactive
+exec) where prompt-based detection would miss. F.0 is purely
+additive.
+
+**PII boundary lift.** ANTI authorised dropping the v0.1 PII boundary
+for Phase F: PromptLine retains hostnames / cwd / etc. (capped),
+parsed locale envvar values ride on observations, F.4 retains typed
+bigram/unigram histograms on `SessionContext`. The discipline kept is
+"no FULL command bodies, no FULL output bodies in observations" —
+PromptLine and histograms live on ctx but are never serialised into
+observation values; only derived primitive values (`bash`, `en-US`,
+`qwerty`, `present`) leave the engine.
+
+The five Phase F primitives + carry-over E.4:
+
+| Primitive | Confidence | Source signal |
+|---|---|---|
+| `environmental.shell_type` | 0.40 / 0.75 | per-prompt-line classification; mode of suffix character with `>` disambiguated by content (`PS ` → powershell, `C:\` → cmd.exe, else fish) |
+| `environmental.terminal_multiplexer` | 0.55 / 0.85 | scan RAW output for tmux markers (DCS passthrough, focus-reporting, window-title), screen markers (DCS, screen-OSC); both → prefer tmux |
+| `environmental.locale` | 0.80 | regex match `LANG=` / `LC_ALL=` / `LC_CTYPE=` in stripped output; LC_ALL > LANG > LC_CTYPE; POSIX → BCP-47 normalisation |
+| `environmental.keyboard_layout` | 0.40 / 0.55 | typed bigram/unigram histograms; layout-artefact unigrams (`q`, `z`/`y`) take priority over English-bigram saturation |
+| `environmental.numpad_usage` | 0.50 | sliding window over single-char digit input events; ≥4 contiguous events with all-fast IATs (≤50ms) → detected |
+| `temporal.lifecycle_markers.exit_behavior` | 0.45 / 0.65 | resolution of the E.4 hold; uses `Command.followed_by_prompt` to distinguish `abrupt` from `cleanup`/`graceful` |
+
+**Calibration grid widened:** the binding set now contains 25 names
+(`PHASE_ABCDEF_PRIMITIVES`). The three Phase D `error_resilience.*`
+primitives stay in `PHASE_D_CONDITIONAL_PRIMITIVES`;
+`environmental.locale` joins a new `PHASE_F_CONDITIONAL_PRIMITIVES`
+since it only fires on shards containing an env / locale dump.
+
+**Tier-A corpus delta:** 25 of 37 Tier-A primitives now emit. Phase G
+(`operational.*` + `emotional_valence.*`, 8 primitives + the
+command-intent lexicon) lands next. Phase H is full-corpus lockdown
++ v0 release.
 
 ---
 

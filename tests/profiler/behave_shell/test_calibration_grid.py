@@ -31,7 +31,7 @@ from decnet.profiler.behave_shell import extract_session
 from decnet.profiler.behave_shell._parse import parse_shard_line
 
 
-PHASE_ABCDE_PRIMITIVES: frozenset[str] = frozenset({
+PHASE_ABCDEF_PRIMITIVES: frozenset[str] = frozenset({
     # Phase A — calibration floor
     "motor.input_modality",
     "motor.paste_burst_rate",
@@ -39,32 +39,32 @@ PHASE_ABCDE_PRIMITIVES: frozenset[str] = frozenset({
     "cognitive.command_branch_diversity",
     "cognitive.feedback_loop_engagement",
     "cognitive.inter_command_consistency",
-    # Phase B — motor.* completion (lands one primitive per commit)
+    # Phase B — motor.* completion
     "motor.keystroke_cadence",
     "motor.motor_stability",
     "motor.error_correction",
     "motor.command_chunking",
-    # Phase C — motor.shell_mastery.* (lands one primitive per commit)
+    # Phase C — motor.shell_mastery.*
     "motor.shell_mastery.tab_completion",
     "motor.shell_mastery.shortcut_usage",
     "motor.shell_mastery.pipe_chaining_depth",
-    # Phase D — cognitive.* completion (one primitive per commit)
+    # Phase D — cognitive.* completion (error_resilience.* are
+    # conditional, see PHASE_D_CONDITIONAL_PRIMITIVES below)
     "cognitive.cognitive_load",
     "cognitive.exploration_style",
     "cognitive.planning_depth",
     "cognitive.tool_vocabulary",
-    # Phase D — error_resilience.* primitives only fire on shards with
-    # at least one errored command. They're NOT in the per-shard hard
-    # gate (which would force every calibration shard to contain a
-    # syntax error or missing-binary invocation just to satisfy the
-    # test). They ARE included in the discrimination check below as
-    # "if you have them, they should agree across-class".
-    # Phase E — temporal.* per-session subset (E.4 exit_behavior held
-    # pending Phase F.0's prompt parser; abrupt-vs-cleanup needs
-    # exit-code visibility to be honest).
+    # Phase E — temporal.* per-session subset
     "temporal.session_duration",
     "temporal.escalation_pattern",
     "temporal.lifecycle_markers.landing_ritual",
+    # Phase F — environmental.* output-stream block + carry-over E.4
+    # (locale is conditional, see PHASE_F_CONDITIONAL_PRIMITIVES)
+    "environmental.shell_type",
+    "environmental.terminal_multiplexer",
+    "environmental.keyboard_layout",
+    "environmental.numpad_usage",
+    "temporal.lifecycle_markers.exit_behavior",
 })
 
 # Phase D primitives that are conditional on at least one errored
@@ -77,11 +77,20 @@ PHASE_D_CONDITIONAL_PRIMITIVES: frozenset[str] = frozenset({
     "cognitive.error_resilience.fallback_to_man",
 })
 
+# Phase F primitives conditional on shard content. ``environmental.locale``
+# fires only when the shard's output contains an env / locale dump
+# (LANG=, LC_ALL=, LC_CTYPE=). It's tracked here, not in the per-shard
+# hard gate.
+PHASE_F_CONDITIONAL_PRIMITIVES: frozenset[str] = frozenset({
+    "environmental.locale",
+})
+
 # Backwards-compatible aliases for any external import — earlier phases
 # locked in narrower sets; later phases widen them. All names point at
 # the current binding set.
-PHASE_ABCD_PRIMITIVES = PHASE_ABCDE_PRIMITIVES
-PHASE_ABC_PRIMITIVES = PHASE_ABCDE_PRIMITIVES
+PHASE_ABCDE_PRIMITIVES = PHASE_ABCDEF_PRIMITIVES
+PHASE_ABCD_PRIMITIVES = PHASE_ABCDEF_PRIMITIVES
+PHASE_ABC_PRIMITIVES = PHASE_ABCDEF_PRIMITIVES
 
 
 # (shard filename, class label)
@@ -148,7 +157,7 @@ def test_shard_emits_all_phase_a_primitives(
     obs = _all_observations(path)
     assert obs, f"{class_label}: extractor produced zero observations"
     seen = {o.primitive for o in obs}
-    missing = PHASE_ABCDE_PRIMITIVES - seen
+    missing = PHASE_ABCDEF_PRIMITIVES - seen
     assert not missing, (
         f"{class_label} ({shard_file}) missing primitives: "
         f"{sorted(missing)}"
@@ -185,7 +194,7 @@ def test_shards_are_discriminative_across_classes(
     # At least one primitive should produce different majority values
     # across the present classes.
     discriminative_primitives: list[str] = []
-    for prim in PHASE_ABCDE_PRIMITIVES:
+    for prim in PHASE_ABCDEF_PRIMITIVES:
         values = {by_class[c].get(prim) for c in by_class if prim in by_class[c]}
         if len(values) >= 2:
             discriminative_primitives.append(prim)
