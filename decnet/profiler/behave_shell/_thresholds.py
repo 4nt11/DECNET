@@ -210,6 +210,14 @@ ESCALATION_SUSTAINED_CV: float = 0.50
 ESCALATION_MIN_WINDOWS: int = 5
 ESCALATION_MIN_COMMANDS: int = 5
 
+# ── temporal.lifecycle_markers.landing_ritual (Step E.3) ──────────────────
+# How many of the first ``LANDING_RITUAL_FIRST_N`` commands must hit
+# the recon-token set (uname / id / whoami / pwd / hostname / w / who)
+# for the session to count as having a landing ritual.
+LANDING_RITUAL_FIRST_N: int = 5
+LANDING_RITUAL_HIT_MIN: int = 2
+LANDING_RITUAL_MIN_COMMANDS: int = 3
+
 # ── motor.keystroke_cadence (Step B.1) ──────────────────────────────────────
 # Typing bursts split at gaps > IKI_THINK_MAX_S so think-pauses between
 # commands don't inflate the within-burst CV. Mirrors the prototype's

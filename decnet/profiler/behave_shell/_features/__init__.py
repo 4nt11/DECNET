@@ -26,6 +26,7 @@ from decnet.profiler.behave_shell._features.cognitive import (
 )
 from decnet.profiler.behave_shell._features.temporal import (
     escalation_pattern,
+    landing_ritual,
     session_duration,
 )
 from decnet.profiler.behave_shell._features.motor import (
@@ -65,4 +66,5 @@ FEATURES: tuple[FeatureFn, ...] = (
     error_resilience_fallback_to_man,
     session_duration,
     escalation_pattern,
+    landing_ritual,
 )

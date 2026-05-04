@@ -7,6 +7,7 @@ and computed by the attribution engine, not the extractor.
 
 Step E.1: ``temporal.session_duration``.
 Step E.2: ``temporal.escalation_pattern``.
+Step E.3: ``temporal.lifecycle_markers.landing_ritual``.
 """
 from __future__ import annotations
 
@@ -18,6 +19,7 @@ from decnet_behave_core.spec.envelope import Observation
 
 from decnet.profiler.behave_shell._ctx import SessionContext
 from decnet.profiler.behave_shell._features._emit import make_observation
+from decnet.profiler.behave_shell._parse import hash_token
 from decnet.profiler.behave_shell._thresholds import (
     ESCALATION_BURSTY_CV,
     ESCALATION_BURSTY_ZERO_FRAC,
@@ -26,10 +28,27 @@ from decnet.profiler.behave_shell._thresholds import (
     ESCALATION_SUSTAINED_CV,
     ESCALATION_WINDOW_MIN_S,
     ESCALATION_WINDOW_TARGET,
+    LANDING_RITUAL_FIRST_N,
+    LANDING_RITUAL_HIT_MIN,
+    LANDING_RITUAL_MIN_COMMANDS,
     SESSION_DURATION_LONG_MAX,
     SESSION_DURATION_MEDIUM_MAX,
     SESSION_DURATION_SHORT_MAX,
 )
+
+
+# Precomputed at import time so the per-session check is a set lookup,
+# not 7 sha256 ops per session. The recon-survey vocabulary an attacker
+# (or scripted runner) typically opens with on a freshly-landed shell.
+_LANDING_RITUAL_HASHES: frozenset[str] = frozenset({
+    hash_token("uname"),
+    hash_token("id"),
+    hash_token("whoami"),
+    hash_token("pwd"),
+    hash_token("hostname"),
+    hash_token("w"),
+    hash_token("who"),
+})
 
 
 def session_duration(ctx: SessionContext) -> Iterator[Observation]:
@@ -110,6 +129,40 @@ def escalation_pattern(ctx: SessionContext) -> Iterator[Observation]:
     yield make_observation(
         ctx,
         primitive="temporal.escalation_pattern",
+        value=value,
+        confidence=confidence,
+    )
+
+
+def landing_ritual(ctx: SessionContext) -> Iterator[Observation]:
+    """Emit ``temporal.lifecycle_markers.landing_ritual`` ∈ {present, absent}.
+
+    Inspect the first ``LANDING_RITUAL_FIRST_N`` commands; if at least
+    ``LANDING_RITUAL_HIT_MIN`` of their first_token_hashes match the
+    recon-survey vocabulary set (``uname`` / ``id`` / ``whoami`` /
+    ``pwd`` / ``hostname`` / ``w`` / ``who``), the operator opened
+    with a landing ritual.
+
+    Skip emission when there are no commands at all — the registry's
+    binary doesn't admit ``unknown`` and emitting ``absent`` from
+    nothing would be dishonest. Below ``LANDING_RITUAL_MIN_COMMANDS``
+    we still emit, but at lower confidence — short sessions can still
+    show or fail to show a ritual.
+    """
+    n = len(ctx.commands)
+    if n == 0:
+        return
+    head = ctx.commands[:LANDING_RITUAL_FIRST_N]
+    hits = sum(1 for c in head if c.first_token_hash in _LANDING_RITUAL_HASHES)
+    value = "present" if hits >= LANDING_RITUAL_HIT_MIN else "absent"
+
+    if n < LANDING_RITUAL_MIN_COMMANDS:
+        confidence = 0.40
+    else:
+        confidence = 0.65
+    yield make_observation(
+        ctx,
+        primitive="temporal.lifecycle_markers.landing_ritual",
         value=value,
         confidence=confidence,
     )
