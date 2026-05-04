@@ -43,6 +43,7 @@ PHASE_AB_PRIMITIVES: frozenset[str] = frozenset({
     "motor.keystroke_cadence",
     "motor.motor_stability",
     "motor.error_correction",
+    "motor.command_chunking",
 })
 
 

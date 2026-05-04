@@ -16,6 +16,7 @@ from decnet.profiler.behave_shell._ctx import SessionContext
 from decnet.profiler.behave_shell._features._emit import make_observation
 from decnet.profiler.behave_shell._thresholds import (
     BACKSPACE_IMMEDIATE_MAX_S,
+    CMD_CHUNKING_FLUENT_CV_MAX,
     CV_BURSTY_MAX,
     CV_MACHINE_MAX,
     CV_STEADY_MAX,
@@ -202,6 +203,52 @@ def error_correction(ctx: SessionContext) -> Iterator[Observation]:
     yield make_observation(
         ctx,
         primitive="motor.error_correction",
+        value=value,
+        confidence=confidence,
+    )
+
+
+def command_chunking(ctx: SessionContext) -> Iterator[Observation]:
+    """Emit ``motor.command_chunking`` ∈ {fluent, fragmented, single_command}.
+
+    * 0 commands → skip (no honest answer).
+    * 1 command → ``single_command`` (registry-allowed, distinct from
+      the fluent/fragmented continuum that needs multiple commands).
+    * ≥2 commands → median CV across per-command intra-typing IATs;
+      below ``CMD_CHUNKING_FLUENT_CV_MAX`` → fluent, else fragmented.
+
+    Skips emission if no command has ≥3 typed IATs to compute a CV
+    over (paste-driven sessions where every command arrived as one
+    bulk write — no honest within-command rhythm to measure).
+    """
+    n = len(ctx.commands)
+    if n == 0:
+        return
+    if n == 1:
+        yield make_observation(
+            ctx,
+            primitive="motor.command_chunking",
+            value="single_command",
+            confidence=0.80,
+        )
+        return
+    cvs: list[float] = []
+    for iats in ctx.intra_command_iats:
+        if len(iats) < 3:
+            continue
+        m = statistics.fmean(iats)
+        if m > 0:
+            cvs.append(statistics.pstdev(iats) / m)
+    if not cvs:
+        return
+    cv = statistics.median(cvs)
+    if cv < CMD_CHUNKING_FLUENT_CV_MAX:
+        value, confidence = "fluent", 0.65
+    else:
+        value, confidence = "fragmented", 0.60
+    yield make_observation(
+        ctx,
+        primitive="motor.command_chunking",
         value=value,
         confidence=confidence,
     )

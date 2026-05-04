@@ -18,6 +18,7 @@ from decnet.profiler.behave_shell._features.cognitive import (
     inter_command_latency_class,
 )
 from decnet.profiler.behave_shell._features.motor import (
+    command_chunking,
     error_correction,
     input_modality,
     keystroke_cadence,
@@ -33,6 +34,7 @@ FEATURES: tuple[FeatureFn, ...] = (
     keystroke_cadence,
     motor_stability,
     error_correction,
+    command_chunking,
     inter_command_latency_class,
     command_branch_diversity,
     feedback_loop_engagement,

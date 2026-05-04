@@ -56,6 +56,9 @@ class SessionContext:
     backspace_iats: tuple[float, ...] = field(default_factory=tuple)
     kill_line_count: int = 0
 
+    # Step B.4 derivations — per-command intra-typing IATs
+    intra_command_iats: tuple[tuple[float, ...], ...] = field(default_factory=tuple)
+
 
 def _detect_paste_bursts(
     inputs: list[AsciinemaEvent],
@@ -191,6 +194,30 @@ def _segment_commands(inputs: list[AsciinemaEvent]) -> tuple[Command, ...]:
     return tuple(cmds)
 
 
+def _per_command_iats(
+    commands: tuple[Command, ...],
+    inputs: list[AsciinemaEvent],
+) -> tuple[tuple[float, ...], ...]:
+    """Per-command IATs between consecutive input events whose
+    timestamps fall in ``[cmd.start_ts, cmd.end_ts)``.
+
+    Excludes the terminator IAT (the last event at ``cmd.end_ts`` is
+    the ``\\r``/``\\n`` itself). Returns one tuple per command.
+    """
+    out: list[tuple[float, ...]] = []
+    for cmd in commands:
+        prev_t: float | None = None
+        cmd_iats: list[float] = []
+        for t, _kind, _data in inputs:
+            if t < cmd.start_ts or t >= cmd.end_ts:
+                continue
+            if prev_t is not None:
+                cmd_iats.append(max(0.0, t - prev_t))
+            prev_t = t
+        out.append(tuple(cmd_iats))
+    return tuple(out)
+
+
 def _output_bytes_between(
     outputs: list[AsciinemaEvent],
     start: float,
@@ -246,6 +273,7 @@ def build_session_context(
         _output_bytes_between(outputs, commands[i].end_ts, commands[i + 1].start_ts)
         for i in range(len(commands) - 1)
     )
+    intra_command_iats = _per_command_iats(commands, inputs)
 
     return SessionContext(
         sid=sid,
@@ -266,4 +294,5 @@ def build_session_context(
         backspace_count=backspace_count,
         backspace_iats=backspace_iats,
         kill_line_count=kill_line_count,
+        intra_command_iats=intra_command_iats,
     )

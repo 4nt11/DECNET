@@ -104,3 +104,8 @@ TREMOR_RATE_MIN: float = 0.10  # ≥10% sub-floor → tremor
 # typo mid-keystroke" (immediate). Beyond this = the operator paused,
 # noticed, then went back (deferred).
 BACKSPACE_IMMEDIATE_MAX_S: float = 0.50
+
+# ── motor.command_chunking (Step B.4) ───────────────────────────────────────
+# Median CV of within-command IATs. Below this → fluent (steady within
+# each command); above → fragmented (operator pauses mid-command).
+CMD_CHUNKING_FLUENT_CV_MAX: float = 0.50
