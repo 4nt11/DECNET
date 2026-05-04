@@ -42,6 +42,7 @@ PHASE_AB_PRIMITIVES: frozenset[str] = frozenset({
     # Phase B — motor.* completion (lands one primitive per commit)
     "motor.keystroke_cadence",
     "motor.motor_stability",
+    "motor.error_correction",
 })
 
 

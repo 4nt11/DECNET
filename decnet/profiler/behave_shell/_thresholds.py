@@ -98,3 +98,9 @@ MIN_INPUTS_FOR_CADENCE: int = 5
 # of sub-floor IATs flags double-press / motor twitch / stuck-key.
 TREMOR_FAST_FLOOR_S: float = 0.030
 TREMOR_RATE_MIN: float = 0.10  # ≥10% sub-floor → tremor
+
+# ── motor.error_correction (Step B.3) ───────────────────────────────────────
+# Backspace within this many seconds of the preceding key = "caught the
+# typo mid-keystroke" (immediate). Beyond this = the operator paused,
+# noticed, then went back (deferred).
+BACKSPACE_IMMEDIATE_MAX_S: float = 0.50

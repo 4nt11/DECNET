@@ -15,6 +15,7 @@ from decnet_behave_core.spec.envelope import Observation
 from decnet.profiler.behave_shell._ctx import SessionContext
 from decnet.profiler.behave_shell._features._emit import make_observation
 from decnet.profiler.behave_shell._thresholds import (
+    BACKSPACE_IMMEDIATE_MAX_S,
     CV_BURSTY_MAX,
     CV_MACHINE_MAX,
     CV_STEADY_MAX,
@@ -163,6 +164,44 @@ def motor_stability(ctx: SessionContext) -> Iterator[Observation]:
     yield make_observation(
         ctx,
         primitive="motor.motor_stability",
+        value=value,
+        confidence=confidence,
+    )
+
+
+def error_correction(ctx: SessionContext) -> Iterator[Observation]:
+    """Emit ``motor.error_correction`` ∈ {immediate, deferred, absent, route_around}.
+
+    Backspace timing relative to the preceding non-backspace key:
+
+    * 0 backspaces + ≥1 ^U/^W → ``route_around`` (operator killed
+      the line and rewrote rather than correcting in place).
+    * 0 backspaces + 0 ^U/^W → ``absent`` (no correction observed).
+    * Backspaces with median IAT ≤ ``BACKSPACE_IMMEDIATE_MAX_S``
+      (500 ms) → ``immediate`` (caught the typo mid-keystroke).
+    * Slower → ``deferred`` (paused, noticed, then went back).
+
+    < 3 input events → skip emission.
+    """
+    if len(ctx.input_events) < 3:
+        return
+    if ctx.backspace_count == 0:
+        if ctx.kill_line_count > 0:
+            value, confidence = "route_around", 0.55
+        else:
+            value, confidence = "absent", 0.65
+    else:
+        if ctx.backspace_iats:
+            med = statistics.median(ctx.backspace_iats)
+        else:
+            med = float("inf")
+        if med <= BACKSPACE_IMMEDIATE_MAX_S:
+            value, confidence = "immediate", 0.65
+        else:
+            value, confidence = "deferred", 0.55
+    yield make_observation(
+        ctx,
+        primitive="motor.error_correction",
         value=value,
         confidence=confidence,
     )

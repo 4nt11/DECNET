@@ -51,6 +51,11 @@ class SessionContext:
     # Step B.1 derivations — typing bursts (IATs split at think-pauses)
     typing_bursts: tuple[tuple[float, ...], ...] = field(default_factory=tuple)
 
+    # Step B.3 derivations — error-correction signals
+    backspace_count: int = 0
+    backspace_iats: tuple[float, ...] = field(default_factory=tuple)
+    kill_line_count: int = 0
+
 
 def _detect_paste_bursts(
     inputs: list[AsciinemaEvent],
@@ -104,6 +109,37 @@ def _detect_paste_bursts(
 
     _close()
     return tuple(bursts), paste_count
+
+
+_BACKSPACE_CHARS = ("\x7f", "\x08")
+_KILL_LINE_CHARS = ("\x15", "\x17")
+
+
+def _scan_correction_signals(
+    inputs: list[AsciinemaEvent],
+) -> tuple[int, tuple[float, ...], int]:
+    """Walk input events char-by-char, count backspaces / kill-lines /
+    timing IATs.
+
+    PII discipline: only counts and IATs leave this function — no
+    character data is retained or returned.
+    """
+    backspace_count = 0
+    kill_line_count = 0
+    iats: list[float] = []
+    last_non_bs_t: float | None = None
+    for t, _kind, data in inputs:
+        for c in data:
+            if c in _BACKSPACE_CHARS:
+                backspace_count += 1
+                if last_non_bs_t is not None:
+                    iats.append(max(0.0, t - last_non_bs_t))
+            elif c in _KILL_LINE_CHARS:
+                kill_line_count += 1
+                last_non_bs_t = t
+            else:
+                last_non_bs_t = t
+    return backspace_count, tuple(iats), kill_line_count
 
 
 def _split_typing_bursts(iats: tuple[float, ...]) -> tuple[tuple[float, ...], ...]:
@@ -200,6 +236,7 @@ def build_session_context(
     )
     paste_bursts, paste_count = _detect_paste_bursts(inputs)
     typing_bursts = _split_typing_bursts(iats)
+    backspace_count, backspace_iats, kill_line_count = _scan_correction_signals(inputs)
     commands = _segment_commands(inputs)
     inter_cmd_iats = tuple(
         max(0.0, commands[i + 1].start_ts - commands[i].end_ts)
@@ -226,4 +263,7 @@ def build_session_context(
         inter_cmd_iats=inter_cmd_iats,
         output_per_cmd=output_per_cmd,
         typing_bursts=typing_bursts,
+        backspace_count=backspace_count,
+        backspace_iats=backspace_iats,
+        kill_line_count=kill_line_count,
     )
