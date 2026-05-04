@@ -36,6 +36,8 @@ from decnet.profiler.behave_shell._thresholds import (
     PAUSE_CV_METRONOMIC_MAX,
     PLANNING_DEEP_MIN,
     PLANNING_REACTIVE_MIN,
+    TOOL_VOCAB_BROAD_MIN,
+    TOOL_VOCAB_NARROW_MAX,
 )
 
 
@@ -181,6 +183,35 @@ def feedback_loop_engagement(ctx: SessionContext) -> Iterator[Observation]:
         primitive="cognitive.feedback_loop_engagement",
         value=value,
         confidence=0.75,
+    )
+
+
+def tool_vocabulary(ctx: SessionContext) -> Iterator[Observation]:
+    """Emit ``cognitive.tool_vocabulary`` ∈ {narrow, moderate, broad}.
+
+    Absolute count of distinct first_token_hashes. Skip emission when
+    no commands exist; below the sample-size floor we still emit, but
+    at confidence 0.40 — a session with few commands but five distinct
+    tools is genuinely a moderate-vocabulary signal.
+    """
+    if not ctx.commands:
+        return
+    distinct = len({c.first_token_hash for c in ctx.commands})
+    if distinct <= TOOL_VOCAB_NARROW_MAX:
+        value = "narrow"
+    elif distinct >= TOOL_VOCAB_BROAD_MIN:
+        value = "broad"
+    else:
+        value = "moderate"
+    if len(ctx.commands) < MIN_COMMANDS_FOR_FULL_CONFIDENCE:
+        confidence = 0.40
+    else:
+        confidence = 0.70
+    yield make_observation(
+        ctx,
+        primitive="cognitive.tool_vocabulary",
+        value=value,
+        confidence=confidence,
     )
 
 

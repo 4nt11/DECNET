@@ -141,6 +141,20 @@ EXPLORATION_CHAOTIC_BACKTRACK_MIN: float = 0.30
 PLANNING_DEEP_MIN: float = 0.40
 PLANNING_REACTIVE_MIN: float = 0.50
 
+# ── cognitive.tool_vocabulary (Step D.4) ───────────────────────────────────
+# Absolute count of distinct first_token_hashes across the session.
+#
+#   distinct <= TOOL_VOCAB_NARROW_MAX  → narrow
+#   distinct >= TOOL_VOCAB_BROAD_MIN   → broad
+#   otherwise                          → moderate
+#
+# Absolute, not normalised. A 3-command session with 3 unique tools is
+# ``narrow`` not ``broad`` — the operator simply hasn't shown range yet.
+# Sample-size honesty drops confidence below MIN_COMMANDS_FOR_FULL_CONFIDENCE.
+# v0.1; D.8 re-tunes.
+TOOL_VOCAB_NARROW_MAX: int = 3
+TOOL_VOCAB_BROAD_MIN: int = 10
+
 # ── motor.keystroke_cadence (Step B.1) ──────────────────────────────────────
 # Typing bursts split at gaps > IKI_THINK_MAX_S so think-pauses between
 # commands don't inflate the within-burst CV. Mirrors the prototype's

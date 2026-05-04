@@ -17,6 +17,7 @@ from decnet.profiler.behave_shell._features.cognitive import (
     exploration_style,
     feedback_loop_engagement,
     planning_depth,
+    tool_vocabulary,
     inter_command_consistency,
     inter_command_latency_class,
 )
@@ -51,4 +52,5 @@ FEATURES: tuple[FeatureFn, ...] = (
     cognitive_load,
     exploration_style,
     planning_depth,
+    tool_vocabulary,
 )
