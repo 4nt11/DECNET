@@ -31,7 +31,7 @@ from decnet.profiler.behave_shell import extract_session
 from decnet.profiler.behave_shell._parse import parse_shard_line
 
 
-PHASE_ABCD_PRIMITIVES: frozenset[str] = frozenset({
+PHASE_ABCDE_PRIMITIVES: frozenset[str] = frozenset({
     # Phase A — calibration floor
     "motor.input_modality",
     "motor.paste_burst_rate",
@@ -59,6 +59,12 @@ PHASE_ABCD_PRIMITIVES: frozenset[str] = frozenset({
     # syntax error or missing-binary invocation just to satisfy the
     # test). They ARE included in the discrimination check below as
     # "if you have them, they should agree across-class".
+    # Phase E — temporal.* per-session subset (E.4 exit_behavior held
+    # pending Phase F.0's prompt parser; abrupt-vs-cleanup needs
+    # exit-code visibility to be honest).
+    "temporal.session_duration",
+    "temporal.escalation_pattern",
+    "temporal.lifecycle_markers.landing_ritual",
 })
 
 # Phase D primitives that are conditional on at least one errored
@@ -71,10 +77,11 @@ PHASE_D_CONDITIONAL_PRIMITIVES: frozenset[str] = frozenset({
     "cognitive.error_resilience.fallback_to_man",
 })
 
-# Backwards-compatible alias for any external import — the prior phase
-# locked in PHASE_ABC_PRIMITIVES; D widens it. Both names point at the
-# current binding set.
-PHASE_ABC_PRIMITIVES = PHASE_ABCD_PRIMITIVES
+# Backwards-compatible aliases for any external import — earlier phases
+# locked in narrower sets; later phases widen them. All names point at
+# the current binding set.
+PHASE_ABCD_PRIMITIVES = PHASE_ABCDE_PRIMITIVES
+PHASE_ABC_PRIMITIVES = PHASE_ABCDE_PRIMITIVES
 
 
 # (shard filename, class label)
@@ -141,7 +148,7 @@ def test_shard_emits_all_phase_a_primitives(
     obs = _all_observations(path)
     assert obs, f"{class_label}: extractor produced zero observations"
     seen = {o.primitive for o in obs}
-    missing = PHASE_ABCD_PRIMITIVES - seen
+    missing = PHASE_ABCDE_PRIMITIVES - seen
     assert not missing, (
         f"{class_label} ({shard_file}) missing primitives: "
         f"{sorted(missing)}"
@@ -178,7 +185,7 @@ def test_shards_are_discriminative_across_classes(
     # At least one primitive should produce different majority values
     # across the present classes.
     discriminative_primitives: list[str] = []
-    for prim in PHASE_ABCD_PRIMITIVES:
+    for prim in PHASE_ABCDE_PRIMITIVES:
         values = {by_class[c].get(prim) for c in by_class if prim in by_class[c]}
         if len(values) >= 2:
             discriminative_primitives.append(prim)

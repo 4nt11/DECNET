@@ -662,10 +662,10 @@ unchecked = no v0 tag.**
 - [x] D.8 cognitive.cognitive_load re-tune (gate)
 
 ### Phase E — `temporal.*` per-session
-- [ ] E.1 `temporal.session_duration`
-- [ ] E.2 `temporal.escalation_pattern`
-- [ ] E.3 `temporal.lifecycle_markers.landing_ritual`
-- [ ] E.4 `temporal.lifecycle_markers.exit_behavior`
+- [x] E.1 `temporal.session_duration`
+- [x] E.2 `temporal.escalation_pattern`
+- [x] E.3 `temporal.lifecycle_markers.landing_ritual`
+- [ ] E.4 `temporal.lifecycle_markers.exit_behavior` — **HELD** pending Phase F.0's prompt/exit-code parser. abrupt-vs-cleanup needs exit-code visibility to be honest; first-token membership alone over-fires on benign `rm` / `clear` mid-session and under-fires on `history -c` (flag-detection crosses the v0.1 PII boundary).
 
 ### Phase F — `environmental.*` (output-stream block)
 - [ ] F.0 Prompt-string parser (shared utility)
@@ -846,6 +846,49 @@ gate (a clean shard with zero errors can't honestly emit them).
 
 **Calibration grid widened:** the binding set now contains 17 names.
 Phase E (`temporal.*` per-session subset, 4 primitives) lands next.
+
+---
+
+## Phase E completion log
+
+Closed in 4 commits, **3 of 4 primitives shipping**. ANTI ruled E.4
+(`temporal.lifecycle_markers.exit_behavior`) **held** at planning
+time: the abrupt / graceful / cleanup distinction needs exit-code
+visibility, and that infrastructure lands as part of Phase F.0's
+prompt parser. First-token membership alone is too noisy in both
+directions (`rm` / `clear` mid-session over-fire as cleanup; `history
+-c` under-fires because flag detection crosses v0.1's PII boundary).
+E.4 unblocks once F.0's PS1 + exit-code sniff is wired.
+
+The three Phase E primitives that did ship:
+
+| Primitive | Confidence | Source signal |
+|---|---|---|
+| `temporal.session_duration` | 0.85 | `ctx.duration_s` bucketed against 60s / 600s / 3600s; direct measurement, not an inference. |
+| `temporal.escalation_pattern` | 0.40 / 0.60 | Non-overlapping windows of width `max(10s, duration_s/10)`; CV of per-window counts + zero-window fraction → bursty / sustained / erratic. |
+| `temporal.lifecycle_markers.landing_ritual` | 0.40 / 0.65 | Hits in first `N=5` commands against precomputed hashes of `{uname, id, whoami, pwd, hostname, w, who}`; `≥ K=2` hits → present. |
+
+Implementation note: the new `_features/temporal.py` module mirrors
+the `_features/cognitive.py` layout; recon-vocabulary hashes are
+precomputed at module load (single sha256 sweep at import) so the
+hot path is a frozenset membership test. `math.ceil`-based window
+counting in E.2 avoids a phantom trailing zero bin on clean
+divisions — a real bug that test_temporal_escalation_pattern.py's
+erratic-case fixture flushed out during initial run.
+
+PII discipline preserved across all three: only counts, durations,
+and category labels leave the helpers; no command bodies, no output
+text, no operator-identifying data.
+
+**Calibration grid widened:** the binding set now contains 20 names
+(`PHASE_ABCDE_PRIMITIVES`). The three Phase D `error_resilience.*`
+primitives remain conditional in `PHASE_D_CONDITIONAL_PRIMITIVES`
+(only fire on shards with at least one errored command). E.4 is
+explicitly **not** in either set — it must not be referenced as a
+required primitive until Phase F.0 lands.
+
+Phase F (`environmental.*` output-stream block, 5 primitives plus
+F.0's prompt parser) lands next; E.4 picks up at the tail of Phase F.
 
 ---
 
