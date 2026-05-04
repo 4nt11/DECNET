@@ -26,6 +26,7 @@ from decnet.profiler.behave_shell._features.cognitive import (
 )
 from decnet.profiler.behave_shell._features.environmental import (
     shell_type,
+    terminal_multiplexer,
 )
 from decnet.profiler.behave_shell._features.temporal import (
     escalation_pattern,
@@ -71,4 +72,5 @@ FEATURES: tuple[FeatureFn, ...] = (
     escalation_pattern,
     landing_ritual,
     shell_type,
+    terminal_multiplexer,
 )
