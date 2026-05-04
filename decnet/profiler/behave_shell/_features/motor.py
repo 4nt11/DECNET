@@ -28,6 +28,8 @@ from decnet.profiler.behave_shell._thresholds import (
     PASTE_RATE_OCCASIONAL_MIN,
     SHELL_MASTERY_BOUNDARY_BAND,
     SHELL_MASTERY_MIN_COMMANDS,
+    PIPE_CHAINING_DEEP_MEDIAN,
+    PIPE_CHAINING_MODERATE_MEDIAN,
     SHORTCUT_USAGE_HEAVY_MIN,
     SHORTCUT_USAGE_MODERATE_MIN,
     TAB_COMPLETION_HABITUAL_MIN,
@@ -363,6 +365,58 @@ def shortcut_usage(ctx: SessionContext) -> Iterator[Observation]:
     yield make_observation(
         ctx,
         primitive="motor.shell_mastery.shortcut_usage",
+        value=value,
+        confidence=confidence,
+    )
+
+
+def pipe_chaining_depth(ctx: SessionContext) -> Iterator[Observation]:
+    """Emit ``motor.shell_mastery.pipe_chaining_depth`` ∈ {shallow, moderate, deep}.
+
+    Metric: median ``|`` count across commands. Pipes are counted on
+    every byte regardless of whether they came from a paste-burst —
+    a pasted pipeline is still a pipeline the operator chose to run,
+    and the registry's intent is "what does this operator's typical
+    command look like?", not "did they type it themselves?".
+
+    Buckets (median):
+    * ≤ 1  → shallow (no pipe, or one-stage pipeline)
+    * == 2 → moderate
+    * ≥ 3  → deep
+
+    Confidence:
+    * < ``SHELL_MASTERY_MIN_COMMANDS`` → 0.40.
+    * Median within ±10% of either integer boundary (2 or 3) → 0.55.
+    * Otherwise → 0.70.
+
+    Skips emission when the session has no commands.
+    """
+    n = len(ctx.commands)
+    if n == 0:
+        return
+    pipes_per_cmd = sorted(c.pipe_count for c in ctx.commands)
+    median = statistics.median(pipes_per_cmd)
+
+    if median >= PIPE_CHAINING_DEEP_MEDIAN:
+        value = "deep"
+    elif median >= PIPE_CHAINING_MODERATE_MEDIAN:
+        value = "moderate"
+    else:
+        value = "shallow"
+
+    if n < SHELL_MASTERY_MIN_COMMANDS:
+        confidence = 0.40
+    elif (
+        _near(median, PIPE_CHAINING_MODERATE_MEDIAN)
+        or _near(median, PIPE_CHAINING_DEEP_MEDIAN)
+    ):
+        confidence = 0.55
+    else:
+        confidence = 0.70
+
+    yield make_observation(
+        ctx,
+        primitive="motor.shell_mastery.pipe_chaining_depth",
         value=value,
         confidence=confidence,
     )

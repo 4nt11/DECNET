@@ -47,6 +47,7 @@ PHASE_ABC_PRIMITIVES: frozenset[str] = frozenset({
     # Phase C — motor.shell_mastery.* (lands one primitive per commit)
     "motor.shell_mastery.tab_completion",
     "motor.shell_mastery.shortcut_usage",
+    "motor.shell_mastery.pipe_chaining_depth",
 })
 
 

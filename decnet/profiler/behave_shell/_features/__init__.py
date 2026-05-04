@@ -24,6 +24,7 @@ from decnet.profiler.behave_shell._features.motor import (
     keystroke_cadence,
     motor_stability,
     paste_burst_rate,
+    pipe_chaining_depth,
     shortcut_usage,
     tab_completion,
 )
@@ -39,6 +40,7 @@ FEATURES: tuple[FeatureFn, ...] = (
     command_chunking,
     tab_completion,
     shortcut_usage,
+    pipe_chaining_depth,
     inter_command_latency_class,
     command_branch_diversity,
     feedback_loop_engagement,

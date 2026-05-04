@@ -648,7 +648,7 @@ unchecked = no v0 tag.**
 ### Phase C — `motor.shell_mastery.*`
 - [x] C.1 `motor.shell_mastery.tab_completion`
 - [x] C.2 `motor.shell_mastery.shortcut_usage`
-- [ ] C.3 `motor.shell_mastery.pipe_chaining_depth`
+- [x] C.3 `motor.shell_mastery.pipe_chaining_depth`
 
 ### Phase D — `cognitive.*` completion
 - [ ] D.1 `cognitive.cognitive_load`
@@ -757,6 +757,40 @@ is pinned by ``test_pii_no_command_bodies_in_observation``.
 class shards still emit every Phase A+B primitive at least once.
 
 Phase C (``motor.shell_mastery.*``, 3 primitives) lands next.
+
+---
+
+## Phase C completion log
+
+Closed in 3 commits, one primitive per commit. The
+``motor.shell_mastery.*`` block now emits — three per-command counters
+(`tab_count`, `shortcut_count`, `pipe_count`) populated during the
+single-pass `_segment_commands()` sweep, fed to three independent
+classifiers.
+
+| Primitive | Confidence | Source signal |
+|---|---|---|
+| `motor.shell_mastery.tab_completion` | 0.40 / 0.55 / 0.75 | fraction of commands containing ≥1 ``\t``; <30% → occasional, ≥50% → habitual, 30%-50% gap rounds down |
+| `motor.shell_mastery.shortcut_usage` | 0.40 / 0.55 / 0.65 | total readline ctrl bytes (^A/^E/^W/^U/^R/^B/^F) per command; v0.1 thresholds 0.05 / 0.30 awaiting corpus calibration |
+| `motor.shell_mastery.pipe_chaining_depth` | 0.40 / 0.55 / 0.70 | median ``\|`` count across commands; 2 → moderate, ≥3 → deep; pasted pipelines count too |
+
+Implementation note: ANTI relaxed the Phase A/B PII discipline for
+this phase — full attacker profiles outweigh residual PII paranoia
+on a honeypot byte stream. Even so, only **integer counters** land
+on `Command`; the raw bytes are read once during the segmentation
+walk and discarded. No character data is retained or serialised.
+
+The ^U / ^W bytes that drive ``shortcut_usage`` also count toward
+``motor.error_correction``'s ``kill_line_count`` channel (Step B.3).
+These are independent measurements over the same byte stream — not
+double-counting, just two different questions about the same key.
+
+**Calibration grid widened:** ``PHASE_ABC_PRIMITIVES`` now contains
+13 names and is binding for every subsequent phase. The set rename
+from ``PHASE_AB_PRIMITIVES`` lands in C.1; downstream phases extend
+the same set without renaming again until v0.
+
+Phase D (``cognitive.*`` completion, 7+1 primitives) lands next.
 
 ---
 

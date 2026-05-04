@@ -142,6 +142,19 @@ TAB_COMPLETION_HABITUAL_MIN: float = 0.50
 SHORTCUT_USAGE_MODERATE_MIN: float = 0.05
 SHORTCUT_USAGE_HEAVY_MIN: float = 0.30
 
+# motor.shell_mastery.pipe_chaining_depth — median ``|`` count across
+# commands. Pipes are counted on every byte (typed AND pasted) — a
+# pasted pipeline still indicates pipeline fluency the operator chose
+# to execute. Registry buckets per BEHAVE-EXTRACTOR.md line 473:
+#   median ≤ 1  → shallow (no pipeline at all, or one stage)
+#   median == 2 → moderate
+#   median ≥ 3  → deep
+# Median is integer-valued (sum of ints over commands), so the
+# boundaries here are integer step boundaries; the proximity-band
+# logic uses integer equality.
+PIPE_CHAINING_MODERATE_MEDIAN: int = 2
+PIPE_CHAINING_DEEP_MEDIAN: int = 3
+
 # Sample-size floor below which Phase C primitives drop confidence to
 # 0.40 (sample-size honesty). Mirrors MIN_COMMANDS_FOR_FULL_CONFIDENCE
 # but is named separately so a future tune can move them independently.
