@@ -128,6 +128,19 @@ COGNITIVE_LOAD_MEDIUM_MAX: float = 0.67
 EXPLORATION_TARGETED_REP_MIN: float = 0.50
 EXPLORATION_CHAOTIC_BACKTRACK_MIN: float = 0.30
 
+# ── cognitive.planning_depth (Step D.3) ────────────────────────────────────
+# Distribution of inter-command IATs.
+#   deep_pause_fraction      = (count of inter_cmd_iats > IKI_THINK_MAX_S) / N
+#   reactive_pause_fraction  = (count of inter_cmd_iats <= INTER_CMD_INSTANT_MAX) / N
+#
+#   deep_pause_fraction      >= PLANNING_DEEP_MIN     → deep
+#   reactive_pause_fraction  >= PLANNING_REACTIVE_MIN → reactive
+#   otherwise                                         → shallow
+#
+# v0.1; D.8 re-tunes once D.1-D.7 are stable.
+PLANNING_DEEP_MIN: float = 0.40
+PLANNING_REACTIVE_MIN: float = 0.50
+
 # ── motor.keystroke_cadence (Step B.1) ──────────────────────────────────────
 # Typing bursts split at gaps > IKI_THINK_MAX_S so think-pauses between
 # commands don't inflate the within-burst CV. Mirrors the prototype's

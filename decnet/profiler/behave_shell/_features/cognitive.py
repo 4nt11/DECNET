@@ -25,6 +25,7 @@ from decnet.profiler.behave_shell._thresholds import (
     EXPLORATION_TARGETED_REP_MIN,
     FEEDBACK_CORRELATION_MIN,
     FEEDBACK_MIN_PAIRS,
+    IKI_THINK_MAX_S,
     INTER_CMD_DELIBERATE_MAX,
     INTER_CMD_INSTANT_MAX,
     INTER_CMD_LLM_HEAVYWEIGHT_MAX,
@@ -33,6 +34,8 @@ from decnet.profiler.behave_shell._thresholds import (
     MIN_COMMANDS_FOR_FULL_CONFIDENCE,
     PAUSE_CV_BIMODAL_MIN,
     PAUSE_CV_METRONOMIC_MAX,
+    PLANNING_DEEP_MIN,
+    PLANNING_REACTIVE_MIN,
 )
 
 
@@ -178,6 +181,50 @@ def feedback_loop_engagement(ctx: SessionContext) -> Iterator[Observation]:
         primitive="cognitive.feedback_loop_engagement",
         value=value,
         confidence=0.75,
+    )
+
+
+def planning_depth(ctx: SessionContext) -> Iterator[Observation]:
+    """Emit ``cognitive.planning_depth`` ∈ {deep, shallow, reactive}.
+
+    Read off the distribution of inter-command IATs:
+
+    * **deep** — many think-pauses (> ``IKI_THINK_MAX_S``). The
+      operator stops to think between commands.
+    * **reactive** — most pauses are sub-instant
+      (≤ ``INTER_CMD_INSTANT_MAX``). Knee-jerk pacing — automated
+      runner, prepared playbook, or an LLM with no internal latency.
+    * **shallow** — neither: mostly typing-speed pauses, no extended
+      contemplation.
+
+    Skip emission when no inter-command IATs exist (one or zero
+    commands); the registry has no ``unknown`` for this primitive.
+    """
+    iats = ctx.inter_cmd_iats
+    if not iats:
+        return
+    n = len(iats)
+    deep_count = sum(1 for x in iats if x > IKI_THINK_MAX_S)
+    reactive_count = sum(1 for x in iats if x <= INTER_CMD_INSTANT_MAX)
+    deep_frac = deep_count / n
+    reactive_frac = reactive_count / n
+
+    if deep_frac >= PLANNING_DEEP_MIN:
+        value = "deep"
+    elif reactive_frac >= PLANNING_REACTIVE_MIN:
+        value = "reactive"
+    else:
+        value = "shallow"
+
+    if len(ctx.commands) < MIN_COMMANDS_FOR_FULL_CONFIDENCE:
+        confidence = 0.40
+    else:
+        confidence = 0.65
+    yield make_observation(
+        ctx,
+        primitive="cognitive.planning_depth",
+        value=value,
+        confidence=confidence,
     )
 
 
