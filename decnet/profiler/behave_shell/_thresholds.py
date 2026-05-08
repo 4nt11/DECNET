@@ -364,3 +364,53 @@ SHELL_MASTERY_MIN_COMMANDS: int = 5
 # used by Phase C primitives. ±10% of the boundary value drops
 # confidence by 0.20 per BEHAVE-EXTRACTOR.md §"Threshold proximity".
 SHELL_MASTERY_BOUNDARY_BAND: float = 0.10
+
+# ── operational.objective (Step G.1) ───────────────────────────────────────
+# Below this many *classified* commands, skip emission — too few hits
+# in any intent set to honestly call a session's objective.
+INTENT_MIN_COMMANDS: int = 3
+# At/above this many classified commands, raise confidence from 0.40 to
+# 0.60. Both v0.1 numbers; corpus tuning lands later.
+INTENT_FULL_CONFIDENCE_MIN: int = 6
+
+# ── operational.cleanup_behavior (Step G.3) ───────────────────────────────
+# Window of trailing commands inspected for cleanup-family hashes.
+CLEANUP_TAIL_K: int = 5
+# Distinct cleanup-family hashes in the tail required to call ``thorough``.
+CLEANUP_THOROUGH_MIN_DISTINCT: int = 3
+
+# ── operational.multi_actor_indicators (Step G.4) ─────────────────────────
+# Total command floor — below this we skip emission (no honest first-half
+# / second-half split).
+MULTI_ACTOR_MIN_COMMANDS: int = 8
+# Each half needs at least this many commands to compute a stable median.
+MULTI_ACTOR_HALF_MIN_COMMANDS: int = 4
+# Relative delta between the two halves' median IATs that flips the
+# verdict to ``handoff_detected``.
+MULTI_ACTOR_HANDOFF_DELTA: float = 0.50
+
+# ── emotional_valence.* hard confidence cap (Phase G) ─────────────────────
+# Registry-pinned ceiling for the four soft primitives. Enforced inside
+# each ``emotional_valence.*`` feature function (not in make_observation).
+EMOTIONAL_VALENCE_CONFIDENCE_CAP: float = 0.50
+
+# ── emotional_valence.valence (Step G.5) ──────────────────────────────────
+VALENCE_MIN_TYPED_CHARS: int = 80
+VALENCE_FULL_CONFIDENCE_MIN: int = 200
+VALENCE_MIN_HITS: int = 2
+
+# ── emotional_valence.arousal (Step G.6) ──────────────────────────────────
+AROUSAL_FAST_IAT_S: float = 0.06
+AROUSAL_CALM_IAT_S: float = 0.30
+AROUSAL_MIN_IATS: int = 30
+AROUSAL_CAPS_RUN_MIN: int = 5
+AROUSAL_BANG_RUN_MIN: int = 3
+
+# ── emotional_valence.stress_response (Step G.7) ──────────────────────────
+STRESS_EUSTRESS_RATIO_MIN: float = 1.20
+STRESS_DISTRESS_RATIO_MIN: float = 1.20
+STRESS_MIN_ERRORED_WITH_IATS: int = 2
+
+# ── emotional_valence.frustration_venting (Step G.8) ──────────────────────
+FRUST_VENT_MIN_TYPED_CHARS: int = 30
+FRUST_VENT_FULL_CONFIDENCE_MIN: int = 200

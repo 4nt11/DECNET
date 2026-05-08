@@ -31,6 +31,9 @@ from decnet.profiler.behave_shell._features.environmental import (
     shell_type,
     terminal_multiplexer,
 )
+from decnet.profiler.behave_shell._features.operational import (
+    objective,
+)
 from decnet.profiler.behave_shell._features.temporal import (
     escalation_pattern,
     exit_behavior,
@@ -81,4 +84,5 @@ FEATURES: tuple[FeatureFn, ...] = (
     locale,
     keyboard_layout,
     numpad_usage,
+    objective,
 )
