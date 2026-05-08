@@ -26,6 +26,9 @@ from decnet.profiler.behave_shell._thresholds import (
     AROUSAL_FAST_IAT_S,
     AROUSAL_MIN_IATS,
     EMOTIONAL_VALENCE_CONFIDENCE_CAP,
+    STRESS_DISTRESS_RATIO_MIN,
+    STRESS_EUSTRESS_RATIO_MIN,
+    STRESS_MIN_ERRORED_WITH_IATS,
     VALENCE_FULL_CONFIDENCE_MIN,
     VALENCE_MIN_HITS,
     VALENCE_MIN_TYPED_CHARS,
@@ -114,6 +117,72 @@ def arousal(ctx: SessionContext) -> Iterator[Observation]:
     yield make_observation(
         ctx,
         primitive="emotional_valence.arousal",
+        value=value,
+        confidence=_cap_soft(raw),
+    )
+
+
+def stress_response(ctx: SessionContext) -> Iterator[Observation]:
+    """Emit ``emotional_valence.stress_response`` ∈ {none,
+    eustress_positive, distress_negative}.
+
+    Compare typing speed *after* an errored command vs the session
+    baseline:
+
+    * For each errored command at index ``i``, gather
+      ``ctx.intra_command_iats[i+1]`` — the response command's intra-
+      command IATs.
+    * Baseline: median of all intra-command IATs from commands NOT
+      immediately following an errored command.
+
+    Verdict by ratio of post-error / baseline:
+
+    * ratio ≥ ``STRESS_EUSTRESS_RATIO_MIN`` (1.20) → ``eustress_positive``
+      (slowed down — recovered, deliberate).
+    * ratio ≤ ``1 / STRESS_DISTRESS_RATIO_MIN`` → ``distress_negative``
+      (sped up — anxious, mashing keys).
+    * otherwise → ``none``.
+
+    Skip emission when no commands. Confidence hard-capped at 0.50;
+    0.30 below ``STRESS_MIN_ERRORED_WITH_IATS`` (2) errored commands
+    with non-empty post-error IAT data.
+    """
+    if not ctx.commands:
+        return
+    post_error_iats: list[float] = []
+    baseline_iats: list[float] = []
+    n = len(ctx.commands)
+    qualifying_errored = 0
+    for i, cmd in enumerate(ctx.commands):
+        is_post_error = i > 0 and ctx.commands[i - 1].errored
+        iats = list(ctx.intra_command_iats[i]) if i < len(ctx.intra_command_iats) else []
+        if is_post_error:
+            if iats:
+                qualifying_errored += 1
+                post_error_iats.extend(iats)
+        else:
+            baseline_iats.extend(iats)
+        # mypy: silence unused-var on n / cmd (kept for clarity)
+        _ = (n, cmd)
+    if not post_error_iats or not baseline_iats:
+        value = "none"
+    else:
+        med_post = statistics.median(post_error_iats)
+        med_base = statistics.median(baseline_iats)
+        if med_base <= 0.0:
+            value = "none"
+        else:
+            ratio = med_post / med_base
+            if ratio >= STRESS_EUSTRESS_RATIO_MIN:
+                value = "eustress_positive"
+            elif ratio <= 1.0 / STRESS_DISTRESS_RATIO_MIN:
+                value = "distress_negative"
+            else:
+                value = "none"
+    raw = 0.50 if qualifying_errored >= STRESS_MIN_ERRORED_WITH_IATS else 0.30
+    yield make_observation(
+        ctx,
+        primitive="emotional_valence.stress_response",
         value=value,
         confidence=_cap_soft(raw),
     )

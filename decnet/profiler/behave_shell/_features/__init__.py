@@ -26,6 +26,7 @@ from decnet.profiler.behave_shell._features.cognitive import (
 )
 from decnet.profiler.behave_shell._features.emotional_valence import (
     arousal,
+    stress_response,
     valence,
 )
 from decnet.profiler.behave_shell._features.environmental import (
@@ -97,4 +98,5 @@ FEATURES: tuple[FeatureFn, ...] = (
     multi_actor_indicators,
     valence,
     arousal,
+    stress_response,
 )
