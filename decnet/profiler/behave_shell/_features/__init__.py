@@ -33,6 +33,7 @@ from decnet.profiler.behave_shell._features.environmental import (
 )
 from decnet.profiler.behave_shell._features.operational import (
     cleanup_behavior,
+    multi_actor_indicators,
     objective,
     opsec_discipline,
 )
@@ -89,4 +90,5 @@ FEATURES: tuple[FeatureFn, ...] = (
     objective,
     opsec_discipline,
     cleanup_behavior,
+    multi_actor_indicators,
 )

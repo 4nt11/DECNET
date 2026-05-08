@@ -8,6 +8,7 @@ Step G.4: ``operational.multi_actor_indicators`` (lands later).
 from __future__ import annotations
 
 import collections
+import statistics
 from typing import Iterator
 
 from decnet_behave_core.spec.envelope import Observation
@@ -28,6 +29,9 @@ from decnet.profiler.behave_shell._thresholds import (
     INTENT_FULL_CONFIDENCE_MIN,
     INTENT_MIN_COMMANDS,
     MIN_COMMANDS_FOR_FULL_CONFIDENCE,
+    MULTI_ACTOR_HALF_MIN_COMMANDS,
+    MULTI_ACTOR_HANDOFF_DELTA,
+    MULTI_ACTOR_MIN_COMMANDS,
 )
 
 
@@ -148,6 +152,67 @@ def cleanup_behavior(ctx: SessionContext) -> Iterator[Observation]:
     yield make_observation(
         ctx,
         primitive="operational.cleanup_behavior",
+        value=value,
+        confidence=confidence,
+    )
+
+
+def multi_actor_indicators(ctx: SessionContext) -> Iterator[Observation]:
+    """Emit ``operational.multi_actor_indicators`` ∈ {solo, handoff_detected}.
+
+    Compare first-half vs second-half typing rhythm. ``team_coordinated``
+    is **never** emitted from a single session — it's Tier B and lands
+    in the attribution engine.
+
+    Algorithm:
+    * Split commands at the temporal midpoint
+      (``t_start + duration_s / 2``).
+    * Flatten ``ctx.intra_command_iats`` per half.
+    * If both halves have ≥ ``MULTI_ACTOR_HALF_MIN_COMMANDS`` (4)
+      commands AND
+      ``abs(median_a - median_b) / max(median_a, median_b)`` >
+      ``MULTI_ACTOR_HANDOFF_DELTA`` (0.5) → ``handoff_detected``.
+    * Else → ``solo``.
+
+    Skip emission when fewer than ``MULTI_ACTOR_MIN_COMMANDS`` (8)
+    total. Confidence 0.40 (single-session is a weak handoff signal);
+    0.55 when both halves are ≥ 8 commands.
+    """
+    n = len(ctx.commands)
+    if n < MULTI_ACTOR_MIN_COMMANDS:
+        return
+    midpoint = ctx.t_start + ctx.duration_s / 2.0
+    a_iats: list[float] = []
+    b_iats: list[float] = []
+    a_count = 0
+    b_count = 0
+    for cmd, iats in zip(ctx.commands, ctx.intra_command_iats):
+        if cmd.start_ts < midpoint:
+            a_iats.extend(iats)
+            a_count += 1
+        else:
+            b_iats.extend(iats)
+            b_count += 1
+    if a_count < MULTI_ACTOR_HALF_MIN_COMMANDS or b_count < MULTI_ACTOR_HALF_MIN_COMMANDS:
+        value = "solo"
+    elif not a_iats or not b_iats:
+        value = "solo"
+    else:
+        median_a = statistics.median(a_iats)
+        median_b = statistics.median(b_iats)
+        denom = max(median_a, median_b)
+        if denom > 0.0:
+            delta = abs(median_a - median_b) / denom
+            value = "handoff_detected" if delta > MULTI_ACTOR_HANDOFF_DELTA else "solo"
+        else:
+            value = "solo"
+    if a_count >= 8 and b_count >= 8:
+        confidence = 0.55
+    else:
+        confidence = 0.40
+    yield make_observation(
+        ctx,
+        primitive="operational.multi_actor_indicators",
         value=value,
         confidence=confidence,
     )
