@@ -26,6 +26,8 @@ from decnet.profiler.behave_shell._thresholds import (
     AROUSAL_FAST_IAT_S,
     AROUSAL_MIN_IATS,
     EMOTIONAL_VALENCE_CONFIDENCE_CAP,
+    FRUST_VENT_FULL_CONFIDENCE_MIN,
+    FRUST_VENT_MIN_TYPED_CHARS,
     STRESS_DISTRESS_RATIO_MIN,
     STRESS_EUSTRESS_RATIO_MIN,
     STRESS_MIN_ERRORED_WITH_IATS,
@@ -183,6 +185,39 @@ def stress_response(ctx: SessionContext) -> Iterator[Observation]:
     yield make_observation(
         ctx,
         primitive="emotional_valence.stress_response",
+        value=value,
+        confidence=_cap_soft(raw),
+    )
+
+
+def frustration_venting(ctx: SessionContext) -> Iterator[Observation]:
+    """Emit ``emotional_valence.frustration_venting`` ∈ {none, detected}.
+
+    Pure read of ``ctx.obscenity_hits`` (G.0 lexical counter):
+
+    * ``detected`` — ``obscenity_hits ≥ 1``.
+    * ``none`` — zero hits.
+
+    Skip emission below ``FRUST_VENT_MIN_TYPED_CHARS`` (30) typed
+    letters — too thin to call cleanly absent. Confidence hard-capped
+    at 0.50; 0.40 when ``detected``; 0.50 only when ``none`` AND
+    typed_letter_count ≥ ``FRUST_VENT_FULL_CONFIDENCE_MIN`` (200);
+    0.30 otherwise.
+    """
+    if ctx.typed_letter_count < FRUST_VENT_MIN_TYPED_CHARS:
+        return
+    if ctx.obscenity_hits >= 1:
+        value = "detected"
+        raw = 0.40
+    else:
+        value = "none"
+        if ctx.typed_letter_count >= FRUST_VENT_FULL_CONFIDENCE_MIN:
+            raw = 0.50
+        else:
+            raw = 0.30
+    yield make_observation(
+        ctx,
+        primitive="emotional_valence.frustration_venting",
         value=value,
         confidence=_cap_soft(raw),
     )
