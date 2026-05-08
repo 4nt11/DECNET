@@ -254,3 +254,54 @@ def test_publish_failure_is_swallowed() -> None:
     agg.add_event(_cmd("2026-05-02T06:22:50", "whoami"))
     # Should NOT raise.
     agg.add_event(_session_recorded("2026-05-02T06:23:00", sid="s1"))
+
+
+# ── shard_path enrichment (W.1) ─────────────────────────────────────
+
+
+def test_session_ended_payload_carries_shard_path_when_shard_exists(
+    aggregator: _SessionAggregator,
+    captured_publishes: list[tuple[str, dict[str, Any], str]],
+    tmp_path,
+    monkeypatch,
+) -> None:
+    """When find_shard_with_sid resolves, the payload carries the path."""
+    import json
+    from decnet.artifacts import shards
+
+    sid = "11111111-2222-3333-4444-555555555555"
+    shard_dir = tmp_path / "omega-decky" / "ssh" / "transcripts"
+    shard_dir.mkdir(parents=True)
+    shard = shard_dir / "sessions-2026-05-02.jsonl"
+    shard.write_text(json.dumps({"sid": sid, "hdr": {}}) + "\n")
+
+    monkeypatch.setattr(shards, "ARTIFACTS_ROOT", tmp_path)
+    shards._INDEX_CACHE.clear()
+
+    aggregator.add_event(_cmd("2026-05-02T06:22:48", "whoami"))
+    aggregator.add_event(_session_recorded(
+        "2026-05-02T06:23:00", sid=sid, duration_s=120.0,
+    ))
+
+    payload = captured_publishes[0][1]
+    assert payload["shard_path"] == str(shard.resolve())
+
+
+def test_session_ended_payload_shard_path_none_when_unresolvable(
+    aggregator: _SessionAggregator,
+    captured_publishes: list[tuple[str, dict[str, Any], str]],
+    tmp_path,
+    monkeypatch,
+) -> None:
+    """No shard on disk → shard_path is None (consumer skips honestly)."""
+    from decnet.artifacts import shards
+    monkeypatch.setattr(shards, "ARTIFACTS_ROOT", tmp_path)
+    shards._INDEX_CACHE.clear()
+
+    aggregator.add_event(_cmd("2026-05-02T06:22:48", "whoami"))
+    aggregator.add_event(_session_recorded(
+        "2026-05-02T06:23:00", sid="ffffffff-eeee-dddd-cccc-bbbbbbbbbbbb",
+    ))
+
+    payload = captured_publishes[0][1]
+    assert payload["shard_path"] is None

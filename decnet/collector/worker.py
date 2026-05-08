@@ -18,6 +18,7 @@ from datetime import datetime
 from pathlib import Path
 from typing import Any, Callable, Optional
 
+from decnet.artifacts.shards import find_shard_with_sid
 from decnet.bus import topics as _topics
 from decnet.bus.factory import get_bus
 from decnet.bus.publish import (
@@ -304,6 +305,25 @@ class _SessionAggregator:
                     entry[key] = value
             commands.append(entry)
 
+        # Resolve the asciinema shard so consumers (notably the BEHAVE-SHELL
+        # session-ended handler in the profiler worker) don't each have to
+        # disk-reach independently. Shard fields can be malformed or the
+        # transcripts dir may not exist yet — find_shard_with_sid returns
+        # None in those cases and we publish ``shard_path: None`` so the
+        # consumer skips honestly. Additive field; existing TTP consumers
+        # ignore it.
+        shard_path: str | None = None
+        if sid and decky and service:
+            try:
+                resolved = find_shard_with_sid(decky, service, sid)
+            except (ValueError, OSError, PermissionError) as exc:
+                logger.debug(
+                    "collector: shard resolve failed for sid=%s: %s", sid, exc,
+                )
+                resolved = None
+            if resolved is not None:
+                shard_path = str(resolved)
+
         payload: dict[str, Any] = {
             "session_id": sid or None,
             "attacker_uuid": None,  # consumer resolves via repo
@@ -313,6 +333,7 @@ class _SessionAggregator:
             "ended_at": ended_at.isoformat(),
             "duration_s": duration_s,
             "commands": commands,
+            "shard_path": shard_path,
         }
         topic = _topics.attacker(_topics.ATTACKER_SESSION_ENDED)
         try:
