@@ -33,6 +33,7 @@ from decnet.profiler.behave_shell._features.environmental import (
 )
 from decnet.profiler.behave_shell._features.operational import (
     objective,
+    opsec_discipline,
 )
 from decnet.profiler.behave_shell._features.temporal import (
     escalation_pattern,
@@ -85,4 +86,5 @@ FEATURES: tuple[FeatureFn, ...] = (
     keyboard_layout,
     numpad_usage,
     objective,
+    opsec_discipline,
 )

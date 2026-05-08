@@ -24,7 +24,7 @@ interface ConfigData {
 const Config: React.FC = () => {
   const [config, setConfig] = useState<ConfigData | null>(null);
   const [loading, setLoading] = useState(true);
-  const [activeTab, setActiveTab] = useState<'limits' | 'users' | 'globals' | 'appearance' | 'workers'>('limits');
+  const [activeTab, setActiveTab] = useState<'limits' | 'users' | 'globals' | 'appearance' | 'workers' | 'ttp'>('limits');
   const [accent, setAccent] = useState<'matrix' | 'violet'>(() => {
     try {
       const raw = localStorage.getItem('decnet_tweaks');

@@ -31,7 +31,7 @@ class Topology(SQLModel, table=True):
     id: str = Field(default_factory=lambda: str(uuid4()), primary_key=True)
     name: str = Field(index=True, unique=True)
     mode: Literal["unihost", "agent"] = Field(
-        default="unihost", sa_column=Column("mode", String, nullable=False, default="unihost")
+        default="unihost", sa_column=Column("mode", String(16), nullable=False, default="unihost")
     )
     # When ``mode == "agent"``, pins this topology to a specific enrolled
     # worker.  ``None`` for unihost topologies (master-local deploy).
@@ -46,7 +46,7 @@ class Topology(SQLModel, table=True):
         "pending", "deploying", "active", "degraded", "failed", "tearing_down", "torn_down"
     ] = Field(
         default="pending",
-        sa_column=Column("status", String, nullable=False, default="pending", index=True),
+        sa_column=Column("status", String(32), nullable=False, default="pending", index=True),
     )
     status_changed_at: datetime = Field(
         default_factory=lambda: datetime.now(timezone.utc)
@@ -121,7 +121,7 @@ class TopologyDecky(SQLModel, table=True):
         "pending", "running", "failed", "torn_down", "degraded", "tearing_down", "teardown_failed"
     ] = Field(
         default="pending",
-        sa_column=Column("state", String, nullable=False, default="pending", index=True),
+        sa_column=Column("state", String(32), nullable=False, default="pending", index=True),
     )
     last_error: Optional[str] = Field(
         default=None, sa_column=Column("last_error", Text, nullable=True)
@@ -186,13 +186,13 @@ class TopologyMutation(SQLModel, table=True):
     )
     id: str = Field(default_factory=lambda: str(uuid4()), primary_key=True)
     topology_id: str = Field(foreign_key="topologies.id", index=True)
-    op: _MUTATION_OPS = Field(sa_column=Column("op", String, nullable=False, index=True))
+    op: _MUTATION_OPS = Field(sa_column=Column("op", String(32), nullable=False, index=True))
     payload: str = Field(
         sa_column=Column("payload", _BIG_TEXT, nullable=False, default="{}")
     )
     state: Literal["pending", "applying", "applied", "failed"] = Field(
         default="pending",
-        sa_column=Column("state", String, nullable=False, default="pending", index=True),
+        sa_column=Column("state", String(32), nullable=False, default="pending", index=True),
     )
     requested_at: datetime = Field(
         default_factory=lambda: datetime.now(timezone.utc), index=True

@@ -14,10 +14,18 @@ from decnet_behave_core.spec.envelope import Observation
 
 from decnet.profiler.behave_shell._ctx import SessionContext
 from decnet.profiler.behave_shell._features._emit import make_observation
-from decnet.profiler.behave_shell._intent import classify_intent
+from decnet.profiler.behave_shell._features.temporal import (
+    _CLEANUP_TOKEN_HASHES,
+)
+from decnet.profiler.behave_shell._intent import (
+    OPSEC_HISTORY_TOKENS,
+    classify_intent,
+)
 from decnet.profiler.behave_shell._thresholds import (
+    EXIT_BEHAVIOR_LOOKBACK_K,
     INTENT_FULL_CONFIDENCE_MIN,
     INTENT_MIN_COMMANDS,
+    MIN_COMMANDS_FOR_FULL_CONFIDENCE,
 )
 
 
@@ -57,6 +65,47 @@ def objective(ctx: SessionContext) -> Iterator[Observation]:
     yield make_observation(
         ctx,
         primitive="operational.objective",
+        value=value,
+        confidence=confidence,
+    )
+
+
+def opsec_discipline(ctx: SessionContext) -> Iterator[Observation]:
+    """Emit ``operational.opsec_discipline`` ∈ {careful, careless, learning}.
+
+    * ``careful`` — operator hits ``OPSEC_HISTORY_TOKENS`` AND the
+      tail-K (=``EXIT_BEHAVIOR_LOOKBACK_K``) commands include cleanup
+      vocabulary (locally re-derived; we do **not** read prior
+      observations).
+    * ``learning`` — operator hits ``OPSEC_HISTORY_TOKENS`` but does
+      NOT close with cleanup tokens. Half-discipline.
+    * ``careless`` — no ``OPSEC_HISTORY_TOKENS`` hits at all.
+
+    Skip emission when no commands. Confidence 0.45 (small lexicon,
+    soft); 0.30 below ``MIN_COMMANDS_FOR_FULL_CONFIDENCE`` (=5).
+    """
+    if not ctx.commands:
+        return
+    has_history = any(
+        c.first_token_hash in OPSEC_HISTORY_TOKENS for c in ctx.commands
+    )
+    tail = ctx.commands[-EXIT_BEHAVIOR_LOOKBACK_K:]
+    has_cleanup_tail = any(
+        c.first_token_hash in _CLEANUP_TOKEN_HASHES for c in tail
+    )
+    if not has_history:
+        value = "careless"
+    elif has_cleanup_tail:
+        value = "careful"
+    else:
+        value = "learning"
+    if len(ctx.commands) < MIN_COMMANDS_FOR_FULL_CONFIDENCE:
+        confidence = 0.30
+    else:
+        confidence = 0.45
+    yield make_observation(
+        ctx,
+        primitive="operational.opsec_discipline",
         value=value,
         confidence=confidence,
     )
