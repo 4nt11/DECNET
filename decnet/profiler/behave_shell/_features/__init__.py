@@ -32,6 +32,7 @@ from decnet.profiler.behave_shell._features.environmental import (
     terminal_multiplexer,
 )
 from decnet.profiler.behave_shell._features.operational import (
+    cleanup_behavior,
     objective,
     opsec_discipline,
 )
@@ -87,4 +88,5 @@ FEATURES: tuple[FeatureFn, ...] = (
     numpad_usage,
     objective,
     opsec_discipline,
+    cleanup_behavior,
 )

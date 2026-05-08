@@ -22,6 +22,8 @@ from decnet.profiler.behave_shell._intent import (
     classify_intent,
 )
 from decnet.profiler.behave_shell._thresholds import (
+    CLEANUP_TAIL_K,
+    CLEANUP_THOROUGH_MIN_DISTINCT,
     EXIT_BEHAVIOR_LOOKBACK_K,
     INTENT_FULL_CONFIDENCE_MIN,
     INTENT_MIN_COMMANDS,
@@ -106,6 +108,46 @@ def opsec_discipline(ctx: SessionContext) -> Iterator[Observation]:
     yield make_observation(
         ctx,
         primitive="operational.opsec_discipline",
+        value=value,
+        confidence=confidence,
+    )
+
+
+def cleanup_behavior(ctx: SessionContext) -> Iterator[Observation]:
+    """Emit ``operational.cleanup_behavior`` ∈ {thorough, partial, none}.
+
+    Inspect the last ``CLEANUP_TAIL_K`` (=5) commands. Count distinct
+    cleanup-family hashes (``history`` / ``unset`` / ``rm`` / ``shred``
+    / ``clear`` / ``kill``) in that window:
+
+    * ``thorough`` — ≥ ``CLEANUP_THOROUGH_MIN_DISTINCT`` (3) distinct
+      cleanup tokens.
+    * ``partial`` — 1-2 distinct cleanup tokens.
+    * ``none`` — zero hits.
+
+    Adjacent to E.4's ``exit_behavior=cleanup`` emission — E.4 is
+    binary "did it happen", G.3 graduates intensity. Both ride.
+
+    Skip emission when no commands. Confidence 0.55 when commands ≥ 8;
+    0.35 below.
+    """
+    if not ctx.commands:
+        return
+    tail = ctx.commands[-CLEANUP_TAIL_K:]
+    distinct = {
+        c.first_token_hash for c in tail
+        if c.first_token_hash in _CLEANUP_TOKEN_HASHES
+    }
+    if len(distinct) >= CLEANUP_THOROUGH_MIN_DISTINCT:
+        value = "thorough"
+    elif len(distinct) >= 1:
+        value = "partial"
+    else:
+        value = "none"
+    confidence = 0.55 if len(ctx.commands) >= 8 else 0.35
+    yield make_observation(
+        ctx,
+        primitive="operational.cleanup_behavior",
         value=value,
         confidence=confidence,
     )
