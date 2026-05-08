@@ -690,15 +690,15 @@ unchecked = no v0 tag.**
 - [x] F.5 `environmental.numpad_usage`
 
 ### Phase G — `operational.*` + `emotional_valence.*` (soft block)
-- [ ] G.0 Command-intent lexicon (`_features/_intent.py`)
-- [ ] G.1 `operational.objective`
-- [ ] G.2 `operational.opsec_discipline`
-- [ ] G.3 `operational.cleanup_behavior`
-- [ ] G.4 `operational.multi_actor_indicators`
-- [ ] G.5 `emotional_valence.valence` (cap 0.5)
-- [ ] G.6 `emotional_valence.arousal` (cap 0.5)
-- [ ] G.7 `emotional_valence.stress_response` (cap 0.5)
-- [ ] G.8 `emotional_valence.frustration_venting` (cap 0.5)
+- [x] G.0 Command-intent lexicon (`_intent.py`, **package-root** not `_features/`, to avoid the `_features/__init__.py` ↔ `_ctx.py` import cycle) + typed-text counter pass extension
+- [x] G.1 `operational.objective`
+- [x] G.2 `operational.opsec_discipline`
+- [x] G.3 `operational.cleanup_behavior`
+- [x] G.4 `operational.multi_actor_indicators` (`team_coordinated` is Tier B; never emitted from a single session)
+- [x] G.5 `emotional_valence.valence` (cap 0.5)
+- [x] G.6 `emotional_valence.arousal` (cap 0.5)
+- [x] G.7 `emotional_valence.stress_response` (cap 0.5)
+- [x] G.8 `emotional_valence.frustration_venting` (cap 0.5)
 
 ### Phase H — Full-corpus lockdown + v0 release
 - [ ] H.1 Registry-coverage test
@@ -953,6 +953,110 @@ since it only fires on shards containing an env / locale dump.
 (`operational.*` + `emotional_valence.*`, 8 primitives + the
 command-intent lexicon) lands next. Phase H is full-corpus lockdown
 + v0 release.
+
+## Phase G completion log
+
+Phase G ships the soft block — four `operational.*` primitives and
+four `emotional_valence.*` primitives. All four `emotional_valence.*`
+ride a hard 0.5 confidence cap enforced inside the feature functions
+themselves (a local `_cap_soft()` helper in
+`_features/emotional_valence.py`); sample-size honesty can pull
+confidence below 0.5, but never above.
+
+**Commits (9):**
+
+* G.0 — `decnet/profiler/behave_shell/_intent.py` ships five
+  precomputed first-token-hash sets (`recon` / `exfil` / `persistence`
+  / `lateral` / `destructive`) with documented precedence
+  (`destructive > persistence > exfil > lateral > recon`), an
+  `OPSEC_HISTORY_TOKENS` set, and three lexeme sets (positive /
+  negative / obscenity). The same single-pass walk in
+  `_typed_char_histograms()` now also maintains five integer counters
+  (`obscenity_hits`, `positive_lex_hits`, `negative_lex_hits`,
+  `caps_run_max`, `bang_run_max`) — ANTI's F-phase PII relaxation
+  carries forward as fixed-vocabulary integer counters. Stop words
+  that collide with registry value vocabulary (`no` / `hell` / `ok`)
+  are deliberately excluded; the PII regression test catches such
+  collisions. **Important:** `_intent.py` lives at the **package root**,
+  not under `_features/`, because Python imports the package's
+  `__init__.py` whenever a submodule is loaded — placing intent under
+  `_features/` would have triggered the `_features/__init__.py` →
+  `_ctx.py` → `_features._intent` → `_features/__init__.py` cycle.
+* G.1 — `operational.objective`. Per-command intent classification
+  via `classify_intent()`; majority vote across classified commands.
+  Skip emission below `INTENT_MIN_COMMANDS=3` classified hits.
+  Confidence 0.40 below `INTENT_FULL_CONFIDENCE_MIN=6`, 0.60 above.
+* G.2 — `operational.opsec_discipline`. Three buckets driven by
+  `OPSEC_HISTORY_TOKENS` hits and tail-K (`EXIT_BEHAVIOR_LOOKBACK_K=3`)
+  cleanup vocabulary co-occurrence. `_CLEANUP_TOKEN_HASHES` is
+  re-imported from `_features/temporal.py` rather than redefined.
+  Confidence 0.45; 0.30 below `MIN_COMMANDS_FOR_FULL_CONFIDENCE=5`.
+* G.3 — `operational.cleanup_behavior`. Three buckets over the
+  tail-`CLEANUP_TAIL_K=5` commands by distinct cleanup-family hash
+  count; `thorough` ≥ 3 distinct, `partial` 1-2, `none` 0. Adjacent
+  to E.4's binary `exit_behavior=cleanup` — both ride. Confidence
+  0.55 above 8 commands, 0.35 below.
+* G.4 — `operational.multi_actor_indicators`. First-half vs
+  second-half median intra-command IAT comparison; `handoff_detected`
+  when both halves have ≥ `MULTI_ACTOR_HALF_MIN_COMMANDS=4` AND the
+  relative delta exceeds `MULTI_ACTOR_HANDOFF_DELTA=0.5`. Skip below
+  `MULTI_ACTOR_MIN_COMMANDS=8` total commands.
+  **`team_coordinated` is Tier B (cross-session) and never emitted
+  from a single session.** Confidence 0.55 with both halves ≥ 8;
+  0.40 otherwise.
+* G.5 — `emotional_valence.valence`. Pure ratio over G.0 lexical
+  counters: `positive` if `positive_lex_hits` outweighs the
+  `negative + obscenity` sum AND ≥ `VALENCE_MIN_HITS=2`; symmetric
+  for `negative`; else `neutral`. Skip below
+  `VALENCE_MIN_TYPED_CHARS=80`. Capped at 0.5; 0.30 below
+  `VALENCE_FULL_CONFIDENCE_MIN=200`.
+* G.6 — `emotional_valence.arousal`. Three buckets driven by typing
+  speed (fastest/slowest qualifying burst median IAT) AND the G.0
+  caps-run / bang-run counters. `high_agitated` fires when caps_run ≥
+  5 OR bang_run ≥ 3 OR fastest median IAT < 0.06s with ≥ 30 IATs;
+  `low_calm` when slowest median IAT > 0.30s with ≥ 30 IATs; else
+  `medium_engaged`. Capped at 0.5; 0.30 below `AROUSAL_MIN_IATS=30`.
+* G.7 — `emotional_valence.stress_response`. Compare median post-error
+  intra-command IATs (commands immediately following an errored one)
+  to the baseline (commands not following an error). `eustress_positive`
+  when ratio ≥ 1.20; `distress_negative` when ratio ≤ 1/1.20; else
+  `none`. Capped at 0.5; 0.30 below
+  `STRESS_MIN_ERRORED_WITH_IATS=2` qualifying errored commands.
+* G.8 — `emotional_valence.frustration_venting`. Binary read of
+  `ctx.obscenity_hits`: `detected` if ≥ 1, `none` otherwise. Skip
+  below `FRUST_VENT_MIN_TYPED_CHARS=30`. Capped at 0.5; 0.40 when
+  detected, 0.50 only when cleanly absent over ≥ 200 typed letters,
+  0.30 otherwise.
+
+**Calibration grid widened:** the binding set is now
+`PHASE_ABCDEFG_PRIMITIVES` (28 names in the per-shard hard gate).
+Older `PHASE_ABCDEF_PRIMITIVES` remains as a backwards-compat alias.
+Three new Phase G primitives ride the hard gate
+(`operational.opsec_discipline`, `operational.cleanup_behavior`,
+`emotional_valence.stress_response`); the rest of Phase G ride a new
+`PHASE_G_CONDITIONAL_PRIMITIVES` set because their sample-size floors
+(≥ 3 classified commands for `objective`, ≥ 8 commands for
+`multi_actor_indicators`, typing bursts for `arousal`, typed-letter
+floors for `valence` and `frustration_venting`) make them legitimately
+absent from short shards.
+
+**Out-of-scope reaffirmed:** `team_coordinated` multi-actor value
+(Tier B); `--help` / `-h` flag detection (still v0.2 — only
+`first_token_hash` retained, not arg hashes); emotion above 0.5
+confidence (registry-pinned ceiling, never relaxed).
+
+**Side fixup:** the pre-commit hook caught a previously-clean CVE
+(`CVE-2026-42304` in `twisted 25.5.0`); G.0's commit bumps
+`twisted >= 26.4.0rc2` and adjusts a `# type: ignore` code on
+`decnet/templates/ftp/server.py:149` to match the new Twisted typing.
+
+**Tier-A corpus delta:** **all 37 Tier-A primitives now emit** (up
+from 25). Phase H is full-corpus lockdown + v0 release. Tier B
+(`temporal.session_timing`, `temporal.persistence`,
+`temporal.lifecycle_markers.idle_periodicity`, the four `cultural.*`
+primitives, and the `team_coordinated` value of
+`operational.multi_actor_indicators`) remains the attribution
+engine's job — never the extractor's.
 
 ---
 

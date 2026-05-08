@@ -31,7 +31,7 @@ from decnet.profiler.behave_shell import extract_session
 from decnet.profiler.behave_shell._parse import parse_shard_line
 
 
-PHASE_ABCDEF_PRIMITIVES: frozenset[str] = frozenset({
+PHASE_ABCDEFG_PRIMITIVES: frozenset[str] = frozenset({
     # Phase A — calibration floor
     "motor.input_modality",
     "motor.paste_burst_rate",
@@ -65,6 +65,14 @@ PHASE_ABCDEF_PRIMITIVES: frozenset[str] = frozenset({
     "environmental.keyboard_layout",
     "environmental.numpad_usage",
     "temporal.lifecycle_markers.exit_behavior",
+    # Phase G — operational.* + emotional_valence.* (hard subset)
+    # The rest of Phase G are gated by sample-size floors and ride in
+    # PHASE_G_CONDITIONAL_PRIMITIVES below (objective needs classified
+    # commands, multi_actor needs ≥ 8 commands, arousal needs typing
+    # bursts, valence / frustration_venting need typed-letter floors).
+    "operational.opsec_discipline",
+    "operational.cleanup_behavior",
+    "emotional_valence.stress_response",
 })
 
 # Phase D primitives that are conditional on at least one errored
@@ -85,12 +93,24 @@ PHASE_F_CONDITIONAL_PRIMITIVES: frozenset[str] = frozenset({
     "environmental.locale",
 })
 
+# Phase G primitives that ride sample-size floors and may legitimately
+# skip emission on shards that don't meet them. Tracked for grid
+# discrimination but not part of the per-shard hard gate.
+PHASE_G_CONDITIONAL_PRIMITIVES: frozenset[str] = frozenset({
+    "operational.objective",                # needs ≥ 3 classified commands
+    "operational.multi_actor_indicators",   # needs ≥ 8 commands
+    "emotional_valence.arousal",            # needs typing bursts
+    "emotional_valence.valence",            # needs ≥ 80 typed letters
+    "emotional_valence.frustration_venting",  # needs ≥ 30 typed letters
+})
+
 # Backwards-compatible aliases for any external import — earlier phases
 # locked in narrower sets; later phases widen them. All names point at
 # the current binding set.
-PHASE_ABCDE_PRIMITIVES = PHASE_ABCDEF_PRIMITIVES
-PHASE_ABCD_PRIMITIVES = PHASE_ABCDEF_PRIMITIVES
-PHASE_ABC_PRIMITIVES = PHASE_ABCDEF_PRIMITIVES
+PHASE_ABCDEF_PRIMITIVES = PHASE_ABCDEFG_PRIMITIVES
+PHASE_ABCDE_PRIMITIVES = PHASE_ABCDEFG_PRIMITIVES
+PHASE_ABCD_PRIMITIVES = PHASE_ABCDEFG_PRIMITIVES
+PHASE_ABC_PRIMITIVES = PHASE_ABCDEFG_PRIMITIVES
 
 
 # (shard filename, class label)
@@ -157,7 +177,7 @@ def test_shard_emits_all_phase_a_primitives(
     obs = _all_observations(path)
     assert obs, f"{class_label}: extractor produced zero observations"
     seen = {o.primitive for o in obs}
-    missing = PHASE_ABCDEF_PRIMITIVES - seen
+    missing = PHASE_ABCDEFG_PRIMITIVES - seen
     assert not missing, (
         f"{class_label} ({shard_file}) missing primitives: "
         f"{sorted(missing)}"
@@ -194,7 +214,7 @@ def test_shards_are_discriminative_across_classes(
     # At least one primitive should produce different majority values
     # across the present classes.
     discriminative_primitives: list[str] = []
-    for prim in PHASE_ABCDEF_PRIMITIVES:
+    for prim in PHASE_ABCDEFG_PRIMITIVES:
         values = {by_class[c].get(prim) for c in by_class if prim in by_class[c]}
         if len(values) >= 2:
             discriminative_primitives.append(prim)
