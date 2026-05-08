@@ -24,6 +24,9 @@ from decnet.profiler.behave_shell._features.cognitive import (
     inter_command_consistency,
     inter_command_latency_class,
 )
+from decnet.profiler.behave_shell._features.emotional_valence import (
+    valence,
+)
 from decnet.profiler.behave_shell._features.environmental import (
     keyboard_layout,
     locale,
@@ -91,4 +94,5 @@ FEATURES: tuple[FeatureFn, ...] = (
     opsec_discipline,
     cleanup_behavior,
     multi_actor_indicators,
+    valence,
 )
