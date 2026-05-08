@@ -20,7 +20,9 @@ from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from typing import Any, Callable
 
+from decnet.artifacts.shards import find_shard_with_sid
 from decnet.bus import topics as _topics
+from decnet.bus.base import BaseBus, Event
 from decnet.bus.factory import get_bus
 from decnet.bus.publish import (
     make_thread_safe_publisher,
@@ -33,6 +35,7 @@ from decnet.asn import enrich_ip as enrich_ip_asn
 from decnet.geoip import enrich_ip
 from decnet.geoip.ptr import resolve_ptr_record
 from decnet.logging import get_logger
+from decnet.profiler.behave_shell._handler import handle_session_ended
 from decnet.profiler.behavioral import build_behavior_record
 from decnet.telemetry import traced as _traced, get_tracer as _get_tracer
 from decnet.web.db.repository import BaseRepository
@@ -41,6 +44,14 @@ logger = get_logger("attacker_worker")
 
 _BATCH_SIZE = 500
 _STATE_KEY = "attacker_worker_cursor"
+# Separate cursor for the BEHAVE-SHELL poll fallback so it doesn't
+# conflate with the correlation tick's log-id cursor (memory rule:
+# "Poll fallback's Log cursor — use a separate state key").
+_BEHAVE_POLL_STATE_KEY = "attacker_worker_session_cursor"
+# Pattern the bus subscription matches. Single-topic for BEHAVE-SHELL
+# wiring; matches what the collector publishes from
+# ``_SessionAggregator._emit_session``.
+_BEHAVE_TOPIC = _topics.attacker(_topics.ATTACKER_SESSION_ENDED)
 
 # Event types that indicate active command/query execution — the
 # shell-family subset of INTERACTION_EVENT_TYPES in
@@ -126,6 +137,17 @@ async def attacker_profile_worker(repo: BaseRepository, *, interval: int = 30) -
     control_task = asyncio.create_task(
         run_control_listener(bus, "profiler", shutdown),
     )
+
+    # BEHAVE-SHELL session-ended handler — bus subscription pump (when
+    # bus is available) feeds an asyncio.Queue; the tick body drains
+    # the queue per iteration. Same shape as decnet/ttp/worker.py.
+    behave_queue: "asyncio.Queue[tuple[str, Event] | None]" = asyncio.Queue()
+    behave_pump_task: asyncio.Task[None] | None = None
+    if bus is not None:
+        behave_pump_task = asyncio.create_task(
+            _behave_pump(bus, behave_queue),
+        )
+
     try:
         while not shutdown.is_set():
             try:
@@ -138,11 +160,26 @@ async def attacker_profile_worker(repo: BaseRepository, *, interval: int = 30) -
                 await _incremental_update(repo, state)
             except Exception as exc:
                 logger.error("attacker worker: update failed: %s", exc)
+            # BEHAVE-SHELL drain (bus path).
+            await _drain_behave_queue(repo, behave_queue, raw_publish)
+            # BEHAVE-SHELL poll fallback. Always runs — when bus is up
+            # this catches anything the subscription missed during a
+            # transient reconnect; when bus is down it's the only path.
+            try:
+                await _behave_poll_tick(repo, raw_publish)
+            except Exception as exc:  # noqa: BLE001
+                logger.error(
+                    "attacker worker: behave poll tick failed: %s", exc,
+                )
     finally:
         for t in (heartbeat_task, control_task):
             t.cancel()
             with contextlib.suppress(Exception, asyncio.CancelledError):
                 await t
+        if behave_pump_task is not None:
+            behave_pump_task.cancel()
+            with contextlib.suppress(Exception, asyncio.CancelledError):
+                await behave_pump_task
         if bus is not None:
             with contextlib.suppress(Exception):
                 await bus.close()
@@ -440,3 +477,132 @@ def _extract_smtp_domains(events: list[LogEvent]) -> set[str]:
             if domain:
                 domains.add(domain)
     return domains
+
+
+# ── BEHAVE-SHELL session-ended wiring (Phase 4) ─────────────────────────────
+
+
+async def _behave_pump(
+    bus: BaseBus,
+    queue: "asyncio.Queue[tuple[str, Event] | None]",
+) -> None:
+    """Forward every ``attacker.session.ended`` event into ``queue``.
+
+    Tolerance contract mirrors :func:`decnet.ttp.worker._pump`: the
+    subscriber dies → log-and-fall-back-to-poll, never crash the worker
+    loop. The poll path (always-on per tick) catches anything missed
+    while the subscription is down.
+    """
+    try:
+        sub = bus.subscribe(_BEHAVE_TOPIC)
+        async with sub:
+            async for event in sub:
+                await queue.put((event.topic, event))
+    except asyncio.CancelledError:
+        raise
+    except Exception as exc:  # noqa: BLE001
+        logger.warning(
+            "attacker worker: behave subscriber for %s died (%s); "
+            "falling back to poll", _BEHAVE_TOPIC, exc,
+        )
+
+
+async def _drain_behave_queue(
+    repo: BaseRepository,
+    queue: "asyncio.Queue[tuple[str, Event] | None]",
+    publish: Callable[[str, dict[str, Any], str], None] | None,
+) -> None:
+    """Drain queued ``attacker.session.ended`` events through the
+    handler. Each handler invocation is isolated — exceptions log and
+    do not block the next event."""
+    while not queue.empty():
+        item = queue.get_nowait()
+        if item is None:
+            continue
+        _topic, event = item
+        try:
+            await handle_session_ended(repo, event.payload, publish)
+        except Exception as exc:  # noqa: BLE001
+            logger.error(
+                "attacker worker: behave handler raised on bus path: %s", exc,
+            )
+
+
+async def _behave_poll_tick(
+    repo: BaseRepository,
+    publish: Callable[[str, dict[str, Any], str], None] | None,
+) -> None:
+    """Poll fallback: scan ``Log`` rows after the saved cursor for
+    ``event_type='session_recorded'`` and call the handler for any
+    not yet profiled.
+
+    Cursor is stored under :data:`_BEHAVE_POLL_STATE_KEY`, separate from
+    the correlation tick's cursor so the two never conflate.
+    """
+    cursor_state = await repo.get_state(_BEHAVE_POLL_STATE_KEY) or {}
+    last_id = int(cursor_state.get("last_log_id", 0))
+    rows = await repo.get_logs_after_id(last_id, limit=_BATCH_SIZE)
+    if not rows:
+        return
+    new_cursor = last_id
+    for row in rows:
+        new_cursor = max(new_cursor, int(row.get("id", 0)))
+        if row.get("event_type") != "session_recorded":
+            continue
+        payload = _payload_from_log_row(row)
+        if payload is None:
+            continue
+        try:
+            await handle_session_ended(repo, payload, publish)
+        except Exception as exc:  # noqa: BLE001
+            logger.error(
+                "attacker worker: behave handler raised on poll path: %s", exc,
+            )
+    if new_cursor > last_id:
+        await repo.set_state(
+            _BEHAVE_POLL_STATE_KEY, {"last_log_id": new_cursor},
+        )
+
+
+def _payload_from_log_row(row: dict[str, Any]) -> dict[str, Any] | None:
+    """Project a ``session_recorded`` Log row into the same shape the
+    collector publishes on the bus.
+
+    Returns ``None`` when required fields are missing — the handler
+    has its own guard, but pre-filtering here avoids the round-trip to
+    the handler's logger for malformed rows.
+    """
+    fields_raw = row.get("fields") or "{}"
+    if isinstance(fields_raw, dict):
+        fields = fields_raw
+    else:
+        try:
+            fields = json.loads(fields_raw)
+        except (ValueError, TypeError):
+            return None
+    sid = fields.get("sid")
+    decky = row.get("decky")
+    service = fields.get("service") or row.get("service")
+    attacker_ip = row.get("attacker_ip")
+    if not (sid and decky and service and attacker_ip):
+        return None
+    # Resolve shard_path locally — the Log row may not carry one
+    # (sessrec.c does not yet emit fields.shard_path).
+    shard_path: str | None = None
+    try:
+        resolved = find_shard_with_sid(str(decky), str(service), str(sid))
+    except (ValueError, OSError, PermissionError):
+        resolved = None
+    if resolved is not None:
+        shard_path = str(resolved)
+    return {
+        "session_id": str(sid),
+        "attacker_uuid": None,
+        "attacker_ip": str(attacker_ip),
+        "decky_id": str(decky),
+        "service": str(service),
+        "ended_at": row.get("timestamp"),
+        "duration_s": fields.get("duration_s"),
+        "commands": [],
+        "shard_path": shard_path,
+    }

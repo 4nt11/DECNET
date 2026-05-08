@@ -341,6 +341,16 @@ class BaseRepository(ABC):
         ordered by ``ts`` ASC. Empty list when none."""
         raise NotImplementedError
 
+    @abstractmethod
+    async def has_observations_for_evidence(self, evidence_ref: str) -> bool:
+        """True iff any observation row carries this ``evidence_ref``.
+
+        Worker uses this as the "have we already profiled this session?"
+        check before kicking the BEHAVE-SHELL extractor — equivalent
+        to "is this ``(decky, service, sid)`` already in the table?".
+        """
+        raise NotImplementedError
+
     async def upsert_observed_attachment(
         self,
         *,
