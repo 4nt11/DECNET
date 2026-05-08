@@ -12,6 +12,7 @@ Step G.8: ``emotional_valence.frustration_venting`` (lands later).
 """
 from __future__ import annotations
 
+import statistics
 from typing import Iterator
 
 from decnet_behave_core.spec.envelope import Observation
@@ -19,6 +20,11 @@ from decnet_behave_core.spec.envelope import Observation
 from decnet.profiler.behave_shell._ctx import SessionContext
 from decnet.profiler.behave_shell._features._emit import make_observation
 from decnet.profiler.behave_shell._thresholds import (
+    AROUSAL_BANG_RUN_MIN,
+    AROUSAL_CALM_IAT_S,
+    AROUSAL_CAPS_RUN_MIN,
+    AROUSAL_FAST_IAT_S,
+    AROUSAL_MIN_IATS,
     EMOTIONAL_VALENCE_CONFIDENCE_CAP,
     VALENCE_FULL_CONFIDENCE_MIN,
     VALENCE_MIN_HITS,
@@ -60,6 +66,54 @@ def valence(ctx: SessionContext) -> Iterator[Observation]:
     yield make_observation(
         ctx,
         primitive="emotional_valence.valence",
+        value=value,
+        confidence=_cap_soft(raw),
+    )
+
+
+def arousal(ctx: SessionContext) -> Iterator[Observation]:
+    """Emit ``emotional_valence.arousal`` ∈ {low_calm, medium_engaged,
+    high_agitated}.
+
+    Three signals (any of which fires ``high_agitated``):
+
+    * ``ctx.caps_run_max ≥ AROUSAL_CAPS_RUN_MIN`` (5) — capslock rant.
+    * ``ctx.bang_run_max ≥ AROUSAL_BANG_RUN_MIN`` (3) — repeated bangs.
+    * The fastest typing burst's median IAT < ``AROUSAL_FAST_IAT_S``
+      (0.06) over a burst of ≥ ``AROUSAL_MIN_IATS`` (30) IATs.
+
+    ``low_calm`` — slowest qualifying burst's median IAT >
+    ``AROUSAL_CALM_IAT_S`` (0.30).
+
+    ``medium_engaged`` — fall-through.
+
+    Skip emission when no qualifying typing bursts. Confidence hard-
+    capped at 0.50; 0.30 below ``AROUSAL_MIN_IATS`` total typed IATs.
+    """
+    qualifying = [b for b in ctx.typing_bursts if len(b) >= 3]
+    if not qualifying:
+        return
+    fastest_med = min(statistics.median(b) for b in qualifying)
+    slowest_med = max(statistics.median(b) for b in qualifying)
+    total_iats = sum(len(b) for b in qualifying)
+
+    if (
+        ctx.caps_run_max >= AROUSAL_CAPS_RUN_MIN
+        or ctx.bang_run_max >= AROUSAL_BANG_RUN_MIN
+        or (
+            total_iats >= AROUSAL_MIN_IATS
+            and fastest_med < AROUSAL_FAST_IAT_S
+        )
+    ):
+        value = "high_agitated"
+    elif total_iats >= AROUSAL_MIN_IATS and slowest_med > AROUSAL_CALM_IAT_S:
+        value = "low_calm"
+    else:
+        value = "medium_engaged"
+    raw = 0.50 if total_iats >= AROUSAL_MIN_IATS else 0.30
+    yield make_observation(
+        ctx,
+        primitive="emotional_valence.arousal",
         value=value,
         confidence=_cap_soft(raw),
     )

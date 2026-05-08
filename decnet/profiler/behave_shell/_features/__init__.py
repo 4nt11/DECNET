@@ -25,6 +25,7 @@ from decnet.profiler.behave_shell._features.cognitive import (
     inter_command_latency_class,
 )
 from decnet.profiler.behave_shell._features.emotional_valence import (
+    arousal,
     valence,
 )
 from decnet.profiler.behave_shell._features.environmental import (
@@ -95,4 +96,5 @@ FEATURES: tuple[FeatureFn, ...] = (
     cleanup_behavior,
     multi_actor_indicators,
     valence,
+    arousal,
 )
