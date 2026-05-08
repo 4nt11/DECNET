@@ -17,117 +17,54 @@ and the 10 MB per-session cap.
 from __future__ import annotations
 
 import json
-import os
 import re
-from collections import OrderedDict
 from pathlib import Path
 from typing import Any
 
 from fastapi import APIRouter, Depends, HTTPException, Query
 
+from decnet.artifacts.shards import (
+    ARTIFACTS_ROOT as ARTIFACTS_ROOT,  # re-export for monkeypatching tests
+    _SHARD_BASENAME_RE,
+    find_shard_with_sid as _shared_find_shard_with_sid,
+    get_index as _get_index,
+    resolve_shard as _shared_resolve_shard,
+    validate_names as _shared_validate_names,
+)
 from decnet.telemetry import traced as _traced
 from decnet.web.dependencies import require_admin, repo
 
 router = APIRouter()
 
-ARTIFACTS_ROOT = Path(os.environ.get("DECNET_ARTIFACTS_ROOT", "/var/lib/decnet/artifacts"))
-
 _DECKY_RE = re.compile(r"^[a-z0-9][a-z0-9-]{0,62}$")
 _SID_RE = re.compile(r"^[a-f0-9-]{36}$")
-_SERVICE_RE = re.compile(r"^(ssh|telnet)$")
-# Shard filename is built by sessrec from UTC date — keep the charset tight
-# so a forged shard_path in the Log row can't traverse.
-_SHARD_BASENAME_RE = re.compile(r"^sessions-\d{4}-\d{2}-\d{2}\.jsonl$")
-
-# (path, mtime_ns) → {sid: [(offset, length), ...]}
-_INDEX_CACHE: "OrderedDict[tuple[str, int], dict[str, list[tuple[int, int]]]]" = OrderedDict()
-_CACHE_MAX = 32
-
-
-def _get_index(path: Path) -> tuple[dict[str, list[tuple[int, int]]], int]:
-    st = path.stat()
-    key = (str(path), st.st_mtime_ns)
-    if key in _INDEX_CACHE:
-        _INDEX_CACHE.move_to_end(key)
-        return _INDEX_CACHE[key], st.st_size
-    index: dict[str, list[tuple[int, int]]] = {}
-    with path.open("rb") as f:
-        offset = 0
-        for line in f:
-            length = len(line)
-            # Fast sid extract: look for `"sid":"<36 chars>"` prefix — every
-            # sessrec line starts with that field (see emit_*).
-            try:
-                m = re.search(rb'"sid"\s*:\s*"([a-f0-9-]{36})"', line)
-            except re.error:
-                m = None
-            if m:
-                sid = m.group(1).decode("ascii")
-                index.setdefault(sid, []).append((offset, length))
-            offset += length
-    _INDEX_CACHE[key] = index
-    _INDEX_CACHE.move_to_end(key)
-    while len(_INDEX_CACHE) > _CACHE_MAX:
-        _INDEX_CACHE.popitem(last=False)
-    return index, st.st_size
 
 
 def _validate_names(decky: str, service: str) -> None:
-    if not _DECKY_RE.fullmatch(decky):
-        raise HTTPException(status_code=400, detail="invalid decky name")
-    if not _SERVICE_RE.fullmatch(service):
-        raise HTTPException(status_code=400, detail="invalid service")
+    """Router-level wrapper: translate ValueError → HTTPException(400)."""
+    try:
+        _shared_validate_names(decky, service)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc))
 
 
 def _resolve_shard(decky: str, service: str, shard_name: str) -> Path:
-    _validate_names(decky, service)
-    if not _SHARD_BASENAME_RE.fullmatch(shard_name):
-        raise HTTPException(status_code=400, detail="invalid shard name")
-    root = ARTIFACTS_ROOT.resolve()
-    candidate = (root / decky / service / "transcripts" / shard_name).resolve()
-    if root not in candidate.parents and candidate != root:
-        raise HTTPException(status_code=400, detail="path escapes artifacts root")
-    return candidate
+    try:
+        return _shared_resolve_shard(decky, service, shard_name)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc))
 
 
 def _find_shard_with_sid(decky: str, service: str, sid: str) -> Path | None:
-    """Scan every ``sessions-YYYY-MM-DD.jsonl`` under the decky's transcripts
-    dir until one claims this sid.
+    """Router-level wrapper around the shared helper.
 
-    Fallback for rows where ``fields.shard_path`` is missing (current
-    sessrec.c does not emit it) or for sessions that span UTC midnight
-    (events land in two shards; the emitted SD could only name one).
-    Newest shards first — most transcript lookups are for recent
-    sessions. Result is cached by ``_get_index`` keyed on
-    (path, mtime), so repeated calls are ~free.
+    Translates the ValueError on bad names into HTTPException(400) so
+    the route handler's existing error UX is preserved.
     """
-    _validate_names(decky, service)
-    root = ARTIFACTS_ROOT.resolve()
-    transcripts_dir = (root / decky / service / "transcripts").resolve()
-    if root not in transcripts_dir.parents:
-        return None
-    # Absent dir, or dir the API process can't stat/read — treat as
-    # "no transcript", not as a 500 traceback. Most commonly the decky
-    # container wrote this tree as a container-side uid that the API
-    # (running under --user / --group) can't cross.
     try:
-        if not transcripts_dir.is_dir():
-            return None
-        entries = list(transcripts_dir.iterdir())
-    except (OSError, PermissionError):
-        return None
-    shards = sorted(
-        (p for p in entries if _SHARD_BASENAME_RE.fullmatch(p.name)),
-        reverse=True,  # newest day first
-    )
-    for shard in shards:
-        try:
-            index, _size = _get_index(shard)
-        except (OSError, PermissionError):
-            continue
-        if sid in index:
-            return shard
-    return None
+        return _shared_find_shard_with_sid(decky, service, sid)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc))
 
 
 @router.get(

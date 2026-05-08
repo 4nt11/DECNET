@@ -66,9 +66,11 @@ def shard(tmp_path, monkeypatch):
     shard_path = _write_shard(root, _DECKY, "ssh", _SHARD_NAME,
                               [lines_a[0], lines_b[0], lines_a[1], lines_b[1], lines_b[2], lines_a[2]])
 
+    from decnet.artifacts import shards as _shards
     from decnet.web.router.transcripts import api_get_transcript
+    monkeypatch.setattr(_shards, "ARTIFACTS_ROOT", root)
     monkeypatch.setattr(api_get_transcript, "ARTIFACTS_ROOT", root)
-    api_get_transcript._INDEX_CACHE.clear()
+    _shards._INDEX_CACHE.clear()
     return shard_path
 
 
