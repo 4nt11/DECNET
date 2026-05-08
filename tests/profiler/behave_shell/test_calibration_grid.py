@@ -59,10 +59,10 @@ PHASE_ABCDEFG_PRIMITIVES: frozenset[str] = frozenset({
     "temporal.escalation_pattern",
     "temporal.lifecycle_markers.landing_ritual",
     # Phase F — environmental.* output-stream block + carry-over E.4
-    # (locale is conditional, see PHASE_F_CONDITIONAL_PRIMITIVES)
+    # (locale and keyboard_layout are conditional — see
+    # PHASE_F_CONDITIONAL_PRIMITIVES)
     "environmental.shell_type",
     "environmental.terminal_multiplexer",
-    "environmental.keyboard_layout",
     "environmental.numpad_usage",
     "temporal.lifecycle_markers.exit_behavior",
     # Phase G — operational.* + emotional_valence.* (hard subset)
@@ -85,12 +85,18 @@ PHASE_D_CONDITIONAL_PRIMITIVES: frozenset[str] = frozenset({
     "cognitive.error_resilience.fallback_to_man",
 })
 
-# Phase F primitives conditional on shard content. ``environmental.locale``
-# fires only when the shard's output contains an env / locale dump
-# (LANG=, LC_ALL=, LC_CTYPE=). It's tracked here, not in the per-shard
-# hard gate.
+# Phase F primitives conditional on shard content.
+# * ``environmental.locale`` fires only when the shard's output contains
+#   an env / locale dump (LANG=, LC_ALL=, LC_CTYPE=).
+# * ``environmental.keyboard_layout`` requires LAYOUT_MIN_TYPED_LETTERS
+#   (200) typed letters per session — short SSH-recon shards (the
+#   2026-05-02 calibration corpus) max out around 90 typed letters
+#   per session because most input is pasted rather than typed.
+#   v0 keeps the 200-floor honesty rather than tuning to pass; longer-
+#   text corpora will surface it.
 PHASE_F_CONDITIONAL_PRIMITIVES: frozenset[str] = frozenset({
     "environmental.locale",
+    "environmental.keyboard_layout",
 })
 
 # Phase G primitives that ride sample-size floors and may legitimately

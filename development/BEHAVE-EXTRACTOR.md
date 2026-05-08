@@ -1058,6 +1058,85 @@ primitives, and the `team_coordinated` value of
 `operational.multi_actor_indicators`) remains the attribution
 engine's job — never the extractor's.
 
+## Phase H step log (extractor-slice)
+
+Phase H ships in two slices: an **extractor slice** (H.1, H.2, and a
+`0.1.0-pre` version marker) closing the engine itself, and an
+**integration slice** (H.3 live smoke + H.4 worker wiring + H.5
+proper v0 tag) that rides `BEHAVE-INTEGRATION.md` Phase 4. This log
+covers the extractor slice.
+
+### H.1 — Registry-coverage test
+
+`tests/profiler/behave_shell/test_registry_coverage.py` walks
+`PRIMITIVE_REGISTRY` and asserts every Tier-A primitive has a slot
+in the calibration grid (hard or conditional). Tier B
+(8 cross-session primitives) is excluded by an explicit allow-list;
+Tier C (`toolchain.*`) is excluded by prefix. Three checks ride:
+forward (every Tier-A covered), reverse (no extractor-set drift from
+the registry), and a `len(tier_a) == 37` invariant. CI now fails
+before a registry addition can ship without a feature function.
+
+### H.2 — Calibration grid full sweep (2026-05-02 corpus)
+
+Shards at `/home/anti/Tools/BEHAVE/prototype_extractors/shell/` —
+five classes, 15 sessions total. Per-class observation counts:
+
+| Class | Sessions | Observations | Distinct primitives |
+|---|---|---|---|
+| HUMAN | 1 | 34 | 34 |
+| YOU-sim | 2 | 59 | 34 |
+| LW-sim | 5 | 136 | 34 |
+| CLAUDE-FF | 3 | 84 | 34 |
+| CLAUDE-CL | 4 | 111 | 34 |
+
+**One real-shard regression surfaced and fixed:**
+`environmental.keyboard_layout` was on the per-shard hard gate but
+the calibration corpus maxes at ~90 typed letters per session — well
+below `LAYOUT_MIN_TYPED_LETTERS=200`. Most input on these
+SSH-recon shards is *pasted*, not typed. The honest fix per the
+per-phase rule "v0 ships when honest, not when convenient" is to
+move `environmental.keyboard_layout` from `PHASE_ABCDEFG_PRIMITIVES`
+to `PHASE_F_CONDITIONAL_PRIMITIVES`, alongside `environmental.locale`.
+The 200-letter floor stays — the keyboard-layout signal genuinely
+needs richer typed text than this corpus has, and tuning the
+threshold to pass would corrupt the signal.
+
+**Three Tier-A primitives never fire across the 2026-05-02 corpus,
+all conditional and all expected:**
+
+* `cognitive.error_resilience.frustration_typing` — needs ≥ 2
+  errored commands plus successful baseline (Phase D conditional).
+* `environmental.locale` — needs an `env` / `locale` / `printenv`
+  dump in the output stream (Phase F conditional).
+* `environmental.keyboard_layout` — needs ≥ 200 typed letters
+  per session (Phase F conditional after H.2).
+
+The hard gate (28 primitives) fires on every shard with commands;
+the discrimination smoke-check passes too. No threshold re-tunes
+needed for D / F / G — the corpus surfaced the keyboard_layout shape
+mismatch only.
+
+**Calibration-grid binding update.** `PHASE_ABCDEFG_PRIMITIVES`
+shrinks 28 → 27 (keyboard_layout moves to conditional);
+`PHASE_F_CONDITIONAL_PRIMITIVES` grows 1 → 2.
+
+### H.5-pre — Extractor version marker
+
+`decnet/profiler/behave_shell/__init__.py` exports
+`__version__ = "0.1.0-pre"`. The `-pre` suffix is honest: the
+**extractor** is feature-complete (37/37 Tier-A primitives emit, all
+green tests, calibration grid honest), but the *engine package* —
+worker wiring, observations-table writes, AttackerDetail panel —
+still rides the integration track. The actual `0.1.0` tag bumps the
+suffix off only after `BEHAVE-INTEGRATION.md` Phase 4 lands.
+
+**Tier-A corpus delta (final extractor-slice):** all 37 of 37
+primitives have a feature function; **27** ride the per-shard hard
+gate (28 pre-H.2; keyboard_layout moved out); **10** ride conditional
+sets. Phase H integration slice (H.3 + H.4 + proper H.5 tag) is its
+own plan.
+
 ---
 
 **Owner:** ANTI.
