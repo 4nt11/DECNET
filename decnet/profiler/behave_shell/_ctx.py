@@ -14,6 +14,12 @@ import math
 from dataclasses import dataclass, field
 from typing import Iterable, Mapping
 
+from decnet.profiler.behave_shell._intent import (
+    LEXEME_MAX_LEN,
+    NEGATIVE_LEXEMES,
+    OBSCENITY_LEXEMES,
+    POSITIVE_LEXEMES,
+)
 from decnet.profiler.behave_shell._parse import (
     AsciinemaEvent,
     Command,
@@ -32,6 +38,20 @@ from decnet.profiler.behave_shell._thresholds import (
     PROMPT_LINE_MAX_CHARS,
     SHORTCUT_CTRL_BYTES,
 )
+
+
+@dataclass(frozen=True, slots=True)
+class _LexCounters:
+    """Lexical counters from the typed-text walk (G.0).
+
+    Internal to the ctx-builder; flattened onto SessionContext fields
+    in :func:`build_session_context`.
+    """
+    obscenity_hits: int = 0
+    positive_lex_hits: int = 0
+    negative_lex_hits: int = 0
+    caps_run_max: int = 0
+    bang_run_max: int = 0
 
 
 @dataclass(frozen=True, slots=True)
@@ -75,6 +95,16 @@ class SessionContext:
     typed_unigram_counts: Mapping[str, int] = field(default_factory=dict)
     typed_bigram_counts: Mapping[str, int] = field(default_factory=dict)
     typed_letter_count: int = 0
+
+    # Step G.0 derivations — lexical counters from the same single-pass
+    # typed-text walk. No raw text retained; only fixed-vocabulary
+    # membership counts and run-lengths. Drives valence (G.5), arousal
+    # (G.6), and frustration_venting (G.8).
+    obscenity_hits: int = 0
+    positive_lex_hits: int = 0
+    negative_lex_hits: int = 0
+    caps_run_max: int = 0
+    bang_run_max: int = 0
 
 
 def _detect_paste_bursts(
@@ -309,28 +339,83 @@ def _output_bytes_between(
 
 def _typed_char_histograms(
     inputs: list[AsciinemaEvent],
-) -> tuple[Mapping[str, int], Mapping[str, int], int]:
-    """Walk input events, build typed-only unigram + bigram histograms.
+) -> tuple[Mapping[str, int], Mapping[str, int], int, _LexCounters]:
+    """Walk input events, build typed-only unigram + bigram histograms
+    plus the Phase G lexical counters.
 
     Skip paste-class events (``len(data) >= PASTE_MIN_CHARS_PER_EVENT``)
-    — pasted text reveals nothing about the operator's keyboard. Letter
-    bigrams chain only across consecutive ASCII-letter chars; a digit
-    or punctuation character breaks the chain.
+    — pasted text reveals nothing about the operator's keyboard or
+    sentiment. Letter bigrams chain only across consecutive ASCII-letter
+    chars; a digit or punctuation character breaks the chain.
 
-    Returns ``(unigrams, bigrams, total_letters)``. The bigram dict is
-    truncated to the top ``LAYOUT_BIGRAM_TOP_N`` entries by count to
-    bound memory (the layout signals only need the head of the
-    distribution).
+    Lexical counters (G.0): a small word buffer (≤ ``LEXEME_MAX_LEN``)
+    accumulates ASCII-letter chars (case-folded). On any non-letter
+    boundary, every suffix of the buffer is checked against
+    ``POSITIVE_LEXEMES`` / ``NEGATIVE_LEXEMES`` / ``OBSCENITY_LEXEMES``;
+    the longest match wins (so ``fucking`` counts as one obscenity hit,
+    not two — ``fuck`` + ``fucking``). Caps and bang runs are tracked
+    in the same walk.
+
+    Returns ``(unigrams, bigrams, total_letters, lex_counters)``.
     """
     unigrams: dict[str, int] = {}
     bigrams: dict[str, int] = {}
     total_letters = 0
     last_letter: str | None = None
+
+    word_buf: list[str] = []
+    obscenity_hits = 0
+    positive_lex_hits = 0
+    negative_lex_hits = 0
+    caps_run_cur = 0
+    caps_run_max = 0
+    bang_run_cur = 0
+    bang_run_max = 0
+
+    def _flush_word() -> tuple[int, int, int]:
+        """Match longest lexeme suffix in ``word_buf``; return per-set deltas."""
+        if not word_buf:
+            return 0, 0, 0
+        s = "".join(word_buf)
+        # Longest-suffix scan against fixed lexicons.
+        for length in range(min(len(s), LEXEME_MAX_LEN), 0, -1):
+            suffix = s[-length:]
+            if suffix in OBSCENITY_LEXEMES:
+                return 1, 0, 0
+            if suffix in POSITIVE_LEXEMES:
+                return 0, 1, 0
+            if suffix in NEGATIVE_LEXEMES:
+                return 0, 0, 1
+        return 0, 0, 0
+
     for _t, _kind, data in inputs:
         if len(data) >= PASTE_MIN_CHARS_PER_EVENT:
+            # Paste boundary breaks every running counter.
             last_letter = None
+            obs_d, pos_d, neg_d = _flush_word()
+            obscenity_hits += obs_d
+            positive_lex_hits += pos_d
+            negative_lex_hits += neg_d
+            word_buf.clear()
+            caps_run_cur = 0
+            bang_run_cur = 0
             continue
         for c in data:
+            # Caps-run tracking
+            if c.isascii() and c.isupper():
+                caps_run_cur += 1
+                if caps_run_cur > caps_run_max:
+                    caps_run_max = caps_run_cur
+            else:
+                caps_run_cur = 0
+            # Bang-run tracking
+            if c == "!":
+                bang_run_cur += 1
+                if bang_run_cur > bang_run_max:
+                    bang_run_max = bang_run_cur
+            else:
+                bang_run_cur = 0
+            # Histogram + lexeme buffering
             if c.isascii() and c.isalpha():
                 lower = c.lower()
                 unigrams[lower] = unigrams.get(lower, 0) + 1
@@ -339,12 +424,34 @@ def _typed_char_histograms(
                     big = last_letter + lower
                     bigrams[big] = bigrams.get(big, 0) + 1
                 last_letter = lower
+                word_buf.append(lower)
+                if len(word_buf) > LEXEME_MAX_LEN:
+                    # Slide window — only the tail can match a lexeme.
+                    word_buf[:] = word_buf[-LEXEME_MAX_LEN:]
             else:
                 last_letter = None
+                obs_d, pos_d, neg_d = _flush_word()
+                obscenity_hits += obs_d
+                positive_lex_hits += pos_d
+                negative_lex_hits += neg_d
+                word_buf.clear()
+
+    # Trailing word (no boundary at end of input).
+    obs_d, pos_d, neg_d = _flush_word()
+    obscenity_hits += obs_d
+    positive_lex_hits += pos_d
+    negative_lex_hits += neg_d
+
     if len(bigrams) > LAYOUT_BIGRAM_TOP_N:
         top = sorted(bigrams.items(), key=lambda kv: -kv[1])[:LAYOUT_BIGRAM_TOP_N]
         bigrams = dict(top)
-    return unigrams, bigrams, total_letters
+    return unigrams, bigrams, total_letters, _LexCounters(
+        obscenity_hits=obscenity_hits,
+        positive_lex_hits=positive_lex_hits,
+        negative_lex_hits=negative_lex_hits,
+        caps_run_max=caps_run_max,
+        bang_run_max=bang_run_max,
+    )
 
 
 def _output_window(
@@ -432,7 +539,7 @@ def build_session_context(
         for i in range(len(commands) - 1)
     )
     intra_command_iats = _per_command_iats(commands, inputs)
-    typed_uni, typed_bi, typed_letters = _typed_char_histograms(inputs)
+    typed_uni, typed_bi, typed_letters, lex = _typed_char_histograms(inputs)
 
     return SessionContext(
         sid=sid,
@@ -458,4 +565,9 @@ def build_session_context(
         typed_unigram_counts=typed_uni,
         typed_bigram_counts=typed_bi,
         typed_letter_count=typed_letters,
+        obscenity_hits=lex.obscenity_hits,
+        positive_lex_hits=lex.positive_lex_hits,
+        negative_lex_hits=lex.negative_lex_hits,
+        caps_run_max=lex.caps_run_max,
+        bang_run_max=lex.bang_run_max,
     )

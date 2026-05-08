@@ -146,4 +146,4 @@ if __name__ == "__main__":
     twisted_log.startLoggingWithObserver(lambda e: None, setStdout=False)
     _log("startup", msg=f"FTP server starting as {NODE_NAME} on port {PORT}")
     cast(IReactorTCP, reactor).listenTCP(PORT, ServerFTPFactory())  # type: ignore[arg-type]
-    reactor.run()  # type: ignore[attr-defined]
+    reactor.run()  # type: ignore[misc]
