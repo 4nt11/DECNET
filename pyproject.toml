@@ -47,6 +47,12 @@ dependencies = [
     # platform-marker keeps macOS/Windows installs from pulling a
     # never-imported wheel.
     "asyncinotify>=4.0 ; sys_platform == 'linux'",
+    # BEHAVE — out-of-tree behavioural-observation framework. core ships
+    # the Observation envelope; shell ships the primitive registry +
+    # bus event adapter consumed by decnet/profiler/behave_shell/. Pin
+    # range tracks BEHAVE-INTEGRATION.md §"Versioning".
+    "decnet-behave-core>=0.1.0,<0.2",
+    "decnet-behave-shell>=0.1.0,<0.2",
 ]
 
 [project.optional-dependencies]
