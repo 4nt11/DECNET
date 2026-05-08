@@ -63,3 +63,4 @@ package-lock.json
 # files alongside ARE committed and exercise the harness in CI.
 tests/ttp/rule_precision/corpus/*.jsonl
 tests/ttp/rule_precision/corpus/seed_*.jsonl
+threatfox-api.json
