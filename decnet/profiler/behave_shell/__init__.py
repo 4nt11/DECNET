@@ -15,4 +15,11 @@ from decnet.profiler.behave_shell.extract import (
     extract_session,
 )
 
-__all__ = ["DEFAULT_SOURCE", "build_context", "extract_session"]
+# Phase H.5-pre: extractor is feature-complete (37/37 Tier-A primitives
+# emit; calibration grid honest). The ``-pre`` suffix stays until
+# ``BEHAVE-INTEGRATION.md`` Phase 4 lands the worker wiring + observations
+# table writes + AttackerDetail panel; only then does H.5 proper drop the
+# suffix and tag v0.
+__version__ = "0.1.0-pre"
+
+__all__ = ["DEFAULT_SOURCE", "build_context", "extract_session", "__version__"]
