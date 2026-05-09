@@ -53,6 +53,9 @@ dependencies = [
     # range tracks BEHAVE-INTEGRATION.md §"Versioning".
     "decnet-behave-core>=0.1.0,<0.2",
     "decnet-behave-shell>=0.1.0,<0.2",
+    # STIX → MISP conversion: CIRCL-maintained reference converter used by
+    # MISP itself. Pulls pymisp transitively (needed for MISPEvent output).
+    "misp-stix>=2026.4",
     # MITRE ATT&CK: parse the official STIX 2.1 enterprise-attack bundle
     # instead of hand-maintaining technique/tactic name dicts. stix2
     # gives typed parsing; mitreattack-python ships MitreAttackData

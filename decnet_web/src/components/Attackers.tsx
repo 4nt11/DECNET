@@ -117,12 +117,12 @@ const Attackers: React.FC = () => {
 
   const totalPages = Math.max(1, Math.ceil(total / limit));
 
-  const handleExport = async () => {
+  const _fleetDownload = async (endpoint: string, fallback: string) => {
     try {
-      const res = await api.get('/attackers/export/stix', { responseType: 'blob' });
+      const res = await api.get(endpoint, { responseType: 'blob' });
       const disposition: string = res.headers['content-disposition'] || '';
       const match = disposition.match(/filename="([^"]+)"/);
-      const filename = match ? match[1] : 'decnet-fleet.stix.json';
+      const filename = match ? match[1] : fallback;
       const url = URL.createObjectURL(new Blob([res.data], { type: 'application/json' }));
       const a = document.createElement('a');
       a.href = url;
@@ -133,6 +133,9 @@ const Attackers: React.FC = () => {
       console.error('Export failed', err);
     }
   };
+
+  const handleExport = () => _fleetDownload('/attackers/export/stix', 'decnet-fleet.stix.json');
+  const handleMispExport = () => _fleetDownload('/attackers/export/misp', 'decnet-fleet.misp.json');
 
   const activityCounts = attackers.reduce(
     (acc, a) => { acc[deriveActivity(a)]++; return acc; },
@@ -236,7 +239,17 @@ const Attackers: React.FC = () => {
               style={{ display: 'flex', alignItems: 'center', gap: 6 }}
             >
               <Download size={13} />
-              EXPORT
+              STIX
+            </button>
+            <button
+              type="button"
+              className="btn btn-ghost"
+              onClick={handleMispExport}
+              title="Export all attackers as MISP collection"
+              style={{ display: 'flex', alignItems: 'center', gap: 6 }}
+            >
+              <Download size={13} />
+              MISP
             </button>
             <div className="pager">
               <span className="dim">Page {page} of {totalPages}</span>

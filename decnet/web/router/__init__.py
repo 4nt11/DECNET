@@ -17,6 +17,8 @@ from .attackers.api_get_attackers import router as attackers_router
 from .attackers.api_export_attackers import router as attackers_export_router
 from .attackers.api_export_attacker_stix import router as attacker_export_stix_router
 from .attackers.api_export_attackers_stix import router as attackers_export_stix_router
+from .attackers.api_export_attacker_misp import router as attacker_export_misp_router
+from .attackers.api_export_attackers_misp import router as attackers_export_misp_router
 from .attackers.api_events import router as attacker_events_router
 from .attackers.api_get_attacker_detail import router as attacker_detail_router
 from .attackers.api_get_attacker_commands import router as attacker_commands_router
@@ -109,6 +111,8 @@ api_router.include_router(attackers_router)
 api_router.include_router(attackers_export_router)
 api_router.include_router(attackers_export_stix_router)
 api_router.include_router(attacker_export_stix_router)
+api_router.include_router(attackers_export_misp_router)
+api_router.include_router(attacker_export_misp_router)
 api_router.include_router(attacker_detail_router)
 api_router.include_router(attacker_events_router)
 api_router.include_router(attacker_commands_router)
