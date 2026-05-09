@@ -9,6 +9,7 @@ import EmptyState from './EmptyState/EmptyState';
 import TTPsObservedSection from './TTPsObservedSection';
 import { useAttackerDetail } from './AttackerDetail/useAttackerDetail';
 import { AttackerHeader } from './AttackerDetail/sections/AttackerHeader';
+import { AttackerStats } from './AttackerDetail/sections/AttackerStats';
 import { Tag } from './AttackerDetail/ui';
 import type {
   AttackerData,
@@ -1458,63 +1459,7 @@ const AttackerDetail: React.FC = () => {
 
       <AttackerHeader attacker={attacker} />
 
-      {/* Stats Row */}
-      <div className="stats-grid" style={{ gridTemplateColumns: 'repeat(5, 1fr)' }}>
-        <div className="stat-card">
-          <div className="stat-value matrix-text">{attacker.event_count}</div>
-          <div className="stat-label">EVENTS</div>
-        </div>
-        <div className="stat-card">
-          <div className="stat-value violet-accent">{attacker.bounty_count}</div>
-          <div className="stat-label">BOUNTIES</div>
-        </div>
-        <div className="stat-card">
-          <div className="stat-value violet-accent">{attacker.credential_count}</div>
-          <div className="stat-label">CREDENTIALS</div>
-        </div>
-        <div className="stat-card">
-          <div className="stat-value matrix-text">{attacker.service_count}</div>
-          <div className="stat-label">SERVICES</div>
-        </div>
-        <div className="stat-card">
-          <div className="stat-value matrix-text">{attacker.decky_count}</div>
-          <div className="stat-label">DECKIES</div>
-        </div>
-      </div>
-
-      {/* Scanned vs. Interacted — activity-depth signal */}
-      {attacker.service_activity &&
-        (attacker.service_activity.scanned.length > 0 ||
-         attacker.service_activity.interacted.length > 0) && (
-        <div className="stats-grid" style={{ gridTemplateColumns: 'repeat(2, 1fr)' }}>
-          <div
-            className="stat-card"
-            title={
-              attacker.service_activity.scanned.length > 0
-                ? `Services: ${attacker.service_activity.scanned.join(', ')}`
-                : 'No services were scanned without engagement.'
-            }
-          >
-            <div className="stat-value matrix-text">
-              {attacker.service_activity.scanned.length}
-            </div>
-            <div className="stat-label">SCANNED · SERVICES</div>
-          </div>
-          <div
-            className="stat-card"
-            title={
-              attacker.service_activity.interacted.length > 0
-                ? `Services: ${attacker.service_activity.interacted.join(', ')}`
-                : 'No services were interacted with — scan-only attacker.'
-            }
-          >
-            <div className="stat-value violet-accent">
-              {attacker.service_activity.interacted.length}
-            </div>
-            <div className="stat-label">INTERACTED WITH · SERVICES</div>
-          </div>
-        </div>
-      )}
+      <AttackerStats attacker={attacker} />
 
       {/* TTPs Observed (per-IP slice) — see TTP_TAGGING.md §"UI surface" */}
       <TTPsObservedSection scope="attacker" uuid={attacker.uuid} />
