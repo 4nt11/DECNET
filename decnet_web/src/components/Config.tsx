@@ -6,25 +6,12 @@ import RuleStateControls from './RuleStateControls';
 import './Dashboard.css';
 import './Config.css';
 
-interface UserEntry {
-  uuid: string;
-  username: string;
-  role: string;
-  must_change_password: boolean;
-}
-
-interface ConfigData {
-  role: string;
-  deployment_limit: number;
-  global_mutation_interval: string;
-  users?: UserEntry[];
-  developer_mode?: boolean;
-}
+import type { ConfigData, ConfigTab } from './Config/types';
 
 const Config: React.FC = () => {
   const [config, setConfig] = useState<ConfigData | null>(null);
   const [loading, setLoading] = useState(true);
-  const [activeTab, setActiveTab] = useState<'limits' | 'users' | 'globals' | 'appearance' | 'workers' | 'ttp'>('limits');
+  const [activeTab, setActiveTab] = useState<ConfigTab>('limits');
   const [accent, setAccent] = useState<'matrix' | 'violet'>(() => {
     try {
       const raw = localStorage.getItem('decnet_tweaks');
@@ -256,7 +243,7 @@ const Config: React.FC = () => {
           <button
             key={tab.key}
             className={`config-tab ${activeTab === tab.key ? 'active' : ''}`}
-            onClick={() => setActiveTab(tab.key as any)}
+            onClick={() => setActiveTab(tab.key as ConfigTab)}
           >
             {tab.icon}
             {tab.label}
