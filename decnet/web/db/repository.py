@@ -1496,6 +1496,10 @@ class BaseRepository(ABC):
         """Deduplicated ``command_text`` strings for one attacker, order-preserved."""
         raise NotImplementedError
 
+    async def get_all_ttp_rollups_for_export(self) -> dict[str, list[dict[str, Any]]]:
+        """Return ``{attacker_uuid: [rollup_dict, ...]}`` for all attackers."""
+        raise NotImplementedError
+
     async def list_ttp_decky_phases(
         self, identity_uuid: str,
     ) -> list[dict[str, Any]]:

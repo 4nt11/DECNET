@@ -300,3 +300,47 @@ def build_attacker_bundle(
         objs.append(note)
 
     return stix2.Bundle(objects=objs, allow_custom=True)
+
+
+def build_fleet_bundle(
+    rows: list[dict[str, Any]],
+    ttp_by_attacker: dict[str, list[dict[str, Any]]],
+) -> stix2.Bundle:
+    """Assemble a STIX 2.1 Bundle covering all attackers in *rows*.
+
+    Deduplicates by STIX ID — attack-pattern SDOs with the same canonical
+    MITRE UUID appear once regardless of how many attackers used the technique.
+    Per-tag Sightings, Artifacts, and SMTP targets are omitted in fleet mode
+    (too verbose; use the per-attacker endpoint for full fidelity).
+    """
+    objs_by_id: dict[str, Any] = {}
+
+    for row in rows:
+        raw_cmds = row.get("commands") or []
+        if isinstance(raw_cmds, str):
+            try:
+                raw_cmds = json.loads(raw_cmds)
+            except Exception:
+                raw_cmds = []
+        cmds = [
+            str(e.get("command_text", "")).strip()
+            for e in raw_cmds
+            if isinstance(e, dict) and e.get("command_text")
+        ]
+
+        intel = row.get("threat_intel")
+        bundle = build_attacker_bundle(
+            attacker=row,
+            behavior=None,
+            identity=None,
+            intel=intel,
+            technique_rollup=ttp_by_attacker.get(row["uuid"], []),
+            raw_tags=[],
+            artifacts=[],
+            smtp_targets=[],
+            commands=cmds,
+        )
+        for obj in bundle.objects:
+            objs_by_id[obj.id] = obj
+
+    return stix2.Bundle(objects=list(objs_by_id.values()), allow_custom=True)

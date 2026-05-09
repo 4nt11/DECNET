@@ -361,6 +361,41 @@ class TTPMixin(_MixinBase):
             res = await session.execute(stmt)
             return [r.model_dump(mode="json") for r in res.scalars().all()]
 
+    async def get_all_ttp_rollups_for_export(self) -> dict[str, list[dict[str, Any]]]:
+        """Return ``{attacker_uuid: [rollup_dict, ...]}`` for all attackers.
+
+        Single query; used by the fleet STIX export so it doesn't fan out
+        N × list_techniques_by_attacker calls.
+        """
+        async with self._session() as session:
+            stmt: Any = (
+                select(
+                    col(TTPTag.attacker_uuid),
+                    col(TTPTag.technique_id),
+                    col(TTPTag.sub_technique_id),
+                    func.max(col(TTPTag.tactic)).label("tactic"),
+                    func.count().label("count"),
+                    func.max(col(TTPTag.confidence)).label("confidence_max"),
+                )
+                .where(col(TTPTag.attacker_uuid).is_not(None))
+                .group_by(
+                    TTPTag.attacker_uuid,
+                    TTPTag.technique_id,
+                    TTPTag.sub_technique_id,
+                )
+            )
+            res = await session.execute(stmt)
+        out: dict[str, list[dict[str, Any]]] = {}
+        for r in res.all():
+            out.setdefault(r.attacker_uuid, []).append({
+                "technique_id": r.technique_id,
+                "sub_technique_id": r.sub_technique_id,
+                "tactic": r.tactic,
+                "count": r.count,
+                "confidence_max": r.confidence_max,
+            })
+        return out
+
     # ── Backfill iterators (E.4) ────────────────────────────────────
     #
     # Read-only iterators consumed by ``decnet ttp backfill`` to replay
