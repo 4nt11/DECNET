@@ -1,8 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
-import { Activity, AlertTriangle, ArrowLeft, Cpu, Crosshair, Eye, Fingerprint, Globe, Keyboard, Shield, Clock, Sparkles, Wifi, Lock, FileKey, Radio, Timer, FileText, Mail, AtSign } from '../icons';
+import { Activity, AlertTriangle, ArrowLeft, Cpu, Crosshair, Eye, Fingerprint, Globe, Keyboard, Shield, Clock, Sparkles, Wifi, Lock, FileKey, Radio, Timer, FileText, AtSign } from '../icons';
 import api from '../utils/api';
-import MailDrawer from './MailDrawer';
 import SessionDrawer from './SessionDrawer';
 import EmptyState from './EmptyState/EmptyState';
 import TTPsObservedSection from './TTPsObservedSection';
@@ -13,6 +12,7 @@ import { TimelineSection } from './AttackerDetail/sections/TimelineSection';
 import { ServicesTargeted } from './AttackerDetail/sections/ServicesTargeted';
 import { CommandsViewer } from './AttackerDetail/sections/CommandsViewer';
 import { ArtifactsPanel } from './AttackerDetail/sections/ArtifactsPanel';
+import { MailLogPanel } from './AttackerDetail/sections/MailLogPanel';
 import { Tag, Section } from './AttackerDetail/ui';
 import type {
   AttackerBehavior,
@@ -1283,10 +1283,9 @@ const AttackerDetail: React.FC = () => {
   });
 
   // Drawer selection (ephemeral UI; data feeds come from the hook).
-  // Drawer selection (mail/session). The artifact drawer state moved
-  // into ArtifactsPanel; mail and session follow in the next commits.
+  // Drawer selection (session). Artifact + mail drawer state are
+  // owned by their respective sections.
   const [session, setSession] = useState<{ decky: string; sid: string; fields: Record<string, any> } | null>(null);
-  const [mailItem, setMailItem] = useState<{ decky: string; storedAs: string; fields: Record<string, any> } | null>(null);
 
   const toggle = (key: string) => setOpenSections((prev) => ({ ...prev, [key]: !prev[key] }));
 
@@ -1552,98 +1551,12 @@ const AttackerDetail: React.FC = () => {
         )}
       </Section>
 
-      {/* Stored Mail (admin only — bodies are attacker-controlled) */}
-      <Section
-        title={<>STORED MAIL ({mail.length})</>}
+      <MailLogPanel
+        mail={mail}
+        mailForbidden={mailForbidden}
         open={openSections.mail}
         onToggle={() => toggle('mail')}
-      >
-        {mailForbidden ? (
-          <EmptyState
-            icon={Mail}
-            title="ADMIN ROLE REQUIRED"
-            size="compact"
-          />
-        ) : mail.length > 0 ? (
-          <div className="logs-table-container">
-            <table className="logs-table">
-              <thead>
-                <tr>
-                  <th>TIMESTAMP</th>
-                  <th>DECKY</th>
-                  <th>SUBJECT</th>
-                  <th>FROM</th>
-                  <th>DATE (attacker)</th>
-                  <th>SIZE</th>
-                  <th></th>
-                </tr>
-              </thead>
-              <tbody>
-                {mail.map((row) => {
-                  let fields: Record<string, any> = {};
-                  try { fields = JSON.parse(row.fields || '{}'); } catch {}
-                  const storedAs = fields.stored_as ? String(fields.stored_as) : null;
-                  return (
-                    <tr key={row.id}>
-                      <td className="dim" style={{ fontSize: '0.75rem', whiteSpace: 'nowrap' }}>
-                        {new Date(row.timestamp).toLocaleString()}
-                      </td>
-                      <td className="violet-accent">{row.decky}</td>
-                      <td className="matrix-text" style={{ fontFamily: 'monospace', wordBreak: 'break-all' }}>
-                        {fields.subject || '—'}
-                      </td>
-                      <td className="matrix-text" style={{ fontFamily: 'monospace', wordBreak: 'break-all' }}>
-                        {fields.from_hdr || fields.from_addr || fields.mail_from || '—'}
-                      </td>
-                      <td className="matrix-text" style={{ fontFamily: 'monospace', whiteSpace: 'nowrap', fontSize: '0.75rem' }}>
-                        {fields.date_hdr || '—'}
-                      </td>
-                      <td className="matrix-text" style={{ fontFamily: 'monospace' }}>
-                        {fields.size ? `${fields.size} B` : '—'}
-                      </td>
-                      <td>
-                        {storedAs && (
-                          <button
-                            onClick={() => setMailItem({ decky: row.decky, storedAs, fields })}
-                            title="Inspect stored message"
-                            style={{
-                              display: 'flex', alignItems: 'center', gap: '6px',
-                              fontSize: '0.7rem',
-                              backgroundColor: 'var(--warn-tint-10)',
-                              padding: '2px 8px',
-                              borderRadius: '4px',
-                              border: '1px solid var(--warn)',
-                              color: 'var(--warn)',
-                              cursor: 'pointer',
-                            }}
-                          >
-                            <Mail size={11} /> OPEN
-                          </button>
-                        )}
-                      </td>
-                    </tr>
-                  );
-                })}
-              </tbody>
-            </table>
-          </div>
-        ) : (
-          <EmptyState
-            icon={Mail}
-            title="NO MAIL STORED"
-            size="compact"
-          />
-        )}
-      </Section>
-
-      {mailItem && (
-        <MailDrawer
-          decky={mailItem.decky}
-          storedAs={mailItem.storedAs}
-          fields={mailItem.fields}
-          onClose={() => setMailItem(null)}
-        />
-      )}
+      />
 
       {/* Recorded PTY Sessions (SSH / Telnet) */}
       <Section
