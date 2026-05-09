@@ -1,7 +1,7 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
-  Cpu, Database, Globe, Monitor, Network, PlusCircle, PowerOff,
-  RefreshCw, Server, Shield, Terminal, Plus, X,
+  Network, PlusCircle, PowerOff,
+  RefreshCw, Server, Plus, X,
 } from '../icons';
 import { useEscapeKey } from '../hooks/useEscapeKey';
 import api, { type ApiError } from '../utils/api';
@@ -17,114 +17,19 @@ import ServiceConfigFields, {
   compactPayload as svcCompactPayload,
 } from './ServiceConfigFields';
 import './DeckyFleet.css';
-
-// ─── Types ────────────────────────────────────────────────────────────────
-
-interface SwarmMeta {
-  host_uuid: string;
-  host_name: string;
-  host_address: string;
-  host_status: string;
-  state: string;
-  last_error: string | null;
-  last_seen: string | null;
-}
-
-interface Decky {
-  name: string;
-  ip: string;
-  services: string[];
-  distro: string;
-  hostname: string;
-  archetype: string | null;
-  service_config: Record<string, Record<string, unknown>>;
-  mutate_interval: number | null;
-  last_mutated: number;
-  swarm?: SwarmMeta;
-}
-
-interface SwarmDeckyRaw {
-  decky_name: string;
-  decky_ip: string | null;
-  host_uuid: string;
-  host_name: string;
-  host_address: string;
-  host_status: string;
-  services: string[];
-  state: string;
-  last_error: string | null;
-  last_seen: string | null;
-  hostname: string | null;
-  distro: string | null;
-  archetype: string | null;
-  service_config: Record<string, Record<string, unknown>>;
-  mutate_interval: number | null;
-  last_mutated: number;
-}
-
-interface Archetype {
-  slug: string;
-  name: string;
-  services: string[];
-  icon: string;
-}
-
-type FilterKey = 'all' | 'active' | 'hot' | 'idle';
-type DeckyStatus = 'active' | 'hot' | 'idle';
-
-// ─── Helpers ──────────────────────────────────────────────────────────────
-
-const _archetypeIcon = (slug: string): string => {
-  const s = slug.toLowerCase();
-  if (s.includes('windows') || s.includes('workstation')) return 'monitor';
-  if (s.includes('domain')) return 'shield';
-  if (s.includes('database') || s.includes('sql')) return 'database';
-  if (s.includes('iot') || s.includes('ot')) return 'cpu';
-  if (s.includes('web')) return 'globe';
-  return 'server';
-};
-
-// Compact icon resolver for lucide names we use in the wizard.
-const PickIcon: React.FC<{ name: string; size?: number; className?: string }> = (
-  { name, size = 16, className },
-) => {
-  const map: Record<string, React.ComponentType<{ size?: number; className?: string }>> = {
-    server: Server, monitor: Monitor, shield: Shield, database: Database,
-    cpu: Cpu, globe: Globe, terminal: Terminal,
-  };
-  const Cmp = map[name] ?? Server;
-  return <Cmp size={size} className={className} />;
-};
-
-// Map swarm state -> visual dot status. "active" with no recent hit is idle;
-// we don't have per-decky hit counts here, so treat running = active.
-const _dotFor = (d: Decky): DeckyStatus => {
-  if (!d.swarm) return 'active';
-  switch (d.swarm.state) {
-    case 'running': return 'active';
-    case 'failed':
-    case 'teardown_failed': return 'hot';
-    case 'pending':
-    case 'tearing_down':
-    case 'degraded': return 'idle';
-    default: return 'idle';
-  }
-};
-
-// Hits placeholder — backend doesn't expose per-decky 24h hit count yet.
-const _hitsFor = (_d: Decky): number => 0;
-
-const _stateColor = (state: string): string => {
-  switch (state) {
-    case 'running': return 'var(--matrix)';
-    case 'degraded':
-    case 'tearing_down':
-    case 'pending': return 'var(--violet)';
-    case 'failed':
-    case 'teardown_failed': return 'var(--alert)';
-    default: return 'var(--border)';
-  }
-};
+import type {
+  Decky,
+  SwarmDeckyRaw,
+  Archetype,
+  FilterKey,
+} from './DeckyFleet/types';
+import {
+  archetypeIcon as _archetypeIcon,
+  PickIcon,
+  dotFor as _dotFor,
+  hitsFor as _hitsFor,
+  stateColor as _stateColor,
+} from './DeckyFleet/helpers';
 
 // ─── Decky inspect panel ─────────────────────────────────────────────────
 
