@@ -25,9 +25,9 @@ import { useAttackerDetail } from './useAttackerDetail';
 
 const ID = '11111111-1111-1111-1111-111111111111';
 
-const attackerHandler = (body: unknown, status = 200) =>
+const attackerHandler = (body: object, status = 200) =>
   http.get(apiUrl(`/attackers/${ID}`), () =>
-    HttpResponse.json(body, { status }),
+    HttpResponse.json(body as Record<string, unknown>, { status }),
   );
 
 const stockHandlers = () => [
@@ -139,9 +139,10 @@ describe('useAttackerDetail', () => {
 
   it('flags mailForbidden on 403', async () => {
     server.use(
-      ...stockHandlers().filter(
-        (h) => !h.info.path.endsWith('/mail'),
-      ),
+      ...stockHandlers().filter((h) => {
+        const p = h.info.path;
+        return typeof p === 'string' ? !p.endsWith('/mail') : true;
+      }),
       http.get(apiUrl(`/attackers/${ID}/mail`), () =>
         HttpResponse.json({ detail: 'forbidden' }, { status: 403 }),
       ),
