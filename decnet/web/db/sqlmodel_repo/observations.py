@@ -25,7 +25,7 @@ from typing import Any, Optional
 from sqlalchemy import desc, func, select
 from sqlmodel import col
 
-from decnet.web.db.models import ObservationRow
+from decnet.web.db.models import Attacker, ObservationRow
 from decnet.web.db.sqlmodel_repo._helpers import _MixinBase
 
 
@@ -163,6 +163,34 @@ class ObservationsMixin(_MixinBase):
             if not row:
                 return None
             return row.model_dump(mode="json")
+
+    async def observations_for_identity_primitive(
+        self, identity_uuid: str, primitive: str,
+    ) -> list[dict[str, Any]]:
+        """Union of every observation of *primitive* across the
+        attackers rolling up to *identity_uuid*, ordered ``ts`` ASC.
+
+        v0 with 1:1 stub identities returns the same set as
+        ``observations_time_series(attacker_uuid, primitive)``.
+        v1's clusterer makes the union load-bearing — multiple
+        attackers point at the same identity_id and this query is
+        what gives the merger a cross-attacker view.
+        """
+        async with self._session() as session:
+            stmt = (
+                select(ObservationRow)
+                .join(Attacker, ObservationRow.attacker_uuid == Attacker.uuid)
+                .where(
+                    Attacker.identity_id == identity_uuid,
+                    ObservationRow.primitive == primitive,
+                )
+                .order_by(ObservationRow.ts)
+            )
+            rows = (await session.execute(stmt)).scalars().all()
+            return [
+                {"ts": row.ts, "value": row.value, "confidence": row.confidence}
+                for row in rows
+            ]
 
     async def has_observations_for_evidence(
         self, evidence_ref: str,

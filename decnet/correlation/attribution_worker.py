@@ -26,11 +26,24 @@ from decnet.bus import topics as _topics
 from decnet.bus.base import BaseBus
 from decnet.bus.factory import get_bus
 from decnet.bus.publish import (
+    publish_safely,
     run_control_listener_signal as _run_control_listener_signal,
     run_health_heartbeat as _run_health_heartbeat,
 )
+from decnet.correlation.attribution.aggregate import aggregate_observations
 from decnet.logging import get_logger
 from decnet.web.db.repository import BaseRepository
+
+try:
+    from decnet_behave_shell.spec import (
+        PRIMITIVE_REGISTRY,
+        ValueKind,
+    )
+    _BEHAVE_REGISTRY_AVAILABLE = True
+except ImportError:  # pragma: no cover
+    PRIMITIVE_REGISTRY = {}
+    ValueKind = None
+    _BEHAVE_REGISTRY_AVAILABLE = False
 
 log = get_logger("correlation.attribution_worker")
 
@@ -156,13 +169,103 @@ async def handle_observation_event(
             attacker_uuid,
         )
         return
-    # Phase 4 will run the merger here and emit
-    # ``attribution.profile.state_changed`` on transition. Phase 1
-    # ends with stub materialisation only.
-    log.debug(
-        "attribution worker: stub identity=%s for attacker=%s primitive=%s",
-        identity_uuid, attacker_uuid, primitive,
+    primitive_str = str(primitive)
+
+    # Load the full per-(identity, primitive) observation series.
+    # v0 with 1:1 stub identities, this is the single attacker's
+    # series; v1's clusterer makes it a cross-attacker union.
+    observations = await repo.observations_for_identity_primitive(
+        identity_uuid, primitive_str,
     )
+    if not observations:
+        log.debug(
+            "attribution worker: no observations yet for identity=%s "
+            "primitive=%s (race with upsert)",
+            identity_uuid, primitive_str,
+        )
+        return
+
+    # Run merger.
+    value_kind = _value_kind_for(primitive_str)
+    new_state = aggregate_observations(observations, value_kind=value_kind)
+
+    # Load prior state to detect transitions.
+    prior = await repo.get_attribution_state(identity_uuid, primitive_str)
+    state_changed = prior is None or prior.get("state") != new_state.state
+
+    # Persist. last_change_ts is locked to the prior row when state is
+    # unchanged so the dashboard's "stable since" timestamp doesn't
+    # reset on every observation.
+    if prior is not None and not state_changed:
+        last_change_ts = float(prior.get("last_change_ts", new_state.last_observation_ts))
+    else:
+        last_change_ts = new_state.last_observation_ts
+    await repo.upsert_attribution_state({
+        "identity_uuid": identity_uuid,
+        "primitive": primitive_str,
+        "current_value": new_state.current_value,
+        "state": new_state.state,
+        "confidence": new_state.confidence,
+        "observation_count": new_state.observation_count,
+        "last_change_ts": last_change_ts,
+        "last_observation_ts": new_state.last_observation_ts,
+    })
+
+    # Emit state_changed only on transition. Idempotent re-runs (same
+    # observations, same merger output) produce no event — matches
+    # the loop-prevention invariant that ttp.tagged uses.
+    if state_changed and bus is not None:
+        await publish_safely(
+            bus,
+            _topics.attribution(_topics.ATTRIBUTION_PROFILE_STATE_CHANGED),
+            {
+                "identity_uuid": identity_uuid,
+                "primitive": primitive_str,
+                "old_state": prior.get("state") if prior else None,
+                "new_state": new_state.state,
+                "current_value": new_state.current_value,
+                "confidence": new_state.confidence,
+                "observation_count": new_state.observation_count,
+                "ts": new_state.last_observation_ts,
+            },
+            event_type=_topics.ATTRIBUTION_PROFILE_STATE_CHANGED,
+        )
+        log.info(
+            "attribution worker: identity=%s primitive=%s %s -> %s confidence=%.2f",
+            identity_uuid, primitive_str,
+            (prior or {}).get("state") or "<new>", new_state.state,
+            new_state.confidence,
+        )
+
+
+def _value_kind_for(primitive: str) -> str:
+    """Resolve a BEHAVE primitive name to the merger's ValueKind tag.
+
+    Maps the BEHAVE registry's ``ValueKind`` enum onto the three
+    mergers the engine ships:
+
+    * ``CATEGORICAL`` / ``BOOL`` / ``FREE_STRING`` / ``ARRAY`` →
+      ``"categorical"`` (BOOL is a 2-cardinality categorical;
+      FREE_STRING and ARRAY collapse to opaque-token categorical
+      until a v1 specialised merger lands)
+    * ``NUMERIC`` → ``"numeric"``
+    * ``HASH``    → ``"hash"``
+
+    Unknown primitives (registry miss) default to categorical — the
+    safest fallback because the categorical merger is one-outlier-
+    tolerant and won't lie about confidence on noisy categorical
+    data the way a numeric merger would on non-numeric values.
+    """
+    if not _BEHAVE_REGISTRY_AVAILABLE:
+        return "categorical"
+    spec = PRIMITIVE_REGISTRY.get(primitive)
+    if spec is None or ValueKind is None:
+        return "categorical"
+    if spec.kind is ValueKind.NUMERIC:
+        return "numeric"
+    if spec.kind is ValueKind.HASH:
+        return "hash"
+    return "categorical"
 
 
 def _payload_of(event: Any) -> dict[str, Any]:

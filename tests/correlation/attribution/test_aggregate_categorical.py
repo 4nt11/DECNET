@@ -165,11 +165,12 @@ def test_dispatcher_routes_categorical() -> None:
     assert a == b == c
 
 
-def test_dispatcher_rejects_unimplemented_kinds() -> None:
-    """numeric / hash kinds land in Phase 3; surface the gap loudly
-    so a misuse doesn't silently fall through to categorical."""
+def test_dispatcher_rejects_unknown_value_kind() -> None:
+    """Unknown ValueKind tags surface as ValueError so misuse doesn't
+    silently fall through to categorical. Phase 3 wired numeric +
+    hash; the rejection is for typos and v1 kinds that haven't
+    landed yet."""
     import pytest
-    obs = _pad(value=5000.0, count=5)
-    for kind in ("numeric", "hash"):
-        with pytest.raises(NotImplementedError):
-            aggregate_observations(obs, value_kind=kind)
+    obs = _pad(value="typed", count=5)
+    with pytest.raises(ValueError):
+        aggregate_observations(obs, value_kind="bogus_kind")

@@ -42,6 +42,24 @@ class DummyRepo(BaseRepository):
     async def upsert_observation(self, data): await super().upsert_observation(data); return ""
     async def latest_observation_per_primitive(self, attacker_uuid): await super().latest_observation_per_primitive(attacker_uuid); return {}
     async def observations_time_series(self, attacker_uuid, primitive): await super().observations_time_series(attacker_uuid, primitive); return []
+    async def observations_for_identity_primitive(self, identity_uuid, primitive):
+        await super().observations_for_identity_primitive(identity_uuid, primitive)
+        return []
+    # Attribution engine v0 (ATTRIBUTION-ENGINE.md Phase 1)
+    async def ensure_stub_identity_for_attacker(self, attacker_uuid):
+        await super().ensure_stub_identity_for_attacker(attacker_uuid)
+        return None
+    async def upsert_attribution_state(self, data):
+        await super().upsert_attribution_state(data)
+    async def get_attribution_state(self, identity_uuid, primitive):
+        await super().get_attribution_state(identity_uuid, primitive)
+        return None
+    async def get_attribution_state_for_identity(self, identity_uuid):
+        await super().get_attribution_state_for_identity(identity_uuid)
+        return []
+    async def list_multi_actor_identities(self):
+        await super().list_multi_actor_identities()
+        return []
     async def increment_smtp_target(self, u, d): await super().increment_smtp_target(u, d)
     async def list_smtp_targets(self, u): await super().list_smtp_targets(u)
     async def get_attacker_stored_mail(self, u): await super().get_attacker_stored_mail(u)
@@ -86,6 +104,38 @@ class DummyRepo(BaseRepository):
     async def set_identity_campaign_id(self, i, c): await super().set_identity_campaign_id(i, c)
     async def list_all_campaigns(self): await super().list_all_campaigns(); return []
     async def update_campaign_merged_into(self, u, w): await super().update_campaign_merged_into(u, w)
+    # Pre-existing abstract surface that DummyRepo never stubbed —
+    # added here so the coverage test exercises the full BaseRepository
+    # contract.
+    async def get_log_histogram(self, *a, **kw):
+        await super().get_log_histogram(*a, **kw); return []
+    async def has_observations_for_evidence(self, evidence_ref):
+        await super().has_observations_for_evidence(evidence_ref); return False
+    async def get_attacker_uuid_by_ip(self, ip):
+        await super().get_attacker_uuid_by_ip(ip); return None
+    # TTP rollup surface (TTP_TAGGING.md)
+    async def insert_tags(self, rows): await super().insert_tags(rows); return 0
+    async def list_techniques_by_identity(self, uuid):
+        await super().list_techniques_by_identity(uuid); return []
+    async def list_techniques_by_attacker(self, uuid):
+        await super().list_techniques_by_attacker(uuid); return []
+    async def list_techniques_by_campaign(self, uuid):
+        await super().list_techniques_by_campaign(uuid); return []
+    async def list_techniques_by_session(self, sid):
+        await super().list_techniques_by_session(sid); return []
+    async def list_tags_by_scope_and_technique(self, **kw):
+        await super().list_tags_by_scope_and_technique(**kw); return []
+    async def list_distinct_techniques(self):
+        await super().list_distinct_techniques(); return []
+    # Iter helpers — async generators, can't `await super()` on them
+    # because the base raises in the body before any yield. Just yield
+    # nothing so the consumer's ``async for`` exits cleanly.
+    async def iter_attacker_commands_since(self, since):
+        return
+        yield  # unreachable, marks the function as a generator
+    async def iter_canary_triggers_since(self, since):
+        return
+        yield
 
 @pytest.mark.asyncio
 async def test_base_repo_coverage():
@@ -127,9 +177,26 @@ async def test_base_repo_coverage():
     await dr.upsert_attacker_behavior("a", {})
     await dr.get_attacker_behavior("a")
     await dr.get_behaviors_for_ips({"1.1.1.1"})
-    await dr.upsert_observation({})
-    await dr.latest_observation_per_primitive("a")
-    await dr.observations_time_series("a", "motor.input_modality")
+    # Observation surface — bases raise NotImplementedError.
+    with pytest.raises(NotImplementedError):
+        await dr.upsert_observation({})
+    with pytest.raises(NotImplementedError):
+        await dr.latest_observation_per_primitive("a")
+    with pytest.raises(NotImplementedError):
+        await dr.observations_time_series("a", "motor.input_modality")
+    # observations_for_identity_primitive + attribution engine v0
+    with pytest.raises(NotImplementedError):
+        await dr.observations_for_identity_primitive("i", "motor.input_modality")
+    with pytest.raises(NotImplementedError):
+        await dr.ensure_stub_identity_for_attacker("a")
+    with pytest.raises(NotImplementedError):
+        await dr.upsert_attribution_state({})
+    with pytest.raises(NotImplementedError):
+        await dr.get_attribution_state("i", "motor.input_modality")
+    with pytest.raises(NotImplementedError):
+        await dr.get_attribution_state_for_identity("i")
+    with pytest.raises(NotImplementedError):
+        await dr.list_multi_actor_identities()
     await dr.increment_smtp_target("uuid", "corp.com")
     await dr.list_smtp_targets("uuid")
     await dr.get_attacker_stored_mail("uuid")
@@ -173,6 +240,37 @@ async def test_base_repo_coverage():
     await dr.list_all_campaigns()
     await dr.update_campaign_merged_into("c", "d")
     await dr.update_campaign_merged_into("c", None)
+
+    # Pre-existing abstract surface. get_log_histogram's base body
+    # is ``pass`` (returns None), the rest raise NotImplementedError.
+    from datetime import datetime, timezone
+    await dr.get_log_histogram()
+    with pytest.raises(NotImplementedError):
+        await dr.has_observations_for_evidence("shard:x#1")
+    with pytest.raises(NotImplementedError):
+        await dr.get_attacker_uuid_by_ip("1.1.1.1")
+    with pytest.raises(NotImplementedError):
+        await dr.insert_tags([])
+    with pytest.raises(NotImplementedError):
+        await dr.list_techniques_by_identity("i")
+    with pytest.raises(NotImplementedError):
+        await dr.list_techniques_by_attacker("a")
+    with pytest.raises(NotImplementedError):
+        await dr.list_techniques_by_campaign("c")
+    with pytest.raises(NotImplementedError):
+        await dr.list_techniques_by_session("s")
+    with pytest.raises(NotImplementedError):
+        await dr.list_tags_by_scope_and_technique(
+            scope="identity", uuid="i", technique_id="T1059",
+        )
+    with pytest.raises(NotImplementedError):
+        await dr.list_distinct_techniques()
+    # Iter helpers: just consume the empty generator.
+    now = datetime.now(timezone.utc)
+    async for _ in dr.iter_attacker_commands_since(now):
+        pass
+    async for _ in dr.iter_canary_triggers_since(now):
+        pass
 
     # Swarm methods: default NotImplementedError on BaseRepository.  Covering
     # them here keeps the coverage contract honest for the swarm CRUD surface.

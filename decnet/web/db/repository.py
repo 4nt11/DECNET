@@ -342,6 +342,20 @@ class BaseRepository(ABC):
         raise NotImplementedError
 
     @abstractmethod
+    async def observations_for_identity_primitive(
+        self, identity_uuid: str, primitive: str,
+    ) -> list[dict[str, Any]]:
+        """Every observation of ``primitive`` across all attackers
+        rolling up to ``identity_uuid``, ordered by ``ts`` ASC.
+
+        Empty list when the identity has no observations of this
+        primitive. v0 with 1:1 stub identities returns the same set
+        as ``observations_time_series(attacker_uuid, primitive)``;
+        v1's clusterer makes the union meaningful.
+        """
+        raise NotImplementedError
+
+    @abstractmethod
     async def has_observations_for_evidence(self, evidence_ref: str) -> bool:
         """True iff any observation row carries this ``evidence_ref``.
 
