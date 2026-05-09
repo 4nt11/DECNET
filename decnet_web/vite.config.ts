@@ -15,16 +15,15 @@ export default defineConfig({
       include: ['src/**/*.{ts,tsx}'],
       exclude: ['src/**/*.d.ts', 'src/test/**', 'src/main.tsx'],
       // Baseline floors. Each refactor PR raises these; never lower.
-      // Phase 6 (PersonaGeneration trim): page shell down from 875 to
-      // 357 LOC. Lifted helpers, PersonaCard, PersonaEditor, and a
-      // usePersonaGeneration data hook (GET/PUT, global + topology
-      // endpoints). 18 new tests. Suite: 40 files, 190 tests,
-      // 20.83% lines / 16.3% branches.
+      // Phase 7 (Webhooks trim): page shell down from 642 to 387 LOC.
+      // Lifted helpers, FormRow, SecretModal, and a useWebhooks data
+      // hook (CRUD + test endpoint). 17 new tests. Suite: 43 files,
+      // 207 tests, 21.69% lines / 16.51% branches.
       thresholds: {
-        lines: 20,
-        functions: 17,
+        lines: 21,
+        functions: 18,
         branches: 16,
-        statements: 19,
+        statements: 20,
       },
     },
   },

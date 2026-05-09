@@ -1,98 +1,26 @@
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useMemo, useState } from 'react';
 import {
-  Plus, Trash2, Pencil, Zap, AlertTriangle, Copy, X, Save,
+  Plus, Trash2, Pencil, Zap, AlertTriangle, X,
   Check, Webhook as WebhookIcon,
 } from '../icons';
-import api, { type ApiError } from '../utils/api';
 import { useToast } from './Toasts/useToast';
+import FormRow from './Webhooks/FormRow';
+import SecretModal from './Webhooks/SecretModal';
+import { useWebhooks } from './Webhooks/useWebhooks';
+import {
+  BLANK_FORM, deriveSimpleEvents, formatDate, formToPayload, SIMPLE_PRESETS,
+} from './Webhooks/helpers';
+import type { FormState, SimpleEvent, WebhookRow } from './Webhooks/types';
 import './Dashboard.css';
 import './Config.css';
 import './Webhooks.css';
 
-type SimpleEvent = 'AttackerDetail' | 'DeckyStatus' | 'SystemStatus';
-
-// Server-side canonical expansions (mirrors decnet/webhook/enums.py). Kept
-// in sync manually; this is the sugar layer, not the source of truth.
-const SIMPLE_PRESETS: Record<SimpleEvent, string[]> = {
-  AttackerDetail: ['attacker.>'],
-  DeckyStatus: ['decky.*.state', 'decky.*.traffic'],
-  SystemStatus: ['system.>'],
-};
-
-interface WebhookRow {
-  uuid: string;
-  name: string;
-  url: string;
-  topic_patterns: string[];
-  enabled: boolean;
-  consecutive_failures: number;
-  last_success_at: string | null;
-  last_failure_at: string | null;
-  last_error: string | null;
-  auto_disabled_at: string | null;
-  created_at: string;
-  updated_at: string;
-  warnings: string[];
-}
-
-interface FormState {
-  name: string;
-  url: string;
-  secret: string;                 // blank = server auto-generates (create) / keep existing (edit)
-  simple_events: SimpleEvent[];
-  topic_patterns: string;         // textarea: one per line
-  enabled: boolean;
-}
-
-const BLANK_FORM: FormState = {
-  name: '',
-  url: '',
-  secret: '',
-  simple_events: [],
-  topic_patterns: '',
-  enabled: true,
-};
-
-function extractErrorDetail(err: unknown, fallback: string): string {
-  const e = err as ApiError;
-  if (e?.response?.data?.detail) return e.response.data.detail;
-  if (e?.response?.status === 403) return 'Insufficient permissions (admin only)';
-  if (e?.response?.status === 401) return 'Session expired — please log in again';
-  if (e?.message) return e.message;
-  return fallback;
-}
-
-/** Derive which simple-event checkboxes should show as ticked for a given
- *  persisted pattern list. Only ticks when the intersection is exact —
- *  mixed custom + preset leaves everything unticked and the textarea is
- *  the source of truth. */
-function deriveSimpleEvents(patterns: string[]): SimpleEvent[] {
-  const ticked: SimpleEvent[] = [];
-  const remaining = new Set(patterns);
-  for (const [name, preset] of Object.entries(SIMPLE_PRESETS) as [SimpleEvent, string[]][]) {
-    if (preset.every((p) => remaining.has(p))) {
-      ticked.push(name);
-      preset.forEach((p) => remaining.delete(p));
-    }
-  }
-  // If anything outside the presets remains, don't tick — user sees raw.
-  if (remaining.size > 0) return [];
-  return ticked;
-}
-
-function formatDate(iso: string | null): string {
-  if (!iso) return '—';
-  const d = new Date(iso);
-  if (Number.isNaN(d.getTime())) return iso;
-  const pad = (n: number) => String(n).padStart(2, '0');
-  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())} ${pad(d.getHours())}:${pad(d.getMinutes())}`;
-}
-
 const Webhooks: React.FC = () => {
-  const [webhooks, setWebhooks] = useState<WebhookRow[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
   const { push } = useToast();
+  const {
+    webhooks, loading, error,
+    createWebhook, updateWebhook, removeWebhook, testWebhook,
+  } = useWebhooks();
 
   const [creating, setCreating] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
@@ -108,7 +36,6 @@ const Webhooks: React.FC = () => {
     () => webhooks.filter((w) => w.warnings.some((msg) => msg.startsWith('insecure_url'))).length,
     [webhooks],
   );
-
   const enabledCount = useMemo(() => webhooks.filter((w) => w.enabled).length, [webhooks]);
   const failCount = useMemo(
     () => webhooks.filter((w) => w.consecutive_failures > 0).length,
@@ -118,22 +45,6 @@ const Webhooks: React.FC = () => {
     () => webhooks.filter((w) => w.auto_disabled_at).length,
     [webhooks],
   );
-
-  const fetchWebhooks = async () => {
-    try {
-      const res = await api.get('/webhooks/');
-      setWebhooks(res.data);
-      setError(null);
-    } catch (err) {
-      setError(extractErrorDetail(err, 'Failed to load webhooks'));
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  useEffect(() => {
-    fetchWebhooks();
-  }, []);
 
   const closeForm = () => {
     setCreating(false);
@@ -177,98 +88,76 @@ const Webhooks: React.FC = () => {
   const handleSave = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!form.name.trim() || !form.url.trim()) return;
-    const rawPatterns = form.topic_patterns
-      .split('\n')
-      .map((s) => s.trim())
-      .filter(Boolean);
-    if (form.simple_events.length === 0 && rawPatterns.length === 0) {
+    const payload = formToPayload(form);
+    if (form.simple_events.length === 0 && payload.topic_patterns.length === 0) {
       push({ text: 'SELECT AT LEAST ONE EVENT OR PATTERN', tone: 'violet', icon: 'alert-triangle' });
       return;
     }
-
     setSaving(true);
     try {
       if (editingId) {
-        await api.patch(`/webhooks/${editingId}`, {
-          name: form.name.trim(),
-          url: form.url.trim(),
-          secret: form.secret ? form.secret : undefined,
-          simple_events: form.simple_events,
-          topic_patterns: rawPatterns,
-          enabled: form.enabled,
-        });
-        push({ text: 'WEBHOOK UPDATED', tone: 'violet', icon: 'check-circle' });
+        const r = await updateWebhook(editingId, payload);
+        if (r.ok) {
+          push({ text: 'WEBHOOK UPDATED', tone: 'violet', icon: 'check-circle' });
+          closeForm();
+        } else {
+          push({ text: `SAVE FAILED · ${(r.reason ?? '').toUpperCase()}`, tone: 'violet', icon: 'alert-triangle' });
+        }
       } else {
-        const res = await api.post('/webhooks/', {
-          name: form.name.trim(),
-          url: form.url.trim(),
-          secret: form.secret ? form.secret : undefined,
-          simple_events: form.simple_events,
-          topic_patterns: rawPatterns,
-          enabled: form.enabled,
-        });
-        push({ text: 'WEBHOOK CREATED', tone: 'violet', icon: 'check-circle' });
-        if (res.data?.secret) {
-          setNewSecret({ name: res.data.name, secret: res.data.secret });
+        const r = await createWebhook(payload);
+        if (r.ok) {
+          push({ text: 'WEBHOOK CREATED', tone: 'violet', icon: 'check-circle' });
+          if (r.data?.secret) {
+            setNewSecret({ name: r.data.name, secret: r.data.secret });
+          }
+          closeForm();
+        } else {
+          push({ text: `SAVE FAILED · ${(r.reason ?? '').toUpperCase()}`, tone: 'violet', icon: 'alert-triangle' });
         }
       }
-      closeForm();
-      await fetchWebhooks();
-    } catch (err) {
-      const msg = extractErrorDetail(err, 'Save failed');
-      push({ text: `SAVE FAILED · ${msg.toUpperCase()}`, tone: 'violet', icon: 'alert-triangle' });
     } finally {
       setSaving(false);
     }
   };
 
   const handleTestOne = async (uuid: string, name: string) => {
-    try {
-      const res = await api.post(`/webhooks/${uuid}/test`);
-      const { delivered, status_code, error: err } = res.data;
-      if (delivered) {
-        push({ text: `${name.toUpperCase()} · DELIVERED · ${status_code}`, tone: 'violet', icon: 'zap' });
-      } else {
-        push({ text: `${name.toUpperCase()} · FAILED · ${(err || 'unknown').toUpperCase()}`, tone: 'violet', icon: 'alert-triangle' });
-      }
-      fetchWebhooks();
-    } catch (err) {
-      const msg = extractErrorDetail(err, 'Test failed');
-      push({ text: `TEST FAILED · ${msg.toUpperCase()}`, tone: 'violet', icon: 'alert-triangle' });
+    const r = await testWebhook(uuid);
+    if (!r.ok) {
+      push({ text: `TEST FAILED · ${(r.reason ?? '').toUpperCase()}`, tone: 'violet', icon: 'alert-triangle' });
+      return;
+    }
+    const { delivered, status_code, error: err } = r.data ?? { delivered: false };
+    if (delivered) {
+      push({ text: `${name.toUpperCase()} · DELIVERED · ${status_code}`, tone: 'violet', icon: 'zap' });
+    } else {
+      push({ text: `${name.toUpperCase()} · FAILED · ${(err || 'unknown').toUpperCase()}`, tone: 'violet', icon: 'alert-triangle' });
     }
   };
 
   const handleDeleteOne = async (uuid: string, name: string) => {
-    try {
-      await api.delete(`/webhooks/${uuid}`);
+    const r = await removeWebhook(uuid);
+    if (r.ok) {
       push({ text: `${name.toUpperCase()} · DELETED`, tone: 'violet', icon: 'trash' });
       setSelected((s) => {
-        const n = new Set(s);
-        n.delete(uuid);
-        return n;
+        const n = new Set(s); n.delete(uuid); return n;
       });
-      fetchWebhooks();
-    } catch (err) {
-      const msg = extractErrorDetail(err, 'Delete failed');
-      push({ text: `DELETE FAILED · ${msg.toUpperCase()}`, tone: 'violet', icon: 'alert-triangle' });
+    } else {
+      push({ text: `DELETE FAILED · ${(r.reason ?? '').toUpperCase()}`, tone: 'violet', icon: 'alert-triangle' });
     }
   };
 
   const handleDeleteSelected = async () => {
     const ids = Array.from(selected);
-    const results = await Promise.allSettled(ids.map((id) => api.delete(`/webhooks/${id}`)));
-    const ok = results.filter((r) => r.status === 'fulfilled').length;
+    const results = await Promise.allSettled(ids.map((id) => removeWebhook(id)));
+    const ok = results.filter((r) => r.status === 'fulfilled' && r.value.ok).length;
     const bad = results.length - ok;
     push({
-      text: bad === 0
-        ? `DELETED · ${ok}`
-        : `DELETED · ${ok} · FAILED · ${bad}`,
+      text: bad === 0 ? `DELETED · ${ok}` : `DELETED · ${ok} · FAILED · ${bad}`,
       tone: 'violet',
       icon: bad ? 'alert-triangle' : 'trash',
     });
     setSelected(new Set());
     setDeleteArmed(false);
-    fetchWebhooks();
   };
 
   const toggleSelect = (uuid: string) => {
@@ -413,9 +302,7 @@ const Webhooks: React.FC = () => {
                         />
                       </td>
                       <td>{w.name}</td>
-                      <td className="wh-url-cell" title={w.url}>
-                        {w.url}
-                      </td>
+                      <td className="wh-url-cell" title={w.url}>{w.url}</td>
                       <td>
                         {w.topic_patterns.slice(0, 2).map((p) => (
                           <span key={p} className="wh-chip">{p}</span>
@@ -493,148 +380,6 @@ const Webhooks: React.FC = () => {
           onClose={() => setNewSecret(null)}
         />
       )}
-    </div>
-  );
-};
-
-interface FormRowProps {
-  title: string;
-  form: FormState;
-  setForm: React.Dispatch<React.SetStateAction<FormState>>;
-  onSave: (e: React.FormEvent) => void;
-  onCancel: () => void;
-  saving: boolean;
-  isEdit: boolean;
-  onToggleSimple: (n: SimpleEvent) => void;
-}
-
-const FormRow: React.FC<FormRowProps> = ({
-  title, form, setForm, onSave, onCancel, saving, isEdit, onToggleSimple,
-}) => (
-  <tr className="wh-form-row">
-    <td colSpan={7}>
-      <form className="wh-form-grid" onSubmit={onSave}>
-        <label className="wh-form-title">{title}</label>
-
-        <label>NAME</label>
-        <input
-          type="text"
-          value={form.name}
-          onChange={(e) => setForm((f) => ({ ...f, name: e.target.value }))}
-          placeholder="shuffle-prod"
-          required
-          maxLength={64}
-        />
-
-        <label>URL</label>
-        <input
-          type="url"
-          value={form.url}
-          onChange={(e) => setForm((f) => ({ ...f, url: e.target.value }))}
-          placeholder="https://shuffle.example.com/api/v1/hooks/webhook_xxx"
-          required
-        />
-
-        <label>
-          SECRET {isEdit && <span className="wh-form-hint">(blank = keep existing)</span>}
-        </label>
-        <input
-          type="password"
-          value={form.secret}
-          onChange={(e) => setForm((f) => ({ ...f, secret: e.target.value }))}
-          placeholder={isEdit ? '—' : 'leave blank to auto-generate'}
-          minLength={16}
-          maxLength={256}
-        />
-
-        <label>SIMPLE EVENTS</label>
-        <div className="wh-checkbox-group">
-          {(['AttackerDetail', 'DeckyStatus', 'SystemStatus'] as const).map((name) => (
-            <label key={name}>
-              <input
-                type="checkbox"
-                checked={form.simple_events.includes(name)}
-                onChange={() => onToggleSimple(name)}
-              />
-              {name}
-            </label>
-          ))}
-        </div>
-
-        <label>
-          ADVANCED PATTERNS
-          <br />
-          <span className="wh-form-hint">(one per line, NATS-style)</span>
-        </label>
-        <textarea
-          value={form.topic_patterns}
-          onChange={(e) => setForm((f) => ({ ...f, topic_patterns: e.target.value }))}
-          placeholder={'attacker.>\ndecky.*.state'}
-        />
-
-        <label>ENABLED</label>
-        <div className="wh-checkbox-group">
-          <label>
-            <input
-              type="checkbox"
-              checked={form.enabled}
-              onChange={(e) => setForm((f) => ({ ...f, enabled: e.target.checked }))}
-            />
-            Receive events
-          </label>
-        </div>
-
-        <div className="wh-form-buttons">
-          <button type="button" className="btn ghost" onClick={onCancel} disabled={saving}>
-            <X size={12} /> CANCEL
-          </button>
-          <button type="submit" className="btn violet" disabled={saving}>
-            <Save size={12} /> {saving ? 'SAVING…' : isEdit ? 'SAVE CHANGES' : 'CREATE'}
-          </button>
-        </div>
-      </form>
-    </td>
-  </tr>
-);
-
-interface SecretModalProps {
-  name: string;
-  secret: string;
-  onClose: () => void;
-}
-
-const SecretModal: React.FC<SecretModalProps> = ({ name, secret, onClose }) => {
-  const [copied, setCopied] = useState(false);
-  const copy = async () => {
-    try {
-      await navigator.clipboard.writeText(secret);
-      setCopied(true);
-      setTimeout(() => setCopied(false), 1500);
-    } catch {
-      /* no-op — browsers without clipboard perms will just see no feedback */
-    }
-  };
-  return (
-    <div
-      className="wh-secret-modal-backdrop"
-      onClick={(e) => { if (e.target === e.currentTarget) onClose(); }}
-    >
-      <div className="wh-secret-modal">
-        <h3>WEBHOOK SECRET · {name.toUpperCase()}</h3>
-        <div className="wh-secret-warn">
-          <AlertTriangle size={14} />
-          <span>COPY THIS NOW — IT WILL NOT BE SHOWN AGAIN. THE HMAC ON EVERY DELIVERY IS SIGNED WITH THIS VALUE.</span>
-        </div>
-        <div className="wh-secret-value">{secret}</div>
-        <div className="wh-secret-actions">
-          <button className="btn ghost" onClick={copy}>
-            <Copy size={12} /> {copied ? 'COPIED' : 'COPY'}
-          </button>
-          <button className="btn violet" onClick={onClose}>
-            <Check size={12} /> DONE
-          </button>
-        </div>
-      </div>
     </div>
   );
 };
