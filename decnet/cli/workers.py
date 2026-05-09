@@ -192,6 +192,70 @@ def register(app: typer.Typer) -> None:
         except KeyboardInterrupt:
             console.print("\n[yellow]Reuse correlator stopped.[/]")
 
+    @app.command(name="attribution")
+    def attribution(
+        multi_actor_tick_secs: float = typer.Option(
+            60.0, "--multi-actor-tick", "-t",
+            help=(
+                "Cross-primitive multi_actor correlator tick interval (seconds). "
+                "Walks attribution_state for identities flagged on >= 2 "
+                "primitives and emits attribution.profile.multi_actor_suspected."
+            ),
+        ),
+        daemon: bool = typer.Option(
+            False, "--daemon", "-d",
+            help="Detach to background as a daemon process",
+        ),
+    ) -> None:
+        """Attribution engine v0 — per-(identity, primitive) state machine.
+
+        Subscribes to ``attacker.observation.>`` and, for each event,
+        ensures a stub identity row, runs the merger over the full
+        per-(identity, primitive) observation series, upserts the
+        derived state, and publishes
+        ``attribution.profile.state_changed`` only on transition.
+        Periodic tick fires
+        ``attribution.profile.multi_actor_suspected`` when >= 2
+        primitives flag the same identity.
+
+        Closes DEBT-051. Bright-line scope: behavioural coherence and
+        drift only — never persona attribution to natural persons.
+        """
+        import asyncio
+        from decnet.correlation.attribution_worker import (
+            run_attribution_loop,
+        )
+        from decnet.web.dependencies import repo
+
+        if daemon:
+            log.info(
+                "attribution worker daemonizing tick=%s",
+                multi_actor_tick_secs,
+            )
+            _utils._daemonize()
+
+        log.info(
+            "attribution worker command invoked tick=%s",
+            multi_actor_tick_secs,
+        )
+        console.print(
+            f"[bold cyan]Attribution engine starting[/] "
+            f"multi_actor_tick={multi_actor_tick_secs}s"
+        )
+        console.print("[dim]Press Ctrl+C to stop[/]")
+
+        async def _run() -> None:
+            await repo.initialize()
+            await run_attribution_loop(
+                repo,
+                multi_actor_tick_secs=multi_actor_tick_secs,
+            )
+
+        try:
+            asyncio.run(_run())
+        except KeyboardInterrupt:
+            console.print("\n[yellow]Attribution engine stopped.[/]")
+
     @app.command(name="clusterer")
     def clusterer(
         poll_interval_secs: float = typer.Option(

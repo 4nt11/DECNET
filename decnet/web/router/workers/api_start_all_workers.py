@@ -27,6 +27,7 @@ _PREFERRED_ORDER: tuple[str, ...] = (
     "mutator",
     "reconciler",
     "reuse-correlator",
+    "attribution",
     "enrich",
     "clusterer",
     "campaign-clusterer",
