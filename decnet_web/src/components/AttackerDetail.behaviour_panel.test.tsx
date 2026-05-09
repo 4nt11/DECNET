@@ -4,7 +4,23 @@ import { render, screen } from '@testing-library/react';
 import {
   BehaviouralPrimitivesPanel,
   type BehaviouralObservation,
+  type AttributionPrimitiveState,
 } from './AttackerDetail';
+
+const _attr = (
+  primitive: string,
+  state: AttributionPrimitiveState['state'],
+  confidence = 0.85,
+  observation_count = 6,
+): AttributionPrimitiveState => ({
+  primitive,
+  current_value: 'x',
+  state,
+  confidence,
+  observation_count,
+  last_change_ts: 1714000000,
+  last_observation_ts: 1714000300,
+});
 
 const _obs = (
   primitive: string,
@@ -64,6 +80,75 @@ describe('BehaviouralPrimitivesPanel', () => {
     expect(row.textContent).toContain('input_modality');
     expect(row.textContent).toContain('pasted');
     expect(row.textContent).toContain('91%');
+  });
+
+  it('renders attribution badges only for primitives in the map', () => {
+    const observations: BehaviouralObservation[] = [
+      _obs('motor.input_modality', 'pasted', 0.91),
+      _obs('cognitive.feedback_loop_engagement', 'closed_loop', 0.88),
+    ];
+    const attribution = new Map<string, AttributionPrimitiveState>([
+      ['motor.input_modality', _attr('motor.input_modality', 'stable', 0.95)],
+      // cognitive.feedback_loop_engagement intentionally absent —
+      // the panel must not render a badge for it.
+    ]);
+    render(
+      <BehaviouralPrimitivesPanel
+        observations={observations}
+        attribution={attribution}
+      />,
+    );
+    const badge = screen.getByTestId('attribution-badge-motor.input_modality');
+    expect(badge.textContent).toBe('STABLE');
+    expect(badge.getAttribute('data-state')).toBe('stable');
+    expect(
+      screen.queryByTestId(
+        'attribution-badge-cognitive.feedback_loop_engagement',
+      ),
+    ).toBeNull();
+  });
+
+  it('renders each of the five frozen states with a distinct label', () => {
+    const cases: [AttributionPrimitiveState['state'], string][] = [
+      ['stable', 'STABLE'],
+      ['drifting', 'DRIFTING'],
+      ['conflicted', 'CONFLICTED'],
+      ['multi_actor', 'MULTI-ACTOR'],
+      ['unknown', 'UNKNOWN'],
+    ];
+    const observations: BehaviouralObservation[] = cases.map((_pair, i) =>
+      _obs(`motor.synthetic_${i}`, 'x'),
+    );
+    const attribution = new Map(
+      cases.map(([state], i) => [
+        `motor.synthetic_${i}`,
+        _attr(`motor.synthetic_${i}`, state),
+      ]),
+    );
+    render(
+      <BehaviouralPrimitivesPanel
+        observations={observations}
+        attribution={attribution}
+      />,
+    );
+    for (const [state, label] of cases) {
+      const idx = cases.findIndex(([s]) => s === state);
+      const badge = screen.getByTestId(
+        `attribution-badge-motor.synthetic_${idx}`,
+      );
+      expect(badge.textContent).toBe(label);
+      expect(badge.getAttribute('data-state')).toBe(state);
+    }
+  });
+
+  it('does not render badges when no attribution prop is provided', () => {
+    const observations: BehaviouralObservation[] = [
+      _obs('motor.input_modality', 'pasted'),
+    ];
+    render(<BehaviouralPrimitivesPanel observations={observations} />);
+    expect(
+      screen.queryByTestId('attribution-badge-motor.input_modality'),
+    ).toBeNull();
   });
 
   it('groups by top-level domain in the canonical order', () => {

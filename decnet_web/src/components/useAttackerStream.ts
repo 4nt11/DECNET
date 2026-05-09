@@ -19,6 +19,15 @@
  *                             primitive rides in `payload.primitive`.
  *   * `fingerprint.rotated` — `attacker.fingerprint_rotated`.
  *   * `attacker.scored`     — score-threshold crossings.
+ *   * `attribution.state_changed`         — per-(identity, primitive)
+ *                             state-machine transition (Phase 4 of the
+ *                             attribution engine: stable / drifting /
+ *                             conflicted / multi_actor / unknown).
+ *                             Backend filters on `payload.identity_uuid`
+ *                             matching the attacker's resolved identity.
+ *   * `attribution.multi_actor_suspected` — cross-primitive correlator
+ *                             output (Phase 5): >= 2 primitives flagged
+ *                             multi_actor on the same identity.
  */
 import { useEffect, useRef } from 'react';
 
@@ -36,11 +45,39 @@ export interface SnapshotFrame {
   observations: ObservationFrame[];
 }
 
+export type AttributionState =
+  | 'unknown'
+  | 'stable'
+  | 'drifting'
+  | 'conflicted'
+  | 'multi_actor';
+
+export interface AttributionStateChangedFrame {
+  identity_uuid: string;
+  primitive: string;
+  old_state: AttributionState | null;
+  new_state: AttributionState;
+  current_value: unknown;
+  confidence: number;
+  observation_count: number;
+  ts: number;
+}
+
+export interface AttributionMultiActorFrame {
+  identity_uuid: string;
+  primitives: string[];
+  evidence_summary: string;
+  confidence: number;
+  ts: number;
+}
+
 export type AttackerStreamEventName =
   | 'snapshot'
   | 'observation'
   | 'fingerprint.rotated'
-  | 'attacker.scored';
+  | 'attacker.scored'
+  | 'attribution.state_changed'
+  | 'attribution.multi_actor_suspected';
 
 export interface AttackerStreamEvent {
   name: AttackerStreamEventName | string;
@@ -57,6 +94,8 @@ export interface UseAttackerStreamOptions {
   onObservation?: (data: ObservationFrame) => void;
   onFingerprintRotated?: (data: Record<string, unknown>) => void;
   onScored?: (data: Record<string, unknown>) => void;
+  onAttributionStateChanged?: (data: AttributionStateChangedFrame) => void;
+  onMultiActorSuspected?: (data: AttributionMultiActorFrame) => void;
   onError?: () => void;
 }
 
@@ -65,6 +104,8 @@ const NAMED_EVENTS: AttackerStreamEventName[] = [
   'observation',
   'fingerprint.rotated',
   'attacker.scored',
+  'attribution.state_changed',
+  'attribution.multi_actor_suspected',
 ];
 
 const RECONNECT_MS = 3000;
@@ -76,6 +117,8 @@ export function useAttackerStream({
   onObservation,
   onFingerprintRotated,
   onScored,
+  onAttributionStateChanged,
+  onMultiActorSuspected,
   onError,
 }: UseAttackerStreamOptions): void {
   const esRef = useRef<EventSource | null>(null);
@@ -84,11 +127,15 @@ export function useAttackerStream({
   const onObservationRef = useRef(onObservation);
   const onFingerprintRotatedRef = useRef(onFingerprintRotated);
   const onScoredRef = useRef(onScored);
+  const onAttributionStateChangedRef = useRef(onAttributionStateChanged);
+  const onMultiActorSuspectedRef = useRef(onMultiActorSuspected);
   const onErrorRef = useRef(onError);
   useEffect(() => { onSnapshotRef.current = onSnapshot; }, [onSnapshot]);
   useEffect(() => { onObservationRef.current = onObservation; }, [onObservation]);
   useEffect(() => { onFingerprintRotatedRef.current = onFingerprintRotated; }, [onFingerprintRotated]);
   useEffect(() => { onScoredRef.current = onScored; }, [onScored]);
+  useEffect(() => { onAttributionStateChangedRef.current = onAttributionStateChanged; }, [onAttributionStateChanged]);
+  useEffect(() => { onMultiActorSuspectedRef.current = onMultiActorSuspected; }, [onMultiActorSuspected]);
   useEffect(() => { onErrorRef.current = onError; }, [onError]);
 
   useEffect(() => {
@@ -124,6 +171,16 @@ export function useAttackerStream({
             break;
           case 'attacker.scored':
             onScoredRef.current?.(payload);
+            break;
+          case 'attribution.state_changed':
+            onAttributionStateChangedRef.current?.(
+              payload as unknown as AttributionStateChangedFrame,
+            );
+            break;
+          case 'attribution.multi_actor_suspected':
+            onMultiActorSuspectedRef.current?.(
+              payload as unknown as AttributionMultiActorFrame,
+            );
             break;
         }
       };

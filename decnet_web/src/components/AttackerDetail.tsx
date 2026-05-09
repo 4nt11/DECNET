@@ -8,7 +8,12 @@ import SessionDrawer from './SessionDrawer';
 import EmptyState from './EmptyState/EmptyState';
 import TTPsObservedSection from './TTPsObservedSection';
 import { useIdentityStream } from './useIdentityStream';
-import { useAttackerStream, type ObservationFrame } from './useAttackerStream';
+import {
+  useAttackerStream,
+  type ObservationFrame,
+  type AttributionStateChangedFrame,
+  type AttributionMultiActorFrame,
+} from './useAttackerStream';
 import './Dashboard.css';
 
 interface AttackerBehavior {
@@ -111,6 +116,21 @@ export interface BehaviouralObservation {
   confidence: number;
   ts?: number;
   source?: string;
+}
+
+// Per-(identity, primitive) attribution state — derived by the
+// attribution engine. Keyed by primitive when consumed by
+// BehaviouralPrimitivesPanel; the API also returns identity_uuid +
+// timestamps which the panel doesn't render but the live SSE handler
+// uses to merge updates.
+export interface AttributionPrimitiveState {
+  primitive: string;
+  current_value: unknown;
+  state: 'unknown' | 'stable' | 'drifting' | 'conflicted' | 'multi_actor';
+  confidence: number;
+  observation_count: number;
+  last_change_ts: number;
+  last_observation_ts: number;
 }
 
 // ─── Fingerprint rendering ───────────────────────────────────────────────────
@@ -954,9 +974,53 @@ function _renderValue(value: unknown): string {
   return JSON.stringify(value);
 }
 
+// Per-state badge styling. Five states, frozen vocabulary —
+// matches decnet/correlation/attribution/aggregate.py. multi_actor is
+// the loudest because the cross-primitive correlator (Phase 5) only
+// fires multi_actor_suspected when >= 2 primitives flag it.
+const ATTRIBUTION_STATE_STYLE: Record<
+  AttributionPrimitiveState['state'],
+  { label: string; bg: string; fg: string; border: string }
+> = {
+  stable:      { label: 'STABLE',      bg: 'rgba(64,224,128,0.12)',  fg: '#7fe9a4', border: '#3a8c5a' },
+  drifting:    { label: 'DRIFTING',    bg: 'rgba(240,196,64,0.12)',  fg: '#f0c440', border: '#a08020' },
+  conflicted:  { label: 'CONFLICTED',  bg: 'rgba(240,96,96,0.12)',   fg: '#f06060', border: '#a04040' },
+  multi_actor: { label: 'MULTI-ACTOR', bg: 'rgba(180,96,240,0.16)',  fg: '#c896f6', border: '#7a4fb0' },
+  unknown:     { label: 'UNKNOWN',     bg: 'transparent',            fg: 'var(--text-dim,#888)', border: 'var(--border-color)' },
+};
+
+const AttributionBadge: React.FC<{ state: AttributionPrimitiveState }> = ({ state }) => {
+  const style = ATTRIBUTION_STATE_STYLE[state.state] ?? ATTRIBUTION_STATE_STYLE.unknown;
+  return (
+    <span
+      className="attribution-badge"
+      data-testid={`attribution-badge-${state.primitive}`}
+      data-state={state.state}
+      title={
+        `${style.label} • confidence ${(state.confidence * 100).toFixed(0)}% ` +
+        `over ${state.observation_count} observation${state.observation_count === 1 ? '' : 's'}`
+      }
+      style={{
+        fontSize: '0.6rem',
+        letterSpacing: '1px',
+        fontFamily: 'monospace',
+        padding: '1px 6px',
+        borderRadius: '2px',
+        background: style.bg,
+        color: style.fg,
+        border: `1px solid ${style.border}`,
+        whiteSpace: 'nowrap',
+      }}
+    >
+      {style.label}
+    </span>
+  );
+};
+
 export const BehaviouralPrimitivesPanel: React.FC<{
   observations: ReadonlyArray<BehaviouralObservation>;
-}> = ({ observations }) => {
+  attribution?: ReadonlyMap<string, AttributionPrimitiveState>;
+}> = ({ observations, attribution }) => {
   if (!observations.length) {
     return (
       <div className="info-banner" data-testid="behaviour-empty">
@@ -1036,6 +1100,9 @@ export const BehaviouralPrimitivesPanel: React.FC<{
                   >
                     {_renderValue(obs.value)}
                   </span>
+                  {attribution?.get(obs.primitive) ? (
+                    <AttributionBadge state={attribution.get(obs.primitive)!} />
+                  ) : null}
                   <span
                     className="behaviour-confidence dim"
                     style={{
@@ -1437,6 +1504,13 @@ const AttackerDetail: React.FC = () => {
   // attacker.observations on first fetch; mutated in place by the
   // useAttackerStream hook below (latest-wins per primitive).
   const [observations, setObservations] = useState<BehaviouralObservation[]>([]);
+  // Attribution-engine state per primitive. Seeded from
+  // GET /attackers/{id}/attribution on mount; live-updated via
+  // attribution.state_changed SSE frames. Map keyed on primitive
+  // for O(1) badge lookup in the panel.
+  const [attribution, setAttribution] = useState<Map<string, AttributionPrimitiveState>>(
+    () => new Map(),
+  );
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [serviceFilter, setServiceFilter] = useState<string | null>(null);
@@ -1528,6 +1602,28 @@ const AttackerDetail: React.FC = () => {
     fetchAttacker();
   }, [id]);
 
+  // Fetch attribution state on mount + whenever the attacker uuid
+  // changes. Quietly tolerates 404s (the attribution worker may be
+  // off in a dev decky).
+  useEffect(() => {
+    if (!id) return;
+    let cancelled = false;
+    (async () => {
+      try {
+        const res = await api.get(`/attackers/${id}/attribution`);
+        if (cancelled) return;
+        const next = new Map<string, AttributionPrimitiveState>();
+        const primitives = (res.data?.primitives ?? []) as AttributionPrimitiveState[];
+        for (const row of primitives) next.set(row.primitive, row);
+        setAttribution(next);
+      } catch {
+        // Endpoint optional in dev; the panel will simply not render
+        // badges. Don't surface the error to the user.
+      }
+    })();
+    return () => { cancelled = true; };
+  }, [id]);
+
   // Re-fetch this attacker row whenever an identity event references
   // its uuid. The IDENTITY badge appears once the clusterer binds the
   // row, and follows through merges / unmerges live.
@@ -1583,6 +1679,40 @@ const AttackerDetail: React.FC = () => {
           },
         ];
       });
+    },
+    // Live attribution-state badge updates. Backend filters on
+    // identity_uuid so we only see frames for this attacker's
+    // identity; merge by primitive.
+    onAttributionStateChanged: (frame: AttributionStateChangedFrame) => {
+      setAttribution((prev) => {
+        const next = new Map(prev);
+        const prior = next.get(frame.primitive);
+        next.set(frame.primitive, {
+          primitive: frame.primitive,
+          current_value: frame.current_value,
+          state: frame.new_state,
+          confidence: frame.confidence,
+          observation_count: frame.observation_count,
+          // last_change_ts is derived: this frame IS a transition, so
+          // it locks here. last_observation_ts comes from the frame.
+          last_change_ts: frame.ts,
+          last_observation_ts: frame.ts,
+          // Carry forward the prior change ts only when state didn't
+          // actually flip (defensive — backend gates these on
+          // transition, but a future relaxation shouldn't lie about
+          // "stable since X").
+          ...(prior && prior.state === frame.new_state
+            ? { last_change_ts: prior.last_change_ts }
+            : {}),
+        });
+        return next;
+      });
+    },
+    onMultiActorSuspected: (_frame: AttributionMultiActorFrame) => {
+      // The per-primitive badges already reflect multi_actor on each
+      // contributing primitive; the cross-primitive escalation is a
+      // SIEM-channel signal, not a UI-only badge. Listener wired so
+      // a future "two operators detected" banner has a live source.
     },
   });
 
@@ -1972,7 +2102,7 @@ const AttackerDetail: React.FC = () => {
         open={openSections.behavioural}
         onToggle={() => toggle('behavioural')}
       >
-        <BehaviouralPrimitivesPanel observations={observations} />
+        <BehaviouralPrimitivesPanel observations={observations} attribution={attribution} />
       </Section>
 
       {/* Commands */}
