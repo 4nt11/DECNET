@@ -2,77 +2,19 @@ import React, { useEffect, useMemo, useRef, useState } from 'react';
 import {
   Plus, Upload, X, AlertTriangle, Search, Target,
 } from '../icons';
-import api, { type ApiError } from '../utils/api';
+import api from '../utils/api';
 import { useEscapeKey } from '../hooks/useEscapeKey';
 import { useFocusTrap } from '../hooks/useFocusTrap';
 import CanaryTokenDrawer from './CanaryTokenDrawer';
 import type { CanaryTokenRow } from './CanaryTokenDrawer';
-
-interface BlobRow {
-  uuid: string;
-  sha256: string;
-  filename: string;
-  content_type: string;
-  size_bytes: number;
-  uploaded_by: string;
-  uploaded_at: string;
-  token_count: number;
-}
-
-const KNOWN_GENERATORS = [
-  'git_config', 'env_file', 'ssh_key', 'aws_creds',
-  'honeydoc', 'honeydoc_docx', 'honeydoc_pdf',
-] as const;
-type GeneratorName = typeof KNOWN_GENERATORS[number];
-
-const KIND_OPTIONS: Array<{ value: 'http' | 'dns' | 'aws_passive'; label: string }> = [
-  { value: 'http', label: 'HTTP callback' },
-  { value: 'dns', label: 'DNS callback' },
-  { value: 'aws_passive', label: 'AWS passive (no callback)' },
-];
-
-function extractError(err: unknown, fallback: string): string {
-  const e = err as ApiError;
-  if (e?.response?.data?.detail) return e.response.data.detail;
-  if (e?.response?.status === 403) return 'Insufficient permissions (admin only).';
-  if (e?.response?.status === 401) return 'Session expired — please log in again.';
-  return fallback;
-}
-
-function fmt(iso: string | null): string {
-  if (!iso) return '—';
-  const d = new Date(iso);
-  if (Number.isNaN(d.getTime())) return iso;
-  const pad = (n: number) => String(n).padStart(2, '0');
-  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())} ${pad(d.getHours())}:${pad(d.getMinutes())}`;
-}
-
-function fmtBytes(n: number): string {
-  if (n < 1024) return `${n} B`;
-  if (n < 1024 * 1024) return `${(n / 1024).toFixed(1)} KiB`;
-  return `${(n / 1024 / 1024).toFixed(1)} MiB`;
-}
-
-const STATE_COLOR = {
-  planted: '#00ff88',
-  revoked: 'var(--dim-color)',
-  failed: '#ff5555',
-};
+import {
+  KNOWN_GENERATORS, KIND_OPTIONS, STATE_COLOR,
+  type BlobRow, type DeckyOption, type TopologyOption, type Scope, type GeneratorName,
+} from './CanaryTokens/types';
+import { extractError, fmt, fmtBytes } from './CanaryTokens/helpers';
+import { INPUT_STYLE, BTN_PRIMARY, BTN_GHOST, Field, Stat } from './CanaryTokens/ui';
 
 // ─── CREATE MODAL ──────────────────────────────────────────────────────────
-
-interface DeckyOption {
-  name: string;
-  ip?: string;
-}
-
-interface TopologyOption {
-  id: string;
-  name: string;
-  status: string;
-}
-
-type Scope = 'fleet' | 'topology';
 
 interface CreateModalProps {
   blobs: BlobRow[];
@@ -1274,61 +1216,5 @@ const CanaryTokens: React.FC = () => {
     </div>
   );
 };
-
-// ─── small style helpers ───────────────────────────────────────────────────
-
-const INPUT_STYLE: React.CSSProperties = {
-  width: '100%',
-  padding: '8px 10px',
-  marginBottom: '12px',
-  background: 'var(--matrix-tint-5)',
-  border: '1px solid var(--border-color, #30363d)',
-  color: 'var(--text-color)',
-  fontSize: '0.85rem',
-};
-
-const BTN_PRIMARY: React.CSSProperties = {
-  padding: '8px 14px',
-  border: '1px solid var(--accent-color, #00ff88)',
-  background: 'var(--accent-color, #00ff88)',
-  color: 'var(--bg-color, #0d1117)',
-  cursor: 'pointer',
-  fontSize: '0.8rem',
-  textTransform: 'uppercase',
-  letterSpacing: '0.05em',
-  fontWeight: 'bold',
-};
-
-const BTN_GHOST: React.CSSProperties = {
-  padding: '8px 14px',
-  border: '1px solid var(--text-color)',
-  background: 'transparent',
-  color: 'var(--text-color)',
-  cursor: 'pointer',
-  fontSize: '0.8rem',
-  textTransform: 'uppercase',
-  letterSpacing: '0.05em',
-};
-
-const Field: React.FC<{ label: string; children: React.ReactNode }> = ({ label, children }) => (
-  <div>
-    <div style={{ fontSize: '0.7rem', color: 'var(--dim-color)', letterSpacing: '0.1em', marginBottom: '4px' }}>
-      {label.toUpperCase()}
-    </div>
-    {children}
-  </div>
-);
-
-const Stat: React.FC<{ label: string; value: number | string; color: string }> = ({ label, value, color }) => (
-  <div style={{
-    flex: '1 1 120px',
-    padding: '12px 16px',
-    border: '1px solid var(--border-color, #30363d)',
-    background: 'var(--matrix-tint-5)',
-  }}>
-    <div style={{ fontSize: '0.7rem', color: 'var(--dim-color)', letterSpacing: '0.1em' }}>{label}</div>
-    <div style={{ fontSize: '1.4rem', fontWeight: 'bold', color, marginTop: '4px' }}>{value}</div>
-  </div>
-);
 
 export default CanaryTokens;
