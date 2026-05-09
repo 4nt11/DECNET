@@ -1492,3 +1492,86 @@ class BaseRepository(ABC):
         SQLModel TTP mixin.
         """
         return []
+
+    # ─── Attribution engine (v0 — aggregation only) ────────────────────
+    # See development/ATTRIBUTION-ENGINE.md. The engine consumes
+    # ``attacker.observation.*`` events and writes per-(identity,
+    # primitive) state rows. Pre-clusterer, every Attacker maps 1:1
+    # to a stub AttackerIdentity row so the keying is stable across
+    # the v0 / v1 boundary.
+
+    @abstractmethod
+    async def ensure_stub_identity_for_attacker(
+        self, attacker_uuid: str,
+    ) -> Optional[str]:
+        """Return the ``identity_uuid`` for *attacker_uuid*, creating a
+        degenerate 1:1 stub in ``attacker_identities`` if the attacker
+        does not yet have one.
+
+        Returns ``None`` if the attacker row itself is missing (the
+        worker treats that as "defer" — the profiler tick has not yet
+        materialised the Attacker; same posture as
+        ``_handler.handle_session_ended`` in BEHAVE-SHELL).
+
+        Idempotent under concurrent calls: the second caller sees the
+        first caller's stamp and returns the same uuid. Implementations
+        are responsible for serialising the read-then-insert against
+        the bus's at-least-once delivery.
+
+        The third return value (boolean) signalling "newly created" is
+        deliberately omitted — the worker emits ``identity.formed`` on
+        a transition observed via the row's absence on its first call,
+        not via a flag from the repo. Keeps the repo idempotent and
+        flag-free.
+        """
+        raise NotImplementedError
+
+    @abstractmethod
+    async def upsert_attribution_state(self, data: dict[str, Any]) -> None:
+        """Insert or update an :class:`AttributionStateRow` keyed on
+        ``(identity_uuid, primitive)``.
+
+        ``data`` MUST carry: ``identity_uuid``, ``primitive``,
+        ``current_value``, ``state``, ``confidence``,
+        ``observation_count``, ``last_change_ts``,
+        ``last_observation_ts``. ``schema_version`` defaults to 1.
+        """
+        raise NotImplementedError
+
+    @abstractmethod
+    async def get_attribution_state_for_identity(
+        self, identity_uuid: str,
+    ) -> list[dict[str, Any]]:
+        """Return every attribution-state row for *identity_uuid*.
+
+        Empty list when the identity has no derived state yet (e.g.
+        observations have arrived but the engine has not run, or the
+        engine has not produced ≥ 3 observations per primitive). The
+        attribution API surface and AttackerDetail badge renderer both
+        consume this projection.
+        """
+        raise NotImplementedError
+
+    @abstractmethod
+    async def get_attribution_state(
+        self, identity_uuid: str, primitive: str,
+    ) -> Optional[dict[str, Any]]:
+        """Return one ``(identity_uuid, primitive)`` row, or ``None``.
+
+        Used by the attribution worker on each inbound observation to
+        load the prior state before running the merger. ``None`` means
+        "no prior state — initialise from this observation alone".
+        """
+        raise NotImplementedError
+
+    @abstractmethod
+    async def list_multi_actor_identities(
+        self,
+    ) -> list[dict[str, Any]]:
+        """List ``{identity_uuid, primitives}`` for identities that
+        currently have ≥ 2 primitives flagged ``multi_actor``.
+
+        Backs the cross-primitive correlator (Phase 5). Empty list when
+        no identity is co-flagged.
+        """
+        raise NotImplementedError

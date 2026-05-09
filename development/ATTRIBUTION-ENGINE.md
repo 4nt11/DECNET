@@ -506,6 +506,17 @@ v0.
   Five states, no more (resist the urge to grow the enum).
 - **Subject of attribution in v0.** RESOLVED: `attacker_uuid`,
   not `identity_uuid`. v1 widens.
+  - **Deviation (Phase 1 implementation):** the engine actually keys
+    state rows on `identity_uuid` from day one, materialising a 1:1
+    stub `attacker_identities` row per Attacker on first observation.
+    Rationale: re-keying state rows when the v1 clusterer eventually
+    merges attackers is exactly the migration debt v0 should not
+    bake in. With identity-keyed state from the start, the v1
+    clusterer becomes a natural rollup operation (merge B's stub
+    identity into A's identity, recompute the union once on the
+    merge event) instead of a column-rename. No polymorphic
+    `subject_uuid` column. ANTI sign-off in conversation; saved as
+    memory `feedback_attribution_keys_identity`.
 
 ## Real open questions
 

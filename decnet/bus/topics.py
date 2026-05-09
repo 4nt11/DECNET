@@ -29,6 +29,8 @@ Token structure (NATS-style, dot-separated):
     campaign.unmerged
     credential.captured
     credential.reuse.detected
+    attribution.profile.state_changed
+    attribution.profile.multi_actor_suspected
     canary.{token_id}.triggered
     canary.{token_id}.placed
     canary.{token_id}.revoked
@@ -57,6 +59,7 @@ IDENTITY = "identity"
 CAMPAIGN = "campaign"
 SYSTEM = "system"
 CREDENTIAL = "credential"
+ATTRIBUTION = "attribution"
 ORCHESTRATOR = "orchestrator"
 CANARY = "canary"
 SMTP = "smtp"
@@ -209,6 +212,42 @@ CAMPAIGN_UNMERGED = "unmerged"
 # CredentialReuse row or grows an existing one (added decky/service/IP).
 CREDENTIAL_CAPTURED = "captured"
 CREDENTIAL_REUSE_DETECTED = "reuse.detected"
+
+# Attribution-engine event types (second/third tokens under
+# ``attribution``).  Published by the v0 attribution worker
+# (``decnet.correlation.attribution_worker``) which subscribes to
+# ``attacker.observation.>`` and runs the per-(identity, primitive)
+# state machine.  See ``development/ATTRIBUTION-ENGINE.md``.
+#
+#   attribution.profile.state_changed         — per-primitive state
+#                                               transition (e.g.
+#                                               stable → drifting).
+#                                               Payload: identity_uuid,
+#                                               primitive, old_state,
+#                                               new_state, current_value,
+#                                               confidence,
+#                                               observation_count, ts.
+#   attribution.profile.multi_actor_suspected — fires when ≥ 2
+#                                               primitives flag the same
+#                                               identity as multi_actor
+#                                               concurrently. Cross-
+#                                               primitive correlator;
+#                                               single-primitive
+#                                               multi_actor is too noisy
+#                                               on its own. Payload:
+#                                               identity_uuid, primitives,
+#                                               evidence_summary,
+#                                               confidence, ts.
+#
+# These are *derived* signals — distinct from
+# ``identity.*`` (clusterer lifecycle, IDENTITY_RESOLUTION.md) and
+# ``attacker.observation.*`` (raw extractor envelopes,
+# BEHAVE-INTEGRATION.md). The three families compose: observations feed
+# the attribution engine, the engine emits derived state, the clusterer
+# reads observations + state to form / merge identities.
+ATTRIBUTION_PROFILE_PREFIX = "profile"
+ATTRIBUTION_PROFILE_STATE_CHANGED = "profile.state_changed"
+ATTRIBUTION_PROFILE_MULTI_ACTOR_SUSPECTED = "profile.multi_actor_suspected"
 
 # Canary-token event types (third token under ``canary``).
 #
@@ -400,6 +439,20 @@ def attacker_observation(primitive: str) -> str:
             "attacker_observation topic requires a non-empty primitive",
         )
     return f"{ATTACKER}.{ATTACKER_OBSERVATION_PREFIX}.{primitive}"
+
+
+def attribution(event_type: str) -> str:
+    """Build ``attribution.<event_type>``.
+
+    *event_type* is typically one of
+    :data:`ATTRIBUTION_PROFILE_STATE_CHANGED` or
+    :data:`ATTRIBUTION_PROFILE_MULTI_ACTOR_SUSPECTED` — both contain a
+    dot (``profile.state_changed``) which is permitted under the same
+    "trailing dotted leaf" rule that ``attacker.session.started`` uses.
+    """
+    if not event_type:
+        raise ValueError("attribution topic requires a non-empty event_type")
+    return f"{ATTRIBUTION}.{event_type}"
 
 
 def campaign(event_type: str) -> str:

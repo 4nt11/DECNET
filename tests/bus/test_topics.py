@@ -87,3 +87,19 @@ def test_identity_builder() -> None:
 def test_identity_builder_rejects_empty() -> None:
     with pytest.raises(ValueError):
         topics.identity("")
+
+
+def test_attribution_builder() -> None:
+    assert (
+        topics.attribution(topics.ATTRIBUTION_PROFILE_STATE_CHANGED)
+        == "attribution.profile.state_changed"
+    )
+    assert (
+        topics.attribution(topics.ATTRIBUTION_PROFILE_MULTI_ACTOR_SUSPECTED)
+        == "attribution.profile.multi_actor_suspected"
+    )
+
+
+def test_attribution_builder_rejects_empty() -> None:
+    with pytest.raises(ValueError):
+        topics.attribution("")

@@ -35,6 +35,7 @@ from decnet.web.db.sqlmodel_repo._helpers import (  # noqa: F401  (re-exported f
 )
 from decnet.web.db.sqlmodel_repo.attacker_intel import AttackerIntelMixin
 from decnet.web.db.sqlmodel_repo.attackers import AttackersMixin
+from decnet.web.db.sqlmodel_repo.attribution import AttributionMixin
 from decnet.web.db.sqlmodel_repo.auth import AuthMixin
 from decnet.web.db.sqlmodel_repo.bounties import BountiesMixin
 from decnet.web.db.sqlmodel_repo.campaigns import CampaignsMixin
@@ -58,6 +59,7 @@ from decnet.web.db.sqlmodel_repo.webhooks import WebhooksMixin
 class SQLModelRepository(
     AttackerIntelMixin,
     AttackersMixin,
+    AttributionMixin,
     AuthMixin,
     BountiesMixin,
     CampaignsMixin,
