@@ -1,4 +1,5 @@
 import React, { useEffect, useState } from 'react';
+import ThemeToggle from './ThemeToggle';
 import './ThemeLab.css';
 
 /* Kitchen-sink theme lab.
@@ -314,13 +315,14 @@ const NetBoxes: React.FC = () => (
 const ThemeLab: React.FC = () => {
   return (
     <div className="fleet-root theme-lab" data-testid="theme-lab">
-      <header className="page-header">
+      <header className="page-header lab-page-header">
         <div className="page-title-group">
           <h1>THEME LAB</h1>
           <span className="page-sub">
             dev only · primitive zoo for theme regression
           </span>
         </div>
+        <ThemeToggle />
       </header>
 
       <Section id="swatches" title="COLOUR TOKENS">

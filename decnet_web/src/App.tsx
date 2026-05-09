@@ -182,6 +182,17 @@ function App() {
       }
     } catch { /* fall through to default */ }
     document.documentElement.setAttribute('data-accent', accent);
+
+    /* Lab theme persists in sessionStorage so a tab reload keeps the
+     * dev's chosen theme without leaking to other tabs or users. The
+     * production user-facing toggle (localStorage `decnet_theme`)
+     * arrives with the Config-page setting in a later task. */
+    try {
+      const labTheme = sessionStorage.getItem('decnet_theme_lab');
+      if (labTheme === 'light' || labTheme === 'dark') {
+        document.documentElement.setAttribute('data-theme', labTheme);
+      }
+    } catch { /* ignore */ }
   }, []);
 
   const handleLogin = (newToken: string) => setToken(newToken);

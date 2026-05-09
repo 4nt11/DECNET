@@ -108,6 +108,58 @@ html[data-accent="violet"] {
   --accent-glow:    var(--violet-glow);
 }
 
+/* ── Light theme ────────────────────────────────────────
+ * Cream-on-ink. Activated by setting `data-theme="light"`
+ * on <html>; back-compat aliases (--background-color,
+ * --text-color, etc.) re-resolve through the cascade since
+ * they reference --bg/--matrix/--violet/etc. via var().
+ *
+ * Glows are removed (light mode = hard 1px borders, not
+ * neon haloes) and the scangrid line goes ink-on-cream. */
+html[data-theme="light"] {
+  --bg:              #dbdad6;
+  --matrix:          #047857;
+  --violet:          #6b21a8;
+  --panel:           #c9c7c2;
+  --border:          #1a1a1a;
+  --alert:           #b91c1c;
+
+  --fg-1: var(--matrix);
+  --fg-2: rgba(4, 120, 87, 0.80);
+  --fg-3: rgba(4, 120, 87, 0.60);
+  --fg-4: rgba(4, 120, 87, 0.40);
+
+  --matrix-tint-5:   rgba(4, 120, 87, 0.05);
+  --matrix-tint-10:  rgba(4, 120, 87, 0.10);
+  --matrix-tint-30:  rgba(4, 120, 87, 0.25);
+  --violet-tint-10:  rgba(107, 33, 168, 0.10);
+  --alert-tint-10:   rgba(185, 28, 28, 0.10);
+
+  /* Light mode trades neon glow for hard borders — keep the
+   * vars defined so .btn:hover etc. don't break, just no-op them. */
+  --matrix-glow:       none;
+  --matrix-green-glow: none;
+  --violet-glow:       none;
+  --matrix-glow-lg:    none;
+  --shadow-panel:      0 1px 0 rgba(0, 0, 0, 0.08);
+
+  --grid-line: rgba(0, 0, 0, 0.06);
+}
+
+html[data-theme="light"][data-accent="violet"] {
+  --accent:         var(--violet);
+  --accent-tint-10: var(--violet-tint-10);
+  --accent-tint-30: rgba(107, 33, 168, 0.25);
+  --accent-glow:    none;
+}
+
+html[data-theme="light"]:not([data-accent="violet"]) {
+  --accent:         var(--matrix);
+  --accent-tint-10: var(--matrix-tint-10);
+  --accent-tint-30: var(--matrix-tint-30);
+  --accent-glow:    none;
+}
+
 *, *::before, *::after {
   box-sizing: border-box;
   margin: 0;
