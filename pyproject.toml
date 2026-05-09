@@ -53,6 +53,13 @@ dependencies = [
     # range tracks BEHAVE-INTEGRATION.md §"Versioning".
     "decnet-behave-core>=0.1.0,<0.2",
     "decnet-behave-shell>=0.1.0,<0.2",
+    # MITRE ATT&CK: parse the official STIX 2.1 enterprise-attack bundle
+    # instead of hand-maintaining technique/tactic name dicts. stix2
+    # gives typed parsing; mitreattack-python ships MitreAttackData
+    # query helpers (get_objects_by_external_id, get_parent_technique).
+    # See decnet/ttp/attack_stix.py.
+    "stix2>=3.0",
+    "mitreattack-python>=3.0",
 ]
 
 [project.optional-dependencies]
@@ -96,6 +103,7 @@ dev = [
     "gevent>=24.0",
     "pydeps>=3.0.3",
     "types-PyYAML>=6.0",
+    "types-requests>=2.33",
     "mypy>=1.16,<1.20"
 ]
 
