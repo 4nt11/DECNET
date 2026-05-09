@@ -15,15 +15,16 @@ export default defineConfig({
       include: ['src/**/*.{ts,tsx}'],
       exclude: ['src/**/*.d.ts', 'src/test/**', 'src/main.tsx'],
       // Baseline floors. Each refactor PR raises these; never lower.
-      // Phase 9 (Credentials trim): page shell down from 487 to 231 LOC.
-      // Lifted helpers, SortTh, CredsTable, ReuseTable, and a useCredentials
-      // hook (3 endpoints + reuse-map). 13 new tests. Suite: 48 files,
-      // 236 tests, 24.16% lines / 17.72% branches.
+      // Phase 10 (AttackerDetail follow-through): page shell down from
+      // 1652 to 450 LOC. Lifted fingerprint renderers (12), behaviour
+      // panel (8 sub-pieces + lookups), and IntelPanel into focused
+      // sub-modules. 13 new tests. Suite: 50 files, 249 tests,
+      // 24.8% lines / 19.53% branches.
       thresholds: {
-        lines: 23,
-        functions: 20,
-        branches: 17,
-        statements: 22,
+        lines: 24,
+        functions: 21,
+        branches: 19,
+        statements: 23,
       },
     },
   },

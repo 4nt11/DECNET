@@ -1,7 +1,8 @@
-import React, { useEffect, useState } from 'react';
+import React, { useState } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
-import { Activity, AlertTriangle, ArrowLeft, Cpu, Crosshair, Eye, Fingerprint, Globe, Keyboard, Shield, Clock, Sparkles, Wifi, Lock, FileKey, Radio, Timer, FileText, AtSign } from '../icons';
-import api from '../utils/api';
+import {
+  Activity, ArrowLeft, Crosshair, Fingerprint, Globe, FileText, AtSign,
+} from '../icons';
 import SessionDrawer from './SessionDrawer';
 import EmptyState from './EmptyState/EmptyState';
 import TTPsObservedSection from './TTPsObservedSection';
@@ -13,7 +14,7 @@ import { ServicesTargeted } from './AttackerDetail/sections/ServicesTargeted';
 import { CommandsViewer } from './AttackerDetail/sections/CommandsViewer';
 import { ArtifactsPanel } from './AttackerDetail/sections/ArtifactsPanel';
 import { MailLogPanel } from './AttackerDetail/sections/MailLogPanel';
-import { Tag, Section } from './AttackerDetail/ui';
+import { Section } from './AttackerDetail/ui';
 import {
   FingerprintGroup, getPayload,
 } from './AttackerDetail/fingerprints';
