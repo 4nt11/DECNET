@@ -1,30 +1,22 @@
-import React, { useEffect, useMemo, useRef, useState } from 'react';
+import React, { useMemo, useRef, useState } from 'react';
 import { useSearchParams, useNavigate } from 'react-router-dom';
 import {
-  Lock, Search, ChevronLeft, ChevronRight, Filter, ChevronRight as ChevR,
-  Target, RefreshCw,
+  Lock, Search, ChevronLeft, ChevronRight, Filter, RefreshCw,
 } from '../icons';
-import api from '../utils/api';
 import CredentialsInspector from './CredentialsInspector';
-import type { CredentialEntry } from './CredentialsInspector';
 import CredentialReuseInspector from './CredentialReuseInspector';
-import type { CredentialReuseRow } from './CredentialReuseInspector';
-import EmptyState from './EmptyState/EmptyState';
 import { useFocusSearch } from '../hooks/useFocusSearch';
+import CredsTable from './Credentials/CredsTable';
+import ReuseTable from './Credentials/ReuseTable';
+import { useCredentials } from './Credentials/useCredentials';
+import {
+  CREDS_LIMIT, REUSE_LIMIT, nextSortState, sortCreds, sortReuse,
+} from './Credentials/helpers';
+import type {
+  CredentialEntry, CredentialReuseRow, SortDir, Tab,
+} from './Credentials/types';
 import './Dashboard.css';
 import './Credentials.css';
-
-const truncHash = (h: string | null | undefined, n = 12): string =>
-  h ? `${h.slice(0, n)}…` : '—';
-
-const CREDS_LIMIT = 50;
-const REUSE_LIMIT = 25;
-const REUSE_MAP_CAP = 500;
-
-type Tab = 'creds' | 'reuse';
-
-const reuseKey = (sha: string, kind: string, principal: string | null): string =>
-  `${sha}|${kind}|${principal ?? ''}`;
 
 const Credentials: React.FC = () => {
   const navigate = useNavigate();
@@ -34,87 +26,19 @@ const Credentials: React.FC = () => {
   const tab = (searchParams.get('tab') === 'reuse' ? 'reuse' : 'creds') as Tab;
   const page = parseInt(searchParams.get('page') || '1');
 
-  const [creds, setCreds] = useState<CredentialEntry[]>([]);
-  const [credsTotal, setCredsTotal] = useState(0);
-  const [reuseRows, setReuseRows] = useState<CredentialReuseRow[]>([]);
-  const [reuseTotal, setReuseTotal] = useState(0);
-  const [reuseMap, setReuseMap] = useState<Map<string, { id: string; target_count: number }>>(new Map());
-  const [loading, setLoading] = useState(true);
   const [searchInput, setSearchInput] = useState(query);
   const searchRef = useRef<HTMLInputElement | null>(null);
   useFocusSearch(searchRef);
+
   const [selectedCred, setSelectedCred] = useState<CredentialEntry | null>(null);
   const [selectedReuse, setSelectedReuse] = useState<CredentialReuseRow | null>(null);
   const [refreshTick, setRefreshTick] = useState(0);
   const [sortCol, setSortCol] = useState<string>('');
-  const [sortDir, setSortDir] = useState<'asc' | 'desc'>('asc');
+  const [sortDir, setSortDir] = useState<SortDir>('asc');
 
-  // ── Fetch credentials (CREDS tab + always for badge totals)
-  useEffect(() => {
-    if (tab !== 'creds') return;
-    let cancelled = false;
-    (async () => {
-      setLoading(true);
-      try {
-        const offset = (page - 1) * CREDS_LIMIT;
-        let url = `/credentials?limit=${CREDS_LIMIT}&offset=${offset}`;
-        if (query) url += `&search=${encodeURIComponent(query)}`;
-        if (serviceFilter) url += `&service=${encodeURIComponent(serviceFilter)}`;
-        const res = await api.get(url);
-        if (cancelled) return;
-        setCreds(res.data.data);
-        setCredsTotal(res.data.total);
-      } catch (err) {
-        console.error('Failed to fetch credentials', err);
-      } finally {
-        if (!cancelled) setLoading(false);
-      }
-    })();
-    return () => { cancelled = true; };
-  }, [tab, query, serviceFilter, page, refreshTick]);
-
-  // ── Fetch reuse rows (REUSE tab)
-  useEffect(() => {
-    if (tab !== 'reuse') return;
-    let cancelled = false;
-    (async () => {
-      setLoading(true);
-      try {
-        const offset = (page - 1) * REUSE_LIMIT;
-        const res = await api.get(`/credential-reuse?limit=${REUSE_LIMIT}&offset=${offset}`);
-        if (cancelled) return;
-        setReuseRows(res.data.data);
-        setReuseTotal(res.data.total);
-      } catch (err) {
-        console.error('Failed to fetch credential-reuse', err);
-      } finally {
-        if (!cancelled) setLoading(false);
-      }
-    })();
-    return () => { cancelled = true; };
-  }, [tab, page, refreshTick]);
-
-  // ── Build reuse-map for the badge column on the CREDS tab
-  useEffect(() => {
-    let cancelled = false;
-    (async () => {
-      try {
-        const res = await api.get(`/credential-reuse?limit=${REUSE_MAP_CAP}&offset=0`);
-        if (cancelled) return;
-        const m = new Map<string, { id: string; target_count: number }>();
-        (res.data.data as CredentialReuseRow[]).forEach(r => {
-          m.set(reuseKey(r.secret_sha256, r.secret_kind, r.principal), {
-            id: r.id,
-            target_count: r.target_count,
-          });
-        });
-        setReuseMap(m);
-      } catch {
-        /* badge column degrades silently to "—" */
-      }
-    })();
-    return () => { cancelled = true; };
-  }, [refreshTick]);
+  const {
+    creds, credsTotal, reuseRows, reuseTotal, reuseMap, loading, fetchReuseDetail,
+  } = useCredentials({ tab, page, query, serviceFilter, refreshTick });
 
   const handleSearch = (e: React.FormEvent) => {
     e.preventDefault();
@@ -131,81 +55,37 @@ const Credentials: React.FC = () => {
   const total = tab === 'creds' ? credsTotal : reuseTotal;
   const totalPages = Math.max(1, Math.ceil(total / limit));
 
-  // Service chips derived from visible creds page
+  // Service chips derived from visible creds page.
   const services = useMemo(() => {
     const set = new Set<string>();
-    creds.forEach(c => set.add(c.service));
+    creds.forEach((c) => set.add(c.service));
     return Array.from(set).sort();
   }, [creds]);
 
-  const plaintextCount = creds.filter(c => c.secret_kind === 'plaintext').length;
+  const plaintextCount = creds.filter((c) => c.secret_kind === 'plaintext').length;
   const hashedCount = creds.length - plaintextCount;
 
   const handleSortCol = (col: string) => {
-    if (sortCol === col) {
-      if (sortDir === 'asc') setSortDir('desc');
-      else { setSortCol(''); setSortDir('asc'); }
-    } else {
-      setSortCol(col);
-      setSortDir('asc');
-    }
+    const next = nextSortState({ col: sortCol, dir: sortDir }, col);
+    setSortCol(next.col);
+    setSortDir(next.dir);
   };
 
-  const sortedCreds = useMemo(() => {
-    if (!sortCol) return creds;
-    return [...creds].sort((a, b) => {
-      let av: string | number = '';
-      let bv: string | number = '';
-      if (sortCol === 'seen') { av = a.last_seen; bv = b.last_seen; }
-      else if (sortCol === 'decky') { av = a.decky_name; bv = b.decky_name; }
-      else if (sortCol === 'svc') { av = a.service; bv = b.service; }
-      else if (sortCol === 'attacker') { av = a.attacker_ip; bv = b.attacker_ip; }
-      else if (sortCol === 'principal') { av = a.principal ?? ''; bv = b.principal ?? ''; }
-      else if (sortCol === 'kind') { av = a.secret_kind; bv = b.secret_kind; }
-      else if (sortCol === 'hits') { av = a.attempt_count; bv = b.attempt_count; }
-      const cmp = typeof av === 'number' && typeof bv === 'number'
-        ? av - bv
-        : String(av).localeCompare(String(bv));
-      return sortDir === 'asc' ? cmp : -cmp;
-    });
-  }, [creds, sortCol, sortDir]);
+  const sortedCreds = useMemo(
+    () => sortCreds(creds, sortCol as Parameters<typeof sortCreds>[1], sortDir),
+    [creds, sortCol, sortDir],
+  );
 
-  const sortedReuseRows = useMemo(() => {
-    if (!sortCol) return reuseRows;
-    return [...reuseRows].sort((a, b) => {
-      let av: string | number = '';
-      let bv: string | number = '';
-      if (sortCol === 'seen') { av = a.last_seen; bv = b.last_seen; }
-      else if (sortCol === 'principal') { av = a.principal ?? ''; bv = b.principal ?? ''; }
-      else if (sortCol === 'kind') { av = a.secret_kind; bv = b.secret_kind; }
-      else if (sortCol === 'targets') { av = a.target_count; bv = b.target_count; }
-      else if (sortCol === 'attempts') { av = a.attempt_count; bv = b.attempt_count; }
-      const cmp = typeof av === 'number' && typeof bv === 'number'
-        ? av - bv
-        : String(av).localeCompare(String(bv));
-      return sortDir === 'asc' ? cmp : -cmp;
-    });
-  }, [reuseRows, sortCol, sortDir]);
-
-  const SortTh: React.FC<{ col: string; children: React.ReactNode }> = ({ col, children }) => (
-    <th
-      style={{ cursor: 'pointer', userSelect: 'none', whiteSpace: 'nowrap' }}
-      onClick={() => handleSortCol(col)}
-    >
-      {children}
-      {sortCol === col ? (sortDir === 'asc' ? ' ▲' : ' ▼') : ''}
-    </th>
+  const sortedReuseRows = useMemo(
+    () => sortReuse(reuseRows, sortCol as Parameters<typeof sortReuse>[1], sortDir),
+    [reuseRows, sortCol, sortDir],
   );
 
   const openReuseFromCred = async (key: string) => {
     const hit = reuseMap.get(key);
     if (!hit) return;
-    try {
-      const res = await api.get(`/credential-reuse/${hit.id}`);
-      setSelectedReuse(res.data as CredentialReuseRow);
-    } catch (err) {
-      console.error('Failed to fetch reuse detail', err);
-    }
+    const row = await fetchReuseDetail(hit.id);
+    if (row) setSelectedReuse(row);
   };
 
   return (
@@ -244,7 +124,7 @@ const Credentials: React.FC = () => {
             >
               ALL
             </button>
-            {services.map(svc => (
+            {services.map((svc) => (
               <button
                 key={svc}
                 type="button"
@@ -294,7 +174,7 @@ const Credentials: React.FC = () => {
               <button disabled={page >= totalPages} onClick={() => setPage(page + 1)} aria-label="Next page">
                 <ChevronRight size={14} />
               </button>
-              <button onClick={() => setRefreshTick(t => t + 1)} aria-label="Refresh">
+              <button onClick={() => setRefreshTick((t) => t + 1)} aria-label="Refresh">
                 <RefreshCw size={14} />
               </button>
             </div>
@@ -303,162 +183,26 @@ const Credentials: React.FC = () => {
 
         <div className="logs-table-container">
           {tab === 'creds' ? (
-            <table className="logs-table">
-              <thead>
-                <tr>
-                  <SortTh col="seen">LAST SEEN</SortTh>
-                  <SortTh col="decky">DECKY</SortTh>
-                  <SortTh col="svc">SVC</SortTh>
-                  <SortTh col="attacker">ATTACKER</SortTh>
-                  <SortTh col="principal">PRINCIPAL</SortTh>
-                  <th>SECRET</th>
-                  <SortTh col="kind">KIND</SortTh>
-                  <SortTh col="hits">HITS</SortTh>
-                  <th>REUSE</th>
-                  <th></th>
-                </tr>
-              </thead>
-              <tbody>
-                {sortedCreds.length > 0 ? sortedCreds.map(c => {
-                  const isPlain = c.secret_kind === 'plaintext';
-                  const secretText = isPlain
-                    ? (c.secret_printable ?? '—')
-                    : truncHash(c.secret_sha256, 16);
-                  const key = reuseKey(c.secret_sha256, c.secret_kind, c.principal);
-                  const reuseHit = reuseMap.get(key);
-                  return (
-                    <tr key={c.id} className="clickable" onClick={() => setSelectedCred(c)}>
-                      <td className="dim" style={{ fontSize: '0.72rem', whiteSpace: 'nowrap' }}>
-                        {new Date(c.last_seen).toLocaleTimeString()}
-                      </td>
-                      <td className="violet-accent">{c.decky_name}</td>
-                      <td><span className="chip dim-chip">{c.service}</span></td>
-                      <td>
-                        <span
-                          className="matrix-text attacker-link"
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            navigate(`/attackers?q=${encodeURIComponent(c.attacker_ip)}`);
-                          }}
-                        >
-                          {c.attacker_ip}
-                        </span>
-                      </td>
-                      <td className="principal-cell">
-                        {c.principal ?? <span className="dim">—</span>}
-                      </td>
-                      <td>
-                        <span className={`secret-cell${isPlain ? '' : ' hashed'}`} title={secretText}>
-                          {secretText}
-                        </span>
-                      </td>
-                      <td>
-                        <span className={`chip ${isPlain ? 'matrix' : 'violet'}`}>
-                          {c.secret_kind.toUpperCase()}
-                        </span>
-                      </td>
-                      <td>
-                        <span className="attempt-pill">{c.attempt_count}</span>
-                      </td>
-                      <td>
-                        {reuseHit ? (
-                          <span
-                            className="attempt-pill"
-                            style={{ cursor: 'pointer', color: 'var(--violet)' }}
-                            title="Open reuse finding"
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              openReuseFromCred(key);
-                            }}
-                          >
-                            ×{reuseHit.target_count}
-                          </span>
-                        ) : (
-                          <span className="dim">—</span>
-                        )}
-                      </td>
-                      <td style={{ textAlign: 'right', opacity: 0.4 }}>
-                        <ChevR size={14} />
-                      </td>
-                    </tr>
-                  );
-                }) : (
-                  <tr>
-                    <td colSpan={10}>
-                      <EmptyState
-                        icon={Target}
-                        title={loading ? 'RETRIEVING CREDENTIALS…' : 'NO CREDENTIALS YET'}
-                        hint={loading ? undefined : 'captured auth attempts will land here'}
-                      />
-                    </td>
-                  </tr>
-                )}
-              </tbody>
-            </table>
+            <CredsTable
+              rows={sortedCreds}
+              reuseMap={reuseMap}
+              loading={loading}
+              sortCol={sortCol}
+              sortDir={sortDir}
+              onSort={handleSortCol}
+              onSelectCred={setSelectedCred}
+              onSelectAttacker={(ip) => navigate(`/attackers?q=${encodeURIComponent(ip)}`)}
+              onOpenReuse={openReuseFromCred}
+            />
           ) : (
-            <table className="logs-table">
-              <thead>
-                <tr>
-                  <SortTh col="seen">LAST SEEN</SortTh>
-                  <SortTh col="principal">PRINCIPAL</SortTh>
-                  <SortTh col="kind">KIND</SortTh>
-                  <SortTh col="targets">TARGETS</SortTh>
-                  <SortTh col="attempts">ATTEMPTS</SortTh>
-                  <th>DECKIES</th>
-                  <th>SERVICES</th>
-                  <th></th>
-                </tr>
-              </thead>
-              <tbody>
-                {sortedReuseRows.length > 0 ? sortedReuseRows.map(r => {
-                  const isPlain = r.secret_kind === 'plaintext';
-                  const moreDeckies = Math.max(0, r.deckies.length - 3);
-                  const moreServices = Math.max(0, r.services.length - 3);
-                  return (
-                    <tr key={r.id} className="clickable" onClick={() => setSelectedReuse(r)}>
-                      <td className="dim" style={{ fontSize: '0.72rem', whiteSpace: 'nowrap' }}>
-                        {new Date(r.last_seen).toLocaleTimeString()}
-                      </td>
-                      <td className="principal-cell">
-                        {r.principal ?? <span className="dim">—</span>}
-                      </td>
-                      <td>
-                        <span className={`chip ${isPlain ? 'matrix' : 'violet'}`}>
-                          {r.secret_kind.toUpperCase()}
-                        </span>
-                      </td>
-                      <td><span className="attempt-pill">{r.target_count}</span></td>
-                      <td><span className="attempt-pill">{r.attempt_count}</span></td>
-                      <td>
-                        {r.deckies.slice(0, 3).map(d => (
-                          <span key={d} className="chip dim-chip" style={{ marginRight: 4 }}>{d}</span>
-                        ))}
-                        {moreDeckies > 0 && <span className="dim">+{moreDeckies}</span>}
-                      </td>
-                      <td>
-                        {r.services.slice(0, 3).map(s => (
-                          <span key={s} className="chip dim-chip" style={{ marginRight: 4 }}>{s}</span>
-                        ))}
-                        {moreServices > 0 && <span className="dim">+{moreServices}</span>}
-                      </td>
-                      <td style={{ textAlign: 'right', opacity: 0.4 }}>
-                        <ChevR size={14} />
-                      </td>
-                    </tr>
-                  );
-                }) : (
-                  <tr>
-                    <td colSpan={8}>
-                      <EmptyState
-                        icon={Target}
-                        title={loading ? 'RETRIEVING REUSE…' : 'NO REUSE FINDINGS YET'}
-                        hint={loading ? undefined : 'a credential captured on ≥2 deckies will land here'}
-                      />
-                    </td>
-                  </tr>
-                )}
-              </tbody>
-            </table>
+            <ReuseTable
+              rows={sortedReuseRows}
+              loading={loading}
+              sortCol={sortCol}
+              sortDir={sortDir}
+              onSort={handleSortCol}
+              onSelect={setSelectedReuse}
+            />
           )}
         </div>
       </div>
