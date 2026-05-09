@@ -170,3 +170,48 @@
   font-size: 0.8rem;
   letter-spacing: 1px;
 }
+
+.ttp-mitre-link {
+  color: var(--dim-color);
+  text-decoration: none;
+  border-bottom: 1px dotted var(--dim-color);
+  font-variant-numeric: tabular-nums;
+  letter-spacing: 0.5px;
+}
+.ttp-mitre-link:hover {
+  color: var(--violet);
+  border-bottom-color: var(--violet);
+}
+
+.ttp-group-row {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  font-size: 0.78rem;
+  padding: 3px 4px;
+  border-radius: 2px;
+}
+.ttp-group-row:hover {
+  background: rgba(155, 135, 245, 0.05);
+}
+
+.ttp-group-id {
+  color: var(--dim-color);
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+.ttp-group-name {
+  color: var(--matrix);
+  white-space: nowrap;
+}
+
+.ttp-group-aliases {
+  color: var(--dim-color);
+  font-size: 0.72rem;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  min-width: 0;
+  flex: 1;
+}

@@ -1,8 +1,10 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { X, Crosshair } from '../icons';
-import api from '../utils/api';
 import { useEscapeKey } from '../hooks/useEscapeKey';
 import { useFocusTrap } from '../hooks/useFocusTrap';
+import { fetchTagsForTechnique, fetchGroupsForTechnique } from '../utils/ttpApi';
+import type { TTPScope } from '../utils/ttpApi';
+import type { GroupRef, TTPTagDetailRow } from '../types/ttp';
 import './TTPInspector.css';
 
 /*
@@ -16,28 +18,10 @@ import './TTPInspector.css';
  * geometry mirrors CredentialReuseInspector / BountyInspector.
  */
 
-export interface TTPTagDetailRow {
-  uuid: string;
-  source_kind: string;
-  source_id: string;
-  attacker_uuid: string | null;
-  identity_uuid: string | null;
-  session_id: string | null;
-  decky_id: string | null;
-  tactic: string;
-  technique_id: string;
-  technique_name: string | null;
-  sub_technique_id: string | null;
-  sub_technique_name: string | null;
-  confidence: number;
-  rule_id: string;
-  rule_version: number;
-  evidence: Record<string, unknown>;
-  attack_release: string;
-  created_at: string;
-}
+// Re-export so existing imports of TTPTagDetailRow from this file keep working.
+export type { TTPTagDetailRow } from '../types/ttp';
 
-export type TTPInspectorScope = 'identity' | 'attacker' | 'session';
+export type TTPInspectorScope = TTPScope;
 
 interface Props {
   scope: TTPInspectorScope;
@@ -49,12 +33,35 @@ interface Props {
   tactic: string;
   count: number;
   confidenceMax: number;
+  mitre_url?: string | null;
   onClose: () => void;
 }
 
+function mitreUrlForId(tid: string): string {
+  const [parent, sub] = tid.split('.');
+  return sub
+    ? `https://attack.mitre.org/techniques/${parent}/${sub}`
+    : `https://attack.mitre.org/techniques/${parent}`;
+}
+
+const MitreLink: React.FC<{ tid: string; href?: string | null }> = ({ tid, href }) => {
+  const url = href ?? mitreUrlForId(tid);
+  return (
+    <a
+      href={url}
+      target="_blank"
+      rel="noopener noreferrer"
+      className="ttp-mitre-link"
+      onClick={(e) => e.stopPropagation()}
+    >
+      {tid} ↗
+    </a>
+  );
+};
+
 const TTPInspector: React.FC<Props> = ({
   scope, uuid, techniqueId, subTechniqueId, techniqueName, subTechniqueName,
-  tactic, count, confidenceMax, onClose,
+  tactic, count, confidenceMax, mitre_url, onClose,
 }) => {
   const panelRef = useRef<HTMLDivElement | null>(null);
   useEscapeKey(onClose, true);
@@ -71,29 +78,42 @@ const TTPInspector: React.FC<Props> = ({
 
   useEffect(() => {
     let cancelled = false;
-    const fetch = async () => {
-      try {
-        const params: Record<string, string> = {};
-        if (subTechniqueId) params.sub_technique_id = subTechniqueId;
-        const path = `/ttp/tags/by-${scope}/${uuid}/${techniqueId}`;
-        const res = await api.get(path, { params });
-        if (cancelled) return;
-        setRows(Array.isArray(res.data) ? res.data : []);
-        setError(null);
-      } catch (err: any) {
+    fetchTagsForTechnique(scope, uuid, techniqueId, subTechniqueId)
+      .then((data) => { if (!cancelled) { setRows(data); setError(null); } })
+      .catch((err: any) => {
         if (cancelled) return;
         setRows([]);
         setError(
           err?.response?.status === 403 ? 'Insufficient role for tag detail.' :
           'Failed to load tag detail.',
         );
-      } finally {
-        if (!cancelled) setLoaded(true);
-      }
-    };
-    fetch();
+      })
+      .finally(() => { if (!cancelled) setLoaded(true); });
     return () => { cancelled = true; };
   }, [scope, uuid, techniqueId, subTechniqueId]);
+
+  const [groups, setGroups] = useState<GroupRef[] | null>(null);
+  const [groupsLoading, setGroupsLoading] = useState(false);
+  const [groupsError, setGroupsError] = useState<string | null>(null);
+
+  const groupTarget = subTechniqueId ?? techniqueId;
+  useEffect(() => {
+    let cancelled = false;
+    setGroups(null);
+    setGroupsError(null);
+    setGroupsLoading(true);
+    fetchGroupsForTechnique(groupTarget)
+      .then((data) => { if (!cancelled) setGroups(data); })
+      .catch((err: any) => {
+        if (cancelled) return;
+        setGroupsError(
+          err?.response?.status === 404 ? 'Technique not found in ATT&CK bundle.' :
+          'Failed to load groups.',
+        );
+      })
+      .finally(() => { if (!cancelled) setGroupsLoading(false); });
+    return () => { cancelled = true; };
+  }, [groupTarget]);
 
   const id = subTechniqueId ?? techniqueId;
   const name = subTechniqueName ?? techniqueName;
@@ -125,10 +145,12 @@ const TTPInspector: React.FC<Props> = ({
             <div className="v">{tactic}</div>
             <div className="k" style={{ color: 'var(--dim-color)' }}>TECHNIQUE</div>
             <div className="v">
-              {techniqueId}{techniqueName ? ` — ${techniqueName}` : ''}
+              <MitreLink tid={techniqueId} href={subTechniqueId ? undefined : mitre_url} />
+              {techniqueName ? ` — ${techniqueName}` : ''}
               {subTechniqueId && (
                 <div style={{ marginTop: 2 }}>
-                  ↳ {subTechniqueId}{subTechniqueName ? ` — ${subTechniqueName}` : ''}
+                  ↳ <MitreLink tid={subTechniqueId} href={mitre_url} />
+                  {subTechniqueName ? ` — ${subTechniqueName}` : ''}
                 </div>
               )}
             </div>
@@ -148,6 +170,43 @@ const TTPInspector: React.FC<Props> = ({
               <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
                 {rows.map((row) => (
                   <TTPTagCard key={row.uuid} row={row} />
+                ))}
+              </div>
+            )}
+          </div>
+
+          <div>
+            <div className="type-label">GROUPS</div>
+            {groupsLoading ? (
+              <div className="ttp-empty">Loading groups…</div>
+            ) : groupsError ? (
+              <div className="ttp-empty">{groupsError}</div>
+            ) : groups === null ? null : groups.length === 0 ? (
+              <div className="ttp-empty">No MITRE-tracked groups documented for this technique.</div>
+            ) : (
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+                {groups.map((g) => (
+                  <div key={g.group_id} className="ttp-group-row">
+                    {g.mitre_url ? (
+                      <a
+                        href={g.mitre_url}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="ttp-mitre-link"
+                        onClick={(e) => e.stopPropagation()}
+                      >
+                        {g.group_id} ↗
+                      </a>
+                    ) : (
+                      <span className="ttp-group-id">{g.group_id}</span>
+                    )}
+                    <span className="ttp-group-name">{g.name}</span>
+                    {g.aliases.length > 0 && (
+                      <span className="ttp-group-aliases" title={g.aliases.join(', ')}>
+                        {g.aliases.join(', ')}
+                      </span>
+                    )}
+                  </div>
                 ))}
               </div>
             )}
@@ -239,7 +298,19 @@ const TTPTagCard: React.FC<{ row: TTPTagDetailRow }> = ({ row }) => {
         <div className="k">SEEN</div>
         <div className="v">{new Date(row.created_at).toLocaleString()}</div>
         <div className="k">ATT&CK</div>
-        <div className="v">{row.attack_release}</div>
+        <div className="v">
+          {row.mitre_url ? (
+            <a
+              href={row.mitre_url}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="ttp-mitre-link"
+            >
+              {row.sub_technique_id ?? row.technique_id} ↗
+            </a>
+          ) : (row.sub_technique_id ?? row.technique_id)}
+          {' '}{row.attack_release}
+        </div>
       </div>
       {evidenceRows.length === 0 ? (
         <div className="ttp-empty" style={{ padding: '8px' }}>—</div>

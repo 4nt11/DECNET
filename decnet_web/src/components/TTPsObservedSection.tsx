@@ -3,6 +3,7 @@ import { Crosshair, Download, Target } from '../icons';
 import api from '../utils/api';
 import EmptyState from './EmptyState/EmptyState';
 import TTPInspector from './TTPInspector';
+import type { TechniqueRow } from '../types/ttp';
 
 /*
  * TTPsObservedSection — shared between IdentityDetail (primary) and
@@ -15,18 +16,6 @@ import TTPInspector from './TTPInspector';
  * not here — the analyst-facing rollup is a separate concern from
  * operator rule administration.
  */
-
-interface TechniqueRow {
-  technique_id: string;
-  technique_name: string | null;
-  sub_technique_id: string | null;
-  sub_technique_name: string | null;
-  tactic: string;
-  count: number;
-  first_seen: string;
-  last_seen: string;
-  confidence_max: number;
-}
 
 const TACTIC_LABEL: Record<string, string> = {
   TA0043: 'RECONNAISSANCE',
@@ -168,6 +157,7 @@ const TTPsObservedSection: React.FC<Props> = ({ scope, uuid }) => {
           tactic={selected.tactic}
           count={selected.count}
           confidenceMax={selected.confidence_max}
+          mitre_url={selected.mitre_url}
           onClose={() => setSelected(null)}
         />
       )}
@@ -221,7 +211,20 @@ const TechniqueBar: React.FC<{
           textOverflow: 'ellipsis',
         }}
         title={label}
-      >{label}</span>
+      >
+        {row.mitre_url ? (
+          <>
+            <a
+              href={row.mitre_url}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="ttp-mitre-link"
+              onClick={(e) => e.stopPropagation()}
+            >{id} ↗</a>
+            {name ? ` — ${name}` : ''}
+          </>
+        ) : label}
+      </span>
       <div
         style={{
           height: 6,
