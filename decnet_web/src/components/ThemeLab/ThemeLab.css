@@ -3,19 +3,362 @@
 
 .theme-lab {
   padding: var(--space-8);
-  color: var(--text-color);
-  font-family: var(--font-mono);
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-8);
 }
 
 .theme-lab .page-header h1 {
   font-size: var(--fs-page);
   letter-spacing: var(--ls-title);
-  color: var(--accent-color);
-  margin-bottom: var(--space-2);
+  color: var(--accent);
+  margin: 0;
 }
 
-.theme-lab-subtitle {
+.theme-lab .page-sub {
+  font-size: var(--fs-mini);
+  letter-spacing: var(--ls-label);
+  opacity: 0.5;
+}
+
+.lab-section {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+  padding: var(--space-5);
+  border: 1px solid var(--border);
+  background: var(--matrix-tint-5);
+}
+
+.lab-section-title {
+  font-size: var(--fs-small);
+  letter-spacing: var(--ls-nav);
+  color: var(--accent);
+  margin: 0;
+}
+
+.lab-section-body {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+}
+
+/* ── Colour swatches ─────────────────────────────────── */
+.lab-swatch-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+  gap: var(--space-3);
+}
+
+.lab-swatch {
+  display: flex;
+  gap: var(--space-3);
+  border: 1px solid var(--border);
+  padding: var(--space-2);
+  background: var(--panel);
+}
+
+.lab-swatch-chip {
+  width: 56px;
+  height: 56px;
+  border: 1px solid var(--border);
+  flex-shrink: 0;
+}
+
+.lab-swatch-meta {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  font-size: var(--fs-mini);
+  min-width: 0;
+}
+
+.lab-swatch-meta code {
+  font-size: var(--fs-mini);
+  color: var(--matrix);
+}
+
+.lab-swatch-value {
+  opacity: 0.6;
+  word-break: break-all;
+}
+
+.lab-swatch-desc {
+  opacity: 0.5;
+  font-size: var(--fs-micro);
+}
+
+.lab-swatch-contrast {
+  font-size: var(--fs-micro);
+  letter-spacing: var(--ls-label);
+  margin-top: 2px;
+}
+.lab-swatch-contrast.ok    { color: var(--matrix); }
+.lab-swatch-contrast.warn  { color: var(--violet); }
+.lab-swatch-contrast.fail  { color: var(--alert); }
+
+/* ── Typography scale ────────────────────────────────── */
+.lab-type-list {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+}
+
+.lab-type-row {
+  display: grid;
+  grid-template-columns: 140px 1fr;
+  align-items: baseline;
+  gap: var(--space-3);
+  border-bottom: 1px dashed var(--border);
+  padding-bottom: var(--space-2);
+}
+
+.lab-type-token {
+  font-size: var(--fs-mini);
+  opacity: 0.6;
+}
+
+.lab-type-sample {
+  color: var(--matrix);
+  font-weight: 700;
+}
+
+/* ── Buttons ─────────────────────────────────────────── */
+.lab-btn-grid {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+}
+
+.lab-btn-row {
+  display: flex;
+  gap: var(--space-3);
+  align-items: center;
+  flex-wrap: wrap;
+}
+
+.lab-btn-label {
+  font-size: var(--fs-mini);
+  letter-spacing: var(--ls-label);
+  opacity: 0.6;
+  width: 80px;
+}
+
+/* Force the visual hover state without relying on user pointer. */
+.lab-btn-row .btn[data-state='hover-demo'] {
+  background: var(--matrix);
+  color: var(--bg);
+  box-shadow: var(--matrix-glow);
+}
+.lab-btn-row .btn.violet[data-state='hover-demo'] {
+  background: var(--violet);
+  color: var(--bg);
+  box-shadow: var(--violet-glow);
+}
+.lab-btn-row .btn.alert[data-state='hover-demo'] {
+  background: var(--alert);
+  color: var(--bg);
+  box-shadow: 0 0 10px var(--alert);
+}
+
+/* ── Badges ──────────────────────────────────────────── */
+.lab-badge-row {
+  display: flex;
+  gap: var(--space-3);
+  align-items: center;
+  flex-wrap: wrap;
+}
+
+.lab-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 2px 10px;
+  border: 1px solid var(--border);
+  font-size: var(--fs-micro);
+  letter-spacing: var(--ls-label);
+  border-radius: var(--radius-pill);
+}
+
+.lab-pill.live {
+  color: var(--matrix);
+  border-color: var(--matrix);
+  background: var(--matrix-tint-10);
+}
+.lab-pill.inactive {
+  opacity: 0.6;
+}
+.lab-pill.threat {
+  color: var(--alert);
+  border-color: var(--alert);
+  background: var(--alert-tint-10);
+}
+
+.nav-badge {
+  display: inline-flex;
+  min-width: 22px;
+  height: 18px;
+  padding: 0 6px;
+  align-items: center;
+  justify-content: center;
+  border: 1px solid var(--alert);
+  color: var(--alert);
+  font-size: var(--fs-micro);
+  letter-spacing: var(--ls-label);
+}
+
+/* ── Banners ─────────────────────────────────────────── */
+.lab-banner-stack {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+}
+
+.lab-banner-error {
+  border-left-color: var(--alert);
+}
+.lab-banner-error em { color: var(--alert); }
+
+/* ── Metric cards ────────────────────────────────────── */
+.lab-metric-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  gap: var(--space-3);
+}
+
+.lab-stat-card {
+  border: 1px solid var(--border);
+  border-left: 2px solid var(--accent);
+  background: var(--panel);
+  padding: var(--space-4);
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+}
+.lab-stat-card.empty { border-left-color: var(--border); opacity: 0.7; }
+
+.lab-stat-label {
   font-size: var(--fs-mini);
   letter-spacing: var(--ls-label);
   opacity: 0.6;
 }
+.lab-stat-value {
+  font-size: var(--fs-hero);
+  color: var(--accent);
+  font-weight: 700;
+  letter-spacing: var(--ls-tight);
+}
+.lab-stat-empty { color: var(--matrix); opacity: 0.4; }
+.lab-stat-foot {
+  font-size: var(--fs-micro);
+  opacity: 0.6;
+}
+.lab-stat-foot.dim { opacity: 0.4; }
+
+/* ── Table ───────────────────────────────────────────── */
+.lab-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: var(--fs-small);
+}
+.lab-table th,
+.lab-table td {
+  padding: var(--space-2) var(--space-3);
+  border-bottom: 1px solid var(--border);
+  text-align: left;
+}
+.lab-table th {
+  font-size: var(--fs-micro);
+  letter-spacing: var(--ls-nav);
+  opacity: 0.6;
+}
+.lab-table tr.hover-demo {
+  background: var(--matrix-tint-5);
+}
+.lab-table tr.selected {
+  background: var(--accent-tint-10);
+  outline: 1px solid var(--accent);
+  outline-offset: -1px;
+}
+.lab-table tr.drop-target {
+  background: var(--violet-tint-10);
+  outline: 1px dashed var(--violet);
+  outline-offset: -1px;
+}
+.lab-table td.ok   { color: var(--matrix); }
+.lab-table td.warn { color: var(--violet); }
+.lab-table td.dim  { opacity: 0.4; }
+
+/* ── Inputs ──────────────────────────────────────────── */
+.lab-input-grid {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-3);
+  align-items: center;
+}
+.lab-input-grid select {
+  background: var(--panel);
+  border: 1px solid var(--border);
+  color: var(--matrix);
+  padding: 8px 12px;
+}
+.lab-checkbox {
+  display: inline-flex;
+  gap: 6px;
+  align-items: center;
+  font-size: var(--fs-small);
+  opacity: 0.85;
+}
+
+/* ── Drawer ──────────────────────────────────────────── */
+.lab-drawer {
+  width: 360px;
+  max-width: 100%;
+  border: 1px solid var(--border);
+  border-left: 2px solid var(--violet);
+  background: var(--panel);
+  display: flex;
+  flex-direction: column;
+}
+.lab-drawer-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: var(--space-3) var(--space-4);
+  border-bottom: 1px solid var(--border);
+  font-size: var(--fs-mini);
+  letter-spacing: var(--ls-nav);
+  color: var(--violet);
+}
+.lab-drawer-body {
+  padding: var(--space-4);
+  font-size: var(--fs-small);
+  opacity: 0.8;
+}
+
+/* ── Net-box states ──────────────────────────────────── */
+.lab-netbox-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+  gap: var(--space-3);
+}
+
+.lab-netbox {
+  border: 1px solid var(--border);
+  background: var(--panel);
+  padding: var(--space-4);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 80px;
+  font-size: var(--fs-mini);
+  letter-spacing: var(--ls-nav);
+  position: relative;
+}
+
+/* States compose: independent classes layer onto the base.
+ * Per memory: "Net-box visual states compose". */
+.lab-netbox.internet     { border-color: var(--accent); color: var(--accent); }
+.lab-netbox.inactive     { opacity: 0.4; }
+.lab-netbox.selected     { outline: 2px solid var(--accent); outline-offset: -2px; }
+.lab-netbox.drop-target  { border-style: dashed; border-color: var(--violet); }
