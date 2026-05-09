@@ -359,6 +359,13 @@ input:focus {
 }
 ::view-transition-new(root) {
   z-index: 1;
+  /* Default clip-path: a zero-radius circle at the click point
+   * (--reveal-x / --reveal-y are written to <html> by
+   * useThemeToggle.ts BEFORE startViewTransition runs). The
+   * pseudo therefore renders fully clipped on its very first
+   * frame — no opening flash possible. The web-animation then
+   * grows the circle outward; fill: 'both' pins the end. */
+  clip-path: circle(0px at var(--reveal-x, 50%) var(--reveal-y, 50%));
 }
 
 /* ── Scrollbar ─────────────────────────────────── */

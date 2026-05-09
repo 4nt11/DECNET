@@ -64,6 +64,15 @@ function animateSwap(next: Theme, x: number, y: number): void {
     return;
   }
 
+  /* Publish click coords as CSS custom properties BEFORE the
+   * transition starts — index.css uses these in the
+   * ::view-transition-new(root) default rule so the new pseudo
+   * is already clipped to circle(0) at this point on its first
+   * paint. Without this, the new layer renders at default styles
+   * (full size) for one frame before the animation registers. */
+  document.documentElement.style.setProperty('--reveal-x', `${x}px`);
+  document.documentElement.style.setProperty('--reveal-y', `${y}px`);
+
   const transition = docVT.startViewTransition(apply)!;
   transition.ready.then(() => {
     const endRadius = Math.hypot(
