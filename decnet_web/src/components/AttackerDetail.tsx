@@ -8,6 +8,7 @@ import SessionDrawer from './SessionDrawer';
 import EmptyState from './EmptyState/EmptyState';
 import TTPsObservedSection from './TTPsObservedSection';
 import { useIdentityStream } from './useIdentityStream';
+import { useAttackerStream, type ObservationFrame } from './useAttackerStream';
 import './Dashboard.css';
 
 interface AttackerBehavior {
@@ -96,6 +97,20 @@ interface AttackerData {
     };
   }>;
   ip_leaks_total?: number;
+  // BEHAVE-SHELL behavioural primitives — latest value per primitive
+  // for this attacker. The REST `/api/v1/attackers/{uuid}` route
+  // returns this field; the SSE `/events` stream live-updates it via
+  // useAttackerStream. Empty array until the profiler worker has
+  // processed at least one session shard for this attacker.
+  observations?: BehaviouralObservation[];
+}
+
+export interface BehaviouralObservation {
+  primitive: string;
+  value: unknown;
+  confidence: number;
+  ts?: number;
+  source?: string;
 }
 
 // ─── Fingerprint rendering ───────────────────────────────────────────────────
@@ -880,6 +895,97 @@ const PhaseSequenceBlock: React.FC<{ b: AttackerBehavior }> = ({ b }) => {
   );
 };
 
+// ─── Behavioural primitives panel (BEHAVE-INTEGRATION Phase 5) ─────────────
+
+// Day-one render priority per BEHAVE-INTEGRATION.md §441-454. These four
+// primitives carry the highest discriminative value for the "is this the
+// same operator class" hover story; everything else alphabetises.
+const BEHAVIOUR_PRIORITY: ReadonlyArray<string> = [
+  'motor.input_modality',
+  'cognitive.feedback_loop_engagement',
+  'cognitive.command_branch_diversity',
+  'cognitive.inter_command_latency_class',
+];
+
+const BEHAVIOUR_DOMAIN_ORDER: ReadonlyArray<string> = [
+  'motor', 'cognitive', 'temporal', 'operational',
+  'environmental', 'emotional_valence',
+];
+
+function _domainOf(primitive: string): string {
+  return primitive.split('.', 1)[0];
+}
+
+function _leafOf(primitive: string): string {
+  return primitive.split('.').slice(1).join('.');
+}
+
+function _comparePrimitives(a: string, b: string): number {
+  const ai = BEHAVIOUR_PRIORITY.indexOf(a);
+  const bi = BEHAVIOUR_PRIORITY.indexOf(b);
+  if (ai !== -1 && bi !== -1) return ai - bi;
+  if (ai !== -1) return -1;
+  if (bi !== -1) return 1;
+  return a.localeCompare(b);
+}
+
+function _renderValue(value: unknown): string {
+  if (value === null || value === undefined) return '—';
+  if (typeof value === 'string') return value;
+  if (typeof value === 'number' || typeof value === 'boolean') return String(value);
+  return JSON.stringify(value);
+}
+
+export const BehaviouralPrimitivesPanel: React.FC<{
+  observations: ReadonlyArray<BehaviouralObservation>;
+}> = ({ observations }) => {
+  if (!observations.length) {
+    return (
+      <div className="info-banner" data-testid="behaviour-empty">
+        <span className="dim">No behavioural observations yet — the profiler runs once a session ends.</span>
+      </div>
+    );
+  }
+  // Group by top-level domain, sort each group by the priority-then-alpha
+  // comparator, then walk the canonical domain order.
+  const groups = new Map<string, BehaviouralObservation[]>();
+  for (const obs of observations) {
+    const domain = _domainOf(obs.primitive);
+    const list = groups.get(domain) ?? [];
+    list.push(obs);
+    groups.set(domain, list);
+  }
+  for (const list of groups.values()) {
+    list.sort((a, b) => _comparePrimitives(a.primitive, b.primitive));
+  }
+  const orderedDomains = [
+    ...BEHAVIOUR_DOMAIN_ORDER.filter((d) => groups.has(d)),
+    ...Array.from(groups.keys()).filter((d) => !BEHAVIOUR_DOMAIN_ORDER.includes(d)).sort(),
+  ];
+  return (
+    <div className="behaviour-panel" data-testid="behaviour-panel">
+      {orderedDomains.map((domain) => (
+        <div key={domain} className="behaviour-group" data-testid={`behaviour-group-${domain}`}>
+          <div className="page-header dim">{domain.toUpperCase()}</div>
+          {groups.get(domain)!.map((obs) => (
+            <div
+              key={obs.primitive}
+              className="behaviour-row"
+              data-testid={`behaviour-row-${obs.primitive}`}
+            >
+              <span className="behaviour-leaf">{_leafOf(obs.primitive)}</span>
+              <span className="behaviour-value matrix-text">{_renderValue(obs.value)}</span>
+              <span className="behaviour-confidence dim">
+                {(obs.confidence * 100).toFixed(0)}%
+              </span>
+            </div>
+          ))}
+        </div>
+      ))}
+    </div>
+  );
+};
+
 // ─── Collapsible section ────────────────────────────────────────────────────
 
 const Section: React.FC<{
@@ -1253,6 +1359,10 @@ const AttackerDetail: React.FC = () => {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
   const [attacker, setAttacker] = useState<AttackerData | null>(null);
+  // Live behavioural-primitive state. Seeded from
+  // attacker.observations on first fetch; mutated in place by the
+  // useAttackerStream hook below (latest-wins per primitive).
+  const [observations, setObservations] = useState<BehaviouralObservation[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [serviceFilter, setServiceFilter] = useState<string | null>(null);
@@ -1263,6 +1373,7 @@ const AttackerDetail: React.FC = () => {
     services: true,
     deckies: true,
     behavior: true,
+    behavioural: true,
     commands: true,
     fingerprints: true,
     intel: true,
@@ -1329,6 +1440,7 @@ const AttackerDetail: React.FC = () => {
       try {
         const res = await api.get(`/attackers/${id}`);
         setAttacker(res.data);
+        setObservations(res.data?.observations ?? []);
       } catch (err: any) {
         if (err.response?.status === 404) {
           setError('ATTACKER NOT FOUND');
@@ -1372,6 +1484,31 @@ const AttackerDetail: React.FC = () => {
           .then((res) => setAttacker(res.data))
           .catch(() => {});
       }
+    },
+  });
+
+  // Live behavioural-primitive updates: subscribe to per-attacker
+  // SSE and replace-by-primitive on every observation event.
+  useAttackerStream({
+    attackerUuid: id ?? '',
+    enabled: !!id,
+    onSnapshot: (data) => {
+      setObservations(data.observations ?? []);
+    },
+    onObservation: (frame: ObservationFrame) => {
+      setObservations((prev) => {
+        const filtered = prev.filter((o) => o.primitive !== frame.primitive);
+        return [
+          ...filtered,
+          {
+            primitive: frame.primitive,
+            value: frame.value,
+            confidence: frame.confidence,
+            ts: frame.ts,
+            source: frame.source,
+          },
+        ];
+      });
     },
   });
 
@@ -1753,6 +1890,15 @@ const AttackerDetail: React.FC = () => {
             size="compact"
           />
         )}
+      </Section>
+
+      {/* Behavioural primitives (BEHAVE-SHELL) */}
+      <Section
+        title="BEHAVIOURAL PRIMITIVES"
+        open={openSections.behavioural}
+        onToggle={() => toggle('behavioural')}
+      >
+        <BehaviouralPrimitivesPanel observations={observations} />
       </Section>
 
       {/* Commands */}
