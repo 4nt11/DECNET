@@ -22,6 +22,7 @@ import { useTopologyEditor } from './useTopologyEditor';
 import { useMazeInteraction, type PaletteDrag } from './useMazeInteraction';
 import { useLayoutPersistor } from './useMazeLayoutStore';
 import { useTopologyStream, type TopologyStreamEvent } from './useTopologyStream';
+import { useFullscreenMode } from './useFullscreenMode';
 import { ARCHETYPES as DEFAULT_ARCHETYPES } from './data';
 import { useToast } from '../Toasts/useToast';
 import { useServiceRegistry } from '../../hooks/useServiceRegistry';
@@ -187,43 +188,7 @@ const MazeNET: React.FC = () => {
   const [selection, setSelection] = useState<Selection>(null);
   const [inspectorOpen, setInspectorOpen] = useState(true);
   const [paletteOpen, setPaletteOpen] = useState(true);
-  const [fullscreen, setFullscreen] = useState(false);
-
-  useEffect(() => {
-    const cls = 'maze-fullscreen';
-    if (fullscreen) document.body.classList.add(cls);
-    else document.body.classList.remove(cls);
-    return () => document.body.classList.remove(cls);
-  }, [fullscreen]);
-
-  // Request/exit browser fullscreen alongside the in-app chrome hide.
-  // Ignore failures (fullscreen requires a user gesture; the chrome-only
-  // mode still works if the API rejects).
-  useEffect(() => {
-    if (fullscreen && !document.fullscreenElement) {
-      document.documentElement.requestFullscreen?.().catch(() => {});
-    } else if (!fullscreen && document.fullscreenElement) {
-      document.exitFullscreen?.().catch(() => {});
-    }
-  }, [fullscreen]);
-
-  // Sync state if the user presses F11/Esc to leave fullscreen from
-  // outside our button.
-  useEffect(() => {
-    const onFsChange = () => {
-      if (!document.fullscreenElement) setFullscreen(false);
-    };
-    document.addEventListener('fullscreenchange', onFsChange);
-    return () => document.removeEventListener('fullscreenchange', onFsChange);
-  }, []);
-
-  useEffect(() => {
-    const onKey = (e: KeyboardEvent) => {
-      if (e.key === 'Escape' && fullscreen) setFullscreen(false);
-    };
-    window.addEventListener('keydown', onKey);
-    return () => window.removeEventListener('keydown', onKey);
-  }, [fullscreen]);
+  const { fullscreen, toggle: toggleFullscreen } = useFullscreenMode();
   const [services, setServices] = useState<ServiceDef[]>(DEFAULT_SERVICES);
   const [archetypes, setArchetypes] = useState<Archetype[]>(DEFAULT_ARCHETYPES);
 
@@ -839,7 +804,7 @@ const MazeNET: React.FC = () => {
           <button
             type="button"
             className="maze-btn ghost"
-            onClick={() => setFullscreen((f) => !f)}
+            onClick={toggleFullscreen}
             title={fullscreen ? 'Exit fullscreen (Esc)' : 'Fullscreen canvas'}
           >
             {fullscreen ? <Minimize2 size={12} /> : <Maximize2 size={12} />}
