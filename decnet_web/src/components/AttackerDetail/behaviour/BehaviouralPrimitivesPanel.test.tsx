@@ -1,11 +1,13 @@
+/**
+ * @vitest-environment jsdom
+ */
 import { describe, it, expect } from 'vitest';
 import { render, screen } from '@testing-library/react';
 
-import {
-  BehaviouralPrimitivesPanel,
-  type BehaviouralObservation,
-  type AttributionPrimitiveState,
-} from './AttackerDetail';
+import { BehaviouralPrimitivesPanel } from './BehaviouralPrimitivesPanel';
+import type {
+  AttributionPrimitiveState, BehaviouralObservation,
+} from '../types';
 
 const _attr = (
   primitive: string,
@@ -41,26 +43,22 @@ describe('BehaviouralPrimitivesPanel', () => {
   });
 
   it('places day-one priority primitives at the top of their group', () => {
-    // Mix priority + non-priority primitives in arbitrary input order.
     const observations: BehaviouralObservation[] = [
       _obs('motor.keystroke_cadence', 'steady'),
       _obs('cognitive.tool_vocabulary', 'broad'),
-      _obs('motor.input_modality', 'typed'), // priority #1
-      _obs('cognitive.feedback_loop_engagement', 'closed_loop'), // priority #2
-      _obs('cognitive.command_branch_diversity', 'adaptive_branching'), // #3
-      _obs('cognitive.inter_command_latency_class', 'typing_speed'), // #4
+      _obs('motor.input_modality', 'typed'),
+      _obs('cognitive.feedback_loop_engagement', 'closed_loop'),
+      _obs('cognitive.command_branch_diversity', 'adaptive_branching'),
+      _obs('cognitive.inter_command_latency_class', 'typing_speed'),
       _obs('motor.error_correction', 'immediate'),
     ];
     render(<BehaviouralPrimitivesPanel observations={observations} />);
 
-    // motor group: input_modality must precede the alphabetised rest.
     const motorRows = Array.from(
       document.querySelectorAll('[data-testid^="behaviour-row-motor."]'),
     ).map((el) => el.getAttribute('data-testid')!);
     expect(motorRows[0]).toBe('behaviour-row-motor.input_modality');
 
-    // cognitive group: the three priority primitives must be in the
-    // documented order at the top.
     const cogRows = Array.from(
       document.querySelectorAll('[data-testid^="behaviour-row-cognitive."]'),
     ).map((el) => el.getAttribute('data-testid')!);
@@ -89,8 +87,6 @@ describe('BehaviouralPrimitivesPanel', () => {
     ];
     const attribution = new Map<string, AttributionPrimitiveState>([
       ['motor.input_modality', _attr('motor.input_modality', 'stable', 0.95)],
-      // cognitive.feedback_loop_engagement intentionally absent —
-      // the panel must not render a badge for it.
     ]);
     render(
       <BehaviouralPrimitivesPanel
