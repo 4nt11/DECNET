@@ -29,8 +29,30 @@ ATTACK_BUNDLE_URL: Final[str] = (
     f"/master/enterprise-attack/enterprise-attack-{ATTACK_BUNDLE_VERSION}.json"
 )
 
+# MITRE's ATT&CK Terms of Use (https://attack.mitre.org/resources/legal-and-branding/terms-of-use/)
+# require reproducing their copyright + license alongside any cached
+# copy of ATT&CK data. The license file lives at the root of the
+# attack-stix-data repository and is fetched into the same cache dir
+# as the bundle. ``resolve_bundle_path`` refuses to operate without
+# this file present — a hard compliance ratchet, not a soft warning.
+ATTACK_LICENSE_URL: Final[str] = (
+    "https://raw.githubusercontent.com/mitre-attack/attack-stix-data/master/LICENSE.txt"
+)
+
+# sha256 of the LICENSE.txt at the time of pinning. License text gets
+# occasional formatting touch-ups, so a mismatch is logged + refreshed
+# rather than fail-closed (see _fetch_license in attack_stix.py).
+ATTACK_LICENSE_SHA256: Final[str] = (
+    "738144f7fb054722a4ef9d3367c51710341dc12fc574c6ac3a41daaaecd8bf5e"
+)
+
+ATTACK_LICENSE_FILENAME: Final[str] = "LICENSE.txt"
+
 __all__ = [
     "ATTACK_BUNDLE_SHA256",
     "ATTACK_BUNDLE_URL",
     "ATTACK_BUNDLE_VERSION",
+    "ATTACK_LICENSE_FILENAME",
+    "ATTACK_LICENSE_SHA256",
+    "ATTACK_LICENSE_URL",
 ]
