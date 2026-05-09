@@ -98,6 +98,9 @@ async def test_happy_path_persists_and_publishes(tmp_path) -> None:
         assert topic.startswith("attacker.observation.")
         # Adapter excludes id/ts/v from payload body; handler re-merges.
         assert "id" in payload and "ts" in payload and "v" in payload
+        # Phase 5 amendment: attacker_uuid is also re-merged so the
+        # per-attacker SSE route can filter in O(1).
+        assert payload["attacker_uuid"] == _ATTACKER_UUID
 
 
 async def test_missing_session_id_skipped(tmp_path) -> None:
@@ -175,3 +178,23 @@ async def test_publish_none_is_silent(tmp_path) -> None:
     repo = _make_repo()
     n = await handle_session_ended(repo, _payload(shard_path), None)
     assert n > 0
+
+
+async def test_attacker_uuid_in_payload_for_filter(tmp_path) -> None:
+    """Phase 5 amendment: every published observation carries the
+    DECNET-side ``attacker_uuid`` denorm (NOT the BEHAVE
+    ``identity_ref``, which stays None until attribution exists)."""
+    shard_path = _shard_with_typing_session(tmp_path)
+    repo = _make_repo()
+    published: list[tuple[str, dict[str, Any], str]] = []
+    publish = lambda topic, payload, etype: published.append((topic, payload, etype))
+
+    n = await handle_session_ended(repo, _payload(shard_path), publish)
+
+    assert n > 0
+    for _topic, payload, _etype in published:
+        assert payload["attacker_uuid"] == _ATTACKER_UUID
+        # identity_ref ride-along comes from the BEHAVE adapter's
+        # to_event_payload — None today, that's fine. The point is the
+        # attacker_uuid is INDEPENDENT of identity_ref.
+        assert payload.get("identity_ref") is None

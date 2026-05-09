@@ -96,15 +96,23 @@ def _flatten_observation(obs: Observation, attacker_uuid: str) -> dict[str, Any]
     }
 
 
-def _publish_observation(publish: Optional[PublishFn], obs: Observation) -> None:
-    """Best-effort publish; never raise. Re-merges id/ts/v into payload
-    per BEHAVE-INTEGRATION.md §339-366 deviation note."""
+def _publish_observation(
+    publish: Optional[PublishFn],
+    obs: Observation,
+    attacker_uuid: str,
+) -> None:
+    """Best-effort publish; never raise. Re-merges id/ts/v plus
+    DECNET-side ``attacker_uuid`` denorm into payload per
+    BEHAVE-INTEGRATION.md §339-366 deviation note. The ``attacker_uuid``
+    stamp gives the per-attacker SSE route an O(1) filter without a
+    repo round-trip per event (Phase 5)."""
     if publish is None:
         return
     payload = to_event_payload(obs) | {
         "id": obs.id,
         "ts": obs.ts,
         "v": obs.v,
+        "attacker_uuid": attacker_uuid,
     }
     try:
         publish(event_topic_for(obs.primitive), payload, obs.primitive)
@@ -202,7 +210,7 @@ async def handle_session_ended(
 
     # 7. Publish — fire-and-forget, never raises out.
     for obs in observations:
-        _publish_observation(publish, obs)
+        _publish_observation(publish, obs, attacker_uuid)
 
     log.info(
         "behave_handler: persisted=%d primitives sid=%s attacker_ip=%s",
