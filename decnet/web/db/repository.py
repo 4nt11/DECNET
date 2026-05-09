@@ -1492,6 +1492,10 @@ class BaseRepository(ABC):
         """Raw ``ttp_tag`` rows for one attacker (for STIX export + similar)."""
         raise NotImplementedError
 
+    async def list_attacker_commands_deduped(self, uuid: str) -> list[str]:
+        """Deduplicated ``command_text`` strings for one attacker, order-preserved."""
+        raise NotImplementedError
+
     async def list_ttp_decky_phases(
         self, identity_uuid: str,
     ) -> list[dict[str, Any]]:

@@ -41,6 +41,24 @@ class AttackerActivityMixin(_MixinBase):
             page = commands[offset: offset + limit]
             return {"total": total, "data": page}
 
+    async def list_attacker_commands_deduped(self, uuid: str) -> list[str]:
+        async with self._session() as session:
+            result = await session.execute(
+                select(col(Attacker.commands)).where(Attacker.uuid == uuid)
+            )
+            raw = result.scalar_one_or_none()
+            if raw is None:
+                return []
+            commands: list = json.loads(raw) if isinstance(raw, str) else raw
+            seen: set[str] = set()
+            out: list[str] = []
+            for entry in commands:
+                text = str(entry.get("command_text", "")).strip()
+                if text and text not in seen:
+                    seen.add(text)
+                    out.append(text)
+            return out
+
     async def get_attacker_service_activity(
         self, attacker_uuid: str
     ) -> list[tuple[str, str]]:

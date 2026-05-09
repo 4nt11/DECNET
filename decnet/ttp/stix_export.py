@@ -156,6 +156,7 @@ def build_attacker_bundle(
     raw_tags: list[dict[str, Any]],
     artifacts: list[dict[str, Any]],
     smtp_targets: list[dict[str, Any]],
+    commands: list[str] | None = None,
 ) -> stix2.Bundle:
     """Assemble a STIX 2.1 Bundle for *attacker*.
 
@@ -271,6 +272,24 @@ def build_attacker_bundle(
                 last_observed=s_ls or now,
                 number_observed=max(1, tgt.get("count") or 1),
                 object_refs=[dn.id],
+                created_by_ref=org.id,
+            )
+        )
+
+    # ── Shell commands (process SCOs + observed-data) ────────────────
+    seen_cmds: set[str] = set()
+    for cmd_line in commands or []:
+        if not cmd_line or cmd_line in seen_cmds:
+            continue
+        seen_cmds.add(cmd_line)
+        proc = stix2.Process(command_line=cmd_line, is_hidden=False)
+        objs.append(proc)
+        objs.append(
+            stix2.ObservedData(
+                first_observed=fs or now,
+                last_observed=ls or now,
+                number_observed=1,
+                object_refs=[proc.id],
                 created_by_ref=org.id,
             )
         )

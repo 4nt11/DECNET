@@ -128,7 +128,9 @@ class DummyRepo(BaseRepository):
     async def list_distinct_techniques(self):
         await super().list_distinct_techniques(); return []
     async def list_ttp_tags_by_attacker(self, uuid, limit=2000):
-        await super().list_ttp_tags_by_attacker(uuid, limit); return []
+        return []
+    async def list_attacker_commands_deduped(self, uuid):
+        return []
     # Iter helpers — async generators, can't `await super()` on them
     # because the base raises in the body before any yield. Just yield
     # nothing so the consumer's ``async for`` exits cleanly.
@@ -267,6 +269,11 @@ async def test_base_repo_coverage():
         )
     with pytest.raises(NotImplementedError):
         await dr.list_distinct_techniques()
+    with pytest.raises(NotImplementedError):
+        from decnet.web.db.repository import BaseRepository
+        await BaseRepository.list_ttp_tags_by_attacker(dr, "a")
+    with pytest.raises(NotImplementedError):
+        await BaseRepository.list_attacker_commands_deduped(dr, "a")
     # Iter helpers: just consume the empty generator.
     now = datetime.now(timezone.utc)
     async for _ in dr.iter_attacker_commands_since(now):
