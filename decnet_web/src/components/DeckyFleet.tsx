@@ -1,26 +1,17 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
-import { PlusCircle, Server } from '../icons';
-import api, { type ApiError } from '../utils/api';
-import { ARCHETYPES as FALLBACK_ARCHETYPES } from './MazeNET/data';
+import { Server } from '../icons';
 import { useToast } from './Toasts/useToast';
 import { useServiceRegistry } from '../hooks/useServiceRegistry';
 import './DeckyFleet.css';
-import type {
-  Decky,
-  SwarmDeckyRaw,
-  Archetype,
-  FilterKey,
-} from './DeckyFleet/types';
-import {
-  archetypeIcon as _archetypeIcon,
-  dotFor as _dotFor,
-} from './DeckyFleet/helpers';
+import type { Decky, FilterKey } from './DeckyFleet/types';
+import { dotFor } from './DeckyFleet/helpers';
+import { useDeckyFleet } from './DeckyFleet/useDeckyFleet';
 import { DeckyInspectPanel } from './DeckyFleet/DeckyInspectPanel';
 import { DeckyCard } from './DeckyFleet/DeckyCard';
 import { DeployWizard } from './DeckyFleet/DeployWizard';
 import { IntervalEditor } from './DeckyFleet/IntervalEditor';
-
-// ─── Fleet page ──────────────────────────────────────────────────────────
+import { DeckyFilters } from './DeckyFleet/DeckyFilters';
+import { DeckyGridEmpty } from './DeckyFleet/DeckyGridEmpty';
 
 interface FleetProps {
   searchQuery?: string;
@@ -29,26 +20,27 @@ interface FleetProps {
 const DeckyFleet: React.FC<FleetProps> = ({ searchQuery = '' }) => {
   const { push } = useToast();
   const serviceRegistry = useServiceRegistry();
-  const [deckies, setDeckies] = useState<Decky[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [mutating, setMutating] = useState<string | null>(null);
-  const [isAdmin, setIsAdmin] = useState(false);
-  const [deployMode, setDeployMode] = useState<{ mode: string; swarm_host_count: number } | null>(null);
+  const fleet = useDeckyFleet();
+  const {
+    deckies, loading, isAdmin, deployMode, archetypes, isSwarm,
+    mutating, tearingDown,
+    mutate, setMutateInterval, teardown, applyServicesChange, refresh,
+  } = fleet;
+
+  // Pure UI state (no data lifecycle).
   const [filter, setFilter] = useState<FilterKey>('all');
   const [showDeploy, setShowDeploy] = useState(false);
   const [armed, setArmed] = useState<string | null>(null);
-  const [tearingDown, setTearingDown] = useState<Set<string>>(new Set());
-  const [archetypes, setArchetypes] = useState<Archetype[]>(FALLBACK_ARCHETYPES);
   const [localSearch, setLocalSearch] = useState<string>('');
   const [intervalEditor, setIntervalEditor] = useState<{ name: string; current: number | null } | null>(null);
   const [selectedDecky, setSelectedDecky] = useState<Decky | null>(null);
   const cardRefs = useRef<Map<string, HTMLDivElement>>(new Map());
 
+  // Mirror the topbar search prop into local state; filter-decky events
+  // can override it in-session.
   const lastSearchPropRef = useRef<string>(searchQuery);
   if (lastSearchPropRef.current !== searchQuery) {
     lastSearchPropRef.current = searchQuery;
-    // Mirror the topbar search into local state; filter-decky events can
-    // override it in-session.
     if (localSearch !== searchQuery) setLocalSearch(searchQuery);
   }
 
@@ -57,97 +49,19 @@ const DeckyFleet: React.FC<FleetProps> = ({ searchQuery = '' }) => {
     window.setTimeout(() => setArmed((p) => (p === key ? null : p)), 4000);
   };
 
-  const fetchDeckies = async (mode?: string) => {
-    try {
-      if (mode === 'swarm') {
-        const res = await api.get<SwarmDeckyRaw[]>('/swarm/deckies');
-        const normalized: Decky[] = res.data.map((s) => ({
-          name: s.decky_name,
-          ip: s.decky_ip || '—',
-          services: s.services || [],
-          distro: s.distro || 'unknown',
-          hostname: s.hostname || '—',
-          archetype: s.archetype,
-          service_config: s.service_config || {},
-          mutate_interval: s.mutate_interval,
-          last_mutated: s.last_mutated || 0,
-          swarm: {
-            host_uuid: s.host_uuid,
-            host_name: s.host_name,
-            host_address: s.host_address,
-            host_status: s.host_status,
-            state: s.state,
-            last_error: s.last_error,
-            last_seen: s.last_seen,
-          },
-        }));
-        setDeckies(normalized);
-      } else {
-        const res = await api.get<Decky[]>('/deckies');
-        setDeckies(res.data);
-      }
-    } catch (err) {
-      console.error('Failed to fetch decky fleet', err);
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  const fetchRole = async () => {
-    try {
-      const res = await api.get('/config');
-      setIsAdmin(res.data.role === 'admin');
-    } catch {
-      setIsAdmin(false);
-    }
-  };
-
-  const fetchDeployMode = async () => {
-    try {
-      const res = await api.get('/system/deployment-mode');
-      setDeployMode({ mode: res.data.mode, swarm_host_count: res.data.swarm_host_count });
-      return res.data.mode as string;
-    } catch {
-      setDeployMode(null);
-      return undefined;
-    }
-  };
-
-  const fetchArchetypes = async () => {
-    try {
-      const res = await api.get<{ archetypes: { slug: string; display_name: string; services: string[] }[] }>(
-        '/topologies/archetypes',
-      );
-      const list: Archetype[] = res.data.archetypes.map((a) => ({
-        slug: a.slug,
-        name: a.display_name,
-        services: a.services,
-        icon: _archetypeIcon(a.slug),
-      }));
-      if (list.length) setArchetypes(list);
-    } catch {
-      // fall back to bundled list
-    }
-  };
-
+  // Toast-wrapping handlers — the hook returns discriminated results,
+  // and the page decides how to surface them in the toast lane.
   const handleMutate = async (name: string): Promise<boolean> => {
-    setMutating(name);
-    try {
-      await api.post(`/deckies/${name}/mutate`, {}, { timeout: 120000 });
-      await fetchDeckies(deployMode?.mode);
+    const r = await mutate(name);
+    if (r.ok) {
       push({ text: `MUTATED · ${name.toUpperCase()}`, tone: 'matrix', icon: 'refresh-cw' });
       return true;
-    } catch (err: unknown) {
-      console.error('Failed to mutate', err);
-      const e = err as { code?: string };
-      const msg = e.code === 'ECONNABORTED'
-        ? `MUTATION TIMED OUT · ${name.toUpperCase()}`
-        : `MUTATION FAILED · ${name.toUpperCase()}`;
-      push({ text: msg, tone: 'alert', icon: 'alert-triangle' });
-      return false;
-    } finally {
-      setMutating(null);
     }
+    const msg = r.reason === 'timeout'
+      ? `MUTATION TIMED OUT · ${name.toUpperCase()}`
+      : `MUTATION FAILED · ${name.toUpperCase()}`;
+    push({ text: msg, tone: 'alert', icon: 'alert-triangle' });
+    return false;
   };
 
   const handleMutateAll = async () => {
@@ -180,10 +94,9 @@ const DeckyFleet: React.FC<FleetProps> = ({ searchQuery = '' }) => {
   const handleIntervalSave = async (minutes: number | null) => {
     if (!intervalEditor) return;
     const { name } = intervalEditor;
-    try {
-      await api.put(`/deckies/${name}/mutate-interval`, { mutate_interval: minutes });
+    const ok = await setMutateInterval(name, minutes);
+    if (ok) {
       setIntervalEditor(null);
-      fetchDeckies(deployMode?.mode);
       push({
         text: minutes === null
           ? `INTERVAL · ${name.toUpperCase()} · DISABLED`
@@ -191,57 +104,28 @@ const DeckyFleet: React.FC<FleetProps> = ({ searchQuery = '' }) => {
         tone: 'matrix',
         icon: 'refresh-cw',
       });
-    } catch (err) {
-      console.error('Failed to update interval', err);
+    } else {
       push({ text: `INTERVAL UPDATE FAILED · ${name.toUpperCase()}`, tone: 'alert', icon: 'alert-triangle' });
     }
   };
 
+  // Two-step teardown: first click arms the button, second click within
+  // 4s actually fires the POST. Keeps swarm hosts safe from misclicks.
   const handleTeardown = async (d: Decky) => {
     if (!d.swarm) return;
     const key = `td:${d.swarm.host_uuid}:${d.name}`;
     if (armed !== key) { arm(key); return; }
     setArmed(null);
-    setTearingDown((prev) => new Set(prev).add(d.name));
-    try {
-      await api.post(`/swarm/hosts/${d.swarm.host_uuid}/teardown`, { decky_id: d.name });
-      await fetchDeckies(deployMode?.mode);
+    const r = await teardown(d);
+    if (r.ok) {
       push({ text: `TORN DOWN · ${d.name.toUpperCase()}`, tone: 'matrix', icon: 'check-circle' });
-    } catch (err: unknown) {
-      const e = err as ApiError;
-      push({
-        text: `TEARDOWN FAILED · ${e?.response?.data?.detail || d.name}`,
-        tone: 'alert',
-        icon: 'alert-triangle',
-      });
-    } finally {
-      setTearingDown((prev) => {
-        const next = new Set(prev);
-        next.delete(d.name);
-        return next;
-      });
+    } else {
+      push({ text: `TEARDOWN FAILED · ${r.reason}`, tone: 'alert', icon: 'alert-triangle' });
     }
   };
 
-  const handleInspect = (d: Decky) => {
-    setSelectedDecky(d);
-  };
-
-  useEffect(() => {
-    let cancelled = false;
-    (async () => {
-      const mode = await fetchDeployMode();
-      if (cancelled) return;
-      await Promise.all([fetchDeckies(mode), fetchRole(), fetchArchetypes()]);
-    })();
-    const interval = window.setInterval(() => {
-      fetchDeployMode().then((m) => fetchDeckies(m));
-    }, 10000);
-    return () => { cancelled = true; window.clearInterval(interval); };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
-
-  // Phase-2 decnet:cmd bus: deploy, mutate-all, filter-decky
+  // decnet:cmd bus: deploy + mutate-all are wired here because they
+  // dispatch UI state and a toast-wrapped operation respectively.
   useEffect(() => {
     const onCmd = (e: Event) => {
       const detail = (e as CustomEvent).detail as { id?: string; payload?: string };
@@ -263,14 +147,14 @@ const DeckyFleet: React.FC<FleetProps> = ({ searchQuery = '' }) => {
   const counts = useMemo(() => {
     const c = { all: deckies.length, active: 0, hot: 0, idle: 0 } as Record<FilterKey, number>;
     for (const d of deckies) {
-      const s = _dotFor(d);
+      const s = dotFor(d);
       c[s] += 1;
     }
     return c;
   }, [deckies]);
 
   const visible = useMemo(() => {
-    const base = filter === 'all' ? deckies : deckies.filter((d) => _dotFor(d) === filter);
+    const base = filter === 'all' ? deckies : deckies.filter((d) => dotFor(d) === filter);
     const q = localSearch.trim().toLowerCase();
     if (!q) return base;
     return base.filter((d) =>
@@ -279,7 +163,6 @@ const DeckyFleet: React.FC<FleetProps> = ({ searchQuery = '' }) => {
       || (d.hostname || '').toLowerCase().includes(q),
     );
   }, [deckies, filter, localSearch]);
-  const isSwarm = deployMode?.mode === 'swarm';
 
   if (loading) {
     return (
@@ -306,43 +189,22 @@ const DeckyFleet: React.FC<FleetProps> = ({ searchQuery = '' }) => {
             )}
           </span>
         </div>
-        <div className="actions">
-          <div className="fleet-filter-group">
-            {([['all', 'ALL'], ['active', 'ACTIVE'], ['hot', 'HOT'], ['idle', 'IDLE']] as [FilterKey, string][]).map(
-              ([v, l]) => (
-                <button
-                  key={v}
-                  onClick={() => setFilter(v)}
-                  className={`fleet-filter-btn ${filter === v ? 'active' : ''}`}
-                >
-                  {l} {counts[v]}
-                </button>
-              ),
-            )}
-          </div>
-          {isAdmin && (
-            <button className="btn violet" onClick={() => setShowDeploy(true)}>
-              <PlusCircle size={12} /> DEPLOY DECKIES
-            </button>
-          )}
-        </div>
+        <DeckyFilters
+          filter={filter}
+          setFilter={setFilter}
+          counts={counts}
+          isAdmin={isAdmin}
+          onDeploy={() => setShowDeploy(true)}
+        />
       </div>
 
       <div className="grid-fleet">
         {visible.length === 0 ? (
-          <div className="fleet-empty">
-            <Server size={32} className="dim" />
-            <span className="dim">
-              {deckies.length === 0
-                ? 'NO DECOYS DEPLOYED IN THIS SECTOR'
-                : 'NO DECOYS MATCH CURRENT FILTER'}
-            </span>
-            {isAdmin && deckies.length === 0 && (
-              <button className="btn violet" onClick={() => setShowDeploy(true)}>
-                <PlusCircle size={12} /> DEPLOY DECKIES
-              </button>
-            )}
-          </div>
+          <DeckyGridEmpty
+            fleetEmpty={deckies.length === 0}
+            isAdmin={isAdmin}
+            onDeploy={() => setShowDeploy(true)}
+          />
         ) : (
           visible.map((d) => (
             <DeckyCard
@@ -355,17 +217,13 @@ const DeckyFleet: React.FC<FleetProps> = ({ searchQuery = '' }) => {
               onForce={(name) => { void handleMutate(name); }}
               onTeardown={handleTeardown}
               onIntervalChange={handleIntervalChange}
-              onInspect={handleInspect}
+              onInspect={(decky) => setSelectedDecky(decky)}
               innerRef={(el: HTMLDivElement | null) => {
                 if (el) cardRefs.current.set(d.name, el);
                 else cardRefs.current.delete(d.name);
               }}
               availableServices={serviceRegistry.perDecky}
-              onServicesChanged={(name, services) => {
-                setDeckies((prev) => prev.map((row) =>
-                  row.name === name ? { ...row, services } : row,
-                ));
-              }}
+              onServicesChanged={applyServicesChange}
               onTarpitResult={(_name, ok, message) => {
                 push({
                   text: message,
@@ -385,7 +243,7 @@ const DeckyFleet: React.FC<FleetProps> = ({ searchQuery = '' }) => {
         onClose={() => setShowDeploy(false)}
         onComplete={(count) => {
           setShowDeploy(false);
-          fetchDeckies(deployMode?.mode);
+          void refresh();
           push({
             text: `DEPLOYED · ${count} DECK${count === 1 ? 'Y' : 'IES'}`,
             tone: 'matrix',
