@@ -1,0 +1,125 @@
+# AbuseIPDB category → ATT&CK technique mapping.
+#
+# Mirrors what _ABUSEIPDB_CATEGORY_TO_TECHNIQUES + _ABUSEIPDB_HIGH_SCORE_GATED
+# used to encode in decnet/ttp/impl/intel_lifter.py before the data
+# extraction. Source-of-truth column for which categories produce
+# which ATT&CK tags, paired with rules/ttp/R0054.yaml which declares
+# the full slate the predicate can emit.
+#
+# Cat 4 (DDoS), 10 (Web Spam), 12 (Blog Spam) are intentionally
+# unmapped — design doc TTP_TAGGING.md §A.10: DDoS-without-protocol
+# is too muddy for v0; CMS spam has no clean ATT&CK fit at the IP
+# layer. Keep the explanatory comments here so the next quarterly
+# drift check (development/DEBT.md DEBT-048) can diff cheaply.
+provider: abuseipdb
+mapping_version: "2"
+attack_release: ">=15.1"
+signals:
+  - id: cat_5
+    label: "FTP Brute-Force"
+    external_reference:
+      source_name: abuseipdb
+      url: "https://www.abuseipdb.com/categories#5"
+    techniques:
+      - technique_id: T1110
+  - id: cat_7
+    label: "Phishing"
+    external_reference:
+      source_name: abuseipdb
+      url: "https://www.abuseipdb.com/categories#7"
+    techniques:
+      - technique_id: T1566
+  - id: cat_9
+    label: "Open Proxy"
+    external_reference:
+      source_name: abuseipdb
+      url: "https://www.abuseipdb.com/categories#9"
+    techniques:
+      - technique_id: T1090
+  - id: cat_11
+    label: "Email Spam"
+    external_reference:
+      source_name: abuseipdb
+      url: "https://www.abuseipdb.com/categories#11"
+    techniques:
+      - technique_id: T1496
+      - technique_id: T1566
+        high_score_threshold: 80
+  - id: cat_13
+    label: "VPN IP"
+    external_reference:
+      source_name: abuseipdb
+      url: "https://www.abuseipdb.com/categories#13"
+    techniques:
+      - technique_id: T1090
+  - id: cat_14
+    label: "Port Scan"
+    external_reference:
+      source_name: abuseipdb
+      url: "https://www.abuseipdb.com/categories#14"
+    techniques:
+      - technique_id: T1046
+      - technique_id: T1595
+  - id: cat_15
+    label: "Hacking"
+    external_reference:
+      source_name: abuseipdb
+      url: "https://www.abuseipdb.com/categories#15"
+    techniques:
+      - technique_id: T1190
+  - id: cat_16
+    label: "SQL Injection"
+    external_reference:
+      source_name: abuseipdb
+      url: "https://www.abuseipdb.com/categories#16"
+    techniques:
+      - technique_id: T1190
+  - id: cat_17
+    label: "Spoofing"
+    external_reference:
+      source_name: abuseipdb
+      url: "https://www.abuseipdb.com/categories#17"
+    techniques:
+      - technique_id: T1566
+  - id: cat_18
+    label: "Brute-Force"
+    external_reference:
+      source_name: abuseipdb
+      url: "https://www.abuseipdb.com/categories#18"
+    techniques:
+      - technique_id: T1110
+  - id: cat_19
+    label: "Bad Web Bot"
+    external_reference:
+      source_name: abuseipdb
+      url: "https://www.abuseipdb.com/categories#19"
+    techniques:
+      - technique_id: T1595
+  - id: cat_20
+    label: "Exploited Host"
+    external_reference:
+      source_name: abuseipdb
+      url: "https://www.abuseipdb.com/categories#20"
+    techniques:
+      - technique_id: T1078
+  - id: cat_21
+    label: "Web App Attack"
+    external_reference:
+      source_name: abuseipdb
+      url: "https://www.abuseipdb.com/categories#21"
+    techniques:
+      - technique_id: T1190
+  - id: cat_22
+    label: "SSH"
+    external_reference:
+      source_name: abuseipdb
+      url: "https://www.abuseipdb.com/categories#22"
+    techniques:
+      - technique_id: T1110
+  - id: cat_23
+    label: "IoT Targeted"
+    external_reference:
+      source_name: abuseipdb
+      url: "https://www.abuseipdb.com/categories#23"
+    techniques:
+      - technique_id: T1190

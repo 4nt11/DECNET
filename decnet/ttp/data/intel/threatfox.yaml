@@ -1,0 +1,45 @@
+# ThreatFox threat_type → ATT&CK technique mapping.
+#
+# Mirrors _THREATFOX_THREAT_TYPE_TO_TECHNIQUES from
+# decnet/ttp/impl/intel_lifter.py. ThreatFox's canonical taxonomy is
+# the ``threat_type`` field (NOT ``ioc_type`` — that was the v1
+# ship-time bug). ``ioc_type`` is the indicator format (url, domain,
+# md5_hash, …) and carries no ATT&CK signal.
+provider: threatfox
+mapping_version: "1"
+attack_release: ">=15.1"
+signals:
+  - id: botnet_cc
+    label: "Botnet C2"
+    external_reference:
+      source_name: threatfox
+      url: "https://threatfox.abuse.ch/faq/"
+      external_id: botnet_cc
+    techniques:
+      - technique_id: T1071
+      - technique_id: T1588
+  - id: payload_delivery
+    label: "Payload delivery"
+    external_reference:
+      source_name: threatfox
+      url: "https://threatfox.abuse.ch/faq/"
+      external_id: payload_delivery
+    techniques:
+      - technique_id: T1105
+      - technique_id: T1588
+  - id: payload
+    label: "Payload"
+    external_reference:
+      source_name: threatfox
+      url: "https://threatfox.abuse.ch/faq/"
+      external_id: payload
+    techniques:
+      - technique_id: T1588
+  - id: cc_skimming
+    label: "Credit-card skimming"
+    external_reference:
+      source_name: threatfox
+      url: "https://threatfox.abuse.ch/faq/"
+      external_id: cc_skimming
+    techniques:
+      - technique_id: T1056
