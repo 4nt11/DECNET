@@ -186,6 +186,7 @@ class TestGetAttackerDetail:
             mock_repo.get_attacker_service_activity = AsyncMock(return_value=[])
             mock_repo.get_attacker_ip_leaks = AsyncMock(return_value=[])
             mock_repo.count_attacker_ip_leaks = AsyncMock(return_value=0)
+            mock_repo.latest_observation_per_primitive = AsyncMock(return_value={})
 
             result = await get_attacker_detail(uuid="att-uuid-1", user={"uuid": "test-user", "role": "viewer"})
 
@@ -217,6 +218,7 @@ class TestGetAttackerDetail:
             mock_repo.get_attacker_service_activity = AsyncMock(return_value=[])
             mock_repo.get_attacker_ip_leaks = AsyncMock(return_value=[])
             mock_repo.count_attacker_ip_leaks = AsyncMock(return_value=0)
+            mock_repo.latest_observation_per_primitive = AsyncMock(return_value={})
 
             result = await get_attacker_detail(uuid="att-uuid-1", user={"uuid": "test-user", "role": "viewer"})
 
@@ -244,6 +246,7 @@ class TestGetAttackerDetail:
             mock_repo.get_attacker_service_activity = AsyncMock(return_value=pairs)
             mock_repo.get_attacker_ip_leaks = AsyncMock(return_value=[])
             mock_repo.count_attacker_ip_leaks = AsyncMock(return_value=0)
+            mock_repo.latest_observation_per_primitive = AsyncMock(return_value={})
 
             result = await get_attacker_detail(
                 uuid="att-uuid-1",
@@ -283,6 +286,7 @@ class TestGetAttackerDetail:
             mock_repo.get_attacker_service_activity = AsyncMock(return_value=[])
             mock_repo.get_attacker_ip_leaks = AsyncMock(return_value=leaks)
             mock_repo.count_attacker_ip_leaks = AsyncMock(return_value=1)
+            mock_repo.latest_observation_per_primitive = AsyncMock(return_value={})
 
             result = await get_attacker_detail(
                 uuid="att-uuid-1",
@@ -323,6 +327,7 @@ class TestGetAttackerDetail:
             mock_repo.get_attacker_service_activity = AsyncMock(return_value=[])
             mock_repo.get_attacker_ip_leaks = AsyncMock(return_value=first_ten)
             mock_repo.count_attacker_ip_leaks = AsyncMock(return_value=100)
+            mock_repo.latest_observation_per_primitive = AsyncMock(return_value={})
 
             result = await get_attacker_detail(
                 uuid="att-uuid-1",

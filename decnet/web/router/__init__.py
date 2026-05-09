@@ -64,6 +64,7 @@ from .ttp.api_get_by_session import router as ttp_by_session_router
 from .ttp.api_get_rules import router as ttp_rules_router
 from .ttp.api_get_tag_details import router as ttp_tag_details_router
 from .ttp.api_export_navigator import router as ttp_navigator_router
+from .ttp.api_get_groups_for_technique import router as ttp_groups_for_technique_router
 
 api_router = APIRouter(
     # Every route under /api/v1 is auth-guarded (either by an explicit
@@ -189,3 +190,4 @@ api_router.include_router(ttp_by_session_router)
 api_router.include_router(ttp_rules_router)
 api_router.include_router(ttp_tag_details_router)
 api_router.include_router(ttp_navigator_router)
+api_router.include_router(ttp_groups_for_technique_router)
