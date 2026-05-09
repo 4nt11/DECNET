@@ -32,6 +32,8 @@ __all__ = [
     "AttributionState",
     "aggregate_observations",
     "aggregate_categorical",
+    "aggregate_numeric",
+    "aggregate_hash",
 ]
 
 
@@ -78,10 +80,189 @@ def aggregate_observations(
         return _unknown(0.0, count=0)
     if value_kind in (None, "categorical"):
         return aggregate_categorical(observations)
-    raise NotImplementedError(
-        f"aggregate_observations: value_kind={value_kind!r} lands in Phase 3 "
-        "(numeric + hash). v0 Phase 2 only supports categorical.",
+    if value_kind == "numeric":
+        return aggregate_numeric(observations)
+    if value_kind == "hash":
+        return aggregate_hash(observations)
+    raise ValueError(
+        f"aggregate_observations: unknown value_kind={value_kind!r}; "
+        "expected 'categorical' | 'numeric' | 'hash' | None",
     )
+
+
+def aggregate_numeric(
+    observations: Sequence[dict[str, Any]],
+) -> AttributionState:
+    """Numeric merger — for primitives whose ``value`` is an int /
+    float (e.g. ``toolchain.c2.beacon_interval_ms``,
+    ``motor.paste_burst_rate``).
+
+    Compares the EWMA of the recent window against the EWMA of the
+    older window; reports dispersion as coefficient of variation.
+
+    * < ``MIN_OBSERVATIONS_FOR_STATE`` → ``unknown``
+    * recent CV < ``NUMERIC_STABLE_DISPERSION_PCT`` *and* mean shift
+      from older window < ``NUMERIC_DRIFT_MEAN_SHIFT_PCT`` → ``stable``
+    * mean shifted >= ``NUMERIC_DRIFT_MEAN_SHIFT_PCT`` → ``drifting``
+    * recent CV > ``NUMERIC_CONFLICT_DISPERSION_PCT`` → ``conflicted``
+    * otherwise → ``stable`` (falling-through case for moderate
+      dispersion that hasn't yet become drift)
+
+    Confidence on stable/drifting is ``1 - min(CV, 1.0)`` —
+    tighter dispersion = higher confidence. Conflicted is ``0.5``
+    by convention; we cannot meaningfully claim certainty in a
+    statistic computed over a degenerate sample.
+
+    ``current_value`` is the recent EWMA, not the last raw
+    observation: numeric primitives are noisy by nature and
+    surfacing the smoothed estimate keeps the dashboard from
+    flapping on every tick. ``multi_actor`` is *not* a numeric state
+    in v0 — bimodal distributions belong to the categorical
+    detector once the primitive's value space is bucketed.
+    """
+    n = len(observations)
+    last_ts = float(observations[-1].get("ts", 0.0)) if observations else 0.0
+    if n < _T.MIN_OBSERVATIONS_FOR_STATE:
+        return AttributionState(
+            current_value=_safe_float(observations[-1].get("value")) if n else None,
+            state="unknown",
+            confidence=0.0,
+            observation_count=n,
+            last_observation_ts=last_ts,
+        )
+
+    window = _T.CATEGORICAL_WINDOW_N
+    recent_vals = [_safe_float(o.get("value")) for o in observations[-window:]]
+    older_vals = [
+        _safe_float(o.get("value"))
+        for o in observations[-2 * window: -window]
+    ]
+    recent_mean = _ewma(recent_vals, _T.NUMERIC_EWMA_ALPHA)
+    recent_cv = _coef_of_variation(recent_vals, recent_mean)
+
+    if recent_cv > _T.NUMERIC_CONFLICT_DISPERSION_PCT:
+        return AttributionState(
+            current_value=recent_mean,
+            state="conflicted",
+            confidence=0.5,
+            observation_count=n,
+            last_observation_ts=last_ts,
+        )
+
+    if older_vals:
+        older_mean = _ewma(older_vals, _T.NUMERIC_EWMA_ALPHA)
+        denom = abs(older_mean) if older_mean != 0 else 1.0
+        mean_shift = abs(recent_mean - older_mean) / denom
+        if mean_shift >= _T.NUMERIC_DRIFT_MEAN_SHIFT_PCT:
+            return AttributionState(
+                current_value=recent_mean,
+                state="drifting",
+                confidence=max(0.0, 1.0 - min(recent_cv, 1.0)),
+                observation_count=n,
+                last_observation_ts=last_ts,
+            )
+
+    return AttributionState(
+        current_value=recent_mean,
+        state="stable",
+        confidence=max(0.0, 1.0 - min(recent_cv, 1.0)),
+        observation_count=n,
+        last_observation_ts=last_ts,
+    )
+
+
+def aggregate_hash(
+    observations: Sequence[dict[str, Any]],
+) -> AttributionState:
+    """Hash merger — for rotation-resistant fingerprints
+    (``toolchain.tls.jarm_server``, ``toolchain.ssh.hassh_client``).
+
+    The merger does NOT recompute hashes; DEBT-032
+    (``decnet.correlation.fingerprint_rotation``) already produces
+    one observation per rotation event. The state machine counts
+    distinct hash values inside ``HASH_DRIFT_WINDOW_SECS`` of the
+    most recent observation:
+
+    * 0 rotations (single hash, any count) → ``stable``
+    * 1 to ``HASH_DRIFT_MAX`` rotations within window → ``drifting``
+    * > ``HASH_DRIFT_MAX`` rotations within window → ``conflicted``
+
+    ``unknown`` fires only on empty input — a single hash with one
+    observation is enough signal to say "stable", because hashes
+    don't have a noisy baseline the way categorical/numeric
+    primitives do.
+
+    ``current_value`` is the most recent hash. Confidence is
+    ``1 / (1 + rotations_in_window)`` — one rotation halves
+    confidence, two thirds it, etc.
+    """
+    n = len(observations)
+    if n == 0:
+        return _unknown(0.0, count=0)
+    last_ts = float(observations[-1].get("ts", 0.0))
+    last_value = observations[-1].get("value")
+
+    window_start = last_ts - _T.HASH_DRIFT_WINDOW_SECS
+    in_window = [
+        o for o in observations
+        if float(o.get("ts", 0.0)) >= window_start
+    ]
+    distinct = len({o.get("value") for o in in_window if o.get("value") is not None})
+    rotations = max(0, distinct - 1)
+    confidence = 1.0 / (1.0 + rotations)
+
+    if rotations == 0:
+        state = "stable"
+    elif rotations <= _T.HASH_DRIFT_MAX:
+        state = "drifting"
+    else:
+        state = "conflicted"
+
+    return AttributionState(
+        current_value=last_value,
+        state=state,
+        confidence=confidence,
+        observation_count=n,
+        last_observation_ts=last_ts,
+    )
+
+
+def _ewma(values: Sequence[float], alpha: float) -> float:
+    """Single-pass EWMA. Empty input is illegal; callers gate on
+    ``MIN_OBSERVATIONS_FOR_STATE`` upstream."""
+    it = iter(values)
+    smoothed = next(it)
+    for v in it:
+        smoothed = alpha * v + (1.0 - alpha) * smoothed
+    return smoothed
+
+
+def _coef_of_variation(values: Sequence[float], mean: float) -> float:
+    """Population-style CV = stdev / |mean|. Returns 0 on a constant
+    signal; returns +inf-equivalent (1e9) when the mean is exactly
+    zero and the signal isn't constant — so the conflicted threshold
+    fires without us having to special-case it upstream."""
+    if not values:
+        return 0.0
+    diffs_sq = [(v - mean) ** 2 for v in values]
+    variance = sum(diffs_sq) / len(values)
+    stdev = variance ** 0.5
+    if mean == 0:
+        return 0.0 if stdev == 0 else 1e9
+    return stdev / abs(mean)
+
+
+def _safe_float(value: Any) -> float:
+    """Defensive coercion — observations may carry value=None on
+    unknown-emitter primitives. Treat None as 0.0; the dispersion
+    check will surface the resulting flat baseline as 'stable'
+    which is the honest answer for a single-observation primitive
+    that hasn't fired yet."""
+    if value is None:
+        return 0.0
+    if isinstance(value, bool):
+        return 1.0 if value else 0.0
+    return float(value)
 
 
 def aggregate_categorical(
