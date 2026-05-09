@@ -48,6 +48,7 @@ def build_attacker_misp_event(
     smtp_targets: list[dict[str, Any]],
     commands: list[str] | None = None,
     observations: list[dict[str, Any]] | None = None,
+    fingerprint_bounties: list[dict[str, Any]] | None = None,
 ) -> dict[str, Any]:
     """Return a MISP event dict for *attacker*.
 
@@ -65,6 +66,7 @@ def build_attacker_misp_event(
         smtp_targets=smtp_targets,
         commands=commands,
         observations=observations,
+        fingerprint_bounties=fingerprint_bounties,
     )
     return _parse_bundle(bundle)
 
@@ -73,6 +75,7 @@ def build_fleet_misp_collection(
     rows: list[dict[str, Any]],
     ttp_by_attacker: dict[str, list[dict[str, Any]]],
     observations_by_attacker: dict[str, list[dict[str, Any]]] | None = None,
+    fingerprint_bounties_by_ip: dict[str, list[dict[str, Any]]] | None = None,
 ) -> dict[str, Any]:
     """Return a MISP collection dict with one event per attacker in *rows*.
 
@@ -84,6 +87,7 @@ def build_fleet_misp_collection(
     """
     events: list[dict[str, Any]] = []
     obs_map = observations_by_attacker or {}
+    fp_map = fingerprint_bounties_by_ip or {}
     for row in rows:
         raw_cmds = row.get("commands") or []
         if isinstance(raw_cmds, str):
@@ -107,6 +111,7 @@ def build_fleet_misp_collection(
             smtp_targets=[],
             commands=cmds,
             observations=obs_map.get(row["uuid"]),
+            fingerprint_bounties=fp_map.get(row.get("ip", ""), []),
         )
         event = _parse_bundle(bundle)
         if event:

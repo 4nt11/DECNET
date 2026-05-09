@@ -42,11 +42,12 @@ async def api_export_attackers_stix(
     user: dict[str, Any] = Depends(require_viewer),
 ) -> Response:
     """Download a STIX 2.1 bundle covering every observed attacker."""
-    rows, ttp_by_attacker, obs_by_attacker = await _gather_fleet_data()
+    rows, ttp_by_attacker, obs_by_attacker, fp_by_ip = await _gather_fleet_data()
     bundle = build_fleet_bundle(
         rows=rows,
         ttp_by_attacker=ttp_by_attacker,
         observations_by_attacker=obs_by_attacker,
+        fingerprint_bounties_by_ip=fp_by_ip,
     )
     ts = datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%SZ")
     return Response(
@@ -64,11 +65,13 @@ async def _gather_fleet_data() -> tuple[
     list[dict[str, Any]],
     dict[str, list[dict[str, Any]]],
     dict[str, list[dict[str, Any]]],
+    dict[str, list[dict[str, Any]]],
 ]:
     import asyncio
-    rows, ttp_by_attacker, obs_by_attacker = await asyncio.gather(
+    rows, ttp_by_attacker, obs_by_attacker, fp_by_ip = await asyncio.gather(
         repo.get_all_attackers_for_export(),
         repo.get_all_ttp_rollups_for_export(),
         repo.get_all_observations_for_export(),
+        repo.get_all_fingerprint_bounties_for_export(),
     )
-    return rows, ttp_by_attacker, obs_by_attacker
+    return rows, ttp_by_attacker, obs_by_attacker, fp_by_ip

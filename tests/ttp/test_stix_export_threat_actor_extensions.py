@@ -239,6 +239,100 @@ def test_kd_digraph_simhash_base64_input():
     assert profile.kd_digraph_simhash == raw.hex()
 
 
+def _fp_bounties() -> list[dict]:
+    return [
+        {
+            "payload": {
+                "fingerprint_type": "jarm",
+                "hash": "2ad2ad16d2ad2ad00042d42d000000f93d17e5fba64fc1c6f4cb080b9a5cf1e",
+                "target_ip": "1.2.3.4",
+                "target_port": "443",
+            }
+        },
+        {
+            "payload": {
+                "fingerprint_type": "http_quirks",
+                "order_hash": "abc123",
+                "order": ["Host", "User-Agent", "Accept"],
+                "casing_hash": "def456",
+                "casing_category": "title_case",
+                "stable_count": 3,
+                "tool_guess": "curl",
+            }
+        },
+        {
+            "payload": {
+                "fingerprint_type": "jarm",
+                "hash": "2ad2ad16d2ad2ad00042d42d000000f93d17e5fba64fc1c6f4cb080b9a5cf1e",
+            }
+        },
+    ]
+
+
+def test_fingerprint_bounties_jarm_in_protocol_fingerprints():
+    """JARM hashes from bounties appear deduplicated in protocol_fingerprints."""
+    bundle = build_attacker_bundle(
+        attacker=_attacker(),
+        behavior=None, identity=None, intel=None,
+        technique_rollup=[], raw_tags=[], artifacts=[],
+        smtp_targets=[], observations=None,
+        fingerprint_bounties=_fp_bounties(),
+    )
+    ta = _get_ta(bundle)
+    assert ta.extensions, "expected extension block with fingerprint bounties"
+    ext = ta.extensions[ACTOR_FINGERPRINT_EXT_ID]
+    fp = ext.protocol_fingerprints
+    assert "jarm_hashes" in fp
+    assert len(fp["jarm_hashes"]) == 1, "duplicate JARM hash must be collapsed"
+    assert "http_quirks" in fp
+    assert fp["http_quirks"][0]["tool_guess"] == "curl"
+    assert fp["http_quirks"][0]["order"] == ["Host", "User-Agent", "Accept"]
+
+
+def test_fingerprint_bounties_empty_produces_no_extension():
+    """Empty fingerprint bounties with no other signal → no extension block."""
+    bundle = build_attacker_bundle(
+        attacker=_attacker(),
+        behavior=None, identity=None, intel=None,
+        technique_rollup=[], raw_tags=[], artifacts=[],
+        smtp_targets=[], observations=None,
+        fingerprint_bounties=[],
+    )
+    ta = _get_ta(bundle)
+    assert not getattr(ta, "extensions", None)
+
+
+def test_behave_profile_has_characterizes_relationship():
+    """When behave_profile is present the bundle contains a 'characterizes' Relationship."""
+    bundle = build_attacker_bundle(
+        attacker=_attacker(),
+        behavior=None, identity=None, intel=None,
+        technique_rollup=[], raw_tags=[], artifacts=[],
+        smtp_targets=[], observations=_obs(),
+    )
+    ta = _get_ta(bundle)
+    profile = next(o for o in bundle.objects if o.type == "x-decnet-behave-profile")
+    rels = [o for o in bundle.objects if o.type == "relationship"
+            and o.relationship_type == "characterizes"]
+    assert len(rels) == 1
+    rel = rels[0]
+    assert rel.source_ref == profile.id
+    assert rel.target_ref == ta.id
+
+
+def test_no_behave_profile_no_characterizes_relationship():
+    """Skinny attacker with no observations → no 'characterizes' relationship."""
+    bundle = build_attacker_bundle(
+        attacker=_attacker(),
+        behavior=None, identity=None, intel=None,
+        technique_rollup=[], raw_tags=[], artifacts=[],
+        smtp_targets=[], observations=None,
+    )
+    rels = [o for o in bundle.objects if o.type == "relationship"
+            and o.relationship_type == "characterizes"]
+    assert len(rels) == 0
+
+
 def test_inter_decnet_round_trip():
     """Primary fidelity: stix2.parse restores typed objects, not bare dicts."""
     ident = _identity()

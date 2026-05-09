@@ -115,6 +115,10 @@ class DummyRepo(BaseRepository):
         await super().list_observations_by_attacker(attacker_uuid); return []
     async def get_all_observations_for_export(self):
         await super().get_all_observations_for_export(); return {}
+    async def get_fingerprint_bounties_by_ip(self, ip):
+        await super().get_fingerprint_bounties_by_ip(ip); return []
+    async def get_all_fingerprint_bounties_for_export(self):
+        await super().get_all_fingerprint_bounties_for_export(); return {}
     async def get_attacker_uuid_by_ip(self, ip):
         await super().get_attacker_uuid_by_ip(ip); return None
     # TTP rollup surface (TTP_TAGGING.md)
@@ -261,6 +265,10 @@ async def test_base_repo_coverage():
         await dr.list_observations_by_attacker("a")
     with pytest.raises(NotImplementedError):
         await dr.get_all_observations_for_export()
+    with pytest.raises(NotImplementedError):
+        await dr.get_fingerprint_bounties_by_ip("1.1.1.1")
+    with pytest.raises(NotImplementedError):
+        await dr.get_all_fingerprint_bounties_for_export()
     with pytest.raises(NotImplementedError):
         await dr.get_attacker_uuid_by_ip("1.1.1.1")
     with pytest.raises(NotImplementedError):

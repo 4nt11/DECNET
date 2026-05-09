@@ -129,6 +129,7 @@ def _mock_repo(*, attacker=None, identity=None, intel=None,
     m.list_smtp_targets = AsyncMock(return_value=smtp or [])
     m.list_attacker_commands_deduped = AsyncMock(return_value=commands or [])
     m.list_observations_by_attacker = AsyncMock(return_value=[])
+    m.get_fingerprint_bounties_by_ip = AsyncMock(return_value=[])
     return m
 
 

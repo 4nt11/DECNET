@@ -70,6 +70,7 @@ async def api_export_attacker_stix(
         repo.list_smtp_targets(uuid),
         repo.list_attacker_commands_deduped(uuid),
         repo.list_observations_by_attacker(uuid),
+        repo.get_fingerprint_bounties_by_ip(attacker["ip"]),
     )
     behavior = cast(dict[str, Any] | None, results[0])
     identity = cast(dict[str, Any] | None, results[1])
@@ -80,6 +81,7 @@ async def api_export_attacker_stix(
     smtp_targets = cast(list[dict[str, Any]], results[6])
     commands = cast(list[str], results[7])
     observations = cast(list[dict[str, Any]], results[8])
+    fingerprint_bounties = cast(list[dict[str, Any]], results[9])
 
     bundle = build_attacker_bundle(
         attacker=attacker,
@@ -95,6 +97,7 @@ async def api_export_attacker_stix(
         smtp_targets=smtp_targets,
         commands=commands,
         observations=observations,
+        fingerprint_bounties=fingerprint_bounties,
     )
     return Response(
         content=bundle.serialize(pretty=True, indent=2),

@@ -394,6 +394,27 @@ class BaseRepository(ABC):
         """
         raise NotImplementedError
 
+    async def get_fingerprint_bounties_by_ip(
+        self, ip: str
+    ) -> list[dict[str, Any]]:
+        """Return all fingerprint bounties for *ip* with parsed payload dicts.
+
+        Filters to ``bounty_type='fingerprint'``.  Each returned dict has the
+        standard Bounty columns plus a decoded ``payload`` dict.
+        """
+        raise NotImplementedError
+
+    async def get_all_fingerprint_bounties_for_export(
+        self,
+    ) -> dict[str, list[dict[str, Any]]]:
+        """Return ``{attacker_ip: [bounty_dict, ...]}`` for all fingerprint
+        bounties in the database.
+
+        Used by fleet exports to attach per-attacker fingerprint bounties
+        (JARM hashes, HTTP quirks) without N+1 queries.
+        """
+        raise NotImplementedError
+
     async def upsert_observed_attachment(
         self,
         *,
