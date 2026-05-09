@@ -7,131 +7,20 @@ import MailDrawer from './MailDrawer';
 import SessionDrawer from './SessionDrawer';
 import EmptyState from './EmptyState/EmptyState';
 import TTPsObservedSection from './TTPsObservedSection';
-import { useIdentityStream } from './useIdentityStream';
-import {
-  useAttackerStream,
-  type ObservationFrame,
-  type AttributionStateChangedFrame,
-  type AttributionMultiActorFrame,
-} from './useAttackerStream';
+import { useAttackerDetail } from './AttackerDetail/useAttackerDetail';
+import type {
+  AttackerData,
+  AttackerBehavior,
+  BehaviouralObservation,
+  AttributionPrimitiveState,
+} from './AttackerDetail/types';
 import './Dashboard.css';
 
-interface AttackerBehavior {
-  os_guess: string | null;
-  hop_distance: number | null;
-  tcp_fingerprint: {
-    window?: number | null;
-    wscale?: number | null;
-    mss?: number | null;
-    options_sig?: string;
-    has_sack?: boolean;
-    has_timestamps?: boolean;
-    tos?: number | null;
-    dscp?: number | null;
-    ecn?: number | null;
-    ipid_class?: string | null;
-    isn_class?: string | null;
-  } | null;
-  retransmit_count: number;
-  behavior_class: string | null;
-  beacon_interval_s: number | null;
-  beacon_jitter_pct: number | null;
-  tool_guesses: string[] | null;
-  timing_stats: {
-    event_count?: number;
-    duration_s?: number;
-    mean_iat_s?: number | null;
-    median_iat_s?: number | null;
-    stdev_iat_s?: number | null;
-    min_iat_s?: number | null;
-    max_iat_s?: number | null;
-    cv?: number | null;
-  } | null;
-  phase_sequence: {
-    recon_end_ts?: string | null;
-    exfil_start_ts?: string | null;
-    exfil_latency_s?: number | null;
-    large_payload_count?: number;
-  } | null;
-  updated_at?: string;
-}
+// Re-export the types historically exposed from this module so external
+// importers (tests, future siblings) keep their import paths stable
+// while the canonical definitions live in ./AttackerDetail/types.
+export type { BehaviouralObservation, AttributionPrimitiveState };
 
-interface AttackerData {
-  uuid: string;
-  ip: string;
-  // Resolved identity FK. NULL while the clusterer hasn't run on this
-  // observation yet, or hasn't seen enough stable signal (JA3, HASSH,
-  // payload hash, C2 callback) to claim a same-hands match. See
-  // development/IDENTITY_RESOLUTION.md.
-  identity_id?: string | null;
-  first_seen: string;
-  last_seen: string;
-  event_count: number;
-  service_count: number;
-  decky_count: number;
-  services: string[];
-  deckies: string[];
-  traversal_path: string | null;
-  is_traversal: boolean;
-  bounty_count: number;
-  credential_count: number;
-  fingerprints: any[];
-  commands: { service: string; decky: string; command: string; timestamp: string }[];
-  country_code: string | null;
-  country_source: string | null;
-  asn: number | null;
-  as_name: string | null;
-  asn_source: string | null;
-  ptr_record: string | null;
-  updated_at: string;
-  behavior: AttackerBehavior | null;
-  service_activity?: {
-    interacted: string[];
-    scanned: string[];
-  };
-  ip_leaks?: Array<{
-    timestamp: string;
-    decky?: string;
-    service?: string;
-    bounty_type: string;
-    payload: {
-      source_ip?: string;
-      real_ip_claim?: string;
-      source_header?: string;
-      headers_seen?: Record<string, string>;
-    };
-  }>;
-  ip_leaks_total?: number;
-  // BEHAVE-SHELL behavioural primitives — latest value per primitive
-  // for this attacker. The REST `/api/v1/attackers/{uuid}` route
-  // returns this field; the SSE `/events` stream live-updates it via
-  // useAttackerStream. Empty array until the profiler worker has
-  // processed at least one session shard for this attacker.
-  observations?: BehaviouralObservation[];
-}
-
-export interface BehaviouralObservation {
-  primitive: string;
-  value: unknown;
-  confidence: number;
-  ts?: number;
-  source?: string;
-}
-
-// Per-(identity, primitive) attribution state — derived by the
-// attribution engine. Keyed by primitive when consumed by
-// BehaviouralPrimitivesPanel; the API also returns identity_uuid +
-// timestamps which the panel doesn't render but the live SSE handler
-// uses to merge updates.
-export interface AttributionPrimitiveState {
-  primitive: string;
-  current_value: unknown;
-  state: 'unknown' | 'stable' | 'drifting' | 'conflicted' | 'multi_actor';
-  confidence: number;
-  observation_count: number;
-  last_change_ts: number;
-  last_observation_ts: number;
-}
 
 // ─── Fingerprint rendering ───────────────────────────────────────────────────
 
@@ -1499,21 +1388,27 @@ const IntelPanel: React.FC<{ uuid: string }> = ({ uuid }) => {
 const AttackerDetail: React.FC = () => {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
-  const [attacker, setAttacker] = useState<AttackerData | null>(null);
-  // Live behavioural-primitive state. Seeded from
-  // attacker.observations on first fetch; mutated in place by the
-  // useAttackerStream hook below (latest-wins per primitive).
-  const [observations, setObservations] = useState<BehaviouralObservation[]>([]);
-  // Attribution-engine state per primitive. Seeded from
-  // GET /attackers/{id}/attribution on mount; live-updated via
-  // attribution.state_changed SSE frames. Map keyed on primitive
-  // for O(1) badge lookup in the panel.
-  const [attribution, setAttribution] = useState<Map<string, AttributionPrimitiveState>>(
-    () => new Map(),
-  );
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
-  const [serviceFilter, setServiceFilter] = useState<string | null>(null);
+  // Data layer is owned by the hook: REST fetches, attribution table,
+  // and per-attacker / per-identity SSE streams all live there.
+  const {
+    attacker,
+    observations,
+    attribution,
+    loading,
+    error,
+    commands,
+    cmdTotal,
+    cmdPage,
+    setCmdPage,
+    serviceFilter,
+    setServiceFilter,
+    cmdLimit,
+    artifacts,
+    smtpTargets,
+    mail,
+    mailForbidden,
+    sessions,
+  } = useAttackerDetail(id);
 
   // Section collapse state
   const [openSections, setOpenSections] = useState<Record<string, boolean>>({
@@ -1531,270 +1426,12 @@ const AttackerDetail: React.FC = () => {
     mail: true,
   });
 
-  // Captured file-drop artifacts (ssh inotify farm) for this attacker.
-  type ArtifactLog = {
-    id: number;
-    timestamp: string;
-    decky: string;
-    service: string;
-    fields: string; // JSON-encoded SD params (parsed lazily below)
-  };
-  const [artifacts, setArtifacts] = useState<ArtifactLog[]>([]);
+  // Drawer selection (ephemeral UI; data feeds come from the hook).
   const [artifact, setArtifact] = useState<{ decky: string; storedAs: string; fields: Record<string, any> } | null>(null);
-
-  // PTY session transcripts (sessrec) for this attacker.
-  type SessionLog = {
-    id: number;
-    timestamp: string;
-    decky: string;
-    service: string;
-    fields: string;
-  };
-  const [sessions, setSessions] = useState<SessionLog[]>([]);
   const [session, setSession] = useState<{ decky: string; sid: string; fields: Record<string, any> } | null>(null);
-
-  // SMTP victim-domain rollup (viewer-safe: domains only, no local parts).
-  type SmtpTargetRow = {
-    domain: string;
-    count: number;
-    first_seen: string;
-    last_seen: string;
-  };
-  const [smtpTargets, setSmtpTargets] = useState<SmtpTargetRow[]>([]);
-
-  // Stored SMTP messages (admin-gated: full attacker-controlled bodies).
-  type MailLog = {
-    id: number;
-    timestamp: string;
-    decky: string;
-    service: string;
-    fields: string;
-  };
-  const [mail, setMail] = useState<MailLog[]>([]);
-  const [mailForbidden, setMailForbidden] = useState(false);
   const [mailItem, setMailItem] = useState<{ decky: string; storedAs: string; fields: Record<string, any> } | null>(null);
 
   const toggle = (key: string) => setOpenSections((prev) => ({ ...prev, [key]: !prev[key] }));
-
-  // Commands pagination state
-  const [commands, setCommands] = useState<AttackerData['commands']>([]);
-  const [cmdTotal, setCmdTotal] = useState(0);
-  const [cmdPage, setCmdPage] = useState(1);
-  const cmdLimit = 50;
-
-  useEffect(() => {
-    const fetchAttacker = async () => {
-      setLoading(true);
-      try {
-        const res = await api.get(`/attackers/${id}`);
-        setAttacker(res.data);
-        setObservations(res.data?.observations ?? []);
-      } catch (err: any) {
-        if (err.response?.status === 404) {
-          setError('ATTACKER NOT FOUND');
-        } else {
-          setError('FAILED TO LOAD ATTACKER PROFILE');
-        }
-      } finally {
-        setLoading(false);
-      }
-    };
-    fetchAttacker();
-  }, [id]);
-
-  // Fetch attribution state on mount + whenever the attacker uuid
-  // changes. Quietly tolerates 404s (the attribution worker may be
-  // off in a dev decky).
-  useEffect(() => {
-    if (!id) return;
-    let cancelled = false;
-    (async () => {
-      try {
-        const res = await api.get(`/attackers/${id}/attribution`);
-        if (cancelled) return;
-        const next = new Map<string, AttributionPrimitiveState>();
-        const primitives = (res.data?.primitives ?? []) as AttributionPrimitiveState[];
-        for (const row of primitives) next.set(row.primitive, row);
-        setAttribution(next);
-      } catch {
-        // Endpoint optional in dev; the panel will simply not render
-        // badges. Don't surface the error to the user.
-      }
-    })();
-    return () => { cancelled = true; };
-  }, [id]);
-
-  // Re-fetch this attacker row whenever an identity event references
-  // its uuid. The IDENTITY badge appears once the clusterer binds the
-  // row, and follows through merges / unmerges live.
-  useIdentityStream({
-    enabled: !!id,
-    onEvent: (ev) => {
-      if (!id) return;
-      const payload = ev.payload || {};
-      const refs = new Set<string>();
-      const addUuid = (v: unknown) => {
-        if (typeof v === 'string') refs.add(v);
-      };
-      addUuid(payload.observation_uuid);
-      const obsList = payload.observation_uuids;
-      if (Array.isArray(obsList)) obsList.forEach(addUuid);
-      // merge / unmerge events carry identity uuids, not observation
-      // uuids — but if the current attacker's identity_id matches any
-      // of them, we still want to refresh so the badge link follows.
-      addUuid(payload.identity_uuid);
-      addUuid(payload.winner_uuid);
-      addUuid(payload.loser_uuid);
-      addUuid(payload.resurrected_uuid);
-      addUuid(payload.former_winner_uuid);
-
-      const myIdentity = attacker?.identity_id;
-      if (refs.has(id) || (myIdentity && refs.has(myIdentity))) {
-        api.get(`/attackers/${id}`)
-          .then((res) => setAttacker(res.data))
-          .catch(() => {});
-      }
-    },
-  });
-
-  // Live behavioural-primitive updates: subscribe to per-attacker
-  // SSE and replace-by-primitive on every observation event.
-  useAttackerStream({
-    attackerUuid: id ?? '',
-    enabled: !!id,
-    onSnapshot: (data) => {
-      setObservations(data.observations ?? []);
-    },
-    onObservation: (frame: ObservationFrame) => {
-      setObservations((prev) => {
-        const filtered = prev.filter((o) => o.primitive !== frame.primitive);
-        return [
-          ...filtered,
-          {
-            primitive: frame.primitive,
-            value: frame.value,
-            confidence: frame.confidence,
-            ts: frame.ts,
-            source: frame.source,
-          },
-        ];
-      });
-    },
-    // Live attribution-state badge updates. Backend filters on
-    // identity_uuid so we only see frames for this attacker's
-    // identity; merge by primitive.
-    onAttributionStateChanged: (frame: AttributionStateChangedFrame) => {
-      setAttribution((prev) => {
-        const next = new Map(prev);
-        const prior = next.get(frame.primitive);
-        next.set(frame.primitive, {
-          primitive: frame.primitive,
-          current_value: frame.current_value,
-          state: frame.new_state,
-          confidence: frame.confidence,
-          observation_count: frame.observation_count,
-          // last_change_ts is derived: this frame IS a transition, so
-          // it locks here. last_observation_ts comes from the frame.
-          last_change_ts: frame.ts,
-          last_observation_ts: frame.ts,
-          // Carry forward the prior change ts only when state didn't
-          // actually flip (defensive — backend gates these on
-          // transition, but a future relaxation shouldn't lie about
-          // "stable since X").
-          ...(prior && prior.state === frame.new_state
-            ? { last_change_ts: prior.last_change_ts }
-            : {}),
-        });
-        return next;
-      });
-    },
-    onMultiActorSuspected: (_frame: AttributionMultiActorFrame) => {
-      // The per-primitive badges already reflect multi_actor on each
-      // contributing primitive; the cross-primitive escalation is a
-      // SIEM-channel signal, not a UI-only badge. Listener wired so
-      // a future "two operators detected" banner has a live source.
-    },
-  });
-
-  useEffect(() => {
-    if (!id) return;
-    const fetchCommands = async () => {
-      try {
-        const offset = (cmdPage - 1) * cmdLimit;
-        let url = `/attackers/${id}/commands?limit=${cmdLimit}&offset=${offset}`;
-        if (serviceFilter) url += `&service=${encodeURIComponent(serviceFilter)}`;
-        const res = await api.get(url);
-        setCommands(res.data.data);
-        setCmdTotal(res.data.total);
-      } catch (err: any) {
-        if (err.response?.status === 422) {
-          alert("Fuck off.");
-        }
-        setCommands([]);
-        setCmdTotal(0);
-      }
-    };
-    fetchCommands();
-  }, [id, cmdPage, serviceFilter]);
-
-  // Reset command page when service filter changes
-  useEffect(() => {
-    setCmdPage(1);
-  }, [serviceFilter]);
-
-  useEffect(() => {
-    if (!id) return;
-    const fetchArtifacts = async () => {
-      try {
-        const res = await api.get(`/attackers/${id}/artifacts`);
-        setArtifacts(res.data.data ?? []);
-      } catch {
-        setArtifacts([]);
-      }
-    };
-    fetchArtifacts();
-  }, [id]);
-
-  useEffect(() => {
-    if (!id) return;
-    const fetchSmtpTargets = async () => {
-      try {
-        const res = await api.get(`/attackers/${id}/smtp-targets`);
-        setSmtpTargets(res.data.data ?? []);
-      } catch {
-        setSmtpTargets([]);
-      }
-    };
-    fetchSmtpTargets();
-  }, [id]);
-
-  useEffect(() => {
-    if (!id) return;
-    const fetchMail = async () => {
-      try {
-        const res = await api.get(`/attackers/${id}/mail`);
-        setMail(res.data.data ?? []);
-        setMailForbidden(false);
-      } catch (err: any) {
-        setMail([]);
-        setMailForbidden(err?.response?.status === 403);
-      }
-    };
-    fetchMail();
-  }, [id]);
-
-  useEffect(() => {
-    if (!id) return;
-    const fetchSessions = async () => {
-      try {
-        const res = await api.get(`/attackers/${id}/transcripts`);
-        setSessions(res.data.data ?? []);
-      } catch {
-        setSessions([]);
-      }
-    };
-    fetchSessions();
-  }, [id]);
 
   if (loading) {
     return (
