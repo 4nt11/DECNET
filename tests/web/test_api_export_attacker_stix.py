@@ -245,6 +245,11 @@ async def test_commands_emit_process_scos():
     assert len(processes) == 2
     cmd_lines = {p["command_line"] for p in processes}
     assert cmd_lines == {"whoami", "cat /etc/passwd"}
+    # Each unique command emits a Sighting back to the threat-actor (no TTP tags here)
+    sightings = [o for o in objs if o["type"] == "sighting"]
+    assert len(sightings) == 2
+    ta_id = next(o["id"] for o in objs if o["type"] == "threat-actor")
+    assert all(s["sighting_of_ref"] == ta_id for s in sightings)
 
 
 @pytest.mark.asyncio

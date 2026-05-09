@@ -284,12 +284,22 @@ def build_attacker_bundle(
         seen_cmds.add(cmd_line)
         proc = stix2.Process(command_line=cmd_line, is_hidden=False)
         objs.append(proc)
+        proc_obs = stix2.ObservedData(
+            first_observed=fs or now,
+            last_observed=ls or now,
+            number_observed=1,
+            object_refs=[proc.id],
+            created_by_ref=org.id,
+        )
+        objs.append(proc_obs)
         objs.append(
-            stix2.ObservedData(
-                first_observed=fs or now,
-                last_observed=ls or now,
-                number_observed=1,
-                object_refs=[proc.id],
+            stix2.Sighting(
+                sighting_of_ref=ta.id,
+                first_seen=fs or now,
+                last_seen=ls or now,
+                count=1,
+                where_sighted_refs=[org.id],
+                observed_data_refs=[proc_obs.id],
                 created_by_ref=org.id,
             )
         )
