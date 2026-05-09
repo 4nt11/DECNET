@@ -199,6 +199,14 @@ body.maze-fullscreen .maze-shell {
   opacity: 0.42; filter: grayscale(0.7); border-style: dotted;
 }
 .maze-net-box.inactive .maze-net-box-head { color: var(--fg-3); }
+/* In light mode 0.42 + grayscale on cream makes inactive LANs
+ * disappear into the page. Keep the dotted border as the "no
+ * traffic" signal but bump opacity so the header is still
+ * legible. */
+html[data-theme="light"] .maze-net-box.inactive {
+  opacity: 0.85;
+  filter: none;
+}
 /* Optimistic placeholder for an enqueued LAN-add. Amber tint matches
  * the REAP button voice — clearly "in-flight, not committed" without
  * collapsing into the dimmed-out 'inactive' style which means the

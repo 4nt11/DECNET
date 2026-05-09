@@ -19,6 +19,8 @@
   --accent-color:     var(--violet);
   --secondary-color:  var(--panel);
   --border-color:     var(--border);
+  --dim-color:        var(--fg-3);  /* dimmed body text (~60-70% of base) */
+  --danger-color:     var(--alert); /* red icon/text — was undefined, fell back to #f88 */
 
   /* Cyan/info — REPLAY buttons, neutral status that's neither
    * "good/active" (matrix) nor "stop" (alert). */
@@ -152,9 +154,9 @@ html[data-theme="light"] {
   --crit:            #b91c1c;   /* matches alert in light, distinct in dark */
 
   --fg-1: var(--matrix);
-  --fg-2: rgba(13, 13, 13, 0.78);
-  --fg-3: rgba(13, 13, 13, 0.55);
-  --fg-4: rgba(13, 13, 13, 0.35);
+  --fg-2: rgba(13, 13, 13, 0.88);   /* near-ink — bumped from dark's 0.80 */
+  --fg-3: rgba(13, 13, 13, 0.70);   /* dim ink — bumped from 0.55 */
+  --fg-4: rgba(13, 13, 13, 0.50);   /* faint ink — bumped from 0.35 */
 
   --matrix-tint-5:   rgba(13, 13, 13, 0.04);
   --matrix-tint-10:  rgba(13, 13, 13, 0.08);
