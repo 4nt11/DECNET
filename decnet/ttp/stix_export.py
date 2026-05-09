@@ -38,9 +38,11 @@ _NS = _uuid.UUID("b5d2c3a1-8f4e-4d1b-9a6c-0e7f5b3d2c1a")
 _DECNET_ORG_STIX_ID = f"identity--{_uuid.uuid5(_NS, 'decnet-honeypot')}"
 
 
-def _aware(dt: datetime | None) -> datetime | None:
+def _aware(dt: datetime | str | None) -> datetime | None:
     if dt is None:
         return None
+    if isinstance(dt, str):
+        dt = datetime.fromisoformat(dt.replace("Z", "+00:00"))
     if dt.tzinfo is None:
         return dt.replace(tzinfo=timezone.utc)
     return dt
