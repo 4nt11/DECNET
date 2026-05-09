@@ -86,6 +86,11 @@ function animateSwap(next: Theme, x: number, y: number): void {
         duration: 520,
         easing: 'cubic-bezier(0.4, 0, 0.2, 1)',
         pseudoElement: '::view-transition-old(root)',
+        /* Without 'forwards' the keyframes release on completion
+         * and the pseudo reverts to its computed style (no
+         * clip-path), making the old layer flash back at full
+         * size for a frame before View Transitions tears it down. */
+        fill: 'forwards',
       },
     );
   }).catch(() => { /* user-cancelled or unsupported pseudo, ignore */ });
