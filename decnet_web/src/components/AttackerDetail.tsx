@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
-import { Activity, AlertTriangle, ArrowLeft, ChevronDown, ChevronLeft, ChevronRight, ChevronUp, Cpu, Crosshair, Eye, Fingerprint, Globe, Keyboard, Shield, Clock, Sparkles, Wifi, Lock, FileKey, Radio, Timer, Paperclip, Terminal, Package, FileText, Mail, AtSign } from '../icons';
+import { Activity, AlertTriangle, ArrowLeft, ChevronLeft, ChevronRight, Cpu, Crosshair, Eye, Fingerprint, Globe, Keyboard, Shield, Clock, Sparkles, Wifi, Lock, FileKey, Radio, Timer, Paperclip, Terminal, Package, FileText, Mail, AtSign } from '../icons';
 import api from '../utils/api';
 import ArtifactDrawer from './ArtifactDrawer';
 import MailDrawer from './MailDrawer';
@@ -10,9 +10,9 @@ import TTPsObservedSection from './TTPsObservedSection';
 import { useAttackerDetail } from './AttackerDetail/useAttackerDetail';
 import { AttackerHeader } from './AttackerDetail/sections/AttackerHeader';
 import { AttackerStats } from './AttackerDetail/sections/AttackerStats';
-import { Tag } from './AttackerDetail/ui';
+import { TimelineSection } from './AttackerDetail/sections/TimelineSection';
+import { Tag, Section } from './AttackerDetail/ui';
 import type {
-  AttackerData,
   AttackerBehavior,
   BehaviouralObservation,
   AttributionPrimitiveState,
@@ -1008,144 +1008,6 @@ export const BehaviouralPrimitivesPanel: React.FC<{
   );
 };
 
-// ─── Collapsible section ────────────────────────────────────────────────────
-
-const Section: React.FC<{
-  title: React.ReactNode;
-  right?: React.ReactNode;
-  open: boolean;
-  onToggle: () => void;
-  children: React.ReactNode;
-}> = ({ title, right, open, onToggle, children }) => (
-  <div className="logs-section">
-    <div
-      className="section-header"
-      style={{ justifyContent: 'space-between', cursor: 'pointer', userSelect: 'none' }}
-      onClick={onToggle}
-    >
-      <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-        {open ? <ChevronUp size={16} className="dim" /> : <ChevronDown size={16} className="dim" />}
-        <h2>{title}</h2>
-      </div>
-      {right && <div onClick={(e) => e.stopPropagation()}>{right}</div>}
-    </div>
-    {open && children}
-  </div>
-);
-
-// ─── Leaked-IPs row (truncated view + rotation-detection badge) ────────────
-
-const ROTATION_THRESHOLD = 20;
-const INLINE_LIMIT = 1;
-
-interface LeakedIPsRowProps {
-  leaks: NonNullable<AttackerData['ip_leaks']>;
-  total: number;
-}
-
-const LeakedIPsRow: React.FC<LeakedIPsRowProps> = ({ leaks, total }) => {
-  const [expanded, setExpanded] = useState(false);
-  const distinctIPs = Array.from(
-    new Set(
-      leaks
-        .map((l) => l.payload?.real_ip_claim)
-        .filter((v): v is string => !!v),
-    ),
-  );
-  const rotationDetected = total >= ROTATION_THRESHOLD;
-  const visible = expanded ? distinctIPs : distinctIPs.slice(0, INLINE_LIMIT);
-  const hiddenInList = distinctIPs.length - visible.length;
-  // Backend caps server-side leaks at 10 rows; "total" is the unbounded
-  // count — may exceed what we actually have IP values for.
-  const remainingBeyondSample = total - distinctIPs.length;
-
-  const ipTooltip = (ip: string): string => {
-    const latest = leaks.find((l) => l.payload?.real_ip_claim === ip);
-    return latest
-      ? `Leaked via ${latest.payload.source_header ?? '?'}; source ${latest.payload.source_ip ?? '?'}`
-      : '';
-  };
-
-  return (
-    <div>
-      <span className="dim" style={{ color: 'var(--warn, #e0a040)' }}>
-        LEAKED IPs:{' '}
-      </span>
-      {rotationDetected && (
-        <span
-          style={{ marginRight: 8, display: 'inline-block' }}
-          title={`${total} distinct claimed IPs — almost certainly XFF-rotation / WAF-bypass probing, not a real attribution leak.`}
-        >
-          <Tag color="var(--alert, #ff4d4d)">
-            ROTATION · {total}
-          </Tag>
-        </span>
-      )}
-      {visible.map((ip, i, arr) => (
-        <span
-          key={ip}
-          style={{
-            color: 'var(--warn, #e0a040)',
-            fontFamily: 'monospace',
-          }}
-          title={ipTooltip(ip)}
-        >
-          {ip}
-          {i < arr.length - 1 ? ', ' : ''}
-        </span>
-      ))}
-      {!expanded && hiddenInList > 0 && (
-        <>
-          {' '}
-          <button
-            onClick={() => setExpanded(true)}
-            style={{
-              background: 'transparent',
-              border: 'none',
-              color: 'var(--warn, #e0a040)',
-              cursor: 'pointer',
-              padding: 0,
-              fontFamily: 'inherit',
-              textDecoration: 'underline',
-            }}
-          >
-            + {hiddenInList} more
-          </button>
-        </>
-      )}
-      {remainingBeyondSample > 0 && (
-        <span
-          className="dim"
-          style={{ marginLeft: 6, fontSize: '0.75rem' }}
-          title="Only the 10 most-recent claimed IPs are fetched; the total count is the full DB tally."
-        >
-          (+{remainingBeyondSample} beyond sample)
-        </span>
-      )}
-      {expanded && hiddenInList === 0 && distinctIPs.length > INLINE_LIMIT && (
-        <>
-          {' '}
-          <button
-            onClick={() => setExpanded(false)}
-            style={{
-              background: 'transparent',
-              border: 'none',
-              color: 'var(--accent-color)',
-              cursor: 'pointer',
-              padding: 0,
-              fontFamily: 'inherit',
-              textDecoration: 'underline',
-            }}
-          >
-            collapse
-          </button>
-        </>
-      )}
-    </div>
-  );
-};
-
-
 // ─── Threat-Intel Panel ─────────────────────────────────────────────────────
 
 // Mirrors decnet/web/db/models/attacker_intel.py — server returns the row
@@ -1464,78 +1326,11 @@ const AttackerDetail: React.FC = () => {
       {/* TTPs Observed (per-IP slice) — see TTP_TAGGING.md §"UI surface" */}
       <TTPsObservedSection scope="attacker" uuid={attacker.uuid} />
 
-      {/* Timestamps */}
-      <Section title="TIMELINE" open={openSections.timeline} onToggle={() => toggle('timeline')}>
-        <div style={{ padding: '16px', display: 'flex', flexWrap: 'wrap', gap: '32px', fontSize: '0.85rem' }}>
-          <div>
-            <span className="dim">FIRST SEEN: </span>
-            <span className="matrix-text">{new Date(attacker.first_seen).toLocaleString()}</span>
-          </div>
-          <div>
-            <span className="dim">LAST SEEN: </span>
-            <span className="matrix-text">{new Date(attacker.last_seen).toLocaleString()}</span>
-          </div>
-          <div>
-            <span className="dim">UPDATED: </span>
-            <span className="dim">{new Date(attacker.updated_at).toLocaleString()}</span>
-          </div>
-          <div>
-            <span className="dim">ORIGIN: </span>
-            {attacker.country_code ? (
-              <span className="matrix-text">
-                {attacker.country_code}
-                {attacker.country_source && (
-                  <span className="dim" style={{ marginLeft: 6, fontSize: '0.75rem' }}>
-                    ({attacker.country_source})
-                  </span>
-                )}
-              </span>
-            ) : (
-              <span className="dim">unknown</span>
-            )}
-          </div>
-          <div>
-            <span className="dim">AS: </span>
-            {attacker.asn != null ? (
-              <span className="matrix-text">
-                AS{attacker.asn}
-                {attacker.as_name && (
-                  <span className="dim" style={{ marginLeft: 6, fontSize: '0.75rem' }}>
-                    {attacker.as_name}
-                  </span>
-                )}
-                {attacker.asn_source && (
-                  <span className="dim" style={{ marginLeft: 6, fontSize: '0.75rem' }}>
-                    ({attacker.asn_source})
-                  </span>
-                )}
-              </span>
-            ) : (
-              <span className="dim">unknown</span>
-            )}
-          </div>
-          <div>
-            <span className="dim">REVERSE DNS: </span>
-            {attacker.ptr_record ? (
-              <span
-                className="matrix-text"
-                style={{ fontFamily: 'monospace' }}
-                title="One-shot PTR record resolved at first sighting."
-              >
-                {attacker.ptr_record}
-              </span>
-            ) : (
-              <span className="dim">—</span>
-            )}
-          </div>
-          {attacker.ip_leaks && attacker.ip_leaks.length > 0 && (
-            <LeakedIPsRow
-              leaks={attacker.ip_leaks}
-              total={attacker.ip_leaks_total ?? attacker.ip_leaks.length}
-            />
-          )}
-        </div>
-      </Section>
+      <TimelineSection
+        attacker={attacker}
+        open={openSections.timeline}
+        onToggle={() => toggle('timeline')}
+      />
 
       {/* Services */}
       <Section title="SERVICES TARGETED" open={openSections.services} onToggle={() => toggle('services')}>
