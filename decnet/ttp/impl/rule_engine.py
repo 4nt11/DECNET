@@ -36,6 +36,7 @@ from pydantic import BaseModel, Field
 
 from decnet import telemetry as _telemetry
 from decnet.logging import get_logger
+from decnet.ttp.attack_stix import mitre_url_for
 from decnet.ttp.base import Tagger, TaggerEvent
 from decnet.ttp.impl._rule_index import RuleIndex
 from decnet.ttp.impl._state import apply_ceiling, is_active
@@ -367,6 +368,7 @@ def _evaluate_rules(
                     rule_version=rule.rule_version,
                     evidence=evidence,
                     attack_release=_ATTACK_RELEASE,
+                    mitre_url=mitre_url_for(sub_technique_id or technique_id),
                 ))
     return out
 

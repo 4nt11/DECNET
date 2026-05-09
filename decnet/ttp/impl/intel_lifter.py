@@ -23,7 +23,6 @@ from typing import Any, Final
 from decnet.ttp.base import TaggerEvent, TolerantTagger
 from decnet.ttp.data.intel_loader import (
     ProviderMapping,
-    TechniqueEmission,
     load_provider_mapping,
 )
 from decnet.ttp.impl._emit import emit_tags
@@ -53,22 +52,6 @@ def _mapping(provider: str) -> ProviderMapping:
 _GREYNOISE_MALICIOUS_BARE_MULT: Final[float] = 0.5
 
 
-def _emission_url_extras(
-    emissions: dict[str, TechniqueEmission],
-) -> dict[str, dict[str, str]]:
-    """Map technique_id → {"mitre_url": "<url>"} for every emission that has one.
-
-    Lets the per-decision-function evidence_extra builders attach the
-    canonical MITRE URL to each emit slot without re-resolving against
-    the loaded ATT&CK bundle.
-    """
-    return {
-        tid: {"mitre_url": e.mitre_url}
-        for tid, e in emissions.items()
-        if e.mitre_url
-    }
-
-
 # Predicate signature: returns either a list of (technique_id_filter,
 # confidence_multiplier, evidence_extra) tuples — one per emit slot the
 # rule should fire — or empty list when the rule does not fire.
@@ -92,11 +75,9 @@ def _abuseipdb_decisions(
     # Resolve technique set across all categories present, applying
     # any per-technique high-score gate (see TechniqueEmission).
     triggered: dict[str, list[int]] = {}
-    emissions_by_tech: dict[str, TechniqueEmission] = {}
     for cat in categories:
         for emission in mapping.techniques_for_signal(f"cat_{cat}", score=float(score)):
             triggered.setdefault(emission.technique_id, []).append(cat)
-            emissions_by_tech.setdefault(emission.technique_id, emission)
     if not triggered:
         return []
     multiplier = float(score) / 100.0
@@ -104,10 +85,6 @@ def _abuseipdb_decisions(
         (tech, multiplier, {
             "abuseipdb_categories": cats,
             "abuse_confidence_score": int(score),
-            **(
-                {"mitre_url": emissions_by_tech[tech].mitre_url}
-                if emissions_by_tech[tech].mitre_url else {}
-            ),
         })
         for tech, cats in triggered.items()
     ]
@@ -136,21 +113,16 @@ def _greynoise_decisions(
     # signals that triggered it AND the multiplier to apply (max wins
     # if multiple lanes hit the same technique).
     triggered: dict[str, tuple[float, list[str]]] = {}
-    emissions_by_tech: dict[str, TechniqueEmission] = {}
 
-    def _bump(
-        tech: str, mult: float, signal: str, emission: TechniqueEmission | None = None,
-    ) -> None:
+    def _bump(tech: str, mult: float, signal: str) -> None:
         existing = triggered.get(tech)
         if existing is None:
             triggered[tech] = (mult, [signal])
-        else:
-            old_mult, signals = existing
-            signals.append(signal)
-            if mult > old_mult:
-                triggered[tech] = (mult, signals)
-        if emission is not None:
-            emissions_by_tech.setdefault(tech, emission)
+            return
+        old_mult, signals = existing
+        signals.append(signal)
+        if mult > old_mult:
+            triggered[tech] = (mult, signals)
 
     if classification == "scanner":
         _bump("T1595", 1.0, "scanner")
@@ -159,7 +131,7 @@ def _greynoise_decisions(
             if not isinstance(tag, str):
                 continue
             for emission in mapping.techniques_for_signal(tag):
-                _bump(emission.technique_id, 1.0, tag, emission)
+                _bump(emission.technique_id, 1.0, tag)
     if classification == "malicious" and "T1071" not in triggered:
         _bump("T1071", _GREYNOISE_MALICIOUS_BARE_MULT, "malicious")
     if not triggered:
@@ -168,11 +140,6 @@ def _greynoise_decisions(
         (tech, mult, {
             "greynoise_classification": classification,
             "greynoise_tags": signals,
-            **(
-                {"mitre_url": emissions_by_tech[tech].mitre_url}
-                if tech in emissions_by_tech and emissions_by_tech[tech].mitre_url
-                else {}
-            ),
         })
         for tech, (mult, signals) in triggered.items()
     ]
@@ -187,17 +154,14 @@ def _feodo_decisions(
         payload.get("feodo_malware_family")
         or payload.get("malware_family")
     )
-    base_extra: dict[str, Any] = {"feodo_listed": True}
+    extra: dict[str, Any] = {"feodo_listed": True}
     if isinstance(family, str) and family:
-        base_extra["malware_family"] = family
+        extra["malware_family"] = family
     mapping = _mapping("feodo")
-    out: EmitDecision = []
-    for emission in mapping.techniques_for_signal("feodo_listed"):
-        extra = dict(base_extra)
-        if emission.mitre_url:
-            extra["mitre_url"] = emission.mitre_url
-        out.append((emission.technique_id, 1.0, extra))
-    return out
+    return [
+        (emission.technique_id, 1.0, dict(extra))
+        for emission in mapping.techniques_for_signal("feodo_listed")
+    ]
 
 
 def _threatfox_decisions(
@@ -224,11 +188,9 @@ def _threatfox_decisions(
 
     mapping = _mapping("threatfox")
     triggered: dict[str, list[str]] = {}
-    emissions_by_tech: dict[str, TechniqueEmission] = {}
     for tt in threat_types:
         for emission in mapping.techniques_for_signal(tt):
             triggered.setdefault(emission.technique_id, []).append(tt)
-            emissions_by_tech.setdefault(emission.technique_id, emission)
     if not triggered:
         return []
 
@@ -252,10 +214,6 @@ def _threatfox_decisions(
             "threat_types": signals,
             **({"malware_families": families} if families else {}),
             **({"ioc_types": ioc_types} if ioc_types else {}),
-            **(
-                {"mitre_url": emissions_by_tech[tech].mitre_url}
-                if emissions_by_tech[tech].mitre_url else {}
-            ),
         })
         for tech, signals in triggered.items()
     ]

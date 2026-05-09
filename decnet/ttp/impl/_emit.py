@@ -11,6 +11,7 @@ from __future__ import annotations
 
 from typing import Any
 
+from decnet.ttp.attack_stix import mitre_url_for
 from decnet.ttp.base import TaggerEvent
 from decnet.ttp.impl._state import apply_ceiling
 from decnet.ttp.impl.rule_engine import _ATTACK_RELEASE, CompiledRule
@@ -61,6 +62,7 @@ def emit_tags(
             rule_version=rule.rule_version,
             evidence=dict(evidence),
             attack_release=_ATTACK_RELEASE,
+            mitre_url=mitre_url_for(sub_technique_id or technique_id),
         ))
     return out
 

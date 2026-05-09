@@ -146,6 +146,15 @@ class TTPTag(SQLModel, table=True):
     # ID cannot render deterministically in MITRE Navigator.
     attack_release: str = Field(index=True)
 
+    # Canonical attack.mitre.org URL for this technique (or
+    # sub-technique when present). Resolved at insert via
+    # decnet.ttp.attack_stix.mitre_url_for from the loaded STIX
+    # bundle. Nullable because (a) the bundle may not be loaded in
+    # certain test paths and (b) a future release could deprecate
+    # a technique we have legacy tags for. Not indexed — derived
+    # deeplink, not a query target; technique_id is already indexed.
+    mitre_url: Optional[str] = Field(default=None)
+
     created_at: datetime = Field(
         default_factory=lambda: datetime.now(timezone.utc),
         index=True,
@@ -256,6 +265,7 @@ class TechniqueRollupRow(BaseModel):
     tactic: str
     count: int
     last_seen: datetime
+    mitre_url: Optional[str] = None
 
 
 class IdentityTechniqueRow(BaseModel):
@@ -278,6 +288,7 @@ class IdentityTechniqueRow(BaseModel):
     first_seen: datetime
     last_seen: datetime
     confidence_max: float
+    mitre_url: Optional[str] = None
 
 
 class TTPTagDetailRow(BaseModel):
@@ -306,6 +317,7 @@ class TTPTagDetailRow(BaseModel):
     evidence: dict[str, Any] = Field(default_factory=dict)
     attack_release: str
     created_at: datetime
+    mitre_url: Optional[str] = None
 
 
 class CampaignTechniqueRow(BaseModel):
@@ -320,6 +332,7 @@ class CampaignTechniqueRow(BaseModel):
     count: int
     identity_count: int
     last_seen: datetime
+    mitre_url: Optional[str] = None
 
 
 class RuleCatalogueRow(BaseModel):

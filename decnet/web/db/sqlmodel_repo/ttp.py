@@ -21,6 +21,7 @@ from sqlalchemy import func, select
 from sqlmodel import col
 
 from decnet.ttp.attack_catalog import technique_name as _technique_name
+from decnet.ttp.attack_stix import mitre_url_for as _mitre_url_for
 from decnet.web.db.models import (
     Attacker,
     AttackerIdentity,
@@ -117,6 +118,7 @@ class TTPMixin(_MixinBase):
                     technique_name=_technique_name(r.technique_id),
                     sub_technique_id=r.sub_technique_id,
                     sub_technique_name=_technique_name(r.sub_technique_id),
+                    mitre_url=_mitre_url_for(r.sub_technique_id or r.technique_id),
                     tactic=r.tactic,
                     count=r.count,
                     first_seen=r.first_seen,
@@ -155,6 +157,7 @@ class TTPMixin(_MixinBase):
                     technique_name=_technique_name(r.technique_id),
                     sub_technique_id=r.sub_technique_id,
                     sub_technique_name=_technique_name(r.sub_technique_id),
+                    mitre_url=_mitre_url_for(r.sub_technique_id or r.technique_id),
                     tactic=r.tactic,
                     count=r.count,
                     first_seen=r.first_seen,
@@ -199,6 +202,7 @@ class TTPMixin(_MixinBase):
                     technique_name=_technique_name(r.technique_id),
                     sub_technique_id=r.sub_technique_id,
                     sub_technique_name=_technique_name(r.sub_technique_id),
+                    mitre_url=_mitre_url_for(r.sub_technique_id or r.technique_id),
                     tactic=r.tactic,
                     count=r.count,
                     identity_count=r.identity_count,
@@ -235,6 +239,7 @@ class TTPMixin(_MixinBase):
                     technique_name=_technique_name(r.technique_id),
                     sub_technique_id=r.sub_technique_id,
                     sub_technique_name=_technique_name(r.sub_technique_id),
+                    mitre_url=_mitre_url_for(r.sub_technique_id or r.technique_id),
                     tactic=r.tactic,
                     count=r.count,
                     first_seen=r.first_seen,
@@ -408,6 +413,7 @@ class TTPMixin(_MixinBase):
                     technique_name=_technique_name(r.technique_id),
                     sub_technique_id=r.sub_technique_id,
                     sub_technique_name=_technique_name(r.sub_technique_id),
+                    mitre_url=_mitre_url_for(r.sub_technique_id or r.technique_id),
                     tactic=r.tactic,
                     count=r.count,
                     last_seen=r.last_seen,
