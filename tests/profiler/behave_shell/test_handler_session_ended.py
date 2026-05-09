@@ -10,8 +10,6 @@ import json
 from typing import Any
 from unittest.mock import AsyncMock
 
-import pytest
-
 from decnet.profiler.behave_shell._handler import (
     _build_evidence_ref,
     handle_session_ended,
@@ -178,6 +176,42 @@ async def test_publish_none_is_silent(tmp_path) -> None:
     repo = _make_repo()
     n = await handle_session_ended(repo, _payload(shard_path), None)
     assert n > 0
+
+
+async def test_handler_tolerates_non_utf8_bytes_in_shard(tmp_path) -> None:
+    """Real-world regression: sessrec.c's json_escape only escapes
+    bytes < 0x20 + DEL, so bytes >= 0x80 pass through raw. An attacker
+    pasting Latin-1 (or any non-UTF-8) text yields a shard line that
+    chokes Python's default UTF-8 text-mode read. The handler must
+    open with errors='surrogateescape' and process the session anyway.
+    """
+    sid = _SID
+    shard_dir = tmp_path / _DECKY / _SERVICE / "transcripts"
+    shard_dir.mkdir(parents=True, exist_ok=True)
+    shard = shard_dir / "sessions-2026-05-09.jsonl"
+    # Header (valid JSON).
+    header = b'{"sid":"' + sid.encode() + b'","hdr":{"version":2,"width":80,"height":24,"timestamp":1}}\n'
+    # Synthetic typing burst — six commands so the calibration floor fires.
+    body_lines: list[bytes] = []
+    text = "ls\rps\rid\rwhoami\rpwd\runame\r"
+    for i, c in enumerate(text):
+        body_lines.append(
+            f'{{"sid":"{sid}","t":{i * 0.05},"ch":"i","d":"{c}"}}\n'.encode()
+        )
+    # ONE output event with a raw 0xAC byte inside the data string —
+    # exactly what sessrec emits for Latin-1 content.
+    body_lines.append(
+        b'{"sid":"' + sid.encode()
+        + b'","t":5.0,"ch":"o","d":"prefix\xac\xac\xacsuffix"}\n'
+    )
+    with shard.open("wb") as f:
+        f.write(header)
+        for line in body_lines:
+            f.write(line)
+
+    repo = _make_repo()
+    n = await handle_session_ended(repo, _payload(str(shard)), None)
+    assert n > 0, "handler should persist at least one observation despite raw bytes"
 
 
 async def test_attacker_uuid_in_payload_for_filter(tmp_path) -> None:

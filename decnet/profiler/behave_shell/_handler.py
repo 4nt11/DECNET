@@ -53,9 +53,17 @@ def _events_for_sid(shard: Path, sid: str) -> list[AsciinemaEvent]:
     Mirrors the loader pattern in
     ``tests/profiler/behave_shell/test_calibration_grid.py``: skip
     headers / non-matching sids / unparseable lines silently.
+
+    ``errors="surrogateescape"`` because sessrec.c's json_escape only
+    escapes bytes < 0x20 + DEL — bytes >= 0x80 pass through raw, so
+    a real shard with Latin-1 / GB18030 / arbitrary 8-bit attacker
+    paste content is NOT valid UTF-8. surrogateescape preserves byte
+    fidelity through the JSON read; downstream isalpha() / isascii()
+    correctly filter the surrogate-half chars out of the typed-letter
+    histograms. Filed for v0.2: tighten sessrec.c to escape >= 0x80.
     """
     events: list[AsciinemaEvent] = []
-    with shard.open() as f:
+    with shard.open(encoding="utf-8", errors="surrogateescape") as f:
         for line in f:
             try:
                 rec = json.loads(line)

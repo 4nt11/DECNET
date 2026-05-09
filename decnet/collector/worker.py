@@ -313,16 +313,34 @@ class _SessionAggregator:
         # consumer skips honestly. Additive field; existing TTP consumers
         # ignore it.
         shard_path: str | None = None
+        resolve_error: str | None = None
         if sid and decky and service:
             try:
                 resolved = find_shard_with_sid(decky, service, sid)
             except (ValueError, OSError, PermissionError) as exc:
-                logger.debug(
-                    "collector: shard resolve failed for sid=%s: %s", sid, exc,
-                )
+                resolve_error = f"{type(exc).__name__}: {exc}"
                 resolved = None
             if resolved is not None:
                 shard_path = str(resolved)
+        if shard_path is None and sid:
+            # Loud-by-default — the BEHAVE-SHELL handler will skip
+            # session.ended events with shard_path=None, so a silent
+            # miss here means the profiler panel never hydrates. Surface
+            # the most common failure modes inline so the operator can
+            # diagnose without grepping decnet/artifacts/shards.py.
+            #
+            # 1. ARTIFACTS_ROOT not readable by the collector's user
+            #    (perm 0750 decnet:decnet vs. User=anti without
+            #    SupplementaryGroups=decnet).
+            # 2. service whitelist (_SERVICE_RE accepts ssh|telnet only).
+            # 3. sessrec hasn't flushed the shard for this sid yet
+            #    (collector tick won the race; next tick recovers).
+            logger.warning(
+                "collector: shard_path=None decky=%s service=%s sid=%s "
+                "(error=%s) — profiler will skip this session.ended; "
+                "check ARTIFACTS_ROOT perms / service whitelist",
+                decky, service, sid, resolve_error or "shard not found",
+            )
 
         payload: dict[str, Any] = {
             "session_id": sid or None,
