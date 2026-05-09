@@ -183,16 +183,22 @@ function App() {
     } catch { /* fall through to default */ }
     document.documentElement.setAttribute('data-accent', accent);
 
-    /* Lab theme persists in sessionStorage so a tab reload keeps the
-     * dev's chosen theme without leaking to other tabs or users. The
-     * production user-facing toggle (localStorage `decnet_theme`)
-     * arrives with the Config-page setting in a later task. */
+    /* Theme hydration order on boot:
+     *   1. localStorage `decnet_theme` — the saved user preference
+     *      from the topbar Sun/Moon toggle. Default = 'dark'.
+     *   2. sessionStorage `decnet_theme_lab` — dev-mode lab override
+     *      (set from /theme-lab). Tab-scoped, wins on top so devs
+     *      can A/B without clobbering their saved preference. */
+    let theme: 'dark' | 'light' = 'dark';
     try {
-      const labTheme = sessionStorage.getItem('decnet_theme_lab');
-      if (labTheme === 'light' || labTheme === 'dark') {
-        document.documentElement.setAttribute('data-theme', labTheme);
-      }
+      const saved = localStorage.getItem('decnet_theme');
+      if (saved === 'light' || saved === 'dark') theme = saved;
     } catch { /* ignore */ }
+    try {
+      const lab = sessionStorage.getItem('decnet_theme_lab');
+      if (lab === 'light' || lab === 'dark') theme = lab;
+    } catch { /* ignore */ }
+    document.documentElement.setAttribute('data-theme', theme);
   }, []);
 
   const handleLogin = (newToken: string) => setToken(newToken);

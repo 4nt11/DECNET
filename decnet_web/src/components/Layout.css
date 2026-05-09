@@ -212,6 +212,29 @@
   flex-shrink: 0;
 }
 
+/* Dark/light toggle in topbar.
+ * Sits between the threat indicator and the system status pill,
+ * matching the slim/quiet voice of the rest of the topbar. */
+.theme-toggle-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  padding: 0;
+  background: transparent;
+  border: 1px solid var(--border);
+  color: var(--accent);
+  cursor: pointer;
+  transition: border-color var(--dur-quick) var(--ease),
+              color var(--dur-quick) var(--ease),
+              background var(--dur-quick) var(--ease);
+}
+.theme-toggle-btn:hover {
+  background: var(--accent-tint-10);
+  border-color: var(--accent);
+}
+
 .crumbs {
   display: flex;
   align-items: center;

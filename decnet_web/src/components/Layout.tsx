@@ -4,9 +4,10 @@ import {
   Menu, X, Search, Activity, LayoutDashboard, Terminal, Settings, LogOut,
   Server, Archive, Package, Network, ChevronDown, ChevronRight, HardDrive,
   ShieldAlert, Bell, Webhook, Lock, Crosshair, Fingerprint, Zap, Cpu, Mail,
-  Target, FileText, Sliders,
+  Target, FileText, Sliders, Sun, Moon,
 } from '../icons';
 import { prefetchRoute } from '../routePrefetch';
+import { useThemeToggle } from '../lib/useThemeToggle';
 import './Layout.css';
 
 type ThreatLevel = 'nominal' | 'elevated' | 'critical';
@@ -207,6 +208,7 @@ const Layout: React.FC<LayoutProps> = ({
                 <span>THREAT: {threatLabel}</span>
               </div>
             )}
+            <ThemeToggleButton />
             <div className="topbar-status">
               <span
                 className="matrix-text"
@@ -225,6 +227,25 @@ const Layout: React.FC<LayoutProps> = ({
         </div>
       </main>
     </div>
+  );
+};
+
+/* Topbar dark/light toggle. Click coords drive the circular reveal
+ * animation in useThemeToggle so the swap visually propagates from
+ * the cursor outward — see lib/useThemeToggle.ts. */
+const ThemeToggleButton: React.FC = () => {
+  const { theme, toggle } = useThemeToggle();
+  const isLight = theme === 'light';
+  return (
+    <button
+      type="button"
+      className="theme-toggle-btn"
+      onClick={(e) => toggle({ clientX: e.clientX, clientY: e.clientY })}
+      aria-label={`Switch to ${isLight ? 'dark' : 'light'} mode`}
+      title={`Switch to ${isLight ? 'dark' : 'light'} mode`}
+    >
+      {isLight ? <Moon size={14} /> : <Sun size={14} />}
+    </button>
   );
 };
 

@@ -337,6 +337,24 @@ input:focus {
   background-size: var(--grid-size) var(--grid-size);
 }
 
+/* ── Theme transition ───────────────────────────
+ * Disables the default cross-fade so the JS-driven
+ * circle clip-path in useThemeToggle.ts owns the
+ * reveal entirely. The new theme grows from the
+ * click point; the old theme stays put and is
+ * uncovered by the expanding circle. */
+::view-transition-old(root),
+::view-transition-new(root) {
+  animation: none;
+  mix-blend-mode: normal;
+}
+::view-transition-old(root) {
+  z-index: 0;
+}
+::view-transition-new(root) {
+  z-index: 1;
+}
+
 /* ── Scrollbar ─────────────────────────────────── */
 * {
   scrollbar-width: thin;

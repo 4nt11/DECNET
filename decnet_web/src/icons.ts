@@ -92,6 +92,8 @@ export { default as Terminal } from 'lucide-react/dist/esm/icons/terminal';
 export { default as Timer } from 'lucide-react/dist/esm/icons/timer';
 export { default as Trash2 } from 'lucide-react/dist/esm/icons/trash-2';
 export { default as Upload } from 'lucide-react/dist/esm/icons/upload';
+export { default as Moon } from 'lucide-react/dist/esm/icons/moon';
+export { default as Sun } from 'lucide-react/dist/esm/icons/sun';
 export { default as UploadCloud } from 'lucide-react/dist/esm/icons/cloud-upload';
 export { default as UserPlus } from 'lucide-react/dist/esm/icons/user-plus';
 export { default as Users } from 'lucide-react/dist/esm/icons/users';
