@@ -248,6 +248,21 @@ async def run_ttp_worker_loop(
     """
     if tagger is None:
         tagger = get_tagger()
+
+    # Fail closed at boot if any technique/tactic the worker can emit
+    # is missing from the loaded ATT&CK STIX bundle. The bundle is the
+    # canonical source of truth (see decnet/ttp/attack_stix.py) — drift
+    # between the pinned version and what the lifters reference would
+    # silently mistag thousands of events. We run this once per worker
+    # process; the underlying bundle load is itself memoised.
+    from decnet.clustering.ukc import validate_against_attack_bundle as _validate_ukc
+    from decnet.ttp.impl.intel_lifter import (
+        validate_against_attack_bundle as _validate_intel,
+    )
+
+    _validate_intel()
+    _validate_ukc()
+
     log.info(
         "ttp worker started tagger=%s poll_interval_secs=%s topics=%d",
         tagger.name, poll_interval_secs, len(_TOPICS),

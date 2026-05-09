@@ -375,7 +375,40 @@ def _emit_filtered(
     return out
 
 
-__all__ = ["IntelLifter"]
+def all_emitted_technique_ids() -> frozenset[str]:
+    """Every technique ID this lifter could emit, drawn from all four provider tables.
+
+    Used by :func:`validate_against_attack_bundle` (and
+    :mod:`tests.ttp.test_attack_catalog`-adjacent tests) to assert that
+    every provider-driven emission resolves in the loaded ATT&CK STIX
+    bundle. Includes the bare-classification emissions in
+    ``_greynoise_decisions`` and the unconditional emissions in
+    ``_feodo_decisions`` — those don't appear in the lookup tables
+    above because they're decision-flow constants, not table entries.
+    """
+    ids: set[str] = set()
+    for techs in _ABUSEIPDB_CATEGORY_TO_TECHNIQUES.values():
+        ids.update(techs)
+    for techs in _GREYNOISE_TAG_TO_TECHNIQUES.values():
+        ids.update(techs)
+    for techs in _THREATFOX_THREAT_TYPE_TO_TECHNIQUES.values():
+        ids.update(techs)
+    # Decision-flow constants (see _greynoise_decisions, _feodo_decisions).
+    ids.update({"T1071", "T1595", "T1588"})
+    return frozenset(ids)
+
+
+def validate_against_attack_bundle() -> None:
+    """Assert every technique ID this lifter could emit resolves in the loaded ATT&CK STIX bundle."""
+    from decnet.ttp.attack_stix import assert_known_technique_ids
+
+    assert_known_technique_ids(
+        list(all_emitted_technique_ids()),
+        source="decnet.ttp.impl.intel_lifter",
+    )
+
+
+__all__ = ["IntelLifter", "all_emitted_technique_ids", "validate_against_attack_bundle"]
 
 
 # Suppress unused-import lint; emit_tags is exposed for parity with the

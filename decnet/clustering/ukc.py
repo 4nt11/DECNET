@@ -15,6 +15,7 @@ emits no events for unobservable phases.
 from __future__ import annotations
 
 from enum import Enum
+from typing import Final
 
 
 class UKCPhase(str, Enum):
@@ -136,6 +137,31 @@ ATTACK_TACTIC_TO_UKC: dict[str, UKCPhase] = {
     "TA0105": UKCPhase.IMPACT,                # ICS: Impact
     "TA0106": UKCPhase.IMPACT,                # ICS: Impair Process Control
 }
+
+
+# ICS tactics live in a separate STIX bundle (mitre/ics-attack) that
+# DECNET does not currently load. They're exempt from the
+# enterprise-bundle validation in :func:`validate_against_attack_bundle`
+# so a startup check doesn't false-fail the moment ICS rules are wired.
+_NON_ENTERPRISE_TACTICS: Final[frozenset[str]] = frozenset(
+    {"TA0100", "TA0102", "TA0105", "TA0106"}
+)
+
+
+def validate_against_attack_bundle() -> None:
+    """Assert every enterprise tactic ID in :data:`ATTACK_TACTIC_TO_UKC` resolves in the loaded STIX bundle.
+
+    Called at startup (see :mod:`decnet.ttp.impl.rule_engine`) so a
+    typoed tactic ID surfaces as a fail-closed boot, not a silent
+    miss in campaign rollups.
+    """
+    from decnet.ttp.attack_stix import assert_known_tactic_ids
+
+    assert_known_tactic_ids(
+        list(ATTACK_TACTIC_TO_UKC.keys()),
+        source="decnet.clustering.ukc.ATTACK_TACTIC_TO_UKC",
+        exempt=set(_NON_ENTERPRISE_TACTICS),
+    )
 
 
 def tactic_to_ukc_phase(tactic: str) -> UKCPhase | None:
