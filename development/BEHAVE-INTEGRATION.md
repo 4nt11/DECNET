@@ -676,5 +676,57 @@ this integration; explicitly listed under "Out of scope" above.
 
 ---
 
+## Phase 6 completion log
+
+Phase 6 ships the smoke harness in `scripts/behave_shell/`.
+
+* **`replay_calibration.py`** — Python tool that drives the
+  production handler
+  (`decnet.profiler.behave_shell._handler.handle_session_ended`)
+  against one calibration shard. Mints a temp SQLite repo + an
+  Attacker row per session, captures bus emissions in-process, and
+  asserts every session in the shard produces ≥ 1 observation. Exits
+  non-zero on any session that emits zero observations.
+* **`smoke.sh`** — bash entry point. Auto-discovers the calibration
+  dir at `../BEHAVE/prototype_extractors/shell`, replays all five
+  classes, and prints a per-class summary. Auto-activates the `.311`
+  venv if present; forces `DECNET_DB_TYPE=sqlite` so the smoke
+  doesn't depend on a running MySQL.
+* **`README.md`** — runbook covering both halves of Phase 6:
+  the offline replay (CI-suitable) and the **manual live decky
+  round-trip** (one SSH session per calibration class against a
+  deployed `smoke-decky`, with expected dominant primitives, the SQL
+  verification query, and the AttackerDetail panel check).
+
+**Offline replay results on the 2026-05-02 corpus:**
+
+| Class      | Sessions | Observations | Distinct primitives |
+|------------|---------:|-------------:|--------------------:|
+| HUMAN      |        1 |           34 |                  34 |
+| YOU-sim    |        2 |           59 |                  34 |
+| LW-sim     |        5 |          136 |                  34 |
+| CLAUDE-FF  |        3 |           84 |                  34 |
+| CLAUDE-CL  |        4 |          111 |                  34 |
+| **Total**  |   **15** |      **424** |                  — |
+
+`smoke: OK — all classes emit observations end-to-end`. Every session
+in every class persists 27+ Tier-A primitives (the per-shard hard
+gate) plus the conditional sets where present.
+
+**The live-decky run is intentionally NOT scripted** — Phase 6 of
+the integration doc explicitly calls for a manual SSH session per
+class so the operator confirms the bus / collector / disk-reach
+plumbing under real PTY conditions. The README pins the procedure +
+pass criteria + per-class expected primitives.
+
+**v0 tag gating.** The proper `0.1.0` tag (drop `-pre` from
+`decnet/profiler/behave_shell/__init__.py`) lands once the operator
+has run the manual round-trip across all five classes and confirmed
+the AttackerDetail panel hydrates + live-updates as expected. That
+commit is intentionally separate from this Phase 6 commit so the
+v0-tag commit message can cite the live-smoke walkthrough.
+
+---
+
 **Owner:** ANTI.
 **Implementation gate:** this doc reviewed → Phase 1 starts.
