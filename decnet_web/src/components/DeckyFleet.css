@@ -319,7 +319,7 @@
   flex-direction: column;
   overflow: hidden;
 }
-.modal.violet { border-color: var(--violet); box-shadow: 0 0 30px rgba(238, 130, 238, 0.25); }
+.modal.violet { border-color: var(--violet); box-shadow: 0 0 30px var(--violet); }
 .modal.wide { width: 880px; }
 .modal-head {
   padding: 16px 22px;

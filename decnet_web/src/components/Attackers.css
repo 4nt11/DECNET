@@ -212,7 +212,7 @@
   animation: decnet-pulse 1s infinite alternate;
 }
 .attackers-root .activity-chip.passive {
-  border: 1px solid rgba(238, 130, 238, 0.5);
+  border: 1px solid var(--violet);
   color: var(--violet);
   background: var(--violet-tint-10);
 }

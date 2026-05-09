@@ -60,7 +60,7 @@
 
 /* Table row interactivity */
 .bounty-root .logs-table tr.clickable { cursor: pointer; }
-.bounty-root .logs-table tr.clickable:hover { background: rgba(238, 130, 238, 0.04); }
+.bounty-root .logs-table tr.clickable:hover { background: var(--violet-tint-10); }
 .bounty-root .logs-table td .attacker-link {
   text-decoration: underline dotted;
   cursor: pointer;
@@ -131,7 +131,7 @@
   height: 100%;
   background: var(--bg);
   border-left: 1px solid var(--violet);
-  box-shadow: -12px 0 40px rgba(238, 130, 238, 0.1);
+  box-shadow: -12px 0 40px var(--violet-tint-10);
   overflow-y: auto;
   display: flex;
   flex-direction: column;
@@ -211,7 +211,7 @@
   margin: 0;
   overflow-x: auto;
 }
-.bounty-drawer .code-block .ck { color: rgba(238, 130, 238, 0.9); }
+.bounty-drawer .code-block .ck { color: var(--violet); }
 .bounty-drawer .code-block .cs { color: var(--matrix); }
 
 .bounty-drawer .bd-actions {

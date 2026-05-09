@@ -501,7 +501,7 @@
   font-size: 0.65rem;
   padding: 2px 8px;
   border: 1px solid var(--accent-color);
-  background: rgba(238, 130, 238, 0.1);
+  background: var(--violet-tint-10);
   color: var(--accent-color);
   letter-spacing: 2px;
 }

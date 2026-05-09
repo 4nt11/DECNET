@@ -282,7 +282,7 @@
 .wh-secret-modal {
   background: var(--secondary-color);
   border: 1px solid var(--violet);
-  box-shadow: 0 0 24px rgba(238, 130, 238, 0.4);
+  box-shadow: 0 0 24px var(--violet);
   padding: 28px;
   max-width: 560px;
   width: 100%;

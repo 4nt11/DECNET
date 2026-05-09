@@ -198,7 +198,7 @@
 
 /* Live-prepended row tint — fades back to neutral after a moment via opacity. */
 .orchestrator-root .logs-table tr.fresh td {
-  background: rgba(238, 130, 238, 0.05);
+  background: var(--violet-tint-10);
 }
 
 /* Kind chip */
@@ -249,7 +249,7 @@
 /* ── Row interactivity ─────────────────────────────────── */
 .orchestrator-root .logs-table tr.clickable { cursor: pointer; }
 .orchestrator-root .logs-table tr.clickable:hover {
-  background: rgba(238, 130, 238, 0.04);
+  background: var(--violet-tint-10);
 }
 
 /* ── Inspector drawer ──────────────────────────────────── */
@@ -269,7 +269,7 @@
   height: 100%;
   background: var(--bg);
   border-left: 1px solid var(--violet);
-  box-shadow: -12px 0 40px rgba(238, 130, 238, 0.1);
+  box-shadow: -12px 0 40px var(--violet-tint-10);
   overflow-y: auto;
   display: flex;
   flex-direction: column;

@@ -2009,7 +2009,7 @@ const AttackerDetail: React.FC = () => {
               const isActive = serviceFilter === svc;
               const interacted = attacker.service_activity?.interacted.includes(svc) ?? false;
               const baseStyle: React.CSSProperties = interacted
-                ? { borderColor: 'var(--accent-color)', color: 'var(--accent-color)', background: 'rgba(238, 130, 238, 0.08)' }
+                ? { borderColor: 'var(--accent-color)', color: 'var(--accent-color)', background: 'var(--violet-tint-10)' }
                 : { opacity: 0.55 };
               const activeStyle: React.CSSProperties = isActive
                 ? interacted

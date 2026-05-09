@@ -19,7 +19,7 @@
   max-height: 90vh;
   background: var(--panel);
   border: 1px solid var(--violet);
-  box-shadow: 0 0 30px rgba(238, 130, 238, 0.25);
+  box-shadow: 0 0 30px var(--violet);
   display: flex;
   flex-direction: column;
   overflow: hidden;
@@ -113,7 +113,7 @@
 .ctw-card:hover { border-color: var(--violet); }
 .ctw-card.selected {
   border-color: var(--violet);
-  background: var(--violet-tint-10, rgba(238, 130, 238, 0.1));
+  background: var(--violet-tint-10, var(--violet-tint-10));
 }
 .ctw-card.disabled {
   opacity: 0.45;
@@ -183,7 +183,7 @@
   font-size: 0.7rem;
   line-height: 1.5;
   letter-spacing: 0.3px;
-  background: var(--violet-tint-10, rgba(238, 130, 238, 0.08));
+  background: var(--violet-tint-10, var(--violet-tint-10));
 }
 .ctw-note strong {
   color: var(--violet);

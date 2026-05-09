@@ -20,5 +20,5 @@
 
 .modal.modal-drawer-right.violet {
   border-left-color: var(--violet);
-  box-shadow: -8px 0 30px rgba(238, 130, 238, 0.25);
+  box-shadow: -8px 0 30px var(--violet);
 }
