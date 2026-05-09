@@ -34,6 +34,7 @@ import hashlib
 import logging
 import os
 import sys
+from dataclasses import dataclass
 from functools import lru_cache
 from pathlib import Path
 from threading import Lock
@@ -347,6 +348,100 @@ def kill_chain_phases(technique_id: str) -> list[str]:
     ]
 
 
+def mitre_url_for(technique_id: str | None) -> str | None:
+    """Return the canonical attack.mitre.org URL for *technique_id*, or None.
+
+    Pulled from ``external_references[source_name="mitre-attack"].url``
+    on the cached attack-pattern. Reuses the lru-cached
+    :func:`_attack_pattern_by_id` so per-call cost is constant after
+    first hit. ``None`` for unknown / missing IDs — callers must
+    handle nullability (the column is ``Optional`` everywhere it
+    surfaces).
+    """
+    if not technique_id:
+        return None
+    obj = _attack_pattern_by_id(technique_id)
+    if obj is None:
+        return None
+    for ref in obj.get("external_references", []):
+        if ref.get("source_name") == "mitre-attack":
+            url = ref.get("url")
+            return url if isinstance(url, str) else None
+    return None
+
+
+@dataclass(frozen=True)
+class GroupRef:
+    """A single MITRE ATT&CK ``intrusion-set`` (group) reference.
+
+    Returned by :func:`groups_using_technique` to surface "groups
+    MITRE has documented as using this technique". Read-only —
+    explicitly *not* an attribution claim about a DECNET attacker.
+    """
+
+    group_id: str  # e.g. "G0001"
+    name: str
+    aliases: tuple[str, ...]
+    mitre_url: str | None  # https://attack.mitre.org/groups/G0001
+
+
+def _group_external_id(obj: dict) -> str | None:
+    for ref in obj.get("external_references", []):
+        if ref.get("source_name") == "mitre-attack":
+            ext = ref.get("external_id")
+            return ext if isinstance(ext, str) else None
+    return None
+
+
+def _group_mitre_url(obj: dict) -> str | None:
+    for ref in obj.get("external_references", []):
+        if ref.get("source_name") == "mitre-attack":
+            url = ref.get("url")
+            return url if isinstance(url, str) else None
+    return None
+
+
+@lru_cache(maxsize=4096)
+def groups_using_technique(technique_id: str) -> tuple[GroupRef, ...]:
+    """Groups MITRE has documented as using *technique_id* — exact-match, deterministic order.
+
+    Sub-techniques are queried directly and do **not** union their
+    parent's groups (matching ATT&CK Navigator semantics). Callers
+    that want a broader view can resolve the parent themselves via
+    :func:`subtechnique_parent_name`.
+
+    Returns an empty tuple if the technique is unknown or has no
+    ``uses`` relationships in the loaded bundle. Groups are sorted
+    by group_id ascending so JSON responses are stable across runs.
+    """
+    if not technique_id:
+        return ()
+    obj = _attack_pattern_by_id(technique_id)
+    if obj is None:
+        return ()
+    raw = _load().get_groups_using_technique(obj["id"])
+    refs: list[GroupRef] = []
+    for entry in raw:
+        # mitreattack-python returns [{"object": IntrusionSet, "relationships": [...]}]
+        sdo = entry.get("object") if isinstance(entry, dict) else entry
+        if sdo is None:
+            continue
+        gid = _group_external_id(sdo)
+        if gid is None:
+            continue
+        aliases = sdo.get("aliases") or ()
+        refs.append(
+            GroupRef(
+                group_id=gid,
+                name=sdo.get("name", gid),
+                aliases=tuple(a for a in aliases if isinstance(a, str)),
+                mitre_url=_group_mitre_url(sdo),
+            )
+        )
+    refs.sort(key=lambda g: g.group_id)
+    return tuple(refs)
+
+
 def technique_exists(technique_id: str) -> bool:
     return _attack_pattern_by_id(technique_id) is not None
 
@@ -463,8 +558,11 @@ __all__ = [
     "assert_known_technique_ids",
     "is_subtechnique",
     "kill_chain_phases",
+    "GroupRef",
+    "groups_using_technique",
     "loaded_bundle_path",
     "loaded_license_path",
+    "mitre_url_for",
     "resolve_bundle_path",
     "subtechnique_parent_name",
     "tactic_exists",

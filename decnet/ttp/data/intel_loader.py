@@ -145,13 +145,13 @@ class ProviderMapping:
 
 
 def _mitre_url_for(technique_id: str) -> str | None:
-    obj = attack_stix._attack_pattern_by_id(technique_id)
-    if obj is None:
-        return None
-    for ref in obj.get("external_references", []):
-        if ref.get("source_name") == "mitre-attack":
-            return ref.get("url")
-    return None
+    """Compatibility shim — collapsed to a re-export of :func:`attack_stix.mitre_url_for`.
+
+    Public callers should import :func:`decnet.ttp.attack_stix.mitre_url_for`
+    directly. Kept here so the in-tree loader stays self-contained
+    when someone reads it cold.
+    """
+    return attack_stix.mitre_url_for(technique_id)
 
 
 def _data_path(provider: str) -> Path:
