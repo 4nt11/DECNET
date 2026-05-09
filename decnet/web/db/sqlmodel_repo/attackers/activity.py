@@ -53,7 +53,7 @@ class AttackerActivityMixin(_MixinBase):
             seen: set[str] = set()
             out: list[str] = []
             for entry in commands:
-                text = str(entry.get("command_text", "")).strip()
+                text = str(entry.get("command_text") or entry.get("command") or "").strip()
                 if text and text not in seen:
                     seen.add(text)
                     out.append(text)

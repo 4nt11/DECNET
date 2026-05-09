@@ -323,9 +323,9 @@ def build_fleet_bundle(
             except Exception:
                 raw_cmds = []
         cmds = [
-            str(e.get("command_text", "")).strip()
+            str(e.get("command_text") or e.get("command") or "").strip()
             for e in raw_cmds
-            if isinstance(e, dict) and e.get("command_text")
+            if isinstance(e, dict) and (e.get("command_text") or e.get("command"))
         ]
 
         intel = row.get("threat_intel")
