@@ -15,14 +15,14 @@ export default defineConfig({
       include: ['src/**/*.{ts,tsx}'],
       exclude: ['src/**/*.d.ts', 'src/test/**', 'src/main.tsx'],
       // Baseline floors. Each refactor PR raises these; never lower.
-      // Phase 3 (CanaryTokens split): page shell down from 1,334 to 210
-      // LOC; hook + 3 modals + 3 list views + ui/types/helpers, 33 new
-      // tests. Suite: 28 files, 131 tests, 14.51% lines / 11.43% branches.
+      // Phase 4 (Config split): page shell down from 989 to 131 LOC;
+      // hook + WorkersPanel + 4 tab files, 25 new tests. Suite:
+      // 34 files, 156 tests, 17.73% lines / 13.85% branches.
       thresholds: {
-        lines: 14,
-        functions: 13,
-        branches: 11,
-        statements: 13,
+        lines: 17,
+        functions: 15,
+        branches: 13,
+        statements: 16,
       },
     },
   },
