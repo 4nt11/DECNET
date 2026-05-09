@@ -15,6 +15,7 @@ from .fleet.api_deploy_deckies import router as deploy_deckies_router
 from .stream.api_stream_events import router as stream_router
 from .attackers.api_get_attackers import router as attackers_router
 from .attackers.api_export_attackers import router as attackers_export_router
+from .attackers.api_events import router as attacker_events_router
 from .attackers.api_get_attacker_detail import router as attacker_detail_router
 from .attackers.api_get_attacker_commands import router as attacker_commands_router
 from .attackers.api_get_attacker_artifacts import router as attacker_artifacts_router
@@ -103,6 +104,7 @@ api_router.include_router(deploy_deckies_router)
 api_router.include_router(attackers_router)
 api_router.include_router(attackers_export_router)
 api_router.include_router(attacker_detail_router)
+api_router.include_router(attacker_events_router)
 api_router.include_router(attacker_commands_router)
 api_router.include_router(attacker_artifacts_router)
 api_router.include_router(attacker_transcripts_router)
