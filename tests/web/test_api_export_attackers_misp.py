@@ -51,6 +51,7 @@ def _mock_repo(*, rows=None, ttp_by_attacker=None):
     m = type("M", (), {})()
     m.get_all_attackers_for_export = AsyncMock(return_value=rows or [])
     m.get_all_ttp_rollups_for_export = AsyncMock(return_value=ttp_by_attacker or {})
+    m.get_all_observations_for_export = AsyncMock(return_value={})
     return m
 
 

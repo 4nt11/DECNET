@@ -47,6 +47,7 @@ def build_attacker_misp_event(
     artifacts: list[dict[str, Any]],
     smtp_targets: list[dict[str, Any]],
     commands: list[str] | None = None,
+    observations: list[dict[str, Any]] | None = None,
 ) -> dict[str, Any]:
     """Return a MISP event dict for *attacker*.
 
@@ -63,6 +64,7 @@ def build_attacker_misp_event(
         artifacts=artifacts,
         smtp_targets=smtp_targets,
         commands=commands,
+        observations=observations,
     )
     return _parse_bundle(bundle)
 
@@ -70,6 +72,7 @@ def build_attacker_misp_event(
 def build_fleet_misp_collection(
     rows: list[dict[str, Any]],
     ttp_by_attacker: dict[str, list[dict[str, Any]]],
+    observations_by_attacker: dict[str, list[dict[str, Any]]] | None = None,
 ) -> dict[str, Any]:
     """Return a MISP collection dict with one event per attacker in *rows*.
 
@@ -80,6 +83,7 @@ def build_fleet_misp_collection(
     attacker always has at least an IP) are silently omitted.
     """
     events: list[dict[str, Any]] = []
+    obs_map = observations_by_attacker or {}
     for row in rows:
         raw_cmds = row.get("commands") or []
         if isinstance(raw_cmds, str):
@@ -102,6 +106,7 @@ def build_fleet_misp_collection(
             artifacts=[],
             smtp_targets=[],
             commands=cmds,
+            observations=obs_map.get(row["uuid"]),
         )
         event = _parse_bundle(bundle)
         if event:

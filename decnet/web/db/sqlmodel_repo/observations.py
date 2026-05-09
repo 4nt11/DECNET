@@ -29,6 +29,21 @@ from decnet.web.db.models import Attacker, ObservationRow
 from decnet.web.db.sqlmodel_repo._helpers import _MixinBase
 
 
+def _to_envelope(row: "ObservationRow") -> dict:
+    """Map an ObservationRow to a BEHAVE envelope dict for STIX export."""
+    d: dict = {
+        "primitive": row.primitive,
+        "value": row.value,
+        "confidence": row.confidence,
+        "window": {"start_ts": row.window_start_ts, "end_ts": row.window_end_ts},
+        "source": row.source,
+        "evidence_ref": row.evidence_ref,
+    }
+    if row.identity_ref is not None:
+        d["identity_ref"] = row.identity_ref
+    return d
+
+
 class ObservationsMixin(_MixinBase):
     """Mixin: methods composed onto :class:`SQLModelRepository`."""
 
@@ -208,6 +223,36 @@ class ObservationsMixin(_MixinBase):
                 .limit(1)
             )
             return (await session.execute(stmt)).scalar_one_or_none() is not None
+
+    async def list_observations_by_attacker(
+        self, attacker_uuid: str,
+    ) -> list[dict[str, Any]]:
+        """All observations for *attacker_uuid*, ordered by ``window_end_ts``
+        ASC, shaped as BEHAVE envelope dicts.
+        """
+        async with self._session() as session:
+            stmt = (
+                select(ObservationRow)
+                .where(ObservationRow.attacker_uuid == attacker_uuid)
+                .order_by(ObservationRow.window_end_ts)
+            )
+            rows = (await session.execute(stmt)).scalars().all()
+            return [_to_envelope(row) for row in rows]
+
+    async def get_all_observations_for_export(
+        self,
+    ) -> dict[str, list[dict[str, Any]]]:
+        """Return ``{attacker_uuid: [envelope, ...]}`` for all attackers."""
+        async with self._session() as session:
+            stmt = (
+                select(ObservationRow)
+                .order_by(ObservationRow.attacker_uuid, ObservationRow.window_end_ts)
+            )
+            rows = (await session.execute(stmt)).scalars().all()
+            result: dict[str, list[dict[str, Any]]] = {}
+            for row in rows:
+                result.setdefault(row.attacker_uuid, []).append(_to_envelope(row))
+            return result
 
     # Order desc(ts) reserved as the most-recent-first listing if a
     # paginated UI surface lands later. Not exposed today; named here

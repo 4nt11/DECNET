@@ -365,6 +365,35 @@ class BaseRepository(ABC):
         """
         raise NotImplementedError
 
+    @abstractmethod
+    async def list_observations_by_attacker(
+        self, attacker_uuid: str,
+    ) -> list[dict[str, Any]]:
+        """All BEHAVE-SHELL observations for *attacker_uuid*, ordered by
+        ``window_end_ts`` ASC, shaped as BEHAVE envelope dicts.
+
+        Each dict carries: ``primitive``, ``value``, ``confidence``,
+        ``window`` (``{start_ts, end_ts}``), ``source``, ``evidence_ref``,
+        and (when present) ``identity_ref``.
+
+        Empty list when the attacker has no observations. Used by the STIX
+        export to populate ``XDecnetBehaveProfile.observations``.
+        """
+        raise NotImplementedError
+
+    @abstractmethod
+    async def get_all_observations_for_export(
+        self,
+    ) -> dict[str, list[dict[str, Any]]]:
+        """Return ``{attacker_uuid: [observation_envelope, ...]}`` for all
+        attackers that have BEHAVE observations.
+
+        Used by the fleet STIX export to attach per-attacker observation
+        streams without N+1 queries. Same envelope shape as
+        ``list_observations_by_attacker``.
+        """
+        raise NotImplementedError
+
     async def upsert_observed_attachment(
         self,
         *,

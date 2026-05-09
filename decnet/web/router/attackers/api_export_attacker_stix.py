@@ -69,6 +69,7 @@ async def api_export_attacker_stix(
         repo.get_attacker_artifacts(uuid),
         repo.list_smtp_targets(uuid),
         repo.list_attacker_commands_deduped(uuid),
+        repo.list_observations_by_attacker(uuid),
     )
     behavior = cast(dict[str, Any] | None, results[0])
     identity = cast(dict[str, Any] | None, results[1])
@@ -78,6 +79,7 @@ async def api_export_attacker_stix(
     artifacts = cast(list[dict[str, Any]], results[5])
     smtp_targets = cast(list[dict[str, Any]], results[6])
     commands = cast(list[str], results[7])
+    observations = cast(list[dict[str, Any]], results[8])
 
     bundle = build_attacker_bundle(
         attacker=attacker,
@@ -92,6 +94,7 @@ async def api_export_attacker_stix(
         artifacts=artifacts,
         smtp_targets=smtp_targets,
         commands=commands,
+        observations=observations,
     )
     return Response(
         content=bundle.serialize(pretty=True, indent=2),

@@ -43,13 +43,15 @@ async def api_export_attackers_misp(
     user: dict[str, Any] = Depends(require_viewer),
 ) -> Response:
     """Download a MISP collection JSON covering every observed attacker."""
-    rows, ttp_by_attacker = await asyncio.gather(
+    rows, ttp_by_attacker, obs_by_attacker = await asyncio.gather(
         repo.get_all_attackers_for_export(),
         repo.get_all_ttp_rollups_for_export(),
+        repo.get_all_observations_for_export(),
     )
     collection = build_fleet_misp_collection(
         rows=rows,
         ttp_by_attacker=ttp_by_attacker,
+        observations_by_attacker=obs_by_attacker,
     )
     ts = datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%SZ")
     return Response(

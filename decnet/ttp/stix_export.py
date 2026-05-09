@@ -23,6 +23,7 @@ public ATT&CK bundle by any consumer that already has it.
 """
 from __future__ import annotations
 
+import base64
 import json
 import uuid as _uuid
 from datetime import datetime, timezone
@@ -31,6 +32,12 @@ from typing import Any
 import stix2
 
 from decnet.ttp import attack_stix
+from decnet.ttp.stix_custom import (
+    ACTOR_FINGERPRINT_EXT_ID,
+    FINGERPRINT_EXT_DEF,
+    DecnetActorFingerprintExt,
+    XDecnetBehaveProfile,
+)
 
 # Deterministic DECNET org identity ID — stable across all bundles this
 # instance produces. Consumers can correlate across exports.
@@ -57,15 +64,32 @@ def _decnet_org() -> stix2.Identity:
     )
 
 
+def _parse_json_field(v: Any) -> Any:
+    """JSON-decode strings; return non-strings unchanged."""
+    if isinstance(v, str):
+        try:
+            return json.loads(v)
+        except Exception:
+            return v
+    return v
+
+
 def _threat_actor(
     attacker: dict[str, Any],
     identity: dict[str, Any] | None,
     created_by: str,
-) -> stix2.ThreatActor:
+    behavior: dict[str, Any] | None = None,
+    observations: list[dict[str, Any]] | None = None,
+) -> tuple[stix2.ThreatActor, "XDecnetBehaveProfile | None"]:
+    """Build a ThreatActor SDO plus an optional XDecnetBehaveProfile SDO.
+
+    Returns ``(threat_actor, behave_profile_or_None)``.
+    """
     if identity:
         name = f"DECNET-identity-{identity['uuid'][:8]}"
     else:
         name = f"DECNET-attacker-{attacker['uuid'][:8]}"
+
     kwargs: dict[str, Any] = dict(
         id=f"threat-actor--{_uuid.uuid5(_NS, attacker['uuid'])}",
         name=name,
@@ -73,20 +97,84 @@ def _threat_actor(
         created_by_ref=created_by,
         allow_custom=True,
     )
+
+    # Tier 1 — stable scalars
     if attacker.get("country_code"):
         kwargs["x_decnet_country_code"] = attacker["country_code"]
     if attacker.get("asn"):
         kwargs["x_decnet_asn"] = attacker["asn"]
     if attacker.get("as_name"):
         kwargs["x_decnet_as_name"] = attacker["as_name"]
+
+    # Tier 2 — DecnetActorFingerprintExt (network_behavior + protocol_fingerprints)
+    network_behavior: dict[str, Any] = {}
+    protocol_fingerprints: dict[str, Any] = {}
+
+    if behavior:
+        for key in ("os_guess", "hop_distance", "retransmit_count",
+                    "behavior_class", "beacon_interval_s", "beacon_jitter_pct"):
+            v = behavior.get(key)
+            if v is not None:
+                network_behavior[key] = v
+        for key in ("tcp_fingerprint", "timing_stats", "phase_sequence", "tool_guesses"):
+            v = _parse_json_field(behavior.get(key))
+            if v:
+                network_behavior[key] = v
+        for key in ("kex_order_raw", "ssh_client_banners"):
+            v = _parse_json_field(behavior.get(key))
+            if v:
+                protocol_fingerprints[key] = v
+
     if identity:
-        if identity.get("ja3_hashes"):
-            kwargs["x_decnet_ja3_hashes"] = identity["ja3_hashes"]
-        if identity.get("hassh_hashes"):
-            kwargs["x_decnet_hassh_hashes"] = identity["hassh_hashes"]
+        for key in ("ja3_hashes", "hassh_hashes", "tls_cert_sha256", "payload_simhashes"):
+            v = _parse_json_field(identity.get(key))
+            if v:
+                protocol_fingerprints[key] = v
         if identity.get("c2_endpoints"):
-            kwargs["x_decnet_c2_endpoints"] = identity["c2_endpoints"]
-    return stix2.ThreatActor(**kwargs)
+            protocol_fingerprints["c2_endpoints"] = _parse_json_field(
+                identity["c2_endpoints"]
+            )
+
+    if network_behavior or protocol_fingerprints:
+        ext_kwargs: dict[str, Any] = {"extension_type": "property-extension"}
+        if network_behavior:
+            ext_kwargs["network_behavior"] = network_behavior
+        if protocol_fingerprints:
+            ext_kwargs["protocol_fingerprints"] = protocol_fingerprints
+        kwargs["extensions"] = {
+            ACTOR_FINGERPRINT_EXT_ID: DecnetActorFingerprintExt(**ext_kwargs),
+        }
+
+    # Tier 3 — XDecnetBehaveProfile (BEHAVE observations)
+    behave_profile: XDecnetBehaveProfile | None = None
+    kd_hash: str | None = None
+    if identity:
+        raw_kd = identity.get("kd_digraph_simhash")
+        if raw_kd is not None:
+            if isinstance(raw_kd, (bytes, bytearray)):
+                kd_hash = raw_kd.hex()
+            elif isinstance(raw_kd, str) and raw_kd:
+                try:
+                    kd_hash = base64.b64decode(raw_kd).hex()
+                except Exception:
+                    kd_hash = raw_kd
+
+    obs_list = observations or []
+    if obs_list or kd_hash is not None:
+        from decnet_behave_shell.spec.envelope import OBSERVATION_SCHEMA_VERSION
+        profile_id = (
+            f"x-decnet-behave-profile--{_uuid.uuid5(_NS, attacker['uuid'])}"
+        )
+        behave_profile = XDecnetBehaveProfile(  # type: ignore[call-arg]
+            id=profile_id,
+            created_by_ref=created_by,
+            schema_version=OBSERVATION_SCHEMA_VERSION,
+            kd_digraph_simhash=kd_hash,
+            observations=obs_list,
+        )
+        kwargs["x_decnet_behave_profile_ref"] = profile_id
+
+    return stix2.ThreatActor(**kwargs), behave_profile
 
 
 def _attack_pattern_sdo(technique_id: str, created_by: str) -> stix2.AttackPattern | None:
@@ -157,6 +245,7 @@ def build_attacker_bundle(
     artifacts: list[dict[str, Any]],
     smtp_targets: list[dict[str, Any]],
     commands: list[str] | None = None,
+    observations: list[dict[str, Any]] | None = None,
 ) -> stix2.Bundle:
     """Assemble a STIX 2.1 Bundle for *attacker*.
 
@@ -185,9 +274,16 @@ def build_attacker_bundle(
     )
     objs.append(ip_obs)
 
-    # ── Threat actor ─────────────────────────────────────────────────
-    ta = _threat_actor(attacker, identity, org.id)
+    # ── Threat actor + BEHAVE profile ────────────────────────────────
+    ta, behave_profile = _threat_actor(
+        attacker, identity, org.id,
+        behavior=behavior,
+        observations=observations,
+    )
     objs.append(ta)
+    if behave_profile is not None:
+        objs.append(behave_profile)
+        objs.append(FINGERPRINT_EXT_DEF)
 
     # ── ATT&CK — attack-patterns + uses relationships + sightings ───
     # Build per-technique once; sightings reference the same AP STIX ID.
@@ -315,6 +411,7 @@ def build_attacker_bundle(
 def build_fleet_bundle(
     rows: list[dict[str, Any]],
     ttp_by_attacker: dict[str, list[dict[str, Any]]],
+    observations_by_attacker: dict[str, list[dict[str, Any]]] | None = None,
 ) -> stix2.Bundle:
     """Assemble a STIX 2.1 Bundle covering all attackers in *rows*.
 
@@ -324,6 +421,7 @@ def build_fleet_bundle(
     (too verbose; use the per-attacker endpoint for full fidelity).
     """
     objs_by_id: dict[str, Any] = {}
+    obs_map = observations_by_attacker or {}
 
     for row in rows:
         raw_cmds = row.get("commands") or []
@@ -349,6 +447,7 @@ def build_fleet_bundle(
             artifacts=[],
             smtp_targets=[],
             commands=cmds,
+            observations=obs_map.get(row["uuid"]),
         )
         for obj in bundle.objects:
             objs_by_id[obj.id] = obj

@@ -111,6 +111,10 @@ class DummyRepo(BaseRepository):
         await super().get_log_histogram(*a, **kw); return []
     async def has_observations_for_evidence(self, evidence_ref):
         await super().has_observations_for_evidence(evidence_ref); return False
+    async def list_observations_by_attacker(self, attacker_uuid):
+        await super().list_observations_by_attacker(attacker_uuid); return []
+    async def get_all_observations_for_export(self):
+        await super().get_all_observations_for_export(); return {}
     async def get_attacker_uuid_by_ip(self, ip):
         await super().get_attacker_uuid_by_ip(ip); return None
     # TTP rollup surface (TTP_TAGGING.md)
@@ -253,6 +257,10 @@ async def test_base_repo_coverage():
     await dr.get_log_histogram()
     with pytest.raises(NotImplementedError):
         await dr.has_observations_for_evidence("shard:x#1")
+    with pytest.raises(NotImplementedError):
+        await dr.list_observations_by_attacker("a")
+    with pytest.raises(NotImplementedError):
+        await dr.get_all_observations_for_export()
     with pytest.raises(NotImplementedError):
         await dr.get_attacker_uuid_by_ip("1.1.1.1")
     with pytest.raises(NotImplementedError):
