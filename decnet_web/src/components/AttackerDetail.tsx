@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
-import { Activity, AlertTriangle, ArrowLeft, ChevronDown, ChevronLeft, ChevronRight, ChevronUp, Crosshair, Eye, Fingerprint, Globe, Shield, Clock, Wifi, Lock, FileKey, Radio, Timer, Paperclip, Terminal, Package, FileText, Mail, AtSign } from '../icons';
+import { Activity, AlertTriangle, ArrowLeft, ChevronDown, ChevronLeft, ChevronRight, ChevronUp, Cpu, Crosshair, Eye, Fingerprint, Globe, Keyboard, Shield, Clock, Sparkles, Wifi, Lock, FileKey, Radio, Timer, Paperclip, Terminal, Package, FileText, Mail, AtSign } from '../icons';
 import api from '../utils/api';
 import ArtifactDrawer from './ArtifactDrawer';
 import MailDrawer from './MailDrawer';
@@ -912,6 +912,24 @@ const BEHAVIOUR_DOMAIN_ORDER: ReadonlyArray<string> = [
   'environmental', 'emotional_valence',
 ];
 
+const BEHAVIOUR_DOMAIN_LABELS: Record<string, string> = {
+  motor: 'MOTOR',
+  cognitive: 'COGNITIVE',
+  temporal: 'TEMPORAL',
+  operational: 'OPERATIONAL',
+  environmental: 'ENVIRONMENTAL',
+  emotional_valence: 'EMOTIONAL VALENCE',
+};
+
+const BEHAVIOUR_DOMAIN_ICONS: Record<string, React.ComponentType<{ size?: number; style?: React.CSSProperties }>> = {
+  motor: Keyboard,
+  cognitive: Cpu,
+  temporal: Clock,
+  operational: Activity,
+  environmental: Globe,
+  emotional_valence: Sparkles,
+};
+
 function _domainOf(primitive: string): string {
   return primitive.split('.', 1)[0];
 }
@@ -963,25 +981,81 @@ export const BehaviouralPrimitivesPanel: React.FC<{
     ...Array.from(groups.keys()).filter((d) => !BEHAVIOUR_DOMAIN_ORDER.includes(d)).sort(),
   ];
   return (
-    <div className="behaviour-panel" data-testid="behaviour-panel">
-      {orderedDomains.map((domain) => (
-        <div key={domain} className="behaviour-group" data-testid={`behaviour-group-${domain}`}>
-          <div className="page-header dim">{domain.toUpperCase()}</div>
-          {groups.get(domain)!.map((obs) => (
-            <div
-              key={obs.primitive}
-              className="behaviour-row"
-              data-testid={`behaviour-row-${obs.primitive}`}
-            >
-              <span className="behaviour-leaf">{_leafOf(obs.primitive)}</span>
-              <span className="behaviour-value matrix-text">{_renderValue(obs.value)}</span>
-              <span className="behaviour-confidence dim">
-                {(obs.confidence * 100).toFixed(0)}%
+    <div
+      className="behaviour-panel"
+      data-testid="behaviour-panel"
+      style={{ padding: '16px', display: 'flex', flexDirection: 'column', gap: '12px' }}
+    >
+      {orderedDomains.map((domain) => {
+        const Icon = BEHAVIOUR_DOMAIN_ICONS[domain] ?? Activity;
+        const label = BEHAVIOUR_DOMAIN_LABELS[domain] ?? domain.toUpperCase();
+        const rows = groups.get(domain)!;
+        return (
+          <div
+            key={domain}
+            className="behaviour-group"
+            data-testid={`behaviour-group-${domain}`}
+            style={{ border: '1px solid var(--border-color)', padding: '12px 16px' }}
+          >
+            <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '10px' }}>
+              <Icon size={14} style={{ opacity: 0.6 }} />
+              <span style={{ fontSize: '0.75rem', letterSpacing: '2px', fontWeight: 'bold' }}>
+                {label}
+              </span>
+              <span className="dim" style={{ fontSize: '0.65rem', marginLeft: 'auto' }}>
+                {rows.length} {rows.length === 1 ? 'PRIMITIVE' : 'PRIMITIVES'}
               </span>
             </div>
-          ))}
-        </div>
-      ))}
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
+              {rows.map((obs) => (
+                <div
+                  key={obs.primitive}
+                  className="behaviour-row"
+                  data-testid={`behaviour-row-${obs.primitive}`}
+                  style={{ display: 'flex', gap: '12px', alignItems: 'baseline' }}
+                >
+                  <span
+                    className="behaviour-leaf dim"
+                    style={{
+                      fontSize: '0.7rem',
+                      letterSpacing: '1px',
+                      minWidth: '180px',
+                      textTransform: 'uppercase',
+                    }}
+                  >
+                    {_leafOf(obs.primitive)}
+                  </span>
+                  <span
+                    className="behaviour-value matrix-text"
+                    style={{
+                      fontFamily: 'monospace',
+                      fontSize: '0.85rem',
+                      flex: 1,
+                      wordBreak: 'break-word',
+                    }}
+                  >
+                    {_renderValue(obs.value)}
+                  </span>
+                  <span
+                    className="behaviour-confidence dim"
+                    style={{
+                      fontSize: '0.65rem',
+                      fontFamily: 'monospace',
+                      letterSpacing: '1px',
+                      border: '1px solid var(--border-color)',
+                      borderRadius: '2px',
+                      padding: '1px 6px',
+                      whiteSpace: 'nowrap',
+                    }}
+                  >
+                    {(obs.confidence * 100).toFixed(0)}%
+                  </span>
+                </div>
+              ))}
+            </div>
+          </div>
+        );
+      })}
     </div>
   );
 };
@@ -1894,7 +1968,7 @@ const AttackerDetail: React.FC = () => {
 
       {/* Behavioural primitives (BEHAVE-SHELL) */}
       <Section
-        title="BEHAVIOURAL PRIMITIVES"
+        title="BEHAVE PRIMITIVES"
         open={openSections.behavioural}
         onToggle={() => toggle('behavioural')}
       >
