@@ -233,6 +233,11 @@
 .theme-toggle-btn:hover {
   background: var(--accent-tint-10);
   border-color: var(--accent);
+  /* Without these the global button:hover wins and pushes
+   * color to var(--bg) and adds matrix-glow — the lucide icon
+   * (currentColor stroke) collapses into the tinted background. */
+  color: var(--accent);
+  box-shadow: none;
 }
 
 .crumbs {
