@@ -519,7 +519,7 @@ const DeckyCard: React.FC<DeckyCardProps> = ({
               onChange={(e) => setAddSlug(e.target.value)}
               style={{
                 flex: 1, fontSize: '0.75rem', padding: '4px 6px',
-                background: 'rgba(255,255,255,0.04)',
+                background: 'var(--matrix-tint-10)',
                 border: '1px solid var(--border-color, #30363d)',
                 color: 'var(--text-color)',
               }}

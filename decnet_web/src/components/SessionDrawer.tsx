@@ -29,7 +29,7 @@ interface TranscriptPage {
 const PAGE_SIZE = 500;
 
 const Row: React.FC<{ label: string; value: React.ReactNode }> = ({ label, value }) => (
-  <div style={{ display: 'flex', gap: '12px', padding: '6px 0', borderBottom: '1px solid rgba(255,255,255,0.05)' }}>
+  <div style={{ display: 'flex', gap: '12px', padding: '6px 0', borderBottom: '1px solid var(--matrix-tint-5)' }}>
     <div style={{ minWidth: '140px', color: 'var(--dim-color)', fontSize: '0.75rem', textTransform: 'uppercase' }}>{label}</div>
     <div style={{ flex: 1, fontSize: '0.85rem', wordBreak: 'break-all' }}>{value ?? <span style={{ opacity: 0.4 }}>—</span>}</div>
   </div>
@@ -204,9 +204,9 @@ const SessionDrawer: React.FC<SessionDrawerProps> = ({ decky, sid, fields, onClo
           <div style={{
             display: 'flex', alignItems: 'center', gap: '8px',
             padding: '8px 12px', marginBottom: '16px',
-            border: '1px solid rgba(255, 170, 0, 0.3)',
-            backgroundColor: 'rgba(255, 170, 0, 0.05)',
-            fontSize: '0.75rem', color: '#ffaa00',
+            border: '1px solid var(--warn)',
+            backgroundColor: 'var(--warn-tint-10)',
+            fontSize: '0.75rem', color: 'var(--warn)',
           }}>
             <AlertTriangle size={14} />
             Session exceeded 10 MB cap — playback is truncated.

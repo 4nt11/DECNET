@@ -5,7 +5,7 @@
 .synthetic-files-root .mono { font-family: var(--font-mono); }
 
 .synthetic-files-root .info-banner {
-  background: rgba(255, 255, 255, 0.02);
+  background: var(--matrix-tint-5);
   border: 1px solid var(--border);
   border-left: 3px solid var(--violet);
   padding: 10px 14px;
@@ -69,7 +69,7 @@
   text-transform: uppercase;
 }
 .synthetic-files-root .files-table tbody tr {
-  border-bottom: 1px solid rgba(255, 255, 255, 0.04);
+  border-bottom: 1px solid var(--matrix-tint-5);
   cursor: pointer;
   transition: background 0.1s;
 }
@@ -194,7 +194,7 @@
   font-family: var(--font-mono);
   white-space: pre-wrap;
   word-break: break-word;
-  background: rgba(255, 255, 255, 0.03);
+  background: var(--matrix-tint-5);
   border: 1px solid var(--border);
   padding: 12px;
   font-size: 0.78rem;

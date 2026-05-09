@@ -399,11 +399,11 @@ const Dashboard: React.FC<DashboardProps> = ({ searchQuery }) => {
                                   style={{
                                     display: 'inline-flex', alignItems: 'center', gap: 4,
                                     fontSize: '0.62rem',
-                                    backgroundColor: 'rgba(255, 170, 0, 0.1)',
+                                    backgroundColor: 'var(--warn-tint-10)',
                                     padding: '2px 8px',
                                     borderRadius: 4,
-                                    border: '1px solid rgba(255, 170, 0, 0.5)',
-                                    color: '#ffaa00',
+                                    border: '1px solid var(--warn)',
+                                    color: 'var(--warn)',
                                     cursor: 'pointer',
                                     letterSpacing: 1,
                                   }}

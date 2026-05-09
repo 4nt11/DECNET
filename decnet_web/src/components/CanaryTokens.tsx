@@ -458,9 +458,9 @@ const UploadModal: React.FC<UploadModalProps> = ({ onClose, onUploaded }) => {
         <div style={{
           display: 'flex', alignItems: 'center', gap: '8px',
           padding: '8px 12px', marginBottom: '16px',
-          border: '1px solid rgba(255, 170, 0, 0.3)',
-          backgroundColor: 'rgba(255, 170, 0, 0.05)',
-          fontSize: '0.75rem', color: '#ffaa00',
+          border: '1px solid var(--warn)',
+          backgroundColor: 'var(--warn-tint-10)',
+          fontSize: '0.75rem', color: 'var(--warn)',
         }}>
           <AlertTriangle size={14} />
           DECNET injects the callback server-side; the original bytes stay on the master.
@@ -811,9 +811,9 @@ const FileDropModal: React.FC<FileDropModalProps> = ({ deckies, topologies, onCl
         <div style={{
           display: 'flex', alignItems: 'center', gap: '8px',
           padding: '8px 12px', marginBottom: '16px',
-          border: '1px solid rgba(255, 170, 0, 0.3)',
-          backgroundColor: 'rgba(255, 170, 0, 0.05)',
-          fontSize: '0.7rem', color: '#ffaa00',
+          border: '1px solid var(--warn)',
+          backgroundColor: 'var(--warn-tint-10)',
+          fontSize: '0.7rem', color: 'var(--warn)',
         }}>
           <AlertTriangle size={14} />
           File drops bypass canary instrumentation — bytes land verbatim. The list below is local only.
@@ -1052,7 +1052,7 @@ const CanaryTokens: React.FC = () => {
                   alignItems: 'center', gap: '12px',
                   padding: '10px 14px',
                   border: '1px solid var(--border-color, #30363d)',
-                  background: 'rgba(255,255,255,0.02)',
+                  background: 'var(--matrix-tint-5)',
                   color: 'var(--text-color)',
                   cursor: 'pointer',
                   textAlign: 'left',
@@ -1114,7 +1114,7 @@ const CanaryTokens: React.FC = () => {
                   alignItems: 'center', gap: '12px',
                   padding: '10px 14px',
                   border: '1px solid var(--border-color, #30363d)',
-                  background: 'rgba(255,255,255,0.02)',
+                  background: 'var(--matrix-tint-5)',
                   fontSize: '0.8rem',
                 }}
               >
@@ -1189,7 +1189,7 @@ const CanaryTokens: React.FC = () => {
                   alignItems: 'center', gap: '12px',
                   padding: '10px 14px',
                   border: '1px solid var(--border-color, #30363d)',
-                  background: 'rgba(255,255,255,0.02)',
+                  background: 'var(--matrix-tint-5)',
                   fontSize: '0.8rem',
                 }}
               >
@@ -1281,7 +1281,7 @@ const INPUT_STYLE: React.CSSProperties = {
   width: '100%',
   padding: '8px 10px',
   marginBottom: '12px',
-  background: 'rgba(255,255,255,0.03)',
+  background: 'var(--matrix-tint-5)',
   border: '1px solid var(--border-color, #30363d)',
   color: 'var(--text-color)',
   fontSize: '0.85rem',
@@ -1324,7 +1324,7 @@ const Stat: React.FC<{ label: string; value: number | string; color: string }> =
     flex: '1 1 120px',
     padding: '12px 16px',
     border: '1px solid var(--border-color, #30363d)',
-    background: 'rgba(255,255,255,0.02)',
+    background: 'var(--matrix-tint-5)',
   }}>
     <div style={{ fontSize: '0.7rem', color: 'var(--dim-color)', letterSpacing: '0.1em' }}>{label}</div>
     <div style={{ fontSize: '1.4rem', fontWeight: 'bold', color, marginTop: '4px' }}>{value}</div>

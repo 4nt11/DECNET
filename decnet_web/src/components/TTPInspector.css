@@ -80,7 +80,7 @@
   display: flex;
   flex-direction: column;
   gap: 8px;
-  background: rgba(255, 255, 255, 0.015);
+  background: var(--matrix-tint-5);
 }
 
 .ttp-tag-card .ttp-card-head {

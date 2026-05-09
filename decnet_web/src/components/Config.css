@@ -165,7 +165,7 @@
 .action-btn.danger:hover {
   background: #ff4141;
   color: var(--background-color);
-  box-shadow: 0 0 10px rgba(255, 65, 65, 0.5);
+  box-shadow: 0 0 10px var(--alert);
 }
 
 /* Add User Form */
@@ -260,7 +260,7 @@
   font-size: 0.75rem;
   padding: 6px 12px;
   border: 1px solid #ff4141;
-  background: rgba(255, 65, 65, 0.1);
+  background: var(--alert-tint-10);
   display: inline-block;
 }
 

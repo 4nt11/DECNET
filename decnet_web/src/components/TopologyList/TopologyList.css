@@ -57,7 +57,7 @@
 .tlist-btn.danger:hover { background: var(--alert, #e74c3c); color: var(--bg); box-shadow: 0 0 10px rgba(231, 76, 60, 0.5); }
 .tlist-btn.danger.armed { background: var(--alert, #e74c3c); color: #000; }
 .tlist-btn.warn { border-color: var(--warn, #e0a040); color: var(--warn, #e0a040); }
-.tlist-btn.warn:hover { background: var(--warn, #e0a040); color: var(--bg); box-shadow: 0 0 10px rgba(224, 160, 64, 0.5); }
+.tlist-btn.warn:hover { background: var(--warn, #e0a040); color: var(--bg); box-shadow: 0 0 10px var(--warn); }
 .tlist-btn.warn.armed { background: var(--warn, #e0a040); color: #000; }
 
 .tlist-create-row {

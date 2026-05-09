@@ -27,7 +27,7 @@ function decodeMeta(fields: Record<string, any>): Record<string, any> | null {
 }
 
 const Row: React.FC<{ label: string; value: React.ReactNode }> = ({ label, value }) => (
-  <div style={{ display: 'flex', gap: '12px', padding: '6px 0', borderBottom: '1px solid rgba(255,255,255,0.05)' }}>
+  <div style={{ display: 'flex', gap: '12px', padding: '6px 0', borderBottom: '1px solid var(--matrix-tint-5)' }}>
     <div style={{ minWidth: '140px', color: 'var(--dim-color)', fontSize: '0.75rem', textTransform: 'uppercase' }}>{label}</div>
     <div style={{ flex: 1, fontSize: '0.85rem', wordBreak: 'break-all' }}>{value ?? <span style={{ opacity: 0.4 }}>—</span>}</div>
   </div>
@@ -120,9 +120,9 @@ const ArtifactDrawer: React.FC<ArtifactDrawerProps> = ({ decky, storedAs, fields
         <div style={{
           display: 'flex', alignItems: 'center', gap: '8px',
           padding: '8px 12px', marginBottom: '16px',
-          border: '1px solid rgba(255, 170, 0, 0.3)',
-          backgroundColor: 'rgba(255, 170, 0, 0.05)',
-          fontSize: '0.75rem', color: '#ffaa00',
+          border: '1px solid var(--warn)',
+          backgroundColor: 'var(--warn-tint-10)',
+          fontSize: '0.75rem', color: 'var(--warn)',
         }}>
           <AlertTriangle size={14} />
           Attacker-controlled content. Download at your own risk.
@@ -176,7 +176,7 @@ const ArtifactDrawer: React.FC<ArtifactDrawerProps> = ({ decky, storedAs, fields
             <h3 style={{ fontSize: '0.8rem', letterSpacing: '0.1em', color: 'var(--dim-color)', marginBottom: '8px' }}>
               CONCURRENT SESSIONS ({concurrent.length})
             </h3>
-            <pre style={{ fontSize: '0.75rem', background: 'rgba(255,255,255,0.03)', padding: '8px', overflowX: 'auto' }}>
+            <pre style={{ fontSize: '0.75rem', background: 'var(--matrix-tint-5)', padding: '8px', overflowX: 'auto' }}>
               {JSON.stringify(concurrent, null, 2)}
             </pre>
           </section>
@@ -187,7 +187,7 @@ const ArtifactDrawer: React.FC<ArtifactDrawerProps> = ({ decky, storedAs, fields
             <h3 style={{ fontSize: '0.8rem', letterSpacing: '0.1em', color: 'var(--dim-color)', marginBottom: '8px' }}>
               SS SNAPSHOT ({ssSnapshot.length})
             </h3>
-            <pre style={{ fontSize: '0.75rem', background: 'rgba(255,255,255,0.03)', padding: '8px', overflowX: 'auto' }}>
+            <pre style={{ fontSize: '0.75rem', background: 'var(--matrix-tint-5)', padding: '8px', overflowX: 'auto' }}>
               {JSON.stringify(ssSnapshot, null, 2)}
             </pre>
           </section>

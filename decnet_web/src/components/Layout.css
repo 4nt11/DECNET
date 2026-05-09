@@ -94,7 +94,7 @@
   color: var(--alert);
   border: 1px solid var(--alert);
   padding: 1px 5px;
-  background: rgba(255, 65, 65, 0.1);
+  background: var(--alert-tint-10);
   letter-spacing: 1px;
   margin-left: auto;
 }
@@ -286,7 +286,7 @@
   padding: 6px 10px;
   border: 1px solid var(--alert);
   color: var(--alert);
-  background: rgba(255, 65, 65, 0.08);
+  background: var(--alert-tint-10);
   text-transform: uppercase;
 }
 

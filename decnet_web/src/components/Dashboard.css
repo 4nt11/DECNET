@@ -75,7 +75,7 @@
 .chip.alert-chip {
   border-color: var(--alert);
   color: var(--alert);
-  background: rgba(255, 65, 65, 0.1);
+  background: var(--alert-tint-10);
 }
 
 /* Key-value chips in the live-feed event column. Values are unbounded
@@ -96,7 +96,7 @@
 
 /* Breach banner */
 .breach-banner {
-  background: rgba(255, 65, 65, 0.1);
+  background: var(--alert-tint-10);
   border: 1px solid var(--alert);
   padding: 12px 20px;
   display: flex;
@@ -128,7 +128,7 @@
 }
 
 .breach-banner button:hover {
-  background: rgba(255, 65, 65, 0.15);
+  background: var(--alert-tint-10);
 }
 
 /* Stats */
@@ -155,7 +155,7 @@
 }
 
 .stat-card.alert {
-  border-color: rgba(255, 65, 65, 0.4);
+  border-color: var(--alert);
 }
 
 .stat-card .row {
@@ -370,7 +370,7 @@
 
 .status-dot.warn {
   background: var(--warn);
-  box-shadow: 0 0 6px rgba(255, 170, 0, 0.6);
+  box-shadow: 0 0 6px var(--warn);
 }
 
 .status-dot.hot {

@@ -137,15 +137,15 @@
   font-size: 0.68rem;
   padding: 2px 8px;
   border-radius: 3px;
-  background: rgba(255, 170, 0, 0.1);
-  border: 1px solid rgba(255, 170, 0, 0.5);
+  background: var(--warn-tint-10);
+  border: 1px solid var(--warn);
   color: var(--warn);
   cursor: pointer;
   font-family: inherit;
 }
 .logs-root .artifact-btn:hover {
-  background: rgba(255, 170, 0, 0.2);
-  box-shadow: 0 0 8px rgba(255, 170, 0, 0.4);
+  background: var(--warn-tint-10);
+  box-shadow: 0 0 8px var(--warn);
 }
 
 /* Empty state */

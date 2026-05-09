@@ -57,7 +57,7 @@
 .webhooks-root .btn.alert  { border-color: var(--alert, #ff4d4d); color: var(--alert, #ff4d4d); }
 .webhooks-root .btn.alert:hover  { background: var(--alert, #ff4d4d); color: var(--bg); box-shadow: 0 0 10px rgba(255, 77, 77, 0.5); }
 .webhooks-root .btn.warn   { border-color: var(--warn, #e0a040); color: var(--warn, #e0a040); }
-.webhooks-root .btn.warn:hover   { background: var(--warn, #e0a040); color: var(--bg); box-shadow: 0 0 10px rgba(224, 160, 64, 0.5); }
+.webhooks-root .btn.warn:hover   { background: var(--warn, #e0a040); color: var(--bg); box-shadow: 0 0 10px var(--warn); }
 .webhooks-root .btn.ghost { border-color: var(--border-color); color: var(--matrix); opacity: 0.7; }
 .webhooks-root .btn.ghost:hover { opacity: 1; border-color: var(--matrix); background: transparent; box-shadow: var(--matrix-glow); }
 .webhooks-root .btn:disabled { opacity: 0.3; cursor: not-allowed; }
@@ -67,7 +67,7 @@
 }
 
 .webhooks-root .webhooks-warning-banner {
-  background: rgba(224, 160, 64, 0.08);
+  background: var(--warn-tint-10);
   border: 1px solid var(--warn, #e0a040);
   color: var(--warn, #e0a040);
   padding: 10px 14px;
@@ -167,7 +167,7 @@
 
 .webhooks-root .wh-chip.status-warn {
   border-color: var(--warn, #e0a040);
-  background: rgba(224, 160, 64, 0.1);
+  background: var(--warn-tint-10);
   color: var(--warn, #e0a040);
 }
 

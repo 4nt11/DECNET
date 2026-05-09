@@ -56,7 +56,7 @@ const NetBox: React.FC<Props> = ({
           <span>{net.label}</span>
           {inactive && !net.pending && (
             <span className="chip-mini"
-                  style={{ marginLeft: 4, borderColor: 'var(--border)', color: 'rgba(255,255,255,0.45)' }}>
+                  style={{ marginLeft: 4, borderColor: 'var(--border)', color: 'var(--fg-4)' }}>
               INACTIVE
             </span>
           )}

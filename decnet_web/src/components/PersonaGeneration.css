@@ -6,7 +6,7 @@
 
 /* Info banner explaining scope (non-MazeNET) + showing pool path. */
 .persona-gen-root .info-banner {
-  background: rgba(255, 255, 255, 0.02);
+  background: var(--matrix-tint-5);
   border: 1px solid var(--border);
   border-left: 3px solid var(--violet);
   padding: 10px 14px;

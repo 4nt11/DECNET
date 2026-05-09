@@ -635,7 +635,7 @@ const RealismBadge: React.FC<{
   const breaker = realism.llm_breaker_state ?? 'closed';
   const breakerColor =
     breaker === 'open' ? '#ff5555'
-    : breaker === 'half_open' ? '#ffaa00'
+    : breaker === 'half_open' ? 'var(--warn)'
     : 'var(--matrix)';
   const tooltip = [
     `Backend: ${realism.llm_backend ?? '?'}`,
@@ -793,8 +793,8 @@ const WorkersPanel: React.FC<WorkersPanelProps> = ({ pushToast }) => {
             margin: '16px 20px 0',
             padding: '10px 14px',
             border: '1px solid #ffaa00',
-            background: 'rgba(255, 170, 0, 0.08)',
-            color: '#ffaa00',
+            background: 'var(--warn-tint-10)',
+            color: 'var(--warn)',
             fontSize: '0.72rem',
             letterSpacing: 1,
             lineHeight: 1.5,
@@ -906,8 +906,8 @@ const WorkersPanel: React.FC<WorkersPanelProps> = ({ pushToast }) => {
                 </td>
                 <td style={{
                   color: w.status === 'ok' ? 'var(--matrix)'
-                       : w.status === 'stale' ? '#ffaa00'
-                       : 'rgba(255,255,255,0.4)',
+                       : w.status === 'stale' ? 'var(--warn)'
+                       : 'var(--fg-4)',
                   letterSpacing: 1,
                 }}>
                   {w.status.toUpperCase()}
@@ -927,8 +927,8 @@ const WorkersPanel: React.FC<WorkersPanelProps> = ({ pushToast }) => {
                       alignItems: 'center',
                       justifyContent: 'center',
                       gap: 4,
-                      color: canStop ? '#ff4d4d' : '#ff4d4d',
-                      borderColor: canStop ? '#ff4d4d' : 'rgba(255, 77, 77, 0.4)',
+                      color: canStop ? 'var(--alert)' : 'var(--alert)',
+                      borderColor: canStop ? 'var(--alert)' : 'rgba(255, 77, 77, 0.4)',
                       opacity: canStop ? 1 : 0.3,
                       cursor: canStop ? 'pointer' : 'not-allowed',
                     }}

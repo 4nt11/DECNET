@@ -14,10 +14,23 @@
 
   /* Back-compat names used across the codebase */
   --background-color: var(--bg);
+  --bg-color:         var(--bg);    /* used by drawers and other inline styles */
   --text-color:       var(--matrix);
   --accent-color:     var(--violet);
   --secondary-color:  var(--panel);
   --border-color:     var(--border);
+
+  /* Cyan/info — REPLAY buttons, neutral status that's neither
+   * "good/active" (matrix) nor "stop" (alert). */
+  --info:             #22d3ee;
+  --info-tint-10:     rgba(34, 211, 238, 0.10);
+  --info-tint-30:     rgba(34, 211, 238, 0.30);
+
+  /* Benign/healthy — semantic alias for "verified good". Stays
+   * matrix in dark, picks up a darker emerald in light so a
+   * BENIGN pill still reads as "green check" without the dark-mode
+   * neon. */
+  --ok:               var(--matrix);
 
   /* ── Foreground opacities ──────────────────────── */
   --fg-1: var(--matrix);
@@ -150,6 +163,16 @@ html[data-theme="light"] {
   --alert-tint-10:   rgba(153, 27, 27, 0.10);
   --warn-tint-10:    rgba(180, 83, 9, 0.12);
   --crit-tint-10:    rgba(185, 28, 28, 0.10);
+
+  /* Cyan/info dims to slate in light mode so REPLAY buttons read
+   * as a calm secondary against cream rather than an electric pop. */
+  --info:            #155e75;
+  --info-tint-10:    rgba(21, 94, 117, 0.10);
+  --info-tint-30:    rgba(21, 94, 117, 0.20);
+
+  /* Benign in light mode — emerald, the one "happy green" we keep,
+   * tuned dark enough to read on cream. */
+  --ok:              #047857;
 
   /* Glows no-op'd — kept defined so .btn:hover etc. don't
    * break, just produce no halo. */

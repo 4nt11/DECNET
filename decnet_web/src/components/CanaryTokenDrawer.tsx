@@ -44,7 +44,7 @@ interface Props {
 }
 
 const Row: React.FC<{ label: string; value: React.ReactNode }> = ({ label, value }) => (
-  <div style={{ display: 'flex', gap: '12px', padding: '6px 0', borderBottom: '1px solid rgba(255,255,255,0.05)' }}>
+  <div style={{ display: 'flex', gap: '12px', padding: '6px 0', borderBottom: '1px solid var(--matrix-tint-5)' }}>
     <div style={{ minWidth: '140px', color: 'var(--dim-color)', fontSize: '0.75rem', textTransform: 'uppercase' }}>{label}</div>
     <div style={{ flex: 1, fontSize: '0.85rem', wordBreak: 'break-all' }}>{value ?? <span style={{ opacity: 0.4 }}>—</span>}</div>
   </div>
@@ -291,8 +291,8 @@ const CanaryTokenDrawer: React.FC<Props> = ({ token, onClose, onRevoked }) => {
                 key={t.uuid}
                 style={{
                   padding: '8px 12px',
-                  border: '1px solid rgba(255,255,255,0.08)',
-                  background: 'rgba(255,255,255,0.02)',
+                  border: '1px solid var(--matrix-tint-5)',
+                  background: 'var(--matrix-tint-5)',
                   fontSize: '0.8rem',
                 }}
               >

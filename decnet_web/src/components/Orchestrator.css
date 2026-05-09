@@ -81,7 +81,7 @@
   letter-spacing: 1.5px;
   border: 1px solid var(--alert);
   color: var(--alert);
-  background: rgba(255, 65, 65, 0.06);
+  background: var(--alert-tint-10);
   text-transform: uppercase;
 }
 
@@ -192,9 +192,9 @@
 }
 .orchestrator-root .logs-table tr:hover td { background: var(--matrix-tint-5); }
 .orchestrator-root .logs-table tr.fail td {
-  background: rgba(255, 65, 65, 0.05);
+  background: var(--alert-tint-10);
 }
-.orchestrator-root .logs-table tr.fail:hover td { background: rgba(255, 65, 65, 0.08); }
+.orchestrator-root .logs-table tr.fail:hover td { background: var(--alert-tint-10); }
 
 /* Live-prepended row tint — fades back to neutral after a moment via opacity. */
 .orchestrator-root .logs-table tr.fresh td {

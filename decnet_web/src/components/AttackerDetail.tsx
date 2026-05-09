@@ -1292,10 +1292,10 @@ type IntelRow = {
 };
 
 const VERDICT_TONE: Record<string, { color: string; label: string }> = {
-  malicious: { color: '#ff4d4d', label: 'MALICIOUS' },
-  suspicious: { color: '#ffae42', label: 'SUSPICIOUS' },
-  benign: { color: '#5fd07a', label: 'BENIGN' },
-  unknown: { color: 'rgba(255,255,255,0.4)', label: 'NO SIGNAL' },
+  malicious: { color: 'var(--alert)', label: 'MALICIOUS' },
+  suspicious: { color: 'var(--warn)', label: 'SUSPICIOUS' },
+  benign: { color: 'var(--ok)', label: 'BENIGN' },
+  unknown: { color: 'var(--fg-4)', label: 'NO SIGNAL' },
 };
 
 const fmtTs = (iso?: string | null): string => {
@@ -1317,7 +1317,7 @@ const ProviderRow: React.FC<{
     gridTemplateColumns: '160px 1fr auto',
     gap: '12px',
     padding: '10px 16px',
-    borderTop: '1px solid rgba(255,255,255,0.05)',
+    borderTop: '1px solid var(--matrix-tint-5)',
     alignItems: 'center',
     fontSize: '0.85rem',
   }}>
@@ -1391,7 +1391,7 @@ const IntelPanel: React.FC<{ uuid: string }> = ({ uuid }) => {
         alignItems: 'center',
         gap: '12px',
         padding: '14px 16px',
-        borderBottom: '1px solid rgba(255,255,255,0.05)',
+        borderBottom: '1px solid var(--matrix-tint-5)',
       }}>
         <Shield size={16} style={{ color: tone.color }} />
         <span style={{
@@ -2310,11 +2310,11 @@ const AttackerDetail: React.FC = () => {
                             style={{
                               display: 'flex', alignItems: 'center', gap: '6px',
                               fontSize: '0.7rem',
-                              backgroundColor: 'rgba(255, 170, 0, 0.1)',
+                              backgroundColor: 'var(--warn-tint-10)',
                               padding: '2px 8px',
                               borderRadius: '4px',
-                              border: '1px solid rgba(255, 170, 0, 0.5)',
-                              color: '#ffaa00',
+                              border: '1px solid var(--warn)',
+                              color: 'var(--warn)',
                               cursor: 'pointer',
                             }}
                           >
@@ -2449,11 +2449,11 @@ const AttackerDetail: React.FC = () => {
                             style={{
                               display: 'flex', alignItems: 'center', gap: '6px',
                               fontSize: '0.7rem',
-                              backgroundColor: 'rgba(255, 170, 0, 0.1)',
+                              backgroundColor: 'var(--warn-tint-10)',
                               padding: '2px 8px',
                               borderRadius: '4px',
-                              border: '1px solid rgba(255, 170, 0, 0.5)',
-                              color: '#ffaa00',
+                              border: '1px solid var(--warn)',
+                              color: 'var(--warn)',
                               cursor: 'pointer',
                             }}
                           >
@@ -2532,11 +2532,11 @@ const AttackerDetail: React.FC = () => {
                             style={{
                               display: 'flex', alignItems: 'center', gap: '6px',
                               fontSize: '0.7rem',
-                              backgroundColor: 'rgba(0, 200, 255, 0.1)',
+                              backgroundColor: 'var(--info-tint-10)',
                               padding: '2px 8px',
                               borderRadius: '4px',
-                              border: '1px solid rgba(0, 200, 255, 0.5)',
-                              color: '#00c8ff',
+                              border: '1px solid var(--info)',
+                              color: 'var(--info)',
                               cursor: 'pointer',
                             }}
                           >
