@@ -342,6 +342,25 @@ class TTPMixin(_MixinBase):
             res = await session.execute(stmt)
             return [r.model_dump(mode="json") for r in res.scalars().all()]
 
+    async def list_ttp_tags_by_attacker(
+        self, uuid: str, limit: int = 2000,
+    ) -> list[dict]:
+        """Raw ``ttp_tag`` rows for one attacker UUID. Newest-first.
+
+        Used by the STIX exporter (and similar full-row consumers) that
+        need per-tag granularity — distinct from the rollup returned by
+        :meth:`list_techniques_by_attacker`.
+        """
+        async with self._session() as session:
+            stmt: Any = (
+                select(TTPTag)
+                .where(TTPTag.attacker_uuid == uuid)
+                .order_by(col(TTPTag.created_at).desc())
+                .limit(limit)
+            )
+            res = await session.execute(stmt)
+            return [r.model_dump(mode="json") for r in res.scalars().all()]
+
     # ── Backfill iterators (E.4) ────────────────────────────────────
     #
     # Read-only iterators consumed by ``decnet ttp backfill`` to replay

@@ -1485,6 +1485,13 @@ class BaseRepository(ABC):
         """Fleet-wide distinct-technique rollup."""
         raise NotImplementedError
 
+    @abstractmethod
+    async def list_ttp_tags_by_attacker(
+        self, uuid: str, limit: int = 2000,
+    ) -> list[dict[str, Any]]:
+        """Raw ``ttp_tag`` rows for one attacker (for STIX export + similar)."""
+        raise NotImplementedError
+
     async def list_ttp_decky_phases(
         self, identity_uuid: str,
     ) -> list[dict[str, Any]]:

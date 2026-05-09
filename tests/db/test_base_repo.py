@@ -127,6 +127,8 @@ class DummyRepo(BaseRepository):
         await super().list_tags_by_scope_and_technique(**kw); return []
     async def list_distinct_techniques(self):
         await super().list_distinct_techniques(); return []
+    async def list_ttp_tags_by_attacker(self, uuid, limit=2000):
+        await super().list_ttp_tags_by_attacker(uuid, limit); return []
     # Iter helpers — async generators, can't `await super()` on them
     # because the base raises in the body before any yield. Just yield
     # nothing so the consumer's ``async for`` exits cleanly.
