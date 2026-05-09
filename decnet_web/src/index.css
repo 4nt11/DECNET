@@ -109,34 +109,40 @@ html[data-accent="violet"] {
 }
 
 /* ── Light theme ────────────────────────────────────────
- * Cream-on-ink. Activated by setting `data-theme="light"`
- * on <html>; back-compat aliases (--background-color,
- * --text-color, etc.) re-resolve through the cascade since
- * they reference --bg/--matrix/--violet/etc. via var().
+ * Brutalist ink-on-cream. Dark mode keeps its matrix vibe;
+ * light mode goes monotone — emerald/violet wash out on warm
+ * cream, so --matrix and --violet both resolve to near-ink
+ * shades. --alert stays the one saturated colour, the only
+ * thing that's allowed to "shout" in light mode.
  *
- * Glows are removed (light mode = hard 1px borders, not
- * neon haloes) and the scangrid line goes ink-on-cream. */
+ * Activated by setting `data-theme="light"` on <html>;
+ * back-compat aliases (--background-color, --text-color,
+ * --accent-color) re-resolve through the cascade since they
+ * reference --bg/--matrix/--violet via var().
+ *
+ * Glows are removed entirely — light mode is hard 1px
+ * borders, not neon haloes. */
 html[data-theme="light"] {
   --bg:              #dbdad6;
-  --matrix:          #047857;
-  --violet:          #6b21a8;
+  --matrix:          #0d0d0d;   /* ink — text + "active/live" status */
+  --violet:          #2d1b4e;   /* charcoal-purple — accents/drop-target */
   --panel:           #c9c7c2;
   --border:          #1a1a1a;
-  --alert:           #b91c1c;
+  --alert:           #991b1b;
 
   --fg-1: var(--matrix);
-  --fg-2: rgba(4, 120, 87, 0.80);
-  --fg-3: rgba(4, 120, 87, 0.60);
-  --fg-4: rgba(4, 120, 87, 0.40);
+  --fg-2: rgba(13, 13, 13, 0.78);
+  --fg-3: rgba(13, 13, 13, 0.55);
+  --fg-4: rgba(13, 13, 13, 0.35);
 
-  --matrix-tint-5:   rgba(4, 120, 87, 0.05);
-  --matrix-tint-10:  rgba(4, 120, 87, 0.10);
-  --matrix-tint-30:  rgba(4, 120, 87, 0.25);
-  --violet-tint-10:  rgba(107, 33, 168, 0.10);
-  --alert-tint-10:   rgba(185, 28, 28, 0.10);
+  --matrix-tint-5:   rgba(13, 13, 13, 0.04);
+  --matrix-tint-10:  rgba(13, 13, 13, 0.08);
+  --matrix-tint-30:  rgba(13, 13, 13, 0.18);
+  --violet-tint-10:  rgba(45, 27, 78, 0.10);
+  --alert-tint-10:   rgba(153, 27, 27, 0.10);
 
-  /* Light mode trades neon glow for hard borders — keep the
-   * vars defined so .btn:hover etc. don't break, just no-op them. */
+  /* Glows no-op'd — kept defined so .btn:hover etc. don't
+   * break, just produce no halo. */
   --matrix-glow:       none;
   --matrix-green-glow: none;
   --violet-glow:       none;
@@ -146,14 +152,10 @@ html[data-theme="light"] {
   --grid-line: rgba(0, 0, 0, 0.06);
 }
 
-html[data-theme="light"][data-accent="violet"] {
-  --accent:         var(--violet);
-  --accent-tint-10: var(--violet-tint-10);
-  --accent-tint-30: rgba(107, 33, 168, 0.25);
-  --accent-glow:    none;
-}
-
-html[data-theme="light"]:not([data-accent="violet"]) {
+/* In light mode --accent collapses to ink regardless of
+ * data-accent — the matrix/violet flavour knob is a
+ * dark-mode-only concept; light mode is always monotone. */
+html[data-theme="light"] {
   --accent:         var(--matrix);
   --accent-tint-10: var(--matrix-tint-10);
   --accent-tint-30: var(--matrix-tint-30);
