@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
-import { Activity, AlertTriangle, ArrowLeft, ChevronLeft, ChevronRight, Cpu, Crosshair, Eye, Fingerprint, Globe, Keyboard, Shield, Clock, Sparkles, Wifi, Lock, FileKey, Radio, Timer, Paperclip, Terminal, Package, FileText, Mail, AtSign } from '../icons';
+import { Activity, AlertTriangle, ArrowLeft, Cpu, Crosshair, Eye, Fingerprint, Globe, Keyboard, Shield, Clock, Sparkles, Wifi, Lock, FileKey, Radio, Timer, Paperclip, Package, FileText, Mail, AtSign } from '../icons';
 import api from '../utils/api';
 import ArtifactDrawer from './ArtifactDrawer';
 import MailDrawer from './MailDrawer';
@@ -12,6 +12,7 @@ import { AttackerHeader } from './AttackerDetail/sections/AttackerHeader';
 import { AttackerStats } from './AttackerDetail/sections/AttackerStats';
 import { TimelineSection } from './AttackerDetail/sections/TimelineSection';
 import { ServicesTargeted } from './AttackerDetail/sections/ServicesTargeted';
+import { CommandsViewer } from './AttackerDetail/sections/CommandsViewer';
 import { Tag, Section } from './AttackerDetail/ui';
 import type {
   AttackerBehavior,
@@ -1398,73 +1399,16 @@ const AttackerDetail: React.FC = () => {
         <BehaviouralPrimitivesPanel observations={observations} attribution={attribution} />
       </Section>
 
-      {/* Commands */}
-      {(() => {
-        const cmdTotalPages = Math.ceil(cmdTotal / cmdLimit);
-        return (
-          <Section
-            title={<>COMMANDS ({cmdTotal}{serviceFilter ? ` ${serviceFilter.toUpperCase()}` : ''})</>}
-            open={openSections.commands}
-            onToggle={() => toggle('commands')}
-            right={openSections.commands && cmdTotalPages > 1 ? (
-              <div style={{ display: 'flex', alignItems: 'center', gap: '16px' }}>
-                <span className="dim" style={{ fontSize: '0.8rem' }}>
-                  Page {cmdPage} of {cmdTotalPages}
-                </span>
-                <div style={{ display: 'flex', gap: '8px' }}>
-                  <button
-                    disabled={cmdPage <= 1}
-                    onClick={() => setCmdPage(cmdPage - 1)}
-                    style={{ padding: '4px', border: '1px solid var(--border-color)', opacity: cmdPage <= 1 ? 0.3 : 1 }}
-                  >
-                    <ChevronLeft size={16} />
-                  </button>
-                  <button
-                    disabled={cmdPage >= cmdTotalPages}
-                    onClick={() => setCmdPage(cmdPage + 1)}
-                    style={{ padding: '4px', border: '1px solid var(--border-color)', opacity: cmdPage >= cmdTotalPages ? 0.3 : 1 }}
-                  >
-                    <ChevronRight size={16} />
-                  </button>
-                </div>
-              </div>
-            ) : undefined}
-          >
-            {commands.length > 0 ? (
-              <div className="logs-table-container">
-                <table className="logs-table">
-                  <thead>
-                    <tr>
-                      <th>TIMESTAMP</th>
-                      <th>SERVICE</th>
-                      <th>DECKY</th>
-                      <th>COMMAND</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {commands.map((cmd, i) => (
-                      <tr key={i}>
-                        <td className="dim" style={{ fontSize: '0.75rem', whiteSpace: 'nowrap' }}>
-                          {cmd.timestamp ? new Date(cmd.timestamp).toLocaleString() : '-'}
-                        </td>
-                        <td>{cmd.service}</td>
-                        <td className="violet-accent">{cmd.decky}</td>
-                        <td className="matrix-text" style={{ fontFamily: 'monospace' }}>{cmd.command}</td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
-            ) : (
-              <EmptyState
-                icon={Terminal}
-                title={serviceFilter ? `NO ${serviceFilter.toUpperCase()} COMMANDS CAPTURED` : 'NO COMMANDS CAPTURED'}
-                size="compact"
-              />
-            )}
-          </Section>
-        );
-      })()}
+      <CommandsViewer
+        commands={commands}
+        cmdTotal={cmdTotal}
+        cmdPage={cmdPage}
+        cmdLimit={cmdLimit}
+        setCmdPage={setCmdPage}
+        serviceFilter={serviceFilter}
+        open={openSections.commands}
+        onToggle={() => toggle('commands')}
+      />
 
       {/* Fingerprints — grouped by type */}
       {(() => {
