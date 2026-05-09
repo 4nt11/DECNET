@@ -99,19 +99,19 @@
 .control-btn.primary:hover { background: var(--violet); color: #000; box-shadow: var(--violet-glow); }
 
 .control-btn.danger {
-  border-color: var(--alert, #ff4d4d);
-  color: var(--alert, #ff4d4d);
+  border-color: var(--alert, var(--alert));
+  color: var(--alert, var(--alert));
 }
 .control-btn.danger:hover {
-  background: var(--alert, #ff4d4d);
+  background: var(--alert, var(--alert));
   color: #000;
   box-shadow: 0 0 10px rgba(255, 77, 77, 0.5);
 }
 
 .error-box {
   background-color: rgba(255, 77, 77, 0.08);
-  border: 1px solid #ff4d4d;
-  color: #ff4d4d;
+  border: 1px solid var(--alert);
+  color: var(--alert);
   padding: 10px 14px;
   margin: 10px 0;
   display: flex;

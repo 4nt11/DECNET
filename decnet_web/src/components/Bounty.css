@@ -47,7 +47,7 @@
   border: none;
   border-right: 1px solid var(--border);
   background: transparent;
-  color: rgba(0, 255, 65, 0.6);
+  color: var(--fg-3);
   cursor: pointer;
   font-family: inherit;
 }

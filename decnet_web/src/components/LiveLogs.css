@@ -95,7 +95,7 @@
   opacity: 1;
   box-shadow: var(--violet-glow);
 }
-.logs-root .histogram .bar.has-bounty { background: #ffaa00; opacity: 0.7; }
+.logs-root .histogram .bar.has-bounty { background: var(--warn); opacity: 0.7; }
 .logs-root .histogram .bar.has-bounty.selected { background: var(--violet); }
 .logs-root .histogram-axis {
   display: flex;
@@ -139,7 +139,7 @@
   border-radius: 3px;
   background: rgba(255, 170, 0, 0.1);
   border: 1px solid rgba(255, 170, 0, 0.5);
-  color: #ffaa00;
+  color: var(--warn);
   cursor: pointer;
   font-family: inherit;
 }

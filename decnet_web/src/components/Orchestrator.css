@@ -55,9 +55,9 @@
   box-shadow: 0 0 8px var(--matrix);
   animation: orch-pulse 1.4s infinite alternate;
 }
-.orchestrator-root .status-pill.connecting { color: rgba(0, 255, 65, 0.55); }
+.orchestrator-root .status-pill.connecting { color: var(--fg-3); }
 .orchestrator-root .status-pill.connecting .dot {
-  background: rgba(0, 255, 65, 0.55);
+  background: var(--fg-3);
   animation: orch-blink 1s infinite;
 }
 .orchestrator-root .status-pill.error {
@@ -105,7 +105,7 @@
   border: 0;
   border-right: 1px solid var(--border);
   background: transparent;
-  color: rgba(0, 255, 65, 0.6);
+  color: var(--fg-3);
   font-family: inherit;
   cursor: pointer;
   text-transform: uppercase;
@@ -190,7 +190,7 @@
   border-bottom: 1px solid rgba(48, 54, 61, 0.4);
   vertical-align: middle;
 }
-.orchestrator-root .logs-table tr:hover td { background: rgba(0, 255, 65, 0.025); }
+.orchestrator-root .logs-table tr:hover td { background: var(--matrix-tint-5); }
 .orchestrator-root .logs-table tr.fail td {
   background: rgba(255, 65, 65, 0.05);
 }
@@ -356,8 +356,8 @@
   color: var(--violet);
 }
 .orchestrator-root .orchestrator-drawer .chip.src-shard {
-  border-color: #ffaa00;
-  color: #ffaa00;
+  border-color: var(--warn);
+  color: var(--warn);
 }
 
 .orchestrator-root .orchestrator-drawer .type-label {

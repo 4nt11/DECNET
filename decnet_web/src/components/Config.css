@@ -29,7 +29,7 @@
 
 .config-tab:hover {
   opacity: 0.8;
-  background: rgba(0, 255, 65, 0.03);
+  background: var(--matrix-tint-5);
   box-shadow: none;
   color: var(--text-color);
 }
@@ -141,7 +141,7 @@
 }
 
 .users-table tr:hover {
-  background-color: rgba(0, 255, 65, 0.03);
+  background-color: var(--matrix-tint-5);
 }
 
 .user-actions {
@@ -242,7 +242,7 @@
 
 .must-change-badge {
   font-size: 0.65rem;
-  color: #ffaa00;
+  color: var(--warn);
   opacity: 0.8;
 }
 
@@ -251,7 +251,7 @@
   font-size: 0.75rem;
   padding: 6px 12px;
   border: 1px solid var(--text-color);
-  background: rgba(0, 255, 65, 0.1);
+  background: var(--matrix-tint-10);
   display: inline-block;
 }
 

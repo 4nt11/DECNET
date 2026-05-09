@@ -27,7 +27,7 @@
   border: none;
   border-right: 1px solid var(--border);
   background: transparent;
-  color: rgba(0, 255, 65, 0.5);
+  color: var(--fg-3);
   cursor: pointer;
   font-family: inherit;
 }
@@ -50,8 +50,8 @@
 }
 
 .ak-dot-active  { background: var(--alert); box-shadow: 0 0 5px var(--alert); }
-.ak-dot-passive { background: #ffaa00; }
-.ak-dot-inactive { background: rgba(0, 255, 65, 0.3); }
+.ak-dot-passive { background: var(--warn); }
+.ak-dot-inactive { background: var(--matrix-tint-30); }
 
 .attackers-root .controls-row {
   display: flex;
@@ -219,7 +219,7 @@
 .attackers-root .activity-chip.passive .dot { background: var(--violet); }
 .attackers-root .activity-chip.inactive {
   border: 1px solid var(--border);
-  color: rgba(0, 255, 65, 0.5);
+  color: var(--fg-3);
   background: transparent;
 }
 .attackers-root .activity-chip.inactive .dot { background: var(--border); }

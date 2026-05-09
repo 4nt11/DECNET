@@ -113,7 +113,7 @@
 }
 
 .webhooks-root .webhooks-table tbody tr:hover {
-  background: rgba(0, 255, 65, 0.03);
+  background: var(--matrix-tint-5);
 }
 
 .webhooks-root .webhooks-table .col-check   { width: 28px; }
@@ -143,8 +143,8 @@
 .webhooks-root .wh-chip {
   font-size: 0.66rem;
   padding: 2px 7px;
-  border: 1px solid var(--accent-tint-30, rgba(0, 255, 65, 0.3));
-  background: var(--accent-tint-10, rgba(0, 255, 65, 0.1));
+  border: 1px solid var(--accent-tint-30, var(--matrix-tint-30));
+  background: var(--accent-tint-10, var(--matrix-tint-10));
   color: var(--accent);
   letter-spacing: 0.5px;
   font-family: var(--font-mono);
@@ -237,7 +237,7 @@
 .webhooks-root .wh-form-grid textarea:focus {
   outline: none;
   border-color: var(--accent);
-  box-shadow: var(--accent-glow, 0 0 10px rgba(0, 255, 65, 0.5));
+  box-shadow: var(--accent-glow, 0 0 10px var(--fg-3));
 }
 
 .webhooks-root .wh-checkbox-group {

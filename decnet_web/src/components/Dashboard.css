@@ -68,7 +68,7 @@
 
 .chip.dim-chip {
   border-color: var(--border-color);
-  color: rgba(0, 255, 65, 0.6);
+  color: var(--fg-3);
   background: transparent;
 }
 
@@ -316,7 +316,7 @@
 }
 
 .attacker-row:hover {
-  background: rgba(0, 255, 65, 0.03);
+  background: var(--matrix-tint-5);
 }
 
 .attacker-row:last-child {
@@ -369,7 +369,7 @@
 }
 
 .status-dot.warn {
-  background: #ffaa00;
+  background: var(--warn);
   box-shadow: 0 0 6px rgba(255, 170, 0, 0.6);
 }
 
@@ -382,7 +382,7 @@
 /* Row-enter animation */
 @keyframes row-enter {
   from {
-    background: rgba(0, 255, 65, 0.2);
+    background: var(--matrix-tint-30);
     opacity: 0;
     transform: translateY(-4px);
   }
@@ -428,7 +428,7 @@
 }
 
 .logs-table tr:not(.empty-row):hover {
-  background-color: rgba(0, 255, 65, 0.03);
+  background-color: var(--matrix-tint-5);
 }
 
 .logs-table tr.empty-row td {
@@ -510,7 +510,7 @@
   font-size: 0.7rem;
   padding: 2px 8px;
   border: 1px solid var(--text-color);
-  background: rgba(0, 255, 65, 0.05);
+  background: var(--matrix-tint-5);
   color: var(--text-color);
 }
 

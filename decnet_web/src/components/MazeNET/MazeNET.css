@@ -180,11 +180,11 @@ body.maze-fullscreen .maze-shell {
 .maze-net-box.deployed {
   border-style: solid;
   border-color: var(--matrix);
-  background: rgba(0, 255, 65, 0.05);
-  box-shadow: 0 0 0 1px rgba(0, 255, 65, 0.25) inset, var(--matrix-glow);
+  background: var(--matrix-tint-5);
+  box-shadow: 0 0 0 1px var(--matrix-tint-30) inset, var(--matrix-glow);
 }
 .maze-net-box.deployed .maze-net-box-head {
-  color: var(--matrix); border-bottom-color: rgba(0, 255, 65, 0.45);
+  color: var(--matrix); border-bottom-color: var(--fg-3);
 }
 .maze-net-box.deployed.dmz {
   border-color: var(--alert);
@@ -266,7 +266,7 @@ body.maze-fullscreen .maze-shell {
 .maze-node.deployed {
   border-color: var(--matrix);
   box-shadow: var(--matrix-glow);
-  background: rgba(0, 255, 65, 0.04);
+  background: var(--matrix-tint-5);
 }
 .maze-node.deployed .mn-head { color: var(--matrix); }
 .maze-node.deployed.dmz-gateway {
@@ -543,7 +543,7 @@ body.maze-fullscreen .maze-shell {
 .chip.violet   { border-color: var(--violet); color: var(--violet); background: var(--violet-tint-10); }
 .chip.matrix   { border-color: var(--matrix); color: var(--matrix); background: var(--matrix-tint-10); }
 .chip.alert    { border-color: var(--alert);  color: var(--alert);  background: var(--alert-tint-10); }
-.chip.dim-chip { border-color: var(--border); color: rgba(0, 255, 65, 0.6); background: transparent; }
+.chip.dim-chip { border-color: var(--border); color: var(--fg-3); background: transparent; }
 
 .chip-mini {
   font-size: 0.55rem;

@@ -8,6 +8,9 @@
   --panel:           #0d1117;
   --border:          #30363d;
   --alert:           #ff4141;
+  --warn:            #e0a040;   /* amber — degraded / passive / stale */
+  --amber:           var(--warn);
+  --crit:            #e74c3c;   /* hot/critical, distinct from --alert */
 
   /* Back-compat names used across the codebase */
   --background-color: var(--bg);
@@ -28,6 +31,8 @@
   --matrix-tint-30:  rgba(0, 255, 65, 0.30);
   --violet-tint-10:  rgba(238, 130, 238, 0.10);
   --alert-tint-10:   rgba(255, 65, 65, 0.10);
+  --warn-tint-10:    rgba(224, 160, 64, 0.10);
+  --crit-tint-10:    rgba(231, 76, 60, 0.10);
 
   /* ── Glows ─────────────────────────────────────── */
   --matrix-glow:       0 0 10px rgba(0, 255, 65, 0.5);
@@ -129,6 +134,9 @@ html[data-theme="light"] {
   --panel:           #c9c7c2;
   --border:          #1a1a1a;
   --alert:           #991b1b;
+  --warn:            #b45309;   /* darker amber — readable on cream */
+  --amber:           var(--warn);
+  --crit:            #b91c1c;   /* matches alert in light, distinct in dark */
 
   --fg-1: var(--matrix);
   --fg-2: rgba(13, 13, 13, 0.78);
@@ -140,6 +148,8 @@ html[data-theme="light"] {
   --matrix-tint-30:  rgba(13, 13, 13, 0.18);
   --violet-tint-10:  rgba(45, 27, 78, 0.10);
   --alert-tint-10:   rgba(153, 27, 27, 0.10);
+  --warn-tint-10:    rgba(180, 83, 9, 0.12);
+  --crit-tint-10:    rgba(185, 28, 28, 0.10);
 
   /* Glows no-op'd — kept defined so .btn:hover etc. don't
    * break, just produce no halo. */
