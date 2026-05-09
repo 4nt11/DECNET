@@ -3,27 +3,26 @@ import { useSearchParams, useNavigate } from 'react-router-dom';
 import {
   PanelRightOpen, PanelRightClose, PanelLeftOpen, PanelLeftClose,
   Maximize2, Minimize2, RotateCcw, UploadCloud, ArrowLeft,
-  Plus, Trash2, Zap, Copy, Eye, ShieldAlert, GitMerge, Server, Mail,
+  Server, Mail,
 } from '../../icons';
 import './MazeNET.css';
-import axios, { type ApiError } from '../../utils/api';
+import axios from '../../utils/api';
 import { useSwarmHosts } from '../../hooks/useSwarmHosts';
 import Palette from './Palette';
 import Canvas from './Canvas';
 import Inspector from './Inspector';
 import type { Selection } from './Inspector';
-import ContextMenu, { type MenuItem } from './ContextMenu';
-import { DEFAULT_SERVICES } from './data';
-import type { Archetype, ServiceDef } from './data';
-import type { Net, MazeNode, Edge, DeckyNode } from './types';
+import ContextMenu from './ContextMenu';
+import type { Net, MazeNode, DeckyNode } from './types';
+import type { Archetype } from './data';
 import { useMazeApi } from './useMazeApi';
 import type { DeckyRow } from './useMazeApi';
 import { useTopologyEditor } from './useTopologyEditor';
 import { useMazeInteraction, type PaletteDrag } from './useMazeInteraction';
 import { useLayoutPersistor } from './useMazeLayoutStore';
-import { useTopologyStream, type TopologyStreamEvent } from './useTopologyStream';
 import { useFullscreenMode } from './useFullscreenMode';
-import { ARCHETYPES as DEFAULT_ARCHETYPES } from './data';
+import { useTopologyData } from './useTopologyData';
+import { useMazeContextMenu } from './useMazeContextMenu';
 import { useToast } from '../Toasts/useToast';
 import { useServiceRegistry } from '../../hooks/useServiceRegistry';
 import AddServiceConfigModal from '../AddServiceConfigModal';
@@ -177,35 +176,27 @@ const MazeNET: React.FC = () => {
   const topologyId = params.get('topology') ?? '';
 
   const { byUuid: hostsByUuid } = useSwarmHosts();
-  const [nets,  setNets]  = useState<Net[]>([]);
-  const [nodes, setNodes] = useState<MazeNode[]>([]);
-  const [edges, setEdges] = useState<Edge[]>([]);
-  const [topoStatus, setTopoStatus] = useState<string>('pending');
-  const [topoName, setTopoName] = useState<string>('');
-  const [topoVersion, setTopoVersion] = useState<number>(0);
-  const [topoTargetHost, setTopoTargetHost] = useState<string | null>(null);
-  const [topoMode, setTopoMode] = useState<string>('unihost');
+  const data = useTopologyData(api, topologyId);
+  const {
+    nets, setNets, nodes, setNodes, edges, setEdges,
+    topoMeta, services, archetypes,
+    loadErr, actionErr, flashErr,
+    deploying, onDeploy,
+    streamLive, lastEventAt, streamEnabled,
+    refetch,
+  } = data;
+  const { status: topoStatus, name: topoName, version: topoVersion,
+          targetHost: topoTargetHost, mode: topoMode } = topoMeta;
   const [selection, setSelection] = useState<Selection>(null);
   const [inspectorOpen, setInspectorOpen] = useState(true);
   const [paletteOpen, setPaletteOpen] = useState(true);
   const { fullscreen, toggle: toggleFullscreen } = useFullscreenMode();
-  const [services, setServices] = useState<ServiceDef[]>(DEFAULT_SERVICES);
-  const [archetypes, setArchetypes] = useState<Archetype[]>(DEFAULT_ARCHETYPES);
 
   useLayoutPersistor(topologyId || null, nets, nodes);
-  const [loadErr, setLoadErr] = useState<string | null>(null);
-  const [actionErr, setActionErr] = useState<string | null>(null);
-  const [deploying, setDeploying] = useState(false);
 
   const canvasRef = useRef<HTMLDivElement>(null);
 
   const editor = useTopologyEditor({ api, topoStatus, topoVersion });
-
-  const flashErr = useCallback((err: unknown, fallback: string) => {
-    const msg = (err as ApiError)?.response?.data?.detail ?? (err as ApiError)?.message ?? fallback;
-    setActionErr(msg);
-    setTimeout(() => setActionErr(null), 4000);
-  }, []);
 
   /* ── Live service mutation (W3 endpoints) — hoisted above palette
      drop so onPaletteDrop's deps can reference it without hitting the
@@ -381,8 +372,6 @@ const MazeNET: React.FC = () => {
     onPaletteDrop, onReparent, onAddEdge,
   });
 
-  const [ctxMenu, setCtxMenu] = useState<{ x: number; y: number; items: MenuItem[] } | null>(null);
-
   const removeNet = async (id: string) => {
     const net = nets.find((n) => n.id === id);
     if (!net || net.kind === 'internet') return;
@@ -518,238 +507,19 @@ const MazeNET: React.FC = () => {
     }
   };
 
-  /* Force-mutate is a no-op against a pending topology (no live containers).
-   * Keep the menu item disabled for now; real hook lands with live-editing polish. */
-  const forceMutate = (_id: string) => {
-    flashErr(null, 'force-mutate only applies to deployed topologies');
-  };
+  // Load + SSE + deploy + flashErr live in useTopologyData (above).
 
-  const onNodeContextMenu = (id: string) => (e: React.MouseEvent) => {
-    e.preventDefault();
-    e.stopPropagation();
-    const node = nodes.find((n) => n.id === id);
-    if (!node) return;
-    setSelection({ type: 'node', id });
-    const isObs = node.kind === 'observed';
-    const isGateway = node.kind === 'decky' && !!node.decky_config?.forwards_l3;
-    const locked = isObs || isGateway;
-    const lockedTitle = isObs
-      ? 'observed entity — not a deployed decky'
-      : isGateway ? 'DMZ gateway — pinned to its DMZ network' : undefined;
-    const usedServices = node.kind === 'decky' ? new Set(node.services) : new Set<string>();
-    const serviceSubmenu: MenuItem[] = services
-      .filter((s) => !usedServices.has(s.slug))
-      .slice(0, 16)
-      .map((s) => ({
-        label: `${s.name} · ${s.proto.toUpperCase()}:${s.port}`,
-        disabled: isObs,
-        onClick: () => addServiceToNode(id, s.slug),
-      }));
-    if (serviceSubmenu.length === 0) {
-      serviceSubmenu.push({ label: '(no free services)', disabled: true });
-    }
-
-    setCtxMenu({
-      x: e.clientX, y: e.clientY,
-      items: [
-        { label: 'Add service…', icon: <Plus size={12} />, disabled: isObs,
-          title: isObs ? 'observed entity — services fixed' : undefined,
-          submenu: serviceSubmenu },
-        { label: 'Force mutate', icon: <Zap size={12} />, disabled: isObs,
-          onClick: () => forceMutate(id) },
-        { label: 'Duplicate decky', icon: <Copy size={12} />, disabled: locked,
-          title: lockedTitle, onClick: () => duplicateNode(id) },
-        { separator: true, label: '' },
-        { label: 'Delete decky', icon: <Trash2 size={12} />, danger: true,
-          disabled: locked, title: lockedTitle,
-          onClick: () => removeNode(id) },
-      ],
-    });
-  };
-
-  const onNetContextMenu = (id: string) => (e: React.MouseEvent) => {
-    e.preventDefault();
-    e.stopPropagation();
-    const net = nets.find((n) => n.id === id);
-    if (!net) return;
-    setSelection({ type: 'net', id });
-    const archetypeSubmenu: MenuItem[] = archetypes.map((a) => ({
-      label: a.name, icon: <Server size={12} />,
-      onClick: async () => {
-        const name = `decky-${tempIdSuffix()}`;
-        try {
-          const dRes = await editor.addDeckyToLan(
-            topologyId,
-            { name, services: [...a.services], x: 20, y: 40,
-              decky_config: { archetype: a.slug } },
-            id, net.name,
-          );
-          if (dRes.kind !== 'applied') return;
-          const decky = dRes.data;
-          const node: DeckyNode = {
-            kind: 'decky', id: decky.uuid, netId: id, name: decky.name,
-            archetype: a.slug, services: [...a.services], status: 'idle',
-            x: 20, y: 40,
-          };
-          setNodes((p) => [...p, node]);
-        } catch (err) {
-          flashErr(err, 'create decky failed');
-        }
-      },
-    }));
-
-    setCtxMenu({
-      x: e.clientX, y: e.clientY,
-      items: [
-        { label: 'Add decky…', icon: <Plus size={12} />, submenu: archetypeSubmenu },
-        { label: 'Inspect',    icon: <Eye size={12} />,  onClick: () => setSelection({ type: 'net', id }) },
-        { separator: true, label: '' },
-        { label: net.kind === 'dmz' ? 'Delete DMZ' : 'Delete network',
-          icon: <Trash2 size={12} />, danger: true,
-          disabled: net.kind === 'internet',
-          title: net.kind === 'internet' ? 'internet zone cannot be removed' : undefined,
-          onClick: () => removeNet(id) },
-      ],
-    });
-  };
-
-  const onEdgeContextMenu = (id: string) => (e: React.MouseEvent) => {
-    e.preventDefault();
-    e.stopPropagation();
-    setSelection({ type: 'edge', id });
-    setCtxMenu({
-      x: e.clientX, y: e.clientY,
-      items: [
-        { label: 'Remove edge', icon: <Trash2 size={12} />, danger: true, onClick: () => removeEdge(id) },
-      ],
-    });
-  };
-
-  const onCanvasContextMenu = (e: React.MouseEvent) => {
-    e.preventDefault();
-    setCtxMenu({
-      x: e.clientX, y: e.clientY,
-      items: [
-        { label: 'Add subnet here', icon: <GitMerge size={12} />,
-          onClick: () => {
-            const rect = canvasRef.current?.getBoundingClientRect();
-            const wx = e.clientX - (rect?.left ?? 0) - interaction.pan.x;
-            const wy = e.clientY - (rect?.top  ?? 0) - interaction.pan.y;
-            onPaletteDrop(
-              { kind: 'network-subnet', slug: 'subnet', label: 'SUBNET', clientX: e.clientX, clientY: e.clientY },
-              { x: wx, y: wy }, null, null,
-            );
-          },
-        },
-        { label: 'Add DMZ here', icon: <ShieldAlert size={12} />,
-          onClick: () => {
-            const rect = canvasRef.current?.getBoundingClientRect();
-            const wx = e.clientX - (rect?.left ?? 0) - interaction.pan.x;
-            const wy = e.clientY - (rect?.top  ?? 0) - interaction.pan.y;
-            onPaletteDrop(
-              { kind: 'network-dmz', slug: 'dmz', label: 'DMZ', clientX: e.clientX, clientY: e.clientY },
-              { x: wx, y: wy }, null, null,
-            );
-          },
-        },
-      ],
-    });
-  };
-
-  /* Load catalogs. */
-  useEffect(() => {
-    let cancelled = false;
-    api.getServices().then((s) => { if (!cancelled) setServices(s); }).catch(() => {});
-    api.getArchetypes().then((a) => { if (!cancelled) setArchetypes(a); }).catch(() => {});
-    return () => { cancelled = true; };
-  }, [api]);
-
-  /* Hydrate topology. Route guard in App.tsx ensures topologyId is set;
-   * if the id is bogus, surface a friendly error. */
-  const refetch = useCallback(async () => {
-    if (!topologyId) return;
-    try {
-      const h = await api.getTopology(topologyId);
-      setNets(h.nets); setNodes(h.nodes); setEdges(h.edges);
-      setTopoStatus(h.topology.status);
-      setTopoName(h.topology.name);
-      setTopoVersion(h.topology.version);
-      setTopoMode(h.topology.mode ?? 'unihost');
-      setTopoTargetHost(h.topology.target_host_uuid ?? null);
-      setLoadErr(null);
-    } catch (err) {
-      setLoadErr((err as Error)?.message ?? 'topology load failed');
-    }
-  }, [api, topologyId]);
-
-  useEffect(() => { refetch(); }, [refetch]);
-
-  /* Live topology stream. Open only when the topology is deployed —
-   * pending topologies have no mutator loop and would just idle on
-   * keepalives.  On any state-transition event we refetch; DB is the
-   * source of truth and the bus is at-most-once. */
-  const [streamLive, setStreamLive] = useState(false);
-  const [lastEventAt, setLastEventAt] = useState<Date | null>(null);
-  const streamEnabled = topoStatus === 'active' || topoStatus === 'degraded';
-  const onStreamEvent = useCallback((event: TopologyStreamEvent) => {
-    // Flip LIVE only on named, purposeful events — not incidental keepalives.
-    if (event.name === 'snapshot'
-      || event.name.startsWith('mutation.')
-      || event.name === 'status') {
-      setStreamLive(true);
-      setLastEventAt(new Date());
-    }
-    if (event.name === 'mutation.failed') {
-      const p = event.payload ?? {};
-      const reason = typeof p.reason === 'string' ? p.reason
-        : typeof p.error === 'string' ? p.error
-        : 'mutation failed — check mutator logs';
-      setActionErr(`mutation failed: ${reason}`);
-      setTimeout(() => setActionErr(null), 6000);
-    }
-    if (event.name === 'mutation.applied'
-      || event.name === 'mutation.failed'
-      || event.name === 'status') {
-      refetch();
-    }
-    // Live service mutations from another tab / admin: optimistically
-    // patch local state so the chip set reflects shape without a full
-    // re-hydrate.  The post-mutation services list lives on the
-    // payload; same shape the actor's POST/DELETE response carries.
-    if (event.name === 'decky.service_added'
-      || event.name === 'decky.service_removed') {
-      const p = event.payload ?? {};
-      const deckyName = typeof p.decky_name === 'string' ? p.decky_name : null;
-      const services = Array.isArray(p.services) ? p.services as string[] : null;
-      if (deckyName && services) {
-        setNodes((prev) => prev.map((n) => n.kind === 'decky' && n.name === deckyName
-          ? { ...n, services } : n));
-        setStreamLive(true);
-        setLastEventAt(new Date());
-      }
-    }
-  }, [refetch]);
-  const onStreamError = useCallback(() => { setStreamLive(false); }, []);
-  useTopologyStream({
-    topologyId: streamEnabled ? topologyId : null,
-    enabled: streamEnabled,
-    onEvent: onStreamEvent,
-    onError: onStreamError,
+  const ctx = useMazeContextMenu({
+    nets, nodes, services, archetypes, topologyId,
+    setSelection, setNodes,
+    canvasRef, pan: interaction.pan,
+    editor, flashErr, onPaletteDrop,
+    removeNet, removeNode, removeEdge, duplicateNode, addServiceToNode,
   });
-  useEffect(() => { if (!streamEnabled) setStreamLive(false); }, [streamEnabled]);
-
-  const onDeploy = async () => {
-    if (!topologyId) return;
-    setDeploying(true);
-    try {
-      await api.deployTopology(topologyId);
-      await refetch();
-    } catch (err) {
-      flashErr(err, 'deploy failed');
-    } finally {
-      setDeploying(false);
-    }
-  };
+  const onNodeContextMenu = ctx.onNodeContextMenu;
+  const onNetContextMenu = ctx.onNetContextMenu;
+  const onEdgeContextMenu = ctx.onEdgeContextMenu;
+  const onCanvasContextMenu = ctx.onCanvasContextMenu;
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
@@ -878,8 +648,8 @@ const MazeNET: React.FC = () => {
           panLayerRef={interaction.panLayerRef}
           gridPatternRef={interaction.gridPatternRef}
         />
-        {ctxMenu && (
-          <ContextMenu x={ctxMenu.x} y={ctxMenu.y} items={ctxMenu.items} onClose={() => setCtxMenu(null)} />
+        {ctx.ctxMenu && (
+          <ContextMenu x={ctx.ctxMenu.x} y={ctx.ctxMenu.y} items={ctx.ctxMenu.items} onClose={ctx.closeMenu} />
         )}
         {interaction.paletteDrag && (
           <div

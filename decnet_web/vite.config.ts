@@ -15,14 +15,16 @@ export default defineConfig({
       include: ['src/**/*.{ts,tsx}'],
       exclude: ['src/**/*.d.ts', 'src/test/**', 'src/main.tsx'],
       // Baseline floors. Each refactor PR raises these; never lower.
-      // Phase 4 (Config split): page shell down from 989 to 131 LOC;
-      // hook + WorkersPanel + 4 tab files, 25 new tests. Suite:
-      // 34 files, 156 tests, 17.73% lines / 13.85% branches.
+      // Phase 5 (MazeNET trim): page shell down from 980 to 715 LOC
+      // (already partially modular; lifted fullscreen, topology data
+      // plane, and context-menu builder into focused hooks).
+      // 16 new tests. Suite: 37 files, 172 tests,
+      // 19.49% lines / 14.67% branches.
       thresholds: {
-        lines: 17,
-        functions: 15,
-        branches: 13,
-        statements: 16,
+        lines: 19,
+        functions: 17,
+        branches: 14,
+        statements: 18,
       },
     },
   },
