@@ -119,10 +119,10 @@ const Attackers: React.FC = () => {
 
   const handleExport = async () => {
     try {
-      const res = await api.get('/attackers/export', { responseType: 'blob' });
+      const res = await api.get('/attackers/export/stix', { responseType: 'blob' });
       const disposition: string = res.headers['content-disposition'] || '';
       const match = disposition.match(/filename="([^"]+)"/);
-      const filename = match ? match[1] : 'decnet-export.json';
+      const filename = match ? match[1] : 'decnet-fleet.stix.json';
       const url = URL.createObjectURL(new Blob([res.data], { type: 'application/json' }));
       const a = document.createElement('a');
       a.href = url;
@@ -232,7 +232,7 @@ const Attackers: React.FC = () => {
               type="button"
               className="btn btn-ghost"
               onClick={handleExport}
-              title="Export all threat data as JSON"
+              title="Export all attackers as STIX 2.1 bundle"
               style={{ display: 'flex', alignItems: 'center', gap: 6 }}
             >
               <Download size={13} />
