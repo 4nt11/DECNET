@@ -15,13 +15,14 @@ export default defineConfig({
       include: ['src/**/*.{ts,tsx}'],
       exclude: ['src/**/*.d.ts', 'src/test/**', 'src/main.tsx'],
       // Baseline floors. Each refactor PR raises these; never lower.
-      // Locked in after Phase 1 (AttackerDetail split: hook + 6 sections,
-      // 45 tests across 9 files): 7.78% lines, 5.35% branches.
+      // Phase 2 (DeckyFleet split): page shell down from 1,674 to 274
+      // LOC; hook + 6 children, 28 new tests. Suite: 21 files, 98 tests,
+      // 11.95% lines / 8.78% branches.
       thresholds: {
-        lines: 7,
-        functions: 6,
-        branches: 5,
-        statements: 7,
+        lines: 11,
+        functions: 10,
+        branches: 8,
+        statements: 11,
       },
     },
   },
