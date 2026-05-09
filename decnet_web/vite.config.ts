@@ -15,15 +15,15 @@ export default defineConfig({
       include: ['src/**/*.{ts,tsx}'],
       exclude: ['src/**/*.d.ts', 'src/test/**', 'src/main.tsx'],
       // Baseline floors. Each refactor PR raises these; never lower.
-      // Phase 7 (Webhooks trim): page shell down from 642 to 387 LOC.
-      // Lifted helpers, FormRow, SecretModal, and a useWebhooks data
-      // hook (CRUD + test endpoint). 17 new tests. Suite: 43 files,
-      // 207 tests, 21.69% lines / 16.51% branches.
+      // Phase 8 (SwarmHosts trim): page shell down from 513 to 161 LOC.
+      // Lifted helpers, EnrollmentWizard, and a useSwarmHosts polled
+      // data hook (CRUD + bundle generation). 16 new tests. Suite:
+      // 46 files, 223 tests, 22.9% lines / 16.97% branches.
       thresholds: {
-        lines: 21,
-        functions: 18,
+        lines: 22,
+        functions: 19,
         branches: 16,
-        statements: 20,
+        statements: 21,
       },
     },
   },
