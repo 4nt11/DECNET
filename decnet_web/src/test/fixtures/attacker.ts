@@ -25,6 +25,19 @@ export interface AttackerFixture {
   behavior: null;
   service_activity: { interacted: string[]; scanned: string[] };
   observations: never[];
+  ip_leaks?: Array<{
+    timestamp: string;
+    decky?: string;
+    service?: string;
+    bounty_type: string;
+    payload: {
+      source_ip?: string;
+      real_ip_claim?: string;
+      source_header?: string;
+      headers_seen?: Record<string, string>;
+    };
+  }>;
+  ip_leaks_total?: number;
 }
 
 export const makeAttacker = (overrides: Partial<AttackerFixture> = {}): AttackerFixture => ({
