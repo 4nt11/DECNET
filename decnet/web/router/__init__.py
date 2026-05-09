@@ -23,6 +23,7 @@ from .attackers.api_get_attacker_transcripts import router as attacker_transcrip
 from .attackers.api_get_attacker_smtp_targets import router as attacker_smtp_targets_router
 from .attackers.api_get_attacker_mail import router as attacker_mail_router
 from .attackers.api_get_attacker_intel import router as attacker_intel_router
+from .attackers.api_get_attacker_attribution import router as attacker_attribution_router
 from .identities.api_list_identities import router as identities_list_router
 from .identities.api_get_identity_detail import router as identity_detail_router
 from .identities.api_list_identity_observations import router as identity_observations_router
@@ -111,6 +112,7 @@ api_router.include_router(attacker_transcripts_router)
 api_router.include_router(attacker_smtp_targets_router)
 api_router.include_router(attacker_mail_router)
 api_router.include_router(attacker_intel_router)
+api_router.include_router(attacker_attribution_router)
 
 # Identity Resolution (read-only; populated by the clusterer worker —
 # see development/IDENTITY_RESOLUTION.md). Empty until the clusterer

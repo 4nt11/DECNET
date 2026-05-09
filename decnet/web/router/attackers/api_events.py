@@ -59,8 +59,10 @@ def _sse_name_for(topic: str) -> str:
     register 37+ listeners or know the registry. Single event name
     keeps the EventSource handler shape uniform.)
 
-    ``attacker.fingerprint_rotated``     → ``fingerprint.rotated``
-    ``attacker.scored``                  → ``attacker.scored``
+    ``attacker.fingerprint_rotated``           → ``fingerprint.rotated``
+    ``attacker.scored``                        → ``attacker.scored``
+    ``attribution.profile.state_changed``      → ``attribution.state_changed``
+    ``attribution.profile.multi_actor_suspected`` → ``attribution.multi_actor_suspected``
 
     Anything else passes through unchanged so a future ``attacker.*``
     family doesn't silently collapse onto a generic bucket.
@@ -71,6 +73,12 @@ def _sse_name_for(topic: str) -> str:
         return "fingerprint.rotated"
     if topic == f"{_topics.ATTACKER}.{_topics.ATTACKER_SCORED}":
         return "attacker.scored"
+    if topic == _topics.attribution(_topics.ATTRIBUTION_PROFILE_STATE_CHANGED):
+        return "attribution.state_changed"
+    if topic == _topics.attribution(
+        _topics.ATTRIBUTION_PROFILE_MULTI_ACTOR_SUSPECTED,
+    ):
+        return "attribution.multi_actor_suspected"
     return topic
 
 
@@ -95,7 +103,12 @@ async def api_attacker_events(
     user: dict = Depends(require_stream_viewer),
 ) -> StreamingResponse:
     # 404-after-auth so an existence probe can't enumerate attacker UUIDs.
-    await get_attacker_or_404(attacker_uuid)
+    attacker = await get_attacker_or_404(attacker_uuid)
+    # Pre-resolve the identity_uuid so attribution.profile.* events
+    # (keyed on identity_uuid, not attacker_uuid) can be filtered
+    # without a per-event repo lookup. None until the attribution
+    # worker stamps a stub on first observation.
+    identity_uuid = attacker.get("identity_id") if isinstance(attacker, dict) else None
 
     snapshot_per_primitive = await repo.latest_observation_per_primitive(
         attacker_uuid,
@@ -129,9 +142,10 @@ async def api_attacker_events(
                     yield ": keepalive\n\n"
                 return
 
-            # Three subscriptions, merged through one queue. Per-attacker
-            # filter on payload["attacker_uuid"] — the profiler worker
-            # stamps it on every published payload (Phase 5 amendment).
+            # Five subscriptions, merged through one queue. Filter on
+            # payload["attacker_uuid"] for attacker.* events; on
+            # payload["identity_uuid"] (resolved at stream open) for
+            # attribution.profile.* events.
             obs_sub = bus.subscribe(f"{_topics.ATTACKER}.{_topics.ATTACKER_OBSERVATION_PREFIX}.>")
             fp_sub = bus.subscribe(
                 f"{_topics.ATTACKER}.{_topics.ATTACKER_FINGERPRINT_ROTATED}",
@@ -139,9 +153,10 @@ async def api_attacker_events(
             score_sub = bus.subscribe(
                 f"{_topics.ATTACKER}.{_topics.ATTACKER_SCORED}",
             )
+            attribution_sub = bus.subscribe(f"{_topics.ATTRIBUTION}.>")
             queue: asyncio.Queue = asyncio.Queue(maxsize=_QUEUE_MAX)
 
-            async def _pump(sub) -> None:
+            async def _pump_by_attacker(sub) -> None:
                 async with sub:
                     async for ev in sub:
                         payload = ev.payload or {}
@@ -155,10 +170,26 @@ async def api_attacker_events(
                             # cover any gap a slow consumer creates.
                             pass
 
+            async def _pump_by_identity(sub) -> None:
+                async with sub:
+                    async for ev in sub:
+                        payload = ev.payload or {}
+                        # If the attacker has no stub identity yet,
+                        # there's nothing to filter on — skip silently.
+                        if identity_uuid is None:
+                            continue
+                        if payload.get("identity_uuid") != identity_uuid:
+                            continue
+                        try:
+                            queue.put_nowait(ev)
+                        except asyncio.QueueFull:
+                            pass
+
             tasks = [
-                asyncio.create_task(_pump(obs_sub)),
-                asyncio.create_task(_pump(fp_sub)),
-                asyncio.create_task(_pump(score_sub)),
+                asyncio.create_task(_pump_by_attacker(obs_sub)),
+                asyncio.create_task(_pump_by_attacker(fp_sub)),
+                asyncio.create_task(_pump_by_attacker(score_sub)),
+                asyncio.create_task(_pump_by_identity(attribution_sub)),
             ]
             try:
                 while True:
