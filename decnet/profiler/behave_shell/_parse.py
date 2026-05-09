@@ -160,20 +160,50 @@ _PROMPT_LINE_RE = re.compile(
 )
 
 
+_PS1_SHAPE_RE = re.compile(
+    # A line that LOOKS like a PS1 prompt carries at least one of:
+    #   - user@host                       (bash/zsh/fish defaults)
+    #   - "PS " prefix                    (PowerShell)
+    #   - drive-letter prefix "C:\" / "C:/"  (cmd.exe / PowerShell)
+    # These tokens are extremely rare in the body of generic command
+    # output, so they discriminate prompts from log lines that
+    # incidentally end with one of $#%>.
+    r"(?:[\w.-]+@[\w.-]+|^\s*PS\s|[A-Za-z]:[\\/])"
+)
+
+
 def _detect_prompt_suffix(line: str) -> str | None:
     """Return the suffix character if ``line`` looks like a PS1 prompt.
 
     ``line`` is one logical output line, ANSI-stripped, trailing
-    whitespace included. The discriminating shape: any text ending in
-    one of ``$ # % >`` optionally followed by a single space. We require
-    the line to be non-empty and the suffix to be the rightmost
-    non-whitespace character.
+    whitespace included. The discriminating shape: a line ending in
+    one of ``$ # % >``, AND either
+
+    * the original line ends with the suffix followed by a trailing
+      space (the default PS1 shape across bash / zsh / fish /
+      PowerShell — ``$ ``, ``# ``, ``% ``, ``> ``), OR
+    * the line carries a recognisable PS1-shape token (``user@host``,
+      ``PS `` prefix, or a Windows drive-letter prefix).
+
+    Without this guard, command output that incidentally ends in one
+    of the suffix characters — e.g. ``dpkg.log`` lines that close with
+    ``<none>`` — was being voted into the shell-type mode and could
+    flip the result to ``fish`` for an obvious-bash session.
     """
     stripped = line.rstrip()
     if not stripped:
         return None
     last = stripped[-1]
-    return last if last in ("$", "#", "%", ">") else None
+    if last not in ("$", "#", "%", ">"):
+        return None
+    # Prefer the cheap structural check: was there a trailing space
+    # after the suffix in the original line? (Default PS1s all carry
+    # one.) Falls back to a PS1-shape token search.
+    if len(line) > len(stripped) and line[len(stripped)] == " ":
+        return last
+    if _PS1_SHAPE_RE.search(stripped):
+        return last
+    return None
 
 
 def extract_prompt_lines(

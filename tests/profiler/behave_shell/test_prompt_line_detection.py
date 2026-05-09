@@ -66,6 +66,32 @@ def test_clean_output_no_prompt() -> None:
     assert lines == []
 
 
+def test_log_lines_ending_in_gt_are_not_prompts() -> None:
+    """``dpkg.log`` style lines close with ``<none>`` — incidentally
+    ending in ``>``. They must NOT register as fish prompts; otherwise
+    a single ``cat /var/log/dpkg.log`` would flood ``shell_type`` votes
+    and flip the mode for a plainly-bash session.
+    """
+    text = (
+        "2026-05-09 02:18:09 configure libssl3:amd64 3.0.19-1~deb12u2 <none>\n"
+        "2026-05-09 02:18:09 configure libexpat1:amd64 2.5.0-1+deb12u2 <none>\n"
+        "2026-05-09 02:18:10 configure python3.11-minimal:amd64 3.11.2-6 <none>\n"
+        "root@host:~# "
+    )
+    lines = list(extract_prompt_lines(text, base_ts=10.0, max_chars=256))
+    assert len(lines) == 1
+    assert lines[0].suffix_char == "#"
+
+
+def test_output_line_ending_in_dollar_without_ps1_shape_rejected() -> None:
+    """Sentence that happens to end in ``$`` (e.g. shell variable in
+    a doc) without trailing space and without a PS1 shape token must
+    not be treated as a prompt."""
+    text = "use $PATH or $HOME\nset -- $\n"
+    lines = list(extract_prompt_lines(text, base_ts=11.0, max_chars=256))
+    assert lines == []
+
+
 def test_long_prompt_capped_to_max_chars() -> None:
     long = "x" * 500 + "$ "
     lines = list(extract_prompt_lines(long, base_ts=6.0, max_chars=256))
