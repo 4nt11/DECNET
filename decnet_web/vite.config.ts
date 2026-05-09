@@ -15,16 +15,16 @@ export default defineConfig({
       include: ['src/**/*.{ts,tsx}'],
       exclude: ['src/**/*.d.ts', 'src/test/**', 'src/main.tsx'],
       // Baseline floors. Each refactor PR raises these; never lower.
-      // Phase 10 (AttackerDetail follow-through): page shell down from
-      // 1652 to 450 LOC. Lifted fingerprint renderers (12), behaviour
-      // panel (8 sub-pieces + lookups), and IntelPanel into focused
-      // sub-modules. 13 new tests. Suite: 50 files, 249 tests,
-      // 24.8% lines / 19.53% branches.
+      // Phase 11 (MazeNET/Inspector split): Inspector.tsx (606 LOC)
+      // split into per-selection panels. Inspector/index.tsx is now
+      // a 175 LOC dispatcher; NodeInspector keeps the 7 form-state
+      // useStates that are node-only. 10 new dispatcher tests. Suite:
+      // 51 files, 259 tests, 25.68% lines / 21.43% branches.
       thresholds: {
-        lines: 24,
-        functions: 21,
-        branches: 19,
-        statements: 23,
+        lines: 25,
+        functions: 22,
+        branches: 21,
+        statements: 24,
       },
     },
   },
