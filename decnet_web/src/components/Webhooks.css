@@ -49,15 +49,15 @@
 }
 .webhooks-root .btn:hover {
   background: var(--matrix);
-  color: #000;
+  color: var(--bg);
   box-shadow: var(--matrix-glow);
 }
 .webhooks-root .btn.violet { border-color: var(--violet); color: var(--violet); }
-.webhooks-root .btn.violet:hover { background: var(--violet); color: #000; box-shadow: var(--violet-glow); }
+.webhooks-root .btn.violet:hover { background: var(--violet); color: var(--bg); box-shadow: var(--violet-glow); }
 .webhooks-root .btn.alert  { border-color: var(--alert, #ff4d4d); color: var(--alert, #ff4d4d); }
-.webhooks-root .btn.alert:hover  { background: var(--alert, #ff4d4d); color: #000; box-shadow: 0 0 10px rgba(255, 77, 77, 0.5); }
+.webhooks-root .btn.alert:hover  { background: var(--alert, #ff4d4d); color: var(--bg); box-shadow: 0 0 10px rgba(255, 77, 77, 0.5); }
 .webhooks-root .btn.warn   { border-color: var(--warn, #e0a040); color: var(--warn, #e0a040); }
-.webhooks-root .btn.warn:hover   { background: var(--warn, #e0a040); color: #000; box-shadow: 0 0 10px rgba(224, 160, 64, 0.5); }
+.webhooks-root .btn.warn:hover   { background: var(--warn, #e0a040); color: var(--bg); box-shadow: 0 0 10px rgba(224, 160, 64, 0.5); }
 .webhooks-root .btn.ghost { border-color: var(--border-color); color: var(--matrix); opacity: 0.7; }
 .webhooks-root .btn.ghost:hover { opacity: 1; border-color: var(--matrix); background: transparent; box-shadow: var(--matrix-glow); }
 .webhooks-root .btn:disabled { opacity: 0.3; cursor: not-allowed; }
@@ -126,7 +126,7 @@
 }
 .webhooks-root .action-btn.fire:hover {
   background: var(--violet);
-  color: #000;
+  color: var(--bg);
   box-shadow: var(--violet-glow);
 }
 
@@ -218,7 +218,7 @@
 .webhooks-root .wh-form-grid input[type="url"],
 .webhooks-root .wh-form-grid input[type="password"],
 .webhooks-root .wh-form-grid textarea {
-  background: #0d1117;
+  background: var(--panel);
   border: 1px solid var(--border-color);
   color: var(--text-color);
   padding: 8px 12px;
@@ -307,7 +307,7 @@
 }
 
 .wh-secret-modal .wh-secret-value {
-  background: #0d1117;
+  background: var(--panel);
   border: 1px solid var(--border-color);
   padding: 10px 12px;
   font-size: 0.85rem;
@@ -336,6 +336,6 @@
   transition: all 0.3s ease;
 }
 .wh-secret-modal .btn.violet { border-color: var(--violet); color: var(--violet); }
-.wh-secret-modal .btn.violet:hover { background: var(--violet); color: #000; box-shadow: var(--violet-glow); }
+.wh-secret-modal .btn.violet:hover { background: var(--violet); color: var(--bg); box-shadow: var(--violet-glow); }
 .wh-secret-modal .btn.ghost { border-color: var(--border-color); color: var(--matrix); opacity: 0.7; }
 .wh-secret-modal .btn.ghost:hover { opacity: 1; border-color: var(--matrix); background: transparent; box-shadow: var(--matrix-glow); }

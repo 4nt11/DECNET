@@ -89,14 +89,14 @@
   gap: 8px;
 }
 
-.control-btn:hover { background: var(--matrix); color: #000; box-shadow: var(--matrix-glow); }
+.control-btn:hover { background: var(--matrix); color: var(--bg); box-shadow: var(--matrix-glow); }
 .control-btn:disabled { opacity: 0.3; cursor: not-allowed; }
 
 .control-btn.primary {
   border-color: var(--violet);
   color: var(--violet);
 }
-.control-btn.primary:hover { background: var(--violet); color: #000; box-shadow: var(--violet-glow); }
+.control-btn.primary:hover { background: var(--violet); color: var(--bg); box-shadow: var(--violet-glow); }
 
 .control-btn.danger {
   border-color: var(--alert, var(--alert));
@@ -104,7 +104,7 @@
 }
 .control-btn.danger:hover {
   background: var(--alert, var(--alert));
-  color: #000;
+  color: var(--bg);
   box-shadow: 0 0 10px rgba(255, 77, 77, 0.5);
 }
 

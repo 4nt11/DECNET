@@ -142,10 +142,10 @@ const Canvas = forwardRef<HTMLDivElement, Props>(function Canvas(
         <svg className="maze-svg" overflow="visible">
           <defs>
             <marker id="arrow-matrix" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="6" markerHeight="6" orient="auto">
-              <path d="M0,0 L10,5 L0,10 z" fill="#00ff41" />
+              <path d="M0,0 L10,5 L0,10 z" fill="currentColor" style={{ color: 'var(--matrix)' }} />
             </marker>
             <marker id="arrow-violet" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="6" markerHeight="6" orient="auto">
-              <path d="M0,0 L10,5 L0,10 z" fill="#ee82ee" />
+              <path d="M0,0 L10,5 L0,10 z" fill="currentColor" style={{ color: 'var(--violet)' }} />
             </marker>
             <marker id="arrow-alert" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="6" markerHeight="6" orient="auto">
               <path d="M0,0 L10,5 L0,10 z" fill="#ff4141" />

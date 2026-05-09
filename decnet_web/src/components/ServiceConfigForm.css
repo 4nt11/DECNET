@@ -51,7 +51,7 @@ select.svc-cfg-input {
   font-family: var(--font-mono);
   font-size: 0.72rem;
   padding: 4px 6px;
-  background: rgba(0, 0, 0, 0.35);
+  background: var(--panel);
   border: 1px solid var(--border);
   border-radius: 0;
   color: var(--matrix);
@@ -146,10 +146,10 @@ select.svc-cfg-input {
 }
 .svc-cfg-btn:hover:not(:disabled) {
   background: var(--matrix);
-  color: #000;
+  color: var(--bg);
 }
 .svc-cfg-btn.violet { border-color: var(--violet); color: var(--violet); }
-.svc-cfg-btn.violet:hover:not(:disabled) { background: var(--violet); color: #000; }
+.svc-cfg-btn.violet:hover:not(:disabled) { background: var(--violet); color: var(--bg); }
 .svc-cfg-btn:disabled { opacity: 0.3; cursor: not-allowed; }
 
 .svc-cfg-pw-toggle {
