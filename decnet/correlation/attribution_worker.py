@@ -30,6 +30,7 @@ from decnet.bus.publish import (
     run_control_listener_signal as _run_control_listener_signal,
     run_health_heartbeat as _run_health_heartbeat,
 )
+from decnet.correlation.attribution import _thresholds as _T
 from decnet.correlation.attribution.aggregate import aggregate_observations
 from decnet.logging import get_logger
 from decnet.web.db.repository import BaseRepository
@@ -55,24 +56,46 @@ async def run_attribution_loop(
     repo: BaseRepository,
     *,
     shutdown: asyncio.Event | None = None,
+    multi_actor_tick_secs: float | None = None,
 ) -> None:
     """Run the attribution worker until cancelled.
 
-    *shutdown* is an optional external stop signal; the loop also
-    exits cleanly on ``CancelledError`` and ``KeyboardInterrupt``.
+    Three concurrent tasks under one supervisor:
+
+    1. ``_consume_observations`` — bus subscription on
+       ``attacker.observation.>``; per-event handler upserts state.
+    2. ``_multi_actor_tick`` — periodic walk of ``attribution_state``
+       firing ``attribution.profile.multi_actor_suspected`` when an
+       identity carries ≥ ``MULTI_ACTOR_MIN_PRIMITIVES`` rows in
+       ``multi_actor`` state. Phase 5.
+    3. Health + control standard channels.
+
+    *shutdown* is an optional external stop signal.
+    *multi_actor_tick_secs* overrides ``_thresholds.MULTI_ACTOR_TICK_SECS``
+    (tests use this to drive the correlator without sleeping for a
+    minute).
     """
     log.info("attribution worker started pattern=%s", _OBSERVATION_PATTERN)
 
     bus: BaseBus | None = None
     sub_task: asyncio.Task | None = None
+    tick_task: asyncio.Task | None = None
     heartbeat_task: asyncio.Task | None = None
     control_task: asyncio.Task | None = None
+    tick_secs = (
+        multi_actor_tick_secs
+        if multi_actor_tick_secs is not None
+        else _T.MULTI_ACTOR_TICK_SECS
+    )
     try:
         candidate = get_bus(client_name=f"{_WORKER_NAME}-correlator")
         await candidate.connect()
         bus = candidate
         sub_task = asyncio.create_task(
             _consume_observations(bus, repo),
+        )
+        tick_task = asyncio.create_task(
+            _multi_actor_tick_loop(bus, repo, tick_secs),
         )
         heartbeat_task = asyncio.create_task(
             _run_health_heartbeat(bus, _WORKER_NAME),
@@ -94,7 +117,7 @@ async def run_attribution_loop(
     except (asyncio.CancelledError, KeyboardInterrupt):
         log.info("attribution worker stopped")
     finally:
-        for task in (sub_task, heartbeat_task, control_task):
+        for task in (sub_task, tick_task, heartbeat_task, control_task):
             if task is None:
                 continue
             task.cancel()
@@ -275,7 +298,97 @@ def _payload_of(event: Any) -> dict[str, Any]:
     return payload if isinstance(payload, dict) else {}
 
 
+async def _multi_actor_tick_loop(
+    bus: BaseBus, repo: BaseRepository, interval_secs: float,
+) -> None:
+    """Walk ``attribution_state`` every *interval_secs* and emit
+    ``attribution.profile.multi_actor_suspected`` for any identity
+    whose multi_actor primitives changed since the last tick.
+
+    Dedupe: in-memory ``last_fired`` map keyed on identity_uuid →
+    frozenset(primitives). Same primitive set as last fire → no
+    re-emit. New primitive joining the set → re-emit. Set shrinks
+    below ``MULTI_ACTOR_MIN_PRIMITIVES`` → drop the entry so it
+    re-arms.
+
+    In-memory dedup is honest for v0 — restart-resets are
+    acceptable because the underlying ``attribution_state`` rows
+    persist; on first tick after restart we re-emit the current
+    set. v1 may persist a ``multi_actor_suspect_log`` table.
+    """
+    last_fired: dict[str, frozenset[str]] = {}
+    try:
+        while True:
+            try:
+                await tick_multi_actor(bus, repo, last_fired)
+            except Exception:  # noqa: BLE001
+                log.exception("attribution worker: multi_actor tick failed")
+            await asyncio.sleep(interval_secs)
+    except asyncio.CancelledError:
+        raise
+
+
+async def tick_multi_actor(
+    bus: BaseBus | None,
+    repo: BaseRepository,
+    last_fired: dict[str, frozenset[str]],
+) -> int:
+    """One pass of the cross-primitive correlator. Public for tests.
+
+    Returns the number of ``multi_actor_suspected`` events emitted.
+    """
+    candidates = await repo.list_multi_actor_identities()
+    fired = 0
+    seen_now: set[str] = set()
+    for entry in candidates:
+        identity_uuid = str(entry["identity_uuid"])
+        primitives: list[str] = sorted(entry.get("primitives") or [])
+        seen_now.add(identity_uuid)
+        if len(primitives) < _T.MULTI_ACTOR_MIN_PRIMITIVES:
+            # Repo already filters to >= 2 today; defensive against
+            # future schema drift.
+            continue
+        signature = frozenset(primitives)
+        if last_fired.get(identity_uuid) == signature:
+            continue
+        last_fired[identity_uuid] = signature
+        if bus is None:
+            continue
+        await publish_safely(
+            bus,
+            _topics.attribution(_topics.ATTRIBUTION_PROFILE_MULTI_ACTOR_SUSPECTED),
+            {
+                "identity_uuid": identity_uuid,
+                "primitives": primitives,
+                "evidence_summary": (
+                    f"{len(primitives)} primitives flagged multi_actor"
+                ),
+                "confidence": _T.MULTI_ACTOR_MAX_CONFIDENCE,
+                "ts": _now(),
+            },
+            event_type=_topics.ATTRIBUTION_PROFILE_MULTI_ACTOR_SUSPECTED,
+        )
+        fired += 1
+        log.info(
+            "attribution worker: multi_actor_suspected identity=%s primitives=%s",
+            identity_uuid, primitives,
+        )
+    # Rearm: any identity that was in last_fired but no longer in
+    # candidates dropped below the threshold; remove so the next
+    # qualifying flap re-fires.
+    for stale in [k for k in last_fired if k not in seen_now]:
+        del last_fired[stale]
+    return fired
+
+
+def _now() -> float:
+    """Wall-clock seconds. Wrapped so tests can monkeypatch."""
+    import time
+    return time.time()
+
+
 __all__ = [
     "run_attribution_loop",
     "handle_observation_event",
+    "tick_multi_actor",
 ]
