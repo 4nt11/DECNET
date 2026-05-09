@@ -342,24 +342,22 @@ input:focus {
  * circle clip-path in useThemeToggle.ts owns the
  * reveal entirely.
  *
- * Layering: the NEW theme snapshot sits behind, the
- * OLD theme snapshot sits on top. The JS animation
- * shrinks the old layer's clip-path from the
- * viewport-covering circle down to circle(0) at the
- * click point — burning away to reveal the new
- * theme underneath. This avoids the one-frame flash
- * you'd get by growing the new layer (where the
- * default fully-opaque pseudo is visible for a tick
- * before the clip-path animation registers). */
+ * Layering: the OLD theme sits behind, the NEW theme
+ * sits on top and grows outward from the click point
+ * via a clip-path animation. The JS animation runs
+ * with fill: 'both' so the new layer starts clipped
+ * to circle(0) immediately (no opening flash) and
+ * stays at the final keyframe until pseudo teardown
+ * (no closing flash). */
 ::view-transition-old(root),
 ::view-transition-new(root) {
   animation: none;
   mix-blend-mode: normal;
 }
-::view-transition-new(root) {
+::view-transition-old(root) {
   z-index: 0;
 }
-::view-transition-old(root) {
+::view-transition-new(root) {
   z-index: 1;
 }
 

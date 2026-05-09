@@ -70,27 +70,25 @@ function animateSwap(next: Theme, x: number, y: number): void {
       Math.max(x, window.innerWidth - x),
       Math.max(y, window.innerHeight - y),
     );
-    /* Shrink the OLD layer (on top per index.css z-index rules)
-     * away from the click point, uncovering the NEW layer that
-     * sits behind. Going outside-in instead of inside-out avoids
-     * the one-frame flash where the default-opaque new pseudo
-     * would otherwise be visible before the clip-path registers. */
+    /* Grow the NEW layer (on top per index.css z-index rules)
+     * outward from the click point, covering the OLD layer that
+     * sits behind. fill: 'both' pins both ends of the keyframe
+     * range so the start state (clipped to a 0-radius circle)
+     * is enforced before the first paint and the end state
+     * (full-viewport circle) holds through pseudo teardown —
+     * killing the flash on either end of the animation. */
     document.documentElement.animate(
       {
         clipPath: [
-          `circle(${endRadius}px at ${x}px ${y}px)`,
           `circle(0px at ${x}px ${y}px)`,
+          `circle(${endRadius}px at ${x}px ${y}px)`,
         ],
       },
       {
         duration: 520,
         easing: 'cubic-bezier(0.4, 0, 0.2, 1)',
-        pseudoElement: '::view-transition-old(root)',
-        /* Without 'forwards' the keyframes release on completion
-         * and the pseudo reverts to its computed style (no
-         * clip-path), making the old layer flash back at full
-         * size for a frame before View Transitions tears it down. */
-        fill: 'forwards',
+        pseudoElement: '::view-transition-new(root)',
+        fill: 'both',
       },
     );
   }).catch(() => { /* user-cancelled or unsupported pseudo, ignore */ });
