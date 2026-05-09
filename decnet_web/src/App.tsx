@@ -8,6 +8,7 @@ import ShortcutsHelp from './components/ShortcutsHelp/ShortcutsHelp';
 import { ToastProvider } from './components/Toasts/ToastProvider';
 import { useToast } from './components/Toasts/useToast';
 import { useGlobalHotkeys } from './hooks/useGlobalHotkeys';
+import { isDeveloperMode } from './lib/devGate';
 
 // Page components are code-split per route. Each lands as its own
 // chunk and only downloads when the user navigates to that path —
@@ -38,6 +39,10 @@ const RemoteUpdates  = lazy(() => import('./components/RemoteUpdates'));
 const SwarmHosts     = lazy(() => import('./components/SwarmHosts'));
 const MazeNET        = lazy(() => import('./components/MazeNET/MazeNET'));
 const TopologyList   = lazy(() => import('./components/TopologyList/TopologyList'));
+/* Dev-gated route: when VITE_DECNET_DEVELOPER is unset at build time,
+ * isDeveloperMode() collapses to `false` and Vite tree-shakes both
+ * the import below and the conditional <Route> out of the bundle. */
+const ThemeLab       = lazy(() => import('./components/ThemeLab/ThemeLab'));
 
 /* Minimal fallback rendered while a lazy-loaded route chunk is in
  * flight. Matches the house "dim mono" voice — no spinner library,
@@ -139,6 +144,9 @@ const AuthedShell: React.FC<AuthedShellProps> = ({ onLogout, onSearch, searchQue
             <Route path="/swarm-updates" element={<RemoteUpdates />} />
             <Route path="/swarm/hosts" element={<SwarmHosts />} />
             <Route path="/swarm/enroll" element={<Navigate to="/swarm/hosts" replace />} />
+            {isDeveloperMode() && (
+              <Route path="/theme-lab" element={<ThemeLab />} />
+            )}
             <Route path="*" element={<Navigate to="/" replace />} />
           </Routes>
         </Suspense>

@@ -1,0 +1,21 @@
+/* ThemeLab — lab-page-specific layout only.
+ * Colours come from index.css tokens; no hex literals here. */
+
+.theme-lab {
+  padding: var(--space-8);
+  color: var(--text-color);
+  font-family: var(--font-mono);
+}
+
+.theme-lab .page-header h1 {
+  font-size: var(--fs-page);
+  letter-spacing: var(--ls-title);
+  color: var(--accent-color);
+  margin-bottom: var(--space-2);
+}
+
+.theme-lab-subtitle {
+  font-size: var(--fs-mini);
+  letter-spacing: var(--ls-label);
+  opacity: 0.6;
+}
