@@ -340,18 +340,26 @@ input:focus {
 /* ── Theme transition ───────────────────────────
  * Disables the default cross-fade so the JS-driven
  * circle clip-path in useThemeToggle.ts owns the
- * reveal entirely. The new theme grows from the
- * click point; the old theme stays put and is
- * uncovered by the expanding circle. */
+ * reveal entirely.
+ *
+ * Layering: the NEW theme snapshot sits behind, the
+ * OLD theme snapshot sits on top. The JS animation
+ * shrinks the old layer's clip-path from the
+ * viewport-covering circle down to circle(0) at the
+ * click point — burning away to reveal the new
+ * theme underneath. This avoids the one-frame flash
+ * you'd get by growing the new layer (where the
+ * default fully-opaque pseudo is visible for a tick
+ * before the clip-path animation registers). */
 ::view-transition-old(root),
 ::view-transition-new(root) {
   animation: none;
   mix-blend-mode: normal;
 }
-::view-transition-old(root) {
+::view-transition-new(root) {
   z-index: 0;
 }
-::view-transition-new(root) {
+::view-transition-old(root) {
   z-index: 1;
 }
 

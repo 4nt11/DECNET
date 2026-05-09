@@ -70,17 +70,22 @@ function animateSwap(next: Theme, x: number, y: number): void {
       Math.max(x, window.innerWidth - x),
       Math.max(y, window.innerHeight - y),
     );
+    /* Shrink the OLD layer (on top per index.css z-index rules)
+     * away from the click point, uncovering the NEW layer that
+     * sits behind. Going outside-in instead of inside-out avoids
+     * the one-frame flash where the default-opaque new pseudo
+     * would otherwise be visible before the clip-path registers. */
     document.documentElement.animate(
       {
         clipPath: [
-          `circle(0px at ${x}px ${y}px)`,
           `circle(${endRadius}px at ${x}px ${y}px)`,
+          `circle(0px at ${x}px ${y}px)`,
         ],
       },
       {
         duration: 520,
         easing: 'cubic-bezier(0.4, 0, 0.2, 1)',
-        pseudoElement: '::view-transition-new(root)',
+        pseudoElement: '::view-transition-old(root)',
       },
     );
   }).catch(() => { /* user-cancelled or unsupported pseudo, ignore */ });
