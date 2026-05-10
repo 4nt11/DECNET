@@ -62,7 +62,7 @@ cat > /etc/caddy/Caddyfile <<EOF
   tls ${CERT} ${KEY}
   route {
     decnet_fp
-    reverse_proxy 127.0.0.1:8080
+    reverse_proxy 127.0.0.1:8443
   }
 }
 EOF
@@ -75,12 +75,12 @@ python3 -c "
 import socket, sys, time
 for _ in range(80):
     try:
-        s = socket.create_connection(('127.0.0.1', 8080), timeout=0.25)
+        s = socket.create_connection(('127.0.0.1', 8443), timeout=0.25)
         s.close()
         sys.exit(0)
     except OSError:
         time.sleep(0.1)
-print('Flask did not bind to :8080 in time', file=sys.stderr)
+print('Flask did not bind to :8443 in time', file=sys.stderr)
 sys.exit(1)
 " || { echo 'Flask startup failed — aborting'; kill $FLASK_PID 2>/dev/null; exit 1; }
 

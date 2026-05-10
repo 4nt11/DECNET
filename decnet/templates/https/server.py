@@ -32,7 +32,7 @@ logging.getLogger("werkzeug").setLevel(logging.ERROR)
 NODE_NAME     = os.environ.get("NODE_NAME", "webserver")
 SERVICE_NAME   = "https"
 LOG_TARGET    = os.environ.get("LOG_TARGET", "")
-PORT          = int(os.environ.get("PORT", "8080"))
+PORT          = int(os.environ.get("PORT", "8443"))
 
 _SERVER_CHOICES = [
     "Apache/2.4.41 (Ubuntu)",
