@@ -106,6 +106,7 @@ _PREDICATES: Final[dict[str, Predicate]] = {
 class HttpFingerprintLifter(TolerantTagger):
     """Tags HTTP-layer fingerprint events with MITRE ATT&CK techniques."""
 
+    name = "http_fingerprint"
     HANDLES: frozenset[str] = frozenset({"http_fingerprint"})
 
     def __init__(self, store: RuleStore) -> None:

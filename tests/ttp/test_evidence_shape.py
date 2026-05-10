@@ -3,15 +3,6 @@
 Pins the per-``source_kind`` ``TypedDict`` contract on
 :class:`~decnet.web.db.models.ttp.TTPTag.evidence`.
 
-Two halves of the contract live behind ``xfail(strict=True)`` because
-they require behavior that lands in the implementation phase (E.3.x):
-
-* lifters currently return ``[]``, so the parametrized positive case
-  cannot sample real evidence dicts;
-* :class:`~decnet.ttp.base.TolerantTagger` currently swallows every
-  ``Exception``, so the "shape violation propagates as ``TypeError``"
-  contract has not been wired in yet.
-
 The PII property — ``EmailEvidence`` carries no field for raw rcpt
 addresses or body bytes — is GREEN today: it lives in the type, not
 in code paths.
@@ -20,16 +11,19 @@ from __future__ import annotations
 
 import asyncio
 import typing
+from pathlib import Path
 from typing import Any
 
 import pytest
 
 from decnet.ttp.base import TaggerEvent, TolerantTagger
-from decnet.ttp.impl.behavioral_lifter import BehavioralLifter
 from decnet.ttp.impl.canary_fingerprint_lifter import CanaryFingerprintLifter
 from decnet.ttp.impl.email_lifter import EmailLifter
 from decnet.ttp.impl.http_fingerprint_lifter import HttpFingerprintLifter
 from decnet.ttp.impl.intel_lifter import IntelLifter
+from decnet.ttp.impl.rule_engine import CompiledRule
+from decnet.ttp.store.base import RuleState
+from decnet.ttp.store.impl.filesystem import _parse_and_compile
 from decnet.web.db.models.ttp import (
     CanaryFingerprintEvidence,
     CommandEvidence,
@@ -39,6 +33,10 @@ from decnet.web.db.models.ttp import (
     TTPTag,
     compute_tag_uuid,
 )
+from tests.ttp._stub_store import StubRuleStore
+
+
+_RULES_DIR = Path(__file__).resolve().parents[2] / "rules" / "ttp"
 
 
 # ── PII rule §6: type-level, GREEN today ────────────────────────────
@@ -98,10 +96,10 @@ def test_http_fingerprint_evidence_keys() -> None:
     assert keys == {"kind", "hash", "protocol", "client_ip", "seen_at", "raw"}
 
 
-# ── Per-lifter parametrized positive case (impl phase) ──────────────
+# ── Per-lifter parametrized positive case ───────────────────────────
 
 
-def _ev(source_kind: str) -> TaggerEvent:
+def _ev(source_kind: str, payload: dict[str, Any]) -> TaggerEvent:
     return TaggerEvent(
         source_kind=source_kind,
         source_id="src1",
@@ -109,31 +107,81 @@ def _ev(source_kind: str) -> TaggerEvent:
         identity_uuid="id_1",
         session_id="sess_1",
         decky_id="decky_1",
-        payload={},
+        payload=payload,
     )
 
 
-_LIFTER_CASES = [
-    ("command", BehavioralLifter, CommandEvidence),
-    ("intel", IntelLifter, IntelEvidence),
-    ("email", EmailLifter, EmailEvidence),
-    ("canary_fingerprint", CanaryFingerprintLifter, CanaryFingerprintEvidence),
+def _compile_yaml(rule_id: str) -> CompiledRule:
+    return _parse_and_compile(_RULES_DIR / f"{rule_id}.yaml", RuleState())
+
+
+def _hfp_rule() -> CompiledRule:
+    """HFP-0001 has no backing YAML — construct it directly."""
+    return CompiledRule(
+        rule_id="HFP-0001",
+        rule_version=1,
+        name="scanner_ja4h",
+        applies_to=frozenset({"http_fingerprint"}),
+        match_spec={},
+        emits=(("T1592.002", "T1592", "TA0043", 0.7),),
+        evidence_fields=("kind", "hash", "protocol", "client_ip", "seen_at", "raw"),
+        state=RuleState(),
+    )
+
+
+_LIFTER_CASES: list[tuple[str, Any, Any, Any, dict[str, Any]]] = [
+    (
+        "http_fingerprint",
+        HttpFingerprintLifter,
+        HttpFingerprintEvidence,
+        _hfp_rule,
+        {"ja4h": "GE11nn0000_cafebabe", "protocol": "h1",
+         "client_ip": "10.0.0.1", "seen_at": "2024-01-01T00:00:00Z"},
+    ),
+    (
+        "intel",
+        IntelLifter,
+        IntelEvidence,
+        lambda: _compile_yaml("R0054"),
+        {"abuseipdb_score": 90.0, "abuseipdb_categories": [18, 22]},
+    ),
+    (
+        "email",
+        EmailLifter,
+        EmailEvidence,
+        lambda: _compile_yaml("R0042"),
+        {"rcpt_count": 30, "body_simhash": "abc123sha256"},
+    ),
+    (
+        "canary_fingerprint",
+        CanaryFingerprintLifter,
+        CanaryFingerprintEvidence,
+        lambda: _compile_yaml("R0049"),
+        {"navigator_webdriver": True},
+    ),
 ]
 
 
-@pytest.mark.xfail(strict=True, reason="impl phase E.3.x: lifters return [] today")
-@pytest.mark.parametrize("source_kind, lifter_cls, td_cls", _LIFTER_CASES)
+@pytest.mark.parametrize(
+    "source_kind, lifter_cls, td_cls, rule_factory, payload",
+    _LIFTER_CASES,
+    ids=["http_fingerprint", "intel", "email", "canary_fingerprint"],
+)
 def test_lifter_emits_evidence_matching_typeddict(
     source_kind: str,
     lifter_cls: type[TolerantTagger],
     td_cls: Any,
+    rule_factory: Any,
+    payload: dict[str, Any],
 ) -> None:
     """Each lifter's emitted ``evidence`` dict structurally matches
     its ``TypedDict``: keys are a subset of the declared keys and
     runtime types of the present values agree with the hints.
     """
-    lifter = lifter_cls()
-    out = asyncio.run(lifter.tag(_ev(source_kind)))
+    rule = rule_factory()
+    lifter = lifter_cls(StubRuleStore(compiled=[rule]))
+    lifter._index.install(rule)
+    out = asyncio.run(lifter.tag(_ev(source_kind, payload)))
     assert out, "lifter emitted no tags — cannot verify evidence shape"
     tag = out[0]
 
@@ -141,9 +189,6 @@ def test_lifter_emits_evidence_matching_typeddict(
     hints = typing.get_type_hints(td_cls)
     for key, value in tag.evidence.items():
         assert key in declared, f"evidence key {key!r} not in {td_cls.__name__}"
-        # Soft type check: only compare against concrete types in the
-        # hint where introspection makes sense. This avoids tangling
-        # with Literal / Optional resolution for the contract test.
         hint = hints.get(key)
         if hint in (str, int, float, bool, list, dict):
             assert isinstance(value, hint)

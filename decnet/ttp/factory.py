@@ -21,10 +21,12 @@ from __future__ import annotations
 import asyncio
 import logging
 import os
-from typing import Final
+from contextlib import contextmanager
+from typing import Any, Final
 
 from collections.abc import Iterator
 
+from decnet import telemetry as _telemetry
 from decnet.ttp.base import (
     KNOWN_SOURCE_KINDS,
     Tagger,
@@ -34,6 +36,22 @@ from decnet.ttp.base import (
 from decnet.web.db.models.ttp import TTPTag
 
 _log = logging.getLogger(__name__)
+
+
+@contextmanager
+def _span(name: str, **attrs: Any) -> Iterator[Any]:
+    """Tracing helper gated on ``DECNET_DEVELOPER_TRACING``."""
+    if not _telemetry._ENABLED:
+        yield None
+        return
+    tracer = _telemetry.get_tracer("ttp")
+    with tracer.start_as_current_span(name) as span:
+        for key, value in attrs.items():
+            try:
+                span.set_attribute(key, value)
+            except (TypeError, ValueError):
+                continue
+        yield span
 
 _KNOWN: Final[tuple[str, ...]] = ("composite",)
 _DEFAULT: Final[str] = "composite"
@@ -91,11 +109,15 @@ class CompositeTagger(Tagger):
         if not lifters:
             self._log_unhandled(event.source_kind)
             return []
-        results = await asyncio.gather(*(t.tag(event) for t in lifters))
+        results = await asyncio.gather(*(self._tag_one(t, event) for t in lifters))
         out: list[TTPTag] = []
         for tags in results:
             out.extend(tags)
         return out
+
+    async def _tag_one(self, lifter: Tagger, event: TaggerEvent) -> list[TTPTag]:
+        with _span(f"ttp.lifter.{lifter.name}"):
+            return await lifter.tag(event)
 
     def _log_unhandled(self, source_kind: str) -> None:
         if source_kind in KNOWN_SOURCE_KINDS:
