@@ -14,8 +14,8 @@ Facility: local0 (16). SD element ID uses PEN 55555.
 
 import base64
 import binascii
-import hashlib as _hashlib
 import json as _json
+import os as _os
 import re
 import socket as _socket
 import threading as _threading
@@ -266,105 +266,54 @@ def forward_syslog(line: str, log_target: str) -> None:
     pass
 
 
-# ─── Caddy fp-socket reader ───────────────────────────────────────────────────
+# ─── Caddy fingerprint socket reader ─────────────────────────────────────────
 
-_FP_SOCK_SIZE = 65536
-
-
-def _ja4h_from_record(rec: dict) -> str:
-    method = rec.get("method", "")[:2].upper() or "UN"
-    proto = rec.get("proto", "")
-    ver_map = {
-        "HTTP/1.0": "10", "HTTP/1.1": "11", "HTTP/2.0": "20", "HTTP/3.0": "30",
-    }
-    ver_tag = ver_map.get(proto.upper(), "00")
-    headers: list[str] = rec.get("headers_ordered", [])
-    has_cookie = "c" if any(h.lower() == "cookie" for h in headers) else "n"
-    has_referer = "r" if any(h.lower() == "referer" for h in headers) else "n"
-    lang = rec.get("accept_language", "") or ""
-    lang_tag = (lang[:4].ljust(4, "0") if lang else "0000")
-    filtered = [h for h in headers if h.lower() not in ("cookie", "referer")]
-    count_tag = f"{min(len(filtered), 99):02d}"
-    header_hash = _hashlib.sha256(",".join(h.lower() for h in filtered).encode()).hexdigest()[:12]
-    cookie_val = rec.get("cookie", "") or ""
-    if cookie_val:
-        pairs = sorted(p.strip() for p in cookie_val.split(";") if "=" in p.strip())
-        cookie_hash = _hashlib.sha256(";".join(pairs).encode()).hexdigest()[:12]
-    else:
-        cookie_hash = "000000000000"
-    return f"{method}{ver_tag}{has_cookie}{has_referer}{lang_tag}_{count_tag}_{header_hash}_{cookie_hash}"
+_FP_BUF = 65536
 
 
-def _fp_socket_reader(
-    node_name: str,
-    service_name: str,
-    log_target: str,
-    sock_path: str = "/run/decnet/fp.sock",
-) -> None:
-    import os as _os
+def _fp_socket_reader(node_name: str, service_name: str, log_target: str) -> None:
+    sock_path = _os.environ.get("DECNET_FP_SOCK", "/run/decnet/fp.sock")
     try:
         sock = _socket.socket(_socket.AF_UNIX, _socket.SOCK_DGRAM)
-        _os.makedirs(_os.path.dirname(sock_path), exist_ok=True)
-        try:
-            _os.unlink(sock_path)
-        except FileNotFoundError:
-            pass
         sock.bind(sock_path)
-    except Exception:
+    except OSError:
         return
-
     while True:
         try:
-            data = sock.recv(_FP_SOCK_SIZE)
-            rec = _json.loads(data.decode("utf-8", errors="replace"))
-            kind = rec.get("kind", "")
-            remote = rec.get("remote_addr", "").split(":")[0]
-
-            if kind == "http_request":
-                ja4h = _ja4h_from_record(rec)
-                proto_tag = rec.get("proto_tag", "h1")
-                line = syslog_line(
-                    service_name, node_name, "http_request_fingerprint",
-                    attacker_ip=remote,
-                    ja4h=ja4h,
-                    protocol=proto_tag,
-                    method=rec.get("method", ""),
-                    path=rec.get("path", ""),
-                )
-                write_syslog_file(line)
-                forward_syslog(line, log_target)
-
-            elif kind == "h2_settings":
-                settings_hash = _hashlib.sha256(
-                    _json.dumps(rec.get("settings", {}), sort_keys=True).encode()
-                ).hexdigest()[:12]
-                line = syslog_line(
-                    service_name, node_name, "http2_settings",
-                    attacker_ip=remote,
-                    settings=_json.dumps(rec.get("settings", {})),
-                    frame_order=_json.dumps(rec.get("frame_order", [])),
-                    settings_hash=settings_hash,
-                )
-                write_syslog_file(line)
-                forward_syslog(line, log_target)
-
-        except Exception:
-            pass
+            data = sock.recv(_FP_BUF)
+            record = _json.loads(data)
+        except (OSError, ValueError):
+            continue
+        kind = record.get("kind", "")
+        remote = record.get("remote_addr", "-")
+        if kind == "h2_settings":
+            ln = syslog_line(
+                service_name, node_name, "http2_settings", SEVERITY_INFO,
+                remote_addr=remote,
+                settings=_json.dumps(record.get("settings", {})),
+                frame_order=_json.dumps(record.get("frame_order", [])),
+            )
+            write_syslog_file(ln)
+            if log_target:
+                forward_syslog(ln, log_target)
+        elif kind == "http_request":
+            ln = syslog_line(
+                service_name, node_name, "http_request_fingerprint", SEVERITY_INFO,
+                remote_addr=remote,
+                proto=record.get("proto_tag", "-"),
+                headers_ordered=_json.dumps(record.get("headers_ordered", [])),
+                cookie=record.get("cookie", ""),
+                accept_language=record.get("accept_language", ""),
+            )
+            write_syslog_file(ln)
+            if log_target:
+                forward_syslog(ln, log_target)
 
 
-def start_fp_socket_reader(
-    node_name: str,
-    service_name: str,
-    log_target: str = "",
-    sock_path: str = "/run/decnet/fp.sock",
-) -> None:
-    import os as _os
-    if not _os.path.isdir(_os.path.dirname(sock_path) or "."):
-        return
+def start_fp_socket_reader(node_name: str, service_name: str, log_target: str) -> None:
     t = _threading.Thread(
         target=_fp_socket_reader,
-        args=(node_name, service_name, log_target, sock_path),
+        args=(node_name, service_name, log_target),
         daemon=True,
-        name="fp-socket-reader",
     )
     t.start()

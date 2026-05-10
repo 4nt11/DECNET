@@ -31,6 +31,8 @@ import (
 	"time"
 
 	"github.com/caddyserver/caddy/v2"
+	"github.com/caddyserver/caddy/v2/caddyconfig/caddyfile"
+	"github.com/caddyserver/caddy/v2/caddyconfig/httpcaddyfile"
 	"github.com/caddyserver/caddy/v2/modules/caddyhttp"
 	"go.uber.org/zap"
 )
@@ -39,6 +41,12 @@ func init() {
 	caddy.RegisterModule(H2FPListenerWrapper{})
 	caddy.RegisterModule(FPHandler{})
 	caddy.RegisterModule(DecnetJSONLEncoder{})
+	httpcaddyfile.RegisterHandlerDirective("decnet_fp", parseFPHandler)
+}
+
+func parseFPHandler(h httpcaddyfile.Helper) (caddyhttp.MiddlewareHandler, error) {
+	var fp FPHandler
+	return &fp, fp.UnmarshalCaddyfile(h.Dispenser)
 }
 
 func sockPath() string {
@@ -101,6 +109,10 @@ func (w *H2FPListenerWrapper) Provision(ctx caddy.Context) error {
 
 func (w *H2FPListenerWrapper) WrapListener(ln net.Listener) net.Listener {
 	return &h2FPListener{Listener: ln, logger: w.logger}
+}
+
+func (w *H2FPListenerWrapper) UnmarshalCaddyfile(d *caddyfile.Dispenser) error {
+	return nil
 }
 
 type h2FPListener struct {
@@ -230,6 +242,10 @@ func (h *FPHandler) Provision(ctx caddy.Context) error {
 	return nil
 }
 
+func (h *FPHandler) UnmarshalCaddyfile(d *caddyfile.Dispenser) error {
+	return nil
+}
+
 func (h *FPHandler) ServeHTTP(w http.ResponseWriter, r *http.Request, next caddyhttp.Handler) error {
 	// Collect ordered header names. Go's http.Header is a map so we cannot
 	// recover arrival order from it directly. We read the raw wire order via
@@ -279,10 +295,12 @@ func (h *FPHandler) ServeHTTP(w http.ResponseWriter, r *http.Request, next caddy
 }
 
 var (
-	_ caddy.Provisioner       = (*H2FPListenerWrapper)(nil)
-	_ caddy.ListenerWrapper   = (*H2FPListenerWrapper)(nil)
-	_ caddy.Provisioner       = (*FPHandler)(nil)
+	_ caddy.Provisioner           = (*H2FPListenerWrapper)(nil)
+	_ caddy.ListenerWrapper       = (*H2FPListenerWrapper)(nil)
+	_ caddyfile.Unmarshaler       = (*H2FPListenerWrapper)(nil)
+	_ caddy.Provisioner           = (*FPHandler)(nil)
 	_ caddyhttp.MiddlewareHandler = (*FPHandler)(nil)
+	_ caddyfile.Unmarshaler       = (*FPHandler)(nil)
 )
 
 // ── caddy.logging.encoders.decnet_jsonl ──────────────────────────────────────
