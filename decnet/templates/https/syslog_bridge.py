@@ -12,13 +12,11 @@ RFC 5424 structure:
 Facility: local0 (16). SD element ID uses PEN 55555.
 """
 
+from __future__ import annotations
+
 import base64
 import binascii
-import json as _json
-import os as _os
 import re
-import socket as _socket
-import threading as _threading
 from datetime import datetime, timezone
 from typing import Any, Optional
 
@@ -264,56 +262,3 @@ def write_syslog_file(line: str) -> None:
 def forward_syslog(line: str, log_target: str) -> None:
     """No-op stub. TCP forwarding is handled by rsyslog, not by service containers."""
     pass
-
-
-# ─── Caddy fingerprint socket reader ─────────────────────────────────────────
-
-_FP_BUF = 65536
-
-
-def _fp_socket_reader(node_name: str, service_name: str, log_target: str) -> None:
-    sock_path = _os.environ.get("DECNET_FP_SOCK", "/run/decnet/fp.sock")
-    try:
-        sock = _socket.socket(_socket.AF_UNIX, _socket.SOCK_DGRAM)
-        sock.bind(sock_path)
-    except OSError:
-        return
-    while True:
-        try:
-            data = sock.recv(_FP_BUF)
-            record = _json.loads(data)
-        except (OSError, ValueError):
-            continue
-        kind = record.get("kind", "")
-        remote = record.get("remote_addr", "-")
-        if kind == "h2_settings":
-            ln = syslog_line(
-                service_name, node_name, "http2_settings", SEVERITY_INFO,
-                remote_addr=remote,
-                settings=_json.dumps(record.get("settings", {})),
-                frame_order=_json.dumps(record.get("frame_order", [])),
-            )
-            write_syslog_file(ln)
-            if log_target:
-                forward_syslog(ln, log_target)
-        elif kind == "http_request":
-            ln = syslog_line(
-                service_name, node_name, "http_request_fingerprint", SEVERITY_INFO,
-                remote_addr=remote,
-                proto=record.get("proto_tag", "-"),
-                headers_ordered=_json.dumps(record.get("headers_ordered", [])),
-                cookie=record.get("cookie", ""),
-                accept_language=record.get("accept_language", ""),
-            )
-            write_syslog_file(ln)
-            if log_target:
-                forward_syslog(ln, log_target)
-
-
-def start_fp_socket_reader(node_name: str, service_name: str, log_target: str) -> None:
-    t = _threading.Thread(
-        target=_fp_socket_reader,
-        args=(node_name, service_name, log_target),
-        daemon=True,
-    )
-    t.start()
