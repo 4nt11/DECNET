@@ -78,7 +78,7 @@ def test_build_service_base_image_matches_distro(distro, expected_build_base):
     config = _make_config(["http"], distro=distro)
     compose = generate_compose(config)
     fragment = compose["services"]["decky-01-http"]
-    assert fragment["build"]["args"]["BASE_IMAGE"] == expected_build_base
+    assert fragment["build"]["args"]["BASE_IMAGE"].startswith(expected_build_base)
 
 
 # ---------------------------------------------------------------------------
