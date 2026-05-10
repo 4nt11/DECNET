@@ -79,10 +79,10 @@ def test_defence_in_depth_direct_call_fails_in_agent_mode(monkeypatch):
     monkeypatch.setenv("DECNET_MODE", "agent")
     monkeypatch.setenv("DECNET_DISALLOW_MASTER", "true")
     # Re-import cli so the module-level gate re-runs (harmless here;
-    # we're exercising the in-function guard).
-    for mod in list(sys.modules):
-        if mod == "decnet.cli":
-            sys.modules.pop(mod)
+    # we're exercising the in-function guard). Use monkeypatch.delitem so
+    # the original cached module is restored after the test and subsequent
+    # tests don't see the agent-mode-stripped app singleton.
+    monkeypatch.delitem(sys.modules, "decnet.cli", raising=False)
     from decnet.cli import _require_master_mode
     import typer
     with pytest.raises(typer.Exit):
