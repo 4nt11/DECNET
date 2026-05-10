@@ -69,7 +69,7 @@ async def test_lan_create_blocked_when_active(client, auth_token):
 async def test_lan_patch_ok(client, auth_token):
     topology_id = await _seed("lan-patch")
     lans = await _repo.list_lans_for_topology(topology_id)
-    lan_id = lans[0]["id"]
+    lan_id = lans[0].id
 
     r = await client.patch(
         f"{_V1}/{topology_id}/lans/{lan_id}",
