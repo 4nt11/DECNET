@@ -1,4 +1,4 @@
-"""http_versions multi_enum field: coercion, compose env, UDP port gate."""
+"""http_versions multi_enum field: coercion, compose env."""
 import json
 
 import pytest
@@ -116,22 +116,18 @@ def test_https_compose_http_versions_env():
     assert versions == ["http/1.1", "http/2"]
 
 
-def test_https_compose_h3_adds_udp_port():
+def test_https_compose_h3_no_ports_key():
+    # Fleet uses MACVLAN — service containers share base netns, port publishing
+    # is incompatible with network_mode: service:<base>. UDP/443 is reachable
+    # via the MACVLAN IP without any ports: mapping.
     svc = HTTPSService()
     cfg = svc.validate_cfg({"http_versions": ["http/1.1", "http/2", "http/3"]})
     frag = svc.compose_fragment("decky-test", service_cfg=cfg)
-    assert "443:443/udp" in frag.get("ports", [])
+    assert "ports" not in frag
 
 
-def test_https_compose_no_h3_no_udp_port():
+def test_https_compose_no_h3_no_ports_key():
     svc = HTTPSService()
     cfg = svc.validate_cfg({"http_versions": ["http/1.1", "http/2"]})
     frag = svc.compose_fragment("decky-test", service_cfg=cfg)
-    assert "443:443/udp" not in frag.get("ports", [])
-
-
-def test_https_compose_h3_only_still_adds_udp_port():
-    svc = HTTPSService()
-    cfg = svc.validate_cfg({"http_versions": ["http/3"]})
-    frag = svc.compose_fragment("decky-test", service_cfg=cfg)
-    assert "443:443/udp" in frag.get("ports", [])
+    assert "ports" not in frag

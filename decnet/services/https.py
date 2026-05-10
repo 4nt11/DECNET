@@ -113,8 +113,6 @@ class HTTPSService(BaseService):
             fragment["environment"]["TLS_CN"] = cfg["tls_cn"]
         if "http_versions" in cfg:
             fragment["environment"]["HTTP_VERSIONS"] = json.dumps(cfg["http_versions"])
-            if "http/3" in cfg["http_versions"]:
-                fragment.setdefault("ports", []).append("443:443/udp")
 
         return fragment
 
