@@ -363,8 +363,9 @@ async def _roll_up_fingerprints(
     breaks the clusterer tick — the columns just stay stale until the
     next pass."""
     summaries = extract_fp_summaries(member_rows)
+    fp_kwargs = {k: v for k, v in summaries.items() if k in {"ja3_hashes", "hassh_hashes", "tls_cert_sha256"}}
     try:
-        await repo.update_identity_fingerprints(identity_uuid, **summaries)
+        await repo.update_identity_fingerprints(identity_uuid, **fp_kwargs)
     except Exception:  # noqa: BLE001
         log.exception(
             "clusterer: failed to roll up fingerprints for identity=%s",
