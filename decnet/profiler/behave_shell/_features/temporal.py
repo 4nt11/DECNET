@@ -16,7 +16,7 @@ import math
 import statistics
 from typing import Iterator
 
-from decnet_behave_core.spec.envelope import Observation
+from behave_core.spec.envelope import Observation
 
 from decnet.profiler.behave_shell._ctx import SessionContext
 from decnet.profiler.behave_shell._features._emit import make_observation

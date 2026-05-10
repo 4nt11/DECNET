@@ -8,7 +8,7 @@ from __future__ import annotations
 
 
 def test_envelope_imports_cleanly() -> None:
-    from decnet_behave_core.spec.envelope import Observation, Window
+    from behave_core.spec.envelope import Observation, Window
     # construction smoke — registry-agnostic envelope
     obs = Observation(
         primitive="motor.input_modality",
@@ -22,14 +22,14 @@ def test_envelope_imports_cleanly() -> None:
 
 
 def test_registry_imports_and_is_non_empty() -> None:
-    from decnet_behave_shell.spec.primitives import PRIMITIVE_REGISTRY
+    from behave_shell.spec.primitives import PRIMITIVE_REGISTRY
     assert len(PRIMITIVE_REGISTRY) > 0
     # spot-check a primitive every Tier-A engine emits
     assert "motor.input_modality" in PRIMITIVE_REGISTRY
 
 
 def test_event_adapter_topic_shape() -> None:
-    from decnet_behave_shell.spec.event_adapter import event_topic_for
+    from behave_shell.spec.event_adapter import event_topic_for
     assert (
         event_topic_for("motor.input_modality")
         == "attacker.observation.motor.input_modality"
@@ -40,8 +40,8 @@ def test_to_event_payload_excludes_envelope_meta_fields() -> None:
     """The adapter excludes id/ts/v from payload (they ride at the
     DECNET Event envelope level). The profiler worker re-merges them
     in per BEHAVE-INTEGRATION.md §339-366."""
-    from decnet_behave_core.spec.envelope import Observation, Window
-    from decnet_behave_shell.spec.event_adapter import to_event_payload
+    from behave_core.spec.envelope import Observation, Window
+    from behave_shell.spec.event_adapter import to_event_payload
     obs = Observation(
         primitive="motor.input_modality",
         value="typed",

@@ -14,12 +14,13 @@ import os as _os
 
 
 def pytest_ignore_collect(collection_path, config):
-    """Skip test_schemathesis.py unless fuzz marker is selected.
+    """Skip all test_schemathesis*.py files unless fuzz marker is selected.
 
-    Its module-level code starts a subprocess server and mutates
-    decnet.web.auth.SECRET_KEY, which poisons other test suites.
+    These files start a subprocess server at module-import time and mutate
+    decnet.web.auth.SECRET_KEY, which poisons other test suites and
+    inflates collection time by 20+ seconds.
     """
-    if collection_path.name == "test_schemathesis.py":
+    if collection_path.name.startswith("test_schemathesis"):
         markexpr = config.getoption("markexpr", default="")
         if "fuzz" not in markexpr:
             return True
@@ -28,7 +29,6 @@ def pytest_ignore_collect(collection_path, config):
 os.environ["DECNET_JWT_SECRET"] = "test-secret-key-at-least-32-chars-long!!"
 os.environ["DECNET_ADMIN_PASSWORD"] = "test-password-123"
 
-from decnet.web.api import app
 from decnet.web.dependencies import repo
 from decnet.web.db.models import User
 from decnet.web.auth import get_password_hash
@@ -115,6 +115,7 @@ async def setup_db(monkeypatch) -> AsyncGenerator[None, None]:
 
 @pytest.fixture
 async def client() -> AsyncGenerator[httpx.AsyncClient, None]:
+    from decnet.web.api import app  # heavy — deferred so collection pays no import cost
     async with httpx.AsyncClient(transport=httpx.ASGITransport(app=app), base_url="http://test") as ac:
         yield ac
 

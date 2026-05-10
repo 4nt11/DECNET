@@ -9,7 +9,7 @@ from __future__ import annotations
 
 from typing import Any
 
-from decnet_behave_core.spec.envelope import Observation, Window
+from behave_core.spec.envelope import Observation, Window
 
 from decnet.profiler.behave_shell._ctx import SessionContext
 

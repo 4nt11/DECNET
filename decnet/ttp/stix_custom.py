@@ -77,7 +77,7 @@ class XDecnetBehaveProfile:
     evidence_ref, identity_ref (optional).
 
     ``schema_version`` matches ``OBSERVATION_SCHEMA_VERSION`` from
-    decnet_behave_shell.spec.envelope — bump when the envelope schema changes.
+    behave_shell.spec.envelope — bump when the envelope schema changes.
 
     ``kd_digraph_simhash`` is the 8-byte digraph SimHash from
     AttackerIdentity, hex-encoded. Null when identity has not been clustered.

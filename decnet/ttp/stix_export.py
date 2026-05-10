@@ -209,7 +209,7 @@ def _threat_actor(
 
     obs_list = observations or []
     if obs_list or kd_hash is not None:
-        from decnet_behave_shell.spec.envelope import OBSERVATION_SCHEMA_VERSION
+        from behave_shell.spec.envelope import OBSERVATION_SCHEMA_VERSION
         profile_id = (
             f"x-decnet-behave-profile--{_uuid.uuid5(_NS, attacker['uuid'])}"
         )

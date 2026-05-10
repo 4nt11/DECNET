@@ -117,7 +117,19 @@ decnet = "decnet.cli:app"
 asyncio_mode = "auto"
 asyncio_debug = "true"
 asyncio_default_fixture_loop_scope = "module"
-addopts = "-m 'not fuzz and not live and not stress and not bench and not docker' -v -q -x -n logical --dist loadscope"
+addopts = "-v -q -x -n logical --dist load"
+norecursedirs = [
+    "tests/live",
+    "tests/stress",
+    "tests/service_testing",
+    "tests/docker",
+    "tests/perf",
+    "__pycache__",
+    ".git",
+    "node_modules",
+    ".venv",
+    ".311",
+]
 markers = [
     "fuzz: hypothesis-based fuzz tests (slow, run with -m fuzz or -m '' for all)",
     "live: live subprocess service tests (run with -m live)",

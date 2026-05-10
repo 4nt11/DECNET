@@ -9,7 +9,7 @@ from __future__ import annotations
 
 from typing import Iterable, Iterator
 
-from decnet_behave_core.spec.envelope import Observation
+from behave_core.spec.envelope import Observation
 
 from decnet.profiler.behave_shell._ctx import SessionContext, build_session_context
 from decnet.profiler.behave_shell._features import FEATURES

@@ -427,7 +427,7 @@ def attacker_observation(primitive: str) -> str:
     ``cognitive.feedback_loop_engagement``,
     ``motor.shell_mastery.tab_completion``).  Dotted primitives are
     permitted — this matches the format
-    ``decnet_behave_shell.spec.event_adapter.event_topic_for`` produces
+    ``behave_shell.spec.event_adapter.event_topic_for`` produces
     upstream, and DECNET's bus admits the dotted leaf the same way
     :func:`attacker` does for ``session.started``.
 

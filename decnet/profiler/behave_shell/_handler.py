@@ -17,8 +17,8 @@ import json
 from pathlib import Path
 from typing import Any, Callable, Iterable, Optional
 
-from decnet_behave_core.spec.envelope import Observation
-from decnet_behave_shell.spec.event_adapter import event_topic_for, to_event_payload
+from behave_core.spec.envelope import Observation
+from behave_shell.spec.event_adapter import event_topic_for, to_event_payload
 
 from decnet.logging import get_logger
 from decnet.profiler.behave_shell import extract_session

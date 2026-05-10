@@ -36,7 +36,7 @@ from decnet.logging import get_logger
 from decnet.web.db.repository import BaseRepository
 
 try:
-    from decnet_behave_shell.spec import (
+    from behave_shell.spec import (
         PRIMITIVE_REGISTRY,
         ValueKind,
     )

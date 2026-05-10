@@ -38,9 +38,10 @@ from dataclasses import dataclass
 from functools import lru_cache
 from pathlib import Path
 from threading import Lock
-from typing import Final
+from typing import TYPE_CHECKING, Final
 
-from mitreattack.stix20 import MitreAttackData
+if TYPE_CHECKING:
+    from mitreattack.stix20 import MitreAttackData
 
 from decnet.ttp.attack_version import (
     ATTACK_BUNDLE_SHA256,
@@ -231,6 +232,7 @@ def loaded_license_path() -> Path | None:
 
 
 def _load() -> MitreAttackData:
+    from mitreattack.stix20 import MitreAttackData  # heavy — lazy on first call
     global _data, _loaded_path
     with _data_lock:
         if _data is not None:

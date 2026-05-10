@@ -1,7 +1,7 @@
 """Step H.1: registry-coverage test.
 
 Static assertion that every Tier-A primitive in
-``decnet_behave_shell.spec.primitives.PRIMITIVE_REGISTRY`` has a slot
+``behave_shell.spec.primitives.PRIMITIVE_REGISTRY`` has a slot
 in the calibration-grid binding sets — either the per-shard hard gate
 (``PHASE_ABCDEFG_PRIMITIVES``) or one of the conditional sets
 (``PHASE_D_CONDITIONAL_PRIMITIVES`` / ``PHASE_F_CONDITIONAL_PRIMITIVES``
@@ -24,7 +24,7 @@ Tier exclusion (mirrors ``BEHAVE-EXTRACTOR.md:180-223``):
 """
 from __future__ import annotations
 
-from decnet_behave_shell.spec.primitives import PRIMITIVE_REGISTRY
+from behave_shell.spec.primitives import PRIMITIVE_REGISTRY
 
 from tests.profiler.behave_shell.test_calibration_grid import (
     PHASE_ABCDEFG_PRIMITIVES,

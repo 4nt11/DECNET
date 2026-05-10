@@ -20,8 +20,6 @@ from typing import Any
 from sqlalchemy import func, select
 from sqlmodel import col
 
-from decnet.ttp.attack_catalog import technique_name as _technique_name
-from decnet.ttp.attack_stix import mitre_url_for as _mitre_url_for
 from decnet.web.db.models import (
     Attacker,
     AttackerIdentity,
@@ -32,6 +30,16 @@ from decnet.web.db.models import (
 )
 from decnet.web.db.models.canary import CanaryTrigger
 from decnet.web.db.sqlmodel_repo._helpers import _MixinBase
+
+
+def _technique_name(tid: str | None) -> str | None:
+    from decnet.ttp.attack_catalog import technique_name  # heavy — lazy on first call
+    return technique_name(tid)
+
+
+def _mitre_url_for(tid: str | None) -> str | None:
+    from decnet.ttp.attack_stix import mitre_url_for  # heavy — lazy on first call
+    return mitre_url_for(tid)
 
 
 # Confidence floor: tags computed below this value are silently dropped

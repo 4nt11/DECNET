@@ -19,7 +19,6 @@ from fastapi import APIRouter, Depends
 from fastapi.responses import Response
 
 from decnet.telemetry import traced as _traced
-from decnet.ttp.misp_export import build_fleet_misp_collection
 from decnet.web.dependencies import require_viewer, repo
 
 router = APIRouter()
@@ -49,6 +48,7 @@ async def api_export_attackers_misp(
         repo.get_all_observations_for_export(),
         repo.get_all_fingerprint_bounties_for_export(),
     )
+    from decnet.ttp.misp_export import build_fleet_misp_collection  # heavy — lazy on first call
     collection = build_fleet_misp_collection(
         rows=rows,
         ttp_by_attacker=ttp_by_attacker,

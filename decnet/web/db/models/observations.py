@@ -2,7 +2,7 @@
 emitted Observation envelope.
 
 Mirrors the BEHAVE-SHELL ``Observation`` Pydantic envelope
-(``decnet_behave_core.spec.envelope.Observation``) field-for-field, plus
+(``behave_core.spec.envelope.Observation``) field-for-field, plus
 one DECNET-side denormalisation (``attacker_uuid``) for cheap joins.
 The class is named ``ObservationRow`` to avoid colliding with the
 BEHAVE Pydantic class when both are imported into the same module —

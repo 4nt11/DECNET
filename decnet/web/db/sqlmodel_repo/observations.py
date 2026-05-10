@@ -13,7 +13,7 @@ Composed onto :class:`SQLModelRepository`. Three public methods:
   drift charts.
 
 PII discipline is the BEHAVE envelope's job
-(``core/decnet_behave_core/spec/envelope.py:3-19``); this mixin does
+(``core/behave_core/spec/envelope.py:3-19``); this mixin does
 not validate values — that happens at construction time by the BEHAVE
 ``Observation`` subclass before the dict reaches us.
 """

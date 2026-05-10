@@ -14,7 +14,6 @@ from fastapi import APIRouter, Depends, HTTPException, status
 from fastapi.responses import Response
 
 from decnet.telemetry import traced as _traced
-from decnet.ttp.misp_export import build_attacker_misp_event
 from decnet.web.dependencies import require_viewer, repo
 
 router = APIRouter()
@@ -79,6 +78,7 @@ async def api_export_attacker_misp(
     observations = cast(list[dict[str, Any]], results[8])
     fingerprint_bounties = cast(list[dict[str, Any]], results[9])
 
+    from decnet.ttp.misp_export import build_attacker_misp_event  # heavy — lazy on first call
     event = build_attacker_misp_event(
         attacker=attacker,
         behavior=behavior,
