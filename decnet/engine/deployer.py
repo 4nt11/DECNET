@@ -166,6 +166,21 @@ def _sync_sessrec_sources(config: DecnetConfig) -> None:
                     shutil.copy2(src, dest)
 
 
+def _chown_tree(dest: Path, owner_ref: Path) -> None:
+    """Recursively set uid/gid of *dest* to match *owner_ref*. No-op if not root."""
+    import os
+    if os.geteuid() != 0:
+        return
+    st = owner_ref.stat()
+    uid, gid = st.st_uid, st.st_gid
+    targets = [dest] + list(dest.rglob("*")) if dest.is_dir() else [dest]
+    for p in targets:
+        try:
+            os.lchown(p, uid, gid)
+        except OSError:
+            pass
+
+
 def _sync_caddy_modules(config: DecnetConfig) -> None:
     """Mirror _caddy_modules/ into http/https build contexts.
 
@@ -200,9 +215,11 @@ def _sync_caddy_modules(config: DecnetConfig) -> None:
                     if dest_child.exists():
                         shutil.rmtree(dest_child)
                     shutil.copytree(child, dest_child)
+                    _chown_tree(dest_child, src_dir)
                 else:
                     if not dest_child.exists() or dest_child.read_bytes() != child.read_bytes():
                         shutil.copy2(child, dest_child)
+                        _chown_tree(dest_child, src_dir)
 
 
 def _compose_ps(compose_file: Path) -> list[dict[str, object]]:
