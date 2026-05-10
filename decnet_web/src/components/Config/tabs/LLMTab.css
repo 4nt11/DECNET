@@ -38,7 +38,7 @@
 }
 
 .llm-tab-root .input {
-  background: var(--bg-elev, rgba(0, 0, 0, 0.3));
+  background: var(--bg-elev, transparent);
   border: 1px solid var(--border);
   color: var(--text);
   padding: 7px 10px;
