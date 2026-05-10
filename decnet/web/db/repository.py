@@ -3,6 +3,7 @@ from collections.abc import AsyncIterator
 from datetime import datetime
 from typing import Any, Optional
 
+from decnet.web.db.models.attacker_intel import AttackerIntel
 from decnet.web.db.models.topology import DeckyRow, EdgeRow, LANRow, TopologySummary
 from decnet.web.db.models import (
     CampaignTechniqueRow,
@@ -450,6 +451,19 @@ class BaseRepository(ABC):
     @abstractmethod
     async def get_attacker_intel_by_uuid(self, uuid: str) -> Optional[dict[str, Any]]:
         """Return the threat-intel row for ``uuid`` or ``None`` if missing."""
+        pass
+
+    @abstractmethod
+    async def get_attacker_intel_row_by_uuid(
+        self, uuid: str,
+    ) -> Optional[AttackerIntel]:
+        """Return the live :class:`AttackerIntel` SQLModel instance for
+        ``uuid``, or ``None`` if no row exists.
+
+        Prefer this over :meth:`get_attacker_intel_by_uuid` when the
+        caller needs to call :meth:`~AttackerIntel.to_intel_event_payload`
+        (e.g. the TTP worker's intel catch-up path on session.ended).
+        """
         pass
 
     @abstractmethod

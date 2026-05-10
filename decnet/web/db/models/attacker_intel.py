@@ -1,11 +1,24 @@
 """Threat-intel enrichment row — one per attacker IP, TTL-cached."""
+import json as _json
 from datetime import datetime, timezone
-from typing import Optional
+from typing import Any, Optional
 
 from sqlalchemy import Column
 from sqlmodel import Field, SQLModel
 
 from ._base import _BIG_TEXT
+
+
+def _decode_json_list(value: Any) -> list[Any]:
+    if isinstance(value, list):
+        return value
+    if isinstance(value, str) and value:
+        try:
+            decoded = _json.loads(value)
+        except (_json.JSONDecodeError, TypeError):
+            return []
+        return decoded if isinstance(decoded, list) else []
+    return []
 
 
 class AttackerIntel(SQLModel, table=True):
@@ -129,3 +142,46 @@ class AttackerIntel(SQLModel, table=True):
         default_factory=lambda: datetime.now(timezone.utc), index=True
     )
     expires_at: datetime = Field(index=True)
+
+    def to_intel_event_payload(
+        self,
+        *,
+        providers: Optional[list[str]] = None,
+    ) -> dict[str, Any]:
+        """Project this row into the payload shape the IntelLifter consumes.
+
+        Called by both the intel worker (on live publish of
+        ``attacker.intel.enriched``) and the TTP worker (on
+        ``attacker.session.ended`` catch-up). The two callers produce
+        identical payloads for the same row, so IntelLifter tag UUIDs
+        are deterministic regardless of which path delivered them.
+
+        ``providers`` is included when the intel worker knows which
+        providers contributed; the TTP catch-up path omits it (the
+        IntelLifter does not predicate on ``providers``).
+        """
+        d: dict[str, Any] = {
+            "attacker_uuid": self.attacker_uuid,
+            "attacker_ip": self.attacker_ip,
+            "aggregate_verdict": self.aggregate_verdict,
+            # AbuseIPDB
+            "abuseipdb_score": self.abuseipdb_score,
+            "abuseipdb_categories": _decode_json_list(self.abuseipdb_categories),
+            # GreyNoise
+            "greynoise_classification": self.greynoise_classification,
+            "greynoise_name": self.greynoise_name,
+            "greynoise_tags": _decode_json_list(self.greynoise_tags),
+            # Feodo
+            "feodo_listed": self.feodo_listed,
+            "feodo_malware_family": self.feodo_malware_family,
+            # ThreatFox
+            "threatfox_listed": self.threatfox_listed,
+            "threatfox_threat_types": _decode_json_list(self.threatfox_threat_types),
+            "threatfox_ioc_types": _decode_json_list(self.threatfox_ioc_types),
+            "threatfox_malware_families": _decode_json_list(
+                self.threatfox_malware_families
+            ),
+        }
+        if providers is not None:
+            d["providers"] = providers
+        return d

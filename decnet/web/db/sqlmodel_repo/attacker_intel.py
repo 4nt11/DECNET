@@ -46,6 +46,16 @@ class AttackerIntelMixin(_MixinBase):
             await session.commit()
             return row_uuid
 
+    async def get_attacker_intel_row_by_uuid(
+        self,
+        uuid: str,
+    ) -> Optional[AttackerIntel]:
+        async with self._session() as session:
+            result = await session.execute(
+                select(AttackerIntel).where(AttackerIntel.attacker_uuid == uuid)
+            )
+            return result.scalar_one_or_none()
+
     async def get_attacker_intel_by_uuid(
         self,
         uuid: str,

@@ -228,6 +228,51 @@ def _str_or_none(value: Any) -> str | None:
     return str(value)
 
 
+async def _build_intel_catchup_event(
+    repo: "BaseRepository",
+    base: TaggerEvent,
+) -> TaggerEvent | None:
+    """Synthesize an intel TaggerEvent from the persisted AttackerIntel row.
+
+    Called on every ``attacker.session.ended`` so intel-derived tags emit
+    even when ``attacker.intel.enriched`` was dropped or arrived before the
+    TTP worker started. Per the no-SPOF contract (TTP_TAGGING.md lines
+    212–219) we import ``AttackerIntel`` (a data shape) but never any
+    ``decnet.intel.*`` provider client.
+
+    Returns ``None`` when no intel row exists for the attacker (the normal
+    case for a freshly-observed attacker) or when the lookup fails.
+    """
+    if base.attacker_uuid is None:
+        return None
+    with _span(
+        "ttp.worker.intel_catchup",
+        attacker_uuid=base.attacker_uuid,
+    ):
+        try:
+            row = await repo.get_attacker_intel_row_by_uuid(base.attacker_uuid)
+        except Exception as exc:  # noqa: BLE001
+            log.warning(
+                "ttp worker: intel catch-up lookup failed for "
+                "attacker_uuid=%r: %s",
+                base.attacker_uuid, exc,
+            )
+            return None
+        if row is None:
+            return None
+        payload = row.to_intel_event_payload()
+    source_id = f"intel-catchup:{base.session_id or base.attacker_uuid}"
+    return TaggerEvent(
+        source_kind="intel",
+        source_id=source_id,
+        attacker_uuid=base.attacker_uuid,
+        identity_uuid=base.identity_uuid,
+        session_id=base.session_id,
+        decky_id=base.decky_id,
+        payload=payload,
+    )
+
+
 async def run_ttp_worker_loop(
     repo: BaseRepository,
     *,
@@ -424,6 +469,15 @@ async def _process_event(
     tagger_events = _build_events(topic, payload)
     if not tagger_events:
         return
+    # Intel catch-up: on session.ended, read the persisted intel row (if
+    # any) and append an intel TaggerEvent so intel-derived tags emit even
+    # when attacker.intel.enriched was dropped or arrived before the worker
+    # started. Idempotent UUIDs deduplicate against any prior intel.enriched
+    # path. No-intel-row case is silent (freshly-observed attacker).
+    if "session.ended" in topic:
+        intel_event = await _build_intel_catchup_event(repo, tagger_events[0])
+        if intel_event is not None:
+            tagger_events.append(intel_event)
     # Aggregate tags across the session-level event AND any per-command
     # fan-out so the bus publish sees a single ttp.tagged envelope per
     # upstream session. The repository's INSERT OR IGNORE keeps replay

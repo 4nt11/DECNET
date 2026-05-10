@@ -78,6 +78,7 @@ class DummyRepo(BaseRepository):
     # DEBT-041 / 3eb67c9 — attacker_intel re-key
     async def find_credential_reuse_candidates(self, min_targets=2): await super().find_credential_reuse_candidates(min_targets); return []
     async def get_attacker_intel_by_uuid(self, u): await super().get_attacker_intel_by_uuid(u)
+    async def get_attacker_intel_row_by_uuid(self, u): await super().get_attacker_intel_row_by_uuid(u)
     async def get_unenriched_attackers(self, limit=100): await super().get_unenriched_attackers(limit)
     async def upsert_attacker_intel(self, d): await super().upsert_attacker_intel(d); return ""
     # Identity resolution (this PR)
@@ -228,6 +229,7 @@ async def test_base_repo_coverage():
     await dr.get_session_log("a")
     await dr.find_credential_reuse_candidates()
     await dr.get_attacker_intel_by_uuid("a")
+    await dr.get_attacker_intel_row_by_uuid("a")
     await dr.get_unenriched_attackers()
     await dr.upsert_attacker_intel({"attacker_uuid": "a", "attacker_ip": "1.1.1.1"})
     await dr.get_identity_by_uuid("a")
