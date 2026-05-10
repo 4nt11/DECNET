@@ -88,8 +88,8 @@ async def test_put_then_get(client, auth_token):
 
     # Persisted as JSON string in the topology row.
     topo = await _repo.get_topology(tid)
-    assert isinstance(topo["email_personas"], str)
-    stored = json.loads(topo["email_personas"])
+    assert isinstance(topo.email_personas, str)
+    stored = json.loads(topo.email_personas)
     assert {p["email"] for p in stored} == {"a@example.com", "b@example.com"}
 
 

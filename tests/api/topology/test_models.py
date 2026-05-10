@@ -80,8 +80,7 @@ def test_mutation_request_rejects_unknown_op():
 async def test_summary_accepts_repo_topology_row(repo):
     plan = generate(_cfg())
     tid = await persist(repo, plan)
-    row = await repo.get_topology(tid)
-    summary = TopologySummary(**row)
+    summary = await repo.get_topology(tid)
     assert summary.id == tid
     assert summary.version == 1
     # Defaults surface cleanly on a fresh topology.
@@ -97,8 +96,7 @@ async def test_summary_surfaces_needs_resync_flag(repo):
     plan = generate(_cfg())
     tid = await persist(repo, plan)
     await repo.set_topology_resync(tid, True)
-    row = await repo.get_topology(tid)
-    summary = TopologySummary(**row)
+    summary = await repo.get_topology(tid)
     assert summary.needs_resync is True
 
 

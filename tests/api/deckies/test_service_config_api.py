@@ -35,7 +35,7 @@ async def test_get_ssh_schema_returns_declared_fields(
     assert body["name"] == "ssh"
     assert body["ports"] == [22]
     keys = {f["key"] for f in body["fields"]}
-    assert keys == {"password", "hostname"}
+    assert keys == {"password", "user", "user_password", "hostname"}
     pw = next(f for f in body["fields"] if f["key"] == "password")
     assert pw["type"] == "password" and pw["secret"] is True
 

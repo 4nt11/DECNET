@@ -119,7 +119,7 @@ class TestHealthLive:
         )
         data = resp.json()
         expected = {"database", "ingestion_worker", "collector_worker",
-                    "attacker_worker", "sniffer_worker", "docker"}
+                    "attacker_worker", "sniffer_worker", "tarpit_watcher", "docker"}
         assert set(data["components"].keys()) == expected
 
     async def test_database_healthy_with_real_db(self, live_client, token):
