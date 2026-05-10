@@ -5,6 +5,8 @@ Accepts all requests, logs every detail (method, path, headers, body),
 and responds with configurable pages. Forwards events as JSON to LOG_TARGET if set.
 """
 
+from __future__ import annotations
+
 import json
 import logging
 import os
