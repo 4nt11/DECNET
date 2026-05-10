@@ -26,8 +26,6 @@ const DEFAULTS: LLMPayload = {
   api_key_set: false,
 };
 
-const _SENTINEL = Symbol();
-
 interface Props {
   isAdmin: boolean;
 }
