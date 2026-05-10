@@ -88,6 +88,15 @@ class BaseService(ABC):
         """
         return None
 
+    def udp_ports(self, cfg: dict | None = None) -> list[int]:
+        """UDP ports this service needs published, given its resolved config.
+
+        Only meaningful for gateway deckies in topology deployments where the
+        base container publishes ports on the host.  Fleet deckies use MACVLAN
+        and need no port publishing at all.  Default: no UDP ports.
+        """
+        return []
+
     def validate_cfg(self, cfg: dict | None) -> dict:
         """
         Coerce a user-submitted dict against this service's config_schema.

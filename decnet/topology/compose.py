@@ -108,8 +108,11 @@ def generate_topology_compose(hydrated: dict[str, Any]) -> dict:
                 svc = get_service(svc_name)
                 if svc is None or svc.fleet_singleton:
                     continue
+                svc_cfg = service_config.get(svc_name, {})
                 for port in svc.ports:
                     published.append(f"{port}:{port}")
+                for port in svc.udp_ports(svc_cfg):
+                    published.append(f"{port}:{port}/udp")
             if published:
                 base["ports"] = published
 

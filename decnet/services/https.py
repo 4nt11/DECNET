@@ -116,5 +116,9 @@ class HTTPSService(BaseService):
 
         return fragment
 
+    def udp_ports(self, cfg: dict | None = None) -> list[int]:
+        versions = (cfg or {}).get("http_versions", [])
+        return [443] if "http/3" in versions else []
+
     def dockerfile_context(self) -> Path | None:
         return TEMPLATES_DIR
