@@ -116,7 +116,7 @@ decnet = "decnet.cli:app"
 [tool.pytest.ini_options]
 asyncio_mode = "auto"
 asyncio_debug = "true"
-asyncio_default_fixture_loop_scope = "module"
+asyncio_default_fixture_loop_scope = "function"
 addopts = "-v -q -x -n 4 --dist load"
 norecursedirs = [
     "tests/live",

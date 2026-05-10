@@ -102,7 +102,7 @@ def compiled_rules() -> list[CompiledRule]:
     return _load_compiled_rules()
 
 
-@pytest_asyncio.fixture(scope="module")
+@pytest_asyncio.fixture(scope="module", loop_scope="module")
 async def precision_engine(
     compiled_rules: list[CompiledRule],
 ) -> RuleEngine:
