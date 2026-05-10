@@ -472,7 +472,14 @@ def parse_rfc5424(line: str) -> Optional[dict[str, Any]]:
     attacker_ip = "Unknown"
     for fname in _IP_FIELDS:
         if fname in fields:
-            attacker_ip = fields[fname]
+            raw = fields[fname]
+            # remote_addr may be "host:port" — split so identity keys on IP only.
+            host, _, port = raw.rpartition(":")
+            if host and port.isdigit():
+                attacker_ip = host.strip("[]")  # handle [::1]:port IPv6 form
+                fields.setdefault("remote_port", port)
+            else:
+                attacker_ip = raw
             break
 
     # Fallback for plain `logger` callers that don't use SD params (notably

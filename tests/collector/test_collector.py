@@ -156,6 +156,21 @@ class TestParseRfc5424:
         assert result["fields"]["src_ip"] == "1.2.3.4"
         assert "src" not in result["fields"]
 
+    def test_remote_addr_with_port_strips_port(self):
+        """remote_addr="1.2.3.4:40838" — attacker_ip must be the host only."""
+        line = self._make_line('remote_addr="192.168.1.5:40838"')
+        result = parse_rfc5424(line)
+        assert result["attacker_ip"] == "192.168.1.5"
+        assert result["fields"]["remote_port"] == "40838"
+
+    def test_remote_addr_plain_ip_no_port(self):
+        """remote_addr="1.2.3.4" without port — attacker_ip is the full value,
+        no remote_port key injected."""
+        line = self._make_line('remote_addr="192.168.1.5"')
+        result = parse_rfc5424(line)
+        assert result["attacker_ip"] == "192.168.1.5"
+        assert "remote_port" not in result["fields"]
+
     def test_parses_msg(self):
         line = self._make_line(msg="hello world")
         result = parse_rfc5424(line)

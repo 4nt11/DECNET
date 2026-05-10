@@ -640,6 +640,7 @@ async def _extract_bounty(
                 "protocol": _fields.get("proto") or _fields.get("protocol", "h1"),
                 "method": _fields.get("method"),
                 "path": _fields.get("path"),
+                "remote_port": _fields.get("remote_port"),
             },
         })
 
@@ -656,6 +657,7 @@ async def _extract_bounty(
                 "settings": _fields.get("settings"),
                 "frame_order": _fields.get("frame_order"),
                 "protocol": "h2" if _evt_type == "http2_settings" else "h3",
+                "remote_port": _fields.get("remote_port"),
             },
         })
 
