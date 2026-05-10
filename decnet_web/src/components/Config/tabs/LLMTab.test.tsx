@@ -40,7 +40,7 @@ describe('LLMTab', () => {
     apiGet.mockResolvedValueOnce({ data: { ...defaultPayload, api_key_set: true } });
     render();
     await waitFor(() => expect(screen.queryByText('LOADING…')).toBeNull());
-    expect(screen.getByText(/Key stored/)).toBeDefined();
+    expect(screen.getByText(/KEY SET/)).toBeDefined();
   });
 
   it('calls PUT on save and shows success', async () => {
@@ -71,7 +71,7 @@ describe('LLMTab', () => {
     await waitFor(() => expect(screen.queryByText('LOADING…')).toBeNull());
     await user.click(screen.getByRole('button', { name: /SAVE/ }));
 
-    await waitFor(() => expect(screen.getByText(/ADMIN ROLE REQUIRED/)).toBeDefined());
+    await waitFor(() => expect(screen.getByText(/Admin role required/)).toBeDefined());
   });
 
   it('hides save button for viewers', async () => {
