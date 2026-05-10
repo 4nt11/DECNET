@@ -112,21 +112,39 @@ def test_below_floor_dropped_at_insert() -> None:
     assert all(v < CONFIDENCE_FLOOR for v in rows_below)
 
 
-@pytest.mark.xfail(
-    strict=True,
-    reason="impl phase E.3.10 — IntelLifter provider-score multiplier "
-    "lands with the intel lifter implementation",
-)
 def test_abuseipdb_score_30_dropped() -> None:
-    """End-to-end worked example: AbuseIPDB score=30 → 0.255 → dropped.
+    """End-to-end worked example: AbuseIPDB score=30 → 0.21 → dropped.
 
-    The intel lifter multiplies its rule's base (``0.85``) by the
-    provider score normalised into ``[0, 1]`` (``30 / 100 = 0.30``).
-    Result lands below the floor; no row is written. Today the
-    intel lifter returns ``[]`` from its empty body so the assertion
-    that "no row was written" is trivially true — but the assertion
-    that the worker COMPUTED ``0.255`` and then DROPPED it (rather
-    than never computing at all) requires the impl. xfail until
-    E.3.10.
+    R0054 T1110 base_conf=0.70. Multiplier = 30/100 = 0.30.
+    0.70 × 0.30 = 0.21 < CONFIDENCE_FLOOR → tag is emitted by the lifter
+    but insert_tags drops it.
     """
-    pytest.fail("IntelLifter provider-score multiplier not yet implemented")
+    import asyncio
+    from pathlib import Path
+    from decnet.ttp.base import TaggerEvent
+    from decnet.ttp.impl.intel_lifter import IntelLifter
+    from decnet.ttp.store.base import RuleState
+    from decnet.ttp.store.impl.filesystem import _parse_and_compile
+    from tests.ttp._stub_store import StubRuleStore
+
+    rules_dir = Path(__file__).resolve().parents[2] / "rules" / "ttp"
+    rule = _parse_and_compile(rules_dir / "R0054.yaml", RuleState())
+    lifter = IntelLifter(StubRuleStore(compiled=[rule]))
+    lifter._index.install(rule)
+
+    ev = TaggerEvent(
+        source_kind="intel",
+        source_id="src-confidence-test",
+        attacker_uuid="att1",
+        identity_uuid=None,
+        session_id=None,
+        decky_id=None,
+        payload={"abuseipdb_score": 30, "abuseipdb_categories": [18, 22]},
+    )
+    out = asyncio.run(lifter.tag(ev))
+    assert out, "intel lifter emitted no tags — multiplier not applied"
+    for tag in out:
+        assert tag.confidence == pytest.approx(0.21, rel=1e-4), (
+            f"expected 0.70×0.30=0.21, got {tag.confidence!r}"
+        )
+        assert tag.confidence < CONFIDENCE_FLOOR
