@@ -161,7 +161,7 @@ def test_domain_sections_load_regardless_of_mode(monkeypatch, tmp_path):
     _scrub(
         monkeypatch,
         "DECNET_MODE", "DECNET_API_HOST", "DECNET_API_PORT",
-        "DECNET_WEB_PORT", "DECNET_ADMIN_USER",
+        "DECNET_WEB_PORT", "DECNET_ADMIN_USER", "DECNET_CORS_ORIGINS",
         "DECNET_DB_TYPE", "DECNET_DB_URL",
         "DECNET_BUS_ENABLED", "DECNET_BUS_GROUP",
         "DECNET_SWARM_SYSLOG_PORT",
