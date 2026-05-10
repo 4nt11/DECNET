@@ -25,7 +25,6 @@ Status code semantics:
 """
 from __future__ import annotations
 
-import json
 import os
 from datetime import datetime, timezone
 from typing import Optional
@@ -72,8 +71,8 @@ class GreyNoiseProvider(IntelProvider):
                 column_updates={
                     "greynoise_classification": "unknown",
                     "greynoise_name": None,
-                    "greynoise_tags": "[]",
-                    "greynoise_raw": json.dumps({"message": "not seen"}),
+                    "greynoise_tags": [],
+                    "greynoise_raw": {"message": "not seen"},
                     "greynoise_queried_at": datetime.now(timezone.utc),
                 },
             )
@@ -107,8 +106,8 @@ class GreyNoiseProvider(IntelProvider):
             column_updates={
                 "greynoise_classification": classification,
                 "greynoise_name": name,
-                "greynoise_tags": json.dumps(tags),
-                "greynoise_raw": json.dumps(data),
+                "greynoise_tags": tags,
+                "greynoise_raw": data,
                 "greynoise_queried_at": datetime.now(timezone.utc),
             },
         )

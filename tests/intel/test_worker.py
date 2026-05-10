@@ -12,7 +12,6 @@ Covers — without any real provider impls — that the loop:
 from __future__ import annotations
 
 import asyncio
-import json
 from datetime import datetime, timezone
 from typing import Optional
 
@@ -128,7 +127,7 @@ async def test_fan_out_writes_aggregate_row(repo):
         verdict="benign",
         column_updates={
             "greynoise_classification": "benign",
-            "greynoise_raw": json.dumps({"classification": "benign"}),
+            "greynoise_raw": {"classification": "benign"},
             "greynoise_queried_at": datetime.now(timezone.utc),
         },
     )
@@ -137,7 +136,7 @@ async def test_fan_out_writes_aggregate_row(repo):
         verdict="malicious",
         column_updates={
             "abuseipdb_score": 90,
-            "abuseipdb_raw": json.dumps({"abuseConfidenceScore": 90}),
+            "abuseipdb_raw": {"abuseConfidenceScore": 90},
             "abuseipdb_queried_at": datetime.now(timezone.utc),
         },
     )
@@ -178,7 +177,7 @@ async def test_provider_error_does_not_poison_row(repo):
         verdict="benign",
         column_updates={
             "greynoise_classification": "benign",
-            "greynoise_raw": "{}",
+            "greynoise_raw": {},
             "greynoise_queried_at": datetime.now(timezone.utc),
         },
     )
@@ -234,7 +233,7 @@ async def test_intel_enriched_event_published_to_bus(repo, monkeypatch):
         verdict="malicious",
         column_updates={
             "greynoise_classification": "malicious",
-            "greynoise_raw": "{}",
+            "greynoise_raw": {},
             "greynoise_queried_at": datetime.now(timezone.utc),
         },
     )

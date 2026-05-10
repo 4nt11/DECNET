@@ -77,7 +77,7 @@ async def test_partial_provider_update_preserves_others(repo):
         _intel_payload(
             attacker_uuid=a_uuid, ip="9.9.9.9",
             greynoise_classification="malicious",
-            greynoise_raw='{"classification":"malicious"}',
+            greynoise_raw={"classification": "malicious"},
             greynoise_queried_at=datetime.now(timezone.utc),
         )
     )
@@ -87,7 +87,7 @@ async def test_partial_provider_update_preserves_others(repo):
         _intel_payload(
             attacker_uuid=a_uuid, ip="9.9.9.9",
             abuseipdb_score=85,
-            abuseipdb_raw='{"abuseConfidenceScore":85}',
+            abuseipdb_raw={"abuseConfidenceScore": 85},
             abuseipdb_queried_at=datetime.now(timezone.utc),
         )
     )

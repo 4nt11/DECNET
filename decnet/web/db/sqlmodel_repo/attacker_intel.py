@@ -7,7 +7,6 @@ worker query.
 """
 from __future__ import annotations
 
-import json
 import uuid as _uuid
 from datetime import datetime, timezone
 from typing import Any, Optional
@@ -67,28 +66,7 @@ class AttackerIntelMixin(_MixinBase):
             row = result.scalar_one_or_none()
             if not row:
                 return None
-            d = row.model_dump(mode="json")
-            # Two passes: ``*_raw`` columns hold provider response blobs
-            # (objects); the per-provider taxonomy columns hold JSON
-            # arrays the IntelLifter consumes as native lists.
-            for key in (
-                "greynoise_raw",
-                "abuseipdb_raw",
-                "feodo_raw",
-                "threatfox_raw",
-                "greynoise_tags",
-                "abuseipdb_categories",
-                "threatfox_threat_types",
-                "threatfox_ioc_types",
-                "threatfox_malware_families",
-            ):
-                raw = d.get(key)
-                if isinstance(raw, str):
-                    try:
-                        d[key] = json.loads(raw)
-                    except (json.JSONDecodeError, TypeError):
-                        pass
-            return d
+            return row.model_dump(mode="json")
 
     async def get_unenriched_attackers(
         self, limit: int = 100,

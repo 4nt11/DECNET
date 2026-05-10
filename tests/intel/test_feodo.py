@@ -10,7 +10,6 @@ subsequent ``lookup`` calls hit memory. We assert:
 """
 from __future__ import annotations
 
-import json
 
 import httpx
 import pytest
@@ -56,8 +55,7 @@ async def test_listed_ip_yields_malicious_verdict():
     result = await provider.lookup("9.9.9.9")
     assert result.verdict == "malicious"
     assert result.column_updates["feodo_listed"] is True
-    raw = json.loads(result.column_updates["feodo_raw"])
-    assert raw["malware"] == "TrickBot"
+    assert result.column_updates["feodo_raw"]["malware"] == "TrickBot"
     assert len(captured) == 1
 
 

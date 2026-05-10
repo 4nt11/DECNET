@@ -1,7 +1,6 @@
 """Unit tests for the AbuseIPDB provider."""
 from __future__ import annotations
 
-import json
 
 import httpx
 import pytest
@@ -71,8 +70,7 @@ async def test_high_score_maps_to_malicious(monkeypatch):
     result = await provider.lookup("1.2.3.4")
     assert result.verdict == "malicious"
     assert result.column_updates["abuseipdb_score"] == 92
-    raw = json.loads(result.column_updates["abuseipdb_raw"])
-    assert raw["countryCode"] == "RU"
+    assert result.column_updates["abuseipdb_raw"]["countryCode"] == "RU"
     # Key header sent, query params correct.
     req = captured[0]
     assert req.headers["key"] == "k3y"
@@ -120,8 +118,7 @@ async def test_categories_flattened_from_reports(monkeypatch):
     _install_transport(handler)
     provider = AbuseIPDBProvider()
     result = await provider.lookup("1.2.3.4")
-    cats = json.loads(result.column_updates["abuseipdb_categories"])
-    assert cats == [14, 18, 21, 22]
+    assert result.column_updates["abuseipdb_categories"] == [14, 18, 21, 22]
 
 
 @pytest.mark.anyio
@@ -136,7 +133,7 @@ async def test_categories_empty_when_no_reports(monkeypatch):
     _install_transport(handler)
     provider = AbuseIPDBProvider()
     result = await provider.lookup("8.8.8.8")
-    assert json.loads(result.column_updates["abuseipdb_categories"]) == []
+    assert result.column_updates["abuseipdb_categories"] == []
 
 
 @pytest.mark.anyio

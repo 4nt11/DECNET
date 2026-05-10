@@ -11,7 +11,6 @@ Mocks httpx via ``MockTransport`` and asserts:
 """
 from __future__ import annotations
 
-import json
 
 import httpx
 import pytest
@@ -61,8 +60,7 @@ async def test_malicious_classification_maps_to_verdict():
     assert result.error is None
     assert result.verdict == "malicious"
     assert result.column_updates["greynoise_classification"] == "malicious"
-    raw = json.loads(result.column_updates["greynoise_raw"])
-    assert raw["name"] == "Mirai-like"
+    assert result.column_updates["greynoise_raw"]["name"] == "Mirai-like"
     assert "1.2.3.4" in str(captured[0].url)
     # No DECNET label leaks in the UA.
     assert "decnet" not in captured[0].headers["user-agent"].lower()
@@ -146,8 +144,7 @@ async def test_actor_name_and_tags_persisted_when_present():
     _install_transport(provider, handler)
     result = await provider.lookup("1.2.3.4")
     assert result.column_updates["greynoise_name"] == "Tor"
-    tags = json.loads(result.column_updates["greynoise_tags"])
-    assert tags == ["tor_exit_node", "ssh_bruteforcer"]
+    assert result.column_updates["greynoise_tags"] == ["tor_exit_node", "ssh_bruteforcer"]
 
 
 @pytest.mark.anyio
@@ -159,7 +156,7 @@ async def test_404_clears_actor_and_tags():
     _install_transport(provider, handler)
     result = await provider.lookup("10.0.0.5")
     assert result.column_updates["greynoise_name"] is None
-    assert result.column_updates["greynoise_tags"] == "[]"
+    assert result.column_updates["greynoise_tags"] == []
 
 
 @pytest.mark.anyio

@@ -114,22 +114,10 @@ class AttackersCoreMixin(_MixinBase):
         async with self._session() as session:
             rows = (await session.execute(stmt)).all()
 
-        _intel_raw_keys = ("greynoise_raw", "abuseipdb_raw", "feodo_raw", "threatfox_raw")
         result = []
         for attacker, intel in rows:
             d = self._deserialize_attacker(attacker.model_dump(mode="json"))
-            if intel is not None:
-                intel_d = intel.model_dump(mode="json")
-                for key in _intel_raw_keys:
-                    raw = intel_d.get(key)
-                    if isinstance(raw, str):
-                        try:
-                            intel_d[key] = json.loads(raw)
-                        except (json.JSONDecodeError, TypeError):
-                            pass
-                d["threat_intel"] = intel_d
-            else:
-                d["threat_intel"] = None
+            d["threat_intel"] = intel.model_dump(mode="json") if intel is not None else None
             result.append(d)
         return result
 

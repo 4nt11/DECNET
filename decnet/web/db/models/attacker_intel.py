@@ -1,24 +1,9 @@
 """Threat-intel enrichment row — one per attacker IP, TTL-cached."""
-import json as _json
 from datetime import datetime, timezone
 from typing import Any, Optional
 
-from sqlalchemy import Column
+from sqlalchemy import JSON, Column
 from sqlmodel import Field, SQLModel
-
-from ._base import _BIG_TEXT
-
-
-def _decode_json_list(value: Any) -> list[Any]:
-    if isinstance(value, list):
-        return value
-    if isinstance(value, str) and value:
-        try:
-            decoded = _json.loads(value)
-        except (_json.JSONDecodeError, TypeError):
-            return []
-        return decoded if isinstance(decoded, list) else []
-    return []
 
 
 class AttackerIntel(SQLModel, table=True):
@@ -63,37 +48,35 @@ class AttackerIntel(SQLModel, table=True):
     # empty unless an operator wires a non-Community provider that does.
     greynoise_classification: Optional[str] = Field(default=None, max_length=32)
     greynoise_name: Optional[str] = Field(default=None, max_length=128)
-    greynoise_tags: str = Field(
-        default="[]",
-        sa_column=Column("greynoise_tags", _BIG_TEXT, nullable=False, default="[]"),
-    )  # JSON list[str] — behavioral / actor tags
-    greynoise_raw: str = Field(
-        default="{}",
-        sa_column=Column("greynoise_raw", _BIG_TEXT, nullable=False, default="{}"),
+    greynoise_tags: list[str] = Field(
+        default_factory=list,
+        sa_column=Column("greynoise_tags", JSON, nullable=False),
+    )
+    greynoise_raw: dict[str, Any] = Field(
+        default_factory=dict,
+        sa_column=Column("greynoise_raw", JSON, nullable=False),
     )
     greynoise_queried_at: Optional[datetime] = Field(default=None)
 
     # ── AbuseIPDB ────────────────────────────────────────────────────────
     # 0..100 abuse confidence score
     abuseipdb_score: Optional[int] = Field(default=None)
-    abuseipdb_categories: str = Field(
-        default="[]",
-        sa_column=Column(
-            "abuseipdb_categories", _BIG_TEXT, nullable=False, default="[]",
-        ),
-    )  # JSON list[int] — flattened set of categories across recent reports
-    abuseipdb_raw: str = Field(
-        default="{}",
-        sa_column=Column("abuseipdb_raw", _BIG_TEXT, nullable=False, default="{}"),
+    abuseipdb_categories: list[int] = Field(
+        default_factory=list,
+        sa_column=Column("abuseipdb_categories", JSON, nullable=False),
+    )
+    abuseipdb_raw: dict[str, Any] = Field(
+        default_factory=dict,
+        sa_column=Column("abuseipdb_raw", JSON, nullable=False),
     )
     abuseipdb_queried_at: Optional[datetime] = Field(default=None)
 
     # ── abuse.ch Feodo Tracker ───────────────────────────────────────────
     feodo_listed: Optional[bool] = Field(default=None)
     feodo_malware_family: Optional[str] = Field(default=None, max_length=64)
-    feodo_raw: str = Field(
-        default="{}",
-        sa_column=Column("feodo_raw", _BIG_TEXT, nullable=False, default="{}"),
+    feodo_raw: dict[str, Any] = Field(
+        default_factory=dict,
+        sa_column=Column("feodo_raw", JSON, nullable=False),
     )
     feodo_queried_at: Optional[datetime] = Field(default=None)
 
@@ -105,27 +88,21 @@ class AttackerIntel(SQLModel, table=True):
     # IntelLifter keys ATT&CK techniques on ``threat_type``, the canonical
     # taxonomy field per ThreatFox's API.
     threatfox_listed: Optional[bool] = Field(default=None)
-    threatfox_threat_types: str = Field(
-        default="[]",
-        sa_column=Column(
-            "threatfox_threat_types", _BIG_TEXT, nullable=False, default="[]",
-        ),
-    )  # JSON list[str]
-    threatfox_ioc_types: str = Field(
-        default="[]",
-        sa_column=Column(
-            "threatfox_ioc_types", _BIG_TEXT, nullable=False, default="[]",
-        ),
-    )  # JSON list[str]
-    threatfox_malware_families: str = Field(
-        default="[]",
-        sa_column=Column(
-            "threatfox_malware_families", _BIG_TEXT, nullable=False, default="[]",
-        ),
-    )  # JSON list[str]
-    threatfox_raw: str = Field(
-        default="{}",
-        sa_column=Column("threatfox_raw", _BIG_TEXT, nullable=False, default="{}"),
+    threatfox_threat_types: list[str] = Field(
+        default_factory=list,
+        sa_column=Column("threatfox_threat_types", JSON, nullable=False),
+    )
+    threatfox_ioc_types: list[str] = Field(
+        default_factory=list,
+        sa_column=Column("threatfox_ioc_types", JSON, nullable=False),
+    )
+    threatfox_malware_families: list[str] = Field(
+        default_factory=list,
+        sa_column=Column("threatfox_malware_families", JSON, nullable=False),
+    )
+    threatfox_raw: dict[str, Any] = Field(
+        default_factory=dict,
+        sa_column=Column("threatfox_raw", JSON, nullable=False),
     )
     threatfox_queried_at: Optional[datetime] = Field(default=None)
 
@@ -166,21 +143,19 @@ class AttackerIntel(SQLModel, table=True):
             "aggregate_verdict": self.aggregate_verdict,
             # AbuseIPDB
             "abuseipdb_score": self.abuseipdb_score,
-            "abuseipdb_categories": _decode_json_list(self.abuseipdb_categories),
+            "abuseipdb_categories": self.abuseipdb_categories,
             # GreyNoise
             "greynoise_classification": self.greynoise_classification,
             "greynoise_name": self.greynoise_name,
-            "greynoise_tags": _decode_json_list(self.greynoise_tags),
+            "greynoise_tags": self.greynoise_tags,
             # Feodo
             "feodo_listed": self.feodo_listed,
             "feodo_malware_family": self.feodo_malware_family,
             # ThreatFox
             "threatfox_listed": self.threatfox_listed,
-            "threatfox_threat_types": _decode_json_list(self.threatfox_threat_types),
-            "threatfox_ioc_types": _decode_json_list(self.threatfox_ioc_types),
-            "threatfox_malware_families": _decode_json_list(
-                self.threatfox_malware_families
-            ),
+            "threatfox_threat_types": self.threatfox_threat_types,
+            "threatfox_ioc_types": self.threatfox_ioc_types,
+            "threatfox_malware_families": self.threatfox_malware_families,
         }
         if providers is not None:
             d["providers"] = providers

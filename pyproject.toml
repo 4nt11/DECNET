@@ -117,13 +117,14 @@ decnet = "decnet.cli:app"
 asyncio_mode = "auto"
 asyncio_debug = "true"
 asyncio_default_fixture_loop_scope = "module"
-addopts = "-v -q -x -n logical --dist load"
+addopts = "-v -q -x -n 4 --dist load"
 norecursedirs = [
     "tests/live",
     "tests/stress",
     "tests/service_testing",
     "tests/docker",
     "tests/perf",
+    "tests/api",
     "__pycache__",
     ".git",
     "node_modules",

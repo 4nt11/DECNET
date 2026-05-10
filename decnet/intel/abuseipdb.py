@@ -17,7 +17,6 @@ later if operators report drift.
 """
 from __future__ import annotations
 
-import json
 import os
 from datetime import datetime, timezone
 from typing import Optional
@@ -110,8 +109,8 @@ class AbuseIPDBProvider(IntelProvider):
             verdict=verdict,
             column_updates={
                 "abuseipdb_score": score,
-                "abuseipdb_categories": json.dumps(sorted(categories)),
-                "abuseipdb_raw": json.dumps(data),
+                "abuseipdb_categories": sorted(categories),
+                "abuseipdb_raw": data,
                 "abuseipdb_queried_at": datetime.now(timezone.utc),
             },
         )

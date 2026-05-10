@@ -12,7 +12,6 @@ caps requests/min — the provider works either way.
 """
 from __future__ import annotations
 
-import json
 import os
 from datetime import datetime, timezone
 from typing import Optional
@@ -71,10 +70,10 @@ class ThreatFoxProvider(IntelProvider):
                 verdict=None,  # absence is not a benign signal
                 column_updates={
                     "threatfox_listed": False,
-                    "threatfox_threat_types": "[]",
-                    "threatfox_ioc_types": "[]",
-                    "threatfox_malware_families": "[]",
-                    "threatfox_raw": "{}",
+                    "threatfox_threat_types": [],
+                    "threatfox_ioc_types": [],
+                    "threatfox_malware_families": [],
+                    "threatfox_raw": {},
                     "threatfox_queried_at": datetime.now(timezone.utc),
                 },
             )
@@ -113,10 +112,10 @@ class ThreatFoxProvider(IntelProvider):
             verdict="malicious" if listed else None,
             column_updates={
                 "threatfox_listed": listed,
-                "threatfox_threat_types": json.dumps(sorted(threat_types)),
-                "threatfox_ioc_types": json.dumps(sorted(ioc_types)),
-                "threatfox_malware_families": json.dumps(sorted(families)),
-                "threatfox_raw": json.dumps(data),
+                "threatfox_threat_types": sorted(threat_types),
+                "threatfox_ioc_types": sorted(ioc_types),
+                "threatfox_malware_families": sorted(families),
+                "threatfox_raw": data,
                 "threatfox_queried_at": datetime.now(timezone.utc),
             },
         )

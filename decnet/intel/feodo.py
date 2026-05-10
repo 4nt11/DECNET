@@ -13,7 +13,6 @@ of attacker IPs map to a single network round-trip per refresh window.
 """
 from __future__ import annotations
 
-import json
 import time
 from datetime import datetime, timezone
 from typing import Any, Optional
@@ -94,7 +93,7 @@ class FeodoProvider(IntelProvider):
                 column_updates={
                     "feodo_listed": False,
                     "feodo_malware_family": None,
-                    "feodo_raw": "{}",
+                    "feodo_raw": {},
                     "feodo_queried_at": datetime.now(timezone.utc),
                 },
             )
@@ -108,7 +107,7 @@ class FeodoProvider(IntelProvider):
             column_updates={
                 "feodo_listed": True,
                 "feodo_malware_family": family,
-                "feodo_raw": json.dumps(entry),
+                "feodo_raw": entry,
                 "feodo_queried_at": datetime.now(timezone.utc),
             },
         )

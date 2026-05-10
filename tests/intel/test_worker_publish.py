@@ -98,26 +98,22 @@ async def test_intel_worker_publishes_intel_enriched(
 
 
 def test_build_intel_event_payload_projects_taxonomy_fields() -> None:
-    """Post-2026-05-02 audit: the bus payload now carries the per-
-    provider taxonomy fields the IntelLifter needs (categories, tags,
-    threat_types). JSON-string columns are decoded back to native
-    lists so the consumer does not have to know about storage shape.
+    """The bus payload carries the per-provider taxonomy fields the
+    IntelLifter needs (categories, tags, threat_types) as native lists.
     """
-    import json as _json
-
     row = {
         "aggregate_verdict": "malicious",
         "abuseipdb_score": 87,
-        "abuseipdb_categories": _json.dumps([14, 18, 22]),
+        "abuseipdb_categories": [14, 18, 22],
         "greynoise_classification": "malicious",
         "greynoise_name": "Mirai",
-        "greynoise_tags": _json.dumps(["ssh_bruteforcer"]),
+        "greynoise_tags": ["ssh_bruteforcer"],
         "feodo_listed": True,
         "feodo_malware_family": "Emotet",
         "threatfox_listed": True,
-        "threatfox_threat_types": _json.dumps(["botnet_cc"]),
-        "threatfox_ioc_types": _json.dumps(["ip:port"]),
-        "threatfox_malware_families": _json.dumps(["Sliver"]),
+        "threatfox_threat_types": ["botnet_cc"],
+        "threatfox_ioc_types": ["ip:port"],
+        "threatfox_malware_families": ["Sliver"],
     }
     payload = _iw._build_intel_event_payload(
         "att-2", "203.0.113.7", row, [_FakeProvider()],
