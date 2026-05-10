@@ -115,7 +115,7 @@ async def test_heartbeat_matching_hash_does_not_flag(
     )
     assert resp.status_code == 204, resp.text
     row = await repo.get_topology(tid)
-    assert row["needs_resync"] is False
+    assert row.needs_resync is False
 
 
 @pytest.mark.anyio
@@ -140,7 +140,7 @@ async def test_heartbeat_hash_mismatch_flags_resync(
     )
     assert resp.status_code == 204, resp.text
     row = await repo.get_topology(tid)
-    assert row["needs_resync"] is True
+    assert row.needs_resync is True
 
 
 @pytest.mark.anyio
@@ -167,7 +167,7 @@ async def test_heartbeat_agent_reports_no_topology_flags_resync(
     )
     assert resp.status_code == 204, resp.text
     row = await repo.get_topology(tid)
-    assert row["needs_resync"] is True
+    assert row.needs_resync is True
 
 
 @pytest.mark.anyio
@@ -190,7 +190,7 @@ async def test_heartbeat_without_topology_block_is_noop_for_resync(
     row = await repo.get_topology(tid)
     # Absence of the topology block means agent hasn't reported anything
     # → treat like no topology reported → flag.
-    assert row["needs_resync"] is True
+    assert row.needs_resync is True
 
 
 @pytest.mark.anyio
@@ -221,4 +221,4 @@ async def test_heartbeat_other_host_topology_unaffected(
     )
     assert resp.status_code == 204, resp.text
     row = await repo.get_topology(tid_a)
-    assert row["needs_resync"] is False
+    assert row.needs_resync is False

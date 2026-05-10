@@ -131,13 +131,13 @@ async def _resolve_personas(
         topology = await repo.get_topology(topology_id)
         if not topology:
             return [], source
-        return (
-            parse_personas(
-                topology.get("email_personas"),
-                language_default=topology.get("language_default") or "en",
-            ),
-            source,
-        )
+        if isinstance(topology, dict):
+            raw = topology.get("email_personas")
+            lang = topology.get("language_default") or "en"
+        else:
+            raw = topology.email_personas
+            lang = topology.language_default or "en"
+        return parse_personas(raw, language_default=lang), source
     # Fleet / shard / anything else → global pool.
     return global_pool.load(), source
 
