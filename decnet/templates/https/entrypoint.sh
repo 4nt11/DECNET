@@ -29,8 +29,8 @@ if [ ! -f "$CERT" ] || [ ! -f "$KEY" ]; then
         2>/dev/null
 fi
 
-# Parse HTTP_VERSIONS JSON → Caddy protocol tokens (h1 / h2 only).
-# h3 is handled by decnet_h3 Caddy app (H3App owns UDP/443); never goes to Caddy native h3.
+# Parse HTTP_VERSIONS JSON → Caddy protocol tokens.
+# Caddy handles h3 natively; h3 SETTINGS are captured via FPHandler (http3.Settingser).
 CADDY_PROTOCOLS=$(python3 -c "
 import json, os
 versions = json.loads(os.environ.get('HTTP_VERSIONS', '[\"http/1.1\"]'))
@@ -39,15 +39,9 @@ if 'http/1.1' in versions:
     tokens.append('h1')
 if 'http/2' in versions:
     tokens.append('h2')
-print(' '.join(tokens) if tokens else 'h1')
-")
-
-# When http/3 is selected, activate the decnet_h3 Caddy app (global block).
-DECNET_H3_GLOBAL=$(python3 -c "
-import json, os
-versions = json.loads(os.environ.get('HTTP_VERSIONS', '[\"http/1.1\"]'))
 if 'http/3' in versions:
-    print('  decnet_h3')
+    tokens.append('h3')
+print(' '.join(tokens) if tokens else 'h1')
 ")
 
 DECNET_FP_SOCK="${DECNET_FP_SOCK:-/run/decnet/fp.sock}"
@@ -57,7 +51,6 @@ rm -f "$DECNET_FP_SOCK"
 cat > /etc/caddy/Caddyfile <<EOF
 {
   admin off
-${DECNET_H3_GLOBAL}
   servers :443 {
     protocols ${CADDY_PROTOCOLS}
     listener_wrappers {

@@ -23,6 +23,7 @@ import (
 	"net"
 	"net/http"
 	"os"
+	"strings"
 	"sync"
 	"time"
 
@@ -30,6 +31,7 @@ import (
 	"github.com/caddyserver/caddy/v2/caddyconfig/caddyfile"
 	"github.com/caddyserver/caddy/v2/caddyconfig/httpcaddyfile"
 	"github.com/caddyserver/caddy/v2/modules/caddyhttp"
+	"github.com/quic-go/quic-go/http3"
 	"go.uber.org/zap"
 	"golang.org/x/net/http2/hpack"
 )
@@ -580,8 +582,35 @@ func (h *FPHandler) ServeHTTP(w http.ResponseWriter, r *http.Request, next caddy
 		"ts":          time.Now().UTC().Format(time.RFC3339),
 	})
 
-	// For h3, emit best-effort http_request_headers (map order, degraded).
+	// For h3: emit h3_settings (once per connection, deduped by remote_addr),
+	// then emit best-effort http_request_headers (map order — QPACK frame order
+	// is not available without a stream tap; degraded but usable for JA4H).
 	if r.ProtoMajor == 3 {
+		if settingser, ok := w.(http3.Settingser); ok {
+			select {
+			case <-settingser.ReceivedSettings():
+				s := settingser.Settings()
+				settingsMap := make(map[string]interface{})
+				if s.EnableDatagrams {
+					settingsMap["H3_DATAGRAM"] = uint64(1)
+				}
+				if s.EnableExtendedConnect {
+					settingsMap["ENABLE_CONNECT_PROTOCOL"] = uint64(1)
+				}
+				for id, val := range s.Other {
+					settingsMap[h3SettingName(id)] = val
+				}
+				go sendFP(map[string]interface{}{
+					"kind":        "h3_settings",
+					"remote_addr": r.RemoteAddr,
+					"settings":    settingsMap,
+					"ts":          time.Now().UTC().Format(time.RFC3339),
+				})
+			default:
+				// Settings not yet received — skip; the access_log record is sufficient.
+			}
+		}
+
 		ordered := make([][]string, 0, len(r.Header))
 		var cookie, acceptLang string
 		for name, vals := range r.Header {
@@ -589,7 +618,7 @@ func (h *FPHandler) ServeHTTP(w http.ResponseWriter, r *http.Request, next caddy
 			if len(vals) > 0 {
 				v = vals[0]
 			}
-			ordered = append(ordered, []string{name, v})
+			ordered = append(ordered, []string{strings.ToLower(name), v})
 			switch http.CanonicalHeaderKey(name) {
 			case "Cookie":
 				cookie = v

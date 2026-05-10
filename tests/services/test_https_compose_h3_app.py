@@ -99,15 +99,11 @@ import json, os, sys
 versions = json.loads(os.environ.get("HTTP_VERSIONS", '["http/1.1"]'))
 tokens = []
 if "http/1.1" in versions: tokens.append("h1")
-if "http/2" in versions: tokens.append("h2")
+if "http/2" in versions:   tokens.append("h2")
+if "http/3" in versions:   tokens.append("h3")
 caddy_protocols = " ".join(tokens) if tokens else "h1"
 
-h3_global = ""
-if "http/3" in versions:
-    h3_global = "  decnet_h3"
-
 print("CADDY_PROTOCOLS=" + caddy_protocols)
-print("DECNET_H3_GLOBAL=" + h3_global)
 """
         r = subprocess.run(
             ["python3", "-c", extract],
@@ -121,29 +117,32 @@ print("DECNET_H3_GLOBAL=" + h3_global)
 
         caddyfile_content = template
         caddyfile_content = caddyfile_content.replace("${CADDY_PROTOCOLS}", vars_.get("CADDY_PROTOCOLS", "h1"))
-        caddyfile_content = caddyfile_content.replace("${DECNET_H3_GLOBAL}", vars_.get("DECNET_H3_GLOBAL", ""))
         caddyfile_content = caddyfile_content.replace("${CERT}", cert_path)
         caddyfile_content = caddyfile_content.replace("${KEY}", key_path)
         return caddyfile_content
 
 
 class TestHTTPSCaddyfileH3:
-    def test_h3_selected_adds_decnet_h3_block(self):
+    def test_h3_selected_adds_h3_to_protocols(self):
+        """With h3 selected, Caddy's protocols line must include h3."""
         caddyfile = run_entrypoint_to_caddyfile(["http/1.1", "http/2", "http/3"])
-        assert "decnet_h3" in caddyfile, f"expected decnet_h3 in:\n{caddyfile}"
-
-    def test_h3_selected_omits_h3_protocol(self):
-        caddyfile = run_entrypoint_to_caddyfile(["http/1.1", "http/2", "http/3"])
-        # Caddy protocols line must NOT contain h3 — H3App owns UDP/443.
         import re
         proto_match = re.search(r"protocols\s+(.*)", caddyfile)
         assert proto_match is not None, "no protocols line found"
-        proto_line = proto_match.group(1)
-        assert "h3" not in proto_line, f"h3 must not appear in protocols: {proto_line!r}"
+        assert "h3" in proto_match.group(1), f"h3 missing from protocols: {proto_match.group(1)!r}"
 
-    def test_h1_h2_only_no_decnet_h3(self):
-        caddyfile = run_entrypoint_to_caddyfile(["http/1.1", "http/2"])
+    def test_h3_no_separate_decnet_h3_block(self):
+        """decnet_h3 app is removed; the Caddyfile must never contain that token."""
+        caddyfile = run_entrypoint_to_caddyfile(["http/1.1", "http/2", "http/3"])
         assert "decnet_h3" not in caddyfile, f"unexpected decnet_h3 in:\n{caddyfile}"
+
+    def test_h1_h2_only_no_h3_in_protocols(self):
+        """Without h3 in HTTP_VERSIONS, h3 must not appear in the protocols line."""
+        caddyfile = run_entrypoint_to_caddyfile(["http/1.1", "http/2"])
+        import re
+        proto_match = re.search(r"protocols\s+(.*)", caddyfile)
+        if proto_match:
+            assert "h3" not in proto_match.group(1), f"unexpected h3 in protocols: {proto_match.group(1)!r}"
 
     def test_h1_only_protocols_line(self):
         caddyfile = run_entrypoint_to_caddyfile(["http/1.1"])

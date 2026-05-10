@@ -1,80 +1,13 @@
 package decnetfp
 
 import (
-	"bytes"
-	"context"
-	"io"
-	"sync"
 	"time"
-
-	"github.com/quic-go/quic-go"
-	"github.com/quic-go/quic-go/logging"
 )
 
-// newH3SettingsTracer is the quic.Config.Tracer factory.  We don't use
-// quic-go's logging.ConnectionTracer for SETTINGS (its ReceivedStreamFrame
-// hook gives only metadata, not payload bytes).  The actual h3 SETTINGS
-// capture happens in h3TappingUniStream by wrapping AcceptUniStream.
-// This function returns nil (no-op tracer) so quic-go uses its default path.
-func newH3SettingsTracer(_ context.Context, _ logging.Perspective, _ quic.ConnectionID) *logging.ConnectionTracer {
-	return nil
-}
-
-// ── QUIC connection wrapper ───────────────────────────────────────────────────
-
-// h3SettingsTappingConn wraps quic.Connection and intercepts AcceptUniStream
-// so the first bytes of each client-initiated unidirectional stream can be
-// inspected for h3 control stream SETTINGS before being replayed to the
-// http3.Server.
-type h3SettingsTappingConn struct {
-	quic.Connection
-	remoteAddr string
-}
-
-func (c *h3SettingsTappingConn) AcceptUniStream(ctx context.Context) (quic.ReceiveStream, error) {
-	stream, err := c.Connection.AcceptUniStream(ctx)
-	if err != nil {
-		return stream, err
-	}
-	return &h3TappingUniStream{ReceiveStream: stream, remoteAddr: c.remoteAddr}, nil
-}
-
-// ── QUIC receive-stream wrapper ───────────────────────────────────────────────
-
-// h3TappingUniStream peeks at the first bytes of a unidirectional stream to
-// identify the h3 control stream (stream type 0x00, RFC 9114 §6.2.1) and
-// extract its first SETTINGS frame, then replays all bytes to the caller.
-type h3TappingUniStream struct {
-	quic.ReceiveStream
-	once       sync.Once
-	buf        bytes.Buffer
-	reader     io.Reader
-	remoteAddr string
-}
-
-// maxH3ControlPeek is enough to cover the stream-type varint + SETTINGS
-// frame type varint + frame-length varint + a typical SETTINGS frame body
-// (6 settings × 8 bytes each = 48 bytes, plus 3 varint headers ≈ 64 bytes).
-const maxH3ControlPeek = 256
-
-func (s *h3TappingUniStream) Read(p []byte) (int, error) {
-	s.once.Do(func() {
-		scratch := make([]byte, maxH3ControlPeek)
-		n, _ := s.ReceiveStream.Read(scratch)
-		s.buf.Write(scratch[:n])
-		go tryParseH3ControlStream(s.remoteAddr, s.buf.Bytes())
-		s.reader = io.MultiReader(&s.buf, s.ReceiveStream)
-	})
-	if s.reader != nil {
-		return s.reader.Read(p)
-	}
-	return s.ReceiveStream.Read(p)
-}
-
-// tryParseH3ControlStream examines the peeked bytes.  If the stream opens
-// with stream-type 0x00 (h3 control stream) and the first frame is SETTINGS
-// (type 0x04), it emits an h3_settings fp record.  All errors are silent —
-// this is a best-effort tap.
+// tryParseH3ControlStream examines raw bytes from the beginning of an h3
+// unidirectional stream.  If the stream opens with stream-type 0x00 (h3
+// control stream, RFC 9114 §6.2.1) and the first frame is SETTINGS
+// (type 0x04), it emits an h3_settings fp record.  All errors are silent.
 func tryParseH3ControlStream(remoteAddr string, data []byte) {
 	streamType, c0 := quicVarint(data)
 	if c0 == 0 || streamType != 0x00 {
@@ -99,7 +32,7 @@ func tryParseH3ControlStream(remoteAddr string, data []byte) {
 		return
 	}
 	if uint64(len(data)) < frameLen {
-		return // need more bytes — we only peeked 256
+		return // truncated
 	}
 	body := data[:frameLen]
 
