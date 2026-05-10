@@ -236,11 +236,16 @@ def test_smtp_mta_enum_rejects_unknown():
         SMTPService().validate_cfg({"mta": "qmail"})
 
 
-def test_smtp_relay_schema_matches_smtp():
-    assert (
-        {f.key for f in SMTPRelayService.config_schema}
-        == {f.key for f in SMTPService.config_schema}
-    )
+def test_smtp_relay_schema_is_superset_of_smtp():
+    base_keys = {f.key for f in SMTPService.config_schema}
+    relay_keys = {f.key for f in SMTPRelayService.config_schema}
+    assert base_keys <= relay_keys, f"Relay schema missing base keys: {base_keys - relay_keys}"
+    relay_only = relay_keys - base_keys
+    assert relay_only == {"upstream_host", "upstream_port", "upstream_user",
+                          "upstream_pass", "upstream_sender", "probe_limit"}
+
+
+def test_smtp_relay_compose_sets_open_relay_and_propagates_banner():
     svc = SMTPRelayService()
     frag = svc.compose_fragment(
         "decky-test", service_cfg=svc.validate_cfg({"banner": "x", "mta": "postfix"})

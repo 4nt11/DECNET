@@ -181,3 +181,30 @@ select.svc-cfg-input {
   font-style: italic;
 }
 .svc-cfg-status.alert-text { font-style: normal; }
+
+/* multi_enum checkbox group — sits in the input column, stacks vertically. */
+.svc-cfg-multi-enum {
+  grid-column: 2 / 3;
+  grid-row: 1 / 2;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  border: none;
+  padding: 0;
+  margin: 0;
+}
+.svc-cfg-multi-enum-option {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 0.68rem;
+  cursor: pointer;
+  user-select: none;
+}
+.svc-cfg-multi-enum-option input[type="checkbox"] {
+  width: 13px;
+  height: 13px;
+  accent-color: var(--violet);
+  cursor: pointer;
+  flex-shrink: 0;
+}

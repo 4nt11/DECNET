@@ -4,10 +4,8 @@ set -e
 TLS_DIR="/opt/tls"
 mkdir -p "$TLS_DIR"
 
-# TLS_CERT/TLS_KEY may arrive as either a host-side path OR raw PEM
-# content (the wizard ships PEM textareas as decoded strings). Detect by
-# looking for a PEM header; if present, write to disk and rebind the var
-# to the on-disk path.
+# TLS_CERT/TLS_KEY may arrive as either a host-side path OR raw PEM content.
+# Detect by looking for a PEM header; if present, write to disk.
 if [ -n "$TLS_CERT" ] && printf '%s' "$TLS_CERT" | grep -q 'BEGIN '; then
     printf '%s' "$TLS_CERT" > "$TLS_DIR/cert.pem"
     CERT="$TLS_DIR/cert.pem"
@@ -31,8 +29,46 @@ if [ ! -f "$CERT" ] || [ ! -f "$KEY" ]; then
         2>/dev/null
 fi
 
-# server.py reads TLS_CERT/TLS_KEY as filesystem paths.
-export TLS_CERT="$CERT"
-export TLS_KEY="$KEY"
+# Parse HTTP_VERSIONS JSON → Caddy protocol tokens (h1 / h2 / h3)
+CADDY_PROTOCOLS=$(python3 -c "
+import json, os
+versions = json.loads(os.environ.get('HTTP_VERSIONS', '[\"http/1.1\"]'))
+tokens = []
+if 'http/1.1' in versions:
+    tokens.append('h1')
+if 'http/2' in versions:
+    tokens.append('h2')
+if 'http/3' in versions:
+    tokens.append('h3')
+print(' '.join(tokens) if tokens else 'h1')
+")
 
-exec python3 /opt/server.py
+cat > /etc/caddy/Caddyfile <<EOF
+{
+  admin off
+  servers :443 {
+    protocols ${CADDY_PROTOCOLS}
+  }
+}
+
+:443 {
+  tls ${CERT} ${KEY}
+  reverse_proxy 127.0.0.1:8080
+}
+EOF
+
+python3 /opt/server.py &
+
+# Wait for Flask to be ready before handing off to Caddy
+python3 -c "
+import socket, time
+for _ in range(40):
+    try:
+        s = socket.create_connection(('127.0.0.1', 8080), timeout=0.25)
+        s.close()
+        break
+    except OSError:
+        time.sleep(0.1)
+"
+
+exec caddy run --config /etc/caddy/Caddyfile

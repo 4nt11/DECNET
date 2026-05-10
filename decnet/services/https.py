@@ -59,6 +59,14 @@ class HTTPSService(BaseService):
             type="textarea",
             secret=True,
         ),
+        ServiceConfigField(
+            key="http_versions",
+            label="Supported HTTP versions",
+            type="multi_enum",
+            enum=["http/1.1", "http/2", "http/3"],
+            default=["http/1.1"],
+            help="Protocol versions Caddy advertises. HTTP/3 uses QUIC over UDP/443.",
+        ),
     ]
 
     def compose_fragment(
@@ -103,6 +111,10 @@ class HTTPSService(BaseService):
             fragment["environment"]["TLS_KEY"] = cfg["tls_key"]
         if "tls_cn" in cfg:
             fragment["environment"]["TLS_CN"] = cfg["tls_cn"]
+        if "http_versions" in cfg:
+            fragment["environment"]["HTTP_VERSIONS"] = json.dumps(cfg["http_versions"])
+            if "http/3" in cfg["http_versions"]:
+                fragment.setdefault("ports", []).append("443:443/udp")
 
         return fragment
 

@@ -9,10 +9,10 @@ with configurable pages. Forwards events as JSON to LOG_TARGET if set.
 import json
 import logging
 import os
-import ssl
 from pathlib import Path
 
 from flask import Flask, request, send_from_directory
+from werkzeug.middleware.proxy_fix import ProxyFix
 from werkzeug.serving import make_server, WSGIRequestHandler
 
 import instance_seed as _seed
@@ -29,7 +29,7 @@ logging.getLogger("werkzeug").setLevel(logging.ERROR)
 NODE_NAME     = os.environ.get("NODE_NAME", "webserver")
 SERVICE_NAME   = "https"
 LOG_TARGET    = os.environ.get("LOG_TARGET", "")
-PORT          = int(os.environ.get("PORT", "443"))
+PORT          = int(os.environ.get("PORT", "8080"))
 
 _SERVER_CHOICES = [
     "Apache/2.4.41 (Ubuntu)",
@@ -50,8 +50,6 @@ FAKE_APP      = os.environ.get("FAKE_APP", "")
 EXTRA_HEADERS = json.loads(os.environ.get("EXTRA_HEADERS", "{}"))
 CUSTOM_BODY   = os.environ.get("CUSTOM_BODY", "")
 FILES_DIR     = os.environ.get("FILES_DIR", "")
-TLS_CERT      = os.environ.get("TLS_CERT", "/opt/tls/cert.pem")
-TLS_KEY       = os.environ.get("TLS_KEY", "/opt/tls/key.pem")
 
 _FAKE_APP_BODIES: dict[str, str] = {
     "apache_default": (
@@ -86,6 +84,7 @@ _FAKE_APP_BODIES: dict[str, str] = {
 }
 
 app = Flask(__name__)
+app.wsgi_app = ProxyFix(app.wsgi_app, x_for=1, x_proto=1, x_host=1)  # type: ignore[method-assign]
 
 @app.after_request
 def _fix_server_header(response):
@@ -155,10 +154,5 @@ class _SilentHandler(WSGIRequestHandler):
 
 if __name__ == "__main__":
     _log("startup", msg=f"HTTPS server starting as {NODE_NAME}")
-
-    ctx = ssl.SSLContext(ssl.PROTOCOL_TLS_SERVER)
-    ctx.load_cert_chain(TLS_CERT, TLS_KEY)
-
-    srv = make_server("0.0.0.0", PORT, app, request_handler=_SilentHandler)  # nosec B104
-    srv.socket = ctx.wrap_socket(srv.socket, server_side=True)
+    srv = make_server("127.0.0.1", PORT, app, request_handler=_SilentHandler)
     srv.serve_forever()

@@ -11,7 +11,7 @@ from typing import Any, Literal
 # submitters (PUT /…/services/{svc}/config) keep working with raw strings.
 TEXTAREA_B64_PREFIX = "b64:"
 
-FieldType = Literal["string", "password", "int", "bool", "textarea", "enum"]
+FieldType = Literal["string", "password", "int", "bool", "textarea", "enum", "multi_enum"]
 
 
 @dataclass(frozen=True)
@@ -146,4 +146,23 @@ def _coerce(spec: ServiceConfigField, raw: Any) -> Any:
                 f"{spec.key}: {s!r} not in allowed values {spec.enum}"
             )
         return s
+    if t == "multi_enum":
+        if not isinstance(raw, list):
+            raise ConfigValidationError(
+                f"{spec.key}: expected list, got {type(raw).__name__}"
+            )
+        if not raw:
+            raise ConfigValidationError(f"{spec.key}: list must not be empty")
+        seen: set[str] = set()
+        result: list[str] = []
+        for item in raw:
+            s = str(item)
+            if spec.enum and s not in spec.enum:
+                raise ConfigValidationError(
+                    f"{spec.key}: {s!r} not in allowed values {spec.enum}"
+                )
+            if s not in seen:
+                seen.add(s)
+                result.append(s)
+        return result
     raise ConfigValidationError(f"{spec.key}: unknown field type {t!r}")

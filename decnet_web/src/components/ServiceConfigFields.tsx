@@ -5,7 +5,7 @@ import './ServiceConfigForm.css';
 export interface ServiceConfigFieldDTO {
   key: string;
   label: string;
-  type: 'string' | 'password' | 'int' | 'bool' | 'textarea' | 'enum';
+  type: 'string' | 'password' | 'int' | 'bool' | 'textarea' | 'enum' | 'multi_enum';
   default?: unknown;
   secret?: boolean;
   help?: string | null;
@@ -20,17 +20,19 @@ export interface SchemaResponse {
   fields: ServiceConfigFieldDTO[];
 }
 
-export type FormValue = string | number | boolean;
+export type FormValue = string | number | boolean | string[];
 export type FormState = Record<string, FormValue>;
 
 export function toFormValue(field: ServiceConfigFieldDTO, raw: unknown): FormValue {
   if (raw === undefined || raw === null) {
     if (field.type === 'bool') return Boolean(field.default);
     if (field.type === 'int') return field.default == null ? ('' as unknown as number) : Number(field.default);
+    if (field.type === 'multi_enum') return Array.isArray(field.default) ? (field.default as string[]) : [];
     return (field.default as string | undefined) ?? '';
   }
   if (field.type === 'bool') return Boolean(raw);
   if (field.type === 'int') return Number(raw);
+  if (field.type === 'multi_enum') return Array.isArray(raw) ? (raw as string[]) : [];
   return String(raw);
 }
 
@@ -51,6 +53,7 @@ export function compactPayload(
   for (const f of fields) {
     const v = state[f.key];
     if (v === '' || v === undefined || v === null) continue;
+    if (Array.isArray(v) && v.length === 0) continue;
     out[f.key] = v;
   }
   return out;
@@ -129,7 +132,31 @@ const ServiceConfigFields: React.FC<Props> = ({
               {f.label}
               {f.secret && <span className="svc-cfg-secret-tag">· secret</span>}
             </label>
-            {f.type === 'bool' ? (
+            {f.type === 'multi_enum' ? (
+              <fieldset className="svc-cfg-multi-enum">
+                {(f.enum ?? []).map((opt) => {
+                  const optId = `${id}-${opt}`;
+                  const selected = Array.isArray(v) ? (v as string[]) : [];
+                  const checked = selected.includes(opt);
+                  return (
+                    <label key={opt} htmlFor={optId} className="svc-cfg-multi-enum-option">
+                      <input
+                        id={optId}
+                        type="checkbox"
+                        checked={checked}
+                        onChange={() => {
+                          const next = checked
+                            ? selected.filter((x) => x !== opt)
+                            : [...selected, opt];
+                          setVal(f.key, next);
+                        }}
+                      />
+                      {opt}
+                    </label>
+                  );
+                })}
+              </fieldset>
+            ) : f.type === 'bool' ? (
               <input
                 id={id}
                 type="checkbox"

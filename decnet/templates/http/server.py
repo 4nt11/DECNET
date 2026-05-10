@@ -11,6 +11,7 @@ import os
 from pathlib import Path
 
 from flask import Flask, request, send_from_directory
+from werkzeug.middleware.proxy_fix import ProxyFix
 from werkzeug.serving import make_server, WSGIRequestHandler
 
 import instance_seed as _seed
@@ -27,7 +28,7 @@ logging.getLogger("werkzeug").setLevel(logging.ERROR)
 NODE_NAME     = os.environ.get("NODE_NAME", "webserver")
 SERVICE_NAME   = "http"
 LOG_TARGET    = os.environ.get("LOG_TARGET", "")
-PORT          = int(os.environ.get("PORT", "80"))
+PORT          = int(os.environ.get("PORT", "8080"))
 
 # Per-instance Server header. Every decky running one identical Apache
 # version string is a one-query fleet discovery for any scanner.
@@ -85,6 +86,7 @@ _FAKE_APP_BODIES: dict[str, str] = {
 }
 
 app = Flask(__name__)
+app.wsgi_app = ProxyFix(app.wsgi_app, x_for=1, x_proto=1, x_host=1)  # type: ignore[method-assign]
 
 @app.after_request
 def _fix_server_header(response):
@@ -161,5 +163,5 @@ class _SilentHandler(WSGIRequestHandler):
 
 if __name__ == "__main__":
     _log("startup", msg=f"HTTP server starting as {NODE_NAME}")
-    srv = make_server("0.0.0.0", PORT, app, request_handler=_SilentHandler)  # nosec B104
+    srv = make_server("127.0.0.1", PORT, app, request_handler=_SilentHandler)
     srv.serve_forever()

@@ -43,6 +43,14 @@ class HTTPService(BaseService):
             label="Custom response body",
             type="textarea",
         ),
+        ServiceConfigField(
+            key="http_versions",
+            label="Supported HTTP versions",
+            type="multi_enum",
+            enum=["http/1.1", "http/2"],
+            default=["http/1.1"],
+            help="Protocol versions Caddy advertises. HTTP/3 requires TLS — use the https service.",
+        ),
     ]
 
     def compose_fragment(
@@ -77,6 +85,8 @@ class HTTPService(BaseService):
             )
         if "custom_body" in cfg:
             fragment["environment"]["CUSTOM_BODY"] = cfg["custom_body"]
+        if "http_versions" in cfg:
+            fragment["environment"]["HTTP_VERSIONS"] = json.dumps(cfg["http_versions"])
         if "files" in cfg:
             files_path = str(Path(cfg["files"]).resolve())
             fragment["environment"]["FILES_DIR"] = "/opt/html_files"
