@@ -155,7 +155,9 @@ def _ensure_network(
             # Same driver — but if the IPAM pool drifted (different subnet,
             # gateway, or ip-range than this deploy asks for), reusing it
             # hands out addresses from the old pool and we race the real LAN.
-            # Compare and rebuild on mismatch.
+            # Compare and rebuild on mismatch — but only when no containers
+            # are attached. With active endpoints Docker refuses the remove
+            # with 403; just attach to the existing network instead.
             pools = (net.attrs.get("IPAM") or {}).get("Config") or []
             cur = pools[0] if pools else {}
             if (
@@ -164,8 +166,15 @@ def _ensure_network(
                 and cur.get("IPRange") == ip_range
             ):
                 return  # right driver AND matching pool, leave it alone
-        # Driver mismatch OR IPAM drift — tear it down. Disconnect any live
-        # containers first so `remove()` doesn't refuse with ErrNetworkInUse.
+            if net.attrs.get("Containers"):
+                # Active endpoints — can't safely rebuild. Attach to the
+                # existing network; IPAM drift on ip_range only affects
+                # Docker's auto-assign pool, which DECNET doesn't use
+                # (IPs are always set explicitly in the compose file).
+                return
+        # Driver mismatch OR empty-endpoint IPAM drift — tear it down.
+        # Disconnect any live containers first so `remove()` doesn't
+        # refuse with ErrNetworkInUse.
         for cid in (net.attrs.get("Containers") or {}):
             try:
                 net.disconnect(cid, force=True)
