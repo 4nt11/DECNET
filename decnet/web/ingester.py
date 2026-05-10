@@ -637,7 +637,7 @@ async def _extract_bounty(
             "payload": {
                 "fingerprint_type": "ja4h",
                 "ja4h": _ja4h,
-                "protocol": _fields.get("protocol", "h1"),
+                "protocol": _fields.get("proto") or _fields.get("protocol", "h1"),
                 "method": _fields.get("method"),
                 "path": _fields.get("path"),
             },
@@ -1470,4 +1470,8 @@ def _classify_ua(ua: str) -> tuple[str, Optional[str], list[str]]:
     if _UA_BROWSER_RE.match(ua):
         return "browser", None, signals
     return "nonstandard", None, signals
+
+
+# Test-facing alias so tests can import by a stable name.
+_process_fingerprint_bounties = _extract_bounty
 

@@ -21,6 +21,9 @@ cat > /etc/caddy/Caddyfile <<EOF
   admin off
   servers :80 {
     protocols ${CADDY_PROTOCOLS}
+    listener_wrappers {
+      decnet_fp
+    }
   }
 }
 
