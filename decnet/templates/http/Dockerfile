@@ -1,9 +1,13 @@
-FROM caddy:2 AS caddy-bin
+FROM caddy:2-builder AS caddy-build
+COPY _caddy_modules/decnetfp /src/decnetfp
+RUN xcaddy build \
+    --with github.com/decnet/caddy-fp=/src/decnetfp \
+    --output /usr/bin/caddy
 
 ARG BASE_IMAGE=debian:bookworm-slim@sha256:f9c6a2fd2ddbc23e336b6257a5245e31f996953ef06cd13a59fa0a1df2d5c252
 FROM ${BASE_IMAGE}
 
-COPY --from=caddy-bin /usr/bin/caddy /usr/bin/caddy
+COPY --from=caddy-build /usr/bin/caddy /usr/bin/caddy
 
 RUN apt-get update && apt-get install -y --no-install-recommends \
     python3 python3-pip \
@@ -20,7 +24,9 @@ RUN chmod +x /entrypoint.sh
 
 EXPOSE 80
 
+RUN mkdir -p /run/decnet
 RUN useradd -r -s /bin/false -d /opt logrelay \
+ && chown -R logrelay:logrelay /run/decnet \
  && mkdir -p /etc/caddy /opt/.local/share/caddy /opt/.config/caddy \
  && chown -R logrelay:logrelay /etc/caddy /opt/.local /opt/.config \
  && apt-get update && apt-get install -y --no-install-recommends libcap2-bin \

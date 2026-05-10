@@ -15,11 +15,14 @@ import time
 from collections import deque
 from typing import Any, Callable
 
+from decnet.logging import get_logger
 from decnet.prober.tcpfp import _extract_options_order
 from decnet.sniffer.p0f import guess_os, hop_distance, initial_ttl
 from decnet.sniffer.seq_class import classify_sequence
 from decnet.sniffer.syslog import SEVERITY_INFO, SEVERITY_WARNING, syslog_line
 from decnet.telemetry import traced as _traced, get_tracer as _get_tracer
+
+_log = get_logger("sniffer.fingerprint")
 
 # ─── Constants ───────────────────────────────────────────────────────────────
 
@@ -64,6 +67,10 @@ _BUS_TRAFFIC_EVENTS: frozenset[str] = frozenset({
     "tcp_flow_timing",
     "tcp_syn_fingerprint",
     "ssh_client_banner",
+    "quic_client_hello",
+    "http_request_fingerprint",
+    "http2_settings",
+    "http3_settings",
 })
 
 
@@ -689,6 +696,235 @@ def _ja4s(sh: dict[str, Any]) -> str:
     return f"{section_a}_{section_b}"
 
 
+# ─── JA4H (HTTP-layer fingerprint) ─────────────────────────────────────────
+
+def _ja4h(
+    method: str,
+    version: str,
+    headers_ordered: list[str],
+    cookie_val: str = "",
+    accept_lang: str = "",
+) -> str:
+    """Compute JA4H per the FoxIO public spec.
+
+    ``headers_ordered`` is the sequence of header NAMES as emitted by the
+    decnet_jsonl Caddy log encoder (arrival order preserved for h1; HPACK/
+    QPACK decode order for h2/h3 — the order the client chose).
+    Cookie and Referer are extracted before the header hash.
+    """
+    method_tag = (method[:2].upper() if method else "UN")
+    ver_map = {
+        "HTTP/1.0": "10", "HTTP/1.1": "11", "HTTP/2.0": "20", "HTTP/3.0": "30",
+        "1.0": "10", "1.1": "11", "2.0": "20", "3.0": "30",
+        "2": "20", "3": "30",
+    }
+    ver_tag = ver_map.get(version.upper().lstrip("HTTP/"), ver_map.get(version.upper(), "00"))
+    has_cookie = "c" if any(h.lower() == "cookie" for h in headers_ordered) else "n"
+    has_referer = "r" if any(h.lower() == "referer" for h in headers_ordered) else "n"
+    lang_tag = (accept_lang[:4].ljust(4, "0") if accept_lang else "0000")
+    filtered = [h for h in headers_ordered if h.lower() not in ("cookie", "referer")]
+    count_tag = f"{min(len(filtered), 99):02d}"
+    header_hash = _sha256_12(",".join(h.lower() for h in filtered))
+    if cookie_val:
+        pairs = sorted(p.strip() for p in cookie_val.split(";") if "=" in p.strip())
+        cookie_hash = _sha256_12(";".join(pairs))
+    else:
+        cookie_hash = "000000000000"
+    return f"{method_tag}{ver_tag}{has_cookie}{has_referer}{lang_tag}_{count_tag}_{header_hash}_{cookie_hash}"
+
+
+# ─── QUIC Initial packet decryption ─────────────────────────────────────────
+
+_QUIC_V1_INITIAL_SALT = bytes.fromhex("38762cf7f55934b34d179ae6a4c80cadccbb7f0a")
+
+
+def _hkdf_extract(salt: bytes, ikm: bytes) -> bytes:
+    """HKDF-Extract(SHA-256) = HMAC-SHA256(salt, IKM)."""
+    import hmac as _hmac
+    return _hmac.new(salt, ikm, "sha256").digest()
+
+
+def _hkdf_expand_label(secret: bytes, label: str, context: bytes, length: int) -> bytes:
+    """HKDF-Expand-Label per RFC 8446 §7.1."""
+    label_bytes = b"tls13 " + label.encode()
+    hkdf_label = (
+        struct.pack("!H", length)
+        + bytes([len(label_bytes)]) + label_bytes
+        + bytes([len(context)]) + context
+    )
+    # HKDF-Expand with T(0) = empty; T(n) = HMAC-SHA256(secret, T(n-1) || info || n)
+    import hmac as _hmac
+    t = b""
+    okm = b""
+    for i in range(1, (length + 32 - 1) // 32 + 1):
+        t = _hmac.new(secret, t + hkdf_label + bytes([i]), "sha256").digest()
+        okm += t
+    return okm[:length]
+
+
+def _quic_initial_keys(dcid: bytes) -> tuple[bytes, bytes, bytes]:
+    """Derive (key, iv, hp) for QUIC v1 Initial client packets."""
+    initial_secret = _hkdf_extract(_QUIC_V1_INITIAL_SALT, dcid)
+    client_secret = _hkdf_expand_label(initial_secret, "client in", b"", 32)
+    key = _hkdf_expand_label(client_secret, "quic key", b"", 16)
+    iv = _hkdf_expand_label(client_secret, "quic iv", b"", 12)
+    hp = _hkdf_expand_label(client_secret, "quic hp", b"", 16)
+    return key, iv, hp
+
+
+def _quic_varint(data: bytes | bytearray, offset: int) -> tuple[int, int]:
+    """Parse QUIC variable-length integer. Returns (value, new_offset)."""
+    b0 = data[offset]
+    msb = (b0 & 0xC0) >> 6
+    if msb == 0:
+        return b0 & 0x3F, offset + 1
+    if msb == 1:
+        return struct.unpack_from("!H", data, offset)[0] & 0x3FFF, offset + 2
+    if msb == 2:
+        return struct.unpack_from("!I", data, offset)[0] & 0x3FFFFFFF, offset + 4
+    return struct.unpack_from("!Q", data, offset)[0] & 0x3FFFFFFFFFFFFFFF, offset + 8
+
+
+def _aes128gcm_decrypt(key: bytes, nonce: bytes, aad: bytes, ciphertext: bytes) -> bytes | None:
+    try:
+        from cryptography.hazmat.primitives.ciphers.aead import AESGCM
+        return AESGCM(key).decrypt(nonce, ciphertext, aad)
+    except Exception:
+        return None
+
+
+def _remove_hp_long(data: bytearray, pn_offset: int, sample_offset: int, hp_key: bytes) -> None:
+    """Remove QUIC long-header packet number protection in-place."""
+    from cryptography.hazmat.primitives.ciphers import Cipher, algorithms, modes
+    sample = bytes(data[sample_offset:sample_offset + 16])
+    mask = Cipher(algorithms.AES(hp_key), modes.ECB()).encryptor().update(sample)  # nosec B305 — RFC 9001 §5.4.3 mandates AES-ECB for QUIC header-protection
+    data[0] ^= mask[0] & 0x0F  # long header: low 4 bits protected
+    pn_len = (data[0] & 0x03) + 1
+    for i in range(pn_len):
+        data[pn_offset + i] ^= mask[1 + i]
+
+
+def _extract_crypto_frames(plaintext: bytes) -> bytes:
+    """Reassemble CRYPTO frame data from decrypted QUIC Initial payload."""
+    segments: dict[int, bytes] = {}
+    pos = 0
+    while pos < len(plaintext):
+        if plaintext[pos] in (0x00, 0x01):  # PADDING / PING
+            pos += 1
+            continue
+        try:
+            frame_type, pos = _quic_varint(plaintext, pos)
+        except Exception:
+            break
+        if frame_type == 0x06:  # CRYPTO
+            try:
+                crypto_offset, pos = _quic_varint(plaintext, pos)
+                length, pos = _quic_varint(plaintext, pos)
+                if pos + length > len(plaintext):
+                    break
+                segments[crypto_offset] = plaintext[pos:pos + length]
+                pos += length
+            except Exception:
+                break
+        else:
+            break  # unknown frame — stop
+    if not segments:
+        return b""
+    result = b""
+    expected = 0
+    for off in sorted(segments):
+        if off != expected:
+            break
+        result += segments[off]
+        expected += len(segments[off])
+    return result
+
+
+def _parse_quic_initial(udp_payload: bytes) -> "dict[str, Any] | None":
+    """
+    Decrypt a QUIC v1 Initial packet and extract the TLS ClientHello.
+    Returns the same dict shape as _parse_client_hello(), or None.
+
+    Key derivation per RFC 9001 §5.2. Header protection per §5.4.3.
+    Only processes QUIC v1 (0x00000001) Initial packets.
+    """
+    if len(udp_payload) < 7:
+        return None
+    data = bytearray(udp_payload)
+    # Must be long header (bit 7) with Initial type (bits 4-5 = 00)
+    if not (data[0] & 0x80) or (data[0] & 0x30) != 0x00:
+        return None
+    version = struct.unpack_from("!I", data, 1)[0]
+    if version != 0x00000001:
+        return None
+    pos = 5
+    dcid_len = data[pos]
+    pos += 1
+    if pos + dcid_len > len(data):
+        return None
+    dcid = bytes(data[pos:pos + dcid_len])
+    pos += dcid_len
+    scid_len = data[pos]
+    pos += 1
+    pos += scid_len
+    try:
+        token_len, pos = _quic_varint(data, pos)
+        pos += token_len
+        pkt_len, pos = _quic_varint(data, pos)
+    except Exception:
+        return None
+    pn_offset = pos
+    payload_end = pos + pkt_len
+    if payload_end > len(data):
+        return None
+    try:
+        key, iv, hp = _quic_initial_keys(dcid)
+    except Exception:
+        return None
+    sample_offset = pn_offset + 4
+    if sample_offset + 16 > payload_end:
+        return None
+    _remove_hp_long(data, pn_offset, sample_offset, hp)
+    pn_len = (data[0] & 0x03) + 1
+    pn = 0
+    for i in range(pn_len):
+        pn = (pn << 8) | data[pn_offset + i]
+    nonce = bytes(a ^ b for a, b in zip(iv, pn.to_bytes(12, "big")))
+    aad = bytes(data[:pn_offset + pn_len])
+    ciphertext = bytes(data[pn_offset + pn_len:payload_end])
+    plaintext = _aes128gcm_decrypt(key, nonce, aad, ciphertext)
+    if plaintext is None:
+        return None
+    crypto_data = _extract_crypto_frames(plaintext)
+    if not crypto_data:
+        return None
+    # QUIC CRYPTO frames carry TLS handshake WITHOUT the record layer.
+    # Wrap in a fake TLS record so _parse_client_hello can consume it.
+    fake_record = bytes([0x16, 0x03, 0x01]) + struct.pack("!H", len(crypto_data)) + crypto_data
+    return _parse_client_hello(fake_record)
+
+
+# ─── JA4-QUIC ────────────────────────────────────────────────────────────────
+
+@_traced("sniffer.ja4_quic")
+def _ja4_quic(ch: "dict[str, Any]") -> str:
+    """JA4-QUIC: JA4 with proto prefix 'q' (FoxIO spec, QUIC transport variant)."""
+    proto = "q"
+    ver = _ja4_version(ch)
+    sni_flag = "d" if ch.get("sni") else "i"
+    cs_count = min(len(ch["cipher_suites"]), 99)
+    ext_count = min(len(ch["extensions"]), 99)
+    alpn_tag = _ja4_alpn_tag(ch.get("alpn", []))
+    section_a = f"{proto}{ver}{sni_flag}{cs_count:02d}{ext_count:02d}{alpn_tag}"
+    section_b = _sha256_12(",".join(str(c) for c in sorted(ch["cipher_suites"])))
+    sorted_ext = sorted(ch["extensions"])
+    sorted_sa = sorted(ch.get("signature_algorithms", []))
+    ext_str = ",".join(str(e) for e in sorted_ext)
+    combined = f"{ext_str}_{','.join(str(s) for s in sorted_sa)}" if sorted_sa else ext_str
+    section_c = _sha256_12(combined)
+    return f"{section_a}_{section_b}_{section_c}"
+
+
 # ─── JA4L (latency) ─────────────────────────────────────────────────────────
 
 def _ja4l(
@@ -816,6 +1052,12 @@ class SnifferEngine:
             # one timing event per dedup window. Behavior cadence doesn't
             # need per-ephemeral-port fidelity.
             return fields.get("dst_ip", "") + "|" + fields.get("dst_port", "")
+        if event_type == "quic_client_hello":
+            return fields.get("src_ip", "") + "|" + fields.get("ja4_quic", "")
+        if event_type == "http_request_fingerprint":
+            return fields.get("src_ip", "") + "|" + fields.get("ja4h", "")
+        if event_type in ("http2_settings", "http3_settings"):
+            return fields.get("src_ip", "") + "|" + str(fields.get("settings_hash", ""))
         return fields.get("mechanisms", fields.get("resumption", ""))
 
     def _is_duplicate(self, event_type: str, fields: dict[str, Any]) -> bool:
@@ -850,6 +1092,45 @@ class SnifferEngine:
                 self._publish_fn(node_name, event_type, dict(fields))
             except Exception:  # nosec B110 — bus must never break sniff thread
                 pass
+
+    # ── QUIC packet callback (separate UDP/443 sniff thread) ─────────────────
+
+    def on_quic_packet(self, pkt: Any) -> None:
+        """Packet callback for the UDP/443 QUIC Initial sniff thread."""
+        try:
+            from scapy.layers.inet import IP, UDP
+            if not pkt.haslayer(UDP):
+                return
+            udp = pkt[UDP]
+            if udp.dport != 443:
+                return
+            ip = pkt[IP] if pkt.haslayer(IP) else None
+            if ip is None:
+                return
+            src_ip: str = ip.src
+            dst_ip: str = ip.dst
+            node_name = self._ip_to_decky.get(dst_ip)
+            if node_name is None:
+                return
+            payload = bytes(udp.payload)
+            ch = _parse_quic_initial(payload)
+            if ch is None:
+                return
+            ja4q = _ja4_quic(ch)
+            self._log(
+                node_name,
+                "quic_client_hello",
+                severity=SEVERITY_WARNING,
+                src_ip=src_ip,
+                dst_ip=dst_ip,
+                dst_port="443",
+                ja4_quic=ja4q,
+                sni=ch.get("sni", ""),
+                alpn=",".join(ch.get("alpn", [])),
+                raw_ciphers="-".join(str(c) for c in ch.get("cipher_suites", [])),
+            )
+        except Exception as exc:
+            _log.debug("on_quic_packet: unhandled error for %s: %s", src_ip, exc)
 
     # ── Flow tracking (per-TCP-4-tuple timing + retransmits) ────────────────
 

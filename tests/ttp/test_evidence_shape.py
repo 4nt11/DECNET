@@ -28,11 +28,13 @@ from decnet.ttp.base import TaggerEvent, TolerantTagger
 from decnet.ttp.impl.behavioral_lifter import BehavioralLifter
 from decnet.ttp.impl.canary_fingerprint_lifter import CanaryFingerprintLifter
 from decnet.ttp.impl.email_lifter import EmailLifter
+from decnet.ttp.impl.http_fingerprint_lifter import HttpFingerprintLifter
 from decnet.ttp.impl.intel_lifter import IntelLifter
 from decnet.web.db.models.ttp import (
     CanaryFingerprintEvidence,
     CommandEvidence,
     EmailEvidence,
+    HttpFingerprintEvidence,
     IntelEvidence,
     TTPTag,
     compute_tag_uuid,
@@ -74,6 +76,14 @@ def test_canary_fingerprint_evidence_keys() -> None:
         | CanaryFingerprintEvidence.__optional_keys__
     )
     assert keys == {"metric", "matched_signature"}
+
+
+def test_http_fingerprint_evidence_keys() -> None:
+    keys = (
+        HttpFingerprintEvidence.__required_keys__
+        | HttpFingerprintEvidence.__optional_keys__
+    )
+    assert keys == {"kind", "hash", "protocol", "client_ip", "seen_at", "raw"}
 
 
 # ── Per-lifter parametrized positive case (impl phase) ──────────────

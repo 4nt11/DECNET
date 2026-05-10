@@ -626,6 +626,56 @@ async def _extract_bounty(
         if log_data.get("service") == "smtp_relay":
             await _publish_probe_pending(log_data, _fields)
 
+    # 13. JA4H HTTP-layer fingerprint (from http/https templates via fp socket)
+    _ja4h = _fields.get("ja4h")
+    if _ja4h and log_data.get("event_type") == "http_request_fingerprint":
+        await repo.add_bounty({
+            "decky": log_data.get("decky"),
+            "service": log_data.get("service"),
+            "attacker_ip": log_data.get("attacker_ip"),
+            "bounty_type": "fingerprint",
+            "payload": {
+                "fingerprint_type": "ja4h",
+                "ja4h": _ja4h,
+                "protocol": _fields.get("protocol", "h1"),
+                "method": _fields.get("method"),
+                "path": _fields.get("path"),
+            },
+        })
+
+    # 14. H2/H3 SETTINGS frame fingerprint (from Caddy fp module)
+    _evt_type = log_data.get("event_type", "")
+    if _evt_type in ("http2_settings", "http3_settings"):
+        await repo.add_bounty({
+            "decky": log_data.get("decky"),
+            "service": log_data.get("service"),
+            "attacker_ip": log_data.get("attacker_ip"),
+            "bounty_type": "fingerprint",
+            "payload": {
+                "fingerprint_type": _evt_type,
+                "settings": _fields.get("settings"),
+                "frame_order": _fields.get("frame_order"),
+                "protocol": "h2" if _evt_type == "http2_settings" else "h3",
+            },
+        })
+
+    # 15. JA4-QUIC fingerprint from fleet-wide sniffer (UDP/443)
+    _ja4q = _fields.get("ja4_quic")
+    if _ja4q and log_data.get("event_type") == "quic_client_hello":
+        await repo.add_bounty({
+            "decky": log_data.get("decky"),
+            "service": log_data.get("service", "sniffer"),
+            "attacker_ip": log_data.get("attacker_ip"),
+            "bounty_type": "fingerprint",
+            "payload": {
+                "fingerprint_type": "ja4_quic",
+                "ja4_quic": _ja4q,
+                "sni": _fields.get("sni") or None,
+                "alpn": _fields.get("alpn") or None,
+                "raw_ciphers": _fields.get("raw_ciphers"),
+            },
+        })
+
 
 _RCPT_SPLIT_RE = re.compile(r"[,\s]+")
 _ADDR_AT_RE = re.compile(r"@([A-Za-z0-9.\-]+)")

@@ -89,58 +89,68 @@ def _sniff_loop(
     log_path: Path,
     json_path: Path,
     stop_event: threading.Event,
+    bpf_filter: str = "tcp",
     publish_fn: Callable[[str, str, dict[str, Any]], None] | None = None,
+    engine: "SnifferEngine | None" = None,
 ) -> None:
-    """Blocking sniff loop. Runs in a dedicated thread via asyncio.to_thread."""
+    """Blocking sniff loop. Runs in a dedicated thread via asyncio.to_thread.
+
+    ``bpf_filter`` selects the traffic to capture.  ``engine`` is shared
+    with the caller so the TCP and QUIC loops use the same session state and
+    dedup cache.  When ``engine`` is None a fresh one is created.
+    """
     try:
         from scapy.sendrecv import sniff
     except ImportError:
         logger.error("scapy not installed — sniffer cannot start")
         return
 
-    ip_map = _load_ip_to_decky()
-    if not ip_map:
-        logger.warning("sniffer: no deckies in state — nothing to sniff")
-        return
+    if engine is None:
+        ip_map = _load_ip_to_decky()
+        if not ip_map:
+            logger.warning("sniffer: no deckies in state — nothing to sniff")
+            return
 
-    def _write_fn(line: str) -> None:
-        write_event(line, log_path, json_path)
+        def _write_fn(line: str) -> None:
+            write_event(line, log_path, json_path)
 
-    engine = SnifferEngine(
-        ip_to_decky=ip_map, write_fn=_write_fn, publish_fn=publish_fn,
+        engine = SnifferEngine(
+            ip_to_decky=ip_map, write_fn=_write_fn, publish_fn=publish_fn,
+        )
+
+        def _refresh_loop() -> None:
+            while not stop_event.is_set():
+                stop_event.wait(_IP_MAP_REFRESH_INTERVAL)
+                if stop_event.is_set():
+                    break
+                try:
+                    new_map = _load_ip_to_decky()
+                    if new_map:
+                        engine.update_ip_map(new_map)
+                except Exception as exc:
+                    logger.debug("sniffer: ip map refresh failed: %s", exc)
+
+        threading.Thread(target=_refresh_loop, daemon=True).start()
+
+    pkt_fn = engine.on_quic_packet if bpf_filter.startswith("udp") else engine.on_packet
+    logger.info(
+        "sniffer: sniffing on interface=%s filter=%r deckies=%d",
+        interface, bpf_filter, len(engine._ip_to_decky),
     )
-
-    # Periodically refresh IP map in a background daemon thread
-    def _refresh_loop() -> None:
-        while not stop_event.is_set():
-            stop_event.wait(_IP_MAP_REFRESH_INTERVAL)
-            if stop_event.is_set():
-                break
-            try:
-                new_map = _load_ip_to_decky()
-                if new_map:
-                    engine.update_ip_map(new_map)
-            except Exception as exc:
-                logger.debug("sniffer: ip map refresh failed: %s", exc)
-
-    refresh_thread = threading.Thread(target=_refresh_loop, daemon=True)
-    refresh_thread.start()
-
-    logger.info("sniffer: sniffing on interface=%s deckies=%d", interface, len(ip_map))
 
     try:
         sniff(
             iface=interface,
-            filter="tcp",
-            prn=engine.on_packet,
+            filter=bpf_filter,
+            prn=pkt_fn,
             store=False,
             stop_filter=lambda pkt: stop_event.is_set(),
         )
     except Exception as exc:
-        logger.error("sniffer: scapy sniff exited: %s", exc)
+        logger.error("sniffer: scapy sniff exited (filter=%r): %s", bpf_filter, exc)
     finally:
         stop_event.set()
-        logger.info("sniffer: sniff loop ended")
+        logger.info("sniffer: sniff loop ended (filter=%r)", bpf_filter)
 
 
 @_traced("sniffer.worker")
@@ -211,17 +221,53 @@ async def sniffer_worker(log_file: str) -> None:
             run_control_listener_signal(bus, "sniffer"),
         )
 
-        # Dedicated thread pool so the long-running sniff loop doesn't
-        # occupy a slot in the default asyncio executor.
+        # Build a shared engine so both sniff threads (TCP + UDP/443) share
+        # the same session state, dedup cache, and IP map.
+        ip_map = _load_ip_to_decky()
+        if not ip_map:
+            logger.warning(
+                "sniffer: no deckies in state — sniffer disabled",
+            )
+            return
+
+        def _write_fn(line: str) -> None:
+            from decnet.sniffer.syslog import write_event as _we
+            _we(line, log_path, json_path)
+
+        shared_engine = SnifferEngine(
+            ip_to_decky=ip_map, write_fn=_write_fn, publish_fn=publish_fn,
+        )
+
+        def _refresh_loop() -> None:
+            while not stop_event.is_set():
+                stop_event.wait(_IP_MAP_REFRESH_INTERVAL)
+                if stop_event.is_set():
+                    break
+                try:
+                    new_map = _load_ip_to_decky()
+                    if new_map:
+                        shared_engine.update_ip_map(new_map)
+                except Exception as exc:
+                    logger.debug("sniffer: ip map refresh failed: %s", exc)
+
+        threading.Thread(target=_refresh_loop, daemon=True, name="sniffer-ipmap").start()
+
+        # Dedicated thread pool: 2 workers = TCP loop + UDP/443 QUIC loop.
         sniffer_pool = ThreadPoolExecutor(
             max_workers=2, thread_name_prefix="decnet-sniffer",
         )
 
         try:
-            await loop.run_in_executor(
+            tcp_future = loop.run_in_executor(
                 sniffer_pool, _sniff_loop,
-                interface, log_path, json_path, stop_event, publish_fn,
+                interface, log_path, json_path, stop_event, "tcp", publish_fn, shared_engine,
             )
+            quic_future = loop.run_in_executor(
+                sniffer_pool, _sniff_loop,
+                interface, log_path, json_path, stop_event,
+                "udp port 443", publish_fn, shared_engine,
+            )
+            await asyncio.gather(tcp_future, quic_future)
         except asyncio.CancelledError:
             logger.info("sniffer: shutdown requested")
             stop_event.set()

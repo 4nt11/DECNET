@@ -89,6 +89,15 @@ class CanaryFingerprintEvidence(TypedDict):
     matched_signature: str  # signature ID, not raw fingerprint blob
 
 
+class HttpFingerprintEvidence(TypedDict):
+    kind: str          # "ja4h" | "h2_settings" | "h3_settings" | "ja4_quic"
+    hash: str          # fingerprint hash string (or empty for settings events)
+    protocol: str      # "h1" | "h2" | "h2c" | "h3"
+    client_ip: str
+    seen_at: str       # ISO8601 UTC
+    raw: Optional[dict]  # raw settings dict for h2_settings / h3_settings
+
+
 # ── Tables ──────────────────────────────────────────────────────────
 
 

@@ -20,6 +20,7 @@ from syslog_bridge import (
     classify_authorization,
     extract_form_credentials,
     forward_syslog,
+    start_fp_socket_reader,
     syslog_line,
     write_syslog_file,
 )
@@ -154,5 +155,6 @@ class _SilentHandler(WSGIRequestHandler):
 
 if __name__ == "__main__":
     _log("startup", msg=f"HTTPS server starting as {NODE_NAME}")
+    start_fp_socket_reader(NODE_NAME, SERVICE_NAME, LOG_TARGET)
     srv = make_server("127.0.0.1", PORT, app, request_handler=_SilentHandler)
     srv.serve_forever()

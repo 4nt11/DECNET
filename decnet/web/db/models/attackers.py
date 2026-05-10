@@ -180,6 +180,15 @@ class AttackerIdentity(SQLModel, table=True):
     hassh_hashes: Optional[str] = Field(
         default=None, sa_column=Column("hassh_hashes", Text, nullable=True)
     )
+    ja4h_hashes: Optional[str] = Field(
+        default=None, sa_column=Column("ja4h_hashes", Text, nullable=True)
+    )
+    ja4_quic_hashes: Optional[str] = Field(
+        default=None, sa_column=Column("ja4_quic_hashes", Text, nullable=True)
+    )
+    http_versions_seen: Optional[str] = Field(
+        default=None, sa_column=Column("http_versions_seen", Text, nullable=True)
+    )
     # JSON list[str] — SHA-256 fingerprints of leaf certs presented by
     # attacker-run TLS servers, captured by the active prober alongside
     # JARM. Same federation-gossip rationale as ja3_hashes/hassh_hashes:

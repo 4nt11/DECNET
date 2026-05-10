@@ -13,6 +13,9 @@ if 'http/2' in versions:
 print(' '.join(tokens) if tokens else 'h1')
 ")
 
+DECNET_FP_SOCK="${DECNET_FP_SOCK:-/run/decnet/fp.sock}"
+rm -f "$DECNET_FP_SOCK"
+
 cat > /etc/caddy/Caddyfile <<EOF
 {
   admin off
@@ -22,7 +25,10 @@ cat > /etc/caddy/Caddyfile <<EOF
 }
 
 :80 {
-  reverse_proxy 127.0.0.1:8080
+  route {
+    decnet_fp
+    reverse_proxy 127.0.0.1:8080
+  }
 }
 EOF
 

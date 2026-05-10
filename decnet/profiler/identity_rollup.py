@@ -32,12 +32,16 @@ _PAYLOAD_KEY_BY_FP_TYPE: dict[str, str] = {
     "ja3":             "ja3",
     "hassh_server":    "hash",
     "tls_certificate": "cert_sha256",
+    "ja4h":            "ja4h",
+    "ja4_quic":        "ja4_quic",
 }
 
 _COLUMN_BY_FP_TYPE: dict[str, str] = {
     "ja3":             "ja3_hashes",
     "hassh_server":    "hassh_hashes",
     "tls_certificate": "tls_cert_sha256",
+    "ja4h":            "ja4h_hashes",
+    "ja4_quic":        "ja4_quic_hashes",
 }
 
 
