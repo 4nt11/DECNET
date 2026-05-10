@@ -83,8 +83,14 @@ def apply(cfg: LLMConfig) -> None:
     if cfg.provider == "ollama":
         api_key: Optional[str] = None
         if cfg.api_key_ciphertext:
-            from decnet.web.db.secrets import decrypt_secret
-            api_key = decrypt_secret(cfg.api_key_ciphertext)
+            try:
+                from decnet.web.db.secrets import decrypt_secret
+                api_key = decrypt_secret(cfg.api_key_ciphertext)
+            except RuntimeError as exc:
+                log.warning(
+                    "realism.llm.config: DECNET_SECRET_KEY unavailable, "
+                    "api_key will not be passed to backend: %s", exc,
+                )
 
         from decnet.realism.llm.impl.ollama import OllamaBackend
         _cached_backend = OllamaBackend(

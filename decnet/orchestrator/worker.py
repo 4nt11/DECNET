@@ -129,6 +129,7 @@ async def orchestrator_worker(
     # operator's intent rather than the baked-in defaults. A failure
     # here logs and falls through; the planner already holds defaults.
     await _refresh_realism_config(repo)
+    await _refresh_llm_config(repo)
 
     shutdown = asyncio.Event()
     heartbeat_task = asyncio.create_task(
@@ -161,6 +162,7 @@ async def orchestrator_worker(
                 await _periodic_prune(repo)
             if tick_n % _REALISM_CONFIG_REFRESH_TICKS == 0:
                 await _refresh_realism_config(repo)
+                await _refresh_llm_config(repo)
     finally:
         for t in (heartbeat_task, control_task, probe_task):
             t.cancel()
@@ -221,6 +223,18 @@ async def _refresh_realism_config(repo: BaseRepository) -> None:
         realism_planner.apply_payload(payload)
     except ValueError as exc:
         logger.warning("realism config refresh: rejected payload: %s", exc)
+
+
+async def _refresh_llm_config(repo: BaseRepository) -> None:
+    """Pull operator-tuned LLM config from realism_config into the backend cache."""
+    from decnet.realism.llm.config import apply, load_from_db
+    cfg = await load_from_db(repo)
+    if cfg is None:
+        return
+    try:
+        apply(cfg)
+    except Exception as exc:  # noqa: BLE001
+        logger.warning("llm config refresh: apply failed: %s", exc)
 
 
 def _roll_action_kind(rng: secrets.SystemRandom) -> str:
