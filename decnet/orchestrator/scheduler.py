@@ -311,17 +311,22 @@ async def _resolve_personas(
     return enriched
 
 
-def _topology_personas(topology: Optional[dict[str, Any]]) -> list[EmailPersona]:
+def _topology_personas(topology) -> list[EmailPersona]:
     if not topology:
         return []
-    raw = topology.get("email_personas")
+    if isinstance(topology, dict):
+        raw = topology.get("email_personas")
+        lang = topology.get("language_default") or "en"
+    else:
+        raw = topology.email_personas
+        lang = topology.language_default or "en"
     if raw is None:
         return []
     if isinstance(raw, list):
-        return parse_personas(raw, language_default=topology.get("language_default") or "en")
+        return parse_personas(raw, language_default=lang)
     if isinstance(raw, str):
         try:
-            return parse_personas(json.loads(raw), language_default=topology.get("language_default") or "en")
+            return parse_personas(json.loads(raw), language_default=lang)
         except json.JSONDecodeError:
             return []
     return []
