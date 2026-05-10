@@ -15,18 +15,21 @@ from decnet.realism.llm.impl.ollama import OllamaBackend
 
 def test_factory_default_is_ollama(monkeypatch):
     monkeypatch.delenv("DECNET_REALISM_LLM", raising=False)
+    monkeypatch.setattr("decnet.realism.llm.config._cached_backend", None)
     backend = get_llm()
     assert isinstance(backend, OllamaBackend)
 
 
 def test_factory_selects_fake(monkeypatch):
     monkeypatch.setenv("DECNET_REALISM_LLM", "fake")
+    monkeypatch.setattr("decnet.realism.llm.config._cached_backend", None)
     backend = get_llm()
     assert isinstance(backend, FakeBackend)
 
 
 def test_factory_unknown_raises(monkeypatch):
     monkeypatch.setenv("DECNET_REALISM_LLM", "vllm-someday")
+    monkeypatch.setattr("decnet.realism.llm.config._cached_backend", None)
     with pytest.raises(ValueError, match="Unsupported"):
         get_llm()
 
