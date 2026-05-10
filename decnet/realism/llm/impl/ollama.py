@@ -1,18 +1,17 @@
-"""Ollama subprocess backend.
+"""Ollama backend — subprocess (local) or HTTP (remote).
 
-Shells out to ``ollama run <model>`` with the prompt fed via stdin.
+**Subprocess mode** (default, ``base_url=None``)
+  Shells out to ``ollama run <model>`` with the prompt on stdin.
+  Works on any host where Ollama is reachable however it's bound —
+  unix socket, unusual TCP port, remote-mount — because ``ollama run``
+  resolves all of that transparently.
 
-Why subprocess and not the Ollama HTTP API:
-* No new dependency (``ollama`` Python lib is optional).
-* Works on hosts where Ollama is bound to a unix socket, an unusual TCP
-  port, or behind a remote-mount layer — `ollama run` resolves all that.
-* Same path the operator uses by hand (``ollama run llama3.1``); easier
-  to debug discrepancies between worker output and a console session.
-
-Cost: per-call process spawn (~50ms on a warm box).  Acceptable for
-realism tick rates (one body per ~5 minutes per persona by default).
-When that cost matters, swap to an HTTP-API backend; the seam is in
-:mod:`decnet.realism.llm.factory`.
+**HTTP mode** (``base_url`` set, e.g. ``http://10.0.0.1:11434``)
+  POSTs to ``{base_url}/api/generate`` via httpx (non-streaming).
+  Required when targeting a remote Ollama daemon.  ``api_key`` is sent
+  as ``Authorization: Bearer`` when provided (for reverse-proxy setups).
+  No shell metacharacters ever reach the network call — base_url is
+  validated by :class:`decnet.realism.llm.config.LLMConfig` before storage.
 """
 from __future__ import annotations
 
@@ -32,18 +31,93 @@ _DEFAULT_TIMEOUT = float(os.environ.get("DECNET_REALISM_TIMEOUT", "60"))
 
 
 class OllamaBackend(LLMBackend):
-    """Concrete :class:`LLMBackend` that shells out to ``ollama run``."""
+    """Concrete :class:`LLMBackend` for Ollama — subprocess or HTTP."""
 
     def __init__(
         self,
         *,
         model: Optional[str] = None,
         timeout: Optional[float] = None,
+        base_url: Optional[str] = None,
+        api_key: Optional[str] = None,
     ) -> None:
         self.model = model or _DEFAULT_MODEL
         self.timeout = timeout if timeout is not None else _DEFAULT_TIMEOUT
+        self.base_url = base_url or None
+        self.api_key = api_key or None
 
     async def generate(self, prompt: str) -> LLMResult:
+        if self.base_url:
+            return await self._generate_http(prompt)
+        return await self._generate_subprocess(prompt)
+
+    async def _generate_http(self, prompt: str) -> LLMResult:
+        import httpx
+
+        url = f"{self.base_url}/api/generate"
+        headers: dict[str, str] = {"Content-Type": "application/json"}
+        if self.api_key:
+            headers["Authorization"] = f"Bearer {self.api_key}"
+        payload = {"model": self.model, "prompt": prompt, "stream": False}
+
+        t0 = time.monotonic()
+        try:
+            async with httpx.AsyncClient(timeout=self.timeout) as client:
+                resp = await client.post(url, json=payload, headers=headers)
+        except httpx.TimeoutException as exc:
+            raise LLMTimeout(
+                f"ollama HTTP {self.model} exceeded {self.timeout}s"
+            ) from exc
+        except Exception as exc:  # noqa: BLE001
+            latency_ms = int((time.monotonic() - t0) * 1000)
+            log.warning("ollama HTTP error model=%s exc=%s", self.model, exc)
+            return LLMResult(
+                success=False,
+                text="",
+                model=self.model,
+                latency_ms=latency_ms,
+                extra={"error": str(exc)},
+            )
+
+        latency_ms = int((time.monotonic() - t0) * 1000)
+        if resp.status_code != 200:
+            log.warning(
+                "ollama HTTP non-200 model=%s status=%d body=%r",
+                self.model, resp.status_code, resp.text[:200],
+            )
+            return LLMResult(
+                success=False,
+                text="",
+                model=self.model,
+                latency_ms=latency_ms,
+                extra={"status": resp.status_code, "body": resp.text[:256]},
+            )
+
+        try:
+            data = resp.json()
+            text = data.get("response", "")
+        except Exception:
+            text = resp.text
+
+        if not text.strip():
+            log.warning("ollama HTTP empty response model=%s", self.model)
+            return LLMResult(
+                success=False,
+                text=text,
+                model=self.model,
+                latency_ms=latency_ms,
+                extra={"status": resp.status_code},
+            )
+
+        return LLMResult(
+            success=True,
+            text=text,
+            model=self.model,
+            latency_ms=latency_ms,
+            extra={"status": resp.status_code},
+        )
+
+    async def _generate_subprocess(self, prompt: str) -> LLMResult:
         t0 = time.monotonic()
         try:
             proc = await asyncio.create_subprocess_exec(
