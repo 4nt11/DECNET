@@ -58,6 +58,8 @@ _CANONICAL_AUTH_HELPER_DIR = Path(__file__).parent.parent / "templates" / "_shar
 _AUTH_HELPER_SERVICES = {"ssh", "telnet"}
 _CANONICAL_NTLMSSP = Path(__file__).parent.parent / "templates" / "_shared" / "ntlmssp.py"
 _NTLMSSP_SERVICES = {"smb", "rdp"}
+_CANONICAL_CADDY_MODULES_DIR = Path(__file__).parent.parent / "templates" / "_caddy_modules"
+_CADDY_SERVICES = {"http", "https"}
 
 
 def _sync_logging_helper(config: DecnetConfig) -> None:
@@ -162,6 +164,45 @@ def _sync_sessrec_sources(config: DecnetConfig) -> None:
                 dest = dest_dir / src.name
                 if not dest.exists() or dest.read_bytes() != src.read_bytes():
                     shutil.copy2(src, dest)
+
+
+def _sync_caddy_modules(config: DecnetConfig) -> None:
+    """Mirror _caddy_modules/ into http/https build contexts.
+
+    The xcaddy builder stage in each Dockerfile references
+    ``_caddy_modules/decnetfp`` relative to its build context (the
+    per-service template dir). Since the canonical source lives one
+    level up at ``templates/_caddy_modules/``, we sync it into each
+    active http/https build context before compose up, mirroring the
+    sessrec / auth-helper patterns.
+    """
+    from decnet.services.registry import get_service
+    src_dir = _CANONICAL_CADDY_MODULES_DIR
+    if not src_dir.is_dir():
+        return
+    seen: set[Path] = set()
+    for decky in config.deckies:
+        for svc_name in decky.services:
+            if svc_name not in _CADDY_SERVICES:
+                continue
+            svc = get_service(svc_name)
+            if svc is None:
+                continue
+            ctx = svc.dockerfile_context()
+            if ctx is None or ctx in seen:
+                continue
+            seen.add(ctx)
+            dest_dir = ctx / "_caddy_modules"
+            dest_dir.mkdir(exist_ok=True)
+            for child in src_dir.iterdir():
+                dest_child = dest_dir / child.name
+                if child.is_dir():
+                    if dest_child.exists():
+                        shutil.rmtree(dest_child)
+                    shutil.copytree(child, dest_child)
+                else:
+                    if not dest_child.exists() or dest_child.read_bytes() != child.read_bytes():
+                        shutil.copy2(child, dest_child)
 
 
 def _compose_ps(compose_file: Path) -> list[dict[str, object]]:
@@ -607,6 +648,7 @@ def deploy(config: DecnetConfig, dry_run: bool = False, no_cache: bool = False, 
     _sync_sessrec_sources(config)
     _sync_auth_helper_sources(config)
     _sync_ntlmssp_sources(config)
+    _sync_caddy_modules(config)
 
     compose_path = write_compose(config, COMPOSE_FILE)
     console.print(f"[bold cyan]Compose file written[/] → {compose_path}")
