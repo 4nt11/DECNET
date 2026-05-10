@@ -26,6 +26,7 @@ from decnet.web.db.repository import BaseRepository
 logger = get_logger("api")
 
 _INGEST_STATE_KEY = "ingest_worker_position"
+_sleep = asyncio.sleep  # module-level alias so tests patch here, not the global asyncio singleton
 
 
 async def log_ingestion_worker(repo: BaseRepository) -> None:
@@ -73,7 +74,7 @@ async def _run_loop(
     while True:
         try:
             if not _json_log_path.exists():
-                await asyncio.sleep(2)
+                await _sleep(2)
                 continue
 
             _stat: os.stat_result = _json_log_path.stat()
@@ -84,7 +85,7 @@ async def _run_loop(
 
             if _stat.st_size == _position:
                 # No new data
-                await asyncio.sleep(1)
+                await _sleep(1)
                 continue
 
             # Accumulate parsed rows and the file offset they end at.  We
@@ -149,9 +150,9 @@ async def _run_loop(
                 break  # Exit worker — DB is gone or uninitialized
 
             logger.error("ingest: error in worker: %s", _e)
-            await asyncio.sleep(5)
+            await _sleep(5)
 
-        await asyncio.sleep(1)
+        await _sleep(1)
 
 
 async def _publish_batch(bus: Any, flushed: int, position: int) -> None:

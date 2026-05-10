@@ -476,7 +476,7 @@ class TestLogIngestionWorker:
                 raise asyncio.CancelledError()
 
         with patch.dict(os.environ, {"DECNET_INGEST_LOG_FILE": log_file}):
-            with patch("decnet.web.ingester.asyncio.sleep", side_effect=fake_sleep):
+            with patch("decnet.web.ingester._sleep", side_effect=fake_sleep):
                 with pytest.raises(asyncio.CancelledError):
                     await log_ingestion_worker(mock_repo)
         mock_repo.add_logs.assert_not_awaited()
@@ -507,7 +507,7 @@ class TestLogIngestionWorker:
                 raise asyncio.CancelledError()
 
         with patch.dict(os.environ, {"DECNET_INGEST_LOG_FILE": log_file}):
-            with patch("decnet.web.ingester.asyncio.sleep", side_effect=fake_sleep):
+            with patch("decnet.web.ingester._sleep", side_effect=fake_sleep):
                 with pytest.raises(asyncio.CancelledError):
                     await log_ingestion_worker(mock_repo)
 
@@ -539,7 +539,7 @@ class TestLogIngestionWorker:
                 raise asyncio.CancelledError()
 
         with patch.dict(os.environ, {"DECNET_INGEST_LOG_FILE": log_file}):
-            with patch("decnet.web.ingester.asyncio.sleep", side_effect=fake_sleep):
+            with patch("decnet.web.ingester._sleep", side_effect=fake_sleep):
                 with pytest.raises(asyncio.CancelledError):
                     await log_ingestion_worker(mock_repo)
 
@@ -575,7 +575,7 @@ class TestLogIngestionWorker:
                 raise asyncio.CancelledError()
 
         with patch.dict(os.environ, {"DECNET_INGEST_LOG_FILE": log_file}):
-            with patch("decnet.web.ingester.asyncio.sleep", side_effect=fake_sleep):
+            with patch("decnet.web.ingester._sleep", side_effect=fake_sleep):
                 with pytest.raises(asyncio.CancelledError):
                     await log_ingestion_worker(mock_repo)
 
@@ -607,7 +607,7 @@ class TestLogIngestionWorker:
                 raise asyncio.CancelledError()
 
         with patch.dict(os.environ, {"DECNET_INGEST_LOG_FILE": log_file}):
-            with patch("decnet.web.ingester.asyncio.sleep", side_effect=fake_sleep):
+            with patch("decnet.web.ingester._sleep", side_effect=fake_sleep):
                 with pytest.raises(asyncio.CancelledError):
                     await log_ingestion_worker(mock_repo)
 
@@ -646,7 +646,7 @@ class TestLogIngestionWorker:
                 raise asyncio.CancelledError()
 
         with patch.dict(os.environ, {"DECNET_INGEST_LOG_FILE": log_file}):
-            with patch("decnet.web.ingester.asyncio.sleep", side_effect=fake_sleep):
+            with patch("decnet.web.ingester._sleep", side_effect=fake_sleep):
                 with pytest.raises(asyncio.CancelledError):
                     await log_ingestion_worker(mock_repo)
 
@@ -680,7 +680,7 @@ class TestLogIngestionWorker:
                 raise asyncio.CancelledError()
 
         with patch.dict(os.environ, {"DECNET_INGEST_LOG_FILE": log_file}):
-            with patch("decnet.web.ingester.asyncio.sleep", side_effect=fake_sleep):
+            with patch("decnet.web.ingester._sleep", side_effect=fake_sleep):
                 with pytest.raises(asyncio.CancelledError):
                     await log_ingestion_worker(mock_repo)
 
@@ -721,7 +721,7 @@ class TestLogIngestionWorker:
                 raise asyncio.CancelledError()
 
         with patch.dict(os.environ, {"DECNET_INGEST_LOG_FILE": log_file}):
-            with patch("decnet.web.ingester.asyncio.sleep", side_effect=fake_sleep):
+            with patch("decnet.web.ingester._sleep", side_effect=fake_sleep):
                 with pytest.raises(asyncio.CancelledError):
                     await log_ingestion_worker(mock_repo)
 
@@ -761,7 +761,7 @@ class TestLogIngestionWorker:
                 raise asyncio.CancelledError()
 
         with patch.dict(os.environ, {"DECNET_INGEST_LOG_FILE": log_file}):
-            with patch("decnet.web.ingester.asyncio.sleep", side_effect=fake_sleep):
+            with patch("decnet.web.ingester._sleep", side_effect=fake_sleep):
                 with pytest.raises(asyncio.CancelledError):
                     await log_ingestion_worker(mock_repo)
 

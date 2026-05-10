@@ -30,17 +30,26 @@ def _strip_pytest_vars(monkeypatch: pytest.MonkeyPatch) -> None:
 
 
 async def _run_lifespan_startup(api_mod) -> None:
-    """Run the lifespan up to (but not past) yield, then unwind cleanly."""
-    app = FastAPI()
-    cm = api_mod.lifespan(app)
-    await cm.__aenter__()
+    """Run the lifespan up to (but not past) yield, then unwind cleanly.
+
+    DECNET_CONTRACT_TEST suppresses all background workers (ingestion,
+    collector, TTP, tarpit) so no tasks escape test teardown.
+    """
+    import os
+    os.environ["DECNET_CONTRACT_TEST"] = "true"
     try:
-        return
-    finally:
+        app = FastAPI()
+        cm = api_mod.lifespan(app)
+        await cm.__aenter__()
         try:
-            await cm.__aexit__(None, None, None)
-        except Exception:
-            pass
+            return
+        finally:
+            try:
+                await cm.__aexit__(None, None, None)
+            except Exception:
+                pass
+    finally:
+        os.environ.pop("DECNET_CONTRACT_TEST", None)
 
 
 def test_master_api_refuses_to_start_in_agent_mode(
