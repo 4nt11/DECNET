@@ -151,6 +151,13 @@ def _ensure_network(
         options.update(extra_options)
 
     for net in client.networks.list(names=[MACVLAN_NETWORK_NAME]):
+        # networks.list() doesn't populate Containers — reload to get the
+        # full inspect payload (including connected container IDs).
+        try:
+            net.reload()
+        except docker.errors.APIError:
+            pass
+
         if net.attrs.get("Driver") == driver:
             # Same driver — but if the IPAM pool drifted (different subnet,
             # gateway, or ip-range than this deploy asks for), reusing it
