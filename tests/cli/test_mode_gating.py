@@ -9,6 +9,8 @@ from pathlib import Path
 
 import pytest
 
+import decnet.cli as _decnet_cli  # noqa: F401 — pre-load in master mode at collection time
+
 
 REPO = pathlib.Path(__file__).resolve().parent.parent.parent
 #DECNET_BIN = REPO / ".venv" / "bin" / "decnet"
@@ -78,11 +80,10 @@ def test_defence_in_depth_direct_call_fails_in_agent_mode(monkeypatch):
     _require_master_mode('api') is the belt-and-braces guard."""
     monkeypatch.setenv("DECNET_MODE", "agent")
     monkeypatch.setenv("DECNET_DISALLOW_MASTER", "true")
-    # Re-import cli so the module-level gate re-runs (harmless here;
-    # we're exercising the in-function guard). Use monkeypatch.delitem so
-    # the original cached module is restored after the test and subsequent
-    # tests don't see the agent-mode-stripped app singleton.
-    monkeypatch.delitem(sys.modules, "decnet.cli", raising=False)
+    # _require_master_mode reads os.environ at call time — no reimport needed.
+    # Reimporting decnet.cli would corrupt sys.modules["decnet"].cli (the
+    # parent-package attribute that `import decnet.cli as x` resolves through)
+    # and no restore strategy can fix that without reloading the decnet package.
     from decnet.cli import _require_master_mode
     import typer
     with pytest.raises(typer.Exit):
