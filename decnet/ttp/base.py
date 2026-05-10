@@ -19,7 +19,7 @@ import logging
 from abc import ABC, abstractmethod
 from typing import Any, Final, NamedTuple, Protocol, runtime_checkable
 
-from decnet.web.db.models.ttp import TTPTag
+from decnet.web.db.models.ttp import EVIDENCE_SCHEMA, TTPTag
 
 _log = logging.getLogger(__name__)
 
@@ -109,7 +109,32 @@ class TolerantTagger(Tagger):
 
     async def tag(self, event: TaggerEvent) -> list[TTPTag]:
         try:
-            return await self._tag_impl(event)
+            results = await self._tag_impl(event)
+            # Validate evidence shape: unknown keys are a programmer error,
+            # not a runtime absence. Raise TypeError so the caller sees the
+            # bug rather than silently dropping the tag.
+            td = EVIDENCE_SCHEMA.get(event.source_kind)
+            if td is not None:
+                declared = (
+                    getattr(td, "__required_keys__", frozenset())
+                    | getattr(td, "__optional_keys__", frozenset())
+                )
+                for tag in results:
+                    ev = getattr(tag, "evidence", None)
+                    if ev is None:
+                        continue
+                    unknown = set(ev) - declared
+                    if unknown:
+                        raise TypeError(
+                            f"lifter {self.name!r} emitted evidence keys "
+                            f"{unknown!r} not declared in "
+                            f"{td.__name__} for source_kind={event.source_kind!r}"
+                        )
+            return results
+        except TypeError:
+            # Programmer error — bad evidence shape or type mismatch.
+            # Propagate; do NOT swallow.
+            raise
         except Exception:
             # ``Exception`` deliberately, not ``BaseException``:
             # ``KeyboardInterrupt`` / ``SystemExit`` /

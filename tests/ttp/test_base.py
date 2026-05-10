@@ -140,7 +140,8 @@ _SWALLOWED_EXCS: tuple[type[Exception], ...] = (
     ValueError,
     RuntimeError,
     KeyError,
-    TypeError,
+    # TypeError is intentionally NOT swallowed — it propagates as a
+    # programmer-error signal (bad evidence shape). See TolerantTagger.tag.
     AttributeError,
     LookupError,
     OSError,

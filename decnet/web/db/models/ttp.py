@@ -69,19 +69,46 @@ class CommandEvidence(TypedDict):
     rule_pattern: str  # regex source string, never user input
 
 
-class IntelEvidence(TypedDict):
-    intel_uuid: str
-    provider: Literal["abuseipdb", "greynoise", "feodo", "threatfox"]
-    category: Optional[int]
-    score: float  # already normalized to [0.0, 1.0]
+class IntelEvidence(TypedDict, total=False):
+    # AbuseIPDB
+    abuseipdb_categories: list[int]
+    abuseipdb_score: float
+    abuse_confidence_score: int
+    # GreyNoise
+    greynoise_classification: str
+    greynoise_tags: list[str]
+    greynoise_name: str
+    # Feodo
+    feodo_listed: bool
+    feodo_malware_family: str
+    first_seen_feodo: str
+    malware_family: str
+    # ThreatFox
+    threatfox_threat_types: list[str]
+    threatfox_ioc_types: list[str]
+    threatfox_malware_families: list[str]
+    threat_types: list[str]
+    malware_families: list[str]
+    ioc_types: list[str]
+    # Aggregate meta-rule
+    aggregate_verdict: str
+    bumped_rule_ids: list[str]
 
 
-class EmailEvidence(TypedDict):
-    body_sha256: str  # hash, never raw body
+class EmailEvidence(TypedDict, total=False):
+    body_sha256: str          # hash, never raw body
     matched_headers: list[str]  # header NAMES, not values
     rcpt_domain_set: list[str]  # domains, not addresses
     attachment_sha256s: list[str]
     rcpt_count: int
+    # PII-safe match discriminators (subset of _EMAIL_EVIDENCE_ALLOWED_KEYS)
+    matched_kit: str
+    matched_trigger: str
+    matched_url_host: str
+    matched_signals: list[str]
+    matched_subject_kw: list[str]
+    matched_body_kw: list[str]
+    encoded_byte_count: int
 
 
 class CanaryFingerprintEvidence(TypedDict):
@@ -96,6 +123,18 @@ class HttpFingerprintEvidence(TypedDict):
     client_ip: str
     seen_at: str       # ISO8601 UTC
     raw: Optional[dict]  # raw settings dict for h2_settings / h3_settings
+
+
+# Maps source_kind → its evidence TypedDict. Used by TolerantTagger to
+# validate that lifters do not emit undeclared keys (programmer error →
+# TypeError, not the swallowed absence-of-data case).
+EVIDENCE_SCHEMA: dict[str, type] = {
+    "command": CommandEvidence,
+    "intel": IntelEvidence,
+    "email": EmailEvidence,
+    "canary_fingerprint": CanaryFingerprintEvidence,
+    "http_fingerprint": HttpFingerprintEvidence,
+}
 
 
 # ── Tables ──────────────────────────────────────────────────────────
@@ -175,6 +214,10 @@ class TTPTag(SQLModel, table=True):
         CheckConstraint(
             "attacker_uuid IS NOT NULL OR identity_uuid IS NOT NULL",
             name="ttp_tag_has_anchor",
+        ),
+        CheckConstraint(
+            "confidence >= 0.0 AND confidence <= 1.0",
+            name="ttp_tag_confidence_range",
         ),
         Index(
             "ix_ttp_tag_identity_technique",

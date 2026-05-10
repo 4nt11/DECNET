@@ -67,7 +67,19 @@ def test_intel_evidence_keys() -> None:
     keys = (
         IntelEvidence.__required_keys__ | IntelEvidence.__optional_keys__
     )
-    assert keys == {"intel_uuid", "provider", "category", "score"}
+    assert keys == {
+        # AbuseIPDB
+        "abuseipdb_categories", "abuseipdb_score", "abuse_confidence_score",
+        # GreyNoise
+        "greynoise_classification", "greynoise_tags", "greynoise_name",
+        # Feodo
+        "feodo_listed", "feodo_malware_family", "first_seen_feodo", "malware_family",
+        # ThreatFox
+        "threatfox_threat_types", "threatfox_ioc_types", "threatfox_malware_families",
+        "threat_types", "malware_families", "ioc_types",
+        # Aggregate meta-rule
+        "aggregate_verdict", "bumped_rule_ids",
+    }
 
 
 def test_canary_fingerprint_evidence_keys() -> None:
@@ -140,10 +152,6 @@ def test_lifter_emits_evidence_matching_typeddict(
 # ── Negative case: shape violation propagates (impl phase) ──────────
 
 
-@pytest.mark.xfail(
-    strict=True,
-    reason="impl phase: TolerantTagger currently swallows TypeError",
-)
 def test_evidence_shape_violation_propagates_as_typeerror() -> None:
     """A lifter that emits an evidence dict with a key not in its
     ``TypedDict`` is a programmer error — it MUST propagate past the

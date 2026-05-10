@@ -169,7 +169,6 @@ def test_guard_runs_before_super_init() -> None:
 # ── confidence range guard (impl phase) ─────────────────────────────
 
 
-@pytest.mark.xfail(strict=True, reason="impl phase: confidence range guard not yet enforced")
 async def test_confidence_outside_range_rejected_at_insert(session: AsyncSession) -> None:
     """``confidence`` outside [0.0, 1.0] must be rejected. The contract
     schema currently types it as bare ``float`` without a range
