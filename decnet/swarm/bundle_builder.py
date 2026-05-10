@@ -79,7 +79,7 @@ def _iter_included(root: pathlib.Path) -> list[tuple[pathlib.Path, str]]:
 
             dirnames[:] = [
                 d for d in dirnames
-                if d != "__pycache__"
+                if d not in ("__pycache__", "node_modules")
                 and f"{rel_dir}/{d}" not in _EXCLUDED_DECNET_SUBTREES
             ]
 
