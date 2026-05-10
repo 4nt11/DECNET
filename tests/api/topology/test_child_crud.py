@@ -132,7 +132,7 @@ async def test_decky_create_ok(client, auth_token):
 async def test_decky_patch_ok(client, auth_token):
     topology_id = await _seed("decky-patch")
     deckies = await _repo.list_topology_deckies(topology_id)
-    decky_uuid = deckies[0]["uuid"]
+    decky_uuid = deckies[0].uuid
 
     r = await client.patch(
         f"{_V1}/{topology_id}/deckies/{decky_uuid}",
@@ -185,7 +185,7 @@ async def test_edge_create_and_delete(client, auth_token):
     lan_id = new_lan.json()["id"]
 
     deckies = await _repo.list_topology_deckies(topology_id)
-    decky_uuid = deckies[0]["uuid"]
+    decky_uuid = deckies[0].uuid
 
     r = await client.post(
         f"{_V1}/{topology_id}/edges",
