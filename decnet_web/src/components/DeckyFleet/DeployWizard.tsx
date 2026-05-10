@@ -59,29 +59,29 @@ const buildIni = (
     }
     if (mutate) lines.push(`mutate_interval=${mutateEvery}`);
     lines.push('');
-  }
-  // Per-service overrides emitted as [<prefix>.<svc>] group subsections.
-  // The INI loader (decnet/ini_loader.py) prefix-matches these onto every
-  // ``${prefix}-NN`` decky in the batch, so one block covers all clones.
-  for (const svc of services) {
-    const cfg = serviceConfigs[svc];
-    if (!cfg || Object.keys(cfg).length === 0) continue;
-    const fieldTypes: Record<string, SvcFieldDTO['type']> = {};
-    for (const f of serviceSchemas[svc] ?? []) fieldTypes[f.key] = f.type;
-    lines.push(`[${prefix}.${svc}]`);
-    for (const [k, v] of Object.entries(cfg)) {
-      // textarea values may contain newlines that ConfigParser can't carry
-      // on a single line; wrap them in `b64:` so validate_cfg decodes back
-      // to the original UTF-8 string. Other types are emitted raw.
-      let serialised: string;
-      if (fieldTypes[k] === 'textarea' && typeof v === 'string') {
-        serialised = `b64:${b64encodeUtf8(v)}`;
-      } else {
-        serialised = typeof v === 'string' ? v : String(v);
+
+    // Emit per-service config as [<exact-decky-name>.<svc>] so the section
+    // name unambiguously targets this decky only — no prefix-match magic.
+    for (const svc of services) {
+      const cfg = serviceConfigs[svc];
+      if (!cfg || Object.keys(cfg).length === 0) continue;
+      const fieldTypes: Record<string, SvcFieldDTO['type']> = {};
+      for (const f of serviceSchemas[svc] ?? []) fieldTypes[f.key] = f.type;
+      lines.push(`[${name}.${svc}]`);
+      for (const [k, v] of Object.entries(cfg)) {
+        // textarea values may contain newlines that ConfigParser can't carry
+        // on a single line; wrap them in `b64:` so validate_cfg decodes back
+        // to the original UTF-8 string. Other types are emitted raw.
+        let serialised: string;
+        if (fieldTypes[k] === 'textarea' && typeof v === 'string') {
+          serialised = `b64:${b64encodeUtf8(v)}`;
+        } else {
+          serialised = typeof v === 'string' ? v : String(v);
+        }
+        lines.push(`${k}=${serialised}`);
       }
-      lines.push(`${k}=${serialised}`);
+      lines.push('');
     }
-    lines.push('');
   }
   return lines.join('\n');
 };
