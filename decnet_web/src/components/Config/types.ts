@@ -24,4 +24,5 @@ export type ConfigTab =
   | 'globals'
   | 'appearance'
   | 'workers'
-  | 'ttp';
+  | 'ttp'
+  | 'llm';

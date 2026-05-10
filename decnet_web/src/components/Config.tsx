@@ -1,10 +1,10 @@
 import React, { useEffect, useState } from 'react';
 import {
-  Settings, Users, Sliders, Shield, Palette, Activity,
+  Settings, Users, Sliders, Shield, Palette, Activity, Cpu,
 } from '../icons';
 import { useToast } from './Toasts/useToast';
 import RuleStateControls from './RuleStateControls';
-import './Dashboard.css';
+import './DeckyFleet.css';
 import './Config.css';
 import type { ConfigTab } from './Config/types';
 import { useConfig } from './Config/useConfig';
@@ -13,6 +13,7 @@ import { LimitsTab } from './Config/tabs/LimitsTab';
 import { UsersTab } from './Config/tabs/UsersTab';
 import { GlobalsTab } from './Config/tabs/GlobalsTab';
 import { AppearanceTab } from './Config/tabs/AppearanceTab';
+import { LLMTab } from './Config/tabs/LLMTab';
 
 const Config: React.FC = () => {
   const {
@@ -63,14 +64,19 @@ const Config: React.FC = () => {
     ...(isAdmin
       ? [{ key: 'ttp' as const, label: 'TTP RULES', icon: <Shield size={14} /> }]
       : []),
+    ...(isAdmin
+      ? [{ key: 'llm' as const, label: 'LLM PROVIDER', icon: <Cpu size={14} /> }]
+      : []),
   ];
 
   return (
-    <div className="config-page">
-      <div className="logs-section">
-        <div className="section-header">
-          <Shield size={20} />
-          <h2>SYSTEM CONFIGURATION</h2>
+    <div className="fleet-root config-page">
+      <div className="page-header">
+        <div className="page-title-group">
+          <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+            <Settings size={22} className="violet-accent" />
+            <h1>SYSTEM CONFIGURATION</h1>
+          </div>
         </div>
       </div>
 
@@ -124,6 +130,8 @@ const Config: React.FC = () => {
       {/* RuleStateControls also self-gates on /config?.role so a state
           leak can't render it. */}
       {activeTab === 'ttp' && isAdmin && <RuleStateControls />}
+
+      {activeTab === 'llm' && isAdmin && <LLMTab isAdmin={isAdmin} />}
     </div>
   );
 };

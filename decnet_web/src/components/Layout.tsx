@@ -39,7 +39,6 @@ const ROUTE_LABELS: Record<string, string> = {
   '/persona-generation': 'PERSONA GENERATION',
   '/synthetic-files': 'SYNTHETIC FILES',
   '/realism-config': 'REALISM CONFIG',
-  '/realism-llm': 'LLM PROVIDER',
   '/canary-tokens': 'CANARY TOKENS',
   '/config': 'CONFIG',
   '/swarm-updates': 'REMOTE UPDATES',
@@ -154,7 +153,6 @@ const Layout: React.FC<LayoutProps> = ({
             <NavItem to="/persona-generation" icon={<Mail size={18} />} label="Persona Generation" open={sidebarOpen} indent />
             <NavItem to="/synthetic-files" icon={<FileText size={18} />} label="Synthetic Files" open={sidebarOpen} indent />
             <NavItem to="/realism-config" icon={<Sliders size={18} />} label="Realism Config" open={sidebarOpen} indent />
-            <NavItem to="/realism-llm" icon={<Cpu size={18} />} label="LLM Provider" open={sidebarOpen} indent />
             <NavItem to="/canary-tokens" icon={<Target size={18} />} label="Canary Tokens" open={sidebarOpen} indent />
           </NavGroup>
           <NavGroup label="SWARM" icon={<Network size={20} />} open={sidebarOpen}>
