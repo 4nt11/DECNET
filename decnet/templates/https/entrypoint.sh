@@ -53,7 +53,6 @@ cat > /etc/caddy/Caddyfile <<EOF
   servers :443 {
     protocols ${CADDY_PROTOCOLS}
     listener_wrappers {
-      tls
       decnet_h2fp
     }
   }
