@@ -28,6 +28,7 @@ from datetime import datetime, timedelta, timezone
 from urllib.parse import urlparse, urlunparse
 
 import pytest
+import pytest_asyncio
 from sqlalchemy import text
 from sqlalchemy.ext.asyncio import create_async_engine
 
@@ -74,7 +75,7 @@ def _url_with_db(server_url: str, db_name: str) -> str:
     return urlunparse(parsed._replace(path=f"/{db_name}"))
 
 
-@pytest.fixture(scope="module", loop_scope="module")
+@pytest_asyncio.fixture(scope="module", loop_scope="module")
 async def mysql_test_db_url():
     """Create a per-worker throwaway database, yield its URL, drop it on teardown.
 

@@ -14,6 +14,7 @@ from unittest.mock import MagicMock
 
 import httpx
 import pytest
+import pytest_asyncio
 
 # Must be set before any decnet import
 os.environ.setdefault("DECNET_JWT_SECRET", "test-secret-key-at-least-32-chars-long!!")
@@ -34,7 +35,7 @@ from sqlalchemy.pool import StaticPool  # noqa: E402
 import uuid as _uuid  # noqa: E402
 
 
-@pytest.fixture(scope="module", loop_scope="module", autouse=True)
+@pytest_asyncio.fixture(scope="module", loop_scope="module", autouse=True)
 async def live_db():
     """Spin up an in-memory SQLite for the live test module."""
     engine = create_async_engine(
@@ -68,7 +69,7 @@ async def live_db():
     await engine.dispose()
 
 
-@pytest.fixture(scope="module", loop_scope="module")
+@pytest_asyncio.fixture(scope="module", loop_scope="module")
 async def live_client(live_db):
     async with httpx.AsyncClient(
         transport=httpx.ASGITransport(app=app),
@@ -77,7 +78,7 @@ async def live_client(live_db):
         yield ac
 
 
-@pytest.fixture(scope="module", loop_scope="module")
+@pytest_asyncio.fixture(scope="module", loop_scope="module")
 async def token(live_client):
     resp = await live_client.post("/api/v1/auth/login", json={
         "username": DECNET_ADMIN_USER,

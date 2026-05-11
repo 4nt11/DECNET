@@ -23,6 +23,7 @@ from pathlib import Path
 
 import httpx
 import pytest
+import pytest_asyncio
 
 pytestmark = pytest.mark.skipif(
     os.environ.get("CI") == "true",
@@ -66,7 +67,7 @@ from sqlalchemy.pool import StaticPool  # noqa: E402
 # ─── Shared fixtures ────────────────────────────────────────────────────────
 
 
-@pytest.fixture(scope="module", loop_scope="module", autouse=True)
+@pytest_asyncio.fixture(scope="module", loop_scope="module", autouse=True)
 async def live_db():
     """Real in-memory SQLite — shared across this module."""
     engine = create_async_engine(
@@ -104,7 +105,7 @@ async def live_db():
     await engine.dispose()
 
 
-@pytest.fixture(scope="module", loop_scope="module")
+@pytest_asyncio.fixture(scope="module", loop_scope="module")
 async def live_client(live_db):
     async with httpx.AsyncClient(
         transport=httpx.ASGITransport(app=app),
@@ -113,7 +114,7 @@ async def live_client(live_db):
         yield ac
 
 
-@pytest.fixture(scope="module", loop_scope="module")
+@pytest_asyncio.fixture(scope="module", loop_scope="module")
 async def token(live_client):
     resp = await live_client.post(
         "/api/v1/auth/login",
