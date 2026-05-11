@@ -34,14 +34,7 @@ from sqlalchemy.pool import StaticPool  # noqa: E402
 import uuid as _uuid  # noqa: E402
 
 
-@pytest.fixture(scope="module")
-def event_loop():
-    loop = asyncio.new_event_loop()
-    yield loop
-    loop.close()
-
-
-@pytest.fixture(scope="module", autouse=True)
+@pytest.fixture(scope="module", loop_scope="module", autouse=True)
 async def live_db():
     """Spin up an in-memory SQLite for the live test module."""
     engine = create_async_engine(
@@ -75,7 +68,7 @@ async def live_db():
     await engine.dispose()
 
 
-@pytest.fixture(scope="module")
+@pytest.fixture(scope="module", loop_scope="module")
 async def live_client(live_db):
     async with httpx.AsyncClient(
         transport=httpx.ASGITransport(app=app),
@@ -84,7 +77,7 @@ async def live_client(live_db):
         yield ac
 
 
-@pytest.fixture(scope="module")
+@pytest.fixture(scope="module", loop_scope="module")
 async def token(live_client):
     resp = await live_client.post("/api/v1/auth/login", json={
         "username": DECNET_ADMIN_USER,

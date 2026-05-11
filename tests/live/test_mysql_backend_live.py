@@ -74,7 +74,7 @@ def _url_with_db(server_url: str, db_name: str) -> str:
     return urlunparse(parsed._replace(path=f"/{db_name}"))
 
 
-@pytest.fixture(scope="module")
+@pytest.fixture(scope="module", loop_scope="module")
 async def mysql_test_db_url():
     """Create a per-worker throwaway database, yield its URL, drop it on teardown.
 
