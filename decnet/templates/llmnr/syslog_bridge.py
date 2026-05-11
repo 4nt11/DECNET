@@ -12,9 +12,16 @@ RFC 5424 structure:
 Facility: local0 (16). SD element ID uses PEN 55555.
 """
 
+from __future__ import annotations
+
 import base64
 import binascii
+import hashlib as _hashlib
+import json as _json
+import os as _os
 import re
+import socket as _socket
+import threading as _threading
 from datetime import datetime, timezone
 from typing import Any, Optional
 
@@ -221,16 +228,12 @@ def extract_form_credentials(
         if "=" not in pair:
             continue
         k, _, v = pair.partition("=")
-        # urllib decode without importing urllib at module scope (the
-        # template emitters are import-cost-sensitive). Inline the
-        # tiny percent-decode + plus-decode.
         try:
             from urllib.parse import unquote_plus
             key = unquote_plus(k).lower()
             val = unquote_plus(v)
         except Exception:
             continue
-        # First-wins so duplicate-key forms don't get clobbered.
         fields.setdefault(key, val)
 
     principal: Optional[str] = None
@@ -260,3 +263,140 @@ def write_syslog_file(line: str) -> None:
 def forward_syslog(line: str, log_target: str) -> None:
     """No-op stub. TCP forwarding is handled by rsyslog, not by service containers."""
     pass
+
+
+# ─── JA4H (local copy — containers can't import from decnet.sniffer) ─────────
+
+
+def _sha256_12(s: str) -> str:
+    return _hashlib.sha256(s.encode()).hexdigest()[:12]
+
+
+def _compute_ja4h(
+    method: str,
+    proto: str,
+    headers_ordered: list,
+    cookie: str = "",
+    accept_lang: str = "",
+) -> str:
+    """Compute JA4H per the FoxIO public spec.
+
+    headers_ordered is a list of [name, value] pairs (or bare name strings).
+    """
+    method_tag = (method[:2].upper() if method else "UN")
+    ver_map = {
+        "HTTP/1.0": "10", "HTTP/1.1": "11", "HTTP/2.0": "20", "HTTP/3.0": "30",
+        "H1": "11", "H2": "20", "H3": "30",
+        "h1": "11", "h2": "20", "h3": "30",
+    }
+    ver_tag = ver_map.get(proto.upper(), "00")
+    names = [
+        (h[0].lower() if isinstance(h, (list, tuple)) else h.lower())
+        for h in headers_ordered
+    ]
+    has_cookie = "c" if any(n == "cookie" for n in names) else "n"
+    has_referer = "r" if any(n == "referer" for n in names) else "n"
+    lang_tag = (accept_lang[:4].ljust(4, "0") if accept_lang else "0000")
+    filtered = [n for n in names if n not in ("cookie", "referer")]
+    count_tag = f"{min(len(filtered), 99):02d}"
+    header_hash = _sha256_12(",".join(filtered))
+    if cookie:
+        pairs = sorted(p.strip() for p in cookie.split(";") if "=" in p.strip())
+        cookie_hash = _sha256_12(";".join(pairs))
+    else:
+        cookie_hash = "000000000000"
+    return f"{method_tag}{ver_tag}{has_cookie}{has_referer}{lang_tag}_{count_tag}_{header_hash}_{cookie_hash}"
+
+
+# ─── Caddy fingerprint socket reader ─────────────────────────────────────────
+
+_FP_BUF = 65536
+
+
+def _fp_socket_reader(node_name: str, service_name: str, log_target: str) -> None:
+    sock_path = _os.environ.get("DECNET_FP_SOCK", "/run/decnet/fp.sock")
+    try:
+        sock = _socket.socket(_socket.AF_UNIX, _socket.SOCK_DGRAM)
+        sock.bind(sock_path)
+    except OSError:
+        return
+    while True:
+        try:
+            data = sock.recv(_FP_BUF)
+            record = _json.loads(data)
+        except (OSError, ValueError):
+            continue
+        kind = record.get("kind", "")
+        remote = record.get("remote_addr", "-")
+
+        if kind == "h2_settings":
+            ln = syslog_line(
+                service_name, node_name, "http2_settings", SEVERITY_INFO,
+                remote_addr=remote,
+                settings=_json.dumps(record.get("settings", {})),
+                frame_order=_json.dumps(record.get("frame_order", [])),
+            )
+            write_syslog_file(ln)
+            if log_target:
+                forward_syslog(ln, log_target)
+
+        elif kind == "h3_settings":
+            ln = syslog_line(
+                service_name, node_name, "http3_settings", SEVERITY_INFO,
+                remote_addr=remote,
+                settings=_json.dumps(record.get("settings", {})),
+                frame_order=_json.dumps(record.get("frame_order", [])),
+            )
+            write_syslog_file(ln)
+            if log_target:
+                forward_syslog(ln, log_target)
+
+        elif kind == "http_request_headers":
+            # Canonical header order from the listener wrapper.
+            headers = record.get("headers_ordered", [])
+            method = record.get("method", "")
+            proto = record.get("proto_tag", "h1")
+            cookie = record.get("cookie", "")
+            accept_lang = record.get("accept_language", "")
+            ja4h = _compute_ja4h(method, proto, headers, cookie, accept_lang)
+            names_only = [
+                (h[0].lower() if isinstance(h, (list, tuple)) else h.lower())
+                for h in headers
+            ]
+            ln = syslog_line(
+                service_name, node_name, "http_request_fingerprint", SEVERITY_INFO,
+                remote_addr=remote,
+                proto=proto,
+                method=method,
+                path=record.get("path", ""),
+                ja4h=ja4h,
+                headers_ordered=_json.dumps(names_only),
+                cookie=cookie,
+                accept_language=accept_lang,
+            )
+            write_syslog_file(ln)
+            if log_target:
+                forward_syslog(ln, log_target)
+
+        elif kind == "access_log":
+            ln = syslog_line(
+                service_name, node_name, "http_access", SEVERITY_INFO,
+                remote_addr=remote,
+                method=record.get("method", ""),
+                path=record.get("path", ""),
+                proto=record.get("proto_tag", "-"),
+                status=str(record.get("status", 0)),
+                bytes=str(record.get("bytes", 0)),
+            )
+            write_syslog_file(ln)
+            if log_target:
+                forward_syslog(ln, log_target)
+
+
+def start_fp_socket_reader(node_name: str, service_name: str, log_target: str) -> None:
+    t = _threading.Thread(
+        target=_fp_socket_reader,
+        args=(node_name, service_name, log_target),
+        daemon=True,
+    )
+    t.start()
