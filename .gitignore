@@ -64,3 +64,9 @@ package-lock.json
 tests/ttp/rule_precision/corpus/*.jsonl
 tests/ttp/rule_precision/corpus/seed_*.jsonl
 threatfox-api.json
+
+# MITRE ATT&CK STIX bundle — 50 MB, fetched at runtime via attack_stix.py
+enterprise-attack-*.json
+
+# pytest failure dump files
+testfail
