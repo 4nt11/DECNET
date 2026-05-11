@@ -11,6 +11,7 @@ from __future__ import annotations
 import json
 import logging
 import os
+import ssl
 from pathlib import Path
 
 from flask import Flask, request, send_from_directory
@@ -33,6 +34,8 @@ NODE_NAME     = os.environ.get("NODE_NAME", "webserver")
 SERVICE_NAME   = "https"
 LOG_TARGET    = os.environ.get("LOG_TARGET", "")
 PORT          = int(os.environ.get("PORT", "8443"))
+TLS_CERT      = os.environ.get("TLS_CERT", "")
+TLS_KEY       = os.environ.get("TLS_KEY", "")
 
 _SERVER_CHOICES = [
     "Apache/2.4.41 (Ubuntu)",
@@ -158,5 +161,9 @@ class _SilentHandler(WSGIRequestHandler):
 if __name__ == "__main__":
     _log("startup", msg=f"HTTPS server starting as {NODE_NAME}")
     start_fp_socket_reader(NODE_NAME, SERVICE_NAME, LOG_TARGET)
-    srv = make_server("127.0.0.1", PORT, app, request_handler=_SilentHandler)
+    ssl_ctx: ssl.SSLContext | None = None
+    if TLS_CERT and TLS_KEY:
+        ssl_ctx = ssl.SSLContext(ssl.PROTOCOL_TLS_SERVER)
+        ssl_ctx.load_cert_chain(TLS_CERT, TLS_KEY)
+    srv = make_server("127.0.0.1", PORT, app, request_handler=_SilentHandler, ssl_context=ssl_ctx)
     srv.serve_forever()
