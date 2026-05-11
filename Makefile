@@ -7,7 +7,7 @@ ARGS       :=
 UNIT_FLAGS  := --timeout=30 --timeout-method=thread
 SEQ_FLAGS   := --override-ini="addopts=-v -x" -n logical --timeout=120 --timeout-method=thread
 FUZZ_FLAGS  := --override-ini="addopts=-v -x" -n logical -m fuzz
-BENCH_FLAGS := --override-ini="addopts=-v" -p no:xdist --benchmark-only
+BENCH_FLAGS := --override-ini="addopts=-v" -p no:xdist --benchmark-only -m bench
 
 # ── Unit suites (xdist, 30s timeout) ─────────────────────────────────────────
 
@@ -85,7 +85,7 @@ test-react:
 
 .PHONY: test-live
 test-live:
-	$(PYTEST) tests/live $(SEQ_FLAGS) $(ARGS)
+	$(PYTEST) tests/live -m live $(SEQ_FLAGS) $(ARGS)
 
 .PHONY: test-api
 test-api:
@@ -93,7 +93,7 @@ test-api:
 
 .PHONY: test-stress
 test-stress:
-	$(PYTEST) tests/stress $(SEQ_FLAGS) $(ARGS)
+	$(PYTEST) tests/stress -m stress $(SEQ_FLAGS) $(ARGS)
 
 .PHONY: test-service
 test-service:
@@ -109,7 +109,7 @@ test-bench:
 
 .PHONY: test-docker
 test-docker:
-	DECNET_LIVE_DOCKER=1 $(PYTEST) tests/docker $(SEQ_FLAGS) $(ARGS)
+	DECNET_LIVE_DOCKER=1 $(PYTEST) tests/docker -m docker $(SEQ_FLAGS) $(ARGS)
 
 # ── Static analysis ───────────────────────────────────────────────────────────
 
