@@ -110,7 +110,7 @@ class TestIngesterIsolation:
                 raise asyncio.CancelledError()
 
         with patch.dict(os.environ, {"DECNET_INGEST_LOG_FILE": "/tmp/nonexistent-decnet-test.log"}):
-            with patch("decnet.web.ingester.asyncio.sleep", side_effect=_controlled_sleep):
+            with patch("decnet.web.ingester._sleep", side_effect=_controlled_sleep):
                 task = asyncio.create_task(log_ingestion_worker(mock_repo))
                 with pytest.raises(asyncio.CancelledError):
                     await task
@@ -153,7 +153,7 @@ class TestIngesterIsolation:
                 raise asyncio.CancelledError()
 
         with patch.dict(os.environ, {"DECNET_INGEST_LOG_FILE": str(tmp_path / "test.log")}):
-            with patch("decnet.web.ingester.asyncio.sleep", side_effect=_controlled_sleep):
+            with patch("decnet.web.ingester._sleep", side_effect=_controlled_sleep):
                 task = asyncio.create_task(log_ingestion_worker(mock_repo))
                 with pytest.raises(asyncio.CancelledError):
                     await task
@@ -345,9 +345,11 @@ class TestApiLifespanIsolation:
                                side_effect=Exception("attacker exploded")):
                         with patch("decnet.sniffer.sniffer_worker",
                                    side_effect=Exception("sniffer exploded")):
-                            # API should still start
-                            async with lifespan(mock_app):
-                                mock_repo.initialize.assert_awaited_once()
+                            with patch("decnet.web.api.tarpit_watcher_worker",
+                                       return_value=asyncio.sleep(0)):
+                                # API should still start
+                                async with lifespan(mock_app):
+                                    mock_repo.initialize.assert_awaited_once()
 
     @pytest.mark.asyncio
     async def test_api_survives_db_init_failure(self):
@@ -359,13 +361,15 @@ class TestApiLifespanIsolation:
         mock_repo.initialize = AsyncMock(side_effect=Exception("DB locked"))
 
         with patch("decnet.web.api.repo", mock_repo):
-            with patch("decnet.web.api.asyncio.sleep", new_callable=AsyncMock):
+            with patch("decnet.web.api._retry_sleep", new_callable=AsyncMock):
                 with patch("decnet.web.api.log_ingestion_worker", return_value=asyncio.sleep(0)):
                     with patch("decnet.web.api.log_collector_worker", return_value=asyncio.sleep(0)):
                         with patch("decnet.web.api.attacker_profile_worker", return_value=asyncio.sleep(0)):
-                            async with lifespan(mock_app):
-                                # DB init failed 5 times but API is running
-                                assert mock_repo.initialize.await_count == 5
+                            with patch("decnet.web.api.tarpit_watcher_worker",
+                                       return_value=asyncio.sleep(0)):
+                                async with lifespan(mock_app):
+                                    # DB init failed 5 times but API is running
+                                    assert mock_repo.initialize.await_count == 5
 
     @pytest.mark.asyncio
     async def test_api_survives_sniffer_import_failure(self):
@@ -376,22 +380,23 @@ class TestApiLifespanIsolation:
         mock_repo = MagicMock()
         mock_repo.initialize = AsyncMock()
 
+        import builtins
+        real_import = builtins.__import__
+
+        def _mock_import(name, *args, **kwargs):
+            if name == "decnet.sniffer":
+                raise ImportError("No module named 'scapy'")
+            return real_import(name, *args, **kwargs)
+
         with patch("decnet.web.api.repo", mock_repo):
             with patch("decnet.web.api.log_ingestion_worker", return_value=asyncio.sleep(0)):
                 with patch("decnet.web.api.log_collector_worker", return_value=asyncio.sleep(0)):
                     with patch("decnet.web.api.attacker_profile_worker", return_value=asyncio.sleep(0)):
-                        # Simulate sniffer import failure
-                        import builtins
-                        real_import = builtins.__import__
-
-                        def _mock_import(name, *args, **kwargs):
-                            if name == "decnet.sniffer":
-                                raise ImportError("No module named 'scapy'")
-                            return real_import(name, *args, **kwargs)
-
-                        with patch("builtins.__import__", side_effect=_mock_import):
-                            async with lifespan(mock_app):
-                                mock_repo.initialize.assert_awaited_once()
+                        with patch("decnet.web.api.tarpit_watcher_worker",
+                                   return_value=asyncio.sleep(0)):
+                            with patch("builtins.__import__", side_effect=_mock_import):
+                                async with lifespan(mock_app):
+                                    mock_repo.initialize.assert_awaited_once()
 
     @pytest.mark.asyncio
     async def test_shutdown_handles_already_dead_tasks(self):
@@ -410,10 +415,12 @@ class TestApiLifespanIsolation:
             with patch("decnet.web.api.log_ingestion_worker", side_effect=_instant_worker):
                 with patch("decnet.web.api.log_collector_worker", side_effect=_instant_worker):
                     with patch("decnet.web.api.attacker_profile_worker", side_effect=_instant_worker):
-                        async with lifespan(mock_app):
-                            # Let tasks finish
-                            await asyncio.sleep(0.05)
-                        # Shutdown should handle already-done tasks gracefully
+                        with patch("decnet.web.api.tarpit_watcher_worker",
+                                   side_effect=_instant_worker):
+                            async with lifespan(mock_app):
+                                # Let tasks finish
+                                await asyncio.sleep(0.05)
+                            # Shutdown should handle already-done tasks gracefully
 
 
 # ─── Cross-service cascade tests ────────────────────────────────────────────
@@ -442,7 +449,7 @@ class TestCascadeIsolation:
                 raise asyncio.CancelledError()
 
         with patch.dict(os.environ, {"DECNET_INGEST_LOG_FILE": str(tmp_path / "cascade.log")}):
-            with patch("decnet.web.ingester.asyncio.sleep", side_effect=_controlled_sleep):
+            with patch("decnet.web.ingester._sleep", side_effect=_controlled_sleep):
                 task = asyncio.create_task(log_ingestion_worker(mock_repo))
                 with pytest.raises(asyncio.CancelledError):
                     await task
