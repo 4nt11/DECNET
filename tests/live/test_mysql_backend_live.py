@@ -107,7 +107,7 @@ async def mysql_test_db_url():
         await admin.dispose()
 
 
-@pytest.fixture
+@pytest_asyncio.fixture(loop_scope="module")
 async def mysql_repo(mysql_test_db_url):
     """Fresh schema per test — truncate between tests to keep them isolated."""
     repo = MySQLRepository(url=mysql_test_db_url)
