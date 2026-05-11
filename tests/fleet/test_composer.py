@@ -203,7 +203,8 @@ def test_all_distros_have_build_base():
 
 def test_all_distro_build_bases_are_apt_compatible():
     for slug, profile in all_distros().items():
-        assert profile.build_base in APT_COMPATIBLE, (
+        tag = profile.build_base.split("@")[0]
+        assert tag in APT_COMPATIBLE, (
             f"Distro '{slug}' build_base '{profile.build_base}' is not apt-compatible. "
             f"Allowed: {APT_COMPATIBLE}"
         )

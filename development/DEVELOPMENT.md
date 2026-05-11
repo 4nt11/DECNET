@@ -141,7 +141,7 @@
 - [x] **CI/CD pipeline** — Automated testing and linting via Gitea Actions.
 - [x] **Strict Typing** — Project-wide enforcement of PEP 484 type hints.
 - [x] **Plugin SDK docs** — Documentation for adding custom services.
-- [ ] **Config generator wizard** — `decnet wizard` for interactive setup.
+- [x] **Config generator wizard** — `decnet wizard` for interactive setup. - Not CLI, but UI in the DeckyDeploy wizard, plus TopologyWizard.
 
 ## API Improvements
 
