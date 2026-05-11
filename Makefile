@@ -5,7 +5,7 @@ ARGS       :=
 # addopts in pyproject.toml already provides -v -q -x -n 4 --dist load.
 # Unit suites inherit that; special suites clear it with --override-ini.
 UNIT_FLAGS  := --timeout=30 --timeout-method=thread
-SEQ_FLAGS   := --override-ini="addopts=-v -x" --timeout=120 --timeout-method=thread
+SEQ_FLAGS   := --override-ini="addopts=-v -x" -n logical --timeout=120 --timeout-method=thread
 FUZZ_FLAGS  := --override-ini="addopts=-v -x" -n logical -m fuzz
 BENCH_FLAGS := --override-ini="addopts=-v" -p no:xdist --benchmark-only
 
@@ -111,11 +111,30 @@ test-bench:
 test-docker:
 	DECNET_LIVE_DOCKER=1 $(PYTEST) tests/docker $(SEQ_FLAGS) $(ARGS)
 
-# ── Composite: all unit suites ────────────────────────────────────────────────
+# ── Static analysis ───────────────────────────────────────────────────────────
+
+.PHONY: test-mypy
+test-mypy:
+	.311/bin/mypy decnet --ignore-missing-imports --no-error-summary
+
+.PHONY: test-bandit
+test-bandit:
+	.311/bin/bandit -r decnet -c pyproject.toml
+
+.PHONY: test-vulture
+test-vulture:
+	.311/bin/vulture decnet --min-confidence 80
+
+.PHONY: test-pip-audit
+test-pip-audit:
+	.311/bin/pip-audit
+
+# ── Composite: all suites ─────────────────────────────────────────────────────
 
 _ALL_SUITES := core web db bus ttp intel analysis infra fleet cli features \
                go react \
-               live api stress service fuzz bench docker
+               live api stress service fuzz bench docker \
+               mypy bandit vulture pip-audit
 
 .PHONY: test-all test
 test-all test:
@@ -170,8 +189,14 @@ help:
 	@echo "  make test-bench     tests/perf"
 	@echo "  make test-docker    tests/docker  (needs DECNET_LIVE_DOCKER=1)"
 	@echo ""
+	@echo "Static analysis:"
+	@echo "  make test-mypy      mypy type check on decnet/"
+	@echo "  make test-bandit    bandit security scan on decnet/"
+	@echo "  make test-vulture   vulture dead code scan (>=80% confidence)"
+	@echo "  make test-pip-audit pip-audit dependency vulnerability scan"
+	@echo ""
 	@echo "Composites:"
-	@echo "  make test-all       ALL suites (unit + go + react + live + api + fuzz + bench + stress + docker)"
+	@echo "  make test-all       ALL suites (unit + go + react + live + api + fuzz + bench + stress + docker + static analysis)"
 	@echo "  make test-all FAIL_FAST=0   same, report all failures instead of stopping"
 	@echo ""
 	@echo "Passthrough: make test-web ARGS='--lf -s'"
