@@ -34,7 +34,7 @@ describe('nextSortState', () => {
 });
 
 const cred = (over: Partial<CredentialEntry> = {}): CredentialEntry => ({
-  id: '1', last_seen: '2026-05-01T00:00:00Z', decky_name: 'd1', service: 'ssh',
+  id: 1, last_seen: '2026-05-01T00:00:00Z', decky_name: 'd1', service: 'ssh',
   attacker_ip: '1.2.3.4', principal: 'root', secret_sha256: 'a',
   secret_kind: 'plaintext', secret_printable: 'p', attempt_count: 5,
   ...over,
@@ -42,7 +42,7 @@ const cred = (over: Partial<CredentialEntry> = {}): CredentialEntry => ({
 
 describe('sortCreds', () => {
   it('returns the input untouched for empty col', () => {
-    const rows = [cred({ id: 'A' }), cred({ id: 'B' })];
+    const rows = [cred({ id: 1 }), cred({ id: 2 })];
     expect(sortCreds(rows, '', 'asc')).toBe(rows);
   });
   it('sorts numbers numerically (asc/desc)', () => {

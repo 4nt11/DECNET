@@ -224,7 +224,7 @@ const AttackerDetail: React.FC = () => {
         const groups: Record<string, any[]> = {};
         filteredFps.forEach((fp) => {
           const p = getPayload(fp);
-          let fpType: string = p.fingerprint_type || 'unknown';
+          let fpType: string = String(p.fingerprint_type || 'unknown');
           if (fpType === 'tls_certificate') {
             fpType = p.target_ip ? 'tls_certificate_active' : 'tls_certificate_passive';
           }

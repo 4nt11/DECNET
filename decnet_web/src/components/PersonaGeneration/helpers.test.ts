@@ -47,7 +47,7 @@ describe('coercePersona', () => {
     const r = coercePersona({
       name: 'a', email: 'a@b.c', role: 'r',
       tone: 'custom', tone_custom: long,
-      mannerisms: Array.from({ length: 20 }, (_, i) => `m${i}`).concat([42, null]),
+      mannerisms: Array.from({ length: 20 }, (_, i) => `m${i}`).concat(['42', ''] as string[]),
     });
     expect('ok' in r).toBe(true);
     if ('ok' in r) {

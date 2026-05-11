@@ -7,9 +7,6 @@ import { useMazeContextMenu } from './useMazeContextMenu';
 import type { Net, MazeNode } from './types';
 import type { UseTopologyEditor } from './useTopologyEditor';
 
-const noop = () => {};
-const noopAsync = async () => {};
-
 const stubEditor = (): UseTopologyEditor => ({
   inFlight: 0,
   addLan: vi.fn(),
@@ -43,7 +40,8 @@ const decky: MazeNode = {
   archetype: 'workstation', services: ['ssh'], status: 'idle', x: 0, y: 0,
 };
 const observed: MazeNode = {
-  kind: 'observed', id: 'obs-1', label: '1.2.3.4', netId: 'lan-www',
+  kind: 'observed', id: 'obs-1', netId: 'lan-www', name: '1.2.3.4',
+  archetype: 'attacker-pool', services: ['*'], status: 'idle',
   x: 0, y: 0,
 };
 
@@ -51,7 +49,10 @@ const baseArgs = () => ({
   nets: [subnet, internet],
   nodes: [decky, observed],
   services: [
-    { slug: 'http', name: 'HTTP', proto: 'tcp', port: 80, icon: 'globe', risk: 'medium' as const },
+    {
+      slug: 'http', name: 'HTTP', proto: 'tcp' as const, port: 80,
+      icon: 'globe', risk: 'med' as const, group: 'Web' as const,
+    },
   ],
   archetypes: [
     { slug: 'workstation', name: 'Workstation', services: ['ssh'], icon: 'monitor' },

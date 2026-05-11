@@ -100,7 +100,7 @@ describe('useSwarmHosts', () => {
       });
     });
     expect(r?.ok).toBe(true);
-    expect(r?.data?.host_uuid).toBe('h-9');
+    expect(r?.ok && r.data?.host_uuid).toBe('h-9');
   });
 
   it('polls /swarm/hosts every 10s', async () => {

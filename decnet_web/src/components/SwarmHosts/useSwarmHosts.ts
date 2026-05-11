@@ -3,11 +3,9 @@ import api from '../../utils/api';
 import { extractErrorDetail } from './helpers';
 import type { BundleRequest, BundleResult, SwarmHost } from './types';
 
-export interface MutationResult<T = void> {
-  ok: boolean;
-  reason?: string;
-  data?: T;
-}
+export type MutationResult<T = void> = T extends void
+  ? { ok: true } | { ok: false; reason: string }
+  : { ok: true; data: T } | { ok: false; reason: string };
 
 export interface UseSwarmHosts {
   hosts: SwarmHost[];
