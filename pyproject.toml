@@ -37,6 +37,7 @@ dependencies = [
     "python-multipart>=0.0.20",
     "httpx>=0.28.1",
     "requests>=2.33.1",
+    "urllib3>=2.7.0",
     "slowapi>=0.1.9",
     "sqlite_vec>=0.1.9",
     "Pillow>=12.2.0",
