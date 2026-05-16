@@ -28,6 +28,7 @@ import os
 import pytest
 
 _QUICK = os.getenv("SCHEMA_QUICK") == "1"
+pytestmark = pytest.mark.xdist_group("schemathesis")
 import schemathesis as st
 from hypothesis import HealthCheck, Verbosity, settings
 

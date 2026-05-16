@@ -12,7 +12,7 @@ FUZZ_FLAGS  := --override-ini="addopts=-v -x" -n logical -m fuzz \
 	--ignore=tests/api/test_schemathesis_swarm.py \
 	--ignore=tests/api/test_schemathesis_ttp.py
 SCHEMA_QUICK ?= 0
-SCHEMA_FLAGS := --override-ini="addopts=-v -x" -n logical -m fuzz --timeout=600 --timeout-method=thread
+SCHEMA_FLAGS := --override-ini="addopts=-v -x" -n 4 -m fuzz --timeout=600 --timeout-method=thread
 BENCH_FLAGS := --override-ini="addopts=-v" -p no:xdist --benchmark-only -m bench
 
 # ── Unit suites (xdist, 30s timeout) ─────────────────────────────────────────
