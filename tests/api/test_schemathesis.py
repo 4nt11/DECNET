@@ -40,6 +40,7 @@ def _free_port() -> int:
 LIVE_PORT = _free_port()
 LIVE_SERVER_URL = f"http://127.0.0.1:{LIVE_PORT}"
 TEST_SECRET = "test-secret-for-automated-fuzzing"
+_QUICK = os.getenv("SCHEMA_QUICK") == "1"
 
 import decnet.web.auth
 decnet.web.auth.SECRET_KEY = TEST_SECRET
@@ -144,7 +145,7 @@ schema = st.openapi.from_url(f"{LIVE_SERVER_URL}/openapi.json")
 @pytest.mark.fuzz
 @st.pytest.parametrize(api=schema)
 @settings(
-    max_examples=3000,
+    max_examples=100 if _QUICK else 3000,
     deadline=None,
     verbosity=Verbosity.debug,
     suppress_health_check=[
@@ -161,7 +162,7 @@ def test_schema_compliance(case):
 @pytest.mark.fuzz
 @st.pytest.parametrize(api=schema)
 @settings(
-    max_examples=500,
+    max_examples=100 if _QUICK else 500,
     deadline=None,
     verbosity=Verbosity.normal,
     suppress_health_check=[

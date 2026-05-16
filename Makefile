@@ -6,7 +6,13 @@ ARGS       :=
 # Unit suites inherit that; special suites clear it with --override-ini.
 UNIT_FLAGS  := --timeout=30 --timeout-method=thread
 SEQ_FLAGS   := --override-ini="addopts=-v -x" -n logical --timeout=120 --timeout-method=thread
-FUZZ_FLAGS  := --override-ini="addopts=-v -x" -n logical -m fuzz
+FUZZ_FLAGS  := --override-ini="addopts=-v -x" -n logical -m fuzz \
+	--ignore=tests/api/test_schemathesis.py \
+	--ignore=tests/api/test_schemathesis_agent.py \
+	--ignore=tests/api/test_schemathesis_swarm.py \
+	--ignore=tests/api/test_schemathesis_ttp.py
+SCHEMA_QUICK ?= 0
+SCHEMA_FLAGS := --override-ini="addopts=-v -x" -n logical -m fuzz --timeout=600 --timeout-method=thread
 BENCH_FLAGS := --override-ini="addopts=-v" -p no:xdist --benchmark-only -m bench
 
 # ── Unit suites (xdist, 30s timeout) ─────────────────────────────────────────
@@ -103,6 +109,15 @@ test-service:
 test-fuzz:
 	$(PYTEST) $(FUZZ_FLAGS) $(ARGS)
 
+.PHONY: test-schema
+test-schema:
+	SCHEMA_QUICK=$(SCHEMA_QUICK) $(PYTEST) \
+		tests/api/test_schemathesis.py \
+		tests/api/test_schemathesis_agent.py \
+		tests/api/test_schemathesis_swarm.py \
+		tests/api/test_schemathesis_ttp.py \
+		$(SCHEMA_FLAGS) $(ARGS)
+
 .PHONY: test-bench
 test-bench:
 	$(PYTEST) tests/perf $(BENCH_FLAGS) $(ARGS)
@@ -133,7 +148,7 @@ test-pip-audit:
 
 _ALL_SUITES := core web db bus ttp intel analysis infra fleet cli features \
                go react \
-               live api stress service fuzz bench docker \
+               live api schema stress service fuzz bench docker \
                mypy bandit vulture pip-audit
 
 .PHONY: test-all test
@@ -185,7 +200,9 @@ help:
 	@echo "  make test-api       tests/api  (schemathesis)"
 	@echo "  make test-stress    tests/stress"
 	@echo "  make test-service   tests/service_testing"
-	@echo "  make test-fuzz      hypothesis fuzz (all normal dirs, -m fuzz)"
+	@echo "  make test-schema              schemathesis contract tests (-m fuzz, xdist logical)"
+	@echo "  make test-schema SCHEMA_QUICK=1   same, capped at 100 examples per test"
+	@echo "  make test-fuzz      hypothesis fuzz (all normal dirs, -m fuzz, skips schemathesis files)"
 	@echo "  make test-bench     tests/perf"
 	@echo "  make test-docker    tests/docker  (needs DECNET_LIVE_DOCKER=1)"
 	@echo ""
@@ -196,7 +213,7 @@ help:
 	@echo "  make test-pip-audit pip-audit dependency vulnerability scan"
 	@echo ""
 	@echo "Composites:"
-	@echo "  make test-all       ALL suites (unit + go + react + live + api + fuzz + bench + stress + docker + static analysis)"
+	@echo "  make test-all       ALL suites (unit + go + react + live + api + schema + fuzz + bench + stress + docker + static analysis)"
 	@echo "  make test-all FAIL_FAST=0   same, report all failures instead of stopping"
 	@echo ""
 	@echo "Passthrough: make test-web ARGS='--lf -s'"

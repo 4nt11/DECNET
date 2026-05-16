@@ -24,7 +24,10 @@ Routes covered (all decorated ``tags=["TTP Tagging"]``):
 """
 from __future__ import annotations
 
+import os
 import pytest
+
+_QUICK = os.getenv("SCHEMA_QUICK") == "1"
 import schemathesis as st
 from hypothesis import HealthCheck, Verbosity, settings
 
@@ -46,7 +49,7 @@ TTP_SCHEMA = st.openapi.from_url(
 @pytest.mark.fuzz
 @TTP_SCHEMA.parametrize()
 @settings(
-    max_examples=400,
+    max_examples=100 if _QUICK else 400,
     deadline=None,
     verbosity=Verbosity.normal,
     suppress_health_check=[
@@ -63,7 +66,7 @@ def test_ttp_schema_compliance(case):
 @pytest.mark.fuzz
 @TTP_SCHEMA.parametrize()
 @settings(
-    max_examples=120,
+    max_examples=100 if _QUICK else 120,
     deadline=None,
     verbosity=Verbosity.normal,
     suppress_health_check=[

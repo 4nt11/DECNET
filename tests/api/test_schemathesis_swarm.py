@@ -17,6 +17,8 @@ os.environ.setdefault("DECNET_JWT_SECRET", "schemathesis-swarm-secret-32chars-mi
 
 import pytest
 import schemathesis as st
+
+_QUICK = os.getenv("SCHEMA_QUICK") == "1"
 from schemathesis.checks import not_a_server_error
 from schemathesis.specs.openapi.checks import (
     status_code_conformance,
@@ -54,7 +56,7 @@ CHECKS = (
 @pytest.mark.fuzz
 @SCHEMA.parametrize()
 @settings(
-    max_examples=200,
+    max_examples=100 if _QUICK else 200,
     deadline=None,
     suppress_health_check=[
         HealthCheck.filter_too_much,

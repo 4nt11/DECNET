@@ -18,9 +18,12 @@ from schemathesis.specs.openapi.checks import (
     response_headers_conformance,
     response_schema_conformance,
 )
+import os
 from hypothesis import settings, HealthCheck
 
 from decnet.agent import app as _agent_app_mod
+
+_QUICK = os.getenv("SCHEMA_QUICK") == "1"
 from decnet.agent import executor as _exec
 from decnet.agent import heartbeat as _heartbeat
 
@@ -87,7 +90,7 @@ CHECKS = (
 @pytest.mark.fuzz
 @SCHEMA.parametrize()
 @settings(
-    max_examples=300,
+    max_examples=100 if _QUICK else 300,
     deadline=None,
     suppress_health_check=[
         HealthCheck.filter_too_much,
