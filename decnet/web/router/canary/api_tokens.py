@@ -211,7 +211,7 @@ async def api_list_tokens(
     state: str | None = Query(default=None),
     kind: str | None = Query(default=None),
     topology_id: str | None = Query(default=None),
-    viewer: dict = Depends(require_viewer),
+    _viewer: dict = Depends(require_viewer),
 ) -> CanaryTokensResponse:
     rows = await repo.list_canary_tokens(
         decky_name=decky_name, state=state, kind=kind,
@@ -234,7 +234,7 @@ async def api_list_tokens(
 )
 async def api_get_token(
     uuid: str,
-    viewer: dict = Depends(require_viewer),
+    _viewer: dict = Depends(require_viewer),
 ) -> CanaryTokenResponse:
     row = await repo.get_canary_token(uuid)
     if row is None:
@@ -320,7 +320,7 @@ async def api_list_triggers(
     uuid: str,
     limit: int = Query(default=100, ge=1, le=500),
     offset: int = Query(default=0, ge=0),
-    viewer: dict = Depends(require_viewer),
+    _viewer: dict = Depends(require_viewer),
 ) -> CanaryTriggersResponse:
     row = await repo.get_canary_token(uuid)
     if row is None:

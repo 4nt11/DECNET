@@ -639,7 +639,7 @@ class IMAPProtocol(asyncio.Protocol):
             if sub_cmd == "FETCH":
                 self._cmd_fetch(tag, sub_args, use_uid=True)
             elif sub_cmd == "SEARCH":
-                self._cmd_search(tag, uid_mode=True)
+                self._cmd_search(tag, _uid_mode=True)
             else:
                 self._w(f"{tag} BAD Unknown UID sub-command\r\n")
 
@@ -734,7 +734,7 @@ class IMAPProtocol(asyncio.Protocol):
                 self._transport.write(_build_fetch_response(seq, emails[seq - 1], items))
         self._w(f"{tag} OK FETCH completed\r\n")
 
-    def _cmd_search(self, tag: str, uid_mode: bool = False) -> None:
+    def _cmd_search(self, tag: str, _uid_mode: bool = False) -> None:
         if self._state != "SELECTED":
             self._w(f"{tag} BAD Not in selected state\r\n")
             return

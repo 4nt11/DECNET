@@ -168,7 +168,7 @@ async def api_enable_tarpit(
 )
 async def api_get_tarpit(
     decky_name: str = Path(..., pattern=_DECKY_RE),
-    viewer: dict = Depends(require_viewer),
+    _viewer: dict = Depends(require_viewer),
 ) -> TarpitStatusResponse:
     rule = await repo.get_tarpit_rule(decky_name)
     if rule is None:

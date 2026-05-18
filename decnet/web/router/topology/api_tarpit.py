@@ -123,7 +123,7 @@ async def api_enable_tarpit(
 async def api_get_tarpit(
     topology_id: str = Path(..., pattern=_TOPO_RE),
     decky_name: str = Path(..., pattern=_DECKY_RE),
-    viewer: dict = Depends(require_viewer),
+    _viewer: dict = Depends(require_viewer),
 ) -> TarpitStatusResponse:
     db_key = _db_key(topology_id, decky_name)
     rule = await repo.get_tarpit_rule(db_key)

@@ -292,7 +292,7 @@ class FilesystemRuleStore(RuleStore):
 
     async def __aexit__(
         self,
-        exc_type: Type[BaseException] | None,
+        _exc_type: Type[BaseException] | None,
         exc: BaseException | None,
         tb: TracebackType | None,
     ) -> None:
