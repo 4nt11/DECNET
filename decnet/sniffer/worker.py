@@ -89,7 +89,7 @@ def _sniff_loop(
     log_path: Path,
     json_path: Path,
     stop_event: threading.Event,
-    bpf_filter: str = "tcp",
+    bpf_filter: str = "tcp or ip6",
     publish_fn: Callable[[str, str, dict[str, Any]], None] | None = None,
     engine: "SnifferEngine | None" = None,
 ) -> None:

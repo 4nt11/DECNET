@@ -71,7 +71,35 @@ _BUS_TRAFFIC_EVENTS: frozenset[str] = frozenset({
     "http_request_fingerprint",
     "http2_settings",
     "http3_settings",
+    "ipv6_link_local_leak",
 })
+
+
+def _ipv6_iid_classify(addr: str) -> tuple[str, str]:
+    """Return (iid_kind, mac_oui) for a link-local IPv6 address.
+
+    iid_kind: "eui64" | "stable_privacy" | "temporary" | "unknown"
+    mac_oui:  "aa:bb:cc" (first 3 octets, lowercase) or "" when not derivable.
+
+    EUI-64 IIDs embed the MAC: bytes 11-12 of the 128-bit address are 0xff 0xfe,
+    and bit 6 of byte 8 (the universal/local bit) is flipped.  All other IIDs
+    from RFC 7217 (stable-privacy) or RFC 4941 (temporary) have no embedded MAC.
+    """
+    try:
+        import ipaddress
+        packed = ipaddress.ip_address(addr).packed  # 16 bytes
+    except Exception:
+        return "unknown", ""
+
+    iid = packed[8:]  # 8-byte Interface Identifier
+    if iid[3] == 0xff and iid[4] == 0xfe:
+        # EUI-64: recover 3-byte OUI from bytes 0-2, flip U/L bit (bit 1 of byte 0)
+        oui_bytes = bytearray([iid[0] ^ 0x02, iid[1], iid[2]])
+        oui = ":".join(f"{b:02x}" for b in oui_bytes)
+        return "eui64", oui
+    # Stable-privacy (RFC 7217) and temporary (RFC 4941) are not distinguishable
+    # from the address alone; classify as stable_privacy by default.
+    return "stable_privacy", ""
 
 
 def _parse_ssh_banner(data: bytes) -> str | None:
@@ -1275,8 +1303,71 @@ class SnifferEngine:
             else:
                 self._flows.pop(key, None)
 
+    def _on_ipv6_packet(self, pkt: Any) -> None:
+        """Handle an IPv6 packet and emit ipv6_link_local_leak if fe80::/10 src."""
+        try:
+            from scapy.layers.inet6 import IPv6
+        except ImportError:
+            return
+
+        if not pkt.haslayer(IPv6):
+            return
+
+        ip6 = pkt[IPv6]
+        src: str = ip6.src
+        dst: str = ip6.dst
+
+        # Only care about link-local sources (fe80::/10).
+        if not src.lower().startswith("fe80:"):
+            return
+
+        # Correlate to a known attacker: check if the packet destination
+        # is a known decky IP (attacker→decky direction).
+        attacker_v4 = ""
+        node_name = self._ip_to_decky.get(dst)
+        if node_name is None:
+            # Also accept reverse: decky→attacker (e.g. NDP response to our NS)
+            node_name = self._ip_to_decky.get(src)
+            if node_name is None:
+                return
+        else:
+            # dst is a decky — the attacker is the src (link-local)
+            # Try to find the attacker's known v4 address from ip_to_decky reverse.
+            # We don't have an authoritative v4 here; leave it empty and let the
+            # lifter correlate by decky_name + timing.
+            attacker_v4 = ""
+
+        iid_kind, mac_oui = _ipv6_iid_classify(src)
+        # Scapy packets from sniff() carry the iface in pkt.sniffed_on when
+        # iface= was passed to sniff(); getattr handles absent attribute safely.
+        iface = getattr(pkt, "sniffed_on", None) or ""
+
+        from datetime import datetime, timezone
+        observed_at = datetime.now(timezone.utc).isoformat()
+
+        self._log(
+            node_name,
+            "ipv6_link_local_leak",
+            src_ip=src,
+            dst_ip=dst,
+            iid_kind=iid_kind,
+            mac_oui=mac_oui,
+            on_iface=iface,
+            attacker_v4=attacker_v4,
+            observed_at=observed_at,
+        )
+
     def on_packet(self, pkt: Any) -> None:
         """Process a single scapy packet. Called from the sniff thread."""
+        try:
+            from scapy.layers.inet6 import IPv6
+        except ImportError:
+            pass
+        else:
+            if pkt.haslayer(IPv6):
+                self._on_ipv6_packet(pkt)
+                return
+
         try:
             from scapy.layers.inet import IP, TCP
         except ImportError:
