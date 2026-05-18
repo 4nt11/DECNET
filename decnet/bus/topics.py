@@ -114,9 +114,18 @@ DECKY_SERVICE_CONFIG_CHANGED = "service_config_changed"
 # the wildcard ``attacker.>``.
 ATTACKER_OBSERVED = "observed"
 ATTACKER_SCORED = "scored"
-# Published once per successful active probe result (JARM/HASSH/TCPfp).
+# Published once per successful active probe result (JARM/HASSH/TCPfp/ipv6_leak).
 # Distinct from ``observed`` which is the correlator's first-sight signal —
 # a fingerprint is additional evidence about an already-observed attacker.
+# Known payload ``kind`` discriminators carried in this topic:
+#   "jarm"         — JARM TLS server hash (prober)
+#   "hassh"        — HASSHServer SSH key-exchange hash (prober)
+#   "tcpfp"        — TCP/IP stack fingerprint hash (prober)
+#   "tls_cert"     — leaf TLS certificate SHA-256 (prober)
+#   "ipv6_leak"    — fe80:: link-local address observed via passive sniffer
+#                    or active ICMPv6 solicitation (prober + sniffer);
+#                    payload: {attacker_ip, addr, iid_kind, mac_oui, vector,
+#                              on_iface, observed_at}
 ATTACKER_FINGERPRINTED = "fingerprinted"
 # Published when the prober observes a NEW hash for an
 # (attacker_ip, port, probe_type) triple it has seen before — i.e. the
