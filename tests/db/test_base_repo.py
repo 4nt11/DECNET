@@ -136,6 +136,8 @@ class DummyRepo(BaseRepository):
         await super().list_tags_by_scope_and_technique(**kw); return []
     async def list_distinct_techniques(self):
         await super().list_distinct_techniques(); return []
+    async def bump_attacker_ipv6_leak(self, attacker_uuid, identity_uuid, evidence):
+        await super().bump_attacker_ipv6_leak(attacker_uuid, identity_uuid, evidence)
     async def list_ttp_tags_by_attacker(self, uuid, limit=2000):
         return []
     async def list_attacker_commands_deduped(self, uuid):
@@ -289,6 +291,8 @@ async def test_base_repo_coverage():
         )
     with pytest.raises(NotImplementedError):
         await dr.list_distinct_techniques()
+    with pytest.raises(NotImplementedError):
+        await dr.bump_attacker_ipv6_leak("uuid-1", None, {})
     with pytest.raises(NotImplementedError):
         from decnet.web.db.repository import BaseRepository
         await BaseRepository.list_ttp_tags_by_attacker(dr, "a")

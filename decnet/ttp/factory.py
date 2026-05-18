@@ -165,6 +165,7 @@ def get_tagger() -> Tagger:
         from decnet.ttp.impl.http_fingerprint_lifter import HttpFingerprintLifter
         from decnet.ttp.impl.identity_lifter import IdentityLifter
         from decnet.ttp.impl.intel_lifter import IntelLifter
+        from decnet.ttp.impl.ipv6_leak_lifter import Ipv6LeakLifter
         from decnet.ttp.impl.rule_engine import RuleEngineTagger
         from decnet.ttp.store.factory import get_rule_store
         store = get_rule_store()
@@ -182,6 +183,7 @@ def get_tagger() -> Tagger:
             IdentityLifter(store),
             CredentialLifter(store),
             HttpFingerprintLifter(store),
+            Ipv6LeakLifter(store),
         ])
     raise ValueError(
         f"Unknown tagger: {name!r}. Known: {_KNOWN}"

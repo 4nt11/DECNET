@@ -1550,6 +1550,23 @@ class BaseRepository(ABC):
         raise NotImplementedError
 
     @abstractmethod
+    async def bump_attacker_ipv6_leak(
+        self,
+        attacker_uuid: str,
+        identity_uuid: Optional[str],
+        evidence: dict[str, Any],
+    ) -> None:
+        """Increment ``Attacker.ipv6_leak_count``, set ``last_ipv6_*`` denorm
+        fields, and append-with-dedup to ``AttackerIdentity.ipv6_link_local_iids``.
+
+        *evidence* is an ``Ipv6LinkLocalLeakEvidence``-shaped dict carrying
+        ``addr``, ``iid_kind``, ``mac_oui``, and ``observed_at``.  Missing
+        keys default to empty string.  The method is idempotent for the
+        count but deduplicates IID entries by ``addr``.
+        """
+        raise NotImplementedError
+
+    @abstractmethod
     async def list_ttp_tags_by_attacker(
         self, uuid: str, limit: int = 2000,
     ) -> list[dict[str, Any]]:

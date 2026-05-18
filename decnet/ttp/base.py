@@ -41,6 +41,7 @@ KNOWN_SOURCE_KINDS: Final[frozenset[str]] = frozenset({
     "session",
     "http_request",
     "http_fingerprint",
+    "ipv6_leak",
 })
 
 

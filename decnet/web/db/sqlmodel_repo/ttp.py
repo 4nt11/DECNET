@@ -14,8 +14,8 @@ from __future__ import annotations
 
 import json
 from collections.abc import AsyncIterator
-from datetime import datetime
-from typing import Any
+from datetime import datetime, timezone
+from typing import Any, Optional
 
 from sqlalchemy import func, select
 from sqlmodel import col
@@ -452,6 +452,59 @@ class TTPMixin(_MixinBase):
             res = await session.execute(stmt)
             for row in res.scalars().all():
                 yield row
+
+    async def bump_attacker_ipv6_leak(
+        self,
+        attacker_uuid: str,
+        identity_uuid: Optional[str],
+        evidence: dict[str, Any],
+    ) -> None:
+        """Increment ``Attacker.ipv6_leak_count`` + set last_ipv6_* denorm fields.
+
+        Also appends-with-dedup to ``AttackerIdentity.ipv6_link_local_iids``
+        (JSON text column, keyed by ``addr``).  Both updates run in a single
+        session; missing rows are silently skipped.
+        """
+        now = datetime.now(timezone.utc)
+        addr = evidence.get("addr", "")
+        async with self._session() as session:
+            res = await session.execute(
+                select(Attacker).where(Attacker.uuid == attacker_uuid)
+            )
+            attacker = res.scalar_one_or_none()
+            if attacker is not None:
+                attacker.ipv6_leak_count = (attacker.ipv6_leak_count or 0) + 1
+                attacker.last_ipv6_leak_at = now
+                attacker.last_ipv6_link_local = addr or None
+                attacker.last_ipv6_iid_kind = evidence.get("iid_kind") or None
+                attacker.last_ipv6_mac_oui = evidence.get("mac_oui") or None
+                session.add(attacker)
+
+            if identity_uuid:
+                id_res = await session.execute(
+                    select(AttackerIdentity).where(
+                        AttackerIdentity.uuid == identity_uuid
+                    )
+                )
+                identity = id_res.scalar_one_or_none()
+                if identity is not None and addr:
+                    try:
+                        iids: list[dict[str, Any]] = json.loads(
+                            identity.ipv6_link_local_iids or "[]"
+                        )
+                    except (json.JSONDecodeError, TypeError):
+                        iids = []
+                    if not any(e.get("iid") == addr for e in iids):
+                        iids.append({
+                            "iid": addr,
+                            "oui": evidence.get("mac_oui", ""),
+                            "kind": evidence.get("iid_kind", "unknown"),
+                            "first_seen": now.isoformat(),
+                        })
+                        identity.ipv6_link_local_iids = json.dumps(iids)
+                        session.add(identity)
+
+            await session.commit()
 
     async def list_distinct_techniques(self) -> list[TechniqueRollupRow]:
         """Fleet-wide distinct-technique rollup with counts +

@@ -60,6 +60,10 @@ _TOPICS: tuple[str, ...] = (
     _topics.attacker(_topics.ATTACKER_SESSION_ENDED),
     _topics.attacker(_topics.ATTACKER_OBSERVED),
     _topics.attacker(_topics.ATTACKER_INTEL_ENRICHED),
+    # attacker.fingerprinted carries JARM/HASSH/tcpfp/ipv6_leak results from
+    # the prober and sniffer. Event.type discriminates the kind; lifters that
+    # don't recognise the source_kind derived from Event.type are no-ops.
+    _topics.attacker(_topics.ATTACKER_FINGERPRINTED),
     _topics.identity(_topics.IDENTITY_FORMED),
     _topics.identity(_topics.IDENTITY_MERGED),
     _topics.credential(_topics.CREDENTIAL_REUSE_DETECTED),
@@ -113,7 +117,9 @@ def _span(name: str, **attrs: Any) -> Iterator[Any]:
         yield span
 
 
-def _build_events(topic: str, payload: dict[str, Any]) -> list[TaggerEvent]:
+def _build_events(
+    topic: str, payload: dict[str, Any], event_type: str = "",
+) -> list[TaggerEvent]:
     """Translate one bus payload into one OR MORE :class:`TaggerEvent`s.
 
     A single ``attacker.session.ended`` event carries a *bag* of commands
@@ -134,8 +140,12 @@ def _build_events(topic: str, payload: dict[str, Any]) -> list[TaggerEvent]:
     * ``commands: list[{"command_text": str, "id": str?, ...}]`` — dicts
       with at least a ``command_text`` field; any ``id`` / ``uuid`` /
       ``command_id`` becomes the ``source_id`` for idempotency.
+
+    *event_type* is forwarded from ``Event.type``; used by multiplex
+    topics (``attacker.fingerprinted``) where the kind discriminator lives
+    in the envelope rather than the topic path.
     """
-    base = _build_event(topic, payload)
+    base = _build_event(topic, payload, event_type=event_type)
     if base is None:
         return []
     out = [base]
@@ -183,7 +193,9 @@ def _build_command_event(
     )
 
 
-def _build_event(topic: str, payload: dict[str, Any]) -> TaggerEvent | None:
+def _build_event(
+    topic: str, payload: dict[str, Any], event_type: str = "",
+) -> TaggerEvent | None:
     """Translate one bus payload into a :class:`TaggerEvent`.
 
     Returns ``None`` if the topic isn't one we know how to dispatch
@@ -197,10 +209,18 @@ def _build_event(topic: str, payload: dict[str, Any]) -> TaggerEvent | None:
     same :func:`compute_tag_uuid` and the ``INSERT OR IGNORE`` write
     becomes a no-op the second time around. The order below is the
     same priority list the lifters use internally.
+
+    *event_type* is used as ``source_kind`` when ``_source_kind_for``
+    has no static mapping for *topic* — this covers multiplex topics
+    such as ``attacker.fingerprinted`` where the kind discriminator is
+    carried in ``Event.type`` rather than the topic path itself.
     """
     source_kind = _source_kind_for(topic)
     if source_kind is None:
-        return None
+        if event_type:
+            source_kind = event_type
+        else:
+            return None
     source_id = (
         payload.get("source_id")
         or payload.get("session_id")
@@ -466,7 +486,7 @@ async def _process_event(
         # requires at least one anchor, so emitting any tag would
         # raise. Drop the event with one log line per cold IP.
         return
-    tagger_events = _build_events(topic, payload)
+    tagger_events = _build_events(topic, payload, event_type=event.type)
     if not tagger_events:
         return
     # Intel catch-up: on session.ended, read the persisted intel row (if
@@ -514,8 +534,39 @@ async def _process_event(
         # Idempotent re-eval — the loop-prevention invariant
         # forbids publishing here.
         return
+    await _bump_ipv6_leak_denorm(repo, all_tags)
     if bus is not None:
         await _publish_tagged(bus, all_tags)
+
+
+async def _bump_ipv6_leak_denorm(
+    repo: BaseRepository, tags: list[TTPTag],
+) -> None:
+    """Update Attacker / AttackerIdentity denorm columns for ipv6_leak tags.
+
+    Called once per successful insert_tags batch. Takes the first tag
+    per attacker_uuid (all tags in a batch share the same attacker context).
+    Silently skips if the repo method is unavailable (pre-migration DBs).
+    """
+    ipv6_tags = [t for t in tags if t.source_kind == "ipv6_leak"]
+    if not ipv6_tags:
+        return
+    seen: set[str] = set()
+    for tag in ipv6_tags:
+        if tag.attacker_uuid is None or tag.attacker_uuid in seen:
+            continue
+        seen.add(tag.attacker_uuid)
+        try:
+            await repo.bump_attacker_ipv6_leak(
+                attacker_uuid=tag.attacker_uuid,
+                identity_uuid=tag.identity_uuid,
+                evidence=tag.evidence or {},
+            )
+        except Exception:  # noqa: BLE001
+            log.warning(
+                "ttp worker: bump_attacker_ipv6_leak failed for "
+                "attacker_uuid=%r", tag.attacker_uuid,
+            )
 
 
 async def _publish_tagged(bus: BaseBus, tags: list[TTPTag]) -> None:
