@@ -12,10 +12,10 @@ from unittest.mock import MagicMock, patch
 import pytest
 
 from decnet.prober.jarm import JARM_EMPTY_HASH
+from decnet.prober.probes.hassh import HasshProbe
+from decnet.prober.probes.jarm import JarmProbe
+from decnet.prober.probes.tcpfp import TcpfpProbe
 from decnet.prober.worker import (
-    DEFAULT_PROBE_PORTS,
-    DEFAULT_SSH_PORTS,
-    DEFAULT_TCPFP_PORTS,
     _discover_attackers,
     _probe_cycle,
     _write_event,
@@ -109,13 +109,18 @@ class TestDiscoverAttackers:
 
 class TestProbeCycleJARM:
 
+    @patch("decnet.prober.worker._ipv6_leak_phase")
     @patch("decnet.prober.worker.fetch_leaf_cert", return_value=None)
-    @patch("decnet.prober.worker.tcp_fingerprint")
-    @patch("decnet.prober.worker.hassh_server")
-    @patch("decnet.prober.worker.jarm_hash")
+    @patch("decnet.prober.probes.tcpfp.tcp_fingerprint")
+    @patch("decnet.prober.probes.hassh.hassh_server")
+    @patch("decnet.prober.probes.jarm.jarm_hash")
     def test_probes_new_ips(self, mock_jarm: MagicMock, mock_hassh: MagicMock,
                             mock_tcpfp: MagicMock, mock_cert: MagicMock,
-                            tmp_path: Path):
+                            mock_ipv6: MagicMock,
+                            tmp_path: Path, monkeypatch: pytest.MonkeyPatch):
+        monkeypatch.setattr(JarmProbe, "default_ports", [443, 8443])
+        monkeypatch.setattr(HasshProbe, "default_ports", [])
+        monkeypatch.setattr(TcpfpProbe, "default_ports", [])
         mock_jarm.return_value = "c0c" * 10 + "a" * 32  # fake 62-char hash
         mock_hassh.return_value = None
         mock_tcpfp.return_value = None
@@ -125,19 +130,24 @@ class TestProbeCycleJARM:
         targets = {"10.0.0.1"}
         probed: dict[str, dict[str, set[int]]] = {}
 
-        _probe_cycle(targets, probed, [443, 8443], [], [], log_path, json_path, timeout=1.0)
+        _probe_cycle(targets, probed, log_path, json_path, timeout=1.0)
 
         assert mock_jarm.call_count == 2  # two ports
         assert 443 in probed["10.0.0.1"]["jarm"]
         assert 8443 in probed["10.0.0.1"]["jarm"]
 
+    @patch("decnet.prober.worker._ipv6_leak_phase")
     @patch("decnet.prober.worker.fetch_leaf_cert", return_value=None)
-    @patch("decnet.prober.worker.tcp_fingerprint")
-    @patch("decnet.prober.worker.hassh_server")
-    @patch("decnet.prober.worker.jarm_hash")
+    @patch("decnet.prober.probes.tcpfp.tcp_fingerprint")
+    @patch("decnet.prober.probes.hassh.hassh_server")
+    @patch("decnet.prober.probes.jarm.jarm_hash")
     def test_skips_already_probed_ports(self, mock_jarm: MagicMock, mock_hassh: MagicMock,
                                         mock_tcpfp: MagicMock, mock_cert: MagicMock,
-                                        tmp_path: Path):
+                                        mock_ipv6: MagicMock,
+                                        tmp_path: Path, monkeypatch: pytest.MonkeyPatch):
+        monkeypatch.setattr(JarmProbe, "default_ports", [443, 8443])
+        monkeypatch.setattr(HasshProbe, "default_ports", [])
+        monkeypatch.setattr(TcpfpProbe, "default_ports", [])
         mock_jarm.return_value = "c0c" * 10 + "a" * 32
         mock_hassh.return_value = None
         mock_tcpfp.return_value = None
@@ -147,17 +157,22 @@ class TestProbeCycleJARM:
         targets = {"10.0.0.1"}
         probed: dict[str, dict[str, set[int]]] = {"10.0.0.1": {"jarm": {443}}}
 
-        _probe_cycle(targets, probed, [443, 8443], [], [], log_path, json_path, timeout=1.0)
+        _probe_cycle(targets, probed, log_path, json_path, timeout=1.0)
 
         # Should only probe 8443 (443 already done)
         assert mock_jarm.call_count == 1
         mock_jarm.assert_called_once_with("10.0.0.1", 8443, timeout=1.0)
 
-    @patch("decnet.prober.worker.tcp_fingerprint")
-    @patch("decnet.prober.worker.hassh_server")
-    @patch("decnet.prober.worker.jarm_hash")
+    @patch("decnet.prober.worker._ipv6_leak_phase")
+    @patch("decnet.prober.probes.tcpfp.tcp_fingerprint")
+    @patch("decnet.prober.probes.hassh.hassh_server")
+    @patch("decnet.prober.probes.jarm.jarm_hash")
     def test_empty_hash_not_logged(self, mock_jarm: MagicMock, mock_hassh: MagicMock,
-                                    mock_tcpfp: MagicMock, tmp_path: Path):
+                                    mock_tcpfp: MagicMock, mock_ipv6: MagicMock,
+                                    tmp_path: Path, monkeypatch: pytest.MonkeyPatch):
+        monkeypatch.setattr(JarmProbe, "default_ports", [443])
+        monkeypatch.setattr(HasshProbe, "default_ports", [])
+        monkeypatch.setattr(TcpfpProbe, "default_ports", [])
         mock_jarm.return_value = JARM_EMPTY_HASH
         mock_hassh.return_value = None
         mock_tcpfp.return_value = None
@@ -167,18 +182,23 @@ class TestProbeCycleJARM:
         targets = {"10.0.0.1"}
         probed: dict[str, dict[str, set[int]]] = {}
 
-        _probe_cycle(targets, probed, [443], [], [], log_path, json_path, timeout=1.0)
+        _probe_cycle(targets, probed, log_path, json_path, timeout=1.0)
 
         assert 443 in probed["10.0.0.1"]["jarm"]
         if json_path.exists():
             content = json_path.read_text()
             assert "jarm_fingerprint" not in content
 
-    @patch("decnet.prober.worker.tcp_fingerprint")
-    @patch("decnet.prober.worker.hassh_server")
-    @patch("decnet.prober.worker.jarm_hash")
+    @patch("decnet.prober.worker._ipv6_leak_phase")
+    @patch("decnet.prober.probes.tcpfp.tcp_fingerprint")
+    @patch("decnet.prober.probes.hassh.hassh_server")
+    @patch("decnet.prober.probes.jarm.jarm_hash")
     def test_exception_marks_port_probed(self, mock_jarm: MagicMock, mock_hassh: MagicMock,
-                                          mock_tcpfp: MagicMock, tmp_path: Path):
+                                          mock_tcpfp: MagicMock, mock_ipv6: MagicMock,
+                                          tmp_path: Path, monkeypatch: pytest.MonkeyPatch):
+        monkeypatch.setattr(JarmProbe, "default_ports", [443])
+        monkeypatch.setattr(HasshProbe, "default_ports", [])
+        monkeypatch.setattr(TcpfpProbe, "default_ports", [])
         mock_jarm.side_effect = OSError("Connection refused")
         mock_hassh.return_value = None
         mock_tcpfp.return_value = None
@@ -188,15 +208,20 @@ class TestProbeCycleJARM:
         targets = {"10.0.0.1"}
         probed: dict[str, dict[str, set[int]]] = {}
 
-        _probe_cycle(targets, probed, [443], [], [], log_path, json_path, timeout=1.0)
+        _probe_cycle(targets, probed, log_path, json_path, timeout=1.0)
 
         assert 443 in probed["10.0.0.1"]["jarm"]
 
-    @patch("decnet.prober.worker.tcp_fingerprint")
-    @patch("decnet.prober.worker.hassh_server")
-    @patch("decnet.prober.worker.jarm_hash")
+    @patch("decnet.prober.worker._ipv6_leak_phase")
+    @patch("decnet.prober.probes.tcpfp.tcp_fingerprint")
+    @patch("decnet.prober.probes.hassh.hassh_server")
+    @patch("decnet.prober.probes.jarm.jarm_hash")
     def test_skips_ip_with_all_ports_done(self, mock_jarm: MagicMock, mock_hassh: MagicMock,
-                                           mock_tcpfp: MagicMock, tmp_path: Path):
+                                           mock_tcpfp: MagicMock, mock_ipv6: MagicMock,
+                                           tmp_path: Path, monkeypatch: pytest.MonkeyPatch):
+        monkeypatch.setattr(JarmProbe, "default_ports", [443, 8443])
+        monkeypatch.setattr(HasshProbe, "default_ports", [])
+        monkeypatch.setattr(TcpfpProbe, "default_ports", [])
         log_path = tmp_path / "decnet.log"
         json_path = tmp_path / "decnet.json"
 
@@ -205,7 +230,7 @@ class TestProbeCycleJARM:
             "10.0.0.1": {"jarm": {443, 8443}, "hassh": set(), "tcpfp": set()},
         }
 
-        _probe_cycle(targets, probed, [443, 8443], [], [], log_path, json_path, timeout=1.0)
+        _probe_cycle(targets, probed, log_path, json_path, timeout=1.0)
 
         assert mock_jarm.call_count == 0
 
@@ -214,11 +239,16 @@ class TestProbeCycleJARM:
 
 class TestProbeCycleHASSH:
 
-    @patch("decnet.prober.worker.tcp_fingerprint")
-    @patch("decnet.prober.worker.hassh_server")
-    @patch("decnet.prober.worker.jarm_hash")
+    @patch("decnet.prober.worker._ipv6_leak_phase")
+    @patch("decnet.prober.probes.tcpfp.tcp_fingerprint")
+    @patch("decnet.prober.probes.hassh.hassh_server")
+    @patch("decnet.prober.probes.jarm.jarm_hash")
     def test_probes_ssh_ports(self, mock_jarm: MagicMock, mock_hassh: MagicMock,
-                               mock_tcpfp: MagicMock, tmp_path: Path):
+                               mock_tcpfp: MagicMock, mock_ipv6: MagicMock,
+                               tmp_path: Path, monkeypatch: pytest.MonkeyPatch):
+        monkeypatch.setattr(JarmProbe, "default_ports", [])
+        monkeypatch.setattr(HasshProbe, "default_ports", [22, 2222])
+        monkeypatch.setattr(TcpfpProbe, "default_ports", [])
         mock_jarm.return_value = JARM_EMPTY_HASH
         mock_hassh.return_value = {
             "hassh_server": "a" * 32,
@@ -235,17 +265,22 @@ class TestProbeCycleHASSH:
         targets = {"10.0.0.1"}
         probed: dict[str, dict[str, set[int]]] = {}
 
-        _probe_cycle(targets, probed, [], [22, 2222], [], log_path, json_path, timeout=1.0)
+        _probe_cycle(targets, probed, log_path, json_path, timeout=1.0)
 
         assert mock_hassh.call_count == 2
         assert 22 in probed["10.0.0.1"]["hassh"]
         assert 2222 in probed["10.0.0.1"]["hassh"]
 
-    @patch("decnet.prober.worker.tcp_fingerprint")
-    @patch("decnet.prober.worker.hassh_server")
-    @patch("decnet.prober.worker.jarm_hash")
+    @patch("decnet.prober.worker._ipv6_leak_phase")
+    @patch("decnet.prober.probes.tcpfp.tcp_fingerprint")
+    @patch("decnet.prober.probes.hassh.hassh_server")
+    @patch("decnet.prober.probes.jarm.jarm_hash")
     def test_hassh_writes_event(self, mock_jarm: MagicMock, mock_hassh: MagicMock,
-                                 mock_tcpfp: MagicMock, tmp_path: Path):
+                                 mock_tcpfp: MagicMock, mock_ipv6: MagicMock,
+                                 tmp_path: Path, monkeypatch: pytest.MonkeyPatch):
+        monkeypatch.setattr(JarmProbe, "default_ports", [])
+        monkeypatch.setattr(HasshProbe, "default_ports", [22])
+        monkeypatch.setattr(TcpfpProbe, "default_ports", [])
         mock_jarm.return_value = JARM_EMPTY_HASH
         mock_hassh.return_value = {
             "hassh_server": "b" * 32,
@@ -262,7 +297,7 @@ class TestProbeCycleHASSH:
         targets = {"10.0.0.1"}
         probed: dict[str, dict[str, set[int]]] = {}
 
-        _probe_cycle(targets, probed, [], [22], [], log_path, json_path, timeout=1.0)
+        _probe_cycle(targets, probed, log_path, json_path, timeout=1.0)
 
         assert json_path.exists()
         content = json_path.read_text()
@@ -271,11 +306,16 @@ class TestProbeCycleHASSH:
         assert record["fields"]["hassh_server_hash"] == "b" * 32
         assert record["fields"]["ssh_banner"] == "SSH-2.0-Paramiko_3.0"
 
-    @patch("decnet.prober.worker.tcp_fingerprint")
-    @patch("decnet.prober.worker.hassh_server")
-    @patch("decnet.prober.worker.jarm_hash")
+    @patch("decnet.prober.worker._ipv6_leak_phase")
+    @patch("decnet.prober.probes.tcpfp.tcp_fingerprint")
+    @patch("decnet.prober.probes.hassh.hassh_server")
+    @patch("decnet.prober.probes.jarm.jarm_hash")
     def test_hassh_none_not_logged(self, mock_jarm: MagicMock, mock_hassh: MagicMock,
-                                    mock_tcpfp: MagicMock, tmp_path: Path):
+                                    mock_tcpfp: MagicMock, mock_ipv6: MagicMock,
+                                    tmp_path: Path, monkeypatch: pytest.MonkeyPatch):
+        monkeypatch.setattr(JarmProbe, "default_ports", [])
+        monkeypatch.setattr(HasshProbe, "default_ports", [22])
+        monkeypatch.setattr(TcpfpProbe, "default_ports", [])
         mock_jarm.return_value = JARM_EMPTY_HASH
         mock_hassh.return_value = None  # No SSH server
         mock_tcpfp.return_value = None
@@ -285,18 +325,23 @@ class TestProbeCycleHASSH:
         targets = {"10.0.0.1"}
         probed: dict[str, dict[str, set[int]]] = {}
 
-        _probe_cycle(targets, probed, [], [22], [], log_path, json_path, timeout=1.0)
+        _probe_cycle(targets, probed, log_path, json_path, timeout=1.0)
 
         assert 22 in probed["10.0.0.1"]["hassh"]
         if json_path.exists():
             content = json_path.read_text()
             assert "hassh_fingerprint" not in content
 
-    @patch("decnet.prober.worker.tcp_fingerprint")
-    @patch("decnet.prober.worker.hassh_server")
-    @patch("decnet.prober.worker.jarm_hash")
+    @patch("decnet.prober.worker._ipv6_leak_phase")
+    @patch("decnet.prober.probes.tcpfp.tcp_fingerprint")
+    @patch("decnet.prober.probes.hassh.hassh_server")
+    @patch("decnet.prober.probes.jarm.jarm_hash")
     def test_hassh_skips_already_probed(self, mock_jarm: MagicMock, mock_hassh: MagicMock,
-                                         mock_tcpfp: MagicMock, tmp_path: Path):
+                                         mock_tcpfp: MagicMock, mock_ipv6: MagicMock,
+                                         tmp_path: Path, monkeypatch: pytest.MonkeyPatch):
+        monkeypatch.setattr(JarmProbe, "default_ports", [])
+        monkeypatch.setattr(HasshProbe, "default_ports", [22, 2222])
+        monkeypatch.setattr(TcpfpProbe, "default_ports", [])
         mock_jarm.return_value = JARM_EMPTY_HASH
         mock_tcpfp.return_value = None
         log_path = tmp_path / "decnet.log"
@@ -305,16 +350,21 @@ class TestProbeCycleHASSH:
         targets = {"10.0.0.1"}
         probed: dict[str, dict[str, set[int]]] = {"10.0.0.1": {"hassh": {22}}}
 
-        _probe_cycle(targets, probed, [], [22, 2222], [], log_path, json_path, timeout=1.0)
+        _probe_cycle(targets, probed, log_path, json_path, timeout=1.0)
 
         assert mock_hassh.call_count == 1  # only 2222
         mock_hassh.assert_called_once_with("10.0.0.1", 2222, timeout=1.0)
 
-    @patch("decnet.prober.worker.tcp_fingerprint")
-    @patch("decnet.prober.worker.hassh_server")
-    @patch("decnet.prober.worker.jarm_hash")
+    @patch("decnet.prober.worker._ipv6_leak_phase")
+    @patch("decnet.prober.probes.tcpfp.tcp_fingerprint")
+    @patch("decnet.prober.probes.hassh.hassh_server")
+    @patch("decnet.prober.probes.jarm.jarm_hash")
     def test_hassh_exception_marks_probed(self, mock_jarm: MagicMock, mock_hassh: MagicMock,
-                                           mock_tcpfp: MagicMock, tmp_path: Path):
+                                           mock_tcpfp: MagicMock, mock_ipv6: MagicMock,
+                                           tmp_path: Path, monkeypatch: pytest.MonkeyPatch):
+        monkeypatch.setattr(JarmProbe, "default_ports", [])
+        monkeypatch.setattr(HasshProbe, "default_ports", [22])
+        monkeypatch.setattr(TcpfpProbe, "default_ports", [])
         mock_jarm.return_value = JARM_EMPTY_HASH
         mock_hassh.side_effect = OSError("Connection refused")
         mock_tcpfp.return_value = None
@@ -324,7 +374,7 @@ class TestProbeCycleHASSH:
         targets = {"10.0.0.1"}
         probed: dict[str, dict[str, set[int]]] = {}
 
-        _probe_cycle(targets, probed, [], [22], [], log_path, json_path, timeout=1.0)
+        _probe_cycle(targets, probed, log_path, json_path, timeout=1.0)
 
         assert 22 in probed["10.0.0.1"]["hassh"]
 
@@ -333,11 +383,16 @@ class TestProbeCycleHASSH:
 
 class TestProbeCycleTCPFP:
 
-    @patch("decnet.prober.worker.tcp_fingerprint")
-    @patch("decnet.prober.worker.hassh_server")
-    @patch("decnet.prober.worker.jarm_hash")
+    @patch("decnet.prober.worker._ipv6_leak_phase")
+    @patch("decnet.prober.probes.tcpfp.tcp_fingerprint")
+    @patch("decnet.prober.probes.hassh.hassh_server")
+    @patch("decnet.prober.probes.jarm.jarm_hash")
     def test_probes_tcpfp_ports(self, mock_jarm: MagicMock, mock_hassh: MagicMock,
-                                 mock_tcpfp: MagicMock, tmp_path: Path):
+                                 mock_tcpfp: MagicMock, mock_ipv6: MagicMock,
+                                 tmp_path: Path, monkeypatch: pytest.MonkeyPatch):
+        monkeypatch.setattr(JarmProbe, "default_ports", [])
+        monkeypatch.setattr(HasshProbe, "default_ports", [])
+        monkeypatch.setattr(TcpfpProbe, "default_ports", [80, 443])
         mock_jarm.return_value = JARM_EMPTY_HASH
         mock_hassh.return_value = None
         mock_tcpfp.return_value = {
@@ -354,17 +409,22 @@ class TestProbeCycleTCPFP:
         targets = {"10.0.0.1"}
         probed: dict[str, dict[str, set[int]]] = {}
 
-        _probe_cycle(targets, probed, [], [], [80, 443], log_path, json_path, timeout=1.0)
+        _probe_cycle(targets, probed, log_path, json_path, timeout=1.0)
 
         assert mock_tcpfp.call_count == 2
         assert 80 in probed["10.0.0.1"]["tcpfp"]
         assert 443 in probed["10.0.0.1"]["tcpfp"]
 
-    @patch("decnet.prober.worker.tcp_fingerprint")
-    @patch("decnet.prober.worker.hassh_server")
-    @patch("decnet.prober.worker.jarm_hash")
+    @patch("decnet.prober.worker._ipv6_leak_phase")
+    @patch("decnet.prober.probes.tcpfp.tcp_fingerprint")
+    @patch("decnet.prober.probes.hassh.hassh_server")
+    @patch("decnet.prober.probes.jarm.jarm_hash")
     def test_tcpfp_writes_event_with_all_fields(self, mock_jarm: MagicMock, mock_hassh: MagicMock,
-                                                  mock_tcpfp: MagicMock, tmp_path: Path):
+                                                  mock_tcpfp: MagicMock, mock_ipv6: MagicMock,
+                                                  tmp_path: Path, monkeypatch: pytest.MonkeyPatch):
+        monkeypatch.setattr(JarmProbe, "default_ports", [])
+        monkeypatch.setattr(HasshProbe, "default_ports", [])
+        monkeypatch.setattr(TcpfpProbe, "default_ports", [443])
         mock_jarm.return_value = JARM_EMPTY_HASH
         mock_hassh.return_value = None
         mock_tcpfp.return_value = {
@@ -381,7 +441,7 @@ class TestProbeCycleTCPFP:
         targets = {"10.0.0.1"}
         probed: dict[str, dict[str, set[int]]] = {}
 
-        _probe_cycle(targets, probed, [], [], [443], log_path, json_path, timeout=1.0)
+        _probe_cycle(targets, probed, log_path, json_path, timeout=1.0)
 
         content = json_path.read_text()
         assert "tcpfp_fingerprint" in content
@@ -391,11 +451,16 @@ class TestProbeCycleTCPFP:
         assert record["fields"]["window_size"] == "8192"
         assert record["fields"]["options_order"] == "M,N,W,N,N,S"
 
-    @patch("decnet.prober.worker.tcp_fingerprint")
-    @patch("decnet.prober.worker.hassh_server")
-    @patch("decnet.prober.worker.jarm_hash")
+    @patch("decnet.prober.worker._ipv6_leak_phase")
+    @patch("decnet.prober.probes.tcpfp.tcp_fingerprint")
+    @patch("decnet.prober.probes.hassh.hassh_server")
+    @patch("decnet.prober.probes.jarm.jarm_hash")
     def test_tcpfp_none_not_logged(self, mock_jarm: MagicMock, mock_hassh: MagicMock,
-                                    mock_tcpfp: MagicMock, tmp_path: Path):
+                                    mock_tcpfp: MagicMock, mock_ipv6: MagicMock,
+                                    tmp_path: Path, monkeypatch: pytest.MonkeyPatch):
+        monkeypatch.setattr(JarmProbe, "default_ports", [])
+        monkeypatch.setattr(HasshProbe, "default_ports", [])
+        monkeypatch.setattr(TcpfpProbe, "default_ports", [443])
         mock_jarm.return_value = JARM_EMPTY_HASH
         mock_hassh.return_value = None
         mock_tcpfp.return_value = None
@@ -405,7 +470,7 @@ class TestProbeCycleTCPFP:
         targets = {"10.0.0.1"}
         probed: dict[str, dict[str, set[int]]] = {}
 
-        _probe_cycle(targets, probed, [], [], [443], log_path, json_path, timeout=1.0)
+        _probe_cycle(targets, probed, log_path, json_path, timeout=1.0)
 
         assert 443 in probed["10.0.0.1"]["tcpfp"]
         if json_path.exists():
@@ -417,12 +482,17 @@ class TestProbeCycleTCPFP:
 
 class TestProbeTypeIsolation:
 
-    @patch("decnet.prober.worker.tcp_fingerprint")
-    @patch("decnet.prober.worker.hassh_server")
-    @patch("decnet.prober.worker.jarm_hash")
+    @patch("decnet.prober.worker._ipv6_leak_phase")
+    @patch("decnet.prober.probes.tcpfp.tcp_fingerprint")
+    @patch("decnet.prober.probes.hassh.hassh_server")
+    @patch("decnet.prober.probes.jarm.jarm_hash")
     def test_jarm_does_not_mark_hassh(self, mock_jarm: MagicMock, mock_hassh: MagicMock,
-                                       mock_tcpfp: MagicMock, tmp_path: Path):
+                                       mock_tcpfp: MagicMock, mock_ipv6: MagicMock,
+                                       tmp_path: Path, monkeypatch: pytest.MonkeyPatch):
         """JARM probing port 2222 should not mark HASSH port 2222 as done."""
+        monkeypatch.setattr(JarmProbe, "default_ports", [2222])
+        monkeypatch.setattr(HasshProbe, "default_ports", [2222])
+        monkeypatch.setattr(TcpfpProbe, "default_ports", [])
         mock_jarm.return_value = JARM_EMPTY_HASH
         mock_hassh.return_value = None
         mock_tcpfp.return_value = None
@@ -432,8 +502,7 @@ class TestProbeTypeIsolation:
         targets = {"10.0.0.1"}
         probed: dict[str, dict[str, set[int]]] = {}
 
-        # Probe with JARM on 2222 and HASSH on 2222
-        _probe_cycle(targets, probed, [2222], [2222], [], log_path, json_path, timeout=1.0)
+        _probe_cycle(targets, probed, log_path, json_path, timeout=1.0)
 
         # Both should be called
         assert mock_jarm.call_count == 1
@@ -441,11 +510,16 @@ class TestProbeTypeIsolation:
         assert 2222 in probed["10.0.0.1"]["jarm"]
         assert 2222 in probed["10.0.0.1"]["hassh"]
 
-    @patch("decnet.prober.worker.tcp_fingerprint")
-    @patch("decnet.prober.worker.hassh_server")
-    @patch("decnet.prober.worker.jarm_hash")
+    @patch("decnet.prober.worker._ipv6_leak_phase")
+    @patch("decnet.prober.probes.tcpfp.tcp_fingerprint")
+    @patch("decnet.prober.probes.hassh.hassh_server")
+    @patch("decnet.prober.probes.jarm.jarm_hash")
     def test_all_three_probes_run(self, mock_jarm: MagicMock, mock_hassh: MagicMock,
-                                   mock_tcpfp: MagicMock, tmp_path: Path):
+                                   mock_tcpfp: MagicMock, mock_ipv6: MagicMock,
+                                   tmp_path: Path, monkeypatch: pytest.MonkeyPatch):
+        monkeypatch.setattr(JarmProbe, "default_ports", [443])
+        monkeypatch.setattr(HasshProbe, "default_ports", [22])
+        monkeypatch.setattr(TcpfpProbe, "default_ports", [80])
         mock_jarm.return_value = JARM_EMPTY_HASH
         mock_hassh.return_value = None
         mock_tcpfp.return_value = None
@@ -455,7 +529,7 @@ class TestProbeTypeIsolation:
         targets = {"10.0.0.1"}
         probed: dict[str, dict[str, set[int]]] = {}
 
-        _probe_cycle(targets, probed, [443], [22], [80], log_path, json_path, timeout=1.0)
+        _probe_cycle(targets, probed, log_path, json_path, timeout=1.0)
 
         assert mock_jarm.call_count == 1
         assert mock_hassh.call_count == 1
@@ -490,20 +564,26 @@ class TestWriteEvent:
 
 class TestProbeCycleTLSCert:
 
+    @patch("decnet.prober.worker._ipv6_leak_phase")
     @patch("decnet.prober.worker.fetch_leaf_cert")
-    @patch("decnet.prober.worker.tcp_fingerprint")
-    @patch("decnet.prober.worker.hassh_server")
-    @patch("decnet.prober.worker.jarm_hash")
+    @patch("decnet.prober.probes.tcpfp.tcp_fingerprint")
+    @patch("decnet.prober.probes.hassh.hassh_server")
+    @patch("decnet.prober.probes.jarm.jarm_hash")
     def test_cert_event_emitted_after_successful_jarm(
         self,
         mock_jarm: MagicMock,
         mock_hassh: MagicMock,
         mock_tcpfp: MagicMock,
         mock_cert: MagicMock,
+        mock_ipv6: MagicMock,
         tmp_path: Path,
+        monkeypatch: pytest.MonkeyPatch,
     ):
         """A non-empty JARM hash should trigger a follow-up cert fetch and
         write a tls_certificate event with all parsed fields."""
+        monkeypatch.setattr(JarmProbe, "default_ports", [443])
+        monkeypatch.setattr(HasshProbe, "default_ports", [])
+        monkeypatch.setattr(TcpfpProbe, "default_ports", [])
         mock_jarm.return_value = "c0c" * 10 + "a" * 32
         mock_hassh.return_value = None
         mock_tcpfp.return_value = None
@@ -519,7 +599,7 @@ class TestProbeCycleTLSCert:
         log_path = tmp_path / "decnet.log"
         json_path = tmp_path / "decnet.json"
 
-        _probe_cycle({"10.0.0.1"}, {}, [443], [], [], log_path, json_path, timeout=1.0)
+        _probe_cycle({"10.0.0.1"}, {}, log_path, json_path, timeout=1.0)
 
         mock_cert.assert_called_once_with("10.0.0.1", 443, timeout=1.0)
         records = [
@@ -539,69 +619,87 @@ class TestProbeCycleTLSCert:
         assert f["sans"] == "evil.example.com,c2.example.com"
         assert f["cert_sha256"] == "ab" * 32
 
+    @patch("decnet.prober.worker._ipv6_leak_phase")
     @patch("decnet.prober.worker.fetch_leaf_cert")
-    @patch("decnet.prober.worker.tcp_fingerprint")
-    @patch("decnet.prober.worker.hassh_server")
-    @patch("decnet.prober.worker.jarm_hash")
+    @patch("decnet.prober.probes.tcpfp.tcp_fingerprint")
+    @patch("decnet.prober.probes.hassh.hassh_server")
+    @patch("decnet.prober.probes.jarm.jarm_hash")
     def test_cert_fetch_skipped_on_empty_jarm(
         self,
         mock_jarm: MagicMock,
         mock_hassh: MagicMock,
         mock_tcpfp: MagicMock,
         mock_cert: MagicMock,
+        mock_ipv6: MagicMock,
         tmp_path: Path,
+        monkeypatch: pytest.MonkeyPatch,
     ):
         """JARM_EMPTY_HASH means the port doesn't speak TLS; skip cert fetch."""
+        monkeypatch.setattr(JarmProbe, "default_ports", [443])
+        monkeypatch.setattr(HasshProbe, "default_ports", [])
+        monkeypatch.setattr(TcpfpProbe, "default_ports", [])
         mock_jarm.return_value = JARM_EMPTY_HASH
         mock_hassh.return_value = None
         mock_tcpfp.return_value = None
         log_path = tmp_path / "decnet.log"
         json_path = tmp_path / "decnet.json"
 
-        _probe_cycle({"10.0.0.1"}, {}, [443], [], [], log_path, json_path, timeout=1.0)
+        _probe_cycle({"10.0.0.1"}, {}, log_path, json_path, timeout=1.0)
 
         mock_cert.assert_not_called()
 
+    @patch("decnet.prober.worker._ipv6_leak_phase")
     @patch("decnet.prober.worker.fetch_leaf_cert", return_value=None)
-    @patch("decnet.prober.worker.tcp_fingerprint")
-    @patch("decnet.prober.worker.hassh_server")
-    @patch("decnet.prober.worker.jarm_hash")
+    @patch("decnet.prober.probes.tcpfp.tcp_fingerprint")
+    @patch("decnet.prober.probes.hassh.hassh_server")
+    @patch("decnet.prober.probes.jarm.jarm_hash")
     def test_cert_fetch_failure_silent(
         self,
         mock_jarm: MagicMock,
         mock_hassh: MagicMock,
         mock_tcpfp: MagicMock,
         mock_cert: MagicMock,
+        mock_ipv6: MagicMock,
         tmp_path: Path,
+        monkeypatch: pytest.MonkeyPatch,
     ):
         """fetch_leaf_cert returning None must not write a cert event."""
+        monkeypatch.setattr(JarmProbe, "default_ports", [443])
+        monkeypatch.setattr(HasshProbe, "default_ports", [])
+        monkeypatch.setattr(TcpfpProbe, "default_ports", [])
         mock_jarm.return_value = "c0c" * 10 + "a" * 32
         mock_hassh.return_value = None
         mock_tcpfp.return_value = None
         log_path = tmp_path / "decnet.log"
         json_path = tmp_path / "decnet.json"
 
-        _probe_cycle({"10.0.0.1"}, {}, [443], [], [], log_path, json_path, timeout=1.0)
+        _probe_cycle({"10.0.0.1"}, {}, log_path, json_path, timeout=1.0)
 
         mock_cert.assert_called_once_with("10.0.0.1", 443, timeout=1.0)
         if json_path.exists():
             content = json_path.read_text()
             assert "tls_certificate" not in content
 
+    @patch("decnet.prober.worker._ipv6_leak_phase")
     @patch("decnet.prober.worker.fetch_leaf_cert")
-    @patch("decnet.prober.worker.tcp_fingerprint")
-    @patch("decnet.prober.worker.hassh_server")
-    @patch("decnet.prober.worker.jarm_hash")
+    @patch("decnet.prober.probes.tcpfp.tcp_fingerprint")
+    @patch("decnet.prober.probes.hassh.hassh_server")
+    @patch("decnet.prober.probes.jarm.jarm_hash")
     def test_cert_fetch_crash_does_not_break_phase(
         self,
         mock_jarm: MagicMock,
         mock_hassh: MagicMock,
         mock_tcpfp: MagicMock,
         mock_cert: MagicMock,
+        mock_ipv6: MagicMock,
         tmp_path: Path,
+        monkeypatch: pytest.MonkeyPatch,
     ):
         """If fetch_leaf_cert throws despite its contract, the JARM phase
         must keep moving to the next port without crashing."""
+        monkeypatch.setattr(JarmProbe, "default_ports", [443, 8443])
+        monkeypatch.setattr(HasshProbe, "default_ports", [])
+        monkeypatch.setattr(TcpfpProbe, "default_ports", [])
         mock_jarm.return_value = "c0c" * 10 + "a" * 32
         mock_hassh.return_value = None
         mock_tcpfp.return_value = None
@@ -609,25 +707,30 @@ class TestProbeCycleTLSCert:
         log_path = tmp_path / "decnet.log"
         json_path = tmp_path / "decnet.json"
 
-        _probe_cycle({"10.0.0.1"}, {}, [443, 8443], [], [], log_path, json_path, timeout=1.0)
+        _probe_cycle({"10.0.0.1"}, {}, log_path, json_path, timeout=1.0)
 
         # Both ports still marked probed despite the cert-side crash.
-        from decnet.prober.worker import _probe_cycle as _  # re-import safety
         assert mock_cert.call_count == 2
 
+    @patch("decnet.prober.worker._ipv6_leak_phase")
     @patch("decnet.prober.worker.fetch_leaf_cert")
-    @patch("decnet.prober.worker.tcp_fingerprint")
-    @patch("decnet.prober.worker.hassh_server")
-    @patch("decnet.prober.worker.jarm_hash")
+    @patch("decnet.prober.probes.tcpfp.tcp_fingerprint")
+    @patch("decnet.prober.probes.hassh.hassh_server")
+    @patch("decnet.prober.probes.jarm.jarm_hash")
     def test_cert_publish_fn_called(
         self,
         mock_jarm: MagicMock,
         mock_hassh: MagicMock,
         mock_tcpfp: MagicMock,
         mock_cert: MagicMock,
+        mock_ipv6: MagicMock,
         tmp_path: Path,
+        monkeypatch: pytest.MonkeyPatch,
     ):
         """publish_fn must receive a 'tls_certificate' event when capture succeeds."""
+        monkeypatch.setattr(JarmProbe, "default_ports", [443])
+        monkeypatch.setattr(HasshProbe, "default_ports", [])
+        monkeypatch.setattr(TcpfpProbe, "default_ports", [])
         mock_jarm.return_value = "c0c" * 10 + "a" * 32
         mock_hassh.return_value = None
         mock_tcpfp.return_value = None
@@ -646,7 +749,7 @@ class TestProbeCycleTLSCert:
             published.append((kind, payload))
 
         _probe_cycle(
-            {"10.0.0.1"}, {}, [443], [], [],
+            {"10.0.0.1"}, {},
             tmp_path / "decnet.log", tmp_path / "decnet.json",
             timeout=1.0, publish_fn=publish,
         )
