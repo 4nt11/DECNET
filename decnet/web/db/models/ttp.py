@@ -125,6 +125,16 @@ class HttpFingerprintEvidence(TypedDict):
     raw: Optional[dict]  # raw settings dict for h2_settings / h3_settings
 
 
+class Ipv6LinkLocalLeakEvidence(TypedDict, total=False):
+    addr: str       # the fe80:: address observed
+    mac_oui: str    # first 3 octets if EUI-64-derived ("aa:bb:cc"), else ""
+    iid_kind: str   # "eui64" | "stable_privacy" | "temporary" | "unknown"
+    vector: str     # "passive_ndp" | "passive_mdns" | "passive_tcp" | "active_ns" | "active_echo"
+    on_iface: str   # local iface that observed it
+    attacker_v4: str   # v4 address we have for this attacker (correlation key)
+    observed_at: str   # ISO8601 UTC
+
+
 # Maps source_kind → its evidence TypedDict. Used by TolerantTagger to
 # validate that lifters do not emit undeclared keys (programmer error →
 # TypeError, not the swallowed absence-of-data case).
@@ -134,6 +144,7 @@ EVIDENCE_SCHEMA: dict[str, type] = {
     "email": EmailEvidence,
     "canary_fingerprint": CanaryFingerprintEvidence,
     "http_fingerprint": HttpFingerprintEvidence,
+    "ipv6_leak": Ipv6LinkLocalLeakEvidence,
 }
 
 

@@ -30,6 +30,7 @@ from decnet.web.db.models.ttp import (
     EmailEvidence,
     HttpFingerprintEvidence,
     IntelEvidence,
+    Ipv6LinkLocalLeakEvidence,
     TTPTag,
     compute_tag_uuid,
 )
@@ -94,6 +95,17 @@ def test_http_fingerprint_evidence_keys() -> None:
         | HttpFingerprintEvidence.__optional_keys__
     )
     assert keys == {"kind", "hash", "protocol", "client_ip", "seen_at", "raw"}
+
+
+def test_ipv6_link_local_leak_evidence_keys() -> None:
+    keys = (
+        Ipv6LinkLocalLeakEvidence.__required_keys__
+        | Ipv6LinkLocalLeakEvidence.__optional_keys__
+    )
+    assert keys == {
+        "addr", "mac_oui", "iid_kind", "vector",
+        "on_iface", "attacker_v4", "observed_at",
+    }
 
 
 # ── Per-lifter parametrized positive case ───────────────────────────
