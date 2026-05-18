@@ -21,6 +21,7 @@ from decnet.ttp.impl.canary_fingerprint_lifter import CanaryFingerprintLifter
 from decnet.ttp.impl.email_lifter import EmailLifter
 from decnet.ttp.impl.http_fingerprint_lifter import HttpFingerprintLifter
 from decnet.ttp.impl.intel_lifter import IntelLifter
+from decnet.ttp.impl.ipv6_leak_lifter import Ipv6LeakLifter
 from decnet.ttp.impl.rule_engine import CompiledRule
 from decnet.ttp.store.base import RuleState
 from decnet.ttp.store.impl.filesystem import _parse_and_compile
@@ -171,13 +172,28 @@ _LIFTER_CASES: list[tuple[str, Any, Any, Any, dict[str, Any]]] = [
         lambda: _compile_yaml("R0049"),
         {"navigator_webdriver": True},
     ),
+    (
+        "ipv6_leak",
+        Ipv6LeakLifter,
+        Ipv6LinkLocalLeakEvidence,
+        lambda: _compile_yaml("R0059"),
+        {
+            "addr": "fe80::aabb:ccff:fedd:eeff",
+            "mac_oui": "a8:bb:cc",
+            "iid_kind": "eui64",
+            "vector": "passive_ndp",
+            "on_iface": "eth0",
+            "attacker_v4": "10.0.0.9",
+            "observed_at": "2026-01-01T00:00:00+00:00",
+        },
+    ),
 ]
 
 
 @pytest.mark.parametrize(
     "source_kind, lifter_cls, td_cls, rule_factory, payload",
     _LIFTER_CASES,
-    ids=["http_fingerprint", "intel", "email", "canary_fingerprint"],
+    ids=["http_fingerprint", "intel", "email", "canary_fingerprint", "ipv6_leak"],
 )
 def test_lifter_emits_evidence_matching_typeddict(
     source_kind: str,

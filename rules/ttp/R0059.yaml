@@ -1,0 +1,27 @@
+rule_id: R0059
+rule_version: 1
+last_reviewed: "2026-05-17"
+next_review: "2026-08-17"
+name: ipv6_link_local_leak
+description: |
+  Attacker's IPv6 link-local address (fe80::/10) observed despite operating
+  behind an IPv4-only VPN. The IID is derived from the NIC MAC address
+  (EUI-64) or a stable per-host value (RFC 7217 stable-privacy), either of
+  which survives VPN/IP rotation and constitutes a persistent host fingerprint.
+  Passive sniffer and active ICMPv6 solicitation both feed this rule.
+applies_to:
+  - ipv6_leak
+match:
+  kind: lifter:ipv6_link_local_leak
+emits:
+  - tactic: TA0011
+    technique_id: T1090
+    confidence: 0.85
+evidence_fields:
+  - addr
+  - mac_oui
+  - iid_kind
+  - vector
+  - on_iface
+  - attacker_v4
+  - observed_at
