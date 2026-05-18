@@ -89,6 +89,14 @@ class Attacker(SQLModel, table=True):
     # last 24h" without joining to AttackerFingerprintState.
     rotation_count: int = Field(default=0)
     last_rotation_at: Optional[datetime] = Field(default=None, index=True)
+    # IPv6 link-local leak telemetry. Denormalized cache — authoritative
+    # history lives in TTPTag rows with source_kind="ipv6_leak". Kept here
+    # so the attacker drawer can render the leaked address in one query.
+    ipv6_leak_count: int = Field(default=0)
+    last_ipv6_leak_at: Optional[datetime] = Field(default=None, index=True)
+    last_ipv6_link_local: Optional[str] = Field(default=None, max_length=45)
+    last_ipv6_iid_kind: Optional[str] = Field(default=None, max_length=16)
+    last_ipv6_mac_oui: Optional[str] = Field(default=None, max_length=8)
     updated_at: datetime = Field(
         default_factory=lambda: datetime.now(timezone.utc), index=True
     )
@@ -196,6 +204,15 @@ class AttackerIdentity(SQLModel, table=True):
     # signal, and TEXT keeps MySQL indexable via prefix length.
     tls_cert_sha256: Optional[str] = Field(
         default=None, sa_column=Column("tls_cert_sha256", Text, nullable=True)
+    )
+    # JSON list[dict] — observed IPv6 link-local IIDs per identity.
+    # EUI-64-derived MACs survive VPN/IP rotation and are a stronger
+    # cluster signal than any rotatable TLS/SSH hash. Federation gossip
+    # (V2) will share these. Shape per entry:
+    #   {"iid": "fe80::aabb:ccff:fedd:eeff", "oui": "aa:bb:cc",
+    #    "kind": "eui64", "first_seen": "<ISO8601>"}
+    ipv6_link_local_iids: Optional[str] = Field(
+        default=None, sa_column=Column("ipv6_link_local_iids", Text, nullable=True)
     )
     # Payload SimHash list — 64-bit ints serialized as hex strings.
     # SimHashes are Hamming-comparable, which is the entire reason
