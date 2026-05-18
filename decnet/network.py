@@ -78,6 +78,34 @@ def get_host_ip(interface: str) -> str:
     raise RuntimeError(f"Could not determine host IP for interface {interface}.")
 
 
+def list_v6_addrs(interface: str) -> list[tuple[str, str]]:
+    """Return [(addr, scope)] for all IPv6 addresses on *interface*.
+
+    addr  — the IPv6 address without prefix length (e.g. "fe80::1")
+    scope — the kernel scope label (e.g. "link", "global", "host")
+
+    Returns an empty list when the interface has no IPv6 addresses or
+    when `ip addr show` fails.
+    """
+    try:
+        result = _run(["ip", "-6", "addr", "show", interface])
+    except Exception:
+        return []
+    out: list[tuple[str, str]] = []
+    for line in result.stdout.splitlines():
+        line = line.strip()
+        if not line.startswith("inet6 "):
+            continue
+        # "inet6 fe80::1/64 scope link"
+        parts = line.split()
+        addr = parts[1].split("/")[0]
+        scope = ""
+        if "scope" in parts:
+            scope = parts[parts.index("scope") + 1]
+        out.append((addr, scope))
+    return out
+
+
 # ---------------------------------------------------------------------------
 # IP allocation
 # ---------------------------------------------------------------------------

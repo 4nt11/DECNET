@@ -302,6 +302,9 @@ def _probe_cycle(
         # Phase 3: TCP/IP stack fingerprinting
         _tcpfp_phase(ip, ip_probed, tcpfp_ports, log_path, json_path, timeout, publish_fn, record_rotation)
 
+        # Phase 4: IPv6 link-local leak (active ICMPv6 solicitation; on-link only)
+        _ipv6_leak_phase(ip, ip_probed, log_path, json_path, timeout, publish_fn)
+
 
 @_traced("prober.jarm_phase")
 def _jarm_phase(
@@ -541,6 +544,75 @@ def _tcpfp_phase(
                 msg=f"TCPFP probe failed for {ip}:{port}: {exc}",
             )
             logger.warning("prober: TCPFP probe failed %s:%d: %s", ip, port, exc)
+
+
+@_traced("prober.ipv6_leak_phase")
+def _ipv6_leak_phase(
+    ip: str,
+    ip_probed: dict[str, set[int]],
+    log_path: Path,
+    json_path: Path,
+    timeout: float,
+    publish_fn: ProbePublishFn | None = None,
+) -> None:
+    """Attempt active ICMPv6 solicitation to elicit a fe80:: response.
+
+    Skipped when:
+    - already attempted for this attacker in this cycle
+    - attacker is not on a directly connected (link-local reachable) L2
+    - scapy unavailable or the local iface has no fe80:: address
+    """
+    done = ip_probed.setdefault("ipv6_leak", set())
+    # Use port 0 as a sentinel (no port concept for ICMPv6 probes).
+    if 0 in done:
+        return
+    done.add(0)
+
+    from decnet.prober.ipv6_leak import _is_on_link, _resolve_iface_for_ip, solicit_ipv6_leak
+
+    if not _is_on_link(ip):
+        logger.debug("prober: ipv6_leak: %s is not on-link — skip active probe", ip)
+        return
+
+    iface = _resolve_iface_for_ip(ip)
+    if iface is None:
+        logger.debug("prober: ipv6_leak: cannot determine iface for %s", ip)
+        return
+
+    try:
+        evidence = solicit_ipv6_leak(ip, iface, timeout=timeout)
+    except Exception as exc:
+        logger.warning("prober: ipv6_leak active probe failed %s: %s", ip, exc)
+        return
+
+    if evidence is None:
+        return
+
+    _write_event(
+        log_path, json_path,
+        "ipv6_link_local_leak",
+        target_ip=ip,
+        ipv6_addr=evidence.get("addr", ""),
+        iid_kind=evidence.get("iid_kind", ""),
+        mac_oui=evidence.get("mac_oui", ""),
+        on_iface=evidence.get("on_iface", ""),
+        vector=evidence.get("vector", ""),
+        msg=f"IPv6 leak {ip} → {evidence.get('addr', '')} ({evidence.get('iid_kind', '')})",
+    )
+    logger.info(
+        "prober: ipv6_leak %s → %s kind=%s oui=%s",
+        ip, evidence.get("addr"), evidence.get("iid_kind"), evidence.get("mac_oui"),
+    )
+    if publish_fn is not None:
+        publish_fn("ipv6_leak", {
+            "attacker_ip": ip,
+            "addr": evidence.get("addr", ""),
+            "iid_kind": evidence.get("iid_kind", ""),
+            "mac_oui": evidence.get("mac_oui", ""),
+            "vector": evidence.get("vector", ""),
+            "on_iface": evidence.get("on_iface", ""),
+            "observed_at": evidence.get("observed_at", ""),
+        })
 
 
 # ─── Main worker ─────────────────────────────────────────────────────────────
