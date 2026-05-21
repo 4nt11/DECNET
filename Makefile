@@ -1,5 +1,6 @@
 PYTEST     := .311/bin/pytest
 FAIL_FAST  ?= 1
+NO_CACHE   ?= 0
 ARGS       :=
 
 # addopts in pyproject.toml already provides -v -q -x -n 4 --dist load.
@@ -176,6 +177,42 @@ test-all test:
 	echo ""; \
 	echo "All suites passed."
 
+# ── Decky image pre-build ─────────────────────────────────────────────────────
+
+_DECKY_TEMPLATES := \
+	conpot cowrie docker_api elasticsearch ftp http https imap k8s ldap \
+	llmnr mongodb mqtt mssql mysql pop3 postgres rdp redis sip smb smtp \
+	sniffer snmp ssh telnet tftp vnc
+
+.PHONY: build-all
+build-all:
+	@failed=""; \
+	for svc in $(_DECKY_TEMPLATES); do \
+		echo ""; \
+		echo "══════════════════════════ $$svc ══════════════════════════"; \
+		_nc=""; \
+		if [ "$(NO_CACHE)" = "1" ]; then _nc="--no-cache"; fi; \
+		if DOCKER_BUILDKIT=1 docker build $$_nc \
+				-t decnet/$$svc:latest \
+				decnet/templates/$$svc; then \
+			echo "[BUILT] $$svc"; \
+		else \
+			echo "[FAIL] $$svc"; \
+			failed="$$failed $$svc"; \
+			if [ "$(FAIL_FAST)" = "1" ]; then \
+				echo "Stopping at first failure. Use FAIL_FAST=0 to build all."; \
+				exit 1; \
+			fi; \
+		fi; \
+	done; \
+	if [ -n "$$failed" ]; then \
+		echo ""; \
+		echo "Failed:$$failed"; \
+		exit 1; \
+	fi; \
+	echo ""; \
+	echo "All decky images built."
+
 .PHONY: help
 help:
 	@echo "Unit suites (xdist, 30s timeout):"
@@ -217,3 +254,8 @@ help:
 	@echo "  make test-all FAIL_FAST=0   same, report all failures instead of stopping"
 	@echo ""
 	@echo "Passthrough: make test-web ARGS='--lf -s'"
+	@echo ""
+	@echo "Decky images:"
+	@echo "  make build-all              build decnet/<svc>:latest for all 28 decky templates"
+	@echo "  make build-all NO_CACHE=1   same, bypassing Docker layer cache"
+	@echo "  make build-all FAIL_FAST=0  same, continue past failures"
