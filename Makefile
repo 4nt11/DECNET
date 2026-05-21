@@ -180,7 +180,7 @@ test-all test:
 # ── Decky image pre-build ─────────────────────────────────────────────────────
 
 _DECKY_TEMPLATES := \
-	conpot cowrie docker_api elasticsearch ftp http https imap k8s ldap \
+	conpot docker_api elasticsearch ftp http https imap k8s ldap \
 	llmnr mongodb mqtt mssql mysql pop3 postgres rdp redis sip smb smtp \
 	sniffer snmp ssh telnet tftp vnc
 
@@ -256,6 +256,6 @@ help:
 	@echo "Passthrough: make test-web ARGS='--lf -s'"
 	@echo ""
 	@echo "Decky images:"
-	@echo "  make build-all              build decnet/<svc>:latest for all 28 decky templates"
+	@echo "  make build-all              build decnet/<svc>:latest for all 27 decky templates"
 	@echo "  make build-all NO_CACHE=1   same, bypassing Docker layer cache"
 	@echo "  make build-all FAIL_FAST=0  same, continue past failures"
