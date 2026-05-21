@@ -589,3 +589,15 @@
   flex-wrap: wrap;
   gap: 6px;
 }
+
+/* Align EmptyState color and font with the dim-grey convention used across
+   all other section containers (logs-root, attackers-root, bounty-root…).
+   Without this, the global body color (var(--matrix) green) bleeds in. */
+.dashboard .empty-state .empty-state-icon {
+  color: var(--violet);
+}
+.dashboard .empty-state .type-label {
+  color: var(--text-dim, #888);
+  font-size: 0.7rem;
+  letter-spacing: 2px;
+}
