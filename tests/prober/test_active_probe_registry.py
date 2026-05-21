@@ -21,33 +21,64 @@ def _restore_registry():
 
 class TestRegistryContents:
 
-    def test_all_three_probes_registered(self):
+    def test_all_probes_registered(self):
         names = {cls.probe_name for cls in ActiveProbeMeta.all()}
-        assert names == {"jarm", "hassh", "tcpfp"}
+        assert names == {"jarm", "hassh", "tcpfp", "ipv6_leak"}
 
     def test_sorted_by_priority_then_name(self):
         order = [cls.probe_name for cls in ActiveProbeMeta.all()]
-        assert order == ["hassh", "jarm", "tcpfp"]  # all priority=100, alphabetical
+        # hassh/jarm/tcpfp all priority=100 (alphabetical), ipv6_leak priority=999 last
+        assert order == ["hassh", "jarm", "tcpfp", "ipv6_leak"]
 
     def test_priority10_probe_sorts_first(self):
         class _FastProbe(ActiveProbe):
             probe_name = "_fast_test_probe"
-            default_ports = [9999]
+            default_ports: list[int | None] = [9999]
             event_type = "_fast_event"
             priority = 10
 
-            def run(self, ip: str, port: int, timeout: float) -> dict[str, Any] | None:
+            def run(self, ip: str, port: int | None, timeout: float) -> dict[str, Any] | None:
                 return None
 
-            def syslog_fields(self, ip: str, port: int, result: dict[str, Any]) -> tuple[dict[str, Any], str]:
+            def syslog_fields(self, ip: str, port: int | None, result: dict[str, Any]) -> tuple[dict[str, Any], str]:
                 return {}, ""
 
-            def publish_payload(self, ip: str, port: int, result: dict[str, Any]) -> dict[str, Any]:
+            def publish_payload(self, ip: str, port: int | None, result: dict[str, Any]) -> dict[str, Any]:
                 return {}
 
         order = [cls.probe_name for cls in ActiveProbeMeta.all()]
         assert order[0] == "_fast_test_probe"
-        assert set(order[1:]) == {"hassh", "jarm", "tcpfp"}
+        assert set(order[1:]) == {"hassh", "jarm", "tcpfp", "ipv6_leak"}
+
+    def test_port_none_probe_dispatched_with_none_port(self):
+        """_run_probe must call run(ip, None, timeout) for a port-free probe."""
+        calls: list[tuple] = []
+
+        class _NullPortProbe(ActiveProbe):
+            probe_name = "_null_port_test"
+            default_ports: list[int | None] = [None]
+            event_type = "_null_event"
+            priority = 10
+
+            def run(self, ip: str, port: int | None, timeout: float) -> dict[str, Any] | None:
+                calls.append((ip, port))
+                return None
+
+            def syslog_fields(self, ip: str, port: int | None, result: dict[str, Any]) -> tuple[dict[str, Any], str]:
+                return {}, ""
+
+            def publish_payload(self, ip: str, port: int | None, result: dict[str, Any]) -> dict[str, Any]:
+                return {}
+
+        from pathlib import Path
+        from decnet.prober.worker import _run_probe
+
+        _run_probe(
+            _NullPortProbe(), "10.0.0.1", {},
+            Path("/dev/null"), Path("/dev/null"),
+            timeout=1.0, publish_fn=None, record_rotation=None,
+        )
+        assert calls == [("10.0.0.1", None)]
 
     def test_base_class_not_registered(self):
         assert "ActiveProbe" not in ActiveProbeMeta._registry

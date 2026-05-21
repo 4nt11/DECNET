@@ -48,7 +48,7 @@ class ActiveProbe(metaclass=ActiveProbeMeta):
     """
 
     probe_name: str
-    default_ports: list[int]
+    default_ports: list[int | None]
     event_type: str
     rotation_type: ProbeType | None = None
     rotation_hash_key: str | None = None
@@ -59,26 +59,26 @@ class ActiveProbe(metaclass=ActiveProbeMeta):
         raw = os.environ.get(env_key, "").strip()
         if raw:
             try:
-                self._ports: list[int] = [int(p.strip()) for p in raw.split(",") if p.strip()]
+                self._ports: list[int | None] = [int(p.strip()) for p in raw.split(",") if p.strip()]
             except ValueError:
                 self._ports = list(self.default_ports)
         else:
             self._ports = list(self.default_ports)
 
     @property
-    def ports(self) -> list[int]:
+    def ports(self) -> list[int | None]:
         return self._ports
 
     @abstractmethod
-    def run(self, ip: str, port: int, timeout: float) -> dict[str, Any] | None:
-        """Execute the probe against ip:port.
+    def run(self, ip: str, port: int | None, timeout: float) -> dict[str, Any] | None:
+        """Execute the probe against ip:port (port is None for port-free probes).
 
         Return a result dict on success, or None to suppress emission (e.g.
         empty JARM hash means the port doesn't speak TLS).
         """
 
     @abstractmethod
-    def syslog_fields(self, ip: str, port: int, result: dict[str, Any]) -> tuple[dict[str, Any], str]:
+    def syslog_fields(self, ip: str, port: int | None, result: dict[str, Any]) -> tuple[dict[str, Any], str]:
         """Return (sd_fields, human_msg) for _write_event.
 
         target_ip and target_port are injected by _run_probe; do not include
@@ -86,5 +86,5 @@ class ActiveProbe(metaclass=ActiveProbeMeta):
         """
 
     @abstractmethod
-    def publish_payload(self, ip: str, port: int, result: dict[str, Any]) -> dict[str, Any]:
+    def publish_payload(self, ip: str, port: int | None, result: dict[str, Any]) -> dict[str, Any]:
         """Return the bus payload dict for attacker.fingerprinted events."""

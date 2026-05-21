@@ -109,7 +109,7 @@ class TestDiscoverAttackers:
 
 class TestProbeCycleJARM:
 
-    @patch("decnet.prober.worker._ipv6_leak_phase")
+    @patch("decnet.prober.ipv6_leak._route_info", return_value=(False, None))
     @patch("decnet.prober.worker.fetch_leaf_cert", return_value=None)
     @patch("decnet.prober.probes.tcpfp.tcp_fingerprint")
     @patch("decnet.prober.probes.hassh.hassh_server")
@@ -136,7 +136,7 @@ class TestProbeCycleJARM:
         assert 443 in probed["10.0.0.1"]["jarm"]
         assert 8443 in probed["10.0.0.1"]["jarm"]
 
-    @patch("decnet.prober.worker._ipv6_leak_phase")
+    @patch("decnet.prober.ipv6_leak._route_info", return_value=(False, None))
     @patch("decnet.prober.worker.fetch_leaf_cert", return_value=None)
     @patch("decnet.prober.probes.tcpfp.tcp_fingerprint")
     @patch("decnet.prober.probes.hassh.hassh_server")
@@ -163,7 +163,7 @@ class TestProbeCycleJARM:
         assert mock_jarm.call_count == 1
         mock_jarm.assert_called_once_with("10.0.0.1", 8443, timeout=1.0)
 
-    @patch("decnet.prober.worker._ipv6_leak_phase")
+    @patch("decnet.prober.ipv6_leak._route_info", return_value=(False, None))
     @patch("decnet.prober.probes.tcpfp.tcp_fingerprint")
     @patch("decnet.prober.probes.hassh.hassh_server")
     @patch("decnet.prober.probes.jarm.jarm_hash")
@@ -189,7 +189,7 @@ class TestProbeCycleJARM:
             content = json_path.read_text()
             assert "jarm_fingerprint" not in content
 
-    @patch("decnet.prober.worker._ipv6_leak_phase")
+    @patch("decnet.prober.ipv6_leak._route_info", return_value=(False, None))
     @patch("decnet.prober.probes.tcpfp.tcp_fingerprint")
     @patch("decnet.prober.probes.hassh.hassh_server")
     @patch("decnet.prober.probes.jarm.jarm_hash")
@@ -212,7 +212,7 @@ class TestProbeCycleJARM:
 
         assert 443 in probed["10.0.0.1"]["jarm"]
 
-    @patch("decnet.prober.worker._ipv6_leak_phase")
+    @patch("decnet.prober.ipv6_leak._route_info", return_value=(False, None))
     @patch("decnet.prober.probes.tcpfp.tcp_fingerprint")
     @patch("decnet.prober.probes.hassh.hassh_server")
     @patch("decnet.prober.probes.jarm.jarm_hash")
@@ -239,7 +239,7 @@ class TestProbeCycleJARM:
 
 class TestProbeCycleHASSH:
 
-    @patch("decnet.prober.worker._ipv6_leak_phase")
+    @patch("decnet.prober.ipv6_leak._route_info", return_value=(False, None))
     @patch("decnet.prober.probes.tcpfp.tcp_fingerprint")
     @patch("decnet.prober.probes.hassh.hassh_server")
     @patch("decnet.prober.probes.jarm.jarm_hash")
@@ -271,7 +271,7 @@ class TestProbeCycleHASSH:
         assert 22 in probed["10.0.0.1"]["hassh"]
         assert 2222 in probed["10.0.0.1"]["hassh"]
 
-    @patch("decnet.prober.worker._ipv6_leak_phase")
+    @patch("decnet.prober.ipv6_leak._route_info", return_value=(False, None))
     @patch("decnet.prober.probes.tcpfp.tcp_fingerprint")
     @patch("decnet.prober.probes.hassh.hassh_server")
     @patch("decnet.prober.probes.jarm.jarm_hash")
@@ -306,7 +306,7 @@ class TestProbeCycleHASSH:
         assert record["fields"]["hassh_server_hash"] == "b" * 32
         assert record["fields"]["ssh_banner"] == "SSH-2.0-Paramiko_3.0"
 
-    @patch("decnet.prober.worker._ipv6_leak_phase")
+    @patch("decnet.prober.ipv6_leak._route_info", return_value=(False, None))
     @patch("decnet.prober.probes.tcpfp.tcp_fingerprint")
     @patch("decnet.prober.probes.hassh.hassh_server")
     @patch("decnet.prober.probes.jarm.jarm_hash")
@@ -332,7 +332,7 @@ class TestProbeCycleHASSH:
             content = json_path.read_text()
             assert "hassh_fingerprint" not in content
 
-    @patch("decnet.prober.worker._ipv6_leak_phase")
+    @patch("decnet.prober.ipv6_leak._route_info", return_value=(False, None))
     @patch("decnet.prober.probes.tcpfp.tcp_fingerprint")
     @patch("decnet.prober.probes.hassh.hassh_server")
     @patch("decnet.prober.probes.jarm.jarm_hash")
@@ -355,7 +355,7 @@ class TestProbeCycleHASSH:
         assert mock_hassh.call_count == 1  # only 2222
         mock_hassh.assert_called_once_with("10.0.0.1", 2222, timeout=1.0)
 
-    @patch("decnet.prober.worker._ipv6_leak_phase")
+    @patch("decnet.prober.ipv6_leak._route_info", return_value=(False, None))
     @patch("decnet.prober.probes.tcpfp.tcp_fingerprint")
     @patch("decnet.prober.probes.hassh.hassh_server")
     @patch("decnet.prober.probes.jarm.jarm_hash")
@@ -383,7 +383,7 @@ class TestProbeCycleHASSH:
 
 class TestProbeCycleTCPFP:
 
-    @patch("decnet.prober.worker._ipv6_leak_phase")
+    @patch("decnet.prober.ipv6_leak._route_info", return_value=(False, None))
     @patch("decnet.prober.probes.tcpfp.tcp_fingerprint")
     @patch("decnet.prober.probes.hassh.hassh_server")
     @patch("decnet.prober.probes.jarm.jarm_hash")
@@ -415,7 +415,7 @@ class TestProbeCycleTCPFP:
         assert 80 in probed["10.0.0.1"]["tcpfp"]
         assert 443 in probed["10.0.0.1"]["tcpfp"]
 
-    @patch("decnet.prober.worker._ipv6_leak_phase")
+    @patch("decnet.prober.ipv6_leak._route_info", return_value=(False, None))
     @patch("decnet.prober.probes.tcpfp.tcp_fingerprint")
     @patch("decnet.prober.probes.hassh.hassh_server")
     @patch("decnet.prober.probes.jarm.jarm_hash")
@@ -451,7 +451,7 @@ class TestProbeCycleTCPFP:
         assert record["fields"]["window_size"] == "8192"
         assert record["fields"]["options_order"] == "M,N,W,N,N,S"
 
-    @patch("decnet.prober.worker._ipv6_leak_phase")
+    @patch("decnet.prober.ipv6_leak._route_info", return_value=(False, None))
     @patch("decnet.prober.probes.tcpfp.tcp_fingerprint")
     @patch("decnet.prober.probes.hassh.hassh_server")
     @patch("decnet.prober.probes.jarm.jarm_hash")
@@ -482,7 +482,7 @@ class TestProbeCycleTCPFP:
 
 class TestProbeTypeIsolation:
 
-    @patch("decnet.prober.worker._ipv6_leak_phase")
+    @patch("decnet.prober.ipv6_leak._route_info", return_value=(False, None))
     @patch("decnet.prober.probes.tcpfp.tcp_fingerprint")
     @patch("decnet.prober.probes.hassh.hassh_server")
     @patch("decnet.prober.probes.jarm.jarm_hash")
@@ -510,7 +510,7 @@ class TestProbeTypeIsolation:
         assert 2222 in probed["10.0.0.1"]["jarm"]
         assert 2222 in probed["10.0.0.1"]["hassh"]
 
-    @patch("decnet.prober.worker._ipv6_leak_phase")
+    @patch("decnet.prober.ipv6_leak._route_info", return_value=(False, None))
     @patch("decnet.prober.probes.tcpfp.tcp_fingerprint")
     @patch("decnet.prober.probes.hassh.hassh_server")
     @patch("decnet.prober.probes.jarm.jarm_hash")
@@ -564,7 +564,7 @@ class TestWriteEvent:
 
 class TestProbeCycleTLSCert:
 
-    @patch("decnet.prober.worker._ipv6_leak_phase")
+    @patch("decnet.prober.ipv6_leak._route_info", return_value=(False, None))
     @patch("decnet.prober.worker.fetch_leaf_cert")
     @patch("decnet.prober.probes.tcpfp.tcp_fingerprint")
     @patch("decnet.prober.probes.hassh.hassh_server")
@@ -619,7 +619,7 @@ class TestProbeCycleTLSCert:
         assert f["sans"] == "evil.example.com,c2.example.com"
         assert f["cert_sha256"] == "ab" * 32
 
-    @patch("decnet.prober.worker._ipv6_leak_phase")
+    @patch("decnet.prober.ipv6_leak._route_info", return_value=(False, None))
     @patch("decnet.prober.worker.fetch_leaf_cert")
     @patch("decnet.prober.probes.tcpfp.tcp_fingerprint")
     @patch("decnet.prober.probes.hassh.hassh_server")
@@ -648,7 +648,7 @@ class TestProbeCycleTLSCert:
 
         mock_cert.assert_not_called()
 
-    @patch("decnet.prober.worker._ipv6_leak_phase")
+    @patch("decnet.prober.ipv6_leak._route_info", return_value=(False, None))
     @patch("decnet.prober.worker.fetch_leaf_cert", return_value=None)
     @patch("decnet.prober.probes.tcpfp.tcp_fingerprint")
     @patch("decnet.prober.probes.hassh.hassh_server")
@@ -680,7 +680,7 @@ class TestProbeCycleTLSCert:
             content = json_path.read_text()
             assert "tls_certificate" not in content
 
-    @patch("decnet.prober.worker._ipv6_leak_phase")
+    @patch("decnet.prober.ipv6_leak._route_info", return_value=(False, None))
     @patch("decnet.prober.worker.fetch_leaf_cert")
     @patch("decnet.prober.probes.tcpfp.tcp_fingerprint")
     @patch("decnet.prober.probes.hassh.hassh_server")
@@ -712,7 +712,7 @@ class TestProbeCycleTLSCert:
         # Both ports still marked probed despite the cert-side crash.
         assert mock_cert.call_count == 2
 
-    @patch("decnet.prober.worker._ipv6_leak_phase")
+    @patch("decnet.prober.ipv6_leak._route_info", return_value=(False, None))
     @patch("decnet.prober.worker.fetch_leaf_cert")
     @patch("decnet.prober.probes.tcpfp.tcp_fingerprint")
     @patch("decnet.prober.probes.hassh.hassh_server")

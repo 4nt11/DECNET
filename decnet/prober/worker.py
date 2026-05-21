@@ -253,18 +253,19 @@ RotationRecorderFn = Callable[[str, int, "ProbeType", str], None]
 def _run_probe(
     probe: ActiveProbe,
     ip: str,
-    ip_probed: dict[str, set[int]],
+    ip_probed: dict[str, set[int | None]],
     log_path: Path,
     json_path: Path,
     timeout: float,
     publish_fn: ProbePublishFn | None,
     record_rotation: RotationRecorderFn | None,
 ) -> None:
-    """Generic driver for any port-iterating ActiveProbe."""
+    """Generic driver for any ActiveProbe (port-iterating or port-free)."""
     done = ip_probed.setdefault(probe.probe_name, set())
     for port in probe.ports:
         if port in done:
             continue
+        port_label = str(port) if port is not None else "-"
         try:
             result = probe.run(ip, port, timeout)
             done.add(port)
@@ -275,16 +276,16 @@ def _run_probe(
                 log_path, json_path,
                 probe.event_type,
                 target_ip=ip,
-                target_port=str(port),
+                target_port=port_label,
                 msg=msg,
                 **fields,
             )
-            logger.info("prober: %s %s:%d ok", probe.probe_name, ip, port)
-            if record_rotation is not None and probe.rotation_type and probe.rotation_hash_key:
+            logger.info("prober: %s %s:%s ok", probe.probe_name, ip, port_label)
+            if record_rotation is not None and probe.rotation_type and probe.rotation_hash_key and port is not None:
                 record_rotation(ip, port, probe.rotation_type, result[probe.rotation_hash_key])
             if publish_fn is not None:
                 publish_fn(probe.probe_name, probe.publish_payload(ip, port, result))
-            if probe.probe_name == "jarm":
+            if probe.probe_name == "jarm" and port is not None:
                 # A non-empty JARM hash proves TLS; attempt a real cert capture.
                 _capture_tls_cert(ip, port, log_path, json_path, timeout, publish_fn)
         except Exception as exc:
@@ -294,17 +295,17 @@ def _run_probe(
                 "prober_error",
                 severity=_SEVERITY_WARNING,
                 target_ip=ip,
-                target_port=str(port),
+                target_port=port_label,
                 error=str(exc),
-                msg=f"{probe.probe_name} probe failed for {ip}:{port}: {exc}",
+                msg=f"{probe.probe_name} probe failed for {ip}:{port_label}: {exc}",
             )
-            logger.warning("prober: %s probe failed %s:%d: %s", probe.probe_name, ip, port, exc)
+            logger.warning("prober: %s probe failed %s:%s: %s", probe.probe_name, ip, port_label, exc)
 
 
 @_traced("prober.probe_cycle")
 def _probe_cycle(
     targets: set[str],
-    probed: dict[str, dict[str, set[int]]],
+    probed: dict[str, dict[str, set[int | None]]],
     log_path: Path,
     json_path: Path,
     timeout: float = 5.0,
@@ -314,16 +315,13 @@ def _probe_cycle(
     """Probe all known attacker IPs via every registered ActiveProbe.
 
     Probes run in (priority, probe_name) order per ActiveProbeMeta.all().
-    IPv6 leak runs last — it is not port-iterating and stays a special case.
+    Port-free probes (e.g. Ipv6LeakProbe, priority=999) run last by convention.
     """
     for ip in sorted(targets):
         ip_probed = probed.setdefault(ip, {})
-
         for probe_cls in ActiveProbeMeta.all():
             _run_probe(probe_cls(), ip, ip_probed, log_path, json_path,
                        timeout, publish_fn, record_rotation)
-
-        _ipv6_leak_phase(ip, ip_probed, log_path, json_path, timeout, publish_fn)
 
 
 @_traced("prober.tls_cert_capture")
@@ -380,73 +378,6 @@ def _capture_tls_cert(
         )
 
 
-@_traced("prober.ipv6_leak_phase")
-def _ipv6_leak_phase(
-    ip: str,
-    ip_probed: dict[str, set[int]],
-    log_path: Path,
-    json_path: Path,
-    timeout: float,
-    publish_fn: ProbePublishFn | None = None,
-) -> None:
-    """Attempt active ICMPv6 solicitation to elicit a fe80:: response.
-
-    Skipped when:
-    - already attempted for this attacker in this cycle
-    - attacker is not on a directly connected (link-local reachable) L2
-    - scapy unavailable or the local iface has no fe80:: address
-    """
-    done = ip_probed.setdefault("ipv6_leak", set())
-    # Use port 0 as a sentinel (no port concept for ICMPv6 probes).
-    if 0 in done:
-        return
-    done.add(0)
-
-    from decnet.prober.ipv6_leak import _route_info, solicit_ipv6_leak
-
-    on_link, iface = _route_info(ip)
-    if not on_link:
-        logger.debug("prober: ipv6_leak: %s is not on-link — skip active probe", ip)
-        return
-    if iface is None:
-        logger.debug("prober: ipv6_leak: cannot determine iface for %s", ip)
-        return
-
-    try:
-        evidence = solicit_ipv6_leak(ip, iface, timeout=timeout)
-    except Exception as exc:
-        logger.warning("prober: ipv6_leak active probe failed %s: %s", ip, exc)
-        return
-
-    if evidence is None:
-        return
-
-    _write_event(
-        log_path, json_path,
-        "ipv6_link_local_leak",
-        target_ip=ip,
-        ipv6_addr=evidence.get("addr", ""),
-        iid_kind=evidence.get("iid_kind", ""),
-        mac_oui=evidence.get("mac_oui", ""),
-        on_iface=evidence.get("on_iface", ""),
-        vector=evidence.get("vector", ""),
-        msg=f"IPv6 leak {ip} → {evidence.get('addr', '')} ({evidence.get('iid_kind', '')})",
-    )
-    logger.info(
-        "prober: ipv6_leak %s → %s kind=%s oui=%s",
-        ip, evidence.get("addr"), evidence.get("iid_kind"), evidence.get("mac_oui"),
-    )
-    if publish_fn is not None:
-        publish_fn("ipv6_leak", {
-            "attacker_ip": ip,
-            "addr": evidence.get("addr", ""),
-            "iid_kind": evidence.get("iid_kind", ""),
-            "mac_oui": evidence.get("mac_oui", ""),
-            "vector": evidence.get("vector", ""),
-            "on_iface": evidence.get("on_iface", ""),
-            "observed_at": evidence.get("observed_at", ""),
-        })
-
 
 # ─── Main worker ─────────────────────────────────────────────────────────────
 
@@ -461,7 +392,7 @@ async def prober_worker(
 
     Discovers attacker IPs automatically by tailing the JSON log file,
     then fingerprints each IP via every registered ActiveProbe (JARM,
-    HASSH, TCP/IP stack) plus the IPv6 leak special case.
+    HASSH, TCP/IP stack, IPv6 leak) in priority order.
 
     Per-probe port lists are taken from each probe's ``default_ports``
     attribute. Override at runtime via DECNET_PROBE_PORTS_<NAME_UPPER>
@@ -495,7 +426,7 @@ async def prober_worker(
     )
 
     known_attackers: set[str] = set()
-    probed: dict[str, dict[str, set[int]]] = {}  # IP -> {type -> ports}
+    probed: dict[str, dict[str, set[int | None]]] = {}  # IP -> {probe_name -> ports/None}
     log_position: int = 0
 
     loop = asyncio.get_running_loop()

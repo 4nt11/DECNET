@@ -1,39 +1,19 @@
-"""Active IPv6 link-local solicitation prober tests.
+"""Tests for Ipv6LeakProbe and the underlying ipv6_leak helpers.
 
-Tests _ipv6_leak_phase() via monkeypatching — no actual scapy send/receive,
-no sniff threads.  Validates:
-- Phase skips when attacker is not on-link.
-- Phase skips on second call (dedup via ip_probed sentinel).
-- Phase emits log + publish_fn when solicit_ipv6_leak returns evidence.
-- Phase is silent when solicit_ipv6_leak returns None.
-- _route_info calls _ip_route_get exactly once per invocation.
-- _ip_route_get subprocess failure is logged at debug.
-- solicit_ipv6_leak response-parse failure is logged at debug.
+Covers:
+- Ipv6LeakProbe.run() skips when not on-link or iface unknown.
+- Ipv6LeakProbe.run() returns evidence dict on success.
+- Ipv6LeakProbe.run() returns None when solicit returns None.
+- Ipv6LeakProbe.run() returns None and logs on solicit exception.
+- Ipv6LeakProbe.syslog_fields() produces correct SD fields and human message.
+- Ipv6LeakProbe.publish_payload() produces correct bus payload.
+- _route_info calls _ip_route_get exactly once and parses (on_link, iface).
+- _ip_route_get subprocess failure is logged at debug and returns "".
 """
 from __future__ import annotations
 
-from pathlib import Path
 from typing import Any
 from unittest.mock import MagicMock, patch
-
-
-def _phase(
-    ip: str = "10.0.0.9",
-    ip_probed: dict | None = None,
-    log_path: Path | None = None,
-    json_path: Path | None = None,
-    timeout: float = 1.0,
-    publish_fn=None,
-):
-    from decnet.prober.worker import _ipv6_leak_phase
-    if ip_probed is None:
-        ip_probed = {}
-    if log_path is None:
-        log_path = Path("/dev/null")
-    if json_path is None:
-        json_path = Path("/dev/null")
-    _ipv6_leak_phase(ip, ip_probed, log_path, json_path, timeout, publish_fn)
-
 
 _EVIDENCE = {
     "addr": "fe80::aabb:ccff:fedd:eeff",
@@ -46,82 +26,106 @@ _EVIDENCE = {
 }
 
 
-def test_phase_skips_when_not_on_link() -> None:
-    published: list[Any] = []
+# ─── Ipv6LeakProbe.run() ─────────────────────────────────────────────────────
+
+def _make_probe():
+    from decnet.prober.probes.ipv6_leak_probe import Ipv6LeakProbe
+    return Ipv6LeakProbe()
+
+
+def test_run_skips_when_not_on_link() -> None:
+    probe = _make_probe()
     with (
         patch("decnet.prober.ipv6_leak._route_info", return_value=(False, "eth0")),
-        patch("decnet.prober.ipv6_leak.solicit_ipv6_leak", return_value=_EVIDENCE) as mock_sol,
+        patch("decnet.prober.ipv6_leak.solicit_ipv6_leak") as mock_sol,
     ):
-        _phase(publish_fn=lambda k, p: published.append((k, p)))
+        result = probe.run("10.0.0.9", None, 1.0)
+    assert result is None
     mock_sol.assert_not_called()
-    assert published == []
 
 
-def test_phase_skips_when_no_iface() -> None:
-    published: list[Any] = []
+def test_run_skips_when_no_iface() -> None:
+    probe = _make_probe()
     with (
         patch("decnet.prober.ipv6_leak._route_info", return_value=(True, None)),
-        patch("decnet.prober.ipv6_leak.solicit_ipv6_leak", return_value=_EVIDENCE) as mock_sol,
+        patch("decnet.prober.ipv6_leak.solicit_ipv6_leak") as mock_sol,
     ):
-        _phase(publish_fn=lambda k, p: published.append((k, p)))
+        result = probe.run("10.0.0.9", None, 1.0)
+    assert result is None
     mock_sol.assert_not_called()
-    assert published == []
 
 
-def test_phase_emits_on_evidence() -> None:
-    published: list[Any] = []
+def test_run_returns_evidence_on_success() -> None:
+    probe = _make_probe()
     with (
         patch("decnet.prober.ipv6_leak._route_info", return_value=(True, "eth0")),
         patch("decnet.prober.ipv6_leak.solicit_ipv6_leak", return_value=_EVIDENCE),
     ):
-        _phase(publish_fn=lambda k, p: published.append((k, p)))
-    assert len(published) == 1
-    kind, payload = published[0]
-    assert kind == "ipv6_leak"
-    assert payload["addr"] == _EVIDENCE["addr"]
-    assert payload["iid_kind"] == "eui64"
-    assert payload["mac_oui"] == "a8:bb:cc"
+        result = probe.run("10.0.0.9", None, 1.0)
+    assert result == _EVIDENCE
 
 
-def test_phase_silent_when_solicit_returns_none() -> None:
-    published: list[Any] = []
+def test_run_returns_none_when_solicit_returns_none() -> None:
+    probe = _make_probe()
     with (
         patch("decnet.prober.ipv6_leak._route_info", return_value=(True, "eth0")),
         patch("decnet.prober.ipv6_leak.solicit_ipv6_leak", return_value=None),
     ):
-        _phase(publish_fn=lambda k, p: published.append((k, p)))
-    assert published == []
+        result = probe.run("10.0.0.9", None, 1.0)
+    assert result is None
 
 
-def test_phase_dedup_skips_on_second_call() -> None:
-    published: list[Any] = []
-    ip_probed: dict = {}
-    with (
-        patch("decnet.prober.ipv6_leak._route_info", return_value=(True, "eth0")),
-        patch("decnet.prober.ipv6_leak.solicit_ipv6_leak", return_value=_EVIDENCE) as mock_sol,
-    ):
-        _phase(ip_probed=ip_probed, publish_fn=lambda k, p: published.append((k, p)))
-        _phase(ip_probed=ip_probed, publish_fn=lambda k, p: published.append((k, p)))
-    # solicit called only once despite two phase invocations
-    mock_sol.assert_called_once()
-    assert len(published) == 1
-
-
-def test_phase_handles_solicit_exception_silently() -> None:
-    published: list[Any] = []
+def test_run_propagates_solicit_exception() -> None:
+    """Exceptions from solicit_ipv6_leak bubble up to _run_probe's except clause."""
+    probe = _make_probe()
     with (
         patch("decnet.prober.ipv6_leak._route_info", return_value=(True, "eth0")),
         patch("decnet.prober.ipv6_leak.solicit_ipv6_leak", side_effect=RuntimeError("boom")),
     ):
-        _phase(publish_fn=lambda k, p: published.append((k, p)))
-    assert published == []
+        try:
+            probe.run("10.0.0.9", None, 1.0)
+            raised = False
+        except RuntimeError:
+            raised = True
+    assert raised
+
+
+# ─── Ipv6LeakProbe.syslog_fields() ──────────────────────────────────────────
+
+def test_syslog_fields_structure() -> None:
+    probe = _make_probe()
+    fields, msg = probe.syslog_fields("10.0.0.9", None, _EVIDENCE)
+    assert fields["ipv6_addr"] == _EVIDENCE["addr"]
+    assert fields["iid_kind"] == "eui64"
+    assert fields["mac_oui"] == "a8:bb:cc"
+    assert fields["on_iface"] == "eth0"
+    assert fields["vector"] == "active_echo"
+    assert "10.0.0.9" in msg
+    assert _EVIDENCE["addr"] in msg
+
+
+def test_syslog_fields_byte_stable() -> None:
+    """SD field keys are stable — callers rely on them for syslog parsing."""
+    probe = _make_probe()
+    fields, _ = probe.syslog_fields("10.0.0.9", None, _EVIDENCE)
+    assert set(fields.keys()) == {"ipv6_addr", "iid_kind", "mac_oui", "on_iface", "vector"}
+
+
+# ─── Ipv6LeakProbe.publish_payload() ────────────────────────────────────────
+
+def test_publish_payload_structure() -> None:
+    probe = _make_probe()
+    payload = probe.publish_payload("10.0.0.9", None, _EVIDENCE)
+    assert payload["attacker_ip"] == "10.0.0.9"
+    assert payload["addr"] == _EVIDENCE["addr"]
+    assert payload["iid_kind"] == "eui64"
+    assert payload["mac_oui"] == "a8:bb:cc"
+    assert payload["observed_at"] == _EVIDENCE["observed_at"]
 
 
 # ─── _route_info / _ip_route_get unit tests ──────────────────────────────────
 
-
 def test_route_info_calls_ip_route_get_once() -> None:
-    """_route_info must shell out exactly once regardless of parse path."""
     from decnet.prober.ipv6_leak import _route_info
     stdout = "10.0.0.9 dev eth0 src 10.0.0.1 uid 0\n    cache"
     with patch("decnet.prober.ipv6_leak._ip_route_get", return_value=stdout) as mock_rg:
@@ -149,11 +153,10 @@ def test_ip_route_get_logs_on_subprocess_failure() -> None:
         result = _ip_route_get("10.0.0.9")
     assert result == ""
     mock_log.debug.assert_called_once()
-    assert "10.0.0.9" in mock_log.debug.call_args.args[1]
+    assert "10.0.0.9" in str(mock_log.debug.call_args.args)
 
 
 def test_ip_route_get_returns_empty_string_on_failure() -> None:
-    """subprocess failure returns "" and logs at debug — not a silent swallow."""
     from decnet.prober.ipv6_leak import _ip_route_get
     with (
         patch("decnet.prober.ipv6_leak.subprocess.run", side_effect=OSError("no ip binary")),
@@ -162,5 +165,4 @@ def test_ip_route_get_returns_empty_string_on_failure() -> None:
         result = _ip_route_get("10.0.0.9")
     assert result == ""
     assert mock_log.debug.called
-    logged_msg = mock_log.debug.call_args.args
-    assert "10.0.0.9" in str(logged_msg)
+    assert "10.0.0.9" in str(mock_log.debug.call_args.args)

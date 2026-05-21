@@ -6,22 +6,24 @@ from decnet.prober.base import ActiveProbe
 from decnet.prober.tcpfp import tcp_fingerprint
 from decnet.telemetry import traced as _traced
 
-DEFAULT_PORTS: list[int] = [22, 80, 443, 8080, 8443, 445, 3389]
+DEFAULT_PORTS: list[int | None] = [22, 80, 443, 8080, 8443, 445, 3389]
 
 
 class TcpfpProbe(ActiveProbe):
     probe_name = "tcpfp"
-    default_ports = DEFAULT_PORTS
+    default_ports: list[int | None] = DEFAULT_PORTS
     event_type = "tcpfp_fingerprint"
     rotation_type = "tcpfp"
     rotation_hash_key = "tcpfp_hash"
     priority = 100
 
     @_traced("prober.tcpfp_probe")
-    def run(self, ip: str, port: int, timeout: float) -> dict[str, Any] | None:
+    def run(self, ip: str, port: int | None, timeout: float) -> dict[str, Any] | None:
+        if port is None:
+            return None
         return tcp_fingerprint(ip, port, timeout=timeout)
 
-    def syslog_fields(self, ip: str, port: int, result: dict[str, Any]) -> tuple[dict[str, Any], str]:
+    def syslog_fields(self, ip: str, port: int | None, result: dict[str, Any]) -> tuple[dict[str, Any], str]:
         fields = {
             "tcpfp_hash": result["tcpfp_hash"],
             "tcpfp_raw": result["tcpfp_raw"],
@@ -40,7 +42,7 @@ class TcpfpProbe(ActiveProbe):
         }
         return fields, f"TCPFP {ip}:{port} = {result['tcpfp_hash']}"
 
-    def publish_payload(self, ip: str, port: int, result: dict[str, Any]) -> dict[str, Any]:
+    def publish_payload(self, ip: str, port: int | None, result: dict[str, Any]) -> dict[str, Any]:
         return {
             "attacker_ip": ip,
             "port": port,
