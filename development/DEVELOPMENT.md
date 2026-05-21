@@ -47,7 +47,7 @@
 
 - [~] **Attacker fingerprinting** — HTTP User-Agent, VNC client version stored as `fingerprint` bounties. JA3/JA3S in progress (sniffer container). HASSH, JA4+, TCP stack, JARM planned (see Attacker Intelligence section).
 - [x] **Canary tokens** — Embed fake AWS keys and honeydocs into decky filesystems.
-- [ ] **Tarpit mode** — Slow down attackers by drip-feeding bytes or delaying responses.
+- [x] **Tarpit mode** — Slow down attackers by drip-feeding bytes or delaying responses.
 - [x] **Dynamic decky mutation** — Rotate exposed services or OS fingerprints over time.
 - [x] **Credential harvesting DB** — Centralized database for all username/password attempts.
 - [x] **Session recording** — Full capture for SSH/Telnet sessions. -> sessrec pty relay writes asciinema v2 day-shards per decky; paged API + SessionDrawer replay in the dashboard.
@@ -59,7 +59,7 @@
 - [x] **Threat intel enrichment** — Auto-lookup IPs against AbuseIPDB, Shodan, and GreyNoise. -> Out-of-band `decnet enrich` worker, woken on `attacker.scored`/`attacker.observed`. v1 ships GreyNoise Community + AbuseIPDB + abuse.ch (Feodo Tracker bulk feed and ThreatFox per-IP). Shodan / Censys / OTX backlogged in DEVELOPMENT_V2.md.
 - [x] **Attack campaign clustering** — Group sessions by signatures and timing patterns.
 - [x] **GeoIP mapping** — Visualize attacker origin and ASN data on a map.
-- [ ] **TTPs tagging** — Map observed behaviors to MITRE ATT&CK techniques.
+- [x] **TTPs tagging** — Map observed behaviors to MITRE ATT&CK techniques.
 
 ## Dashboard & Visibility
 
@@ -110,21 +110,22 @@
 - [x] **TCP/IP stack** — ISN patterns, DF bit, ToS/DSCP, IP ID sequence (random/incremental/zero)
 - [x] **HASSH / HASSHServer** — SSH KEX algo, cipher, MAC order → tool fingerprint
 - [x] **HTTP/2 fingerprint** — GREASE values, settings frame order, header pseudo-field ordering
-- [ ] **QUIC fingerprint** — Connection ID length, transport parameters order
+- [x] **QUIC fingerprint** — Connection ID length, transport parameters order
 - [ ] **DNS behavior** — Query patterns, recursion flags, EDNS0 options, resolver fingerprint
 - [x] **HTTP header ordering** — Tool-specific capitalization and ordering quirks
 
 ### Network Topology Leakage
 - [x] **X-Forwarded-For mismatches** — Detect VPN/proxy slip vs. actual source IP
-- [ ] **ICMP error messages** — Internal IP leakage from misconfigured attacker infra
-- [ ] **IPv6 link-local leakage** — IPv6 addrs leaked even over IPv4 VPN (common opsec fail)
+- [x] **ICMP error messages** — Internal IP leakage from misconfigured attacker infra
+- [x] **ICMPv6 error messages** — Internal IP leakage from misconfigured attacker infra
+- [x] **IPv6 link-local leakage** — IPv6 addrs leaked even over IPv4 VPN (common opsec fail)
 - [ ] **mDNS/LLMNR leakage** — Attacker hostname/device info from misconfigured systems
 
 ### Geolocation & Infrastructure
 - [x] **ASN lookup** — Source IP autonomous system number and org name
 - [ ] **BGP prefix / RPKI validity** — Route origin legitimacy
 - [x] **PTR records** — rDNS for attacker IPs (catches infra with forgotten reverse DNS)
-- [ ] **Latency triangulation** — JA4L RTT estimates for rough geolocation
+- [~] **Latency triangulation** — JA4L RTT estimates for rough geolocation. - Deferred to Federation release.
 
 ### Service-Level Behavioral Profiling
 - [x] **Commands executed** — Full command log per session (SSH, Telnet, FTP, Redis, DB services)

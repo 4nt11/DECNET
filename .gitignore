@@ -1,5 +1,6 @@
 .venv/
 .venv*/
+docker-compose.yaml
 .311/
 .3[0-9][0-9]/
 logs/
