@@ -164,6 +164,11 @@ export const TimelineSection: React.FC<Props> = ({ attacker, open, onToggle }) =
         {attacker.asn != null ? (
           <span className="matrix-text">
             AS{attacker.asn}
+            {attacker.bgp_prefix && (
+              <span className="dim" style={{ marginLeft: 6, fontSize: '0.75rem', fontFamily: 'monospace' }}>
+                {attacker.bgp_prefix}
+              </span>
+            )}
             {attacker.as_name && (
               <span className="dim" style={{ marginLeft: 6, fontSize: '0.75rem' }}>
                 {attacker.as_name}
@@ -173,6 +178,15 @@ export const TimelineSection: React.FC<Props> = ({ attacker, open, onToggle }) =
               <span className="dim" style={{ marginLeft: 6, fontSize: '0.75rem' }}>
                 ({attacker.asn_source})
               </span>
+            )}
+            {attacker.rpki_status === 'valid' && (
+              <span className="rpki-status-badge valid" style={{ marginLeft: 8 }}>RPKI VALID</span>
+            )}
+            {attacker.rpki_status === 'invalid' && (
+              <span className="rpki-status-badge invalid" style={{ marginLeft: 8 }}>RPKI INVALID</span>
+            )}
+            {attacker.rpki_status === 'not-found' && (
+              <span className="dim" style={{ marginLeft: 8, fontSize: '0.7rem' }}>RPKI NO ROA</span>
             )}
           </span>
         ) : (

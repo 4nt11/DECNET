@@ -19,7 +19,10 @@ export interface AttackerFixture {
   country_source: string | null;
   asn: number | null;
   as_name: string | null;
+  bgp_prefix: string | null;
   asn_source: string | null;
+  rpki_status: string | null;
+  rpki_source: string | null;
   ptr_record: string | null;
   updated_at: string;
   behavior: null;
@@ -61,7 +64,10 @@ export const makeAttacker = (overrides: Partial<AttackerFixture> = {}): Attacker
   country_source: 'maxmind',
   asn: 64500,
   as_name: 'EXAMPLE-AS',
+  bgp_prefix: null,
   asn_source: 'maxmind',
+  rpki_status: null,
+  rpki_source: null,
   ptr_record: null,
   updated_at: '2026-05-09T11:00:00Z',
   behavior: null,

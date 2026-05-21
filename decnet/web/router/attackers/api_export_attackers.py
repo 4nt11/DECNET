@@ -40,6 +40,10 @@ def _shape_observation(row: dict) -> dict:
         "network": {
             "asn": row.get("asn"),
             "as_name": row.get("as_name"),
+            "bgp_prefix": row.get("bgp_prefix"),
+            "asn_source": row.get("asn_source"),
+            "rpki_status": row.get("rpki_status"),
+            "rpki_source": row.get("rpki_source"),
             "ptr_record": row.get("ptr_record"),
         },
         "threat_intel": {

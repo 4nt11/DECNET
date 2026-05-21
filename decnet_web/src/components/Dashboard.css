@@ -514,6 +514,22 @@
   color: var(--text-color);
 }
 
+.rpki-status-badge {
+  font-size: 0.65rem;
+  padding: 2px 8px;
+  letter-spacing: 1px;
+}
+.rpki-status-badge.valid {
+  border: 1px solid var(--matrix);
+  background: var(--matrix-tint-5);
+  color: var(--matrix);
+}
+.rpki-status-badge.invalid {
+  border: 1px solid var(--alert);
+  background: var(--alert-tint-10);
+  color: var(--alert);
+}
+
 .back-button {
   display: inline-flex;
   align-items: center;

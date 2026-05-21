@@ -73,7 +73,10 @@ export interface AttackerData {
   country_source: string | null;
   asn: number | null;
   as_name: string | null;
+  bgp_prefix: string | null;
   asn_source: string | null;
+  rpki_status: string | null;
+  rpki_source: string | null;
   ptr_record: string | null;
   updated_at: string;
   behavior: AttackerBehavior | null;
