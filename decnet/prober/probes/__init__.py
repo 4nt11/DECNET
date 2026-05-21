@@ -1,5 +1,6 @@
 # Import all probe modules to trigger ActiveProbeMeta registration.
 from decnet.prober.probes.hassh import HasshProbe as HasshProbe
+from decnet.prober.probes.icmp6_error_probe import Icmp6ErrorProbe as Icmp6ErrorProbe
 from decnet.prober.probes.icmp_error_probe import IcmpErrorProbe as IcmpErrorProbe
 from decnet.prober.probes.ipv6_leak_probe import Ipv6LeakProbe as Ipv6LeakProbe
 from decnet.prober.probes.jarm import JarmProbe as JarmProbe
