@@ -1,7 +1,9 @@
 """Tests for decnet/templates/dns/server.py and decnet/services/dns.py."""
 
 import collections
+import hashlib
 import importlib.util
+import socket
 import struct
 import sys
 from types import ModuleType
@@ -37,7 +39,7 @@ def _make_fake_instance_seed() -> ModuleType:
     mod.rng = _random.Random(42)
     mod.pick = lambda choices: list(choices)[0]
     mod.instance_uuid = lambda ns="": f"aaaabbbb-cccc-dddd-eeee-{ns[:12].ljust(12, '0')}"
-    mod.instance_hex = lambda nbytes, ns="": ("deadbeef" * 4)[:nbytes * 2]
+    mod.instance_hex = lambda nbytes, ns="": (hashlib.sha256(ns.encode()).hexdigest() * 4)[:nbytes * 2]
     mod.hostname = lambda: "testhost"
     mod.jitter = MagicMock()
     return mod
@@ -68,8 +70,12 @@ def _load_dns(extra_env: dict | None = None):
     with patch.dict("os.environ", env, clear=False):
         spec.loader.exec_module(mod)  # type: ignore[union-attr]
 
-    # Reset tunneling state between tests
+    # Reset per-src state between tests
     mod._txt_times.clear()
+    mod._qps_window.clear()
+    mod._flood_cooldown.clear()
+    mod._recon_window.clear()
+    mod._recon_cooldown.clear()
 
     return mod, bridge._events
 
@@ -155,6 +161,71 @@ class TestAuthZone:
         resp = mod._handle(_build_query("extra.test.local", mod.TYPE_A), "1.2.3.4", 1234, "udp")
         assert resp is not None
         assert _rcode(resp) == mod.RCODE_NOERROR
+
+# ── AAAA / IPv6 ───────────────────────────────────────────────────────────────
+
+class TestAAAARecords:
+    def test_aaaa_apex(self):
+        mod, _ = _load_dns()
+        resp = mod._handle(_build_query("test.local", mod.TYPE_AAAA), "1.2.3.4", 1234, "udp")
+        assert resp is not None
+        assert _rcode(resp) == mod.RCODE_NOERROR
+        _, ancount, _, _ = _counts(resp)
+        assert ancount >= 1
+
+    def test_aaaa_rdata_is_16_bytes_and_ula(self):
+        mod, _ = _load_dns()
+        resp = mod._handle(_build_query("test.local", mod.TYPE_AAAA), "1.2.3.4", 1234, "udp")
+        assert resp is not None
+        # Walk past header(12) + question to reach answer RDATA
+        # Question: encoded "test.local" + 4 bytes type/class
+        # We just need to find a 16-byte block starting with 0xfd somewhere
+        # The AAAA RDATA is 16 bytes; first byte must be 0xfd (ULA)
+        assert b"\xfd" in resp  # ULA fd::/8
+
+    def test_aaaa_www(self):
+        mod, _ = _load_dns()
+        resp = mod._handle(_build_query("www.test.local", mod.TYPE_AAAA), "1.2.3.4", 1234, "udp")
+        assert resp is not None
+        assert _rcode(resp) == mod.RCODE_NOERROR
+        _, ancount, _, _ = _counts(resp)
+        assert ancount >= 1
+
+    def test_aaaa_out_of_zone_refused(self):
+        mod, _ = _load_dns({"DNS_ZONE_MODE": "auth"})
+        resp = mod._handle(_build_query("google.com", mod.TYPE_AAAA), "1.2.3.4", 1234, "udp")
+        assert resp is not None
+        assert _rcode(resp) == mod.RCODE_REFUSED
+
+    def test_extra_record_aaaa(self):
+        mod, _ = _load_dns({"DNS_EXTRA_RECORDS": "ipv6host AAAA fd00::1234"})
+        resp = mod._handle(_build_query("ipv6host.test.local", mod.TYPE_AAAA), "1.2.3.4", 1234, "udp")
+        assert resp is not None
+        assert _rcode(resp) == mod.RCODE_NOERROR
+        _, ancount, _, _ = _counts(resp)
+        assert ancount >= 1
+
+    def test_extra_record_invalid_aaaa_skipped(self):
+        """Invalid AAAA value in DNS_EXTRA_RECORDS must not crash the server."""
+        mod, _ = _load_dns({"DNS_EXTRA_RECORDS": "badhost AAAA not-an-ipv6"})
+        # If we got a module, the parser didn't crash
+        resp = mod._handle(_build_query("badhost.test.local", mod.TYPE_AAAA), "1.2.3.4", 1234, "udp")
+        assert resp is not None
+        assert _rcode(resp) == mod.RCODE_NXDOMAIN  # record was silently dropped
+
+    def test_fake_ipv6_returns_ula(self):
+        mod, _ = _load_dns()
+        ip6 = mod._fake_ipv6("test")
+        parsed = socket.inet_pton(socket.AF_INET6, ip6)
+        assert parsed[0] == 0xFD  # first byte must be fd
+
+    def test_fake_ipv6_deterministic(self):
+        mod, _ = _load_dns()
+        assert mod._fake_ipv6("x") == mod._fake_ipv6("x")
+
+    def test_fake_ipv6_distinct_labels(self):
+        mod, _ = _load_dns()
+        assert mod._fake_ipv6("zone") != mod._fake_ipv6("ns2")
 
 # ── Fingerprint probes ────────────────────────────────────────────────────────
 
@@ -268,6 +339,121 @@ class TestTunnelingHeuristic:
         query = _build_query(f"{label}.test.local", mod.TYPE_A)
         mod._handle(query, "9.9.9.9", 1234, "udp")
         assert not _events_of(events, "query")
+
+# ── Flood detection ───────────────────────────────────────────────────────────
+
+class TestFloodDetection:
+    def test_flood_threshold_emits_flood_suspect(self):
+        mod, events = _load_dns()
+        src = "7.7.7.7"
+        # Send _FLOOD_THRESHOLD queries (default 50) in one shot
+        for i in range(mod._FLOOD_THRESHOLD):
+            mod._handle(_build_query(f"q{i}.test.local", mod.TYPE_A), src, 1234, "udp")
+        assert _events_of(events, "flood_suspect")
+
+    def test_flood_suspect_fires_only_once_within_cooldown(self):
+        mod, events = _load_dns()
+        src = "8.8.8.8"
+        # Send well above threshold — should still be one event due to cooldown
+        for i in range(mod._FLOOD_THRESHOLD * 2):
+            mod._handle(_build_query(f"q{i}.test.local", mod.TYPE_A), src, 1234, "udp")
+        floods = _events_of(events, "flood_suspect")
+        assert len(floods) == 1
+
+    def test_flood_does_not_suppress_query_events(self):
+        """flood_suspect is additive — baseline query events still fire."""
+        mod, events = _load_dns()
+        src = "9.9.9.8"
+        for i in range(mod._FLOOD_THRESHOLD):
+            mod._handle(_build_query(f"r{i}.test.local", mod.TYPE_A), src, 1234, "udp")
+        # Queries from a flooding src still produce query events
+        assert _events_of(events, "query")
+
+    def test_flood_includes_qps_and_window(self):
+        mod, events = _load_dns()
+        src = "6.6.6.6"
+        for i in range(mod._FLOOD_THRESHOLD):
+            mod._handle(_build_query(f"q{i}.test.local", mod.TYPE_A), src, 1234, "udp")
+        floods = _events_of(events, "flood_suspect")
+        assert floods
+        assert "qps" in floods[0]
+        assert "window_sec" in floods[0]
+
+    def test_tracking_evicted_on_lru_overflow(self):
+        mod, events = _load_dns()
+        # Fill qps_window beyond _MAX_TRACKED_SRCS to trigger eviction
+        # We need _EVICT_EVENT_EVERY evictions to fire tracking_evicted
+        evict_target = mod._EVICT_EVENT_EVERY
+        capacity = mod._MAX_TRACKED_SRCS
+        for i in range(capacity + evict_target):
+            src = f"10.{i >> 16 & 0xFF}.{i >> 8 & 0xFF}.{i & 0xFF}"
+            mod._handle(_build_query("test.local", mod.TYPE_A), src, 1234, "udp")
+        assert _events_of(events, "tracking_evicted")
+
+# ── Recon burst aggregation ───────────────────────────────────────────────────
+
+class TestReconBurst:
+    def test_fingerprint_then_axfr_triggers_recon_burst(self):
+        mod, events = _load_dns()
+        src = "5.5.5.1"
+        # fingerprint_probe
+        mod._handle(
+            _build_query("version.bind", mod.TYPE_TXT, qclass=mod.CLASS_CH),
+            src, 1234, "udp",
+        )
+        # zone_transfer
+        mod._handle(_build_query("test.local", mod.TYPE_AXFR), src, 1234, "tcp")
+        bursts = _events_of(events, "recon_burst")
+        assert bursts
+        assert bursts[0]["distinct_types"] == 2
+
+    def test_recon_burst_fires_only_once_within_cooldown(self):
+        mod, events = _load_dns()
+        src = "5.5.5.2"
+        for _ in range(3):
+            mod._handle(
+                _build_query("version.bind", mod.TYPE_TXT, qclass=mod.CLASS_CH),
+                src, 1234, "udp",
+            )
+            mod._handle(_build_query("test.local", mod.TYPE_AXFR), src, 1234, "tcp")
+        bursts = _events_of(events, "recon_burst")
+        assert len(bursts) == 1
+
+    def test_recon_burst_different_srcs_no_cross_trigger(self):
+        mod, events = _load_dns()
+        # src A does fingerprint, src B does zone_transfer — no burst for either
+        mod._handle(
+            _build_query("version.bind", mod.TYPE_TXT, qclass=mod.CLASS_CH),
+            "5.5.5.3", 1234, "udp",
+        )
+        mod._handle(_build_query("test.local", mod.TYPE_AXFR), "5.5.5.4", 1234, "tcp")
+        assert not _events_of(events, "recon_burst")
+
+    def test_recon_burst_does_not_suppress_source_events(self):
+        mod, events = _load_dns()
+        src = "5.5.5.5"
+        mod._handle(
+            _build_query("version.bind", mod.TYPE_TXT, qclass=mod.CLASS_CH),
+            src, 1234, "udp",
+        )
+        mod._handle(_build_query("test.local", mod.TYPE_AXFR), src, 1234, "tcp")
+        # Source events must still fire
+        assert _events_of(events, "fingerprint_probe")
+        assert _events_of(events, "zone_transfer")
+        # And the burst on top
+        assert _events_of(events, "recon_burst")
+
+    def test_amp_plus_fingerprint_triggers_recon_burst(self):
+        mod, events = _load_dns()
+        src = "5.5.5.6"
+        mod._handle(
+            _build_query("version.bind", mod.TYPE_TXT, qclass=mod.CLASS_CH),
+            src, 1234, "udp",
+        )
+        mod._handle(_build_query("test.local", mod.TYPE_ANY), src, 1234, "udp")
+        bursts = _events_of(events, "recon_burst")
+        assert bursts
+        assert bursts[0]["distinct_types"] == 2
 
 # ── Zone mode: open ───────────────────────────────────────────────────────────
 

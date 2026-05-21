@@ -8,6 +8,9 @@ event_type values emitted:
   zone_transfer      — AXFR or IXFR (always REFUSED)
   amp_probe          — qtype=ANY or EDNS requestor udp_size > 1232
   tunneling_suspect  — long high-entropy labels or rapid TXT burst from same src
+  flood_suspect      — source exceeding QPS threshold within rolling window
+  tracking_evicted   — LRU state evicted (signals IP-rotation evasion)
+  recon_burst        — same source hit ≥2 distinct high-signal event types within 60s
 """
 
 import asyncio
@@ -15,6 +18,7 @@ import collections
 import hashlib
 import math
 import os
+import socket
 import struct
 import time
 from typing import Any, cast
@@ -64,15 +68,32 @@ def _fake_ip(label: str = "") -> str:
     return f"10.{(h >> 16) & 0xFF}.{(h >> 8) & 0xFF}.{h & 0xFF}"
 
 
+def _fake_ipv6(label: str = "") -> str:
+    """Deterministic ULA IPv6 address (fd00::/8) for in-zone names."""
+    raw = bytes.fromhex(seed.instance_hex(15, f"aaaa:{label}"))
+    addr = b"\xfd" + raw  # fd + 15 bytes = 16 bytes total, guaranteed fd::/8
+    return socket.inet_ntop(socket.AF_INET6, addr)
+
+
 ZONE_IP  = _fake_ip("zone")
 _NS2_IP  = _fake_ip("ns2")
+ZONE_IPV6 = _fake_ipv6("zone")
+_NS2_IPV6 = _fake_ipv6("ns2")
 
 # Parse extra_records: one per line, "<name> <TYPE> <value>"
 _EXTRA_RECORDS: list[tuple[str, str, str]] = []
 for _line in _EXTRA_RAW.splitlines():
     _parts = _line.strip().split(None, 2)
     if len(_parts) == 3:
-        _EXTRA_RECORDS.append((_parts[0], _parts[1].upper(), _parts[2]))
+        _ename, _etype, _eval = _parts[0], _parts[1].upper(), _parts[2]
+        if _etype == "AAAA":
+            try:
+                socket.inet_pton(socket.AF_INET6, _eval)
+                _EXTRA_RECORDS.append((_ename, _etype, _eval))
+            except OSError:
+                pass
+        else:
+            _EXTRA_RECORDS.append((_ename, _etype, _eval))
 
 # ── DNS wire constants ────────────────────────────────────────────────────────
 
@@ -159,6 +180,10 @@ def _rr(name: str, rtype: int, rclass: int, ttl: int, rdata: bytes) -> bytes:
 
 def _rdata_A(ip: str) -> bytes:
     return bytes(int(x) for x in ip.split("."))
+
+
+def _rdata_AAAA(ip6: str) -> bytes:
+    return socket.inet_pton(socket.AF_INET6, ip6)
 
 
 def _rdata_NS(ns: str) -> bytes:
@@ -257,17 +282,70 @@ def _log(event_type: str, severity: int = 6, **kwargs) -> None:
     write_syslog_file(line)
     forward_syslog(line, LOG_TARGET)
 
-# ── Tunneling heuristic ───────────────────────────────────────────────────────
+# ── Tunables ──────────────────────────────────────────────────────────────────
 
-_SHANNON_THRESHOLD  = 4.0
+# Tunneling heuristic
+_SHANNON_THRESHOLD   = 4.0
 _LABEL_LEN_THRESHOLD = 30
-_TXT_BURST_WINDOW   = 10.0   # seconds
-_TXT_BURST_COUNT    = 5
-_MAX_TRACKED_SRCS   = 1000
+_TXT_BURST_WINDOW    = 10.0   # seconds
+_TXT_BURST_COUNT     = 5
+_MAX_TRACKED_SRCS    = 1000
 
-# src_ip -> deque of recent TXT query timestamps (monotonic)
+# Flood detection
+_QPS_WINDOW_SEC      = 10.0
+_FLOOD_THRESHOLD     = 50
+_FLOOD_COOLDOWN_SEC  = 30.0
+
+# Recon burst
+_RECON_WINDOW_SEC         = 60.0
+_RECON_DISTINCT_THRESHOLD = 2
+_RECON_COOLDOWN_SEC       = 120.0
+_RECON_SIGNAL_TYPES       = frozenset({"fingerprint_probe", "zone_transfer", "amp_probe"})
+
+# Eviction telemetry
+_EVICT_EVENT_EVERY = 100
+
+# ── Per-src state ─────────────────────────────────────────────────────────────
+
+# Tunneling: src_ip -> deque of recent TXT timestamps
 _txt_times: collections.OrderedDict[str, collections.deque] = collections.OrderedDict()
 
+# Flood: src_ip -> deque of recent query timestamps
+_qps_window: collections.OrderedDict[str, collections.deque] = collections.OrderedDict()
+
+# Flood cooldown: src_ip -> last flood_suspect emit time
+_flood_cooldown: dict[str, float] = {}
+
+# Recon: src_ip -> {event_type: last_seen_monotonic}
+_recon_window: collections.OrderedDict[str, dict[str, float]] = collections.OrderedDict()
+
+# Recon cooldown: src_ip -> last recon_burst emit time
+_recon_cooldown: dict[str, float] = {}
+
+_evictions_total = 0
+
+
+def _note_eviction(tracker_name: str) -> None:
+    global _evictions_total
+    _evictions_total += 1
+    if _evictions_total % _EVICT_EVENT_EVERY == 0:
+        _log(
+            "tracking_evicted",
+            evictions_total=_evictions_total,
+            capacity=_MAX_TRACKED_SRCS,
+            tracker_name=tracker_name,
+        )
+
+
+def _track_lru(table: collections.OrderedDict, key: str, tracker_name: str) -> None:
+    """Touch key to MRU end; evict LRU entries if over capacity."""
+    if key in table:
+        table.move_to_end(key)
+    while len(table) > _MAX_TRACKED_SRCS:
+        table.popitem(last=False)
+        _note_eviction(tracker_name)
+
+# ── Tunneling heuristic ───────────────────────────────────────────────────────
 
 def _shannon_entropy(s: str) -> float:
     if not s:
@@ -286,9 +364,8 @@ def _is_tunneling(qname: str, qtype: int, src: str) -> bool:
     if qtype == TYPE_TXT:
         now = time.monotonic()
         if src not in _txt_times:
-            if len(_txt_times) >= _MAX_TRACKED_SRCS:
-                _txt_times.popitem(last=False)
             _txt_times[src] = collections.deque()
+        _track_lru(_txt_times, src, "txt_times")
         q = _txt_times[src]
         q.append(now)
         while q and now - q[0] > _TXT_BURST_WINDOW:
@@ -296,6 +373,64 @@ def _is_tunneling(qname: str, qtype: int, src: str) -> bool:
         if len(q) >= _TXT_BURST_COUNT:
             return True
     return False
+
+# ── Flood detection ───────────────────────────────────────────────────────────
+
+def _check_flood(src: str, qtype_name: str) -> bool:
+    """Return True (and emit flood_suspect once per cooldown) if src is flooding."""
+    now = time.monotonic()
+    if src not in _qps_window:
+        _qps_window[src] = collections.deque()
+    _track_lru(_qps_window, src, "qps_window")
+    q = _qps_window[src]
+    q.append(now)
+    while q and now - q[0] > _QPS_WINDOW_SEC:
+        q.popleft()
+    if len(q) >= _FLOOD_THRESHOLD:
+        last = _flood_cooldown.get(src, 0.0)
+        if now - last >= _FLOOD_COOLDOWN_SEC:
+            _flood_cooldown[src] = now
+            _log(
+                "flood_suspect",
+                src=src,
+                qps=len(q),
+                window_sec=_QPS_WINDOW_SEC,
+                sample_qtype=qtype_name,
+            )
+            return True
+    return False
+
+# ── Recon burst aggregation ───────────────────────────────────────────────────
+
+def _note_recon_event(src: str, event_type: str) -> None:
+    """Record a high-signal event; emit recon_burst if threshold met."""
+    if event_type not in _RECON_SIGNAL_TYPES:
+        return
+    now = time.monotonic()
+    if src not in _recon_window:
+        _recon_window[src] = {}
+    _track_lru(_recon_window, src, "recon_window")
+    _recon_window[src][event_type] = now
+    # Prune events older than window
+    stale = [k for k, t in _recon_window[src].items() if now - t > _RECON_WINDOW_SEC]
+    for k in stale:
+        del _recon_window[src][k]
+    active = _recon_window[src]
+    if len(active) >= _RECON_DISTINCT_THRESHOLD:
+        last = _recon_cooldown.get(src, 0.0)
+        if now - last >= _RECON_COOLDOWN_SEC:
+            _recon_cooldown[src] = now
+            seq = sorted(
+                [(et, round(now - t, 1)) for et, t in active.items()],
+                key=lambda x: x[1],
+            )
+            _log(
+                "recon_burst",
+                src=src,
+                distinct_types=len(active),
+                window_sec=_RECON_WINDOW_SEC,
+                sequence=str(seq),
+            )
 
 # ── Response builders ─────────────────────────────────────────────────────────
 
@@ -367,7 +502,7 @@ def _auth_response(qid: int, rd: bool, qname: str, qtype: int) -> bytes:
 
     if qtype in (TYPE_A, TYPE_ANY):
         ip_map = {
-            DOMAIN_BARE:        ZONE_IP,
+            DOMAIN_BARE:           ZONE_IP,
             f"www.{DOMAIN_BARE}":  ZONE_IP,
             f"mail.{DOMAIN_BARE}": _fake_ip("mail"),
             f"ns1.{DOMAIN_BARE}":  ZONE_IP,
@@ -375,6 +510,17 @@ def _auth_response(qid: int, rd: bool, qname: str, qtype: int) -> bytes:
         }
         if qname_bare in ip_map:
             answers.append(_rr(qname, TYPE_A, CLASS_IN, 300, _rdata_A(ip_map[qname_bare])))
+
+    if qtype in (TYPE_AAAA, TYPE_ANY):
+        ipv6_map = {
+            DOMAIN_BARE:           ZONE_IPV6,
+            f"www.{DOMAIN_BARE}":  ZONE_IPV6,
+            f"mail.{DOMAIN_BARE}": _fake_ipv6("mail"),
+            f"ns1.{DOMAIN_BARE}":  ZONE_IPV6,
+            f"ns2.{DOMAIN_BARE}":  _NS2_IPV6,
+        }
+        if qname_bare in ipv6_map:
+            answers.append(_rr(qname, TYPE_AAAA, CLASS_IN, 300, _rdata_AAAA(ipv6_map[qname_bare])))
 
     if qtype in (TYPE_NS, TYPE_ANY) and qname_bare == DOMAIN_BARE:
         answers.append(_rr(DOMAIN, TYPE_NS, CLASS_IN, 3600, _rdata_NS(NS1)))
@@ -397,6 +543,8 @@ def _auth_response(qid: int, rd: bool, qname: str, qtype: int) -> bytes:
             continue
         if ertype == "A" and qtype in (TYPE_A, TYPE_ANY):
             answers.append(_rr(er_fqdn, TYPE_A, CLASS_IN, 300, _rdata_A(erval)))
+        elif ertype == "AAAA" and qtype in (TYPE_AAAA, TYPE_ANY):
+            answers.append(_rr(er_fqdn, TYPE_AAAA, CLASS_IN, 300, _rdata_AAAA(erval)))
         elif ertype == "TXT" and qtype in (TYPE_TXT, TYPE_ANY):
             answers.append(_rr(er_fqdn, TYPE_TXT, CLASS_IN, 300, _rdata_TXT(erval)))
         elif ertype == "CNAME" and qtype in (TYPE_A, TYPE_ANY):
@@ -436,6 +584,9 @@ def _handle(data: bytes, src_ip: str, src_port: int, transport: str) -> bytes | 
     qtype_name  = _TYPE_NAMES.get(qtype, str(qtype))
     qclass_name = _CLASS_NAMES.get(qclass, str(qclass))
 
+    # Flood check runs on every packet (including CHAOS / transfer probes)
+    _check_flood(src_ip, qtype_name)
+
     # ── Zone transfer ──────────────────────────────────────────────────────
     if qtype in (TYPE_AXFR, TYPE_IXFR):
         _log(
@@ -444,6 +595,7 @@ def _handle(data: bytes, src_ip: str, src_port: int, transport: str) -> bytes | 
             qname=qname.rstrip("."), qtype=qtype_name, qclass=qclass_name,
             zone=DOMAIN,
         )
+        _note_recon_event(src_ip, "zone_transfer")
         return _refused_response(qid, rd, qname, qtype, qclass)
 
     # ── CHAOS fingerprinting ───────────────────────────────────────────────
@@ -459,6 +611,7 @@ def _handle(data: bytes, src_ip: str, src_port: int, transport: str) -> bytes | 
             src=src_ip, src_port=src_port, transport=transport,
             probe=qname.rstrip("."), response=answer_text,
         )
+        _note_recon_event(src_ip, "fingerprint_probe")
         if answer_text:
             return _chaos_txt_response(qid, rd, qname, answer_text)
         return _refused_response(qid, rd, qname, qtype, qclass)
@@ -480,6 +633,7 @@ def _handle(data: bytes, src_ip: str, src_port: int, transport: str) -> bytes | 
         _log("tunneling_suspect", **base)
     if is_amp:
         _log("amp_probe", **base)
+        _note_recon_event(src_ip, "amp_probe")
     if not is_tunnel and not is_amp:
         _log("query", **base)
 
