@@ -76,7 +76,13 @@ class Attacker(SQLModel, table=True):
     # announced in the global BGP table (e.g. CGNAT, dark space).
     asn: Optional[int] = Field(default=None, index=True)
     as_name: Optional[str] = Field(default=None, max_length=128)
+    bgp_prefix: Optional[str] = Field(default=None, max_length=43, index=True)
     asn_source: Optional[str] = Field(default=None, max_length=16)
+    # RPKI validity (populated by the profiler from decnet.rpki.enrich_rpki).
+    # Values: "valid" / "invalid" / "not-found" / "unknown" / null.
+    # Null means enrichment was skipped (no ASN resolved, or RPKI disabled).
+    rpki_status: Optional[str] = Field(default=None, max_length=16)
+    rpki_source: Optional[str] = Field(default=None, max_length=16)
     # Reverse-DNS (PTR) name, one-shot resolved by the profiler at first
     # sighting. Nullable — many attackers run infra with no rDNS, and
     # private/loopback addresses never resolve.  256 chars matches
