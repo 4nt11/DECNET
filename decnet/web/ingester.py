@@ -584,6 +584,78 @@ async def _extract_bounty(
             },
         })
 
+    # 11b. ICMP error-leak fingerprint from active prober.
+    _icmp_fp = _fields.get("icmp_fp_hash")
+    if _icmp_fp and log_data.get("service") == "prober":
+        await repo.add_bounty({
+            "decky": log_data.get("decky"),
+            "service": "prober",
+            "attacker_ip": _fields.get("target_ip") or log_data.get("attacker_ip", "Unknown"),
+            "bounty_type": "fingerprint",
+            "payload": {
+                "fingerprint_type": "icmp_error",
+                "matrix":   _fields.get("icmp_matrix"),
+                "fp_hash":  _icmp_fp,
+                "errors": {
+                    "port_unreachable": {
+                        "returned": _fields.get("icmp_port_unreach") == "1",
+                        "rtt_ms":   _fields.get("icmp_port_unreach_rtt_ms") or None,
+                    },
+                    "time_exceeded": {
+                        "returned": _fields.get("icmp_time_exceeded") == "1",
+                        "rtt_ms":   _fields.get("icmp_time_exceeded_rtt_ms") or None,
+                        "src_ip":   _fields.get("icmp_time_exceeded_hop") or None,
+                    },
+                    "frag_needed": {
+                        "returned": _fields.get("icmp_frag_needed") == "1",
+                        "rtt_ms":   _fields.get("icmp_frag_needed_rtt_ms") or None,
+                    },
+                    "param_problem": {
+                        "returned": _fields.get("icmp_param_problem") == "1",
+                        "rtt_ms":   _fields.get("icmp_param_problem_rtt_ms") or None,
+                    },
+                },
+                "target_ip":   _fields.get("target_ip"),
+                "target_port": _fields.get("target_port"),
+            },
+        })
+
+    # 11c. ICMPv6 error-leak fingerprint from active prober.
+    _icmp6_fp = _fields.get("icmp6_fp_hash")
+    if _icmp6_fp and log_data.get("service") == "prober":
+        await repo.add_bounty({
+            "decky": log_data.get("decky"),
+            "service": "prober",
+            "attacker_ip": _fields.get("target_ip") or log_data.get("attacker_ip", "Unknown"),
+            "bounty_type": "fingerprint",
+            "payload": {
+                "fingerprint_type": "icmp6_error",
+                "matrix":   _fields.get("icmp6_matrix"),
+                "fp_hash":  _icmp6_fp,
+                "errors": {
+                    "port_unreachable_v6": {
+                        "returned": _fields.get("icmp6_port_unreach") == "1",
+                        "rtt_ms":   _fields.get("icmp6_port_unreach_rtt_ms") or None,
+                    },
+                    "hop_limit_exceeded": {
+                        "returned": _fields.get("icmp6_hop_limit_exceeded") == "1",
+                        "rtt_ms":   _fields.get("icmp6_hop_limit_exceeded_rtt_ms") or None,
+                        "src_ip":   _fields.get("icmp6_hop_limit_exceeded_hop") or None,
+                    },
+                    "unknown_next_header": {
+                        "returned": _fields.get("icmp6_unknown_next_header") == "1",
+                        "rtt_ms":   _fields.get("icmp6_unknown_next_header_rtt_ms") or None,
+                    },
+                    "bad_dest_option": {
+                        "returned": _fields.get("icmp6_bad_dest_option") == "1",
+                        "rtt_ms":   _fields.get("icmp6_bad_dest_option_rtt_ms") or None,
+                    },
+                },
+                "target_ip":   _fields.get("target_ip"),
+                "target_port": _fields.get("target_port"),
+            },
+        })
+
     # 12. Captured file drops + stored mail. The `file_captured` event
     # comes from inotifywait quarantines on SSH deckies; `message_stored`
     # comes from the SMTP template's DATA-commit handler. Both are

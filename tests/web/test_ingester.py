@@ -822,3 +822,113 @@ class TestLogIngestionWorker:
 
         assert _get_state_calls == 2, "should have retried get_state once after the error"
         mock_repo.add_logs.assert_awaited_once()
+
+
+# ── ICMP / ICMPv6 error-leak probe → fingerprint bounty ──────────────────────
+
+class TestIcmpFingerprintBounty:
+    @pytest.mark.asyncio
+    async def test_icmp_error_emits_fingerprint_bounty(self):
+        from decnet.web.ingester import _extract_bounty
+        mock_repo = MagicMock()
+        mock_repo.add_bounty = AsyncMock()
+        log_data: dict = {
+            "decky": "decky-01",
+            "service": "prober",
+            "attacker_ip": "198.51.100.7",
+            "fields": {
+                "target_ip":                "198.51.100.7",
+                "target_port":              "0",
+                "icmp_fp_hash":             "aabbccdd11223344",
+                "icmp_matrix":              "PTFP",
+                "icmp_port_unreach":        "1",
+                "icmp_port_unreach_rtt_ms": "12.3",
+                "icmp_time_exceeded":       "1",
+                "icmp_time_exceeded_rtt_ms": "8.1",
+                "icmp_time_exceeded_hop":   "10.0.0.1",
+                "icmp_frag_needed":         "0",
+                "icmp_frag_needed_rtt_ms":  "",
+                "icmp_param_problem":       "0",
+                "icmp_param_problem_rtt_ms": "",
+            },
+        }
+        await _extract_bounty(mock_repo, log_data)
+        mock_repo.add_bounty.assert_awaited()
+        calls = [c[0][0] for c in mock_repo.add_bounty.call_args_list]
+        bounty = next(c for c in calls if c.get("payload", {}).get("fingerprint_type") == "icmp_error")
+        assert bounty["bounty_type"] == "fingerprint"
+        assert bounty["attacker_ip"] == "198.51.100.7"
+        p = bounty["payload"]
+        assert p["matrix"] == "PTFP"
+        assert p["fp_hash"] == "aabbccdd11223344"
+        assert p["errors"]["port_unreachable"]["returned"] is True
+        assert p["errors"]["port_unreachable"]["rtt_ms"] == "12.3"
+        assert p["errors"]["time_exceeded"]["src_ip"] == "10.0.0.1"
+        assert p["errors"]["frag_needed"]["returned"] is False
+
+    @pytest.mark.asyncio
+    async def test_icmp_error_without_hash_skipped(self):
+        from decnet.web.ingester import _extract_bounty
+        mock_repo = MagicMock()
+        mock_repo.add_bounty = AsyncMock()
+        log_data: dict = {
+            "decky": "decky-01",
+            "service": "prober",
+            "attacker_ip": "198.51.100.7",
+            "fields": {"icmp_matrix": "PTFP"},  # no icmp_fp_hash
+        }
+        await _extract_bounty(mock_repo, log_data)
+        calls = [c[0][0] for c in mock_repo.add_bounty.call_args_list]
+        assert not any(c.get("payload", {}).get("fingerprint_type") == "icmp_error" for c in calls)
+
+    @pytest.mark.asyncio
+    async def test_icmp6_error_emits_fingerprint_bounty(self):
+        from decnet.web.ingester import _extract_bounty
+        mock_repo = MagicMock()
+        mock_repo.add_bounty = AsyncMock()
+        log_data: dict = {
+            "decky": "decky-01",
+            "service": "prober",
+            "attacker_ip": "2001:db8::1",
+            "fields": {
+                "target_ip":                        "2001:db8::1",
+                "target_port":                      "0",
+                "icmp6_fp_hash":                    "ff00112233445566",
+                "icmp6_matrix":                     "PHUB",
+                "icmp6_port_unreach":               "1",
+                "icmp6_port_unreach_rtt_ms":        "5.2",
+                "icmp6_hop_limit_exceeded":         "1",
+                "icmp6_hop_limit_exceeded_rtt_ms":  "3.7",
+                "icmp6_hop_limit_exceeded_hop":     "fe80::1",
+                "icmp6_unknown_next_header":        "0",
+                "icmp6_unknown_next_header_rtt_ms": "",
+                "icmp6_bad_dest_option":            "0",
+                "icmp6_bad_dest_option_rtt_ms":     "",
+            },
+        }
+        await _extract_bounty(mock_repo, log_data)
+        mock_repo.add_bounty.assert_awaited()
+        calls = [c[0][0] for c in mock_repo.add_bounty.call_args_list]
+        bounty = next(c for c in calls if c.get("payload", {}).get("fingerprint_type") == "icmp6_error")
+        assert bounty["bounty_type"] == "fingerprint"
+        p = bounty["payload"]
+        assert p["matrix"] == "PHUB"
+        assert p["fp_hash"] == "ff00112233445566"
+        assert p["errors"]["port_unreachable_v6"]["returned"] is True
+        assert p["errors"]["hop_limit_exceeded"]["src_ip"] == "fe80::1"
+        assert p["errors"]["unknown_next_header"]["returned"] is False
+
+    @pytest.mark.asyncio
+    async def test_icmp6_error_without_hash_skipped(self):
+        from decnet.web.ingester import _extract_bounty
+        mock_repo = MagicMock()
+        mock_repo.add_bounty = AsyncMock()
+        log_data: dict = {
+            "decky": "decky-01",
+            "service": "prober",
+            "attacker_ip": "2001:db8::1",
+            "fields": {"icmp6_matrix": "PHUB"},  # no icmp6_fp_hash
+        }
+        await _extract_bounty(mock_repo, log_data)
+        calls = [c[0][0] for c in mock_repo.add_bounty.call_args_list]
+        assert not any(c.get("payload", {}).get("fingerprint_type") == "icmp6_error" for c in calls)
