@@ -280,9 +280,10 @@ const AttackerDetail: React.FC = () => {
                 )}
               </div>
             ) : (
-              <div style={{ padding: '24px', textAlign: 'center', opacity: 0.5 }}>
-                {serviceFilter ? `NO ${serviceFilter.toUpperCase()} FINGERPRINTS CAPTURED` : 'NO FINGERPRINTS CAPTURED'}
-              </div>
+              <EmptyState
+                icon={Fingerprint}
+                title={serviceFilter ? `NO ${serviceFilter.toUpperCase()} FINGERPRINTS CAPTURED` : 'NO FINGERPRINTS CAPTURED'}
+              />
             )}
           </Section>
         );
