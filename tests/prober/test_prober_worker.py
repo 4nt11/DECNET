@@ -110,13 +110,11 @@ class TestDiscoverAttackers:
 class TestProbeCycleJARM:
 
     @patch("decnet.prober.ipv6_leak._route_info", return_value=(False, None))
-    @patch("decnet.prober.worker.fetch_leaf_cert", return_value=None)
     @patch("decnet.prober.probes.tcpfp.tcp_fingerprint")
     @patch("decnet.prober.probes.hassh.hassh_server")
     @patch("decnet.prober.probes.jarm.jarm_hash")
     def test_probes_new_ips(self, mock_jarm: MagicMock, mock_hassh: MagicMock,
-                            mock_tcpfp: MagicMock, mock_cert: MagicMock,
-                            mock_ipv6: MagicMock,
+                            mock_tcpfp: MagicMock, mock_ipv6: MagicMock,
                             tmp_path: Path, monkeypatch: pytest.MonkeyPatch):
         monkeypatch.setattr(JarmProbe, "default_ports", [443, 8443])
         monkeypatch.setattr(HasshProbe, "default_ports", [])
@@ -137,13 +135,11 @@ class TestProbeCycleJARM:
         assert 8443 in probed["10.0.0.1"]["jarm"]
 
     @patch("decnet.prober.ipv6_leak._route_info", return_value=(False, None))
-    @patch("decnet.prober.worker.fetch_leaf_cert", return_value=None)
     @patch("decnet.prober.probes.tcpfp.tcp_fingerprint")
     @patch("decnet.prober.probes.hassh.hassh_server")
     @patch("decnet.prober.probes.jarm.jarm_hash")
     def test_skips_already_probed_ports(self, mock_jarm: MagicMock, mock_hassh: MagicMock,
-                                        mock_tcpfp: MagicMock, mock_cert: MagicMock,
-                                        mock_ipv6: MagicMock,
+                                        mock_tcpfp: MagicMock, mock_ipv6: MagicMock,
                                         tmp_path: Path, monkeypatch: pytest.MonkeyPatch):
         monkeypatch.setattr(JarmProbe, "default_ports", [443, 8443])
         monkeypatch.setattr(HasshProbe, "default_ports", [])
@@ -560,16 +556,29 @@ class TestWriteEvent:
         assert record["fields"]["target_ip"] == "10.0.0.1"
 
 
-# ─── _probe_cycle: TLS certificate capture (after JARM) ───────────────────
+# ─── _probe_cycle: TLS certificate capture ────────────────────────────────
+# TlsCertProbe is now an independent registered probe (priority=200).
+# It calls fetch_leaf_cert directly — not coupled to JARM outcome.
+
+_CERT_STUB = {
+    "subject_cn": "evil.example.com",
+    "issuer": "CN=evil.example.com",
+    "self_signed": True,
+    "not_before": "2026-01-01T00:00:00Z",
+    "not_after": "2027-01-01T00:00:00Z",
+    "sans": ["evil.example.com", "c2.example.com"],
+    "cert_sha256": "ab" * 32,
+}
+
 
 class TestProbeCycleTLSCert:
 
     @patch("decnet.prober.ipv6_leak._route_info", return_value=(False, None))
-    @patch("decnet.prober.worker.fetch_leaf_cert")
+    @patch("decnet.prober.probes.tlscert_probe.fetch_leaf_cert")
     @patch("decnet.prober.probes.tcpfp.tcp_fingerprint")
     @patch("decnet.prober.probes.hassh.hassh_server")
     @patch("decnet.prober.probes.jarm.jarm_hash")
-    def test_cert_event_emitted_after_successful_jarm(
+    def test_cert_event_emitted_for_tls_port(
         self,
         mock_jarm: MagicMock,
         mock_hassh: MagicMock,
@@ -579,52 +588,39 @@ class TestProbeCycleTLSCert:
         tmp_path: Path,
         monkeypatch: pytest.MonkeyPatch,
     ):
-        """A non-empty JARM hash should trigger a follow-up cert fetch and
-        write a tls_certificate event with all parsed fields."""
-        monkeypatch.setattr(JarmProbe, "default_ports", [443])
+        """TlsCertProbe runs independently; a successful fetch writes a tls_certificate event."""
+        from decnet.prober.probes.tlscert_probe import TlsCertProbe
+        monkeypatch.setattr(JarmProbe, "default_ports", [])
         monkeypatch.setattr(HasshProbe, "default_ports", [])
         monkeypatch.setattr(TcpfpProbe, "default_ports", [])
-        mock_jarm.return_value = "c0c" * 10 + "a" * 32
+        monkeypatch.setattr(TlsCertProbe, "default_ports", [443])
+        mock_jarm.return_value = JARM_EMPTY_HASH
         mock_hassh.return_value = None
         mock_tcpfp.return_value = None
-        mock_cert.return_value = {
-            "subject_cn": "evil.example.com",
-            "issuer": "CN=evil.example.com",
-            "self_signed": True,
-            "not_before": "2026-01-01T00:00:00Z",
-            "not_after": "2027-01-01T00:00:00Z",
-            "sans": ["evil.example.com", "c2.example.com"],
-            "cert_sha256": "ab" * 32,
-        }
+        mock_cert.return_value = _CERT_STUB
         log_path = tmp_path / "decnet.log"
         json_path = tmp_path / "decnet.json"
 
         _probe_cycle({"10.0.0.1"}, {}, log_path, json_path, timeout=1.0)
 
         mock_cert.assert_called_once_with("10.0.0.1", 443, timeout=1.0)
-        records = [
-            json.loads(line)
-            for line in json_path.read_text().splitlines() if line
-        ]
+        records = [json.loads(line) for line in json_path.read_text().splitlines() if line]
         cert_records = [r for r in records if r["event_type"] == "tls_certificate"]
         assert len(cert_records) == 1
         f = cert_records[0]["fields"]
         assert f["target_ip"] == "10.0.0.1"
         assert f["target_port"] == "443"
         assert f["subject_cn"] == "evil.example.com"
-        assert f["issuer"] == "CN=evil.example.com"
         assert f["self_signed"] == "true"
-        assert f["not_before"] == "2026-01-01T00:00:00Z"
-        assert f["not_after"] == "2027-01-01T00:00:00Z"
         assert f["sans"] == "evil.example.com,c2.example.com"
         assert f["cert_sha256"] == "ab" * 32
 
     @patch("decnet.prober.ipv6_leak._route_info", return_value=(False, None))
-    @patch("decnet.prober.worker.fetch_leaf_cert")
+    @patch("decnet.prober.probes.tlscert_probe.fetch_leaf_cert", return_value=None)
     @patch("decnet.prober.probes.tcpfp.tcp_fingerprint")
     @patch("decnet.prober.probes.hassh.hassh_server")
     @patch("decnet.prober.probes.jarm.jarm_hash")
-    def test_cert_fetch_skipped_on_empty_jarm(
+    def test_cert_skipped_when_fetch_returns_none(
         self,
         mock_jarm: MagicMock,
         mock_hassh: MagicMock,
@@ -634,40 +630,13 @@ class TestProbeCycleTLSCert:
         tmp_path: Path,
         monkeypatch: pytest.MonkeyPatch,
     ):
-        """JARM_EMPTY_HASH means the port doesn't speak TLS; skip cert fetch."""
-        monkeypatch.setattr(JarmProbe, "default_ports", [443])
+        """fetch_leaf_cert returning None → no tls_certificate event."""
+        from decnet.prober.probes.tlscert_probe import TlsCertProbe
+        monkeypatch.setattr(JarmProbe, "default_ports", [])
         monkeypatch.setattr(HasshProbe, "default_ports", [])
         monkeypatch.setattr(TcpfpProbe, "default_ports", [])
+        monkeypatch.setattr(TlsCertProbe, "default_ports", [443])
         mock_jarm.return_value = JARM_EMPTY_HASH
-        mock_hassh.return_value = None
-        mock_tcpfp.return_value = None
-        log_path = tmp_path / "decnet.log"
-        json_path = tmp_path / "decnet.json"
-
-        _probe_cycle({"10.0.0.1"}, {}, log_path, json_path, timeout=1.0)
-
-        mock_cert.assert_not_called()
-
-    @patch("decnet.prober.ipv6_leak._route_info", return_value=(False, None))
-    @patch("decnet.prober.worker.fetch_leaf_cert", return_value=None)
-    @patch("decnet.prober.probes.tcpfp.tcp_fingerprint")
-    @patch("decnet.prober.probes.hassh.hassh_server")
-    @patch("decnet.prober.probes.jarm.jarm_hash")
-    def test_cert_fetch_failure_silent(
-        self,
-        mock_jarm: MagicMock,
-        mock_hassh: MagicMock,
-        mock_tcpfp: MagicMock,
-        mock_cert: MagicMock,
-        mock_ipv6: MagicMock,
-        tmp_path: Path,
-        monkeypatch: pytest.MonkeyPatch,
-    ):
-        """fetch_leaf_cert returning None must not write a cert event."""
-        monkeypatch.setattr(JarmProbe, "default_ports", [443])
-        monkeypatch.setattr(HasshProbe, "default_ports", [])
-        monkeypatch.setattr(TcpfpProbe, "default_ports", [])
-        mock_jarm.return_value = "c0c" * 10 + "a" * 32
         mock_hassh.return_value = None
         mock_tcpfp.return_value = None
         log_path = tmp_path / "decnet.log"
@@ -681,7 +650,7 @@ class TestProbeCycleTLSCert:
             assert "tls_certificate" not in content
 
     @patch("decnet.prober.ipv6_leak._route_info", return_value=(False, None))
-    @patch("decnet.prober.worker.fetch_leaf_cert")
+    @patch("decnet.prober.probes.tlscert_probe.fetch_leaf_cert")
     @patch("decnet.prober.probes.tcpfp.tcp_fingerprint")
     @patch("decnet.prober.probes.hassh.hassh_server")
     @patch("decnet.prober.probes.jarm.jarm_hash")
@@ -695,12 +664,13 @@ class TestProbeCycleTLSCert:
         tmp_path: Path,
         monkeypatch: pytest.MonkeyPatch,
     ):
-        """If fetch_leaf_cert throws despite its contract, the JARM phase
-        must keep moving to the next port without crashing."""
-        monkeypatch.setattr(JarmProbe, "default_ports", [443, 8443])
+        """fetch_leaf_cert crash is caught by _run_probe; both ports still marked probed."""
+        from decnet.prober.probes.tlscert_probe import TlsCertProbe
+        monkeypatch.setattr(JarmProbe, "default_ports", [])
         monkeypatch.setattr(HasshProbe, "default_ports", [])
         monkeypatch.setattr(TcpfpProbe, "default_ports", [])
-        mock_jarm.return_value = "c0c" * 10 + "a" * 32
+        monkeypatch.setattr(TlsCertProbe, "default_ports", [443, 8443])
+        mock_jarm.return_value = JARM_EMPTY_HASH
         mock_hassh.return_value = None
         mock_tcpfp.return_value = None
         mock_cert.side_effect = RuntimeError("unexpected")
@@ -709,11 +679,10 @@ class TestProbeCycleTLSCert:
 
         _probe_cycle({"10.0.0.1"}, {}, log_path, json_path, timeout=1.0)
 
-        # Both ports still marked probed despite the cert-side crash.
         assert mock_cert.call_count == 2
 
     @patch("decnet.prober.ipv6_leak._route_info", return_value=(False, None))
-    @patch("decnet.prober.worker.fetch_leaf_cert")
+    @patch("decnet.prober.probes.tlscert_probe.fetch_leaf_cert")
     @patch("decnet.prober.probes.tcpfp.tcp_fingerprint")
     @patch("decnet.prober.probes.hassh.hassh_server")
     @patch("decnet.prober.probes.jarm.jarm_hash")
@@ -727,11 +696,13 @@ class TestProbeCycleTLSCert:
         tmp_path: Path,
         monkeypatch: pytest.MonkeyPatch,
     ):
-        """publish_fn must receive a 'tls_certificate' event when capture succeeds."""
-        monkeypatch.setattr(JarmProbe, "default_ports", [443])
+        """publish_fn receives a 'tls_certificate' event on successful cert capture."""
+        from decnet.prober.probes.tlscert_probe import TlsCertProbe
+        monkeypatch.setattr(JarmProbe, "default_ports", [])
         monkeypatch.setattr(HasshProbe, "default_ports", [])
         monkeypatch.setattr(TcpfpProbe, "default_ports", [])
-        mock_jarm.return_value = "c0c" * 10 + "a" * 32
+        monkeypatch.setattr(TlsCertProbe, "default_ports", [443])
+        mock_jarm.return_value = JARM_EMPTY_HASH
         mock_hassh.return_value = None
         mock_tcpfp.return_value = None
         mock_cert.return_value = {
@@ -760,3 +731,36 @@ class TestProbeCycleTLSCert:
         assert cert_pubs[0][1]["port"] == 443
         assert cert_pubs[0][1]["cert_sha256"] == "cd" * 32
         assert cert_pubs[0][1]["self_signed"] is True
+
+    @patch("decnet.prober.ipv6_leak._route_info", return_value=(False, None))
+    @patch("decnet.prober.probes.tlscert_probe.fetch_leaf_cert")
+    @patch("decnet.prober.probes.tcpfp.tcp_fingerprint")
+    @patch("decnet.prober.probes.hassh.hassh_server")
+    @patch("decnet.prober.probes.jarm.jarm_hash")
+    def test_cert_independent_of_jarm_result(
+        self,
+        mock_jarm: MagicMock,
+        mock_hassh: MagicMock,
+        mock_tcpfp: MagicMock,
+        mock_cert: MagicMock,
+        mock_ipv6: MagicMock,
+        tmp_path: Path,
+        monkeypatch: pytest.MonkeyPatch,
+    ):
+        """TlsCertProbe runs regardless of JARM outcome (independent registry probe)."""
+        from decnet.prober.probes.tlscert_probe import TlsCertProbe
+        monkeypatch.setattr(JarmProbe, "default_ports", [443])
+        monkeypatch.setattr(HasshProbe, "default_ports", [])
+        monkeypatch.setattr(TcpfpProbe, "default_ports", [])
+        monkeypatch.setattr(TlsCertProbe, "default_ports", [443])
+        mock_jarm.return_value = JARM_EMPTY_HASH  # port doesn't speak TLS per JARM
+        mock_hassh.return_value = None
+        mock_tcpfp.return_value = None
+        mock_cert.return_value = _CERT_STUB
+        log_path = tmp_path / "decnet.log"
+        json_path = tmp_path / "decnet.json"
+
+        _probe_cycle({"10.0.0.1"}, {}, log_path, json_path, timeout=1.0)
+
+        # TlsCertProbe still called despite empty JARM hash
+        mock_cert.assert_called_once_with("10.0.0.1", 443, timeout=1.0)

@@ -23,12 +23,15 @@ class TestRegistryContents:
 
     def test_all_probes_registered(self):
         names = {cls.probe_name for cls in ActiveProbeMeta.all()}
-        assert names == {"jarm", "hassh", "tcpfp", "ipv6_leak"}
+        assert names == {"jarm", "hassh", "tcpfp", "ipv6_leak", "tls_certificate", "icmp_error"}
 
     def test_sorted_by_priority_then_name(self):
         order = [cls.probe_name for cls in ActiveProbeMeta.all()]
-        # hassh/jarm/tcpfp all priority=100 (alphabetical), ipv6_leak priority=999 last
-        assert order == ["hassh", "jarm", "tcpfp", "ipv6_leak"]
+        # priority=100: hassh/jarm/tcpfp (alphabetical)
+        # priority=200: tls_certificate
+        # priority=850: icmp_error
+        # priority=999: ipv6_leak
+        assert order == ["hassh", "jarm", "tcpfp", "tls_certificate", "icmp_error", "ipv6_leak"]
 
     def test_priority10_probe_sorts_first(self):
         class _FastProbe(ActiveProbe):
@@ -48,7 +51,7 @@ class TestRegistryContents:
 
         order = [cls.probe_name for cls in ActiveProbeMeta.all()]
         assert order[0] == "_fast_test_probe"
-        assert set(order[1:]) == {"hassh", "jarm", "tcpfp", "ipv6_leak"}
+        assert set(order[1:]) == {"hassh", "jarm", "tcpfp", "ipv6_leak", "tls_certificate", "icmp_error"}
 
     def test_port_none_probe_dispatched_with_none_port(self):
         """_run_probe must call run(ip, None, timeout) for a port-free probe."""

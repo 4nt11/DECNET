@@ -28,10 +28,7 @@ def test_jarm_phase_calls_recorder(tmp_path: Path) -> None:
     probe = JarmProbe()
     probe._ports = [443]
 
-    with (
-        patch("decnet.prober.probes.jarm.jarm_hash", return_value="c0c" * 10 + "a" * 32),
-        patch("decnet.prober.worker.fetch_leaf_cert", return_value=None),
-    ):
+    with patch("decnet.prober.probes.jarm.jarm_hash", return_value="c0c" * 10 + "a" * 32):
         _run_probe(
             probe, "10.0.0.5", {},
             tmp_path / "decnet.log", tmp_path / "decnet.json",
@@ -118,10 +115,7 @@ def test_recorder_optional_no_crash_when_none(tmp_path: Path) -> None:
     probe = JarmProbe()
     probe._ports = [443]
 
-    with (
-        patch("decnet.prober.probes.jarm.jarm_hash", return_value="c0c" * 10 + "a" * 32),
-        patch("decnet.prober.worker.fetch_leaf_cert", return_value=None),
-    ):
+    with patch("decnet.prober.probes.jarm.jarm_hash", return_value="c0c" * 10 + "a" * 32):
         _run_probe(
             probe, "10.0.0.5", {},
             tmp_path / "decnet.log", tmp_path / "decnet.json",
