@@ -1,4 +1,5 @@
 import React from 'react';
+import EmptyState from '../../EmptyState/EmptyState';
 import { Activity } from '../../../icons';
 import type { AttributionPrimitiveState, BehaviouralObservation } from '../types';
 import { AttributionBadge } from './pieces';
@@ -13,8 +14,12 @@ export const BehaviouralPrimitivesPanel: React.FC<{
 }> = ({ observations, attribution }) => {
   if (!observations.length) {
     return (
-      <div className="info-banner" data-testid="behaviour-empty">
-        <span className="dim">No behavioural observations yet — the profiler runs once a session ends.</span>
+      <div data-testid="behaviour-empty">
+        <EmptyState
+          icon={Activity}
+          title="NO BEHAVIOURAL OBSERVATIONS YET"
+          hint="The profiler runs once a session ends."
+        />
       </div>
     );
   }
