@@ -356,7 +356,7 @@ def _build_record(
     fingerprints = [b for b in bounties if b.get("bounty_type") == "fingerprint"]
     credential_count = sum(1 for b in bounties if b.get("bounty_type") == "credential")
     country_code, country_source = enrich_ip(ip)
-    asn, as_name, asn_source = enrich_ip_asn(ip)
+    asn, as_name, bgp_prefix, asn_source = enrich_ip_asn(ip)
 
     record: dict[str, Any] = {
         "ip": ip,
@@ -377,6 +377,7 @@ def _build_record(
         "country_source": country_source,
         "asn": asn,
         "as_name": as_name,
+        "bgp_prefix": bgp_prefix,
         "asn_source": asn_source,
         "updated_at": datetime.now(timezone.utc),
     }

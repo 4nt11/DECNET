@@ -23,9 +23,23 @@ class AsnInfo:
 
     asn: int
     name: str  # AS description / org name; "" if absent in the source data
+    prefix: Optional[str] = None  # synthesized covering CIDR; set at lookup time, not at rest
 
 
 Range = Tuple[int, int, AsnInfo]
+
+
+def _synthesize_prefix(start_int: int, end_int: int, queried_int: int) -> Optional[str]:
+    """Return the most-specific CIDR from [start, end] that contains queried_int."""
+    try:
+        for net in ipaddress.summarize_address_range(
+            ipaddress.IPv4Address(start_int), ipaddress.IPv4Address(end_int)
+        ):
+            if queried_int >= int(net.network_address) and queried_int <= int(net.broadcast_address):
+                return str(net)
+    except (ValueError, TypeError):
+        pass
+    return None
 
 
 @dataclass
@@ -88,7 +102,9 @@ class AsnLookup:
         if idx < 0:
             return None
         if n <= self._ends[idx]:
-            return self._infos[idx]
+            info = self._infos[idx]
+            prefix = _synthesize_prefix(self._starts[idx], self._ends[idx], n)
+            return AsnInfo(asn=info.asn, name=info.name, prefix=prefix)
         return None
 
     def __len__(self) -> int:

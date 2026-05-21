@@ -67,16 +67,17 @@ def test_enrich_ip_short_circuits_when_disabled(monkeypatch: pytest.MonkeyPatch)
     import decnet.asn as asn
 
     monkeypatch.setenv("DECNET_ASN_ENABLED", "false")
-    assert asn.enrich_ip("8.8.8.8") == (None, None, None)
+    assert asn.enrich_ip("8.8.8.8") == (None, None, None, None)
 
 
-def test_enrich_ip_returns_asn_and_source(tmp_path: Path) -> None:
+def test_enrich_ip_returns_asn_prefix_and_source(tmp_path: Path) -> None:
     from decnet.asn import enrich_ip
 
     _seed_fixture(tmp_path)
-    asn, name, src = enrich_ip("8.8.8.8")
+    asn, name, prefix, src = enrich_ip("8.8.8.8")
     assert asn == 15169
     assert name == "GOOGLE"
+    assert prefix == "8.8.8.0/24"
     assert src == "iptoasn"
 
 
@@ -84,7 +85,7 @@ def test_enrich_ip_private_returns_none(tmp_path: Path) -> None:
     from decnet.asn import enrich_ip
 
     _seed_fixture(tmp_path)
-    assert enrich_ip("192.168.1.1") == (None, None, None)
+    assert enrich_ip("192.168.1.1") == (None, None, None, None)
 
 
 def test_enrich_ip_unannounced_returns_none(tmp_path: Path) -> None:
@@ -92,4 +93,4 @@ def test_enrich_ip_unannounced_returns_none(tmp_path: Path) -> None:
 
     _seed_fixture(tmp_path)
     # 9.0.0.0 isn't in our fixture range — no BGP announcement we know of.
-    assert enrich_ip("9.0.0.0") == (None, None, None)
+    assert enrich_ip("9.0.0.0") == (None, None, None, None)

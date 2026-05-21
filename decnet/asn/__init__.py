@@ -6,7 +6,7 @@ Public surface mirrors :mod:`decnet.geoip` so callers can compose them:
 
 * :func:`get_lookup` — returns the singleton :class:`AsnLookup`.
 * :func:`enrich_ip` — takes an IP string, returns
-  ``(asn_int, asn_name, provider_name)`` or ``(None, None, None)``.
+  ``(asn_int, asn_name, bgp_prefix, provider_name)`` or ``(None, None, None, None)``.
 
 Provider selection goes through :func:`~decnet.asn.factory.get_provider`
 (env ``DECNET_ASN_PROVIDER``, default ``iptoasn``). Direct imports of
@@ -51,8 +51,8 @@ def get_lookup(*, force_refresh: bool = False) -> AsnLookup:
     return _lookup
 
 
-def enrich_ip(ip: str) -> Tuple[Optional[int], Optional[str], Optional[str]]:
-    """Return ``(asn, as_name, provider_name)`` or ``(None, None, None)``.
+def enrich_ip(ip: str) -> Tuple[Optional[int], Optional[str], Optional[str], Optional[str]]:
+    """Return ``(asn, as_name, bgp_prefix, provider_name)`` or ``(None, None, None, None)``.
 
     Never raises — any lookup failure collapses to all-None so the
     caller (profiler) can upsert the attacker row regardless.
@@ -62,15 +62,15 @@ def enrich_ip(ip: str) -> Tuple[Optional[int], Optional[str], Optional[str]]:
     touching provider config.
     """
     if os.environ.get("DECNET_ASN_ENABLED", "true").lower() == "false":
-        return (None, None, None)
+        return (None, None, None, None)
     try:
         lookup = get_lookup()
         info = lookup.asn(ip)
         if info is None:
-            return (None, None, None)
-        return (info.asn, info.name or None, _provider_name or "unknown")
+            return (None, None, None, None)
+        return (info.asn, info.name or None, info.prefix, _provider_name or "unknown")
     except Exception:
-        return (None, None, None)
+        return (None, None, None, None)
 
 
 def _files_stale(provider) -> bool:

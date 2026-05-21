@@ -26,6 +26,39 @@ def test_asn_hits_known_ranges() -> None:
     assert lookup.asn("46.101.10.20").asn == 14061
 
 
+def test_prefix_aligned_range() -> None:
+    lookup = _fixture_lookup()
+    assert lookup.asn("8.8.8.8").prefix == "8.8.8.0/24"
+    assert lookup.asn("8.8.8.0").prefix == "8.8.8.0/24"
+    assert lookup.asn("8.8.8.255").prefix == "8.8.8.0/24"
+
+
+def test_prefix_aligned_16() -> None:
+    lookup = _fixture_lookup()
+    assert lookup.asn("46.101.10.20").prefix == "46.101.0.0/16"
+
+
+def test_prefix_non_power_of_two_range() -> None:
+    # 1.0.0.0–1.0.0.191 spans /25 (0-127) and /26 (128-191)
+    lookup = AsnLookup.from_ranges([
+        (_ip("1.0.0.0"), _ip("1.0.0.191"), AsnInfo(13335, "CF")),
+    ])
+    assert lookup.asn("1.0.0.5").prefix == "1.0.0.0/25"
+    assert lookup.asn("1.0.0.130").prefix == "1.0.0.128/26"
+
+
+def test_prefix_single_host_range() -> None:
+    lookup = AsnLookup.from_ranges([
+        (_ip("1.2.3.4"), _ip("1.2.3.4"), AsnInfo(1, "X")),
+    ])
+    assert lookup.asn("1.2.3.4").prefix == "1.2.3.4/32"
+
+
+def test_prefix_not_set_on_miss() -> None:
+    lookup = _fixture_lookup()
+    assert lookup.asn("9.0.0.0") is None
+
+
 def test_asn_misses_gap() -> None:
     lookup = _fixture_lookup()
     assert lookup.asn("9.0.0.0") is None
