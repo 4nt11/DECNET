@@ -45,7 +45,6 @@ from decnet.correlation.fingerprint_rotation import (
 from decnet.logging import get_logger
 from decnet.prober.base import ActiveProbe, ActiveProbeMeta
 import decnet.prober.probes as _probes  # noqa: F401 — triggers metaclass registration
-from decnet.prober.tlscert import fetch_leaf_cert
 from decnet.telemetry import traced as _traced
 
 logger = get_logger("prober")
@@ -285,9 +284,6 @@ def _run_probe(
                 record_rotation(ip, port, probe.rotation_type, result[probe.rotation_hash_key])
             if publish_fn is not None:
                 publish_fn(probe.probe_name, probe.publish_payload(ip, port, result))
-            if probe.probe_name == "jarm" and port is not None:
-                # A non-empty JARM hash proves TLS; attempt a real cert capture.
-                _capture_tls_cert(ip, port, log_path, json_path, timeout, publish_fn)
         except Exception as exc:
             done.add(port)
             _write_event(
@@ -322,60 +318,6 @@ def _probe_cycle(
         for probe_cls in ActiveProbeMeta.all():
             _run_probe(probe_cls(), ip, ip_probed, log_path, json_path,
                        timeout, publish_fn, record_rotation)
-
-
-@_traced("prober.tls_cert_capture")
-def _capture_tls_cert(
-    ip: str,
-    port: int,
-    log_path: Path,
-    json_path: Path,
-    timeout: float,
-    publish_fn: ProbePublishFn | None,
-) -> None:
-    """Fetch the leaf TLS cert from ``ip:port`` and emit a tls_certificate
-    event. No-op when the handshake fails (silent — JARM already proved
-    the port responds, but the real handshake can still fail for many
-    reasons: cipher mismatch, SNI gating, mTLS requirement)."""
-    try:
-        cert = fetch_leaf_cert(ip, port, timeout=timeout)
-    except Exception as exc:
-        # fetch_leaf_cert is supposed to swallow errors; defense in depth.
-        logger.warning("prober: TLS cert fetch crashed %s:%d: %s", ip, port, exc)
-        return
-    if cert is None:
-        return
-
-    sans_csv = ",".join(cert["sans"])
-    _write_event(
-        log_path, json_path,
-        "tls_certificate",
-        target_ip=ip,
-        target_port=str(port),
-        subject_cn=cert["subject_cn"],
-        issuer=cert["issuer"],
-        self_signed=str(cert["self_signed"]).lower(),
-        not_before=cert["not_before"],
-        not_after=cert["not_after"],
-        sans=sans_csv,
-        cert_sha256=cert["cert_sha256"],
-        msg=f"TLS cert {ip}:{port} CN={cert['subject_cn']} sha256={cert['cert_sha256'][:16]}...",
-    )
-    logger.info(
-        "prober: TLS cert %s:%d CN=%s sha256=%s",
-        ip, port, cert["subject_cn"], cert["cert_sha256"],
-    )
-    if publish_fn is not None:
-        publish_fn(
-            "tls_certificate",
-            {
-                "attacker_ip": ip,
-                "port": port,
-                "subject_cn": cert["subject_cn"],
-                "cert_sha256": cert["cert_sha256"],
-                "self_signed": cert["self_signed"],
-            },
-        )
 
 
 

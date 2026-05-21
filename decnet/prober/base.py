@@ -2,8 +2,6 @@
 ActiveProbe ABC and metaclass registry for port-iterating active probes.
 
 Adding a new active probe = one class with three methods.
-IPv6 leak and TLS cert capture are NOT part of this registry (different
-call shapes); they stay as special cases in prober/worker.py.
 """
 
 from __future__ import annotations
