@@ -5,7 +5,7 @@ import { describe, it, expect } from 'vitest';
 import { render, screen } from '@testing-library/react';
 import {
   FingerprintGroup, FpUserAgent, FpHttpQuirks, FpResumption,
-  FpCertificate, FpSpoofedSource, FpTcpStack,
+  FpCertificate, FpSpoofedSource, FpTcpStack, FpIcmpError, FpIcmp6Error,
 } from './renderers';
 
 describe('FpUserAgent', () => {
@@ -145,5 +145,109 @@ describe('FingerprintGroup', () => {
     );
     expect(screen.getByText('WEIRD UNKNOWN')).toBeInTheDocument();
     expect(screen.getByText('mystery-value')).toBeInTheDocument();
+  });
+
+  it('dispatches icmp_error to FpIcmpError', () => {
+    render(
+      <FingerprintGroup
+        fpType="icmp_error"
+        items={[{
+          payload: {
+            fingerprint_type: 'icmp_error',
+            fp_hash: 'aabbccdd11223344',
+            matrix: 'PTFP',
+            errors: {
+              port_unreachable: { returned: true, rtt_ms: '12.3' },
+              time_exceeded:    { returned: true, rtt_ms: '8.1', src_ip: '10.0.0.1' },
+              frag_needed:      { returned: false },
+              param_problem:    { returned: false },
+            },
+          },
+        }]}
+      />,
+    );
+    expect(screen.getByText('ICMP ERROR LEAK')).toBeInTheDocument();
+    expect(screen.getByText('PTFP')).toBeInTheDocument();
+  });
+
+  it('dispatches icmp6_error to FpIcmp6Error', () => {
+    render(
+      <FingerprintGroup
+        fpType="icmp6_error"
+        items={[{
+          payload: {
+            fingerprint_type: 'icmp6_error',
+            fp_hash: 'ff00112233445566',
+            matrix: 'PHUB',
+            errors: {
+              port_unreachable_v6:  { returned: true, rtt_ms: '5.2' },
+              hop_limit_exceeded:   { returned: true, rtt_ms: '3.7', src_ip: 'fe80::1' },
+              unknown_next_header:  { returned: false },
+              bad_dest_option:      { returned: false },
+            },
+          },
+        }]}
+      />,
+    );
+    expect(screen.getByText('ICMPv6 ERROR LEAK')).toBeInTheDocument();
+    expect(screen.getByText('PHUB')).toBeInTheDocument();
+  });
+});
+
+describe('FpIcmpError', () => {
+  it('renders hash, matrix, returned error tags with RTT, and first-hop IP', () => {
+    render(
+      <FpIcmpError p={{
+        fp_hash: 'aabbccdd11223344',
+        matrix: 'PTFP',
+        errors: {
+          port_unreachable: { returned: true, rtt_ms: '12.3' },
+          time_exceeded:    { returned: true, rtt_ms: '8.1', src_ip: '10.0.0.1' },
+          frag_needed:      { returned: false },
+          param_problem:    { returned: false },
+        },
+        target_ip: '198.51.100.7',
+      }} />,
+    );
+    expect(screen.getByText('PTFP')).toBeInTheDocument();
+    expect(screen.getByText('10.0.0.1')).toBeInTheDocument();
+    expect(screen.getByText('198.51.100.7')).toBeInTheDocument();
+  });
+
+  it('renders without first-hop when time_exceeded has no src_ip', () => {
+    render(
+      <FpIcmpError p={{
+        fp_hash: 'deadbeef',
+        matrix: 'P---',
+        errors: {
+          port_unreachable: { returned: true, rtt_ms: '5.0' },
+          time_exceeded:    { returned: false },
+          frag_needed:      { returned: false },
+          param_problem:    { returned: false },
+        },
+      }} />,
+    );
+    expect(screen.queryByText('FIRST HOP')).not.toBeInTheDocument();
+  });
+});
+
+describe('FpIcmp6Error', () => {
+  it('renders hash, matrix, returned tags, and first-hop IP', () => {
+    render(
+      <FpIcmp6Error p={{
+        fp_hash: 'ff00112233445566',
+        matrix: 'PHUB',
+        errors: {
+          port_unreachable_v6:  { returned: true, rtt_ms: '5.2' },
+          hop_limit_exceeded:   { returned: true, rtt_ms: '3.7', src_ip: 'fe80::1' },
+          unknown_next_header:  { returned: false },
+          bad_dest_option:      { returned: false },
+        },
+        target_ip: '2001:db8::1',
+      }} />,
+    );
+    expect(screen.getByText('PHUB')).toBeInTheDocument();
+    expect(screen.getByText('fe80::1')).toBeInTheDocument();
+    expect(screen.getByText('2001:db8::1')).toBeInTheDocument();
   });
 });

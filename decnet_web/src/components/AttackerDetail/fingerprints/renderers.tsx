@@ -391,6 +391,98 @@ export const FpHttpQuirks: React.FC<{ p: any }> = ({ p }) => {
   );
 };
 
+export const FpIcmpError: React.FC<{ p: any }> = ({ p }) => {
+  const errors: Record<string, { returned?: boolean; rtt_ms?: string | null; src_ip?: string | null }> =
+    p.errors ?? {};
+  const ERROR_LABELS: Record<string, string> = {
+    port_unreachable: 'PORT UNREACH',
+    time_exceeded:    'TIME EXCEEDED',
+    frag_needed:      'FRAG NEEDED',
+    param_problem:    'PARAM PROBLEM',
+  };
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+      <HashRow label="HASH" value={p.fp_hash} />
+      {p.matrix && (
+        <span className="matrix-text" style={{ fontFamily: 'monospace', fontSize: '0.85rem', letterSpacing: '2px' }}>
+          {p.matrix}
+        </span>
+      )}
+      <div style={{ display: 'flex', gap: '6px', flexWrap: 'wrap' }}>
+        {Object.entries(ERROR_LABELS).map(([key, label]) => {
+          const e = errors[key];
+          const hit = e?.returned === true;
+          return (
+            <Tag key={key} color={hit ? 'var(--warn, #e0a040)' : undefined}>
+              <span style={{ opacity: hit ? 1 : 0.4 }}>
+                {label}{hit && e?.rtt_ms ? ` ${e.rtt_ms}ms` : ''}
+              </span>
+            </Tag>
+          );
+        })}
+      </div>
+      {errors.time_exceeded?.src_ip && (
+        <div style={{ display: 'flex', gap: '6px', alignItems: 'center', marginTop: '2px' }}>
+          <span className="dim" style={{ fontSize: '0.7rem' }}>FIRST HOP</span>
+          <Tag color="var(--accent-color)">{errors.time_exceeded.src_ip}</Tag>
+        </div>
+      )}
+      {(p.target_ip || p.target_port) && (
+        <div style={{ display: 'flex', gap: '8px', marginTop: '2px', flexWrap: 'wrap' }}>
+          {p.target_ip && <Tag color="var(--accent-color)">{p.target_ip}</Tag>}
+          {p.target_port && <Tag>:{p.target_port}</Tag>}
+        </div>
+      )}
+    </div>
+  );
+};
+
+export const FpIcmp6Error: React.FC<{ p: any }> = ({ p }) => {
+  const errors: Record<string, { returned?: boolean; rtt_ms?: string | null; src_ip?: string | null }> =
+    p.errors ?? {};
+  const ERROR_LABELS: Record<string, string> = {
+    port_unreachable_v6:  'PORT UNREACH',
+    hop_limit_exceeded:   'HOP LIMIT',
+    unknown_next_header:  'UNKNOWN NXT HDR',
+    bad_dest_option:      'BAD DEST OPT',
+  };
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+      <HashRow label="HASH" value={p.fp_hash} />
+      {p.matrix && (
+        <span className="matrix-text" style={{ fontFamily: 'monospace', fontSize: '0.85rem', letterSpacing: '2px' }}>
+          {p.matrix}
+        </span>
+      )}
+      <div style={{ display: 'flex', gap: '6px', flexWrap: 'wrap' }}>
+        {Object.entries(ERROR_LABELS).map(([key, label]) => {
+          const e = errors[key];
+          const hit = e?.returned === true;
+          return (
+            <Tag key={key} color={hit ? 'var(--violet)' : undefined}>
+              <span style={{ opacity: hit ? 1 : 0.4 }}>
+                {label}{hit && e?.rtt_ms ? ` ${e.rtt_ms}ms` : ''}
+              </span>
+            </Tag>
+          );
+        })}
+      </div>
+      {errors.hop_limit_exceeded?.src_ip && (
+        <div style={{ display: 'flex', gap: '6px', alignItems: 'center', marginTop: '2px' }}>
+          <span className="dim" style={{ fontSize: '0.7rem' }}>FIRST HOP</span>
+          <Tag color="var(--accent-color)">{errors.hop_limit_exceeded.src_ip}</Tag>
+        </div>
+      )}
+      {(p.target_ip || p.target_port) && (
+        <div style={{ display: 'flex', gap: '8px', marginTop: '2px', flexWrap: 'wrap' }}>
+          {p.target_ip && <Tag color="var(--accent-color)">{p.target_ip}</Tag>}
+          {p.target_port && <Tag>:{p.target_port}</Tag>}
+        </div>
+      )}
+    </div>
+  );
+};
+
 export const FingerprintGroup: React.FC<{ fpType: string; items: any[] }> = ({ fpType, items }) => {
   const label = fpTypeLabel[fpType] || fpType.toUpperCase().replace(/_/g, ' ');
   const icon = fpTypeIcon[fpType] || <Fingerprint size={14} />;
@@ -429,6 +521,8 @@ export const FingerprintGroup: React.FC<{ fpType: string; items: any[] }> = ({ f
             case 'http3_settings':
               return <FpHttpSettings key={i} p={p} />;
             case 'ja4_quic': return <FpJa4Quic key={i} p={p} />;
+            case 'icmp_error':  return <FpIcmpError  key={i} p={p} />;
+            case 'icmp6_error': return <FpIcmp6Error key={i} p={p} />;
             default: return <FpGeneric key={i} p={p} />;
           }
         })}

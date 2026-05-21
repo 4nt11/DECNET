@@ -21,6 +21,8 @@ export const fpTypeLabel: Record<string, string> = {
   jarm: 'JARM',
   hassh_server: 'HASSH SERVER',
   tcpfp: 'TCP/IP STACK',
+  icmp_error: 'ICMP ERROR LEAK',
+  icmp6_error: 'ICMPv6 ERROR LEAK',
 };
 
 export const fpTypeIcon: Record<string, React.ReactNode> = {
@@ -41,6 +43,8 @@ export const fpTypeIcon: Record<string, React.ReactNode> = {
   jarm: <Crosshair size={14} />,
   hassh_server: <Lock size={14} />,
   tcpfp: <Wifi size={14} />,
+  icmp_error: <Wifi size={14} />,
+  icmp6_error: <Crosshair size={14} />,
 };
 
 export const UA_CATEGORY_COLOR: Record<string, string> = {

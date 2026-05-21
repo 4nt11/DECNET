@@ -2,7 +2,7 @@ export { FingerprintGroup } from './renderers';
 export {
   FpTlsHashes, FpLatency, FpResumption, FpCertificate, FpJarm,
   FpHassh, FpTcpStack, FpGeneric, FpUserAgent, FpSpoofedSource,
-  FpHttpQuirks,
+  FpHttpQuirks, FpIcmpError, FpIcmp6Error,
 } from './renderers';
 export {
   fpTypeLabel, fpTypeIcon, getPayload, seqClassColor,

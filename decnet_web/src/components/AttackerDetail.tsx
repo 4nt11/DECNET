@@ -233,7 +233,7 @@ const AttackerDetail: React.FC = () => {
         });
 
         // Active probes first, then passive, then unknown
-        const activeTypes = ['jarm', 'hassh_server', 'tcpfp', 'tls_certificate_active'];
+        const activeTypes = ['jarm', 'hassh_server', 'tcpfp', 'tls_certificate_active', 'icmp_error', 'icmp6_error'];
         const passiveTypes = ['ja3', 'ja4l', 'tls_resumption', 'tls_certificate_passive', 'http_useragent', 'http_quirks', 'spoofed_source', 'vnc_client_version'];
         const knownTypes = [...activeTypes, ...passiveTypes];
         const unknownTypes = Object.keys(groups).filter((t) => !knownTypes.includes(t));
