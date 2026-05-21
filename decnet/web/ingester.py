@@ -41,7 +41,22 @@ async def log_ingestion_worker(repo: BaseRepository) -> None:
 
     _json_log_path: Path = Path(_base_log_file).with_suffix(".json")
 
-    _saved = await repo.get_state(_INGEST_STATE_KEY)
+    # Retry forever on transient DB failures — MySQL may still be coming
+    # up when the API spawns this task (api.py's own DB-init retry only
+    # bounds the *first* connection, not subsequent ops). If we throw here
+    # the task dies and the ingester is silently dead for the whole API
+    # lifetime — exactly the failure mode that caused decnet.json to grow
+    # unbounded with zero rows in the `logs` table on 2026-05-20.
+    while True:
+        try:
+            _saved = await repo.get_state(_INGEST_STATE_KEY)
+            break
+        except Exception as _exc:
+            logger.warning(
+                "ingester: DB not ready for state load, retrying in 5s: %s",
+                _exc,
+            )
+            await _sleep(5)
     _position: int = _saved.get("position", 0) if _saved else 0
 
     logger.info("ingest worker started path=%s position=%d", _json_log_path, _position)

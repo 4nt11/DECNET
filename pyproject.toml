@@ -52,8 +52,8 @@ dependencies = [
     # the Observation envelope; shell ships the primitive registry +
     # bus event adapter consumed by decnet/profiler/behave_shell/. Pin
     # range tracks BEHAVE-INTEGRATION.md §"Versioning".
-    "decnet-behave-core>=0.1.0,<0.2",
-    "decnet-behave-shell>=0.1.0,<0.2",
+    "behave-core>=0.1.0,<0.2",
+    "behave-shell>=0.1.0,<0.2",
     # STIX → MISP conversion: CIRCL-maintained reference converter used by
     # MISP itself. Pulls pymisp transitively (needed for MISPEvent output).
     "misp-stix>=2026.4",
@@ -96,7 +96,7 @@ dev = [
     "pytest-xdist>=3.8.0",
     "pytest-timeout>=2.4.0",
     "flask>=3.1.3",
-    "twisted>=26.4.0rc2",
+    "twisted>=26.4.0",
     "requests>=2.33.1",
     "redis>=7.4.0",
     "pymysql>=1.1.2",

@@ -770,3 +770,55 @@ class TestLogIngestionWorker:
             if c[0][0] == _INGEST_STATE_KEY and c[0][1] == {"position": 0}
         ]
         assert reset_calls, "set_state not called with position=0 after truncation"
+
+    @pytest.mark.asyncio
+    async def test_get_state_db_error_retries_then_recovers(self, tmp_path):
+        """OperationalError on initial get_state must not kill the task.
+
+        Regression test for the 2026-05-20 incident: MySQL came up after the
+        API process, so the very first get_state() threw before _run_loop was
+        ever entered.  The task died with an unhandled exception and the
+        ingester was silently dead for the whole API lifetime.
+        """
+        from decnet.web.ingester import log_ingestion_worker
+        from sqlalchemy.exc import OperationalError
+
+        log_file = str(tmp_path / "test.log")
+        json_file = tmp_path / "test.json"
+        json_file.write_text(
+            json.dumps({"decky": "d1", "service": "ssh", "event_type": "auth",
+                         "attacker_ip": "1.2.3.4", "fields": {}, "raw_line": "x", "msg": ""}) + "\n"
+        )
+
+        _get_state_calls: int = 0
+
+        async def fake_get_state(key):
+            nonlocal _get_state_calls
+            _get_state_calls += 1
+            if _get_state_calls == 1:
+                raise OperationalError("connection refused", None, None)
+            return {"position": 0}
+
+        mock_repo = MagicMock()
+        mock_repo.get_state = fake_get_state
+        mock_repo.add_logs = AsyncMock()
+        mock_repo.add_bounty = AsyncMock()
+        mock_repo.set_state = AsyncMock()
+
+        _sleep_count: int = 0
+
+        async def fake_sleep(secs):
+            nonlocal _sleep_count
+            _sleep_count += 1
+            # First sleep is the retry backoff after the OperationalError.
+            # Second sleep means we entered _run_loop and processed the batch.
+            if _sleep_count >= 2:
+                raise asyncio.CancelledError()
+
+        with patch.dict(os.environ, {"DECNET_INGEST_LOG_FILE": log_file}):
+            with patch("decnet.web.ingester._sleep", side_effect=fake_sleep):
+                with pytest.raises(asyncio.CancelledError):
+                    await log_ingestion_worker(mock_repo)
+
+        assert _get_state_calls == 2, "should have retried get_state once after the error"
+        mock_repo.add_logs.assert_awaited_once()
