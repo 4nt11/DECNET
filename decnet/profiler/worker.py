@@ -33,6 +33,7 @@ from decnet.correlation.engine import CorrelationEngine
 from decnet.correlation.parser import LogEvent
 from decnet.asn import enrich_ip as enrich_ip_asn
 from decnet.geoip import enrich_ip
+from decnet.rpki import enrich_rpki
 from decnet.geoip.ptr import resolve_ptr_record
 from decnet.logging import get_logger
 from decnet.profiler.behave_shell._handler import handle_session_ended
@@ -357,6 +358,7 @@ def _build_record(
     credential_count = sum(1 for b in bounties if b.get("bounty_type") == "credential")
     country_code, country_source = enrich_ip(ip)
     asn, as_name, bgp_prefix, asn_source = enrich_ip_asn(ip)
+    rpki_status, rpki_source = enrich_rpki(ip, asn)
 
     record: dict[str, Any] = {
         "ip": ip,
@@ -379,6 +381,8 @@ def _build_record(
         "as_name": as_name,
         "bgp_prefix": bgp_prefix,
         "asn_source": asn_source,
+        "rpki_status": rpki_status,
+        "rpki_source": rpki_source,
         "updated_at": datetime.now(timezone.utc),
     }
     # ptr_record is omitted from the dict entirely when the caller didn't
