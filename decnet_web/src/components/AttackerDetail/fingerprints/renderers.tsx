@@ -207,6 +207,77 @@ export const FpTcpStack: React.FC<{ p: any }> = ({ p }) => (
   </div>
 );
 
+export const FpJa4h: React.FC<{ p: any }> = ({ p }) => (
+  <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+    <HashRow label="JA4H" value={String(p.ja4h ?? '')} />
+    <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
+      {p.protocol && <Tag>{String(p.protocol).toUpperCase()}</Tag>}
+      {p.method && <Tag color="var(--accent-color)">{String(p.method).toUpperCase()}</Tag>}
+      {p.path && <Tag>{String(p.path)}</Tag>}
+      {p.remote_port && <Tag>:{p.remote_port}</Tag>}
+    </div>
+  </div>
+);
+
+export const FpHttpSettings: React.FC<{ p: any }> = ({ p }) => {
+  let entries: [string, unknown][] = [];
+  if (p.settings) {
+    try {
+      const parsed = typeof p.settings === 'string' ? JSON.parse(p.settings) : p.settings;
+      entries = Object.entries(parsed as Record<string, unknown>);
+    } catch { /* leave entries empty */ }
+  }
+  let frameOrder: string[] = [];
+  if (p.frame_order) {
+    try {
+      const parsed = typeof p.frame_order === 'string' ? JSON.parse(p.frame_order) : p.frame_order;
+      if (Array.isArray(parsed)) frameOrder = parsed.map(String);
+    } catch { /* leave empty */ }
+  }
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+      <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap', alignItems: 'center' }}>
+        {p.protocol && <Tag>{String(p.protocol).toUpperCase()}</Tag>}
+        {p.remote_port && <Tag>:{p.remote_port}</Tag>}
+      </div>
+      {entries.length > 0 && (
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '3px' }}>
+          {entries.map(([k, v]) => (
+            <div key={k} style={{ display: 'flex', gap: '8px', alignItems: 'baseline' }}>
+              <span className="dim" style={{ fontSize: '0.7rem', minWidth: '180px' }}>
+                {k.replace(/_/g, ' ')}
+              </span>
+              <span className="matrix-text" style={{ fontFamily: 'monospace', fontSize: '0.8rem' }}>
+                {String(v)}
+              </span>
+            </div>
+          ))}
+        </div>
+      )}
+      {frameOrder.length > 0 && (
+        <details>
+          <summary className="dim" style={{ fontSize: '0.7rem', cursor: 'pointer', letterSpacing: '1px' }}>
+            FRAME ORDER
+          </summary>
+          <div style={{ display: 'flex', gap: '4px', flexWrap: 'wrap', marginTop: '4px' }}>
+            {frameOrder.map((f, i) => <Tag key={i}>{f}</Tag>)}
+          </div>
+        </details>
+      )}
+    </div>
+  );
+};
+
+export const FpJa4Quic: React.FC<{ p: any }> = ({ p }) => (
+  <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+    <HashRow label="JA4-QUIC" value={String(p.ja4_quic ?? '')} />
+    <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
+      {p.sni && <Tag color="var(--accent-color)">SNI: {p.sni}</Tag>}
+      {p.alpn && <Tag>ALPN: {p.alpn}</Tag>}
+    </div>
+  </div>
+);
+
 export const FpGeneric: React.FC<{ p: any }> = ({ p }) => (
   <div>
     {p.value ? (
@@ -353,6 +424,11 @@ export const FingerprintGroup: React.FC<{ fpType: string; items: any[] }> = ({ f
             case 'http_quirks': return <FpHttpQuirks key={i} p={p} />;
             case 'http_useragent': return <FpUserAgent key={i} p={p} />;
             case 'spoofed_source': return <FpSpoofedSource key={i} p={p} />;
+            case 'ja4h': return <FpJa4h key={i} p={p} />;
+            case 'http2_settings':
+            case 'http3_settings':
+              return <FpHttpSettings key={i} p={p} />;
+            case 'ja4_quic': return <FpJa4Quic key={i} p={p} />;
             default: return <FpGeneric key={i} p={p} />;
           }
         })}
