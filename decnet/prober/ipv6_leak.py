@@ -35,26 +35,37 @@ def _ip_route_get(attacker_v4: str) -> str:
             capture_output=True, text=True, timeout=2,
         )
         return out.stdout
-    except Exception:
+    except Exception as exc:
+        _log.debug("ipv6_leak: ip route get failed for %s: %s", attacker_v4, exc)
         return ""
+
+
+def _route_info(attacker_v4: str) -> tuple[bool, str | None]:
+    """Return (on_link, iface) with a single `ip route get` invocation.
+
+    on_link is True when there is no intermediate gateway ("via" absent).
+    iface is the local interface name, or None if not parseable.
+    """
+    stdout = _ip_route_get(attacker_v4)
+    parts = stdout.split()
+    on_link = "via" not in parts
+    iface: str | None = None
+    if "dev" in parts:
+        idx = parts.index("dev")
+        iface = parts[idx + 1] if idx + 1 < len(parts) else None
+    return on_link, iface
 
 
 def _resolve_iface_for_ip(attacker_v4: str) -> str | None:
     """Return the local interface name that would route to attacker_v4."""
-    stdout = _ip_route_get(attacker_v4)
-    parts = stdout.split()
-    if "dev" in parts:
-        idx = parts.index("dev")
-        return parts[idx + 1] if idx + 1 < len(parts) else None
-    return None
+    _, iface = _route_info(attacker_v4)
+    return iface
 
 
 def _is_on_link(attacker_v4: str) -> bool:
-    """Return True only when the attacker is directly reachable on L2.
-
-    Checks that `ip route get` shows no intermediate gateway (no "via").
-    """
-    return "via" not in _ip_route_get(attacker_v4)
+    """Return True only when the attacker is directly reachable on L2."""
+    on_link, _ = _route_info(attacker_v4)
+    return on_link
 
 
 def solicit_ipv6_leak(
@@ -100,7 +111,8 @@ def solicit_ipv6_leak(
 
     try:
         src_addr: str = resp[IPv6].src
-    except Exception:
+    except Exception as exc:
+        _log.debug("ipv6_leak: response parse failed on %s: %s", attacker_v4, exc)
         return None
 
     if not _is_link_local(src_addr):

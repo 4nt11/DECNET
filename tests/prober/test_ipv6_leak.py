@@ -6,6 +6,9 @@ no sniff threads.  Validates:
 - Phase skips on second call (dedup via ip_probed sentinel).
 - Phase emits log + publish_fn when solicit_ipv6_leak returns evidence.
 - Phase is silent when solicit_ipv6_leak returns None.
+- _route_info calls _ip_route_get exactly once per invocation.
+- _ip_route_get subprocess failure is logged at debug.
+- solicit_ipv6_leak response-parse failure is logged at debug.
 """
 from __future__ import annotations
 
@@ -46,8 +49,7 @@ _EVIDENCE = {
 def test_phase_skips_when_not_on_link() -> None:
     published: list[Any] = []
     with (
-        patch("decnet.prober.ipv6_leak._is_on_link", return_value=False),
-        patch("decnet.prober.ipv6_leak._resolve_iface_for_ip", return_value="eth0"),
+        patch("decnet.prober.ipv6_leak._route_info", return_value=(False, "eth0")),
         patch("decnet.prober.ipv6_leak.solicit_ipv6_leak", return_value=_EVIDENCE) as mock_sol,
     ):
         _phase(publish_fn=lambda k, p: published.append((k, p)))
@@ -58,8 +60,7 @@ def test_phase_skips_when_not_on_link() -> None:
 def test_phase_skips_when_no_iface() -> None:
     published: list[Any] = []
     with (
-        patch("decnet.prober.ipv6_leak._is_on_link", return_value=True),
-        patch("decnet.prober.ipv6_leak._resolve_iface_for_ip", return_value=None),
+        patch("decnet.prober.ipv6_leak._route_info", return_value=(True, None)),
         patch("decnet.prober.ipv6_leak.solicit_ipv6_leak", return_value=_EVIDENCE) as mock_sol,
     ):
         _phase(publish_fn=lambda k, p: published.append((k, p)))
@@ -70,8 +71,7 @@ def test_phase_skips_when_no_iface() -> None:
 def test_phase_emits_on_evidence() -> None:
     published: list[Any] = []
     with (
-        patch("decnet.prober.ipv6_leak._is_on_link", return_value=True),
-        patch("decnet.prober.ipv6_leak._resolve_iface_for_ip", return_value="eth0"),
+        patch("decnet.prober.ipv6_leak._route_info", return_value=(True, "eth0")),
         patch("decnet.prober.ipv6_leak.solicit_ipv6_leak", return_value=_EVIDENCE),
     ):
         _phase(publish_fn=lambda k, p: published.append((k, p)))
@@ -86,8 +86,7 @@ def test_phase_emits_on_evidence() -> None:
 def test_phase_silent_when_solicit_returns_none() -> None:
     published: list[Any] = []
     with (
-        patch("decnet.prober.ipv6_leak._is_on_link", return_value=True),
-        patch("decnet.prober.ipv6_leak._resolve_iface_for_ip", return_value="eth0"),
+        patch("decnet.prober.ipv6_leak._route_info", return_value=(True, "eth0")),
         patch("decnet.prober.ipv6_leak.solicit_ipv6_leak", return_value=None),
     ):
         _phase(publish_fn=lambda k, p: published.append((k, p)))
@@ -98,8 +97,7 @@ def test_phase_dedup_skips_on_second_call() -> None:
     published: list[Any] = []
     ip_probed: dict = {}
     with (
-        patch("decnet.prober.ipv6_leak._is_on_link", return_value=True),
-        patch("decnet.prober.ipv6_leak._resolve_iface_for_ip", return_value="eth0"),
+        patch("decnet.prober.ipv6_leak._route_info", return_value=(True, "eth0")),
         patch("decnet.prober.ipv6_leak.solicit_ipv6_leak", return_value=_EVIDENCE) as mock_sol,
     ):
         _phase(ip_probed=ip_probed, publish_fn=lambda k, p: published.append((k, p)))
@@ -112,9 +110,57 @@ def test_phase_dedup_skips_on_second_call() -> None:
 def test_phase_handles_solicit_exception_silently() -> None:
     published: list[Any] = []
     with (
-        patch("decnet.prober.ipv6_leak._is_on_link", return_value=True),
-        patch("decnet.prober.ipv6_leak._resolve_iface_for_ip", return_value="eth0"),
+        patch("decnet.prober.ipv6_leak._route_info", return_value=(True, "eth0")),
         patch("decnet.prober.ipv6_leak.solicit_ipv6_leak", side_effect=RuntimeError("boom")),
     ):
         _phase(publish_fn=lambda k, p: published.append((k, p)))
     assert published == []
+
+
+# ─── _route_info / _ip_route_get unit tests ──────────────────────────────────
+
+
+def test_route_info_calls_ip_route_get_once() -> None:
+    """_route_info must shell out exactly once regardless of parse path."""
+    from decnet.prober.ipv6_leak import _route_info
+    stdout = "10.0.0.9 dev eth0 src 10.0.0.1 uid 0\n    cache"
+    with patch("decnet.prober.ipv6_leak._ip_route_get", return_value=stdout) as mock_rg:
+        on_link, iface = _route_info("10.0.0.9")
+    mock_rg.assert_called_once_with("10.0.0.9")
+    assert on_link is True
+    assert iface == "eth0"
+
+
+def test_route_info_detects_gateway() -> None:
+    from decnet.prober.ipv6_leak import _route_info
+    stdout = "10.0.0.9 via 192.168.1.1 dev eth0 src 192.168.1.50\n    cache"
+    with patch("decnet.prober.ipv6_leak._ip_route_get", return_value=stdout):
+        on_link, iface = _route_info("10.0.0.9")
+    assert on_link is False
+    assert iface == "eth0"
+
+
+def test_ip_route_get_logs_on_subprocess_failure() -> None:
+    from decnet.prober.ipv6_leak import _ip_route_get
+    with (
+        patch("decnet.prober.ipv6_leak.subprocess.run", side_effect=OSError("no ip")),
+        patch("decnet.prober.ipv6_leak._log") as mock_log,
+    ):
+        result = _ip_route_get("10.0.0.9")
+    assert result == ""
+    mock_log.debug.assert_called_once()
+    assert "10.0.0.9" in mock_log.debug.call_args.args[1]
+
+
+def test_ip_route_get_returns_empty_string_on_failure() -> None:
+    """subprocess failure returns "" and logs at debug — not a silent swallow."""
+    from decnet.prober.ipv6_leak import _ip_route_get
+    with (
+        patch("decnet.prober.ipv6_leak.subprocess.run", side_effect=OSError("no ip binary")),
+        patch("decnet.prober.ipv6_leak._log") as mock_log,
+    ):
+        result = _ip_route_get("10.0.0.9")
+    assert result == ""
+    assert mock_log.debug.called
+    logged_msg = mock_log.debug.call_args.args
+    assert "10.0.0.9" in str(logged_msg)

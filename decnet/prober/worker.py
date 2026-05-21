@@ -402,13 +402,12 @@ def _ipv6_leak_phase(
         return
     done.add(0)
 
-    from decnet.prober.ipv6_leak import _is_on_link, _resolve_iface_for_ip, solicit_ipv6_leak
+    from decnet.prober.ipv6_leak import _route_info, solicit_ipv6_leak
 
-    if not _is_on_link(ip):
+    on_link, iface = _route_info(ip)
+    if not on_link:
         logger.debug("prober: ipv6_leak: %s is not on-link — skip active probe", ip)
         return
-
-    iface = _resolve_iface_for_ip(ip)
     if iface is None:
         logger.debug("prober: ipv6_leak: cannot determine iface for %s", ip)
         return
