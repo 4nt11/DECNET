@@ -75,7 +75,7 @@ async def test_topology_add_service_persists_and_runs_compose_up(
 ) -> None:
     captured: list[tuple[str, ...]] = []
 
-    def fake_compose(*args, compose_file=None, env=None):
+    def fake_compose(*args, compose_file=None, env=None, project=None):
         captured.append(args)
 
     monkeypatch.setattr(services_live, "_compose", fake_compose)

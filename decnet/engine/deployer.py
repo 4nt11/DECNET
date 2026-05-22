@@ -50,6 +50,7 @@ from decnet.topology.validate import (
 log = get_logger("engine")
 console = Console()
 COMPOSE_FILE = Path("decnet-compose.yml")
+FLEET_COMPOSE_PROJECT = "decnet"
 _CANONICAL_LOGGING = Path(__file__).parent.parent / "templates" / "syslog_bridge.py"
 _CANONICAL_INSTANCE_SEED = Path(__file__).parent.parent / "templates" / "instance_seed.py"
 _CANONICAL_SESSREC_DIR = Path(__file__).parent.parent / "templates" / "_shared" / "sessrec"
@@ -222,7 +223,9 @@ def _sync_caddy_modules(config: DecnetConfig) -> None:
                         _chown_tree(dest_child, src_dir)
 
 
-def _compose_ps(compose_file: Path) -> list[dict[str, object]]:
+def _compose_ps(
+    compose_file: Path, project: str = FLEET_COMPOSE_PROJECT,
+) -> list[dict[str, object]]:
     """Return ``docker compose ps`` rows for *compose_file* as parsed JSON.
 
     Used for post-deploy verification: ``compose up -d`` returns 0 the
@@ -232,7 +235,7 @@ def _compose_ps(compose_file: Path) -> list[dict[str, object]]:
     parse failure — caller treats that as 'unverifiable, don't gate').
     """
     cmd = [
-        "docker", "compose", "-p", "decnet", "-f", str(compose_file),
+        "docker", "compose", "-p", project, "-f", str(compose_file),
         "ps", "--all", "--format", "json",
     ]
     try:
@@ -264,13 +267,21 @@ def _compose_ps(compose_file: Path) -> list[dict[str, object]]:
     return rows
 
 
-def _compose(*args: str, compose_file: Path = COMPOSE_FILE, env: dict | None = None) -> None:
+def _compose(
+    *args: str,
+    compose_file: Path = COMPOSE_FILE,
+    env: dict | None = None,
+    project: str = FLEET_COMPOSE_PROJECT,
+) -> None:
     import os
-    # -p decnet pins the compose project name. Without it, docker compose
+    # -p pins the compose project name. Without it, docker compose
     # derives the project from basename($PWD); when a daemon (systemd) runs
     # with WorkingDirectory=/ that basename is empty and compose aborts with
-    # "project name must not be empty".
-    cmd = ["docker", "compose", "-p", "decnet", "-f", str(compose_file), *args]
+    # "project name must not be empty". Each scope (fleet, individual
+    # topology) gets its OWN project so `--remove-orphans` only sweeps
+    # containers in that scope — without this, a fleet redeploy or a
+    # topology teardown blasts every other scope's containers as orphans.
+    cmd = ["docker", "compose", "-p", project, "-f", str(compose_file), *args]
     merged = {**os.environ, **(env or {})}
     result = subprocess.run(cmd, capture_output=True, text=True, env=merged)  # nosec B603
     if result.stdout:
@@ -424,15 +435,13 @@ def _compose_with_retry(
     retries: int = 3,
     delay: float = 5.0,
     env: dict | None = None,
+    project: str = FLEET_COMPOSE_PROJECT,
 ) -> None:
     """Run a docker compose command, retrying on transient failures."""
     import os
     last_exc: subprocess.CalledProcessError | None = None
-    # -p decnet pins the compose project name. Without it, docker compose
-    # derives the project from basename($PWD); when a daemon (systemd) runs
-    # with WorkingDirectory=/ that basename is empty and compose aborts with
-    # "project name must not be empty".
-    cmd = ["docker", "compose", "-p", "decnet", "-f", str(compose_file), *args]
+    # See ``_compose`` for the project-name rationale.
+    cmd = ["docker", "compose", "-p", project, "-f", str(compose_file), *args]
     merged = {**os.environ, **(env or {})}
 
     # Preflight: if buildx already looks wedged before the first attempt,
@@ -825,6 +834,18 @@ def _topology_compose_path(topology_id: str) -> Path:
     return Path(f"decnet-topology-{topology_id[:8]}-compose.yml")
 
 
+def _topology_compose_project(topology_id: str) -> str:
+    """Per-topology docker compose project name.
+
+    Each topology is its OWN compose project so ``--remove-orphans``
+    during teardown or rollback sweeps only that topology's containers,
+    not the flat fleet or sibling topologies. Sharing a project (the
+    historical default ``decnet``) meant any teardown blasted every
+    other scope's containers.
+    """
+    return f"decnet-topo-{topology_id[:8]}"
+
+
 async def _resolve_swarm_host(repo, host_uuid: str) -> dict:
     host = await repo.get_swarm_host_by_uuid(host_uuid)
     if host is None:
@@ -967,6 +988,7 @@ async def deploy_topology(repo, topology_id: str, *, dry_run: bool = False) -> N
 
     lans = hydrated["lans"]
     compose_path = _topology_compose_path(topology_id)
+    compose_project = _topology_compose_project(topology_id)
 
     if dry_run:
         # Plan-only: don't touch repo status or Docker — write the compose
@@ -1017,6 +1039,7 @@ async def deploy_topology(repo, topology_id: str, *, dry_run: bool = False) -> N
         await anyio.to_thread.run_sync(
             lambda: _compose_with_retry(
                 "up", "--build", "-d", compose_file=compose_path,
+                project=compose_project,
             ),
         )
         compose_started = True
@@ -1029,7 +1052,8 @@ async def deploy_topology(repo, topology_id: str, *, dry_run: bool = False) -> N
         if compose_started or compose_path.exists():
             try:
                 _compose(
-                    "down", "--remove-orphans", compose_file=compose_path
+                    "down", "--remove-orphans", compose_file=compose_path,
+                    project=compose_project,
                 )
             except Exception as rb_exc:  # pragma: no cover
                 log.warning(
@@ -1063,7 +1087,7 @@ async def deploy_topology(repo, topology_id: str, *, dry_run: bool = False) -> N
     # container isn't running — operators see real state instead of an
     # optimistic flag.
     ps_rows = await anyio.to_thread.run_sync(
-        lambda: _compose_ps(compose_path),
+        lambda: _compose_ps(compose_path, project=compose_project),
     )
     bad: list[str] = []
     # Build the per-decky state map.  The base container's compose
@@ -1155,12 +1179,14 @@ async def teardown_topology(repo, topology_id: str) -> None:
 
     client = docker.from_env()
     compose_path = _topology_compose_path(topology_id)
+    compose_project = _topology_compose_project(topology_id)
 
     if compose_path.exists():
         try:
             await anyio.to_thread.run_sync(
                 lambda: _compose(
                     "down", "--remove-orphans", compose_file=compose_path,
+                    project=compose_project,
                 ),
             )
         except subprocess.CalledProcessError as exc:

@@ -40,7 +40,12 @@ from decnet.web.db.repository import BaseRepository
 # pattern in decnet.canary.planter for the same reason.
 
 
-def _compose(*args: str, compose_file: Optional[Path] = None, env=None) -> None:
+def _compose(
+    *args: str,
+    compose_file: Optional[Path] = None,
+    env=None,
+    project: Optional[str] = None,
+) -> None:
     """Indirection so tests can ``monkeypatch.setattr(services_live, '_compose', ...)``.
 
     Real implementation lives in :mod:`decnet.engine.deployer`; we
@@ -48,15 +53,22 @@ def _compose(*args: str, compose_file: Optional[Path] = None, env=None) -> None:
     clean (see module docstring above).
     """
     from decnet.engine.deployer import _compose as _real_compose
-    if compose_file is None:
-        _real_compose(*args, env=env)
-    else:
-        _real_compose(*args, compose_file=compose_file, env=env)
+    kwargs: dict[str, Any] = {"env": env}
+    if compose_file is not None:
+        kwargs["compose_file"] = compose_file
+    if project is not None:
+        kwargs["project"] = project
+    _real_compose(*args, **kwargs)
 
 
 def _topology_compose_path(topology_id: str) -> Path:
     from decnet.engine.deployer import _topology_compose_path as _real_path
     return _real_path(topology_id)
+
+
+def _topology_compose_project(topology_id: str) -> str:
+    from decnet.engine.deployer import _topology_compose_project as _real
+    return _real(topology_id)
 
 
 def _write_topology_compose(hydrated, path: Path) -> Path:
@@ -262,12 +274,13 @@ async def _add_topology_service(
         await _resync_agent_topology(repo, topology_id)
     else:
         target = f"{decky_name}-{service_name}"
+        project = _topology_compose_project(topology_id)
         # Run compose in a worker thread so the API event loop stays
         # responsive — same pattern as engine/deployer.deploy_topology.
         await anyio.to_thread.run_sync(
             lambda: _compose(
                 "up", "-d", "--no-deps", "--build", target,
-                compose_file=compose_path,
+                compose_file=compose_path, project=project,
             ),
         )
     return services
@@ -295,16 +308,21 @@ async def _remove_topology_service(
     services = [s for s in services if s != service_name]
     target = f"{decky_name}-{service_name}"
     compose_path = _topology_compose_path(topology_id)
+    project = _topology_compose_project(topology_id)
     agent_pinned = await _topology_is_agent_pinned(repo, topology_id)
     if not agent_pinned:
         # Stop + rm before persisting + re-rendering so a half-completed
         # mutation leaves the operator a clear state to retry from
         # (container still running; DB still says service is on).
         await anyio.to_thread.run_sync(
-            lambda: _compose("stop", target, compose_file=compose_path),
+            lambda: _compose(
+                "stop", target, compose_file=compose_path, project=project,
+            ),
         )
         await anyio.to_thread.run_sync(
-            lambda: _compose("rm", "-f", target, compose_file=compose_path),
+            lambda: _compose(
+                "rm", "-f", target, compose_file=compose_path, project=project,
+            ),
         )
     await repo.update_topology_decky(decky["uuid"], {"services": services})
     await _rerender_topology_compose(repo, topology_id)
@@ -568,10 +586,11 @@ async def _update_topology_service_config(
             await _resync_agent_topology(repo, topology_id)
         else:
             target = f"{decky_name}-{service_name}"
+            project = _topology_compose_project(topology_id)
             await anyio.to_thread.run_sync(
                 lambda: _compose(
                     "up", "-d", "--no-deps", "--force-recreate", "--build", target,
-                    compose_file=compose_path,
+                    compose_file=compose_path, project=project,
                 ),
             )
 

@@ -28,6 +28,7 @@ from decnet.engine.deployer import (
     _compose_with_retry,
     _teardown_order,
     _topology_compose_path,
+    _topology_compose_project,
 )
 from decnet.logging import get_logger
 from decnet.network import create_bridge_network, remove_bridge_network
@@ -118,12 +119,16 @@ def _materialise(hydrated: dict[str, Any], topology_id: str) -> None:
     the base is the cheapest way to make this race impossible.
     """
     compose_path = _topology_compose_path(topology_id)
+    compose_project = _topology_compose_project(topology_id)
     client = docker.from_env()
     for lan in hydrated["lans"]:
         net_name = _topology_network_name(topology_id, lan["name"])
         create_bridge_network(client, net_name, lan["subnet"], internal=not lan["is_dmz"])
     write_topology_compose(hydrated, compose_path)
-    _compose_with_retry("up", "--build", "-d", "--always-recreate-deps", compose_file=compose_path)
+    _compose_with_retry(
+        "up", "--build", "-d", "--always-recreate-deps",
+        compose_file=compose_path, project=compose_project,
+    )
 
 
 async def apply(
@@ -160,12 +165,16 @@ async def teardown(
     # LAN membership list via the hydrated blob if available.
     hydrated = row.hydrated if row and row.topology_id == topology_id else None
     compose_path = _topology_compose_path(topology_id)
+    compose_project = _topology_compose_project(topology_id)
     client = docker.from_env()
 
     def _dismantle() -> None:
         if compose_path.exists():
             try:
-                _compose("down", "--remove-orphans", compose_file=compose_path)
+                _compose(
+                    "down", "--remove-orphans",
+                    compose_file=compose_path, project=compose_project,
+                )
             except subprocess.CalledProcessError as exc:
                 log.warning(
                     "topology %s compose down failed (continuing): %s",
