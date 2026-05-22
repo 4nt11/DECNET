@@ -109,6 +109,22 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
                 log.error("DB failed to initialize after 5 attempts — startup may be degraded")
             await _retry_sleep(0.5)
 
+    # Sweep stranded DeckyLifecycle rows from a prior master crash.
+    # Anything older than 1h that's still pending/running can never
+    # complete (the runner task died with the process), so flip it to
+    # failed.  Cheap DB op; runs unconditionally including contract-test
+    # mode (idempotent and observable in tests).
+    try:
+        from datetime import datetime, timedelta, timezone
+        cutoff = datetime.now(timezone.utc) - timedelta(hours=1)
+        swept = await repo.sweep_stale_lifecycle(
+            cutoff, reason="master restarted during operation",
+        )
+        if swept:
+            log.warning("API startup: swept %d stranded lifecycle row(s)", swept)
+    except Exception:
+        log.exception("API startup: lifecycle sweep failed (non-fatal)")
+
     # Conditionally enable OpenTelemetry tracing
     from decnet.telemetry import setup_tracing
     setup_tracing(app)
