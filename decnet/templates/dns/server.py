@@ -7,7 +7,7 @@ event_type values emitted:
   fingerprint_probe      — version.bind / hostname.bind / id.server / opcode / flag / qclass probes
   zone_transfer          — AXFR or IXFR (always REFUSED)
   amp_probe              — qtype=ANY or EDNS requestor udp_size > 1232
-  tunneling_suspect      — long high-entropy labels or rapid TXT burst from same src
+  tunneling_suspect      — long high-entropy labels, high-entropy subdomain, or rapid burst from same src
   flood_suspect          — source exceeding QPS threshold within rolling window
   tracking_evicted       — LRU state evicted (signals IP-rotation evasion)
   recon_burst            — same source hit ≥2 distinct high-signal event types within 60s
@@ -345,11 +345,13 @@ def _log(event_type: str, severity: int = 6, **kwargs) -> None:
 # ── Tunables ──────────────────────────────────────────────────────────────────
 
 # Tunneling heuristic
-_SHANNON_THRESHOLD   = 4.0
-_LABEL_LEN_THRESHOLD = 30
-_TXT_BURST_WINDOW    = 10.0   # seconds
-_TXT_BURST_COUNT     = 5
-_MAX_TRACKED_SRCS    = 1000
+_SHANNON_THRESHOLD        = 4.0
+_LABEL_LEN_THRESHOLD      = 30
+_QNAME_TOTAL_LEN_THRESHOLD = 50
+_QNAME_ENTROPY_THRESHOLD  = 3.5
+_TXT_BURST_WINDOW         = 10.0   # seconds
+_TXT_BURST_COUNT          = 5
+_MAX_TRACKED_SRCS         = 1000
 
 # Flood detection
 _QPS_WINDOW_SEC      = 10.0
@@ -433,10 +435,23 @@ def _shannon_entropy(s: str) -> float:
     return -sum((v / n) * math.log2(v / n) for v in freq.values())
 
 
-def _is_tunneling(qname: str, qtype: int, src: str) -> bool:
-    for label in qname.rstrip(".").split("."):
+def _is_tunneling(qname: str, qtype: int, src: str) -> str | None:
+    labels_all = qname.rstrip(".").split(".")
+    # Per-label check: any single label that is long AND high-entropy.
+    for label in labels_all:
         if len(label) >= _LABEL_LEN_THRESHOLD and _shannon_entropy(label) > _SHANNON_THRESHOLD:
-            return True
+            return "label_entropy"
+    # Full-subdomain check: strip zone suffix, concatenate remaining labels, test combined entropy.
+    # Catches split-label exfil where each label is short but the encoded payload spans many.
+    zone_label_count = len(DOMAIN_BARE.split("."))
+    subdomain_labels = labels_all[:-zone_label_count] if len(labels_all) > zone_label_count else []
+    if subdomain_labels:
+        subdomain_str = "".join(subdomain_labels)
+        if (
+            len(subdomain_str) >= _QNAME_TOTAL_LEN_THRESHOLD
+            and _shannon_entropy(subdomain_str) >= _QNAME_ENTROPY_THRESHOLD
+        ):
+            return "qname_entropy"
     if qtype == TYPE_TXT:
         now = time.monotonic()
         if src not in _txt_times:
@@ -447,8 +462,8 @@ def _is_tunneling(qname: str, qtype: int, src: str) -> bool:
         while q and now - q[0] > _TXT_BURST_WINDOW:
             q.popleft()
         if len(q) >= _TXT_BURST_COUNT:
-            return True
-    return False
+            return "burst"
+    return None
 
 # ── Flood detection ───────────────────────────────────────────────────────────
 
@@ -822,7 +837,7 @@ def _handle(data: bytes, src_ip: str, src_port: int, transport: str) -> bytes | 
         edns_size=edns_size or 0, recursion_desired=rd,
     )
     if is_tunnel:
-        _log("tunneling_suspect", **base)
+        _log("tunneling_suspect", tunnel_method=is_tunnel, **base)
     if is_amp:
         _log("amp_probe", **base)
         _note_recon_event(src_ip, "amp_probe")

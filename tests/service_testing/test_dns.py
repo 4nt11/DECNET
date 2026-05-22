@@ -393,6 +393,51 @@ class TestTunnelingHeuristic:
         mod._handle(query, "9.9.9.9", 1234, "udp")
         assert not _events_of(events, "query")
 
+    def test_tunnel_method_label_entropy(self):
+        mod, events = _load_dns()
+        label = "abcdefghijklmnopqrstuvwxyz0123456789abcd"
+        mod._handle(_build_query(f"{label}.test.local", mod.TYPE_A), "9.9.9.9", 1234, "udp")
+        suspects = _events_of(events, "tunneling_suspect")
+        assert suspects and suspects[0]["tunnel_method"] == "label_entropy"
+
+    def test_tunnel_method_burst(self):
+        mod, events = _load_dns()
+        src = "3.3.3.4"
+        for i in range(5):
+            mod._handle(_build_query(f"chunk{i}.test.local", mod.TYPE_TXT), src, 1234, "udp")
+        suspects = _events_of(events, "tunneling_suspect")
+        assert suspects and suspects[0]["tunnel_method"] == "burst"
+
+    def test_short_label_high_entropy_qname_triggers_tunneling(self):
+        """Five 14-char high-entropy labels, each under the per-label threshold,
+        but combined subdomain length (70) and entropy exceed the qname thresholds."""
+        mod, events = _load_dns()
+        # Each label: 14 chars, 14 distinct chars → entropy ≈ 3.8 per label
+        # Combined 70 chars → entropy ≈ 3.8 > _QNAME_ENTROPY_THRESHOLD (3.5)
+        # Individual label len = 14 < _LABEL_LEN_THRESHOLD (30) so per-label check is silent
+        label = "a1b2c3d4e5f6g7"
+        assert len(label) < mod._LABEL_LEN_THRESHOLD
+        qname = f"{label}.{label}.{label}.{label}.{label}.test.local"
+        query = _build_query(qname, mod.TYPE_A)
+        mod._handle(query, "4.4.4.4", 1234, "udp")
+        suspects = _events_of(events, "tunneling_suspect")
+        assert suspects, "expected tunneling_suspect from qname_entropy path"
+        assert suspects[0]["tunnel_method"] == "qname_entropy"
+
+    def test_short_labels_low_entropy_no_tunneling(self):
+        """Short labels that individually and collectively have low entropy must not trigger."""
+        mod, events = _load_dns()
+        # "aaaaaaaaaa" * 5 = 50 chars but entropy is 0
+        qname = "aaaaaaaaaa.aaaaaaaaaa.aaaaaaaaaa.aaaaaaaaaa.aaaaaaaaaa.test.local"
+        mod._handle(_build_query(qname, mod.TYPE_A), "4.4.4.5", 1234, "udp")
+        assert not _events_of(events, "tunneling_suspect")
+
+    def test_qname_entropy_check_ignores_zone_suffix(self):
+        """If the qname IS the zone apex (no subdomain labels), no qname_entropy check fires."""
+        mod, events = _load_dns()
+        mod._handle(_build_query("test.local", mod.TYPE_A), "4.4.4.6", 1234, "udp")
+        assert not _events_of(events, "tunneling_suspect")
+
 # ── Flood detection ───────────────────────────────────────────────────────────
 
 class TestFloodDetection:
