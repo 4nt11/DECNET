@@ -20,6 +20,7 @@ event_type values emitted:
 import asyncio
 import collections
 import hashlib
+import json
 import math
 import os
 import socket
@@ -41,6 +42,7 @@ _AUTHORS       = os.environ.get("DNS_AUTHORS", "BIND9 Developers")
 _NSID_RAW      = os.environ.get("DNS_NSID", "")
 _EXTRA_RAW     = os.environ.get("DNS_EXTRA_RECORDS", "")
 REAL_RECURSIVE = os.environ.get("DNS_REAL_RECURSIVE", "").lower() in ("1", "true", "yes")
+_STATE_PATH    = os.environ.get("DNS_STATE_PATH", "")
 
 _upstream_raw = os.environ.get("DNS_UPSTREAM", "8.8.8.8:53")
 try:
@@ -379,8 +381,9 @@ _FORWARD_BUDGET_WIN = float(os.environ.get("DNS_FORWARD_WINDOW", "1.0"))
 
 # ── Per-src state ─────────────────────────────────────────────────────────────
 
-# Tunneling: src_ip -> deque of recent timestamps (all _TUNNEL_QTYPES counted)
+# Tunneling: src_ip -> deque of recent wall-clock timestamps (all _TUNNEL_QTYPES counted)
 _tunnel_times: collections.OrderedDict[str, collections.deque] = collections.OrderedDict()
+_state_dirty = False
 
 # Flood: src_ip -> deque of recent query timestamps
 _qps_window: collections.OrderedDict[str, collections.deque] = collections.OrderedDict()
@@ -429,6 +432,53 @@ def _track_lru(table: collections.OrderedDict, key: str, tracker_name: str) -> N
         table.popitem(last=False)
         _note_eviction(tracker_name)
 
+
+def _load_state() -> None:
+    """Populate _tunnel_times from the state file on startup, pruning stale entries."""
+    if not _STATE_PATH:
+        return
+    try:
+        with open(_STATE_PATH) as fh:
+            data: dict[str, list[float]] = json.load(fh)
+    except FileNotFoundError:
+        return
+    except Exception:
+        _log("startup", severity=5, msg="dns state file unreadable, starting fresh")
+        return
+    now = time.time()
+    cutoff = now - _TXT_BURST_WINDOW
+    for src, timestamps in data.items():
+        recent = [t for t in timestamps if t > cutoff]
+        if recent:
+            _tunnel_times[src] = collections.deque(recent)
+
+
+def _flush_state() -> None:
+    """Write _tunnel_times atomically to the state file if _STATE_PATH is set."""
+    global _state_dirty
+    if not _STATE_PATH:
+        return
+    tmp = _STATE_PATH + ".tmp"
+    try:
+        serialized = {src: list(q) for src, q in _tunnel_times.items()}
+        with open(tmp, "w") as fh:
+            json.dump(serialized, fh)
+        os.replace(tmp, _STATE_PATH)
+        _state_dirty = False
+    except Exception:
+        pass
+
+
+async def _state_flusher() -> None:
+    """Periodically flush _tunnel_times to disk when dirty."""
+    while True:
+        await asyncio.sleep(5.0)
+        if _state_dirty:
+            _flush_state()
+
+
+_load_state()
+
 # ── Tunneling heuristic ───────────────────────────────────────────────────────
 
 def _shannon_entropy(s: str) -> float:
@@ -459,7 +509,8 @@ def _is_tunneling(qname: str, qtype: int, src: str) -> str | None:
         ):
             return "qname_entropy"
     if qtype in _TUNNEL_QTYPES:
-        now = time.monotonic()
+        global _state_dirty
+        now = time.time()
         if src not in _tunnel_times:
             _tunnel_times[src] = collections.deque()
         _track_lru(_tunnel_times, src, "tunnel_times")
@@ -467,7 +518,9 @@ def _is_tunneling(qname: str, qtype: int, src: str) -> str | None:
         q.append(now)
         while q and now - q[0] > _TXT_BURST_WINDOW:
             q.popleft()
+        _state_dirty = True
         if len(q) >= _TXT_BURST_COUNT:
+            _flush_state()
             return "burst"
     return None
 
@@ -910,9 +963,11 @@ async def main() -> None:
     tcp_server = await asyncio.start_server(
         _tcp_session, "0.0.0.0", 53  # nosec B104
     )
+    flusher = asyncio.ensure_future(_state_flusher())
     try:
         await asyncio.sleep(float("inf"))
     finally:
+        flusher.cancel()
         udp_transport.close()
         tcp_server.close()
 

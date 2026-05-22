@@ -6,6 +6,7 @@ import importlib.util
 import socket
 import struct
 import sys
+import time
 from types import ModuleType
 from unittest.mock import MagicMock, patch
 
@@ -76,6 +77,9 @@ def _load_dns(extra_env: dict | None = None):
     mod._flood_cooldown.clear()
     mod._recon_window.clear()
     mod._recon_cooldown.clear()
+    # Re-load tunnel state from file if path is set (clear above wiped it)
+    if env.get("DNS_STATE_PATH"):
+        mod._load_state()
 
     return mod, bridge._events
 
@@ -474,6 +478,59 @@ class TestTunnelingHeuristic:
         for i in range(2):
             mod._handle(_build_query(f"n{i}.test.local", mod.TYPE_NULL), src, 1234, "udp")
         assert _events_of(events, "tunneling_suspect")
+
+# ── State persistence ─────────────────────────────────────────────────────────
+
+class TestStatePersistence:
+    def test_state_path_unset_no_file_written(self, tmp_path):
+        """With DNS_STATE_PATH unset, no file should be written after burst detection."""
+        mod, events = _load_dns()
+        src = "6.6.6.1"
+        for i in range(mod._TXT_BURST_COUNT):
+            mod._handle(_build_query(f"b{i}.test.local", mod.TYPE_TXT), src, 1234, "udp")
+        assert _events_of(events, "tunneling_suspect")
+        # No state file should have appeared anywhere under tmp_path
+        assert list(tmp_path.iterdir()) == []
+
+    def test_state_persists_across_reload(self, tmp_path):
+        """4 burst queries → flush → fresh module load → 5th query trips the burst."""
+        state_file = str(tmp_path / "dns_state.json")
+        mod, events = _load_dns({"DNS_STATE_PATH": state_file})
+        src = "6.6.6.2"
+        # Send _TXT_BURST_COUNT - 1 queries (not enough to trigger on their own)
+        for i in range(mod._TXT_BURST_COUNT - 1):
+            mod._handle(_build_query(f"b{i}.test.local", mod.TYPE_TXT), src, 1234, "udp")
+        # No burst yet
+        assert not _events_of(events, "tunneling_suspect")
+        # Manually flush state to disk
+        mod._flush_state()
+        assert tmp_path.joinpath("dns_state.json").exists()
+        # Reload module (simulates container restart) — same env so it reads the file
+        mod2, events2 = _load_dns({"DNS_STATE_PATH": state_file})
+        # The reloaded module should have populated _tunnel_times from the file
+        assert src in mod2._tunnel_times
+        # 5th query → burst fires
+        mod2._handle(_build_query("b5.test.local", mod2.TYPE_TXT), src, 1234, "udp")
+        assert _events_of(events2, "tunneling_suspect"), "5th query after restart must fire"
+
+    def test_state_file_prunes_old_entries_on_load(self, tmp_path):
+        """Entries older than _TXT_BURST_WINDOW are pruned on startup, not loaded."""
+        import json as _json
+        state_file = tmp_path / "dns_state.json"
+        old_ts = time.time() - 9999  # way outside window
+        state_file.write_text(_json.dumps({"1.2.3.4": [old_ts, old_ts]}))
+        mod, _ = _load_dns({"DNS_STATE_PATH": str(state_file)})
+        assert "1.2.3.4" not in mod._tunnel_times
+
+    def test_state_file_corrupt_json_tolerated(self, tmp_path):
+        """A corrupt state file must not crash the module; state starts empty."""
+        state_file = tmp_path / "dns_state.json"
+        state_file.write_text("{garbage!!!")
+        mod, events = _load_dns({"DNS_STATE_PATH": str(state_file)})
+        # Module loads, handles a query without crashing
+        resp = mod._handle(_build_query("test.local", mod.TYPE_A), "7.7.7.7", 1234, "udp")
+        assert resp is not None
+        assert mod._tunnel_times == {}
 
 # ── Flood detection ───────────────────────────────────────────────────────────
 
