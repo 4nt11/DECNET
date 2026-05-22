@@ -104,8 +104,14 @@ def build_deckies_from_ini(
     host_ip: str,
     randomize: bool,
     cli_mutate_interval: int | None = None,
+    reserved_ips: set[str] | None = None,
 ) -> list[DeckyConfig]:
-    """Build DeckyConfig list from an IniConfig, auto-allocating missing IPs."""
+    """Build DeckyConfig list from an IniConfig, auto-allocating missing IPs.
+
+    *reserved_ips* lets the additive deploy path pass the IPs of the
+    already-deployed fleet so auto-allocation skips them instead of
+    handing out a colliding address.
+    """
     from ipaddress import IPv4Address, IPv4Network
     import time
     now = time.time()
@@ -121,6 +127,8 @@ def build_deckies_from_ini(
         IPv4Address(gateway),
         IPv4Address(host_ip),
     } | explicit_ips
+    if reserved_ips:
+        reserved |= {IPv4Address(ip) for ip in reserved_ips}
 
     auto_pool = (str(addr) for addr in net.hosts() if addr not in reserved)
 

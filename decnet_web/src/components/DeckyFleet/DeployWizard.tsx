@@ -236,7 +236,7 @@ export const DeployWizard: React.FC<Props> = ({
     try {
       const res = await api.post<{ lifecycle_ids?: string[]; message?: string; mode?: string }>(
         '/deckies/deploy',
-        { ini_content: ini },
+        { ini_content: ini, replace_fleet: false },
       );
       const ids = res.data?.lifecycle_ids ?? [];
       setLifecycleIds(ids);

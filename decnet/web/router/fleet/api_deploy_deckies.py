@@ -76,9 +76,21 @@ async def api_deploy_deckies(req: DeployIniRequest, admin: dict = Depends(requir
                        "Add a [general] section with interface=, net=, and gw= to the INI."
             )
 
+    # Snapshot the existing fleet (from prior state, NOT the freshly-built
+    # config below) so additive collision checks compare new against prior
+    # rather than against themselves. Existing IPs are passed into
+    # build_deckies_from_ini as reserved so auto-allocation skips them.
+    existing_deckies = list(config.deckies) if config is not None else []
+    reserved_ips: set[str] | None = (
+        {d.ip for d in existing_deckies if d.ip}
+        if not req.replace_fleet and existing_deckies
+        else None
+    )
+
     try:
         new_decky_configs = build_deckies_from_ini(
-            ini, subnet_cidr, gateway, host_ip, False, cli_mutate_interval=None
+            ini, subnet_cidr, gateway, host_ip, False,
+            cli_mutate_interval=None, reserved_ips=reserved_ips,
         )
     except ValueError as e:
         log.debug("deploy: build_deckies_from_ini rejected input: %s", e)
@@ -96,12 +108,40 @@ async def api_deploy_deckies(req: DeployIniRequest, admin: dict = Depends(requir
             mutate_interval=ini.mutate_interval or DEFAULT_MUTATE_INTERVAL,
         )
 
-    # The INI is the source of truth for *which* deckies exist this deploy.
-    # The old "merge with prior state" behaviour meant submitting `[decky1]`
-    # after a 3-decky run silently redeployed decky2/decky3 too — and then
-    # collided on their stale IPs ("Address already in use"). Full replace
-    # matches what the operator sees in the submitted config.
-    config.deckies = list(new_decky_configs)
+    # Two intents collapse onto one endpoint:
+    #
+    # * replace_fleet=True (explicit): INI is the complete desired fleet.
+    #   Anything absent is torn down by the reconciler. This is the path
+    #   for set-desired-state callers (CLI, declarative tooling).
+    # * replace_fleet=False (default, wizard path): INI is appended to the
+    #   existing fleet. The wizard only POSTs the new decky and would
+    #   otherwise see prior deckies silently deleted by the reconciler.
+    #
+    # The historical "always full replace" behaviour was added to dodge
+    # stale-IP collisions on redeploy ("Address already in use"); that's
+    # now scoped to replace_fleet=True.
+    if req.replace_fleet:
+        config.deckies = list(new_decky_configs)
+    else:
+        existing_names = {d.name for d in existing_deckies}
+        existing_ips = {d.ip for d in existing_deckies if d.ip}
+        for d in new_decky_configs:
+            if d.name in existing_names:
+                raise HTTPException(
+                    status_code=409,
+                    detail=(
+                        f"decky '{d.name}' already exists; "
+                        "submit with replace_fleet=true to overwrite the fleet"
+                    ),
+                )
+            if d.ip and d.ip in existing_ips:
+                raise HTTPException(
+                    status_code=409,
+                    detail=(
+                        f"IP {d.ip} is already in use by an existing decky"
+                    ),
+                )
+        config.deckies = existing_deckies + list(new_decky_configs)
 
     limits_state = await repo.get_state("config_limits")
     deployment_limit = limits_state.get("deployment_limit", 10) if limits_state else 10
@@ -152,8 +192,16 @@ async def api_deploy_deckies(req: DeployIniRequest, admin: dict = Depends(requir
     }
     await repo.set_state("deployment", new_state_payload)
 
+    # Lifecycle rows track THIS call's deployments only. In additive mode
+    # the existing deckies are already running and don't get a new
+    # lifecycle row — the caller polls /deckies/lifecycle for just the
+    # deckies they submitted. In replace mode every decky in the new
+    # config is being (re)deployed and gets a row.
+    new_names = {d.name for d in new_decky_configs}
     lifecycle_ids: dict[str, str] = {}
     for d in config.deckies:
+        if not req.replace_fleet and d.name not in new_names:
+            continue
         lid = await repo.create_lifecycle({
             "decky_name": d.name,
             "host_uuid": d.host_uuid,
@@ -174,7 +222,7 @@ async def api_deploy_deckies(req: DeployIniRequest, admin: dict = Depends(requir
 
     return {
         "message": (
-            f"Deploy accepted ({len(config.deckies)} decky/ies, mode={mode}). "
+            f"Deploy accepted ({len(lifecycle_ids)} decky/ies, mode={mode}). "
             f"Poll /deckies/lifecycle?ids=... for completion."
         ),
         "mode": mode,

@@ -17,6 +17,15 @@ class DeployIniRequest(BaseModel):
     # This field now enforces strict INI structure during Pydantic initialization.
     # The OpenAPI schema correctly shows it as a required string.
     ini_content: IniContent = PydanticField(..., description="A valid INI formatted string")
+    replace_fleet: bool = PydanticField(
+        default=False,
+        description=(
+            "If true, the INI is treated as the complete desired fleet — any "
+            "existing decky absent from the INI is torn down. Default false: "
+            "the INI is appended to the existing fleet; name or IP collisions "
+            "with already-deployed deckies yield 409."
+        ),
+    )
 
 
 class DeployResponse(BaseModel):
