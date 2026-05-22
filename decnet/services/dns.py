@@ -79,6 +79,15 @@ class DNSService(BaseService):
             default="1.0",
             help="Rolling window in seconds for the forward budget counter.",
         ),
+        ServiceConfigField(
+            key="state_path",
+            label="Tunneling state file path",
+            type="string",
+            default="",
+            help="File path inside the container for persisting per-source tunneling "
+                 "timestamps across restarts. Must be on a mounted volume to survive "
+                 "container recreation. Leave empty to keep state in-memory only.",
+        ),
     ]
 
     def compose_fragment(
@@ -99,6 +108,7 @@ class DNSService(BaseService):
             "DNS_UPSTREAM":         str(cfg.get("upstream",        "8.8.8.8:53")),
             "DNS_FORWARD_BUDGET":   str(cfg.get("forward_budget",  "50")),
             "DNS_FORWARD_WINDOW":   str(cfg.get("forward_window",  "1.0")),
+            "DNS_STATE_PATH":       str(cfg.get("state_path",      "")),
         }
         if log_target:
             env["LOG_TARGET"] = log_target
