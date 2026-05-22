@@ -715,6 +715,16 @@ def _handle(data: bytes, src_ip: str, src_port: int, transport: str) -> bytes | 
             return _chaos_txt_response(qid, rd, qname, answer_text)
         return _refused_response(qid, rd, qname, qtype, qclass)
 
+    # ── CLASS=ANY fingerprint probe ────────────────────────────────────────
+    if qclass == CLASS_ANY:
+        _log(
+            "fingerprint_probe", severity=4,
+            src=src_ip, src_port=src_port, transport=transport,
+            probe="qclass_any", qname=qname.rstrip("."), qtype=qtype_name,
+        )
+        _note_recon_event(src_ip, "fingerprint_probe")
+        return _refused_response(qid, rd, qname, qtype, qclass)
+
     # ── Classify amp / tunneling ───────────────────────────────────────────
     is_amp    = qtype == TYPE_ANY or (edns_size is not None and edns_size > 1232)
     is_tunnel = _is_tunneling(qname, qtype, src_ip)

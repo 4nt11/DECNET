@@ -476,6 +476,37 @@ class TestReconBurst:
         assert bursts
         assert bursts[0]["distinct_types"] == 2
 
+# ── CLASS=ANY fingerprint probe ───────────────────────────────────────────────
+
+class TestClassAnyProbe:
+    def test_class_any_emits_fingerprint_probe(self):
+        mod, events = _load_dns()
+        pkt = _build_query("example.test.local", mod.TYPE_A, qclass=mod.CLASS_ANY)
+        resp = mod._handle(pkt, "9.9.9.9", 53, "udp")
+        assert resp is not None
+        assert _rcode(resp) == mod.RCODE_REFUSED
+        probes = _events_of(events, "fingerprint_probe")
+        assert len(probes) == 1
+        assert probes[0]["probe"] == "qclass_any"
+        assert probes[0]["qname"] == "example.test.local"
+
+    def test_class_any_counts_toward_recon_burst(self):
+        mod, events = _load_dns()
+        pkt = _build_query("x.test.local", mod.TYPE_A, qclass=mod.CLASS_ANY)
+        for _ in range(3):
+            mod._handle(pkt, "6.6.6.6", 53, "udp")
+        # Should accumulate; also trigger a second distinct probe type to fire burst
+        zxfr = _build_query("test.local", mod.TYPE_AXFR)
+        mod._handle(zxfr, "6.6.6.6", 53, "tcp")
+        assert len(_events_of(events, "recon_burst")) >= 1
+
+    def test_class_in_is_not_affected(self):
+        """Regular CLASS_IN queries must NOT trigger qclass_any."""
+        mod, events = _load_dns()
+        pkt = _build_query("test.local", mod.TYPE_A, qclass=mod.CLASS_IN)
+        mod._handle(pkt, "1.1.1.1", 53, "udp")
+        assert not _events_of(events, "fingerprint_probe")
+
 # ── Zone mode: open ───────────────────────────────────────────────────────────
 
 class TestZoneModeOpen:
