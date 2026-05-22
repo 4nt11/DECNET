@@ -18,7 +18,7 @@ class DNSService(BaseService):
             type="enum",
             enum=["auth", "recursive", "open"],
             default="auth",
-            help="auth: authoritative only; recursive: RA flag set, NXDOMAIN for out-of-zone; open: responds to everything (amp bait)",
+            help="auth: authoritative only; recursive: forwards out-of-zone queries upstream (real_recursive=true) or sinkholes them; open: responds to everything (amp bait)",
         ),
         ServiceConfigField(
             key="domain",
@@ -50,6 +50,21 @@ class DNSService(BaseService):
             placeholder="www A 10.0.0.5\nmail TXT v=spf1 ~all",
             help="Additional zone records, one per line: <name> <TYPE> <value>",
         ),
+        ServiceConfigField(
+            key="real_recursive",
+            label="Real recursive forwarding",
+            type="bool",
+            default=False,
+            help="When zone_mode=recursive, forward out-of-zone queries to an upstream resolver instead of returning a sinkhole. Falls back to sinkhole on upstream timeout.",
+        ),
+        ServiceConfigField(
+            key="upstream",
+            label="Upstream resolver",
+            type="string",
+            default="8.8.8.8:53",
+            placeholder="8.8.8.8:53",
+            help="Upstream DNS resolver used when real_recursive is enabled (host:port).",
+        ),
     ]
 
     def compose_fragment(
@@ -65,7 +80,9 @@ class DNSService(BaseService):
             "DNS_DOMAIN":       str(cfg.get("domain",       "")),
             "DNS_BIND_VERSION": str(cfg.get("bind_version", _DEFAULT_VERSION)),
             "DNS_NSID":         str(cfg.get("nsid",         "")),
-            "DNS_EXTRA_RECORDS": str(cfg.get("extra_records", "")),
+            "DNS_EXTRA_RECORDS":    str(cfg.get("extra_records",    "")),
+            "DNS_REAL_RECURSIVE":   "true" if cfg.get("real_recursive") else "false",
+            "DNS_UPSTREAM":         str(cfg.get("upstream", "8.8.8.8:53")),
         }
         if log_target:
             env["LOG_TARGET"] = log_target

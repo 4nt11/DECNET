@@ -480,6 +480,102 @@ class TestZoneModeOpen:
 
 # ── Zone mode: recursive ──────────────────────────────────────────────────────
 
+class TestRealRecursive:
+    def test_upstream_response_relayed_when_available(self):
+        """Upstream response is returned instead of sinkhole when forwarding succeeds."""
+        mod, events = _load_dns({"DNS_ZONE_MODE": "recursive", "DNS_REAL_RECURSIVE": "true"})
+        # Build a realistic upstream response: NOERROR, 1 A answer for evil.example.com
+        fake_upstream = _build_query("evil.example.com", mod.TYPE_A, qid=0x1234)
+        # Craft a minimal answer: header with QR=1, ANCOUNT=1 + question + A RR
+        flags = struct.pack(">H", 0x8180)  # QR=1 AA=0 RA=1 RCODE=0
+        answer_hdr = struct.pack(">HHHHHH", 0x1234, 0x8180, 1, 1, 0, 0)
+        qname_wire = b"\x04evil\x07example\x03com\x00"
+        question = qname_wire + struct.pack(">HH", mod.TYPE_A, mod.CLASS_IN)
+        rdata = bytes([1, 2, 3, 4])
+        rr = qname_wire + struct.pack(">HHIH", mod.TYPE_A, mod.CLASS_IN, 60, 4) + rdata
+        fake_response = answer_hdr + question + rr
+
+        import asyncio
+        from unittest.mock import AsyncMock, patch
+        mock_forward = AsyncMock(return_value=fake_response)
+        with patch.object(mod, "_forward_upstream", mock_forward):
+            query = _build_query("evil.example.com", mod.TYPE_A, qid=0x1234)
+            resp = asyncio.get_event_loop().run_until_complete(
+                mod._dispatch(query, "1.1.1.1", 1234, "udp")
+            )
+        assert resp == fake_response
+        mock_forward.assert_awaited_once()
+
+    def test_sinkhole_fallback_when_upstream_fails(self):
+        """Sinkhole is returned when upstream times out."""
+        mod, _ = _load_dns({"DNS_ZONE_MODE": "recursive", "DNS_REAL_RECURSIVE": "true"})
+        import asyncio
+        from unittest.mock import AsyncMock, patch
+        with patch.object(mod, "_forward_upstream", AsyncMock(return_value=None)):
+            query = _build_query("evil.example.com", mod.TYPE_A)
+            resp = asyncio.get_event_loop().run_until_complete(
+                mod._dispatch(query, "1.1.1.1", 1234, "udp")
+            )
+        assert resp is not None
+        assert _rcode(resp) == mod.RCODE_NOERROR
+        assert b"\x7f" in resp  # sinkhole
+
+    def test_in_zone_query_not_forwarded(self):
+        """In-zone queries never hit upstream even with real_recursive=true."""
+        mod, _ = _load_dns({"DNS_ZONE_MODE": "recursive", "DNS_REAL_RECURSIVE": "true"})
+        import asyncio
+        from unittest.mock import AsyncMock, patch
+        mock_forward = AsyncMock(return_value=None)
+        with patch.object(mod, "_forward_upstream", mock_forward):
+            query = _build_query("test.local", mod.TYPE_A)
+            asyncio.get_event_loop().run_until_complete(
+                mod._dispatch(query, "1.1.1.1", 1234, "udp")
+            )
+        mock_forward.assert_not_awaited()
+
+    def test_real_recursive_false_never_forwards(self):
+        """_forward_upstream is never called when REAL_RECURSIVE is off."""
+        mod, _ = _load_dns({"DNS_ZONE_MODE": "recursive", "DNS_REAL_RECURSIVE": "false"})
+        import asyncio
+        from unittest.mock import AsyncMock, patch
+        mock_forward = AsyncMock(return_value=None)
+        with patch.object(mod, "_forward_upstream", mock_forward):
+            query = _build_query("evil.example.com", mod.TYPE_A)
+            asyncio.get_event_loop().run_until_complete(
+                mod._dispatch(query, "1.1.1.1", 1234, "udp")
+            )
+        mock_forward.assert_not_awaited()
+
+    def test_logging_fires_even_when_forwarding(self):
+        """query event is still emitted for forwarded queries (via _handle)."""
+        mod, events = _load_dns({"DNS_ZONE_MODE": "recursive", "DNS_REAL_RECURSIVE": "true"})
+        import asyncio
+        from unittest.mock import AsyncMock, patch
+        fake_resp = b"\x12\x34\x81\x80" + b"\x00" * 8  # minimal valid header
+        with patch.object(mod, "_forward_upstream", AsyncMock(return_value=fake_resp)):
+            query = _build_query("evil.example.com", mod.TYPE_A)
+            asyncio.get_event_loop().run_until_complete(
+                mod._dispatch(query, "1.1.1.1", 1234, "udp")
+            )
+        assert _events_of(events, "query")
+
+    def test_compose_fragment_includes_real_recursive_vars(self):
+        from decnet.services.registry import get_service
+        svc = get_service("dns")
+        frag = svc.compose_fragment(
+            "decky-01",
+            service_cfg={"real_recursive": True, "upstream": "1.1.1.1:53"},
+        )
+        assert frag["environment"]["DNS_REAL_RECURSIVE"] == "true"
+        assert frag["environment"]["DNS_UPSTREAM"] == "1.1.1.1:53"
+
+    def test_compose_fragment_real_recursive_default_false(self):
+        from decnet.services.registry import get_service
+        svc = get_service("dns")
+        frag = svc.compose_fragment("decky-01")
+        assert frag["environment"]["DNS_REAL_RECURSIVE"] == "false"
+
+
 class TestZoneModeRecursive:
     def test_recursive_mode_sets_ra_flag(self):
         mod, _ = _load_dns({"DNS_ZONE_MODE": "recursive"})
