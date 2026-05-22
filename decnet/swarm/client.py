@@ -256,6 +256,29 @@ class AgentClient:
         resp.raise_for_status()
         return resp.json()
 
+    async def mutate(
+        self,
+        decky_id: str,
+        services: list[str],
+        *,
+        dry_run: bool = False,
+    ) -> dict[str, Any]:
+        body = {
+            "decky_id": decky_id,
+            "services": list(services),
+            "dry_run": dry_run,
+        }
+        # Worker /mutate runs `compose up -d` which can pull/build; same
+        # long-tail latency as /deploy. Swap the deploy timeout in.
+        old = self._require_client().timeout
+        self._require_client().timeout = _TIMEOUT_DEPLOY
+        try:
+            resp = await self._require_client().post("/mutate", json=body)
+        finally:
+            self._require_client().timeout = old
+        resp.raise_for_status()
+        return resp.json()
+
     async def teardown(self, decky_id: Optional[str] = None) -> dict[str, Any]:
         resp = await self._require_client().post(
             "/teardown", json={"decky_id": decky_id}

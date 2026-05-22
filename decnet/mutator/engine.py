@@ -93,22 +93,37 @@ async def mutate_decky(
     # Save to DB
     await repo.set_state("deployment", {"config": config.model_dump(), "compose_path": str(compose_path)})
 
-    # Still writes files for Docker to use
-    write_compose(config, compose_path)
-
     log.info("mutation applied decky=%s services=%s", decky_name, ",".join(decky.services))
     console.print(f"[cyan]Mutating '{decky_name}' to services: {', '.join(decky.services)}[/]")
 
-    try:
-        # Wrap blocking call in thread
-        cp = compose_path
-        await anyio.to_thread.run_sync(
-            lambda: _compose_with_retry("up", "-d", "--remove-orphans", compose_file=cp)
-        )
-    except Exception as e:
-        log.error("mutation failed decky=%s error=%s", decky_name, e)
-        console.print(f"[red]Failed to mutate '{decky_name}': {e}[/]")
-        return False
+    # Swarm-resident deckies are reified on a remote worker; dispatch to its
+    # agent /mutate rather than scribbling a compose file on the master.
+    # Master-resident deckies (host_uuid is None, or unihost mode) keep the
+    # local docker path.
+    if config.mode == "swarm" and decky.host_uuid:
+        try:
+            from decnet.engine.deployer import _resolve_swarm_host
+            from decnet.swarm.client import AgentClient
+
+            host = await _resolve_swarm_host(repo, decky.host_uuid)
+            async with AgentClient(host=host) as agent:
+                await agent.mutate(decky.name, list(decky.services))
+        except Exception as e:
+            log.error("mutation failed decky=%s error=%s", decky_name, e)
+            console.print(f"[red]Failed to mutate '{decky_name}': {e}[/]")
+            return False
+    else:
+        # Still writes files for Docker to use
+        write_compose(config, compose_path)
+        try:
+            cp = compose_path
+            await anyio.to_thread.run_sync(
+                lambda: _compose_with_retry("up", "-d", "--remove-orphans", compose_file=cp)
+            )
+        except Exception as e:
+            log.error("mutation failed decky=%s error=%s", decky_name, e)
+            console.print(f"[red]Failed to mutate '{decky_name}': {e}[/]")
+            return False
 
     await emit_decky_mutated(
         bus,

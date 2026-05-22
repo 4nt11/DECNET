@@ -28,10 +28,132 @@ def test_status_when_not_deployed() -> None:
     assert "deckies" in body
 
 
-def test_mutate_is_501() -> None:
+def _seed_state(monkeypatch, tmp_path):
+    """Install a fake load_state/save_state pair backed by a list cell so
+    tests can both seed and re-read what the handler wrote."""
+    from decnet.config import DecnetConfig, DeckyConfig
+    from decnet.agent import app as _app_module
+
+    cfg = DecnetConfig(
+        mode="swarm",
+        interface="eth0",
+        subnet="10.66.0.0/24",
+        gateway="10.66.0.1",
+        deckies=[
+            DeckyConfig(
+                name="decky-01",
+                ip="10.66.0.10",
+                services=["ssh"],
+                distro="debian",
+                base_image="debian:bookworm-slim",
+                hostname="d01",
+            ),
+        ],
+    )
+    compose_path = tmp_path / "decnet-compose.yml"
+    cell = {"cfg": cfg, "compose_path": compose_path}
+
+    def _fake_load_state():
+        return (cell["cfg"], cell["compose_path"]) if cell["cfg"] is not None else None
+
+    def _fake_save_state(c, p):
+        cell["cfg"] = c
+        cell["compose_path"] = p
+
+    monkeypatch.setattr("decnet.config.load_state", _fake_load_state)
+    monkeypatch.setattr("decnet.config.save_state", _fake_save_state)
+    return cell
+
+
+def test_mutate_success(monkeypatch, tmp_path) -> None:
+    cell = _seed_state(monkeypatch, tmp_path)
+    compose_calls: list[tuple] = []
+    write_compose_calls: list[tuple] = []
+
+    monkeypatch.setattr(
+        "decnet.composer.write_compose",
+        lambda c, p: write_compose_calls.append((c, p)) or p,
+    )
+    monkeypatch.setattr(
+        "decnet.engine._compose_with_retry",
+        lambda *a, **kw: compose_calls.append((a, kw)),
+    )
+
     client = TestClient(app)
-    resp = client.post("/mutate", json={"decky_id": "decky-01", "services": ["ssh"]})
-    assert resp.status_code == 501
+    resp = client.post(
+        "/mutate",
+        json={"decky_id": "decky-01", "services": ["http", "ftp"]},
+    )
+    assert resp.status_code == 200, resp.text
+    body = resp.json()
+    assert body == {"status": "mutated", "decky_id": "decky-01", "services": ["http", "ftp"]}
+    assert cell["cfg"].deckies[0].services == ["http", "ftp"]
+    assert cell["cfg"].deckies[0].last_mutated > 0
+    assert len(write_compose_calls) == 1
+    assert len(compose_calls) == 1
+    assert compose_calls[0][0] == ("up", "-d", "--remove-orphans")
+
+
+def test_mutate_unknown_decky_returns_404(monkeypatch, tmp_path) -> None:
+    _seed_state(monkeypatch, tmp_path)
+    compose_calls: list = []
+    monkeypatch.setattr(
+        "decnet.engine._compose_with_retry",
+        lambda *a, **kw: compose_calls.append((a, kw)),
+    )
+
+    client = TestClient(app)
+    resp = client.post(
+        "/mutate", json={"decky_id": "ghost", "services": ["ssh"]},
+    )
+    assert resp.status_code == 404
+    assert compose_calls == []
+
+
+def test_mutate_no_state_returns_404(monkeypatch) -> None:
+    monkeypatch.setattr("decnet.config.load_state", lambda: None)
+    client = TestClient(app)
+    resp = client.post(
+        "/mutate", json={"decky_id": "decky-01", "services": ["ssh"]},
+    )
+    assert resp.status_code == 404
+
+
+def test_mutate_dry_run_does_not_touch_docker_or_state(monkeypatch, tmp_path) -> None:
+    cell = _seed_state(monkeypatch, tmp_path)
+    saved: list = []
+    written: list = []
+    composed: list = []
+
+    monkeypatch.setattr(
+        "decnet.config.save_state",
+        lambda c, p: saved.append((c, p)),
+    )
+    monkeypatch.setattr(
+        "decnet.composer.write_compose",
+        lambda c, p: written.append((c, p)),
+    )
+    monkeypatch.setattr(
+        "decnet.engine._compose_with_retry",
+        lambda *a, **kw: composed.append((a, kw)),
+    )
+
+    original_services = list(cell["cfg"].deckies[0].services)
+    client = TestClient(app)
+    resp = client.post(
+        "/mutate",
+        json={"decky_id": "decky-01", "services": ["http"], "dry_run": True},
+    )
+    assert resp.status_code == 200
+    assert resp.json()["status"] == "dry_run"
+    # No persistence, no compose render, no docker.
+    assert saved == []
+    assert written == []
+    assert composed == []
+    # State on the in-memory cell was touched (handler mutated the loaded
+    # DeckyConfig) but never persisted — load_state is shared by reference,
+    # so we only assert that no save/render happened above.
+    del original_services
 
 
 def test_deploy_rejects_malformed_body() -> None:

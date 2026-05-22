@@ -181,6 +181,7 @@ class TeardownRequest(BaseModel):
 class MutateRequest(BaseModel):
     decky_id: str
     services: list[str]
+    dry_run: bool = False
 
 
 # ------------------------------------------------------------------ routes
@@ -307,14 +308,51 @@ async def topology_state() -> dict:
 
 @app.post(
     "/mutate",
-    responses={501: {"description": "Worker-side mutate not yet implemented"}},
+    responses={
+        404: {"description": "No active deployment, or unknown decky_id"},
+        500: {"description": "Compose rewrite or container restart failed"},
+    },
 )
 async def mutate(req: MutateRequest) -> dict:
-    # TODO: implement worker-side mutate. Currently the master performs
-    # mutation by re-sending a full /deploy with the updated DecnetConfig;
-    # this avoids duplicating mutation logic on the worker for v1. When
-    # ready, replace the 501 with a real redeploy-of-a-single-decky path.
-    raise HTTPException(
-        status_code=501,
-        detail="Per-decky mutate is performed via /deploy with updated services",
-    )
+    import time
+    from decnet.composer import write_compose
+    from decnet.config import load_state, save_state
+    from decnet.engine import _compose_with_retry
+
+    state = load_state()
+    if state is None:
+        raise HTTPException(status_code=404, detail="no active deployment on this worker")
+    cfg, compose_path = state
+
+    decky = next((d for d in cfg.deckies if d.name == req.decky_id), None)
+    if decky is None:
+        raise HTTPException(
+            status_code=404, detail=f"decky {req.decky_id!r} not found in worker state",
+        )
+
+    decky.services = list(req.services)
+    decky.last_mutated = time.time()
+
+    if req.dry_run:
+        return {
+            "status": "dry_run",
+            "decky_id": decky.name,
+            "services": list(decky.services),
+        }
+
+    try:
+        save_state(cfg, compose_path)
+        write_compose(cfg, compose_path)
+        await asyncio.to_thread(
+            _compose_with_retry, "up", "-d", "--remove-orphans",
+            compose_file=compose_path,
+        )
+    except Exception as exc:
+        log.exception("agent.mutate failed")
+        raise HTTPException(status_code=500, detail=str(exc)) from exc
+
+    return {
+        "status": "mutated",
+        "decky_id": decky.name,
+        "services": list(decky.services),
+    }

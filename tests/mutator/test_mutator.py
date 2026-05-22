@@ -128,6 +128,67 @@ class TestMutateDecky:
         new_last_mutated = call_args[1]["config"]["deckies"][0]["last_mutated"]
         assert new_last_mutated >= before
 
+    async def test_swarm_decky_dispatches_to_agent(self, mock_repo):
+        """When mode=swarm and decky.host_uuid is set, mutate_decky must
+        call AgentClient.mutate() instead of touching local compose/docker."""
+        decky = _make_decky()
+        decky.host_uuid = "host-uuid-42"
+        cfg = DecnetConfig(
+            mode="swarm", interface="eth0",
+            subnet="192.168.1.0/24", gateway="192.168.1.1",
+            deckies=[decky],
+        )
+        mock_repo.get_state.return_value = {
+            "config": cfg.model_dump(), "compose_path": "c.yml",
+        }
+
+        mutate_mock = AsyncMock(return_value={"status": "mutated"})
+        agent_ctx = MagicMock()
+        agent_ctx.__aenter__ = AsyncMock(return_value=MagicMock(mutate=mutate_mock))
+        agent_ctx.__aexit__ = AsyncMock(return_value=None)
+
+        with patch("decnet.engine.deployer._resolve_swarm_host",
+                   new_callable=AsyncMock,
+                   return_value={"uuid": "host-uuid-42", "address": "10.0.0.2"}), \
+             patch("decnet.swarm.client.AgentClient", return_value=agent_ctx), \
+             patch("decnet.mutator.engine.write_compose") as mock_compose, \
+             patch("anyio.to_thread.run_sync", new_callable=AsyncMock) as mock_run:
+            ok = await mutate_decky("decky-01", repo=mock_repo)
+
+        assert ok is True
+        mutate_mock.assert_awaited_once()
+        # AgentClient.mutate(decky_name, services_list)
+        call = mutate_mock.await_args
+        assert call.args[0] == "decky-01"
+        assert isinstance(call.args[1], list)
+        # Local docker path MUST NOT run for swarm-resident deckies.
+        mock_compose.assert_not_called()
+        mock_run.assert_not_called()
+
+    async def test_swarm_decky_without_host_uuid_uses_local_path(self, mock_repo):
+        """In swarm mode, a decky with host_uuid=None is master-resident
+        and should still take the local compose path."""
+        decky = _make_decky()
+        # host_uuid defaults to None — explicit for clarity.
+        decky.host_uuid = None
+        cfg = DecnetConfig(
+            mode="swarm", interface="eth0",
+            subnet="192.168.1.0/24", gateway="192.168.1.1",
+            deckies=[decky],
+        )
+        mock_repo.get_state.return_value = {
+            "config": cfg.model_dump(), "compose_path": "c.yml",
+        }
+        with patch("decnet.mutator.engine.write_compose") as mock_compose, \
+             patch("anyio.to_thread.run_sync", new_callable=AsyncMock) as mock_run, \
+             patch("decnet.swarm.client.AgentClient") as mock_client:
+            ok = await mutate_decky("decky-01", repo=mock_repo)
+        assert ok is True
+        mock_compose.assert_called_once()
+        mock_run.assert_awaited_once()
+        mock_client.assert_not_called()
+
+
 # ---------------------------------------------------------------------------
 # mutate_all
 # ---------------------------------------------------------------------------
