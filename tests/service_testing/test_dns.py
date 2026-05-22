@@ -712,3 +712,54 @@ class TestServiceRegistration:
         assert ctx is not None
         assert ctx.name == "dns"
         assert (ctx / "Dockerfile").exists()
+
+
+# ── Parse hygiene events ───────────────────────────────────────────────────────
+
+class TestParseHygiene:
+    def test_malformed_packet_too_short(self):
+        mod, events = _load_dns()
+        resp = mod._handle(b"\x00\x01\x00\x00", "1.2.3.4", 1234, "udp")
+        assert resp is None
+        ev = _events_of(events, "malformed_packet")
+        assert len(ev) == 1
+        assert ev[0]["src"] == "1.2.3.4"
+        assert ev[0]["length"] == 4
+        assert ev[0]["transport"] == "udp"
+
+    def test_malformed_packet_empty(self):
+        mod, events = _load_dns()
+        resp = mod._handle(b"", "10.0.0.1", 5353, "tcp")
+        assert resp is None
+        ev = _events_of(events, "malformed_packet")
+        assert len(ev) == 1
+        assert ev[0]["length"] == 0
+
+    def test_empty_question_section(self):
+        mod, events = _load_dns()
+        # 12-byte header with qdcount=0
+        pkt = struct.pack(">HHHHHH", 0xBEEF, 0x0100, 0, 0, 0, 0)
+        resp = mod._handle(pkt, "2.2.2.2", 53, "udp")
+        assert resp is None
+        ev = _events_of(events, "empty_question_section")
+        assert len(ev) == 1
+        assert ev[0]["qid"] == 0xBEEF
+        assert ev[0]["src"] == "2.2.2.2"
+
+    def test_question_parse_error_truncated(self):
+        mod, events = _load_dns()
+        # Header claims qdcount=1 but question section is empty
+        pkt = struct.pack(">HHHHHH", 0x0001, 0x0100, 1, 0, 0, 0)
+        resp = mod._handle(pkt, "3.3.3.3", 1053, "udp")
+        assert resp is None
+        ev = _events_of(events, "question_parse_error")
+        assert len(ev) == 1
+        assert ev[0]["src"] == "3.3.3.3"
+        assert "reason" in ev[0]
+
+    def test_question_parse_error_no_malformed_event(self):
+        """question_parse_error must not also emit malformed_packet."""
+        mod, events = _load_dns()
+        pkt = struct.pack(">HHHHHH", 0x0001, 0x0100, 1, 0, 0, 0)
+        mod._handle(pkt, "3.3.3.3", 1053, "udp")
+        assert len(_events_of(events, "malformed_packet")) == 0

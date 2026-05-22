@@ -3,14 +3,18 @@
 DNS server (UDP+TCP/53) — BIND 9.x persona.
 
 event_type values emitted:
-  query              — standard resolution attempt
-  fingerprint_probe  — version.bind / hostname.bind / id.server CHAOS queries
-  zone_transfer      — AXFR or IXFR (always REFUSED)
-  amp_probe          — qtype=ANY or EDNS requestor udp_size > 1232
-  tunneling_suspect  — long high-entropy labels or rapid TXT burst from same src
-  flood_suspect      — source exceeding QPS threshold within rolling window
-  tracking_evicted   — LRU state evicted (signals IP-rotation evasion)
-  recon_burst        — same source hit ≥2 distinct high-signal event types within 60s
+  query                  — standard resolution attempt
+  fingerprint_probe      — version.bind / hostname.bind / id.server / opcode / flag / qclass probes
+  zone_transfer          — AXFR or IXFR (always REFUSED)
+  amp_probe              — qtype=ANY or EDNS requestor udp_size > 1232
+  tunneling_suspect      — long high-entropy labels or rapid TXT burst from same src
+  flood_suspect          — source exceeding QPS threshold within rolling window
+  tracking_evicted       — LRU state evicted (signals IP-rotation evasion)
+  recon_burst            — same source hit ≥2 distinct high-signal event types within 60s
+  malformed_packet       — wire bytes shorter than 12 (no DNS header possible)
+  empty_question_section — qdcount=0 (headerless keepalive / scanner probe)
+  question_parse_error   — question section could not be decoded
+  multi_question         — qdcount>1; only question 0 is answered
 """
 
 import asyncio
@@ -646,15 +650,21 @@ async def _dispatch(data: bytes, src_ip: str, src_port: int, transport: str) -> 
 def _handle(data: bytes, src_ip: str, src_port: int, transport: str) -> bytes | None:
     """Parse one DNS request and return the response wire bytes, emitting events."""
     if len(data) < 12:
+        _log("malformed_packet", severity=5, src=src_ip, src_port=src_port,
+             transport=transport, length=len(data))
         return None
     qid, flags_in, qdcount, ancount, nscount, arcount = struct.unpack_from(">HHHHHH", data, 0)
     if qdcount == 0:
+        _log("empty_question_section", severity=5, src=src_ip, src_port=src_port,
+             transport=transport, qid=qid)
         return None
     rd = bool(flags_in & 0x0100)
 
     try:
         qname, qtype, qclass, _ = _parse_question(data, 12)
-    except ValueError:
+    except ValueError as exc:
+        _log("question_parse_error", severity=5, src=src_ip, src_port=src_port,
+             transport=transport, reason=str(exc)[:64])
         return None
 
     edns_size = _parse_edns_size(data, qdcount, ancount, nscount, arcount)
