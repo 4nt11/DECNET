@@ -37,6 +37,37 @@ log = get_logger("mutator")
 console = Console()
 
 
+def pick_new_services(decky: DeckyConfig) -> list[str] | None:
+    """Pick a fresh service list for *decky* using its archetype pool
+    (or the global pool when no archetype is set).  Returns ``None`` if
+    no services are available to pick from.
+
+    Pure: does not touch the repo, file system, or docker.  Shared by
+    the mutator watch loop and the async API handler.
+    """
+    if decky.archetype:
+        try:
+            arch = get_archetype(decky.archetype)
+            svc_pool = list(arch.services)
+        except ValueError:
+            svc_pool = all_service_names()
+    else:
+        svc_pool = all_service_names()
+
+    if not svc_pool:
+        return None
+
+    current_services = set(decky.services)
+    attempts = 0
+    while True:
+        count = random.randint(1, min(3, len(svc_pool)))  # nosec B311
+        chosen = set(random.sample(svc_pool, count))  # nosec B311
+        attempts += 1
+        if chosen != current_services or attempts > 20:
+            break
+    return list(chosen)
+
+
 @_traced("mutator.mutate_decky")
 async def mutate_decky(
     decky_name: str,

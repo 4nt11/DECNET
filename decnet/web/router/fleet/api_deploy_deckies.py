@@ -1,16 +1,17 @@
+import asyncio
 import os
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, status
 
+from decnet.bus.factory import get_bus
+from decnet.lifecycle.runner import run_deploy
 from decnet.logging import get_logger
 from decnet.telemetry import traced as _traced
 from decnet.config import DEFAULT_MUTATE_INTERVAL, DecnetConfig, _ROOT
-from decnet.engine import deploy as _deploy
 from decnet.ini_loader import load_ini_from_string
 from decnet.network import detect_interface, detect_subnet, get_host_ip
 from decnet.web.dependencies import require_admin, repo
 from decnet.web.db.models import DeployIniRequest, DeployResponse
-from decnet.web.router.swarm.api_deploy_swarm import dispatch_decnet_config
 
 log = get_logger("api")
 
@@ -20,19 +21,19 @@ router = APIRouter()
 @router.post(
     "/deckies/deploy",
     tags=["Fleet Management"],
+    status_code=status.HTTP_202_ACCEPTED,
     response_model=DeployResponse,
     responses={
+        202: {"description": "Deploy accepted; poll GET /deckies/lifecycle?ids=... for terminal status"},
         400: {"description": "Bad Request (e.g. malformed JSON)"},
         401: {"description": "Could not validate credentials"},
         403: {"description": "Insufficient permissions"},
         409: {"description": "Configuration conflict (e.g. invalid IP allocation or network mismatch)"},
         422: {"description": "Invalid INI config or schema validation error"},
-        500: {"description": "Deployment failed"},
-        502: {"description": "Partial swarm deploy failure — one or more worker hosts returned an error"},
     }
 )
 @_traced("api.deploy_deckies")
-async def api_deploy_deckies(req: DeployIniRequest, admin: dict = Depends(require_admin)) -> dict[str, str]:
+async def api_deploy_deckies(req: DeployIniRequest, admin: dict = Depends(require_admin)) -> dict:
     from decnet.fleet import build_deckies_from_ini
 
     try:
@@ -136,46 +137,46 @@ async def api_deploy_deckies(req: DeployIniRequest, admin: dict = Depends(requir
         for i, d in enumerate(unassigned):
             d.host_uuid = swarm_hosts[i % len(swarm_hosts)]["uuid"]
         config = config.model_copy(update={"mode": "swarm"})
+        mode = "swarm"
+    else:
+        mode = "unihost"
 
-        try:
-            result = await dispatch_decnet_config(config, repo, dry_run=False, no_cache=False)
-        except HTTPException:
-            raise
-        except Exception as e:
-            log.exception("swarm-auto deploy dispatch failed: %s", e)
-            raise HTTPException(status_code=500, detail="Swarm dispatch failed. Check server logs.")
+    # Commit the new shape before spawning so the wizard / dashboard
+    # observe the intended fleet immediately; lifecycle rows track the
+    # operation's progress separately.
+    new_state_payload = {
+        "config": config.model_dump(),
+        "compose_path": state_dict["compose_path"] if state_dict else str(
+            _ROOT / "docker-compose.yml",
+        ),
+    }
+    await repo.set_state("deployment", new_state_payload)
 
-        await repo.set_state("deployment", {
-            "config": config.model_dump(),
-            "compose_path": state_dict["compose_path"] if state_dict else "",
+    lifecycle_ids: dict[str, str] = {}
+    for d in config.deckies:
+        lid = await repo.create_lifecycle({
+            "decky_name": d.name,
+            "host_uuid": d.host_uuid,
+            "operation": "deploy",
         })
+        lifecycle_ids[d.name] = lid
 
-        failed = [r for r in result.results if not r.ok]
-        if failed:
-            detail = "; ".join(f"{r.host_name}: {r.detail}" for r in failed)
-            raise HTTPException(status_code=502, detail=f"Partial swarm deploy failure — {detail}")
-        return {
-            "message": f"Deckies deployed across {len(result.results)} swarm host(s)",
-            "mode": "swarm",
-        }
-
-    # Unihost path — docker-compose on the master itself.
-    # NB: the JSON state file (decnet-state.json) and fleet_deckies DB rows
-    # are both written *inside* _deploy(config) — engine.deployer is the
-    # single shared sink for every fleet-creation path (CLI deploy, this
-    # unihost API path, and per-worker SWARM agent deploys).  Do not
-    # duplicate save_state / fleet upserts here.
     try:
-        if os.environ.get("DECNET_CONTRACT_TEST") != "true":
-            _deploy(config)
+        bus = get_bus(client_name="api.deploy")
+    except Exception:
+        bus = None
 
-        new_state_payload = {
-            "config": config.model_dump(),
-            "compose_path": str(_ROOT / "docker-compose.yml") if not state_dict else state_dict["compose_path"]
-        }
-        await repo.set_state("deployment", new_state_payload)
-    except Exception as e:
-        log.exception("Deployment failed: %s", e)
-        raise HTTPException(status_code=500, detail="Deployment failed. Check server logs for details.")
+    if os.environ.get("DECNET_CONTRACT_TEST") != "true":
+        asyncio.create_task(
+            run_deploy(repo, bus, lifecycle_ids=lifecycle_ids, config=config),
+            name=f"deploy-{mode}-{len(config.deckies)}",
+        )
 
-    return {"message": "Deckies deployed successfully", "mode": "unihost"}
+    return {
+        "message": (
+            f"Deploy accepted ({len(config.deckies)} decky/ies, mode={mode}). "
+            f"Poll /deckies/lifecycle?ids=... for completion."
+        ),
+        "mode": mode,
+        "lifecycle_ids": list(lifecycle_ids.values()),
+    }

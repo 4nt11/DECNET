@@ -20,8 +20,12 @@ class DeployIniRequest(BaseModel):
 
 
 class DeployResponse(BaseModel):
+    """202-Accepted response: deploy spawned in background, client polls
+    GET /deckies/lifecycle?ids=... until each row reaches a terminal
+    status."""
     message: str
     mode: str
+    lifecycle_ids: list[str] = PydanticField(default_factory=list)
 
 
 class PurgeResponse(BaseModel):

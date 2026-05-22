@@ -24,7 +24,7 @@ def mock_network():
 
 @pytest.mark.anyio
 async def test_deploy_automode_unihost_when_no_swarm_hosts(client, auth_token, monkeypatch):
-    """No swarm hosts enrolled → local unihost deploy."""
+    """No swarm hosts enrolled → local unihost deploy returns 202 with lifecycle ids."""
     monkeypatch.setenv("DECNET_MODE", "master")
     for row in await repo.list_swarm_hosts():
         await repo.delete_swarm_host(row["uuid"])
@@ -36,13 +36,21 @@ async def test_deploy_automode_unihost_when_no_swarm_hosts(client, auth_token, m
         json={"ini_content": ini},
         headers={"Authorization": f"Bearer {auth_token}"},
     )
-    assert resp.status_code == 200, resp.text
-    assert resp.json()["mode"] == "unihost"
+    assert resp.status_code == 202, resp.text
+    body = resp.json()
+    assert body["mode"] == "unihost"
+    assert len(body["lifecycle_ids"]) == 1
 
 
 @pytest.mark.anyio
 async def test_deploy_automode_shards_when_swarm_host_enrolled(client, auth_token, monkeypatch):
-    """Master + one active swarm host → swarm mode, dispatch invoked."""
+    """Master + one active swarm host → swarm mode, lifecycle rows + 202.
+
+    The handler no longer awaits dispatch synchronously — it commits the
+    new shape, creates lifecycle rows, and spawns the runner.  We
+    verify the commit + the per-decky host_uuid assignment via the
+    committed deployment state, and that 202 carries one lifecycle id
+    per decky."""
     monkeypatch.setenv("DECNET_MODE", "master")
     await repo.set_state("deployment", None)
 
@@ -63,27 +71,23 @@ async def test_deploy_automode_shards_when_swarm_host_enrolled(client, auth_toke
         "notes": "",
     })
 
-    fake_response = SwarmDeployResponse(results=[
-        SwarmHostResult(host_uuid="host-A", host_name="worker-a", ok=True, detail={})
-    ])
+    ini = "[decky-01]\nservices = ssh\n[decky-02]\nservices = http\n"
+    resp = await client.post(
+        "/api/v1/deckies/deploy",
+        json={"ini_content": ini},
+        headers={"Authorization": f"Bearer {auth_token}"},
+    )
 
-    with patch(
-        "decnet.web.router.fleet.api_deploy_deckies.dispatch_decnet_config",
-        new=AsyncMock(return_value=fake_response),
-    ) as mock_dispatch:
-        ini = "[decky-01]\nservices = ssh\n[decky-02]\nservices = http\n"
-        resp = await client.post(
-            "/api/v1/deckies/deploy",
-            json={"ini_content": ini},
-            headers={"Authorization": f"Bearer {auth_token}"},
-        )
+    assert resp.status_code == 202, resp.text
+    body = resp.json()
+    assert body["mode"] == "swarm"
+    assert len(body["lifecycle_ids"]) == 2
 
-    assert resp.status_code == 200, resp.text
-    assert resp.json()["mode"] == "swarm"
-    assert mock_dispatch.await_count == 1
-    dispatched_config = mock_dispatch.await_args.args[0]
-    assert dispatched_config.mode == "swarm"
-    assert all(d.host_uuid == "host-A" for d in dispatched_config.deckies)
+    committed = await repo.get_state("deployment")
+    assert committed is not None
+    cfg = committed["config"]
+    assert cfg["mode"] == "swarm"
+    assert {d["host_uuid"] for d in cfg["deckies"]} == {"host-A"}
 
     await repo.delete_swarm_host("host-A")
 
@@ -130,25 +134,19 @@ async def test_deploy_automode_resets_stale_host_uuid(client, auth_token, monkey
         "compose_path": "",
     })
 
-    fake_response = SwarmDeployResponse(results=[
-        SwarmHostResult(host_uuid="host-LIVE", host_name="live", ok=True, detail={})
-    ])
+    ini = "[decky-new]\nservices = ssh\n"
+    resp = await client.post(
+        "/api/v1/deckies/deploy",
+        json={"ini_content": ini},
+        headers={"Authorization": f"Bearer {auth_token}"},
+    )
 
-    with patch(
-        "decnet.web.router.fleet.api_deploy_deckies.dispatch_decnet_config",
-        new=AsyncMock(return_value=fake_response),
-    ) as mock_dispatch:
-        ini = "[decky-new]\nservices = ssh\n"
-        resp = await client.post(
-            "/api/v1/deckies/deploy",
-            json={"ini_content": ini},
-            headers={"Authorization": f"Bearer {auth_token}"},
-        )
-
-    assert resp.status_code == 200, resp.text
-    dispatched = mock_dispatch.await_args.args[0]
-    # Both the carried-over decky and the new one must point at the live host.
-    assert {d.host_uuid for d in dispatched.deckies} == {"host-LIVE"}
+    assert resp.status_code == 202, resp.text
+    committed = await repo.get_state("deployment")
+    assert committed is not None
+    cfg = committed["config"]
+    # The carried-over decky and the new one must both point at the live host.
+    assert {d["host_uuid"] for d in cfg["deckies"]} == {"host-LIVE"}
 
     await repo.delete_swarm_host("host-LIVE")
     await repo.set_state("deployment", None)

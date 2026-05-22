@@ -57,7 +57,7 @@ services = ssh
         json={"ini_content": ini},
         headers={"Authorization": f"Bearer {auth_token}"},
     )
-    assert resp.status_code == 200
+    assert resp.status_code == 202
     persisted = await repo.get_state("deployment")
     names = [d["name"] for d in persisted["config"]["deckies"]]
     assert names == ["only-decky"]
@@ -81,4 +81,4 @@ services = ssh
     if resp.status_code == 409:
         assert "limit" not in resp.json()["detail"].lower()
     else:
-        assert resp.status_code == 200
+        assert resp.status_code == 202
