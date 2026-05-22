@@ -71,7 +71,7 @@ def _load_dns(extra_env: dict | None = None):
         spec.loader.exec_module(mod)  # type: ignore[union-attr]
 
     # Reset per-src state between tests
-    mod._txt_times.clear()
+    mod._tunnel_times.clear()
     mod._qps_window.clear()
     mod._flood_cooldown.clear()
     mod._recon_window.clear()
@@ -437,6 +437,43 @@ class TestTunnelingHeuristic:
         mod, events = _load_dns()
         mod._handle(_build_query("test.local", mod.TYPE_A), "4.4.4.6", 1234, "udp")
         assert not _events_of(events, "tunneling_suspect")
+
+    @pytest.mark.parametrize("qtype_attr,expected_name", [
+        ("TYPE_NULL",    "NULL"),
+        ("TYPE_PRIVATE", "PRIVATE"),
+        ("TYPE_AAAA",    "AAAA"),
+        ("TYPE_CNAME",   "CNAME"),
+    ])
+    def test_non_txt_burst_triggers_tunneling(self, qtype_attr, expected_name):
+        """NULL/PRIVATE/AAAA/CNAME bursts must count toward the tunnel burst window."""
+        mod, events = _load_dns()
+        src = "5.5.5.10"
+        qtype = getattr(mod, qtype_attr)
+        for i in range(mod._TXT_BURST_COUNT):
+            mod._handle(_build_query(f"probe{i}.test.local", qtype), src, 1234, "udp")
+        suspects = _events_of(events, "tunneling_suspect")
+        assert suspects, f"expected tunneling_suspect for qtype {expected_name}"
+        assert suspects[0]["tunnel_method"] == "burst"
+
+    def test_qtype_name_present_in_burst_event(self):
+        """tunneling_suspect event must carry a qtype field."""
+        mod, events = _load_dns()
+        src = "5.5.5.11"
+        for i in range(mod._TXT_BURST_COUNT):
+            mod._handle(_build_query(f"q{i}.test.local", mod.TYPE_NULL), src, 1234, "udp")
+        suspects = _events_of(events, "tunneling_suspect")
+        assert suspects and "qtype" in suspects[0]
+
+    def test_mixed_tunnel_qtypes_share_burst_window(self):
+        """TXT + NULL queries from the same src aggregate in one counter."""
+        mod, events = _load_dns()
+        src = "5.5.5.12"
+        # 3 TXT + 2 NULL = 5 → should trip the burst
+        for i in range(3):
+            mod._handle(_build_query(f"t{i}.test.local", mod.TYPE_TXT), src, 1234, "udp")
+        for i in range(2):
+            mod._handle(_build_query(f"n{i}.test.local", mod.TYPE_NULL), src, 1234, "udp")
+        assert _events_of(events, "tunneling_suspect")
 
 # ── Flood detection ───────────────────────────────────────────────────────────
 

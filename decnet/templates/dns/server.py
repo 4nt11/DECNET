@@ -7,7 +7,7 @@ event_type values emitted:
   fingerprint_probe      — version.bind / hostname.bind / id.server / opcode / flag / qclass probes
   zone_transfer          — AXFR or IXFR (always REFUSED)
   amp_probe              — qtype=ANY or EDNS requestor udp_size > 1232
-  tunneling_suspect      — long high-entropy labels, high-entropy subdomain, or rapid burst from same src
+  tunneling_suspect      — long high-entropy labels, high-entropy subdomain, or rapid burst (TXT/NULL/CNAME/AAAA/PRIVATE) from same src
   flood_suspect          — source exceeding QPS threshold within rolling window
   tracking_evicted       — LRU state evicted (signals IP-rotation evasion)
   recon_burst            — same source hit ≥2 distinct high-signal event types within 60s
@@ -121,16 +121,19 @@ for _line in _EXTRA_RAW.splitlines():
 
 # ── DNS wire constants ────────────────────────────────────────────────────────
 
-TYPE_A    = 1
-TYPE_NS   = 2
-TYPE_SOA  = 6
-TYPE_MX   = 15
-TYPE_TXT  = 16
-TYPE_AAAA = 28
-TYPE_OPT  = 41
-TYPE_IXFR = 251
-TYPE_AXFR = 252
-TYPE_ANY  = 255
+TYPE_A       = 1
+TYPE_NS      = 2
+TYPE_CNAME   = 5
+TYPE_SOA     = 6
+TYPE_NULL    = 10
+TYPE_MX      = 15
+TYPE_TXT     = 16
+TYPE_AAAA    = 28
+TYPE_OPT     = 41
+TYPE_IXFR    = 251
+TYPE_AXFR    = 252
+TYPE_ANY     = 255
+TYPE_PRIVATE = 65399
 
 CLASS_IN  = 1
 CLASS_CH  = 3
@@ -144,9 +147,10 @@ RCODE_NOTIMP   = 4
 RCODE_REFUSED  = 5
 
 _TYPE_NAMES = {
-    TYPE_A: "A", TYPE_NS: "NS", TYPE_SOA: "SOA", TYPE_MX: "MX",
-    TYPE_TXT: "TXT", TYPE_AAAA: "AAAA", TYPE_IXFR: "IXFR",
-    TYPE_AXFR: "AXFR", TYPE_OPT: "OPT", TYPE_ANY: "ANY",
+    TYPE_A: "A", TYPE_NS: "NS", TYPE_CNAME: "CNAME", TYPE_SOA: "SOA",
+    TYPE_NULL: "NULL", TYPE_MX: "MX", TYPE_TXT: "TXT", TYPE_AAAA: "AAAA",
+    TYPE_IXFR: "IXFR", TYPE_AXFR: "AXFR", TYPE_OPT: "OPT", TYPE_ANY: "ANY",
+    TYPE_PRIVATE: "PRIVATE",
 }
 _CLASS_NAMES = {CLASS_IN: "IN", CLASS_CH: "CH", CLASS_ANY: "ANY"}
 _OPCODE_NAMES = {0: "query", 1: "iquery", 2: "status", 4: "notify", 5: "update"}
@@ -345,13 +349,15 @@ def _log(event_type: str, severity: int = 6, **kwargs) -> None:
 # ── Tunables ──────────────────────────────────────────────────────────────────
 
 # Tunneling heuristic
-_SHANNON_THRESHOLD        = 4.0
-_LABEL_LEN_THRESHOLD      = 30
+_SHANNON_THRESHOLD         = 4.0
+_LABEL_LEN_THRESHOLD       = 30
 _QNAME_TOTAL_LEN_THRESHOLD = 50
-_QNAME_ENTROPY_THRESHOLD  = 3.5
-_TXT_BURST_WINDOW         = 10.0   # seconds
-_TXT_BURST_COUNT          = 5
-_MAX_TRACKED_SRCS         = 1000
+_QNAME_ENTROPY_THRESHOLD   = 3.5
+_TXT_BURST_WINDOW          = 10.0   # seconds
+_TXT_BURST_COUNT           = 5
+_MAX_TRACKED_SRCS          = 1000
+# iodine and dnscat2 use these qtypes for data exfiltration in addition to TXT
+_TUNNEL_QTYPES = frozenset({TYPE_TXT, TYPE_CNAME, TYPE_NULL, TYPE_PRIVATE, TYPE_AAAA})
 
 # Flood detection
 _QPS_WINDOW_SEC      = 10.0
@@ -373,8 +379,8 @@ _FORWARD_BUDGET_WIN = float(os.environ.get("DNS_FORWARD_WINDOW", "1.0"))
 
 # ── Per-src state ─────────────────────────────────────────────────────────────
 
-# Tunneling: src_ip -> deque of recent TXT timestamps
-_txt_times: collections.OrderedDict[str, collections.deque] = collections.OrderedDict()
+# Tunneling: src_ip -> deque of recent timestamps (all _TUNNEL_QTYPES counted)
+_tunnel_times: collections.OrderedDict[str, collections.deque] = collections.OrderedDict()
 
 # Flood: src_ip -> deque of recent query timestamps
 _qps_window: collections.OrderedDict[str, collections.deque] = collections.OrderedDict()
@@ -452,12 +458,12 @@ def _is_tunneling(qname: str, qtype: int, src: str) -> str | None:
             and _shannon_entropy(subdomain_str) >= _QNAME_ENTROPY_THRESHOLD
         ):
             return "qname_entropy"
-    if qtype == TYPE_TXT:
+    if qtype in _TUNNEL_QTYPES:
         now = time.monotonic()
-        if src not in _txt_times:
-            _txt_times[src] = collections.deque()
-        _track_lru(_txt_times, src, "txt_times")
-        q = _txt_times[src]
+        if src not in _tunnel_times:
+            _tunnel_times[src] = collections.deque()
+        _track_lru(_tunnel_times, src, "tunnel_times")
+        q = _tunnel_times[src]
         q.append(now)
         while q and now - q[0] > _TXT_BURST_WINDOW:
             q.popleft()
