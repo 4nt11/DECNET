@@ -153,6 +153,17 @@ class DummyRepo(BaseRepository):
     async def iter_canary_triggers_since(self, since):
         return
         yield
+    # DeckyLifecycle surface
+    async def create_lifecycle(self, data):
+        await super().create_lifecycle(data); return ""
+    async def update_lifecycle(self, lifecycle_id, fields):
+        await super().update_lifecycle(lifecycle_id, fields)
+    async def get_lifecycle_by_ids(self, ids):
+        await super().get_lifecycle_by_ids(ids); return []
+    async def find_open_lifecycle(self, decky_name, operation, host_uuid=None):
+        await super().find_open_lifecycle(decky_name, operation, host_uuid); return None
+    async def sweep_stale_lifecycle(self, older_than, reason):
+        await super().sweep_stale_lifecycle(older_than, reason); return 0
 
 @pytest.mark.asyncio
 async def test_base_repo_coverage():
@@ -319,6 +330,11 @@ async def test_base_repo_coverage():
         (dr.upsert_decky_shard, ({},)),
         (dr.list_decky_shards, ()),
         (dr.delete_decky_shards_for_host, ("u",)),
+        (dr.create_lifecycle, ({"decky_name": "d", "operation": "deploy"},)),
+        (dr.update_lifecycle, ("id", {})),
+        (dr.get_lifecycle_by_ids, (["id"],)),
+        (dr.find_open_lifecycle, ("d", "deploy")),
+        (dr.sweep_stale_lifecycle, (datetime.now(timezone.utc), "reason")),
         (dr.create_topology, ({},)),
         (dr.get_topology, ("t",)),
         (dr.list_topologies, ()),

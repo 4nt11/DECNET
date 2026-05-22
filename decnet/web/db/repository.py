@@ -872,6 +872,71 @@ class BaseRepository(ABC):
     async def delete_decky_shard(self, decky_name: str) -> bool:
         raise NotImplementedError
 
+    # ----------------------------------------------------------- lifecycle
+    # Per-(decky, operation) attempt tracking for the async deploy/mutate
+    # state machine.  Rows are append-only after terminal status; retries
+    # write new rows.
+
+    async def create_lifecycle(self, data: dict[str, Any]) -> str:
+        """Insert a new lifecycle row in ``pending`` status.
+
+        ``data`` must include ``decky_name``, ``operation``; ``host_uuid``
+        and ``id`` are optional.  Returns the row's ``id``.
+        """
+        raise NotImplementedError
+
+    async def update_lifecycle(
+        self,
+        lifecycle_id: str,
+        fields: dict[str, Any],
+    ) -> None:
+        """Partial update of an open row (status / error / timestamps).
+
+        Callers must bump ``updated_at`` themselves, or rely on the impl
+        to stamp it.  Terminal rows are not protected at this layer — the
+        runner / heartbeat handler must enforce the immutability rule.
+        """
+        raise NotImplementedError
+
+    async def get_lifecycle_by_ids(
+        self, lifecycle_ids: list[str],
+    ) -> list[dict[str, Any]]:
+        """Fetch lifecycle rows by id, in undefined order.
+
+        Used by the wizard polling endpoint; missing ids are silently
+        omitted from the result rather than raising.
+        """
+        raise NotImplementedError
+
+    async def find_open_lifecycle(
+        self,
+        decky_name: str,
+        operation: str,
+        host_uuid: Optional[str] = None,
+    ) -> Optional[dict[str, Any]]:
+        """Return the most-recently-started row whose status is
+        ``pending`` or ``running`` for (decky_name, operation,
+        host_uuid).  ``None`` if none open.
+
+        The worker-heartbeat path uses this to match deltas to the
+        master's view of an in-flight operation.
+        """
+        raise NotImplementedError
+
+    async def sweep_stale_lifecycle(
+        self,
+        older_than: datetime,
+        reason: str,
+    ) -> int:
+        """Mark every non-terminal row started before ``older_than`` as
+        ``failed`` with ``error=reason``.  Returns the row count.
+
+        Called on master boot to flush orphans from a previous crash.
+        Pre-v1 substitute for a durable queue per
+        ``feedback_prev1_no_user_problems``.
+        """
+        raise NotImplementedError
+
     # ----------------------------------------------------------- mazenet
     # MazeNET topology persistence.  Default no-op / NotImplementedError so
     # non-default backends stay functional; SQLModelRepository provides the

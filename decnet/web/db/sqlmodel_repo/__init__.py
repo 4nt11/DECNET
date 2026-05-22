@@ -42,6 +42,7 @@ from decnet.web.db.sqlmodel_repo.campaigns import CampaignsMixin
 from decnet.web.db.sqlmodel_repo.canary import CanaryMixin
 from decnet.web.db.sqlmodel_repo.credentials import CredentialsMixin
 from decnet.web.db.sqlmodel_repo.deckies import DeckiesMixin
+from decnet.web.db.sqlmodel_repo.decky_lifecycle import LifecycleMixin
 from decnet.web.db.sqlmodel_repo.fleet import FleetMixin
 from decnet.web.db.sqlmodel_repo.identities import IdentitiesMixin
 from decnet.web.db.sqlmodel_repo.logs import LogsMixin
@@ -66,6 +67,7 @@ class SQLModelRepository(
     CanaryMixin,
     CredentialsMixin,
     DeckiesMixin,
+    LifecycleMixin,
     FleetMixin,
     IdentitiesMixin,
     LogsMixin,

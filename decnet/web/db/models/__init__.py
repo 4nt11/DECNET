@@ -82,6 +82,15 @@ from .decky import (
     ServiceConfigFieldDTO,
     ServiceSchemaResponse,
 )
+from .decky_lifecycle import (
+    DeckyLifecycle,
+    DeckyLifecycleListResponse,
+    DeckyLifecycleView,
+    LifecycleAcceptedResponse,
+    LifecycleDelta,
+    LifecycleOperation,
+    LifecycleStatus,
+)
 from .fleet import (
     LOCAL_HOST_SENTINEL,
     FleetDecky,
@@ -278,6 +287,14 @@ __all__ = [
     "FleetDecky",
     "ServiceConfigFieldDTO",
     "ServiceSchemaResponse",
+    # decky_lifecycle
+    "DeckyLifecycle",
+    "DeckyLifecycleListResponse",
+    "DeckyLifecycleView",
+    "LifecycleAcceptedResponse",
+    "LifecycleDelta",
+    "LifecycleOperation",
+    "LifecycleStatus",
     # health
     "ComponentHealth",
     "HealthResponse",
