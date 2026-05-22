@@ -265,8 +265,16 @@ def _parse_question(data: bytes, offset: int) -> tuple[str, int, int, int]:
     return qname, qtype, qclass, offset + 4
 
 
-def _parse_edns_size(data: bytes, qdcount: int, ancount: int, nscount: int, arcount: int) -> int | None:
-    """Walk to the additional section; return requestor UDP size if OPT found."""
+def _parse_opt_record(
+    data: bytes, qdcount: int, ancount: int, nscount: int, arcount: int
+) -> dict | None:
+    """Walk to the additional section; parse the OPT record if present.
+
+    Returns a dict with:
+      udp_size (int), ext_rcode (int), version (int), do_bit (bool), z (int),
+      options (list of (code, length, data_bytes) tuples)
+    or None if no OPT record is found or the packet is malformed.
+    """
     if arcount == 0:
         return None
     offset = 12
@@ -289,8 +297,35 @@ def _parse_edns_size(data: bytes, qdcount: int, ancount: int, nscount: int, arco
                     return None
                 rtype = struct.unpack_from(">H", data, offset + 1)[0]
                 if rtype == TYPE_OPT:
-                    udp_size = struct.unpack_from(">H", data, offset + 3)[0]
-                    return udp_size
+                    udp_size  = struct.unpack_from(">H", data, offset + 3)[0]
+                    # TTL field encodes: ext_rcode(8) | version(8) | DO+Z(16)
+                    ttl_raw   = struct.unpack_from(">I", data, offset + 5)[0]
+                    ext_rcode = (ttl_raw >> 24) & 0xFF
+                    version   = (ttl_raw >> 16) & 0xFF
+                    do_bit    = bool(ttl_raw & 0x8000)
+                    z_bits    = ttl_raw & 0x7FFF
+                    rdlen     = struct.unpack_from(">H", data, offset + 9)[0]
+                    rdata_start = offset + 11
+                    rdata_end   = rdata_start + rdlen
+                    if rdata_end > len(data):
+                        rdata_end = len(data)
+                    rdata = data[rdata_start:rdata_end]
+                    options: list[tuple[int, int, bytes]] = []
+                    pos = 0
+                    while pos + 4 <= len(rdata):
+                        opt_code = struct.unpack_from(">H", rdata, pos)[0]
+                        opt_len  = struct.unpack_from(">H", rdata, pos + 2)[0]
+                        opt_data = rdata[pos + 4 : pos + 4 + opt_len]
+                        options.append((opt_code, opt_len, opt_data))
+                        pos += 4 + opt_len
+                    return {
+                        "udp_size":  udp_size,
+                        "ext_rcode": ext_rcode,
+                        "version":   version,
+                        "do_bit":    do_bit,
+                        "z":         z_bits,
+                        "options":   options,
+                    }
             _, offset = _decode_name(data, offset)
             if offset + 10 > len(data):
                 return None
@@ -705,7 +740,18 @@ def _handle(data: bytes, src_ip: str, src_port: int, transport: str) -> bytes | 
              transport=transport, reason=str(exc)[:64])
         return None
 
-    edns_size = _parse_edns_size(data, qdcount, ancount, nscount, arcount)
+    opt = _parse_opt_record(data, qdcount, ancount, nscount, arcount)
+    edns_size = opt["udp_size"] if opt else None
+
+    # ── EDNS NSID request (option code 3) ─────────────────────────────────
+    if opt and any(code == 3 for code, _len, _data in opt["options"]):
+        _log(
+            "fingerprint_probe", severity=4,
+            src=src_ip, src_port=src_port, transport=transport,
+            probe="edns_nsid", qname=qname.rstrip("."),
+            qtype=_TYPE_NAMES.get(qtype, str(qtype)),
+        )
+        _note_recon_event(src_ip, "fingerprint_probe")
 
     qtype_name  = _TYPE_NAMES.get(qtype, str(qtype))
     qclass_name = _CLASS_NAMES.get(qclass, str(qclass))
