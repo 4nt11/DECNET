@@ -80,6 +80,99 @@ async def deploy(config: DecnetConfig, dry_run: bool = False, no_cache: bool = F
     await asyncio.to_thread(_deployer.deploy, config, dry_run, no_cache, False)
 
 
+async def deploy_async(
+    config: DecnetConfig, *, dry_run: bool = False, no_cache: bool = False,
+) -> None:
+    """Background-task body for /deploy: run the deploy, then push a
+    lifecycle delta to the master so it observes terminal transitions
+    immediately rather than waiting for the next scheduled heartbeat.
+
+    Per-decky lifecycle deltas — master pivots them onto the matching
+    open DeckyLifecycle rows via the heartbeat handler.  Errors are
+    captured and pushed as ``failed`` deltas; the task itself never
+    raises (a crashed task would just leave master rows wedged).
+    """
+    from datetime import datetime, timezone
+    from decnet.agent.heartbeat import push_lifecycle_delta
+
+    decky_names = [d.name for d in config.deckies]
+    try:
+        await deploy(config, dry_run=dry_run, no_cache=no_cache)
+    except Exception as exc:  # noqa: BLE001
+        log.exception("agent.deploy_async failed")
+        err = f"{type(exc).__name__}: {exc}"
+        deltas = [
+            {
+                "decky_name": name, "operation": "deploy",
+                "status": "failed", "error": err[:2000],
+                "completed_at": datetime.now(timezone.utc).isoformat(),
+            }
+            for name in decky_names
+        ]
+        await push_lifecycle_delta(deltas)
+        return
+    deltas = [
+        {
+            "decky_name": name, "operation": "deploy",
+            "status": "succeeded",
+            "completed_at": datetime.now(timezone.utc).isoformat(),
+        }
+        for name in decky_names
+    ]
+    await push_lifecycle_delta(deltas)
+
+
+async def mutate_async(decky_id: str, services: list[str]) -> None:
+    """Background-task body for /mutate.  Same shape as deploy_async:
+    perform the work, then push a single lifecycle delta on
+    completion (success or failure)."""
+    import time
+    from datetime import datetime, timezone
+    from decnet.composer import write_compose
+    from decnet.config import load_state, save_state
+    from decnet.engine import _compose_with_retry
+    from decnet.agent.heartbeat import push_lifecycle_delta
+
+    def _delta(status: str, error: str | None = None) -> dict:
+        out = {
+            "decky_name": decky_id, "operation": "mutate",
+            "status": status,
+            "completed_at": datetime.now(timezone.utc).isoformat(),
+        }
+        if error is not None:
+            out["error"] = error[:2000]
+        return out
+
+    try:
+        state = load_state()
+        if state is None:
+            await push_lifecycle_delta(
+                [_delta("failed", "no active deployment on this worker")],
+            )
+            return
+        cfg, compose_path = state
+        decky = next((d for d in cfg.deckies if d.name == decky_id), None)
+        if decky is None:
+            await push_lifecycle_delta(
+                [_delta("failed", f"decky {decky_id!r} not found in worker state")],
+            )
+            return
+        decky.services = list(services)
+        decky.last_mutated = time.time()
+        save_state(cfg, compose_path)
+        write_compose(cfg, compose_path)
+        await asyncio.to_thread(
+            _compose_with_retry, "up", "-d", "--remove-orphans",
+            compose_file=compose_path,
+        )
+    except Exception as exc:  # noqa: BLE001
+        log.exception("agent.mutate_async failed decky=%s", decky_id)
+        err = f"{type(exc).__name__}: {exc}"
+        await push_lifecycle_delta([_delta("failed", err)])
+        return
+    await push_lifecycle_delta([_delta("succeeded")])
+
+
 async def teardown(decky_id: str | None = None) -> None:
     log.info("agent.teardown decky_id=%s", decky_id)
     await asyncio.to_thread(_deployer.teardown, decky_id)

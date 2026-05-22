@@ -65,80 +65,67 @@ def _seed_state(monkeypatch, tmp_path):
     return cell
 
 
-def test_mutate_success(monkeypatch, tmp_path) -> None:
-    cell = _seed_state(monkeypatch, tmp_path)
-    compose_calls: list[tuple] = []
-    write_compose_calls: list[tuple] = []
+def test_mutate_returns_202_and_spawns_task(monkeypatch, tmp_path) -> None:
+    _seed_state(monkeypatch, tmp_path)
+    spawned: list = []
+    real_create_task = __import__("asyncio").create_task
 
-    monkeypatch.setattr(
-        "decnet.composer.write_compose",
-        lambda c, p: write_compose_calls.append((c, p)) or p,
-    )
-    monkeypatch.setattr(
-        "decnet.engine._compose_with_retry",
-        lambda *a, **kw: compose_calls.append((a, kw)),
-    )
+    def _capture_create_task(coro, **kw):
+        spawned.append(kw.get("name", ""))
+        # Run the coro so it doesn't leak as a never-awaited warning,
+        # but swap its body out for a no-op.
+        coro.close()
+        # Return something task-like for the handler.
+        async def _noop():
+            return None
+        return real_create_task(_noop())
+
+    monkeypatch.setattr("decnet.agent.app.asyncio.create_task", _capture_create_task)
 
     client = TestClient(app)
     resp = client.post(
         "/mutate",
         json={"decky_id": "decky-01", "services": ["http", "ftp"]},
     )
-    assert resp.status_code == 200, resp.text
+    assert resp.status_code == 202, resp.text
     body = resp.json()
-    assert body == {"status": "mutated", "decky_id": "decky-01", "services": ["http", "ftp"]}
-    assert cell["cfg"].deckies[0].services == ["http", "ftp"]
-    assert cell["cfg"].deckies[0].last_mutated > 0
-    assert len(write_compose_calls) == 1
-    assert len(compose_calls) == 1
-    assert compose_calls[0][0] == ("up", "-d", "--remove-orphans")
+    assert body == {
+        "status": "accepted",
+        "decky_id": "decky-01",
+        "services": ["http", "ftp"],
+    }
+    assert spawned and spawned[0].startswith("mutate-")
 
 
-def test_mutate_unknown_decky_returns_404(monkeypatch, tmp_path) -> None:
-    _seed_state(monkeypatch, tmp_path)
-    compose_calls: list = []
-    monkeypatch.setattr(
-        "decnet.engine._compose_with_retry",
-        lambda *a, **kw: compose_calls.append((a, kw)),
-    )
-
-    client = TestClient(app)
-    resp = client.post(
-        "/mutate", json={"decky_id": "ghost", "services": ["ssh"]},
-    )
-    assert resp.status_code == 404
-    assert compose_calls == []
-
-
-def test_mutate_no_state_returns_404(monkeypatch) -> None:
+def test_mutate_dry_run_404_when_no_state(monkeypatch) -> None:
     monkeypatch.setattr("decnet.config.load_state", lambda: None)
     client = TestClient(app)
     resp = client.post(
-        "/mutate", json={"decky_id": "decky-01", "services": ["ssh"]},
+        "/mutate",
+        json={"decky_id": "decky-01", "services": ["ssh"], "dry_run": True},
     )
     assert resp.status_code == 404
 
 
-def test_mutate_dry_run_does_not_touch_docker_or_state(monkeypatch, tmp_path) -> None:
-    cell = _seed_state(monkeypatch, tmp_path)
-    saved: list = []
-    written: list = []
-    composed: list = []
+def test_mutate_dry_run_404_for_unknown_decky(monkeypatch, tmp_path) -> None:
+    _seed_state(monkeypatch, tmp_path)
+    client = TestClient(app)
+    resp = client.post(
+        "/mutate",
+        json={"decky_id": "ghost", "services": ["ssh"], "dry_run": True},
+    )
+    assert resp.status_code == 404
 
-    monkeypatch.setattr(
-        "decnet.config.save_state",
-        lambda c, p: saved.append((c, p)),
-    )
-    monkeypatch.setattr(
-        "decnet.composer.write_compose",
-        lambda c, p: written.append((c, p)),
-    )
+
+def test_mutate_dry_run_returns_services_without_touching_docker(
+    monkeypatch, tmp_path,
+) -> None:
+    _seed_state(monkeypatch, tmp_path)
+    composed: list = []
     monkeypatch.setattr(
         "decnet.engine._compose_with_retry",
         lambda *a, **kw: composed.append((a, kw)),
     )
-
-    original_services = list(cell["cfg"].deckies[0].services)
     client = TestClient(app)
     resp = client.post(
         "/mutate",
@@ -146,14 +133,39 @@ def test_mutate_dry_run_does_not_touch_docker_or_state(monkeypatch, tmp_path) ->
     )
     assert resp.status_code == 200
     assert resp.json()["status"] == "dry_run"
-    # No persistence, no compose render, no docker.
-    assert saved == []
-    assert written == []
     assert composed == []
-    # State on the in-memory cell was touched (handler mutated the loaded
-    # DeckyConfig) but never persisted — load_state is shared by reference,
-    # so we only assert that no save/render happened above.
-    del original_services
+
+
+def test_deploy_returns_202_and_spawns_task(monkeypatch) -> None:
+    from decnet.config import DecnetConfig, DeckyConfig
+    cfg = DecnetConfig(
+        mode="unihost", interface="eth0",
+        subnet="10.66.0.0/24", gateway="10.66.0.1",
+        deckies=[DeckyConfig(
+            name="decky-01", ip="10.66.0.10",
+            services=["ssh"], distro="debian",
+            base_image="debian:bookworm-slim", hostname="d01",
+        )],
+    )
+    spawned: list = []
+    real_create_task = __import__("asyncio").create_task
+
+    def _capture_create_task(coro, **kw):
+        spawned.append(kw.get("name", ""))
+        coro.close()
+        async def _noop():
+            return None
+        return real_create_task(_noop())
+
+    monkeypatch.setattr("decnet.agent.app.asyncio.create_task", _capture_create_task)
+
+    client = TestClient(app)
+    resp = client.post("/deploy", json={"config": cfg.model_dump(mode="json")})
+    assert resp.status_code == 202, resp.text
+    body = resp.json()
+    assert body["status"] == "accepted"
+    assert body["deckies"] == ["decky-01"]
+    assert spawned and spawned[0].startswith("deploy-")
 
 
 def test_deploy_rejects_malformed_body() -> None:

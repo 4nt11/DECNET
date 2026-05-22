@@ -50,7 +50,11 @@ def _resolve_agent_dir() -> pathlib.Path:
     return pki.DEFAULT_AGENT_DIR
 
 
-async def _tick(client: httpx.AsyncClient, url: str, host_uuid: str, agent_version: str) -> None:
+async def _build_body(
+    host_uuid: str,
+    agent_version: str,
+    lifecycle: Optional[list[dict]] = None,
+) -> dict:
     snap = await _exec.status()
     body: dict = {
         "host_uuid": host_uuid,
@@ -70,7 +74,13 @@ async def _tick(client: httpx.AsyncClient, url: str, host_uuid: str, agent_versi
             store.close()
     except Exception:
         log.debug("heartbeat: topology state unavailable", exc_info=True)
+    if lifecycle:
+        body["lifecycle"] = lifecycle
+    return body
 
+
+async def _tick(client: httpx.AsyncClient, url: str, host_uuid: str, agent_version: str) -> None:
+    body = await _build_body(host_uuid, agent_version)
     resp = await client.post(url, json=body)
     # 403 / 404 are terminal-ish — we still keep looping because an
     # operator may re-enrol the host mid-session, but we log loudly so
@@ -132,6 +142,59 @@ def start() -> Optional[asyncio.Task]:
         name="agent-heartbeat",
     )
     return _task
+
+
+async def push_lifecycle_delta(deltas: list[dict]) -> None:
+    """Fire a one-off heartbeat POST carrying *deltas* in the
+    ``lifecycle`` field.  Each delta: ``{decky_name, operation, status,
+    error?, completed_at?}``.
+
+    Called by the agent executor on /deploy and /mutate completion so
+    the master observes the terminal transition immediately rather than
+    waiting up to ``INTERVAL_S`` for the next scheduled tick.  Failures
+    are logged and swallowed; the next scheduled heartbeat carries the
+    same deltas via DB-side reconciliation, since the worker has no
+    durable per-row state to lose.
+    """
+    from decnet.env import (
+        DECNET_HOST_UUID,
+        DECNET_MASTER_HOST,
+        DECNET_SWARMCTL_PORT,
+    )
+
+    if not deltas:
+        return
+    if not DECNET_HOST_UUID or not DECNET_MASTER_HOST:
+        log.debug("push_lifecycle_delta: identity unconfigured — skipping")
+        return
+
+    agent_dir = _resolve_agent_dir()
+    try:
+        ssl_ctx = build_worker_ssl_context(agent_dir)
+    except Exception:
+        log.exception("push_lifecycle_delta: SSL context unavailable")
+        return
+
+    try:
+        from decnet import __version__ as _v  # type: ignore[attr-defined]
+        agent_version = _v
+    except Exception:
+        agent_version = "unknown"
+
+    url = f"https://{DECNET_MASTER_HOST}:{DECNET_SWARMCTL_PORT}/swarm/heartbeat"
+    try:
+        async with httpx.AsyncClient(verify=ssl_ctx, timeout=_TIMEOUT) as client:
+            body = await _build_body(
+                DECNET_HOST_UUID, agent_version, lifecycle=deltas,
+            )
+            resp = await client.post(url, json=body)
+            if resp.status_code not in (200, 204):
+                log.warning(
+                    "lifecycle delta push rejected status=%d body=%s",
+                    resp.status_code, resp.text[:200],
+                )
+    except Exception:
+        log.exception("push_lifecycle_delta failed — next scheduled tick will retry")
 
 
 async def stop() -> None:

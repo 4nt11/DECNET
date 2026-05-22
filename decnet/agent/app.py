@@ -25,6 +25,7 @@ from contextlib import asynccontextmanager
 from typing import Any, Optional
 
 from fastapi import FastAPI, HTTPException
+from fastapi.responses import JSONResponse
 from pydantic import BaseModel, Field
 
 import contextlib
@@ -198,15 +199,22 @@ async def status() -> dict:
 
 @app.post(
     "/deploy",
-    responses={500: {"description": "Deployer raised an exception materialising the config"}},
+    status_code=202,
+    responses={202: {"description": "Deploy accepted; runs in background; lifecycle deltas pushed via heartbeat"}},
 )
 async def deploy(req: DeployRequest) -> dict:
-    try:
-        await _exec.deploy(req.config, dry_run=req.dry_run, no_cache=req.no_cache)
-    except Exception as exc:
-        log.exception("agent.deploy failed")
-        raise HTTPException(status_code=500, detail=str(exc)) from exc
-    return {"status": "deployed", "deckies": len(req.config.deckies)}
+    """Spawn the deploy in the background and return 202 immediately.
+
+    The master tracks per-decky completion via lifecycle deltas pushed on
+    the next heartbeat (one immediate push on completion, plus the
+    scheduled 30 s ticks as a fallback).  Holding the request open across
+    a multi-minute compose build was the previous source of the wizard
+    API-hang."""
+    asyncio.create_task(
+        _exec.deploy_async(req.config, dry_run=req.dry_run, no_cache=req.no_cache),
+        name=f"deploy-{id(req)}",
+    )
+    return {"status": "accepted", "deckies": [d.name for d in req.config.deckies]}
 
 
 @app.post(
@@ -308,51 +316,50 @@ async def topology_state() -> dict:
 
 @app.post(
     "/mutate",
+    status_code=202,
     responses={
-        404: {"description": "No active deployment, or unknown decky_id"},
-        500: {"description": "Compose rewrite or container restart failed"},
+        202: {"description": "Mutate accepted; runs in background; lifecycle delta pushed via heartbeat"},
+        404: {"description": "No active deployment, or unknown decky_id (dry_run validation only)"},
     },
 )
-async def mutate(req: MutateRequest) -> dict:
-    import time
-    from decnet.composer import write_compose
-    from decnet.config import load_state, save_state
-    from decnet.engine import _compose_with_retry
+async def mutate(req: MutateRequest) -> Any:
+    """Spawn the mutate in the background and return 202 immediately.
 
-    state = load_state()
-    if state is None:
-        raise HTTPException(status_code=404, detail="no active deployment on this worker")
-    cfg, compose_path = state
-
-    decky = next((d for d in cfg.deckies if d.name == req.decky_id), None)
-    if decky is None:
-        raise HTTPException(
-            status_code=404, detail=f"decky {req.decky_id!r} not found in worker state",
-        )
-
-    decky.services = list(req.services)
-    decky.last_mutated = time.time()
-
+    Master tracks completion via a lifecycle delta pushed on the next
+    heartbeat (immediate push on completion).  ``dry_run`` is still
+    synchronous — it validates against the worker's current state and
+    returns the would-be services without spawning a task or touching
+    docker, so the wizard's preview path stays cheap."""
     if req.dry_run:
-        return {
-            "status": "dry_run",
-            "decky_id": decky.name,
-            "services": list(decky.services),
-        }
-
-    try:
-        save_state(cfg, compose_path)
-        write_compose(cfg, compose_path)
-        await asyncio.to_thread(
-            _compose_with_retry, "up", "-d", "--remove-orphans",
-            compose_file=compose_path,
+        from decnet.config import load_state
+        state = load_state()
+        if state is None:
+            raise HTTPException(
+                status_code=404,
+                detail="no active deployment on this worker",
+            )
+        cfg, _ = state
+        decky = next((d for d in cfg.deckies if d.name == req.decky_id), None)
+        if decky is None:
+            raise HTTPException(
+                status_code=404,
+                detail=f"decky {req.decky_id!r} not found in worker state",
+            )
+        return JSONResponse(
+            status_code=200,
+            content={
+                "status": "dry_run",
+                "decky_id": req.decky_id,
+                "services": list(req.services),
+            },
         )
-    except Exception as exc:
-        log.exception("agent.mutate failed")
-        raise HTTPException(status_code=500, detail=str(exc)) from exc
 
+    asyncio.create_task(
+        _exec.mutate_async(req.decky_id, list(req.services)),
+        name=f"mutate-{req.decky_id}",
+    )
     return {
-        "status": "mutated",
-        "decky_id": decky.name,
-        "services": list(decky.services),
+        "status": "accepted",
+        "decky_id": req.decky_id,
+        "services": list(req.services),
     }

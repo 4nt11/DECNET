@@ -142,8 +142,11 @@ async def test_client_mutate_unknown_decky_404(
         async with swarm_client.AgentClient(
             address="127.0.0.1", agent_port=port, identity=master_id,
         ) as agent:
+            # Only dry_run can surface 404 synchronously; the live path is
+            # 202 fire-and-forget and would surface failure via the
+            # heartbeat lifecycle delta.
             with pytest.raises(httpx.HTTPStatusError) as ei:
-                await agent.mutate("ghost", ["ssh"])
+                await agent.mutate("ghost", ["ssh"], dry_run=True)
             assert ei.value.response.status_code == 404
     finally:
         server.should_exit = True

@@ -246,13 +246,11 @@ class AgentClient:
             "dry_run": dry_run,
             "no_cache": no_cache,
         }
-        # Swap in a long-deploy timeout for this call only.
-        old = self._require_client().timeout
-        self._require_client().timeout = _TIMEOUT_DEPLOY
-        try:
-            resp = await self._require_client().post("/deploy", json=body)
-        finally:
-            self._require_client().timeout = old
+        # Worker /deploy is async (202 fire-and-forget): the response only
+        # acks acceptance; the real work runs in the agent's event loop
+        # and reports terminal state via heartbeat lifecycle deltas.  No
+        # need for the long deploy timeout here.
+        resp = await self._require_client().post("/deploy", json=body)
         resp.raise_for_status()
         return resp.json()
 
@@ -268,14 +266,8 @@ class AgentClient:
             "services": list(services),
             "dry_run": dry_run,
         }
-        # Worker /mutate runs `compose up -d` which can pull/build; same
-        # long-tail latency as /deploy. Swap the deploy timeout in.
-        old = self._require_client().timeout
-        self._require_client().timeout = _TIMEOUT_DEPLOY
-        try:
-            resp = await self._require_client().post("/mutate", json=body)
-        finally:
-            self._require_client().timeout = old
+        # Worker /mutate is async (202): control-timeout is right.
+        resp = await self._require_client().post("/mutate", json=body)
         resp.raise_for_status()
         return resp.json()
 
