@@ -481,9 +481,12 @@ def _auth_response(qid: int, rd: bool, qname: str, qtype: int) -> bytes:
             ans = _rr(qname, TYPE_A, CLASS_IN, 30, _rdata_A(ip))
             return _build_header(qid, flags, 1, 1, 0, 0) + q + ans
         if ZONE_MODE == "recursive":
-            flags = _flags_response(rd=rd, aa=False, ra=True, rcode=RCODE_NXDOMAIN)
+            h = int(hashlib.sha256(qname.encode()).hexdigest()[:2], 16) or 1
+            ip = f"127.0.0.{h}"
+            flags = _flags_response(rd=rd, aa=False, ra=True, rcode=RCODE_NOERROR)
             q = _encode_name(qname) + struct.pack(">HH", qtype, CLASS_IN)
-            return _build_header(qid, flags, 1, 0, 0, 0) + q
+            ans = _rr(qname, TYPE_A, CLASS_IN, 30, _rdata_A(ip))
+            return _build_header(qid, flags, 1, 1, 0, 0) + q + ans
         return _refused_response(qid, rd, qname, qtype, CLASS_IN)
 
     flags = _flags_response(rd=rd, aa=True, rcode=RCODE_NOERROR)

@@ -487,8 +487,31 @@ class TestZoneModeRecursive:
         resp = mod._handle(query, "1.1.1.1", 1234, "udp")
         assert resp is not None
         flags = struct.unpack_from(">H", resp, 2)[0]
-        ra = bool(flags & 0x0080)
-        assert ra
+        assert bool(flags & 0x0080)  # RA=1
+
+    def test_recursive_mode_returns_answer_for_out_of_zone(self):
+        mod, _ = _load_dns({"DNS_ZONE_MODE": "recursive"})
+        query = _build_query("evil.example.com", mod.TYPE_A)
+        resp = mod._handle(query, "1.1.1.1", 1234, "udp")
+        assert resp is not None
+        assert _rcode(resp) == mod.RCODE_NOERROR
+        _, ancount, _, _ = _counts(resp)
+        assert ancount >= 1
+
+    def test_recursive_mode_not_authoritative(self):
+        mod, _ = _load_dns({"DNS_ZONE_MODE": "recursive"})
+        query = _build_query("evil.example.com", mod.TYPE_A)
+        resp = mod._handle(query, "1.1.1.1", 1234, "udp")
+        assert resp is not None
+        flags = struct.unpack_from(">H", resp, 2)[0]
+        assert not bool(flags & 0x0400)  # AA=0
+
+    def test_recursive_mode_sinkhole_in_loopback(self):
+        mod, _ = _load_dns({"DNS_ZONE_MODE": "recursive"})
+        query = _build_query("evil.example.com", mod.TYPE_A)
+        resp = mod._handle(query, "1.1.1.1", 1234, "udp")
+        assert resp is not None
+        assert b"\x7f" in resp  # sinkhole 127.x
 
 # ── Service registration ──────────────────────────────────────────────────────
 
