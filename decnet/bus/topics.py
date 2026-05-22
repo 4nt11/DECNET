@@ -107,6 +107,11 @@ DECKY_SERVICE_REMOVED = "service_removed"
 # when the operator hit Apply (container was force-recreated to pick up
 # the new env), false when they only hit Save (DB-only).
 DECKY_SERVICE_CONFIG_CHANGED = "service_config_changed"
+# Async deploy/mutate operation transitions
+# (pending/running/succeeded/failed).  Payload: {lifecycle_id, operation,
+# status, error?}.  UI polling endpoint is the source of truth; this
+# fires for live subscribers (dashboard, mutator-side audit, etc).
+DECKY_LIFECYCLE = "lifecycle"
 
 # Attacker event types (second token under the ``attacker`` root).  First
 # sighting, session boundary transitions, and score-threshold crossings
@@ -389,6 +394,12 @@ def decky_mutation(decky_id: str) -> str:
     """Build ``decky.<id>.mutation``."""
     _reject_tokens(decky_id)
     return f"{DECKY}.{decky_id}.{DECKY_MUTATION}"
+
+
+def decky_lifecycle(decky_id: str) -> str:
+    """Build ``decky.<id>.lifecycle``."""
+    _reject_tokens(decky_id)
+    return f"{DECKY}.{decky_id}.{DECKY_LIFECYCLE}"
 
 
 def system(event_type: str) -> str:
