@@ -576,6 +576,66 @@ class TestRealRecursive:
         assert frag["environment"]["DNS_REAL_RECURSIVE"] == "false"
 
 
+class TestForwardBudget:
+    def _load_with_budget(self, budget: int = 3):
+        mod, events = _load_dns({
+            "DNS_ZONE_MODE": "recursive",
+            "DNS_REAL_RECURSIVE": "true",
+            "DNS_FORWARD_BUDGET": str(budget),
+            "DNS_FORWARD_WINDOW": "60",  # wide window so nothing expires mid-test
+        })
+        mod._forward_timestamps.clear()
+        return mod, events
+
+    def test_within_budget_forwards(self):
+        mod, _ = self._load_with_budget(budget=5)
+        import asyncio
+        from unittest.mock import AsyncMock, patch
+        fake_resp = b"\x12\x34" + b"\x81\x80" + b"\x00" * 8
+        mock_fwd = AsyncMock(return_value=fake_resp)
+        with patch.object(mod, "_forward_upstream", mock_fwd):
+            query = _build_query("evil.example.com", mod.TYPE_A)
+            for _ in range(5):
+                asyncio.get_event_loop().run_until_complete(
+                    mod._dispatch(query, "1.1.1.1", 1234, "udp")
+                )
+        assert mock_fwd.await_count == 5
+
+    def test_over_budget_falls_back_to_sinkhole(self):
+        mod, _ = self._load_with_budget(budget=2)
+        import asyncio
+        from unittest.mock import AsyncMock, patch
+        fake_resp = b"\x12\x34" + b"\x81\x80" + b"\x00" * 8
+        mock_fwd = AsyncMock(return_value=fake_resp)
+        with patch.object(mod, "_forward_upstream", mock_fwd):
+            query = _build_query("evil.example.com", mod.TYPE_A)
+            responses = []
+            for _ in range(5):
+                resp = asyncio.get_event_loop().run_until_complete(
+                    mod._dispatch(query, "1.1.1.1", 1234, "udp")
+                )
+                responses.append(resp)
+        # Upstream called at most budget+1 times (budget check appends before pruning)
+        assert mock_fwd.await_count <= 3
+        # All responses are non-None (sinkhole for over-budget ones)
+        assert all(r is not None for r in responses)
+
+    def test_budget_is_global_not_per_src(self):
+        """Budget counts all upstream calls regardless of source IP."""
+        mod, _ = self._load_with_budget(budget=2)
+        import asyncio
+        from unittest.mock import AsyncMock, patch
+        fake_resp = b"\x12\x34" + b"\x81\x80" + b"\x00" * 8
+        mock_fwd = AsyncMock(return_value=fake_resp)
+        with patch.object(mod, "_forward_upstream", mock_fwd):
+            query = _build_query("evil.example.com", mod.TYPE_A)
+            for i in range(5):
+                asyncio.get_event_loop().run_until_complete(
+                    mod._dispatch(query, f"10.0.0.{i+1}", 1234, "udp")
+                )
+        assert mock_fwd.await_count <= 3
+
+
 class TestZoneModeRecursive:
     def test_recursive_mode_sets_ra_flag(self):
         mod, _ = _load_dns({"DNS_ZONE_MODE": "recursive"})

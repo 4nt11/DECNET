@@ -65,6 +65,20 @@ class DNSService(BaseService):
             placeholder="8.8.8.8:53",
             help="Upstream DNS resolver used when real_recursive is enabled (host:port).",
         ),
+        ServiceConfigField(
+            key="forward_budget",
+            label="Forward budget (queries/window)",
+            type="string",
+            default="50",
+            help="Maximum upstream forwarding calls allowed within the rate window. Excess queries fall back to sinkhole.",
+        ),
+        ServiceConfigField(
+            key="forward_window",
+            label="Forward budget window (seconds)",
+            type="string",
+            default="1.0",
+            help="Rolling window in seconds for the forward budget counter.",
+        ),
     ]
 
     def compose_fragment(
@@ -82,7 +96,9 @@ class DNSService(BaseService):
             "DNS_NSID":         str(cfg.get("nsid",         "")),
             "DNS_EXTRA_RECORDS":    str(cfg.get("extra_records",    "")),
             "DNS_REAL_RECURSIVE":   "true" if cfg.get("real_recursive") else "false",
-            "DNS_UPSTREAM":         str(cfg.get("upstream", "8.8.8.8:53")),
+            "DNS_UPSTREAM":         str(cfg.get("upstream",        "8.8.8.8:53")),
+            "DNS_FORWARD_BUDGET":   str(cfg.get("forward_budget",  "50")),
+            "DNS_FORWARD_WINDOW":   str(cfg.get("forward_window",  "1.0")),
         }
         if log_target:
             env["LOG_TARGET"] = log_target

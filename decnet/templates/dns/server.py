@@ -313,6 +313,10 @@ _RECON_SIGNAL_TYPES       = frozenset({"fingerprint_probe", "zone_transfer", "am
 # Eviction telemetry
 _EVICT_EVENT_EVERY = 100
 
+# Global upstream forwarding budget
+_FORWARD_BUDGET_MAX = int(os.environ.get("DNS_FORWARD_BUDGET", "50"))
+_FORWARD_BUDGET_WIN = float(os.environ.get("DNS_FORWARD_WINDOW", "1.0"))
+
 # ── Per-src state ─────────────────────────────────────────────────────────────
 
 # Tunneling: src_ip -> deque of recent TXT timestamps
@@ -331,6 +335,18 @@ _recon_window: collections.OrderedDict[str, dict[str, float]] = collections.Orde
 _recon_cooldown: dict[str, float] = {}
 
 _evictions_total = 0
+
+# Global forward budget: timestamps of recent upstream calls
+_forward_timestamps: collections.deque[float] = collections.deque()
+
+
+def _can_forward() -> bool:
+    """Return True and consume one budget slot if under the global forward limit."""
+    now = time.monotonic()
+    _forward_timestamps.append(now)
+    while _forward_timestamps[0] < now - _FORWARD_BUDGET_WIN:
+        _forward_timestamps.popleft()
+    return len(_forward_timestamps) <= _FORWARD_BUDGET_MAX
 
 
 def _note_eviction(tracker_name: str) -> None:
@@ -619,7 +635,7 @@ async def _dispatch(data: bytes, src_ip: str, src_port: int, transport: str) -> 
     """Async dispatcher: runs sync _handle (logging + detection), then overlays
     upstream forwarding for real-recursive out-of-zone queries."""
     sinkhole = _handle(data, src_ip, src_port, transport)
-    if _is_upstream_candidate(data):
+    if _is_upstream_candidate(data) and _can_forward():
         upstream = await _forward_upstream(data)
         if upstream is not None:
             return upstream
