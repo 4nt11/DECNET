@@ -462,6 +462,51 @@
 }
 .fleet-empty .dim { opacity: 0.5; }
 
+/* Per-decky lifecycle pills (deploy wizard, /deckies/{name}/mutate) */
+.lifecycle-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(160px, 1fr));
+  gap: 6px;
+  margin-bottom: 10px;
+}
+.lifecycle-pill {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 10px;
+  font-size: 0.7rem;
+  letter-spacing: 1px;
+  border: 1px solid var(--border);
+  background: var(--panel);
+}
+.lifecycle-pill .lifecycle-name {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  flex: 1;
+}
+.lifecycle-pill .lifecycle-status {
+  font-weight: 600;
+  font-size: 0.62rem;
+}
+.lifecycle-pill.lifecycle-pending {
+  opacity: 0.6;
+}
+.lifecycle-pill.lifecycle-running {
+  border-color: var(--matrix);
+  color: var(--matrix);
+  animation: dfleet-pulse 1.2s ease-in-out infinite alternate;
+}
+.lifecycle-pill.lifecycle-succeeded {
+  border-color: var(--matrix);
+  color: var(--matrix);
+}
+.lifecycle-pill.lifecycle-failed {
+  border-color: var(--alert);
+  color: var(--alert);
+}
+
 /* Animations */
 @keyframes dfleet-pulse { from { opacity: 0.5; } to { opacity: 1; } }
 @keyframes dfleet-blink { 0%, 100% { opacity: 1; } 50% { opacity: 0.3; } }

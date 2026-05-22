@@ -1,5 +1,6 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { PlusCircle } from '../../icons';
+import { useLifecyclePolling } from '../../hooks/useLifecyclePolling';
 import api from '../../utils/api';
 import Modal from '../Modal/Modal';
 import { DEFAULT_SERVICES } from '../MazeNET/data';
@@ -129,6 +130,8 @@ export const DeployWizard: React.FC<Props> = ({
     setServiceConfigs({});
     setServiceSchemas({});
     setOpenSvcCfg(null);
+    setLifecycleIds([]);
+    setLoggedTerminals(new Set());
   }, [open]);
 
   const effectiveArchetypeName = archetype?.name
@@ -163,28 +166,45 @@ export const DeployWizard: React.FC<Props> = ({
     return out;
   }, [count, prefix, fleetSize, effectiveArchetypeName, effectiveServices]);
 
-  const [deployOk, setDeployOk] = useState(false);
-  const [deployFailures, setDeployFailures] = useState<string[]>([]);
+  // 202 returns the per-decky lifecycle row ids; the polling hook flips
+  // them through pending -> running -> succeeded|failed.  Empty array
+  // disables the hook (idle / not yet POSTed).
+  const [lifecycleIds, setLifecycleIds] = useState<string[]>([]);
+  const { rows: lifecycleRows, done: lifecycleDone, error: lifecycleErr } =
+    useLifecyclePolling(lifecycleIds);
 
-  // Fake log stream during "deploying" (runs as visual backdrop; real API
-  // lines are spliced in by startDeploy once the HTTP call resolves).
+  // Atmospheric backdrop (one-shot, decoupled from real progress now
+  // that the lifecycle rows carry truth).  Runs once when DEPLOYING
+  // begins so the operator sees activity before the first poll lands.
   useEffect(() => {
-    if (step !== 3 || !deploying) return;
+    if (step !== 3 || !deploying || lifecycleIds.length === 0) return;
     const msgs = PLACEHOLDER_LINES(effectiveArchetypeName, effectiveServices, count, fleetSize);
     let i = 0;
     const t = window.setInterval(() => {
       setLog((prev) => [...prev, msgs[i]]);
       i++;
-      if (i >= msgs.length) {
-        window.clearInterval(t);
-        // Only auto-close if the server accepted.
-        if (deployOk) {
-          window.setTimeout(() => onComplete(count), 500);
-        }
-      }
+      if (i >= msgs.length) window.clearInterval(t);
     }, 420);
     return () => window.clearInterval(t);
-  }, [step, deploying, effectiveArchetypeName, effectiveServices, count, fleetSize, onComplete, deployOk]);
+  }, [step, deploying, lifecycleIds.length, effectiveArchetypeName, effectiveServices, count, fleetSize]);
+
+  const deployFailures = useMemo(() =>
+    lifecycleRows
+      .filter((r) => r.status === 'failed')
+      .map((r) => `[FAIL] ${r.decky_name}: ${r.error ?? 'unknown error'}`),
+    [lifecycleRows],
+  );
+  const deployOk = lifecycleDone && deployFailures.length === 0;
+
+  // When every row reaches terminal status, auto-close on full success
+  // (or stay open so the operator can read failures).
+  useEffect(() => {
+    if (!lifecycleDone) return;
+    if (deployFailures.length === 0) {
+      const t = window.setTimeout(() => onComplete(count), 700);
+      return () => window.clearTimeout(t);
+    }
+  }, [lifecycleDone, deployFailures.length, count, onComplete]);
 
   const canNext = step === 0
     ? (pickMode === 'archetype' ? !!archetype : selectedServices.length > 0)
@@ -193,8 +213,7 @@ export const DeployWizard: React.FC<Props> = ({
   const startDeploy = async () => {
     setDeployErr(null);
     setLog([]);
-    setDeployOk(false);
-    setDeployFailures([]);
+    setLifecycleIds([]);
     setDeploying(true);
     // Roll the per-service forms into the compact payload the server
     // expects — empty values dropped, types coerced where the schema
@@ -215,26 +234,46 @@ export const DeployWizard: React.FC<Props> = ({
       mutate, mutateEvery, rolled, serviceSchemas,
     );
     try {
-      const res = await api.post<{ failures?: { name: string; reason: string }[] }>(
+      const res = await api.post<{ lifecycle_ids?: string[]; message?: string; mode?: string }>(
         '/deckies/deploy',
         { ini_content: ini },
-        { timeout: 180000 },
       );
-      const failures = res.data?.failures ?? [];
-      setDeployFailures(failures.map(f => `[FAIL] ${f.name}: ${f.reason}`));
-      if (failures.length > 0) {
-        setLog(prev => [...prev, `[OK]   server accepted ${count - failures.length}/${count}`,
-          ...failures.map(f => `[FAIL] ${f.name}: ${f.reason}`)]);
-      } else {
-        setLog(prev => [...prev, `[OK]   server accepted ${count} deckies`]);
-      }
-      setDeployOk(true);
+      const ids = res.data?.lifecycle_ids ?? [];
+      setLifecycleIds(ids);
+      setLog((prev) => [...prev, `[ACK]  server accepted ${ids.length} decky/ies — tracking...`]);
     } catch (e: unknown) {
       const err = e as { response?: { data?: { detail?: string } }; message?: string };
       setDeployErr(err?.response?.data?.detail || err?.message || 'Deploy failed');
       setDeploying(false);
     }
   };
+
+  // Append lifecycle terminal lines to the log as rows resolve, so the
+  // operator gets a running transcript instead of a flicker-replaced
+  // table.  De-dupe by id so re-polls don't double-log.
+  const [, setLoggedTerminals] = useState<Set<string>>(new Set());
+  useEffect(() => {
+    setLoggedTerminals((prev) => {
+      let next = prev;
+      const additions: string[] = [];
+      for (const r of lifecycleRows) {
+        if (prev.has(r.id)) continue;
+        if (r.status === 'succeeded') {
+          additions.push(`[OK]   ${r.decky_name} deployed`);
+        } else if (r.status === 'failed') {
+          additions.push(`[FAIL] ${r.decky_name}: ${r.error ?? 'unknown error'}`);
+        } else {
+          continue;
+        }
+        if (next === prev) next = new Set(prev);
+        next.add(r.id);
+      }
+      if (additions.length > 0) {
+        setLog((l) => [...l, ...additions]);
+      }
+      return next;
+    });
+  }, [lifecycleRows]);
 
   const toggleService = (slug: string) => {
     setSelectedServices((prev) =>
@@ -270,10 +309,10 @@ export const DeployWizard: React.FC<Props> = ({
             {step === 3 && !deploying && (
               <button className="btn violet" onClick={startDeploy}>ESTABLISH FLEET</button>
             )}
-            {step === 3 && deploying && !deployOk && (
+            {step === 3 && deploying && !lifecycleDone && (
               <button className="btn" disabled>DEPLOYING...</button>
             )}
-            {step === 3 && deployOk && deployFailures.length > 0 && (
+            {step === 3 && lifecycleDone && deployFailures.length > 0 && (
               <button className="btn alert" disabled>{deployFailures.length} FAILED</button>
             )}
           </div>
@@ -485,8 +524,29 @@ export const DeployWizard: React.FC<Props> = ({
               <div className="type-label">
                 {!deploying
                   ? 'Ready to deploy. This will write to the fleet and start the listener.'
-                  : 'Deploying...'}
+                  : lifecycleDone
+                    ? (deployFailures.length === 0 ? 'Deployed.' : 'Deploy finished with errors.')
+                    : 'Deploying — polling lifecycle...'}
               </div>
+              {lifecycleIds.length > 0 && (
+                <div className="lifecycle-grid">
+                  {lifecycleRows.map((r) => (
+                    <div
+                      key={r.id}
+                      className={`lifecycle-pill lifecycle-${r.status}`}
+                      title={r.error ?? ''}
+                    >
+                      <span className="lifecycle-name">{r.decky_name}</span>
+                      <span className="lifecycle-status">{r.status.toUpperCase()}</span>
+                    </div>
+                  ))}
+                </div>
+              )}
+              {lifecycleErr && (
+                <div className="info-banner warn" style={{ marginBottom: 8 }}>
+                  Polling: {lifecycleErr} — retrying...
+                </div>
+              )}
               <div className="code-block" style={{ minHeight: 180 }}>
                 {log.length === 0 && !deploying && (
                   <>
