@@ -37,6 +37,7 @@ SERVICE_NAME   = "dns"
 LOG_TARGET     = os.environ.get("LOG_TARGET", "")
 ZONE_MODE      = os.environ.get("DNS_ZONE_MODE", "auth")
 BIND_VERSION   = os.environ.get("DNS_BIND_VERSION", "9.11.4-P2-RedHat-9.11.4-26.P2.el7_9.10")
+_AUTHORS       = os.environ.get("DNS_AUTHORS", "BIND9 Developers")
 _NSID_RAW      = os.environ.get("DNS_NSID", "")
 _EXTRA_RAW     = os.environ.get("DNS_EXTRA_RECORDS", "")
 REAL_RECURSIVE = os.environ.get("DNS_REAL_RECURSIVE", "").lower() in ("1", "true", "yes")
@@ -70,9 +71,20 @@ DOMAIN      = _generate_domain()
 DOMAIN_BARE = DOMAIN.rstrip(".")
 NSID        = _NSID_RAW if _NSID_RAW else seed.instance_uuid("nsid")[:16]
 
+# Module-level map so tests can introspect probe names without re-parsing.
+# Keys are the normalised qname (with trailing dot) as returned by _decode_name.
+_CHAOS_PROBE_MAP: dict[str, str] = {}  # populated after BIND_VERSION/NODE_NAME/NSID/_AUTHORS
+
 _SOA_SERIAL = int(seed.instance_hex(4, "soa-serial"), 16) % 99 + 2020010101
 NS1         = f"ns1.{DOMAIN_BARE}."
 NS2         = f"ns2.{DOMAIN_BARE}."
+
+_CHAOS_PROBE_MAP.update({
+    "version.bind.":  BIND_VERSION,
+    "hostname.bind.": NODE_NAME,
+    "id.server.":     NSID,
+    "authors.bind.":  _AUTHORS,
+})
 
 
 def _fake_ip(label: str = "") -> str:
@@ -692,12 +704,7 @@ def _handle(data: bytes, src_ip: str, src_port: int, transport: str) -> bytes | 
 
     # ── CHAOS fingerprinting ───────────────────────────────────────────────
     if qclass == CLASS_CH and qtype == TYPE_TXT:
-        probe_map = {
-            "version.bind.":  BIND_VERSION,
-            "hostname.bind.": NODE_NAME,
-            "id.server.":     NSID,
-        }
-        answer_text = probe_map.get(qname, "")
+        answer_text = _CHAOS_PROBE_MAP.get(qname, "")
         _log(
             "fingerprint_probe",
             src=src_ip, src_port=src_port, transport=transport,

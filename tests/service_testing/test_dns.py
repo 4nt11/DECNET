@@ -271,6 +271,27 @@ class TestFingerprintProbe:
         mod._handle(query, "10.0.0.1", 12345, "udp")
         assert not _events_of(events, "query")
 
+    def test_authors_bind_identified_by_name(self):
+        mod, events = _load_dns()
+        query = _build_query("authors.bind", mod.TYPE_TXT, qclass=mod.CLASS_CH)
+        resp = mod._handle(query, "10.0.0.1", 12345, "udp")
+        assert resp is not None
+        assert _rcode(resp) == mod.RCODE_NOERROR
+        probes = _events_of(events, "fingerprint_probe")
+        assert probes
+        assert probes[0]["probe"] == "authors.bind"
+        assert probes[0]["response"] != ""
+
+    def test_authors_bind_in_probe_map(self):
+        mod, _ = _load_dns()
+        assert "authors.bind." in mod._CHAOS_PROBE_MAP
+
+    def test_chaos_probe_map_introspectable(self):
+        mod, _ = _load_dns()
+        assert "version.bind." in mod._CHAOS_PROBE_MAP
+        assert "hostname.bind." in mod._CHAOS_PROBE_MAP
+        assert "id.server." in mod._CHAOS_PROBE_MAP
+
 # ── Zone transfer ─────────────────────────────────────────────────────────────
 
 class TestZoneTransfer:
