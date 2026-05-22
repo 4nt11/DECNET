@@ -672,6 +672,10 @@ def _handle(data: bytes, src_ip: str, src_port: int, transport: str) -> bytes | 
     qtype_name  = _TYPE_NAMES.get(qtype, str(qtype))
     qclass_name = _CLASS_NAMES.get(qclass, str(qclass))
 
+    if qdcount > 1:
+        _log("multi_question", severity=5, src=src_ip, src_port=src_port,
+             transport=transport, qdcount=qdcount, qname=qname.rstrip("."))
+
     # Flood check runs on every packet (including CHAOS / transfer probes)
     _check_flood(src_ip, qtype_name)
 

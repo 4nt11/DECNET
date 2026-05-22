@@ -714,6 +714,47 @@ class TestServiceRegistration:
         assert (ctx / "Dockerfile").exists()
 
 
+def _build_multi_question(qname: str, qtype: int, qclass: int = 1, qid: int = 0x1234) -> bytes:
+    """DNS query with qdcount=2 — second question is identical to first."""
+    header = struct.pack(">HHHHHH", qid, 0x0100, 2, 0, 0, 0)
+    wire = b""
+    for label in qname.rstrip(".").split("."):
+        enc = label.encode("ascii")
+        wire += bytes([len(enc)]) + enc
+    wire += b"\x00"
+    q = wire + struct.pack(">HH", qtype, qclass)
+    return header + q + q
+
+
+# ── Multi-question event ──────────────────────────────────────────────────────
+
+class TestMultiQuestion:
+    def test_multi_question_event_emitted(self):
+        mod, events = _load_dns()
+        pkt = _build_multi_question("example.test.local", mod.TYPE_A)
+        resp = mod._handle(pkt, "5.5.5.5", 53, "udp")
+        ev = _events_of(events, "multi_question")
+        assert len(ev) == 1
+        assert ev[0]["qdcount"] == 2
+        assert ev[0]["qname"] == "example.test.local"
+
+    def test_multi_question_still_answers_q0(self):
+        mod, events = _load_dns()
+        pkt = _build_multi_question("test.local", mod.TYPE_A)
+        resp = mod._handle(pkt, "5.5.5.5", 53, "udp")
+        assert resp is not None
+        assert _rcode(resp) == mod.RCODE_NOERROR
+
+    def test_multi_question_also_logs_query(self):
+        """multi_question event accompanies, does not replace, the normal query event."""
+        mod, events = _load_dns()
+        pkt = _build_multi_question("test.local", mod.TYPE_A)
+        mod._handle(pkt, "5.5.5.5", 53, "udp")
+        assert len(_events_of(events, "multi_question")) == 1
+        # A query or amp_probe event must also be present for q0
+        assert len(_events_of(events, "query")) + len(_events_of(events, "amp_probe")) >= 1
+
+
 # ── Parse hygiene events ───────────────────────────────────────────────────────
 
 class TestParseHygiene:
