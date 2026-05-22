@@ -149,6 +149,7 @@ _TYPE_NAMES = {
     TYPE_AXFR: "AXFR", TYPE_OPT: "OPT", TYPE_ANY: "ANY",
 }
 _CLASS_NAMES = {CLASS_IN: "IN", CLASS_CH: "CH", CLASS_ANY: "ANY"}
+_OPCODE_NAMES = {0: "query", 1: "iquery", 2: "status", 4: "notify", 5: "update"}
 
 # ── Wire codec ────────────────────────────────────────────────────────────────
 
@@ -480,6 +481,13 @@ def _refused_response(qid: int, rd: bool, qname: str, qtype: int, qclass: int) -
     return _build_header(qid, flags, 1, 0, 0, 0) + q
 
 
+def _notimp_response(qid: int, opcode: int) -> bytes:
+    # QR=1, opcode echoed, RCODE=NOTIMP, no question/answer sections.
+    # Matches real BIND behaviour for unimplemented opcodes.
+    flags = (1 << 15) | ((opcode & 0x0F) << 11) | RCODE_NOTIMP
+    return _build_header(qid, flags, 0, 0, 0, 0)
+
+
 def _soa_rr(ttl: int = 300) -> bytes:
     rdata = _rdata_SOA(
         NS1, f"hostmaster.{DOMAIN_BARE}.",
@@ -666,11 +674,29 @@ def _handle(data: bytes, src_ip: str, src_port: int, transport: str) -> bytes | 
              transport=transport, length=len(data))
         return None
     qid, flags_in, qdcount, ancount, nscount, arcount = struct.unpack_from(">HHHHHH", data, 0)
+    opcode = (flags_in >> 11) & 0x0F
+    rd     = bool(flags_in & 0x0100)
+    tc     = bool(flags_in & 0x0200)
+    ad     = bool(flags_in & 0x0020)
+    cd     = bool(flags_in & 0x0010)
+    z      = bool(flags_in & 0x0040)
+
+    # ── Unsupported opcode ─────────────────────────────────────────────────
+    # Before qdcount check: BIND returns NOTIMP regardless of question count.
+    if opcode != 0:
+        probe = f"opcode_{_OPCODE_NAMES.get(opcode, str(opcode))}"
+        _log(
+            "fingerprint_probe", severity=4,
+            src=src_ip, src_port=src_port, transport=transport,
+            probe=probe, opcode=opcode,
+        )
+        _note_recon_event(src_ip, "fingerprint_probe")
+        return _notimp_response(qid, opcode)
+
     if qdcount == 0:
         _log("empty_question_section", severity=5, src=src_ip, src_port=src_port,
              transport=transport, qid=qid)
         return None
-    rd = bool(flags_in & 0x0100)
 
     try:
         qname, qtype, qclass, _ = _parse_question(data, 12)
@@ -687,6 +713,17 @@ def _handle(data: bytes, src_ip: str, src_port: int, transport: str) -> bytes | 
     if qdcount > 1:
         _log("multi_question", severity=5, src=src_ip, src_port=src_port,
              transport=transport, qdcount=qdcount, qname=qname.rstrip("."))
+
+    # ── Header flag fingerprinting ─────────────────────────────────────────
+    # Z bit must-be-zero per RFC; AD+CD without RD is operationally nonsensical.
+    if z or (ad and cd and not rd):
+        _log(
+            "fingerprint_probe", severity=4,
+            src=src_ip, src_port=src_port, transport=transport,
+            probe="header_flags", qname=qname.rstrip("."),
+            opcode=opcode, ad=ad, cd=cd, z=z, tc=tc,
+        )
+        _note_recon_event(src_ip, "fingerprint_probe")
 
     # Flood check runs on every packet (including CHAOS / transfer probes)
     _check_flood(src_ip, qtype_name)
