@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """
 Live integration tests for the MySQL dashboard backend.
 

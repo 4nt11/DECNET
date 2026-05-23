@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """GET /swarm/hosts — admin-gated list of enrolled workers for the dashboard.
 
 Fans out an ``AgentClient.health()`` probe to each host on every call and

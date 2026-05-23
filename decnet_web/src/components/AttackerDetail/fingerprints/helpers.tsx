@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
 import React from 'react';
 import {
   Clock, Crosshair, FileKey, Fingerprint, Lock, Shield, Wifi,

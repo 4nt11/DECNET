@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """E.2.8 — Admin-only mutation endpoints for /api/v1/ttp/rules/{id}/state.
 
 The two mutation endpoints (POST / DELETE) carry the rule

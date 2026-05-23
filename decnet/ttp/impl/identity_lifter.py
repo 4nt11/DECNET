@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """Identity lifter — cross-attacker identity-rollup tagger.
 
 E.3.13 of ``development/TTP_TAGGING.md``. Owns rules whose

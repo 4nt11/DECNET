@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """GET /api/v1/identities — paginated list of resolved identities.
 
 Returns an empty list while the clusterer hasn't run yet (the

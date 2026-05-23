@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """GET /api/v1/attackers/{uuid}/export/misp — MISP event for one attacker.
 
 Converts the attacker's STIX 2.1 bundle to a MISP event JSON file via

@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """
 Pydantic models for DECNET configuration and runtime state.
 State is persisted to decnet-state.json in the working directory.

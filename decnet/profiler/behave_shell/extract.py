@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """Public extraction entry point.
 
 ``extract_session`` is the only function workers call. It builds a

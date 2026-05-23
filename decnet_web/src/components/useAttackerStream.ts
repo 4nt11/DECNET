@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
 /**
  * Per-attacker behavioural event stream — opens an SSE connection to
  * `/attackers/{uuid}/events` and dispatches typed events to the caller.

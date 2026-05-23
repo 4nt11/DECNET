@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """
 Unit tests for decnet.web.db.mysql.database.build_mysql_url / resolve_url.
 

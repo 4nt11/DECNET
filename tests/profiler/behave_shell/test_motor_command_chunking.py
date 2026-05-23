@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """Step B.4: ``motor.command_chunking``."""
 from __future__ import annotations
 

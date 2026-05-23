@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """The web dashboard proxy must follow DECNET_API_HOST.
 
 Hardcoding 127.0.0.1 broke deploys where the operator binds the API to

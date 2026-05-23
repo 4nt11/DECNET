@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """Worker shutdown smoke test for fleet_reconciler_worker.
 
 The reconcile logic itself is exercised in test_reconciler.py.  This file

@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """Shared stub :class:`RuleStore` for lifter unit tests.
 
 Tests that exercise :class:`BehavioralLifter` / :class:`IntelLifter` /

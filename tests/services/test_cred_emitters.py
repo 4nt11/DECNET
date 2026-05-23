@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """Per-service credential-emitter integration tests.
 
 Each test simulates the SD-block a migrated emitter produces, hands it

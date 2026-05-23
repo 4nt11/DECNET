@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """Tests for :func:`decnet.bus.worker.bus_worker` lifecycle + heartbeat."""
 from __future__ import annotations
 

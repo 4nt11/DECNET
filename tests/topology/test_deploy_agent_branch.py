@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """Agent-branch routing inside deploy_topology / teardown_topology.
 
 Exercises the target_host_uuid branch added in Step 6.  We never hit a

@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """``decnet canary`` — HTTP + DNS callback receiver for canary tokens.
 
 Two entry points share this module:

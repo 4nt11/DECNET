@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """iptoasn provider — orchestrates fetch + parse into an :class:`AsnLookup`.
 
 Mirrors :class:`decnet.geoip.rir.provider.RirProvider` exactly: fetch,

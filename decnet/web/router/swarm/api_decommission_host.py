@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """DELETE /swarm/hosts/{uuid} — decommission a worker.
 
 Removes the DeckyShard rows bound to the host (portable cascade — MySQL

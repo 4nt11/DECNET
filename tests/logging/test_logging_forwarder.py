@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """
 Tests for decnet.logging.forwarder — parse_log_target, probe_log_target.
 """

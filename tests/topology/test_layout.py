@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """Layout coordinate roundtrips for LAN and TopologyDecky."""
 from __future__ import annotations
 

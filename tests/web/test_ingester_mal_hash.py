@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """Ingester wiring for mal_hash + observed_attachments (DEBT-046).
 
 Validates `_publish_email_received` against a stub repo + stub provider:

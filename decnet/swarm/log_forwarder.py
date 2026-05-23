@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """Worker-side syslog-over-TLS forwarder (RFC 5425).
 
 Runs alongside the worker agent. Tails the worker's local RFC 5424 log

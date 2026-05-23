@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """POST /webhooks/{uuid}/test — fire a synthetic ping to verify plumbing.
 
 This hits the same delivery path the worker uses, so a 200 here proves

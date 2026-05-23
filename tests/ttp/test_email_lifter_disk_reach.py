@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """Disk-reach tests for EmailLifter (DEBT-047).
 
 When the bus payload omits ``body_text`` but carries ``decky_id`` +

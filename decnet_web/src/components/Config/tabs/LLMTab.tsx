@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
 import React, { useEffect, useState } from 'react';
 import { Save, CheckCircle, AlertTriangle } from '../../../icons';
 import api from '../../../utils/api';

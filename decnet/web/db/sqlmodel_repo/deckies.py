@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """Decky-shard CRUD (per-host shard registrations)."""
 from __future__ import annotations
 

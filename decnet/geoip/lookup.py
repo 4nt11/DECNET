@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """Provider-agnostic country lookup.
 
 A :class:`Lookup` is a frozen, sorted array of (start_ip, end_ip, cc)

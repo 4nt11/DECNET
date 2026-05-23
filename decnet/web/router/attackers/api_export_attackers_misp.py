@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """GET /api/v1/attackers/export/misp — fleet-wide MISP collection.
 
 Returns a MISP collection JSON ({"response": [event, ...]}) with one event

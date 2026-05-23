@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """GET ``/api/v1/realism/synthetic-files`` — browse planted realism files.
 
 The orchestrator's realism worker grows synthetic files on each decky

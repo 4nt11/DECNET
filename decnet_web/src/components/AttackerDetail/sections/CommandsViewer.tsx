@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
 import React from 'react';
 import { ChevronLeft, ChevronRight, Terminal } from '../../../icons';
 import EmptyState from '../../EmptyState/EmptyState';

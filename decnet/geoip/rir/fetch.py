@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """RIR delegated-stats download.
 
 Five public files, ~5 MB total. Pulled over HTTPS with a generic

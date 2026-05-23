@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """POST /topologies/{id}/teardown — transition an active/degraded/failed
 topology to ``tearing_down`` and fire the background teardown.
 

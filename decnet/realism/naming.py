@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """Per-content-class filename generators.
 
 The pre-realism orchestrator emitted ``notes-1777315854.txt``

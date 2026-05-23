@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
 import React from 'react';
 import { Shield, Trash2 } from '../../../icons';
 import ServiceConfigForm from '../../ServiceConfigForm';

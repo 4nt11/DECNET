@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """Mutation-event emission.
 
 One helper (:func:`emit_decky_mutated`) writes every substrate

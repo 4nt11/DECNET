@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """Phase 7 — calibration lockdown.
 
 Four synthetic operator-behaviour scenarios that exercise the full

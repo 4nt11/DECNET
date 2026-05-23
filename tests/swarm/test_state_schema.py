@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """Backward-compatibility tests for the SWARM state-schema extension.
 
 DeckyConfig gained an optional ``host_uuid`` field in swarm mode.  Existing

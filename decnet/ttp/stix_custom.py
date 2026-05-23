@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """DECNET-defined STIX 2.1 custom extension and object types.
 
 Import this module before parsing any DECNET-produced bundle so the types are

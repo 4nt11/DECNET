@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """POST /swarm/teardown — tear down one or all enrolled workers."""
 from __future__ import annotations
 

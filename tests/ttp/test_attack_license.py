@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """MITRE ATT&CK Terms of Use compliance: LICENSE.txt is fetched, verified, and required.
 
 Bundle and license live side-by-side in the cache dir. The bundle is

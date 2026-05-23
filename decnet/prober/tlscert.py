@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """
 TLS leaf-certificate capture from attacker-run servers.
 

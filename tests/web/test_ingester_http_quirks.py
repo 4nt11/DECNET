@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """HTTP header-quirks fingerprint extraction in the ingester."""
 from __future__ import annotations
 

@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """W.3 poll-fallback tests.
 
 Exercises ``_behave_poll_tick`` and ``_payload_from_log_row`` —

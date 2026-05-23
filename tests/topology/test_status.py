@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """MazeNET status state-machine tests.
 
 Every legal transition declared in the plan is permitted; every other

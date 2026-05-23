@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """POST /api/v1/swarm-updates/rollback — single-host manual rollback."""
 from __future__ import annotations
 

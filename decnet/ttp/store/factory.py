@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """Rule store factory.
 
 Mirrors :mod:`decnet.ttp.factory` and :mod:`decnet.intel.factory`:

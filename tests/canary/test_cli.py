@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """Smoke coverage for the ``decnet canary`` CLI subcommand.
 
 We don't run the worker (it would block on HTTP/DNS sockets) — we

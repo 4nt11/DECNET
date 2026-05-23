@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """Unit tests for ``decnet.correlation.fingerprint_rotation``.
 
 Pure library: in-memory SQLite + sync Session + collected callback

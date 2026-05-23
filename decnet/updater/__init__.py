@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """DECNET self-updater daemon.
 
 Runs on each worker alongside ``decnet agent``. Receives working-tree

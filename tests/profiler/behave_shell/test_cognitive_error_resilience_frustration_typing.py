@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """Step D.6: ``cognitive.error_resilience.frustration_typing``."""
 from __future__ import annotations
 

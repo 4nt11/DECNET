@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """Collector publishes ``attacker.session.ended`` end-to-end.
 
 Wires :func:`_make_system_log_publisher` against a fake bus, drives

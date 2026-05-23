@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """Heartbeat-driven topology resync: master flags divergent agents.
 
 When an agent reports an applied_version_hash that differs from what

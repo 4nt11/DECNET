@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """GET /api/v1/identities/{uuid}/observations — observations for an identity.
 
 Returns the per-IP ``Attacker`` rows whose ``identity_id`` FK points at

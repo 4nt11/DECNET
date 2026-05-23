@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """GeoIP provider factory.
 
 Dispatch key: ``DECNET_GEOIP_PROVIDER`` (default ``rir``). Lazy singleton,

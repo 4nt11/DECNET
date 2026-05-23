@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """GET /api/v1/ttp/techniques — distinct techniques observed fleet-wide.
 
 Returns an empty list at contract phase (E.1.9). Repo wiring lands in

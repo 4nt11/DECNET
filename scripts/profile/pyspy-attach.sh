@@ -1,4 +1,5 @@
 #!/usr/bin/env bash
+# SPDX-License-Identifier: AGPL-3.0-or-later
 # Attach py-spy to the running DECNET uvicorn worker(s) and record a flamegraph.
 # Requires sudo on Linux because of kernel.yama.ptrace_scope=1 by default.
 set -euo pipefail

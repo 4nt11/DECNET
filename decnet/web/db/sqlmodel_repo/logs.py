@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """Log ingestion, query, and the stats summary endpoint.
 
 ``get_log_histogram`` is the per-dialect override point; the abstract

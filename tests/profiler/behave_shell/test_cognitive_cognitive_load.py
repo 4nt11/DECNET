@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """Step D.1: ``cognitive.cognitive_load``.
 
 Composite of three [0, 1]-clipped sub-signals (chunking variance, error

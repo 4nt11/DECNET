@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """RipeStatValidator HTTP + cache integration tests.
 
 All network calls are intercepted via monkeypatching

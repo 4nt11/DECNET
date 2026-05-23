@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """E.2.14a — Observability tracing tests.
 
 Pins the OTEL span hierarchy from ``development/TTP_TAGGING.md``

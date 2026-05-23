@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """Long-running credential-reuse correlator.
 
 Loops :meth:`CorrelationEngine.correlate_credential_reuse` over the

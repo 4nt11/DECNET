@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """Phase 1 attribution worker — wiring smoke tests.
 
 The Phase 1 worker subscribes to ``attacker.observation.>`` and, for

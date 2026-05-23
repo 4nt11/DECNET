@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import api, { type ApiError } from '../../utils/api';
 import { ARCHETYPES as FALLBACK_ARCHETYPES } from '../MazeNET/data';

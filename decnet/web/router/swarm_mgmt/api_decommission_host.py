@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """DELETE /swarm/hosts/{uuid} — decommission a worker from the dashboard.
 
 Also instructs the worker agent to stop all DECNET services and delete

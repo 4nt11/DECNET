@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
 /* Ambient typings for lucide-react's per-icon module paths.
  *
  * lucide-react ships .d.ts only for the barrel entry point; the

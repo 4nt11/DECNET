@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """TTP rule catalogue + admin-only state mutations.
 
 Three endpoints in one router:

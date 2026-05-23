@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """GET /api/v1/attackers/{uuid}/export/stix — STIX 2.1 bundle for one attacker.
 
 Returns a self-contained STIX 2.1 Bundle with the attacker's IP

@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """GreyNoise Community API provider.
 
 Endpoint: ``GET https://api.greynoise.io/v3/community/<ip>``

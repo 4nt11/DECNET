@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """Topology decky CRUD + the running-decky listing the fleet aggregator
 calls through MRO."""
 from __future__ import annotations

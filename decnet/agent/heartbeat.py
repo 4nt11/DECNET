@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """Agent → master liveness heartbeat loop.
 
 Every ``INTERVAL_S`` seconds the worker posts ``executor.status()`` to

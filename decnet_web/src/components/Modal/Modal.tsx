@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
 import React, { useEffect, useRef } from 'react';
 import { X, type LucideIcon } from '../../icons';
 import { useEscapeKey } from '../../hooks/useEscapeKey';

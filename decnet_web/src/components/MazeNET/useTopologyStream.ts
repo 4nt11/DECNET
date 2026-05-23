@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
 /**
  * Topology event stream — opens an SSE connection to
  * `/topologies/{id}/events` and dispatches typed events to the caller.

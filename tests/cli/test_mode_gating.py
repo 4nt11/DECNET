@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """CLI mode gating — master-only commands hidden when DECNET_MODE=agent."""
 from __future__ import annotations
 

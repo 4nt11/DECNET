@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """UNIX-socket client — :class:`UnixSocketBus` implementation of :class:`BaseBus`.
 
 Holds one open socket to the local :class:`~decnet.bus.unix_server.BusServer`.

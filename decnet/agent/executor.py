@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """Thin adapter between the agent's HTTP endpoints and the existing
 ``decnet.engine.deployer`` code path.
 

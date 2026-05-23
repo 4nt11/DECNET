@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """POST/GET/DELETE /api/v1/deckies/{decky_name}/tarpit — per-decky tc netem tarpit.
 
 Applies port-selective traffic delay on the host veth paired to the target

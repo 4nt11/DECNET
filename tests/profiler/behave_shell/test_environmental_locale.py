@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """Step F.3: ``environmental.locale``."""
 from __future__ import annotations
 

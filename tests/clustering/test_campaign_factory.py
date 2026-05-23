@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """Determinism + DSL-validation tests for the synthetic campaign factory."""
 from __future__ import annotations
 

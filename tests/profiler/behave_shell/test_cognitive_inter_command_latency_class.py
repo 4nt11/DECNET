@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """Step 5: ``cognitive.inter_command_latency_class``."""
 from __future__ import annotations
 

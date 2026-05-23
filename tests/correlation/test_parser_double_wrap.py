@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """Correlation parser unwraps double-wrapped RFC5424 lines.
 
 Mirrors ``tests/collector/test_parse_rfc5424_double_wrap.py``. Both

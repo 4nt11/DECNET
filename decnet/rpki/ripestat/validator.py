@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """RIPE STAT RPKI validator.
 
 Resolves the most-specific announced prefix covering ``ip`` via the

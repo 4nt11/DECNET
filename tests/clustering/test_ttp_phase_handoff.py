@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """E.3.15 — production phase-handoff edge fires from ttp_tag rows.
 
 The UKC bridge (``tactic_to_ukc_phase`` + ``OBSERVABLE_PHASES``) was

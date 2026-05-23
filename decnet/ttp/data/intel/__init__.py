@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """Per-provider intel-signal → ATT&CK technique mapping data.
 
 One YAML file per intel provider (abuseipdb / greynoise / feodo /

@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """Per-(identity, primitive) attribution state — v0 of the
 attribution engine.
 

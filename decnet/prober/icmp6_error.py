@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """ICMPv6 error-elicitation prober.
 
 Sends four crafted stimuli to a target and records which ICMPv6 error

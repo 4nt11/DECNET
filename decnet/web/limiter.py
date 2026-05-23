@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """Rate-limiting infra for the dashboard API.
 
 Uses slowapi (which wraps the `limits` library) with in-memory storage.

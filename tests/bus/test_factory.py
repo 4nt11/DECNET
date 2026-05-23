@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """Tests for :func:`decnet.bus.factory.get_bus` dispatch."""
 from __future__ import annotations
 

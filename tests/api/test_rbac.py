@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """RBAC matrix tests — verify role enforcement on every API endpoint."""
 import pytest
 

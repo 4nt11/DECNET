@@ -1,4 +1,5 @@
 #!/usr/bin/env bash
+# SPDX-License-Identifier: AGPL-3.0-or-later
 ### Usage: scripts/behave_shell/smoke.sh [BEHAVE_CALIBRATION_DIR]
 #
 # BEHAVE-INTEGRATION Phase 6 — offline replay smoke test.

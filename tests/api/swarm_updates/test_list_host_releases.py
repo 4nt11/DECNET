@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """GET /api/v1/swarm-updates/hosts — per-host updater health fan-out."""
 from __future__ import annotations
 

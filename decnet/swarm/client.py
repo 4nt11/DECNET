@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """Master-side HTTP client that talks to a worker's DECNET agent.
 
 All traffic is mTLS: the master presents a cert issued by its own CA (which

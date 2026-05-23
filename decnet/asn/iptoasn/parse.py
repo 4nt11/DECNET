@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """Parser for the iptoasn.com ``ip2asn-v4.tsv`` dump.
 
 Line shape (gzipped, one row per BGP-announced prefix)::

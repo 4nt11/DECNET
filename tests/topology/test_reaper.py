@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """Tests for the orphan topology-resource reaper."""
 from __future__ import annotations
 

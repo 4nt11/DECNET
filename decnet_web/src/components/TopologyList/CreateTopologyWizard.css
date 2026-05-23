@@ -1,3 +1,4 @@
+/* SPDX-License-Identifier: AGPL-3.0-or-later */
 /* Mirrors the design-handoff DeployWizard: backdrop + bordered modal,
  * wizard-step tabs, two-column card picker, matrix/violet palette.
  * Scoped with .ctw- prefix so nothing leaks into other views. */

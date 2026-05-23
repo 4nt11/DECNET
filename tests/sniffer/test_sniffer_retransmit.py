@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """
 Unit tests for TCP retransmit detection in the SnifferEngine flow aggregator.
 

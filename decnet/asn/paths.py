@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """Filesystem layout for ASN data — mirror of :mod:`decnet.geoip.paths`.
 
 ``ASN_ROOT`` is where providers drop their raw files and cache indexes.

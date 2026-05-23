@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """RPKI validator factory — mirror of :mod:`decnet.asn.factory`.
 
 Dispatch key: ``DECNET_RPKI_PROVIDER`` (default ``ripestat``). Lazy

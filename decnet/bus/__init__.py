@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """DECNET ServiceBus — pub/sub notification substrate.
 
 The bus is the notification layer for DECNET's worker constellation.  The DB

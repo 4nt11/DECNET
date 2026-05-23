@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """Smoke coverage for the Pydantic request/response shapes + helpers.
 
 The tables themselves are exercised end-to-end in

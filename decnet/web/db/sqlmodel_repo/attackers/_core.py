@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """Core ``Attacker`` row CRUD + the ``_deserialize_attacker`` helper.
 
 The helper lives here because sibling submixins and ``IdentitiesMixin``

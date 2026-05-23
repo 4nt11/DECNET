@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """Master API startup guards: mode gating + eager JWT load.
 
 The lifespan is what enforces these. We invoke it directly with a fresh

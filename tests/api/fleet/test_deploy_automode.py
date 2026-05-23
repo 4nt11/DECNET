@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """POST /deckies/deploy auto-mode: master + swarm hosts → shard to workers."""
 from __future__ import annotations
 

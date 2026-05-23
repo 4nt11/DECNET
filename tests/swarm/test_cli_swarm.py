@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """CLI `decnet swarm {enroll,list,decommission}` + `deploy --mode swarm`.
 
 Controller HTTP is stubbed via monkeypatching `_http_request`; we aren't

@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """Sentinel: every cohort's seed corpus parses and the harness lives.
 
 Runs in clean checkouts (no operator-built corpus). Asserts the seed

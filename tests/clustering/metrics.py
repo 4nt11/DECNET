@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """
 Clustering metric harness — see development/CAMPAIGN_CLUSTERING.md §3.
 

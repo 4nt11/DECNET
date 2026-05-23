@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """Simple-mode event enum → bus-topic pattern expansion.
 
 The UI's Simple mode hides the NATS-style wildcard syntax behind three

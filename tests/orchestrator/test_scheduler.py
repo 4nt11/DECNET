@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """Picker policy tests for the orchestrator scheduler.
 
 Stage-3 realism split:

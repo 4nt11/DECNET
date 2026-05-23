@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """
 Direct async tests for the configured Repository implementation.
 These exercise the DB layer without going through the HTTP stack.

@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """Per-package fixtures — flip DECNET_GEOIP_ENABLED back on for geoip tests
 and point the provider at a tmp dir so no real /var/lib/decnet paths get
 touched and no real RIR URL gets fetched.

@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """``decnet bus`` worker entrypoint.
 
 Starts a :class:`~decnet.bus.unix_server.BusServer` on the configured UNIX

@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """GET/PUT ``/api/v1/realism/llm`` — LLM provider configuration.
 
 Reads accept viewer; writes are admin (same trust level as the existing

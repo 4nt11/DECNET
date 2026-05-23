@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """Schemathesis contract tests scoped to the TTP Tagging API surface.
 
 E.3.17 of ``development/TTP_TAGGING.md``. The full ``test_schemathesis``

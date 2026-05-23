@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """Parser for RIR ``delegated-*-extended`` files.
 
 Line shape (the bits we care about)::

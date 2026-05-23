@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """Shared helpers for the per-attacker routes.
 
 Currently houses the 404 guard used by the SSE events stream

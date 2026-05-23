@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """TTP rule store — pluggable backend for rule definitions + state.
 
 Contract step E.1.11 of ``development/TTP_TAGGING.md``. Two backends

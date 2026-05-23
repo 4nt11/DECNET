@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """Agent-mode gating for the `ttp` worker (DEBT-047).
 
 `decnet ttp` runs the live TTP-tagging worker against local bus events

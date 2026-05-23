@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """DECNET worker agent — runs on every SWARM worker host.
 
 Exposes an mTLS-protected FastAPI service the master's SWARM controller

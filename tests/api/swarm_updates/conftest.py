@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """Shared fixtures for /api/v1/swarm-updates tests.
 
 The tests never talk to a real worker — ``UpdaterClient`` is monkeypatched

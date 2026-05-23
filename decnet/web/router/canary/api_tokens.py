@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """Operator-facing canary token CRUD.
 
 Every body-bearing route documents the 400 error per

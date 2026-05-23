@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """Log-derived activity views: commands, service activity, IP leaks,
 artifacts, stored mail, recorded sessions, transcripts.
 

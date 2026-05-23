@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
 # start the instance
 docker run -d --rm --name decnet-mysql \
     -e MYSQL_ROOT_PASSWORD=root \

@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """GET /api/v1/ttp/by-identity/{identity_uuid} — Identity-scoped TTP rollup.
 
 Primary endpoint for the IdentityDetail "TTPs Observed" section. See

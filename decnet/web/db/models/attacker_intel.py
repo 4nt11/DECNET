@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """Threat-intel enrichment row — one per attacker IP, TTL-cached."""
 from datetime import datetime, timezone
 from typing import Any, Optional

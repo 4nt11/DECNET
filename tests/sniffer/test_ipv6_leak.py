@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """Passive IPv6 link-local leak detection — sniffer unit tests.
 
 Tests SnifferEngine._on_ipv6_packet and _ipv6_iid_classify via direct

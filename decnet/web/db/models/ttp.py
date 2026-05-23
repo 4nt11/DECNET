@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """TTP-tagging schema — `ttp_tag`, `ttp_rule`, `ttp_rule_state`.
 
 Contract step E.1.1 of `development/TTP_TAGGING.md`. Shapes only — no

@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """Step 8: ``cognitive.inter_command_consistency``."""
 from __future__ import annotations
 

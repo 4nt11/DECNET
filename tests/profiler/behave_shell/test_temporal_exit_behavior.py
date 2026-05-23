@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """Step E.4: ``temporal.lifecycle_markers.exit_behavior`` (unblocked by F.0)."""
 from __future__ import annotations
 

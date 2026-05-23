@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """LAN CRUD within a topology."""
 from __future__ import annotations
 

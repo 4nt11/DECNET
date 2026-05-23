@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """Step D.2: ``cognitive.exploration_style``."""
 from __future__ import annotations
 

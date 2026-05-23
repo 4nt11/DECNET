@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """Body templates produce realistic, non-empty output per content class."""
 from __future__ import annotations
 

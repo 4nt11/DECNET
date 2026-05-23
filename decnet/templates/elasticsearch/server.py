@@ -1,4 +1,5 @@
 #!/usr/bin/env python3
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """
 Elasticsearch server — presents a convincing ES 7.x HTTP API on port 9200.
 Logs all requests (especially recon probes like /_cat/, /_cluster/, /_nodes/)

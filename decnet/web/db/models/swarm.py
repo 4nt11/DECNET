@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """Swarm host + decky shard tables and their HTTP DTOs."""
 from datetime import datetime, timezone
 from typing import Annotated, Any, Optional

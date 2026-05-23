@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """Tests for the connected-components clusterer (commit 4 — high-weight edges).
 
 Covers, in order:

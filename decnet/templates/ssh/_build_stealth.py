@@ -1,4 +1,5 @@
 #!/usr/bin/env python3
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """
 Build-time helper: merge capture Python sources, XOR+gzip+base64 pack them
 and the capture.sh loop, and render the final /entrypoint.sh from its

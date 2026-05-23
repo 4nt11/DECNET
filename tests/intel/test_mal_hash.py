@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """Unit tests for MalwareBazaarProvider (DEBT-046).
 
 Bulk-feed shape: one HTTP fetch loads ``_known``, subsequent

@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """Phase 3 — numeric + hash merger tests + dispatcher coverage.
 
 Pure-function tests; no DB, no bus. Synthetic input lists drive each

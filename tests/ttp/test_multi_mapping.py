@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """E.2.11 — Multi-mapping property tests.
 
 Pins the fan-out semantics from ``development/TTP_TAGGING.md``

@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """``synthetic_files.last_body`` is capped at 64 KB by the repo.
 
 The repo clips on both insert and update so callers may pass the full

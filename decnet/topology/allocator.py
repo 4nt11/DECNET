@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """IP and subnet allocators for MazeNET topologies.
 
 Extracted from :mod:`decnet.topology.generator` so the same primitives

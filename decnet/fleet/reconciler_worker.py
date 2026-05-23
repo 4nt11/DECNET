@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """Long-lived periodic reconciler worker.
 
 Modeled on :mod:`decnet.orchestrator.worker`: same control listener, same

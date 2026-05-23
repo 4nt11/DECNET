@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """Mutator reconcile loop + deployer.resync_agent_topology.
 
 Covers the last mile of Step 7: once the heartbeat handler flags a

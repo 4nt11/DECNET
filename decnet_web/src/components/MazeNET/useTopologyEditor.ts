@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
 /**
  * Status-aware topology editor — wraps {@link useMazeApi} so the MazeNET
  * editor can call one set of primitives regardless of whether the

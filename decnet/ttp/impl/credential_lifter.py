@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """Credential lifter — credential-capture / reuse / brute-force tagger.
 
 E.3.13 of ``development/TTP_TAGGING.md``. Owns rules whose

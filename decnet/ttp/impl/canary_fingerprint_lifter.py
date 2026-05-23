@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """Canary fingerprint lifter — browser-payload derived technique tagger (E.3.11).
 
 Reads canary-payload fingerprints (navigator properties, canvas hashes,

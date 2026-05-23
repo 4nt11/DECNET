@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """Inject the TLS peer cert into ASGI scope — uvicorn ≤ 0.44 does not.
 
 Uvicorn's h11/httptools HTTP protocols build the ASGI ``scope`` dict

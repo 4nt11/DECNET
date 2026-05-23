@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """GET /api/v1/ttp/techniques/{technique_id}/groups — MITRE-tracked groups using *technique_id*.
 
 Read-only reverse-index off the loaded ATT&CK STIX bundle. **NOT an

@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """Phase 3 Step 4 — child CRUD: LAN / decky / edge."""
 from __future__ import annotations
 

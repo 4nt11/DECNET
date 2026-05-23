@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """Provider-agnostic IP→ASN lookup.
 
 A :class:`AsnLookup` is a frozen, sorted array of ``(start_ip,

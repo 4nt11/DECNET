@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """Work-hours gating and backdated mtime sampling.
 
 The current orchestrator stamps every planted file at wall-clock-now,

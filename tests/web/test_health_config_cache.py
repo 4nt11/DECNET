@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """
 TTL-cache contract: under concurrent load, N callers collapse to 1 repo hit
 per TTL window. Tests use fake repo objects — no real DB.

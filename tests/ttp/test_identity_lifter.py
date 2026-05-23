@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """Per-rule unit tests for :class:`IdentityLifter` (E.3.13).
 
 Identity-rollup tags carry ``identity_uuid`` populated and

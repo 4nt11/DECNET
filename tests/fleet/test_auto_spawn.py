@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """Auto-spawn of forwarder from `decnet agent` (and listener from
 `decnet swarmctl`, added in a later patch).
 

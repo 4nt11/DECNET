@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """Coverage for the synthesised-artifact generators.
 
 Each generator MUST be deterministic for a given ``CanaryContext`` —

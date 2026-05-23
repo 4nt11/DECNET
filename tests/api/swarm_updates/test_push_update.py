@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """POST /api/v1/swarm-updates/push — happy paths, rollback, validation."""
 from __future__ import annotations
 

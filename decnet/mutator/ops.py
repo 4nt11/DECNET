@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """Live-mutation ops for active MazeNET topologies.
 
 Each ``apply_<op>`` function consumes a claimed ``TopologyMutation``

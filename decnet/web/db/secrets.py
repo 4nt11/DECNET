@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """Symmetric encryption helper for operator secrets stored in the DB.
 
 ``DECNET_SECRET_KEY`` must be a URL-safe base64-encoded 32-byte Fernet key

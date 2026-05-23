@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """Credential capture + credential-reuse correlation.
 
 Capture (per-attempt rows) lives in ``_core.py``; the reuse correlator

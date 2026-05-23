@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """End-to-end-ish: run one orchestrator tick against a real SQLite repo +
 FakeBus, with the docker subprocess stubbed.  Verifies that:
 

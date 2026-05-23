@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """_build_record must thread country fields through to the upsert payload."""
 from __future__ import annotations
 

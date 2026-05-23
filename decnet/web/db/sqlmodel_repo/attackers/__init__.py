@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """Attacker repository methods.
 
 Per-concern submixins composed onto ``AttackersMixin``. The legacy

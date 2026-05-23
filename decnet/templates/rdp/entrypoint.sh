@@ -1,4 +1,5 @@
 #!/bin/bash
+# SPDX-License-Identifier: AGPL-3.0-or-later
 set -e
 
 # Generate a self-signed cert on first start when NLA is enabled.

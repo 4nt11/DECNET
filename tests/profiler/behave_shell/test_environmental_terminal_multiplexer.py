@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """Step F.2: ``environmental.terminal_multiplexer``."""
 from __future__ import annotations
 

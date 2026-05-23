@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """Coarse behavior classification for DECNET attacker profiles."""
 
 from __future__ import annotations

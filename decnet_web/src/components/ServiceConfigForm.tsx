@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
 import React, { useMemo, useState } from 'react';
 import api from '../utils/api';
 import { useToast } from './Toasts/useToast';

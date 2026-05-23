@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """Add/remove a single service on a deployed decky without full redeploy.
 
 The ``_compose()`` wrapper in :mod:`decnet.engine.deployer` already

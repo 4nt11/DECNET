@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """Tests for IcmpErrorProbe and the underlying icmp_error helpers.
 
 Covers:

@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """GET /swarm/deckies — admin-gated list of decky shards across the fleet."""
 from __future__ import annotations
 

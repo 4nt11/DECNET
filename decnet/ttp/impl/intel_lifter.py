@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """Intel lifter — opportunistic third-party verdict translator (E.3.10).
 
 Reads ``AttackerIntel``-derived payload fields and emits ATT&CK

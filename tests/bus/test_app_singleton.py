@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """Tests for the process-wide app-bus singleton.
 
 Covers the retry-with-backoff behaviour of ``get_app_bus()`` — the

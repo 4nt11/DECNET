@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
 import React, { useEffect, useState, useRef, useMemo } from 'react';
 import { useFocusSearch } from '../hooks/useFocusSearch';
 import { useSearchParams } from 'react-router-dom';

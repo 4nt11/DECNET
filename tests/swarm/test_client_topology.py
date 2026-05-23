@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """AgentClient topology methods — unit tests with a mock httpx transport.
 
 Avoids the full uvicorn+mTLS setup used by the roundtrip test; we just

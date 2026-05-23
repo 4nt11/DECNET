@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """W.3 bus-path drain tests.
 
 Exercises ``_drain_behave_queue`` directly without the asyncio worker

@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
 import React, { useCallback, useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Network, Plus, Power, Trash2, UploadCloud, RefreshCw, Skull, Server, Cpu, Mail } from '../../icons';

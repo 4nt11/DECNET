@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """Seed-backed email loading for the IMAP template.
 
 Verifies that when ``IMAP_EMAIL_SEED`` points at a directory of .eml /

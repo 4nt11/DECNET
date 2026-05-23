@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """GET /swarm/hosts — list enrolled workers, optionally filtered by status."""
 from __future__ import annotations
 

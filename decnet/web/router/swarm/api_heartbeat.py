@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """POST /swarm/heartbeat — agent→master liveness + decky snapshot refresh.
 
 Workers call this every ~30 s with the output of ``executor.status()``.

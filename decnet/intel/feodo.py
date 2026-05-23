@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """abuse.ch Feodo Tracker provider — bulk JSON botnet C2 feed.
 
 Endpoint: ``GET https://feodotracker.abuse.ch/downloads/ipblocklist.json``

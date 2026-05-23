@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
 /* Human-readable labels for realism content classes.
  *
  * Source of truth for the enum values is decnet/realism/taxonomy.py.

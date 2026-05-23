@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """Tests for RFC 5424 syslog formatter."""
 
 import re

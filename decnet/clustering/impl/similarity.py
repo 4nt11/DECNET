@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """Similarity-graph primitives for the connected-components clusterer.
 
 Each function takes two :class:`Observation` projections and returns a

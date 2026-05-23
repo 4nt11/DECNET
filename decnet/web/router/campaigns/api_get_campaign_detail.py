@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """GET /api/v1/campaigns/{uuid} — single campaign row.
 
 Soft-merge handling: if the requested UUID has merged_into_uuid set,

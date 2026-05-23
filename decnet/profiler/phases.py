@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """Recon → exfil phase sequencing for DECNET attacker profiles."""
 
 from __future__ import annotations

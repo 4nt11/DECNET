@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """Canonical hash of a hydrated topology dict.
 
 Both master and agent need to agree on "is the applied state the one

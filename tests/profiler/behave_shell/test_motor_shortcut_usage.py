@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """Step C.2: ``motor.shell_mastery.shortcut_usage``."""
 from __future__ import annotations
 

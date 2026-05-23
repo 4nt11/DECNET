@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """Attribution-engine bus subscriber — v0 Phase 1 skeleton.
 
 Subscribes to ``attacker.observation.>`` and, for each event, ensures

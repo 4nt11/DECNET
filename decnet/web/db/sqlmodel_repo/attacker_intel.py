@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """Attacker-intel domain methods.
 
 Owns reads/writes for ``AttackerIntel`` rows: per-attacker enrichment

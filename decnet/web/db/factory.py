@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """
 Repository factory — selects a :class:`BaseRepository` implementation based on
 ``DECNET_DB_TYPE`` (``sqlite`` or ``mysql``).

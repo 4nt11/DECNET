@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """
 Mock test for BaseRepository to ensure coverage of abstract pass lines.
 """

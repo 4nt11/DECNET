@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """Seed-backed email loading for the POP3 template.
 
 Concat semantics: hardcoded ``_BAIT_EMAILS`` + .eml/.json from the seed

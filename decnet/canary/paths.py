@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """Persona-aware path resolution for canary artifacts.
 
 Linux-persona deckies use POSIX-shaped paths under ``/home/<user>``.

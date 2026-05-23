@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """TTP-tagging API router package — see development/TTP_TAGGING.md.
 
 Contract phase E.1.9: handlers return typed empty values. The repo

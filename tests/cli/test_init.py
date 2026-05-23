@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """Orchestration tests for ``decnet init``.
 
 The command is a thin orchestrator over privileged system calls.  We

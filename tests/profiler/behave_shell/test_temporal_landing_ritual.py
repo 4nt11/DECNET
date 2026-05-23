@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """Step E.3: ``temporal.lifecycle_markers.landing_ritual``."""
 from __future__ import annotations
 

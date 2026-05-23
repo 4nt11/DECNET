@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """Updater executor: directory rotation, probe-driven rollback, safety checks.
 
 All three real seams (`_run_pip`, `_spawn_agent`, `_stop_agent`,

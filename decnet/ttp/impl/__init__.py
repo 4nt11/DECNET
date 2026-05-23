@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """TTP tagger implementations — rule engine + per-source lifters.
 
 Subpackage layout per the provider-subpackage convention used in

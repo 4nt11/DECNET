@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """End-to-end coverage for /api/v1/deckies/files via the live FastAPI app.
 
 The docker subprocess is stubbed; everything else (DB, repo, auth)

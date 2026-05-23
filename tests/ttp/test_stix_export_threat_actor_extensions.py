@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """Integration tests for the x_decnet_* ThreatActor extensions in stix_export.py.
 
 Covers:

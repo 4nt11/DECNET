@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """End-to-end test: AgentClient talks to a live worker agent over mTLS.
 
 Spins up uvicorn in-process on an ephemeral port with real cert files on

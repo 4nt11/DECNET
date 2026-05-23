@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """Backend protocol shared by every LLM transport.
 
 Deliberately narrow: realism consumers need one async ``generate``

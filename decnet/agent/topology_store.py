@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """Agent-side sqlite cache of the currently-applied topology.
 
 **This is a cache, not a source of truth.**  The master is the only

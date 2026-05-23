@@ -1,4 +1,5 @@
 #!/usr/bin/env python3
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """Publish a single event to the local DECNET bus.
 
 Usage: scripts/bus/pub.py <topic> [json-payload] [--type EVENT_TYPE]

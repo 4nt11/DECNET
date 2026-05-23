@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """Backward-compatible shim over :mod:`decnet.ttp.attack_stix`.
 
 Historically this module exposed a hand-maintained

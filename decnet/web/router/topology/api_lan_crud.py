@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """LAN CRUD endpoints — pending-only child mutations.
 
     POST   /topologies/{id}/lans

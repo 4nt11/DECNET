@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """
 Passive OS fingerprinting (p0f-lite) for the DECNET sniffer.
 

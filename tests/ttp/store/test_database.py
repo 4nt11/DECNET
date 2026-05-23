@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """E.2.14b — Database-specific RuleStore properties.
 
 Per ``development/TTP_TAGGING.md`` §E.2.14b: the database backend's

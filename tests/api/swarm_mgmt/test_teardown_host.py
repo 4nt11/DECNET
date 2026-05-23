@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """POST /swarm/hosts/{uuid}/teardown — per-host and per-decky remote teardown."""
 from __future__ import annotations
 

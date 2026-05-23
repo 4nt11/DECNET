@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """Passive + active OS fingerprinting providers.
 
 Consumed by the profiler's `sniffer_rollup` (and, longer-term, by a

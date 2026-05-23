@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """GeoIP provider protocol.
 
 Concrete providers (:mod:`decnet.geoip.rir`, future ``dbip``, ``maxmind``)

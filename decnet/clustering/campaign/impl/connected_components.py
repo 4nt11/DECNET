@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """Connected-components campaign clusterer (v1).
 
 Builds a similarity graph over identities (the layer below — already

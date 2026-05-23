@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
 import type { ApiError } from '../../utils/api';
 import type { FormState, SimpleEvent } from './types';
 

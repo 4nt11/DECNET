@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """RIR delegated-stats provider.
 
 Free, offline, no license: each Regional Internet Registry publishes a

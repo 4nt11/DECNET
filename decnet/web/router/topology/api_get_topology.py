@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """GET /topologies/{id} and /topologies/{id}/status-events."""
 from __future__ import annotations
 

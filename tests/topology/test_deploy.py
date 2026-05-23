@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """Deploy/teardown integration tests for MazeNET topologies.
 
 Docker-touching paths live behind ``@pytest.mark.live`` per

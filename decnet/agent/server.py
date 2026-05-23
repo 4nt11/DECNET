@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """Worker-agent uvicorn launcher.
 
 Starts ``decnet.agent.app:app`` over HTTPS with mTLS enforcement.  The

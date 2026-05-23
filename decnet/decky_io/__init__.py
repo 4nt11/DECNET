@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """Shared primitives for writing/deleting files inside running deckies.
 
 The canary planter and the orchestrator SSH driver both need to drop

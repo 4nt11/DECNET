@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """Tests for the generic Exception handler at decnet/web/api.py.
 
 Mitigation target: threat model F1/I — "Production error handler suppresses

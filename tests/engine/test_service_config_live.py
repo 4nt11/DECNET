@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """Engine-layer coverage for services_live.update_service_config.
 
 Mirrors test_services_live.py — _compose patched to a recorder, real

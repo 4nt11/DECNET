@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
 import pytest
 from decnet.ini_loader import load_ini_from_string, validate_ini_string
 

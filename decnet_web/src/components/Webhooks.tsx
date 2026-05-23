@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
 import React, { useMemo, useState } from 'react';
 import {
   Plus, Trash2, Pencil, Zap, AlertTriangle, X,

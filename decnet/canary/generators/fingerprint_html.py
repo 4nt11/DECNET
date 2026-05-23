@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """HTML fingerprint canary — plausible-looking page with an obfuscated
 browser-fingerprinting payload inlined at the bottom of ``<body>``.
 

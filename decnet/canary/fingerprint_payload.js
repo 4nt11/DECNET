@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
 // Canary fingerprint payload — the JS that runs inside an opened HTML/SVG
 // canary, harvests browser primitives, and beacons the result back to the
 // canary worker.  Ported from canary-self-test.html with the rendering UI

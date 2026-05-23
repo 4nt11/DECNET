@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """Bus wiring for the attacker prober (DEBT-031, worker 2).
 
 The prober fingerprints observed attackers (JARM / HASSH / TCPfp) in a

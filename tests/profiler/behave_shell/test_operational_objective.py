@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """Step G.1: ``operational.objective`` ∈ {recon, exfil, persistence,
 lateral, destructive}."""
 from __future__ import annotations

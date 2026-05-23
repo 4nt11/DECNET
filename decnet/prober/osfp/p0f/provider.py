@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """p0f v2 Provider — loads the vendored .fp databases and matches
 against observed TCP quirks.
 

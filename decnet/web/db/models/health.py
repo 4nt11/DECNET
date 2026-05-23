@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """Health-endpoint DTOs."""
 from typing import Literal, Optional
 

@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """Shared TTPTag emission helper used by per-source lifters.
 
 The rule engine assembles a tag inline inside ``_evaluate_rules``; the

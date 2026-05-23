@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """E.3.18a — Worker hydrates per-lifter rule indexes via watch_store().
 
 Pins the wiring fix from ``development/TTP_TAGGING.md`` §"Worker shape":

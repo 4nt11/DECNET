@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """DOCX instrumenter — inject a remote image into the body.
 
 DOCX files are zip archives carrying ``word/document.xml`` (the body)

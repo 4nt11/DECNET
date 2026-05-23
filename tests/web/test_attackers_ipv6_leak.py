@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """Tests for IPv6 link-local leak columns on Attacker and AttackerIdentity.
 
 Verifies:

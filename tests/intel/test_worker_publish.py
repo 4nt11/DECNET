@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """Intel worker publishes ``attacker.intel.enriched`` per enriched row.
 
 Pins the producer wiring. The worker drains

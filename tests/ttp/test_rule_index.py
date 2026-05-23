@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """Unit tests for :class:`decnet.ttp.impl._rule_index.RuleIndex`.
 
 The dispatch index was extracted from :class:`RuleEngine` so the four

@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """Workers panel DTOs (bus-backed health + control)."""
 from typing import Any, Dict, List, Literal, Optional
 

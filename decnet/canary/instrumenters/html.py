@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """HTML instrumenter — append a 1×1 tracking pixel.
 
 Stdlib-only.  We don't parse the HTML; we just inject the ``<img>``

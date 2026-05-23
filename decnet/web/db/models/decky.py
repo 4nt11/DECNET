@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """DTOs for cross-cutting decky operations (file drops, etc.).
 
 These don't bind to a single table — fleet deckies and MazeNET

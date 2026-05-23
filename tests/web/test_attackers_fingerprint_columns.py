@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """Round-trip tests for the three PR2 fingerprint columns on AttackerIdentity.
 
 Verifies:

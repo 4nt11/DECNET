@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """validate_public_binding refuses footgun configs at master startup.
 
 The validator no-ops under pytest by design (so unit tests in unrelated

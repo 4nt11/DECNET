@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """Generator and instrumenter factories.
 
 Same lazy-import pattern as :mod:`decnet.intel.factory` — concrete

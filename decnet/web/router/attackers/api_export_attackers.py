@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """GET /api/v1/attackers/export — bulk JSON export of all attacker + intel data."""
 import json
 from datetime import datetime, timezone

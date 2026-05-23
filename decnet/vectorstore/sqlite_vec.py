@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """SQLite + sqlite-vec backend.
 
 Lazy-imports the ``sqlite_vec`` extension. If the extension isn't

@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """E.2.8 — GET endpoint shape + auth contract for /api/v1/ttp/*.
 
 The TTP router landed at E.1.9 (contract phase) returning typed

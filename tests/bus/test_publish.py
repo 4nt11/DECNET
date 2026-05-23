@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """Tests for :mod:`decnet.bus.publish`.
 
 The whole point of ``publish_safely`` is that it never raises back at the

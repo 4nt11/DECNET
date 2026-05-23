@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """Registered feature functions.
 
 Each entry takes a ``SessionContext`` and yields zero or more

@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """Agent topology endpoints — contract-level tests with mocked ops."""
 from __future__ import annotations
 

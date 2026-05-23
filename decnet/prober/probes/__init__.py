@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
 # Import all probe modules to trigger ActiveProbeMeta registration.
 from decnet.prober.probes.hassh import HasshProbe as HasshProbe
 from decnet.prober.probes.icmp6_error_probe import Icmp6ErrorProbe as Icmp6ErrorProbe

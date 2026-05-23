@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """GET /swarm/hosts/{uuid} — fetch a single worker by UUID."""
 from __future__ import annotations
 

@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """IPv6 link-local leak lifter — opsec-failure tagger (R0059).
 
 Reads ``ipv6_leak`` source-kind events emitted by the passive sniffer

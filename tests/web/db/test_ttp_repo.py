@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """E.2.13 — Repository tests for the TTP-tag mixin.
 
 Pins the repo contract from ``development/TTP_TAGGING.md`` §E.2.13:

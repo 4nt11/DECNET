@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """Per-rule unit tests for :class:`CanaryFingerprintLifter` (E.3.11).
 
 Pins the predicates for R0049–R0053 and the

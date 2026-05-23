@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """Step 9: calibration grid lockdown — the Phase A gate.
 
 Runs the **pure engine** (``behave_shell.extract_session()``) against

@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """TTP-tagging repository — ``ttp_tag`` reads + idempotent inserts.
 
 Implementation phase E.3.3 of ``development/TTP_TAGGING.md``. The

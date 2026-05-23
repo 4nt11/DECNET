@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """AbuseIPDB provider.
 
 Endpoint: ``GET https://api.abuseipdb.com/api/v2/check``

@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """Realism library — synthetic content + scheduling primitives.
 
 A shared, importable library that produces *plausible* artifacts (file

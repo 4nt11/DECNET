@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """Backend dispatch.
 
 Reads ``DECNET_REALISM_LLM`` to pick a concrete :class:`LLMBackend`.

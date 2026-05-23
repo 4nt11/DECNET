@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """Step G.8: ``emotional_valence.frustration_venting`` ∈ {none, detected}.
 
 Hard 0.5 confidence cap.

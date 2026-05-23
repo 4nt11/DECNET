@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """Vectorstore factory — selects a :class:`BaseVectorStore` implementation.
 
 Dispatch keys:

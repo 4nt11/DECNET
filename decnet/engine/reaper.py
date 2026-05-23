@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """Orphan Docker resource reaper for MazeNET topologies.
 
 Every topology's Docker resources carry the fixed prefix

@@ -1,4 +1,5 @@
 #!/usr/bin/env python3
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """
 MySQLserver.
 Sends a realistic MySQL 5.7 server handshake, reads the client login

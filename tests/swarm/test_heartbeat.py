@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """Tests for POST /swarm/heartbeat — cert pinning + shard snapshot refresh."""
 from __future__ import annotations
 

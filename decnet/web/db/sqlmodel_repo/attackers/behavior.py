@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """Per-attacker behavior signals (TCP fingerprint, timing stats, phase
 sequence, tool guesses, KEX order, SSH client banners)."""
 from __future__ import annotations

@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """
 Regression: the ingester's JA4H path must fire when a ja4h field is present
 in the sd-block of an http_request_fingerprint event (new shape, emitted by

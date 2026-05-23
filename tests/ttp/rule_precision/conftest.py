@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """Fixtures for the per-rule precision suite.
 
 Two halves:

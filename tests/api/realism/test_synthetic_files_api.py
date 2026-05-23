@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """GET /api/v1/realism/synthetic-files — paginated browser API."""
 from __future__ import annotations
 

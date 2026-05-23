@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """E.2.10 — Confidence model tests.
 
 Pins the confidence calculus from ``development/TTP_TAGGING.md``

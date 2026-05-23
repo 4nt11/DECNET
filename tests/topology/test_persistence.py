@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """MazeNET persistence-layer tests: generator → repo → hydrate roundtrip."""
 import pytest
 

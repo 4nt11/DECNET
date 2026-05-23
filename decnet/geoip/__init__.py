@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """
 GeoIP enrichment — maps attacker IPs to country codes for attacker intelligence.
 

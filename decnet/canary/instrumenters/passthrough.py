@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """Passthrough instrumenter — bytes go to disk unchanged.
 
 Used as the dispatch fallback for content types we can't safely

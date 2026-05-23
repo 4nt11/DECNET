@@ -1,4 +1,5 @@
 #!/usr/bin/env python3
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """
 Redisserver.
 Implements enough of the RESP protocol to respond to AUTH, INFO, CONFIG GET,

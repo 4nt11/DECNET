@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """Tests for _ja4h computation and QUIC helpers in decnet.sniffer.fingerprint."""
 from __future__ import annotations
 

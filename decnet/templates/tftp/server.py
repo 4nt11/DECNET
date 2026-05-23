@@ -1,4 +1,5 @@
 #!/usr/bin/env python3
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """
 TFTP server (UDP 69).
 Parses RRQ (read) and WRQ (write) requests, logs filename and transfer mode,

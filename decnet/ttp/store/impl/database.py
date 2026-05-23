@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """Database-backed rule store — ``ttp_rule`` + ``ttp_rule_state``.
 
 E.3.6 implementation. Right for swarm: master syncs filesystem changes

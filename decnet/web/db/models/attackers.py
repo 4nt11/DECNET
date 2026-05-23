@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """Attacker core + per-attacker behavioral rows.
 
 Per-session keystroke-dynamics fingerprints have moved out of this

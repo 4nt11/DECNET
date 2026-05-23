@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """Vector-store abstractions: :class:`BaseVectorStore` ABC + record types.
 
 Every backend (sqlite-vec, in-memory fake, future pgvector / Qdrant)

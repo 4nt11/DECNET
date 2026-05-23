@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """Step D.7: ``cognitive.error_resilience.fallback_to_man``."""
 from __future__ import annotations
 

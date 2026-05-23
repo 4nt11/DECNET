@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """
 TCP/IP stack fingerprinting via SYN-ACK analysis.
 

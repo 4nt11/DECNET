@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """decnet.config_ini — INI file loader, precedence, section routing."""
 from __future__ import annotations
 

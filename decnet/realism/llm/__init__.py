@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """LLM backend for the realism library.
 
 Pluggable per the provider-subpackages convention (mirrors

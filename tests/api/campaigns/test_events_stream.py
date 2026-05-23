@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """SSE events stream — GET /api/v1/campaigns/events.
 
 Mirror of :mod:`tests.api.identities.test_events_stream`. Drives the

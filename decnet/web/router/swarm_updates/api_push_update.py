@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """POST /swarm-updates/push — fan a tarball of the master's tree to workers.
 
 Mirrors the ``decnet swarm update`` CLI flow: build the tarball once,

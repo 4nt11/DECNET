@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """GET /api/v1/orchestrator/events/stats — failure-count badge endpoint (DEBT-042)."""
 from __future__ import annotations
 

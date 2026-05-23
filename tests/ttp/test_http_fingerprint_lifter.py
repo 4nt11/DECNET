@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """Per-predicate unit tests for :class:`HttpFingerprintLifter` (PR2).
 
 Covers HFP-0001 (scanner JA4H), HFP-0002 (h2/h3 settings probe),

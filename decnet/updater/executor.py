@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """Update/rollback orchestrator for the DECNET self-updater.
 
 Directory layout owned by this module (root = ``install_dir``):

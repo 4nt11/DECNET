@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """Tests for the intel provider factory.
 
 The factory returns a **list** of configured providers (not a singleton

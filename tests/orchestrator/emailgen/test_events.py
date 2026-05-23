@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """events.to_row / topic_for / event_type_for."""
 from __future__ import annotations
 

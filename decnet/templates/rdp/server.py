@@ -1,4 +1,5 @@
 #!/usr/bin/env python3
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """Minimal honeypot RDP server.
 
 Two operating modes share the same X.224 Connection Request parser:

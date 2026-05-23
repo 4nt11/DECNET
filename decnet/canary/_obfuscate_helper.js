@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
 // Node helper invoked by decnet.canary.obfuscator.
 // Reads {code, options} JSON from stdin, writes obfuscated JS to stdout.
 // Kept dependency-light on purpose: only javascript-obfuscator.

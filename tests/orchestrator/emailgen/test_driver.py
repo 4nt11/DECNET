@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """EmailDriver: inject a fake LLM backend + stub docker exec; verify
 EML parse-and-repair and payload metadata."""
 from __future__ import annotations

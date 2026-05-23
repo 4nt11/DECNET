@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """
 RBAC contract test — every route is classified by server-side dependency
 introspection and exercised with a viewer JWT.

@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """Threat-intel provider factory.
 
 Returns the **list** of configured :class:`IntelProvider` instances —

@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """
 Tests for the prober worker — target discovery from the log stream and
 probe cycle behavior (JARM, HASSH, TCP/IP fingerprinting).

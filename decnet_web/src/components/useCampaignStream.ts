@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
 /**
  * Campaign-clustering event stream — opens an SSE connection to
  * `/campaigns/events` and dispatches typed events to the caller.

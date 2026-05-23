@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """Prompt builders for LLM-enriched content.
 
 * :mod:`decnet.realism.prompts.email` — corporate-email body builder.

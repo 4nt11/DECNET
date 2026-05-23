@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """Extract a labelled corpus from the production sqlite DB.
 
 Run on the operator workstation against a real ``decnet-prod.db``.

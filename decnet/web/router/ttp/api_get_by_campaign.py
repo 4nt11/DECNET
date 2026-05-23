@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """GET /api/v1/ttp/by-campaign/{campaign_uuid} — campaign-wide TTP rollup."""
 from __future__ import annotations
 

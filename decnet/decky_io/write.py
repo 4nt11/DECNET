@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """``docker exec``-driven file write/delete inside a decky container.
 
 The write path streams a base64-encoded payload over stdin to

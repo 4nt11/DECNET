@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """Coverage for the operator-upload instrumenters.
 
 Each instrumenter is round-tripped against a small, real-shaped

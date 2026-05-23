@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
 /* Dev-only feature gate.
  *
  * Reads VITE_DECNET_DEVELOPER at build time. Vite inlines the value

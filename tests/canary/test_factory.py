@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """Coverage for the generator/instrumenter factory + MIME dispatch.
 
 The concrete generators and instrumenters land in subsequent commits;

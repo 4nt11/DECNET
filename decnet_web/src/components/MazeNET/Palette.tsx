@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
 import React from 'react';
 import { GitMerge, ShieldAlert, Server, Monitor, Shield, Database, Cpu, Globe,
          Terminal, Lock, Folder, HardDrive, Users, KeyRound,

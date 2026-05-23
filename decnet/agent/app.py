@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """Worker-side FastAPI app.
 
 Protected by mTLS at the ASGI/uvicorn transport layer: uvicorn is started

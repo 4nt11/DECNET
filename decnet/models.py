@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """
 DECNET Domain Models.
 Centralized repository for all Pydantic specifications used throughout the project.

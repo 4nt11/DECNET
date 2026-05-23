@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """DECNET — honeypot deception-network framework.
 
 This __init__ runs once, on the first `import decnet.*`. It seeds

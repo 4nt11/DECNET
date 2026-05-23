@@ -1,4 +1,5 @@
 #!/usr/bin/env bash
+# SPDX-License-Identifier: AGPL-3.0-or-later
 # Run the DECNET API under memray to capture an allocation profile.
 # Stop with Ctrl-C; then render with `memray flamegraph <bin>`.
 set -euo pipefail

@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """GET /system/deployment-mode — tells the UI whether a deploy will shard
 across SWARM workers or land on the master itself.
 

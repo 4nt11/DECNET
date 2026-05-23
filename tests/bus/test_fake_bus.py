@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """Tests for :class:`decnet.bus.fake.FakeBus` and :class:`NullBus`."""
 from __future__ import annotations
 

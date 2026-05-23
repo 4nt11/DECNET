@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
 import React from 'react';
 import { Server, Trash2 } from '../../../icons';
 import type { Edge, MazeNode } from '../types';

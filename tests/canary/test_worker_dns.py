@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """DNS surface coverage for the canary worker.
 
 We don't open a real UDP socket — instead we drive

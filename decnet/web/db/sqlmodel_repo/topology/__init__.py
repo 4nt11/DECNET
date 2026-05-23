@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """MazeNET topology repository methods.
 
 The full domain spans ~700 lines of methods across topologies, LANs,

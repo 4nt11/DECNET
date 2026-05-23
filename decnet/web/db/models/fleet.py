@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """Fleet decky table — DB mirror of ``decnet-state.json``.
 
 The legacy unihost / MACVLAN / IPVLAN deploy path persists fleet state to a

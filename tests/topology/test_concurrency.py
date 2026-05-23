@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """Optimistic-concurrency (version) checks on topology child mutations."""
 from __future__ import annotations
 

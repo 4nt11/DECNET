@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """Orchestrator-emitted activity events.
 
 Purpose-built sibling to ``logs.Log`` so attacker-originated events stay

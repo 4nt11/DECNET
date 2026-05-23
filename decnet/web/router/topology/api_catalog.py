@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """Read-only catalog endpoints — services, next-subnet, next-ip.
 
 These wrap fleet/allocator helpers so the phase-4 canvas UI can lean

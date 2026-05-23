@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """GET /api/v1/attackers/export/stix — fleet-wide STIX 2.1 bundle.
 
 Returns a self-contained STIX 2.1 Bundle covering every attacker the

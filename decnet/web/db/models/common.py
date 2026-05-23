@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """Generic response shapes used across multiple router domains."""
 from __future__ import annotations
 

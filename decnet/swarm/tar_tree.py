@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """Build a gzipped tarball of the master's working tree for pushing to workers.
 
 Always excludes the obvious large / secret / churn paths: ``.venv/``,

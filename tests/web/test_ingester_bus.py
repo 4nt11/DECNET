@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """Bus wiring for the ingester (DEBT-031, worker 6).
 
 The ingester emits one ``system.log`` event per DB-committed batch via

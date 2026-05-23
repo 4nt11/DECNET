@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """TTP worker resolves ``attacker_uuid`` from ``attacker_ip`` per repo lookup.
 
 The collector publishes ``attacker.session.ended`` with

@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """ASN provider factory — mirror of :mod:`decnet.geoip.factory`.
 
 Dispatch key: ``DECNET_ASN_PROVIDER`` (default ``iptoasn``). Lazy

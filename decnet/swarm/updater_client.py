@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """Master-side HTTP client for the worker's self-updater daemon.
 
 Sibling of ``AgentClient``: same mTLS identity (same DECNET CA, same

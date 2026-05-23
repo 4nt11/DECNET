@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """Asciinema event types + shard-line parsing helpers.
 
 Shard lines are JSON objects ``{"sid": ..., "t": float, "ch": "i"|"o",

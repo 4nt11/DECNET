@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """HTTP fingerprint lifter — JA4H / H2-settings / H3-settings / JA4-QUIC tagger.
 
 Reads ``http_fingerprint`` source-kind events and emits Reconnaissance

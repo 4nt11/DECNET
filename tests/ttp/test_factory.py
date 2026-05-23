@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """Contract tests for :mod:`decnet.ttp.factory` (E.1.4).
 
 Scoped to the factory + composite dispatch contract: env var routing,

@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """Per-topology persona endpoints — GET/PUT /topologies/{id}/personas."""
 from __future__ import annotations
 

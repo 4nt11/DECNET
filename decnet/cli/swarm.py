@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """`decnet swarm ...` — master-side operator commands (HTTP to local swarmctl)."""
 
 from __future__ import annotations

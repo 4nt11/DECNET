@@ -1,4 +1,5 @@
 #!/usr/bin/env bash
+# SPDX-License-Identifier: AGPL-3.0-or-later
 # Open the newest profile artifact in the right viewer.
 #
 # Usage:

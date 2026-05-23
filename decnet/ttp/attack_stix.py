@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """STIX 2.1 backed MITRE ATT&CK lookups.
 
 Replaces the hand-maintained technique-name dict that used to live in

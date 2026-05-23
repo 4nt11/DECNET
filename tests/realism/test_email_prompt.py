@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """Prompt builder behaviour: language constraint, em-dash suppression,
 deterministic mannerism injection."""
 from __future__ import annotations

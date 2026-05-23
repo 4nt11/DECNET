@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """
 Fleet builder — shared logic for constructing DeckyConfig lists.
 

@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """Parser tests for RIR delegated-stats files."""
 from __future__ import annotations
 

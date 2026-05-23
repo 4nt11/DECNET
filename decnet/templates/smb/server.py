@@ -1,4 +1,5 @@
 #!/usr/bin/env python3
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """Minimal honeypot SMB2 server.
 
 Hand-rolled asyncio framer that does just enough of MS-SMB2 to lure a

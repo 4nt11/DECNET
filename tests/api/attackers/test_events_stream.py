@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """SSE events stream — GET /attackers/{uuid}/events (Phase 5).
 
 Mirrors the topology events test pattern at

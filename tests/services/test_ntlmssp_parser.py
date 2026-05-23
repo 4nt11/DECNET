@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """NTLMSSP Type 3 parser tests.
 
 Builds Type 3 buffers field-by-field per MS-NLMP §2.2.1.3 and asserts

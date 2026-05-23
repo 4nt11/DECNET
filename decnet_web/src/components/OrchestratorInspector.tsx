@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
 import React, { useMemo } from 'react';
 import { X, Cpu, Copy, ArrowRight } from '../icons';
 import { useToast } from './Toasts/useToast';

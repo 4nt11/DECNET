@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """Per-rule unit tests for :class:`IntelLifter` (E.3.10 + 2026-05-02 audit).
 
 Per Appendix A.10 each provider's mapping is exercised positively with

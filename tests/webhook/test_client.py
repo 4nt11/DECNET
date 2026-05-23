@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """Unit tests for decnet.webhook.client — HMAC + retry policy."""
 from __future__ import annotations
 

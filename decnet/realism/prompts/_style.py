@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """Shared stylometric guards for LLM-bound prompts.
 
 Lifted from the original ``orchestrator.emailgen.prompt`` em-dash

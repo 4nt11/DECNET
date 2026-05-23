@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """Repo tests for ``observed_attachments`` upsert (DEBT-046).
 
 The table is the per-hash sibling of ``attacker_intel`` — every

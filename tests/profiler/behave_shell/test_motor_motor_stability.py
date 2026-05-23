@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """Step B.2: ``motor.motor_stability``."""
 from __future__ import annotations
 

@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """Read-only ``/credential-reuse`` API tests.
 
 Mirrors ``tests/api/credentials/test_get_credentials.py`` for the

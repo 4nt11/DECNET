@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """Unit tests for ``decnet.profiler.behave_shell._handler``.
 
 Direct exercise of ``handle_session_ended()`` without the worker loop

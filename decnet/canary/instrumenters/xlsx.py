@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """XLSX instrumenter — embed an external-image link.
 
 XLSX is structurally identical to DOCX (Office Open XML zip).  The

@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """Coverage for the canary planter (docker exec wrapper).
 
 We don't actually invoke docker — :func:`asyncio.create_subprocess_exec`

@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """Realism contract adapter for canary generators.
 
 Stage 7 of the realism migration.  The orchestrator's planner picks a

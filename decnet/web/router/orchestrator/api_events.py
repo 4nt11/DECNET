@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """SSE stream of orchestrator events.
 
 Subscribes to ``orchestrator.>`` for the duration of the request and

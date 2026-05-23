@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """Step C.3: ``motor.shell_mastery.pipe_chaining_depth``."""
 from __future__ import annotations
 

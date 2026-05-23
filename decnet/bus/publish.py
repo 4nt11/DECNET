@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """Fire-and-forget publish helpers shared across every worker.
 
 Lifted out of ``decnet/mutator/engine.py`` once a second caller showed up

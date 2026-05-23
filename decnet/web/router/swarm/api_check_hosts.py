@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """POST /swarm/check — active mTLS probe of every enrolled worker.
 
 Updates ``SwarmHost.status`` and ``last_heartbeat`` for each host based

@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """E.2.6 — "Tolerates absence" per-lifter conformance.
 
 Every per-source lifter is allowed (and expected) to encounter

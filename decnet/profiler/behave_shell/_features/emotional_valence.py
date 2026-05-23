@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """``emotional_valence.*`` feature functions (Phase G, soft block).
 
 All four primitives in this module ride a hard 0.5 confidence cap

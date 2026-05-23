@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """Boot-time ATT&CK bundle validation for lifters and the UKC tactic map.
 
 Mirrors what :func:`decnet.ttp.worker.run_ttp_worker_loop` runs at

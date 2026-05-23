@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """Pagination + filter + prune for orchestrator_events repo methods."""
 from __future__ import annotations
 

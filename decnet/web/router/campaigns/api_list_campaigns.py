@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """GET /api/v1/campaigns — paginated list of campaigns.
 
 Mirror of :mod:`decnet.web.router.identities.api_list_identities` for

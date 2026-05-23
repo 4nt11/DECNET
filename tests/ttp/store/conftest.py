@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """Parametrized ``rule_store`` fixture for E.2.14b.
 
 The conformance contract from ``development/TTP_TAGGING.md`` §E.2.14b:

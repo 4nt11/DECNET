@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """Shared fixtures for ``tests/web/db/`` — dual-backend repo testing.
 
 The ``db_backends`` fixture parametrizes a repository instance over

@@ -1,4 +1,5 @@
 #!/usr/bin/env python3
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """
 PostgreSQLserver.
 Reads the startup message, extracts username and database, responds with

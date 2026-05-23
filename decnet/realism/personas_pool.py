@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """Global persona pool — non-topology deckies.
 
 DECNET runs in three deployment shapes that emit running deckies:

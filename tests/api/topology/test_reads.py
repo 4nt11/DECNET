@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """Phase 3 Step 2 — read endpoints: list / get / status-events / catalog."""
 from __future__ import annotations
 

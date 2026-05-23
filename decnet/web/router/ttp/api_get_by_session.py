@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """GET /api/v1/ttp/by-session/{session_id} — session timeline of TTP tags."""
 from __future__ import annotations
 

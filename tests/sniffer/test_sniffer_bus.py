@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """Bus wiring for the fleet sniffer (DEBT-031, worker 1).
 
 The sniff loop itself lives in a dedicated thread running scapy and

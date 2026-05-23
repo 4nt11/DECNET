@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """E.2.14b — Cross-backend conformance for :class:`RuleStore`.
 
 Both :class:`FilesystemRuleStore` and :class:`DatabaseRuleStore` must

@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """Tests for the p0f v2 .fp parser (decnet/prober/osfp/p0f/format.py)."""
 from __future__ import annotations
 

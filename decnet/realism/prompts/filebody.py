@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """Class-conditioned prompt builder for user-class file bodies.
 
 Stage 6 of the realism migration.  Only user-classes (``note``,

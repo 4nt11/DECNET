@@ -1,4 +1,5 @@
 #!/usr/bin/env python3
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """
 POP3 server (port 110).
 Full POP3 state machine with bait mailbox.

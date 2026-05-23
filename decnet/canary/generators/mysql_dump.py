@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """Fake ``mysqldump`` output that phones home on import.
 
 Mirrors the Canarytokens.org MySQL-dump trick.  When a victim runs

@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """Canary tokens — operator-facing CRUD.
 
 Mounted under ``/api/v1/canary``.  Covers:

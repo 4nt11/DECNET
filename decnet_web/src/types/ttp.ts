@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
 export interface TechniqueRow {
   technique_id: string;
   technique_name: string | null;

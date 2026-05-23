@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """RPKI validator protocol.
 
 Concrete validators (:mod:`decnet.rpki.ripestat`, future offline providers)

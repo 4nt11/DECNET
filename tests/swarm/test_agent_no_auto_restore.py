@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """Step 8 regression: the agent must NEVER auto-restore a topology on boot.
 
 Guiding rule: master is authoritative, agent is a dumb executor.  If an

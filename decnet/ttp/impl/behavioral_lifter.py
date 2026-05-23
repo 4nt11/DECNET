@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """Behavioral lifter — derives techniques from cross-event session signal.
 
 E.3.9 of ``development/TTP_TAGGING.md``. Owns YAML rules R0031–R0040 by

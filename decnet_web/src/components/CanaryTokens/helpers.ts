@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
 import type { ApiError } from '../../utils/api';
 
 /** Normalize an axios error into operator-friendly text, with role

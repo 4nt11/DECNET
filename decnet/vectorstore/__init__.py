@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """Vector store substrate for behavioral fingerprint similarity search.
 
 Provider-pluggable storage for ``(kind, id, vector)`` triples used by the

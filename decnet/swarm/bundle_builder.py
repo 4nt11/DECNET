@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """Tarball + bootstrap construction for agent-enrollment bundles.
 
 Pure I/O, no FastAPI dependency — independently testable.

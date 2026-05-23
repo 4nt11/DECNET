@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """OS / TCP fingerprint rollup for DECNET attacker profiles.
 
 Consumes sniffer-emitted `tcp_syn_fingerprint` / `tcp_flow_timing` events and

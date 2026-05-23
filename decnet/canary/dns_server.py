@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """Minimal authoritative DNS server for canary tokens (stdlib only).
 
 We don't need a full resolver — only enough to:

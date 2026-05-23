@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """``decnet realism ...`` — content-engine maintenance commands.
 
 After stage 5 of the realism migration, this is the only remaining

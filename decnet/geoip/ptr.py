@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """Reverse DNS (PTR record) lookup for attacker IPs.
 
 Colocated with ``decnet.geoip`` because the shape matches: take an IP,

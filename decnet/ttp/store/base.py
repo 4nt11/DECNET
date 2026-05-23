@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """Rule store ABC + change/state value types.
 
 Contract step E.1.11. The two backends (``impl/filesystem.py``,

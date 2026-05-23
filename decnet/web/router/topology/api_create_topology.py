@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """POST /topologies — generate and persist a new MazeNET topology."""
 from __future__ import annotations
 

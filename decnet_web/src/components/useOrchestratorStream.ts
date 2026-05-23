@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
 /**
  * Orchestrator event stream — opens an SSE connection to
  * `/orchestrator/events/stream` and dispatches typed events to the

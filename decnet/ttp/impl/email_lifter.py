@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """Email lifter — SMTP message-level technique tagger (E.3.12).
 
 Reads pre-parsed SMTP message payload (headers as a name-only list,

@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """LLM backend factory + Ollama implementation."""
 from __future__ import annotations
 

@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """iptoasn.com IP→ASN provider.
 
 Daily-refreshed gzipped TSV dump of the global BGP table, derived from

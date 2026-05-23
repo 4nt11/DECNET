@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """Persona schema for realism content generation.
 
 Stored as a JSON list on :attr:`Topology.email_personas`.  Each persona

@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """Campaign clusterer protocol — layer above identity resolution.
 
 Mirrors :mod:`decnet.clustering.base` for the layer above. Each concrete

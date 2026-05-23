@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
 import { useContext } from 'react';
 import { ToastContext } from './toast-context';
 import type { ToastContextValue } from './toast-context';

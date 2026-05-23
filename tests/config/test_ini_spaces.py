@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
 from decnet.ini_loader import load_ini_from_string
 
 def test_load_ini_with_spaces_around_equals():

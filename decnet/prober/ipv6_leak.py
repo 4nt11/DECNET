@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """Active IPv6 link-local solicitation prober.
 
 Sends ICMPv6 Neighbor Solicitation and Echo Request packets to the

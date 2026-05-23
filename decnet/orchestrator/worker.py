@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """Orchestrator main loop.
 
 One tick = one action pick + one driver invocation + one DB write +

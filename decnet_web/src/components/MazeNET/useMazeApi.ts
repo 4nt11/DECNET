@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
 import { useCallback, useMemo } from 'react';
 import api from '../../utils/api';
 import { ARCHETYPES as DEFAULT_ARCHETYPES, DEFAULT_SERVICES } from './data';

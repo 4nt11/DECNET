@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """Email driver — pluggable-LLM EML generation + decky-side delivery.
 
 One :class:`EmailAction` becomes one EML written into the mail decky's

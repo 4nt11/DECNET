@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """Long-running identity-resolution clusterer worker.
 
 Runs :meth:`Clusterer.tick` on bus-wake or slow-tick fallback. Mirrors

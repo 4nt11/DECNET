@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """Per-decky, per-service config roundtrips through persist + compose."""
 from __future__ import annotations
 

@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """Emailgen — email-specific delivery, scheduling, and threading.
 
 After stage 5 of the realism migration, ``emailgen`` is no longer a

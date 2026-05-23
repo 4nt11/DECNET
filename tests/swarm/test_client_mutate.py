@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """Roundtrip test for AgentClient.mutate() through a live in-process
 agent over mTLS.  Mirrors test_client_agent_roundtrip's harness."""
 from __future__ import annotations

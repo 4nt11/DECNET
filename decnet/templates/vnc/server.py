@@ -1,4 +1,5 @@
 #!/usr/bin/env python3
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """
 VNC (RFB)server.
 Performs the RFB 3.8 handshake, offers VNC authentication, captures the

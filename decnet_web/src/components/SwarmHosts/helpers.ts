@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
 import type { ApiError } from '../../utils/api';
 
 export const AGENT_NAME_RE = /^[a-z0-9][a-z0-9-]{0,62}$/;

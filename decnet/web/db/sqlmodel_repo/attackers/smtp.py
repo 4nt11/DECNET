@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """SMTP victim-domain tracking (per-attacker counters and
 cross-attacker aggregate)."""
 from __future__ import annotations

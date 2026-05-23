@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """W.2 smoke: BEHAVE library pins are install-time importable.
 
 Three asserts protect the pyproject.toml pin from a broken wheel /

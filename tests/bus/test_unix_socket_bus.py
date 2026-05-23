@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """End-to-end tests for :class:`UnixSocketBus` against a real :class:`BusServer`.
 
 These tests run in the dev loop (no pytest marker) because they only need

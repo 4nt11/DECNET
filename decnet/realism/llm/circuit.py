@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """Process-local circuit breaker for LLM calls.
 
 Per-call timeouts (``asyncio.wait_for(llm.generate, timeout=...)``)

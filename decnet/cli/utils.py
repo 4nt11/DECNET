@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """Shared CLI helpers: console, logger, process management, swarm HTTP client.
 
 Submodules reference these as ``from . import utils`` then ``utils.foo(...)``

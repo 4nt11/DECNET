@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
 import api from './api';
 import type { GroupRef, TechniqueRow, TTPTagDetailRow } from '../types/ttp';
 

@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """Filesystem-backed rule store — reads ``./rules/ttp/`` + inotify watch.
 
 E.3.5 implementation. Linux-only by construction: the inotify dep

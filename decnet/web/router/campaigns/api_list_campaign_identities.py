@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """GET /api/v1/campaigns/{uuid}/identities — identities for a campaign.
 
 Returns the ``AttackerIdentity`` rows whose ``campaign_id`` FK points

@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """Shared helpers for the Phase-3 child-CRUD routes."""
 from __future__ import annotations
 

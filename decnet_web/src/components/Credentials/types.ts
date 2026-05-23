@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
 export type { CredentialEntry } from '../CredentialsInspector';
 export type { CredentialReuseRow } from '../CredentialReuseInspector';
 

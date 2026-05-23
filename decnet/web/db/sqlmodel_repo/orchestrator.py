@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """Orchestrator event log + email log + per-pool prune helpers."""
 from __future__ import annotations
 

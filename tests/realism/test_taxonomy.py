@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """Coverage for :mod:`decnet.realism.taxonomy`.
 
 The enum values are persisted on ``synthetic_files.content_class`` and

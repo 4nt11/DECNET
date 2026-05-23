@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """GET/PUT ``/topologies/{id}/personas`` — per-topology email persona pool.
 
 The global pool (``decnet/web/router/emailgen/api_personas.py``) drives

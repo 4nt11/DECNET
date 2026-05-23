@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """MISP event builder for DECNET attacker data.
 
 Converts a STIX 2.1 Bundle (built by stix_export.build_attacker_bundle /

@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
 /**
  * Identity-resolution event stream — opens an SSE connection to
  * `/identities/events` and dispatches typed events to the caller.

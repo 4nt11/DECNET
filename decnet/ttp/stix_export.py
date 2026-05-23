@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """STIX 2.1 bundle builder for a DECNET attacker observation.
 
 Pure function — no I/O. The caller (router) does all DB reads and

@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """POST/DELETE /api/v1/deckies/files — generic file drops on deckies.
 
 Wraps :func:`decnet.decky_io.write_file_to_container` /

@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """
 Tests for the composer — verifies BASE_IMAGE injection and distro heterogeneity.
 """

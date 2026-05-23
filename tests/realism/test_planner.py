@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """Realism planner — picks (decky, persona, class, action, mtime).
 
 Stage 3 ships create-only plans; the edit branch lands in 3b.  Tests

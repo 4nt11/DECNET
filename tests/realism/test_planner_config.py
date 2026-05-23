@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """Operator-tunable planner knobs (apply_payload / current_payload).
 
 §3c of the realism handoff: the planner reads mutable module globals

@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """record / update / list / pick-for-edit on the synthetic_files table.
 
 Stage 3 of the realism migration introduces the synthetic_files

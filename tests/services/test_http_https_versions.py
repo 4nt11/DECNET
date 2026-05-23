@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """http_versions multi_enum field: coercion, compose env."""
 import json
 

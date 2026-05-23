@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """Action picker for the orchestrator.
 
 Stage-3 realism: file actions are sourced from

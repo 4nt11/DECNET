@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """next_iteration mutators per content class.
 
 Stage 3b — read-modify-write contract: each editor takes a previous

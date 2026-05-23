@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """Remote updates DTOs (master → worker /updater fan-out)."""
 from typing import Any, Literal, Optional
 

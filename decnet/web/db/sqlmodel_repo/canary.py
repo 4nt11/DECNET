@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """Canary blob/token CRUD + trigger ingestion."""
 from __future__ import annotations
 

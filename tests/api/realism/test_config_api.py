@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """GET/PUT /api/v1/realism/config — operator-tunable weights."""
 from __future__ import annotations
 

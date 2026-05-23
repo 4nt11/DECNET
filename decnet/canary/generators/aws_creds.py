@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """Fake ``~/.aws/credentials`` block (passive bait).
 
 This is the **passive** variant — no callback wiring.  An attacker

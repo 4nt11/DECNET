@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """POST /deckies/deploy additive vs replace_fleet semantics.
 
 Default behaviour (replace_fleet=False) appends the INI to the existing

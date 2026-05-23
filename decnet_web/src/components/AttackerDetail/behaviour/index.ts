@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
 export { BehaviouralPrimitivesPanel } from './BehaviouralPrimitivesPanel';
 export {
   BehaviorHeadline, BeaconBlock, DetectedToolsBlock, PhaseSequenceBlock,

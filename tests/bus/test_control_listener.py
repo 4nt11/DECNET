@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """Tests for :func:`run_control_listener`.
 
 The listener is the worker-side half of the Workers panel stop flow:

@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """
 Tests for decnet.mutator — mutation engine, retry logic, due-time scheduling.
 All subprocess and state I/O is mocked; no Docker or filesystem access.

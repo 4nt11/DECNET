@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """Global persona pool — disk-backed source for fleet/shard mail deckies."""
 from __future__ import annotations
 

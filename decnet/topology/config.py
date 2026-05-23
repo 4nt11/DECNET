@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """MazeNET topology config + in-memory generation output."""
 from __future__ import annotations
 

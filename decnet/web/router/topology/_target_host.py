@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """Shared validation for the ``mode`` / ``target_host_uuid`` pair.
 
 Called by the two topology-create endpoints

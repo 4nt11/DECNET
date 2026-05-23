@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
 /* Prefetch-on-intent for lazy-loaded routes.
  *
  * Each key is a route path; each value is the same dynamic import()

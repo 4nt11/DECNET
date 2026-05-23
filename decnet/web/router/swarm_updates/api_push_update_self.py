@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """POST /swarm-updates/push-self — push only to workers' /update-self.
 
 Use case: the agent is fine but the updater itself needs an upgrade (e.g.

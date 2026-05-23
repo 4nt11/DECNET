@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """Bus wiring for the correlation engine (DEBT-031, worker 3).
 
 The correlator is not a standalone worker — ``CorrelationEngine`` is a

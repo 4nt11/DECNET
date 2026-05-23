@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """MalwareBazaar bad-hash provider — bulk SHA-256 feed.
 
 Mirrors :mod:`decnet.intel.feodo` for the refresh / TTL / set-membership

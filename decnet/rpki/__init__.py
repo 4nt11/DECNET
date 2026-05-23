@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """RPKI validity enrichment — maps (IP, ASN) pairs to route origin validity.
 
 Public surface:

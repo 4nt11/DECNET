@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """Run the production campaign clusterer through all 7 fixtures.
 
 The 7 fixtures' YAML bounds were tuned for *reference* clusterers

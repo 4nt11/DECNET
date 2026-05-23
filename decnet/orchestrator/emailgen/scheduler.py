@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """Action picker for the emailgen worker.
 
 One tick = one (mail-decky, sender, recipient, [thread]) decision.

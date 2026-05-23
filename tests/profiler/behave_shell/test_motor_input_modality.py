@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """Step 2: ``motor.input_modality`` — typed / pasted / mixed."""
 from __future__ import annotations
 

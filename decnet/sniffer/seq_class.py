@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """
 Sequence-pattern classifier for TCP/IP fields that are useful as a tooling
 fingerprint when sampled across multiple packets from the same source.

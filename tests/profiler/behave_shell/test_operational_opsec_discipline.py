@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """Step G.2: ``operational.opsec_discipline`` ∈ {careful, careless, learning}."""
 from __future__ import annotations
 

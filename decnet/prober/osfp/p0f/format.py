@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """p0f v2 ``.fp`` file parser.
 
 Format (from the DSL spec at the top of every shipped ``.fp`` file):

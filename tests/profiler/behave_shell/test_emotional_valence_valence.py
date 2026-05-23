@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """Step G.5: ``emotional_valence.valence`` ∈ {positive, neutral, negative}.
 
 Hard 0.5 confidence cap.

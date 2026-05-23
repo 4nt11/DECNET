@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """DECNET SWARM PKI — self-managed X.509 CA for master↔worker mTLS.
 
 Used by:

@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """Live materialisation contracts for decnet.mutator.ops.
 
 These tests run each ``apply_*`` op against an active topology and

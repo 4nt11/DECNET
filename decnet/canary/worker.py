@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """``decnet canary`` worker — HTTP + DNS callback receivers.
 
 Two surfaces, one process:

@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """Remote Updates — master dashboard's surface for pushing code to workers.
 
 These are *not* the swarm-controller's /swarm routes (those run on a

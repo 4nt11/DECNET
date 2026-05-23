@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """Updater FastAPI app — mTLS-protected endpoints for self-update.
 
 Mirrors the shape of ``decnet/agent/app.py``: bare FastAPI, docs disabled,

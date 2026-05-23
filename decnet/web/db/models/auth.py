@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """Auth + user-management tables and DTOs."""
 from typing import List, Literal
 

@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """Filesystem layout for GeoIP data.
 
 ``GEOIP_ROOT`` is where providers drop their raw files and cache indexes.

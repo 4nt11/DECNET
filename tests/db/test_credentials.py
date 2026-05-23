@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """Credential model + repo tests — upsert, dedup, cross-service reuse."""
 from __future__ import annotations
 

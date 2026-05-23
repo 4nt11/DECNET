@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """Shared ``run_health_heartbeat`` helper (DEBT-031 workers 7–9).
 
 Three workers (agent, forwarder, updater) publish identical

@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """CLI surface for `decnet forwarder`. Only guard clauses — the async
 loop itself is covered by tests/swarm/test_log_forwarder.py."""
 from __future__ import annotations

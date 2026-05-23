@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """Bus wiring for the collector (DEBT-031, worker 5).
 
 Collector streams logs from Docker containers in a thread pool — can't be

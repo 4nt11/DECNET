@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """Tests for the Workers panel API endpoints.
 
 Covers ``GET /api/v1/workers`` (viewer-readable, always surfaces every

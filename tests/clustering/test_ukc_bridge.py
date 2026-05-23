@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """E.2.9 — UKC bridge bijection tests.
 
 Pins the ATT&CK tactic ↔ UKC phase mapping declared in

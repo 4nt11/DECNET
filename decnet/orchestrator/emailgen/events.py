@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """DB-row + bus-topic helpers for the emailgen worker.
 
 Mirror of :mod:`decnet.orchestrator.events` for the email action class.

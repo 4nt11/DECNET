@@ -1,4 +1,5 @@
 #!/bin/bash
+# SPDX-License-Identifier: AGPL-3.0-or-later
 # systemd-journal relay helper: mirrors newly-written files under a
 # monitored set of paths into the coredump staging directory and emits
 # a structured journal line per event.

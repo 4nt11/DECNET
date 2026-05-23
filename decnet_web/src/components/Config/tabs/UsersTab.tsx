@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
 import React, { useState } from 'react';
 import { Key, Trash2, UserPlus } from '../../../icons';
 import type { FormMsg, UserEntry } from '../types';

@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
 import React, { forwardRef, useCallback, useMemo } from 'react';
 import { RotateCcw, LayoutGrid, ZoomIn, ZoomOut } from '../../icons';
 import NetBox from './NetBox';

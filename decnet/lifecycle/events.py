@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """Bus emit helper for DeckyLifecycle transitions.
 
 DB is the source of truth (wizard polls ``GET /deckies/lifecycle?ids=``).

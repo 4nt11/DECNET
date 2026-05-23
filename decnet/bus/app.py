@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """Process-wide bus singleton for request-serving workers (API, SSE routes).
 
 A single connected :class:`~decnet.bus.base.BaseBus` shared across request

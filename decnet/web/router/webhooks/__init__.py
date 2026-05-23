@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """Webhook subscription CRUD.
 
 Admin-gated management of external-egress webhook subscriptions. The

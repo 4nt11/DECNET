@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """UNIX-socket server for the DECNET bus.
 
 One :class:`BusServer` per host.  Accepts local connections on a UNIX-domain

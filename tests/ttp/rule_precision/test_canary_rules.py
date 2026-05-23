@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """R0049-R0053 — canary fingerprint cohort.
 
 CanaryFingerprintLifter (E.3.11) parses the fingerprint payload

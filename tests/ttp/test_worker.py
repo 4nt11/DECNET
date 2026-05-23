@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """Contract tests for :mod:`decnet.ttp.worker` (E.1.7).
 
 Scoped to the contract surface: ``_TOPICS`` shape and contents,

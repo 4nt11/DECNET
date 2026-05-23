@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """CredentialReuse repo tests — upsert idempotency, list pagination, FK backfill."""
 from __future__ import annotations
 

@@ -1,4 +1,5 @@
 #!/usr/bin/env python3
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """
 HTTPS service emulator using Flask + TLS.
 Identical to the HTTP honeypot but wrapped in TLS. Accepts all requests,

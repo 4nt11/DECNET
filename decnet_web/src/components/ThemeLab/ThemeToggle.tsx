@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
 import React, { useEffect, useState } from 'react';
 
 /* Dev-scoped Dark/Light theme toggle for the theme lab.

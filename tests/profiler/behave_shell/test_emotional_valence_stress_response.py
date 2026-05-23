@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """Step G.7: ``emotional_valence.stress_response`` ∈ {none,
 eustress_positive, distress_negative}.
 

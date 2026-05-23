@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """Phase 4 — end-to-end worker wiring.
 
 Observation event → stub identity → load series → merger → upsert

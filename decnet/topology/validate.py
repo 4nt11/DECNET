@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """Pre-deploy validator for MazeNET topologies.
 
 Consumes a hydrated dict (output of

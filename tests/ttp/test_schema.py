@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """Schema invariant tests for ``ttp_tag`` (E.2.1).
 
 Pins the structural contract of :class:`~decnet.web.db.models.ttp.TTPTag`:

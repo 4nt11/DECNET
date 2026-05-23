@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """Numeric thresholds for BEHAVE-SHELL primitive classification.
 
 Each constant cites its calibration source. When the registry's

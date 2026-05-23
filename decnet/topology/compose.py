@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """Compose-file generator for a MazeNET topology.
 
 Produces a ``docker-compose.yml`` dict given a hydrated topology

@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """Canary token tables + CRUD DTOs.
 
 Canary tokens are decoy artifacts (operator-uploaded honeydocs / synthesised

@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { Network, Plus, PowerOff, RefreshCw, X } from '../../icons';
 import api, { type ApiError } from '../../utils/api';

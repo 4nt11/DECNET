@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """Per-rule unit tests for :class:`BehavioralLifter` (E.3.9).
 
 Each R003N gets a positive payload that fires the predicate and a

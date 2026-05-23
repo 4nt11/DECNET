@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """Every TTPTag emitted via ``emit_tags()`` carries a populated ``mitre_url`` column.
 
 Phase 3 promoted ``mitre_url`` from a JSON evidence field to a

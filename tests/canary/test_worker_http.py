@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """HTTP surface coverage for the canary worker.
 
 We exercise the FastAPI app via Starlette's TestClient so the test

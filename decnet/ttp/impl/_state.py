@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """Shared state-modulation helpers for rule consumers.
 
 Both :class:`~decnet.ttp.impl.rule_engine.RuleEngine` and the per-source

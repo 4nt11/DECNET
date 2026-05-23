@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """Tarpit rule CRUD."""
 from __future__ import annotations
 

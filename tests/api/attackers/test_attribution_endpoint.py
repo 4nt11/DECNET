@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """Phase 6 — GET /api/v1/attackers/{uuid}/attribution.
 
 Pins the contract: 401 unauth, 404 unknown attacker, 200 with empty

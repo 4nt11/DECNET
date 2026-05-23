@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """Master-side syslog-over-TLS listener (RFC 5425).
 
 Accepts mTLS-authenticated worker connections on TCP 6514, reads

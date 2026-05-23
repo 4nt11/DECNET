@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """E.4.a — TTP backfill CLI replays history through the live tagger.
 
 Pins the contract from ``development/TTP_TAGGING.md`` §"E.4 Out-of-band

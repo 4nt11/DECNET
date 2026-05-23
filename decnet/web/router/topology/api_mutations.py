@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """Live-mutation queue endpoints — for active | degraded topologies.
 
     POST /topologies/{id}/mutations   enqueue one mutation op

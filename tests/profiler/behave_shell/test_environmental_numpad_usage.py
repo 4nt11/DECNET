@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """Step F.5: ``environmental.numpad_usage``."""
 from __future__ import annotations
 

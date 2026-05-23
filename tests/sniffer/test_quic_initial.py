@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """Tests for QUIC v1 Initial packet key derivation (RFC 9001 Appendix A vectors)."""
 from __future__ import annotations
 

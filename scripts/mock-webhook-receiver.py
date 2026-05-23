@@ -1,4 +1,5 @@
 #!/usr/bin/env python3
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """Mock webhook receiver for local DECNET testing.
 
 Listens on a local port, accepts POSTs from the `decnet webhook`

@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """Every technique ID emitted by ``rules/ttp/`` must resolve in the loaded ATT&CK STIX bundle.
 
 The shim in :mod:`decnet.ttp.attack_catalog` now reads names from the

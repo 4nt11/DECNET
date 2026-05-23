@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """Tests for graceful publish-on-closed-bus behaviour.
 
 Regression guard for the 'publish on closed bus' log flood: when a

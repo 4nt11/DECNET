@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """Per-package fixtures — sandbox the ASN provider into a tmp dir so no
 real /var/lib/decnet paths get touched and no real iptoasn URL gets
 fetched."""

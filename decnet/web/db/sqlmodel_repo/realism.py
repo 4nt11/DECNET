@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """Synthetic-file CRUD + realism config key/value store."""
 from __future__ import annotations
 

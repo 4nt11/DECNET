@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """Extra resilience tests for the syslog-over-TLS pipeline.
 
 Covers failure modes the happy-path tests in test_log_forwarder.py don't

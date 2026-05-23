@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """POST/DELETE …/{decky}/services — live service add/remove.
 
 Two scopes mounted here:

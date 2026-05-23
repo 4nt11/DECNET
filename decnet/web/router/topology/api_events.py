@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """SSE stream of topology lifecycle events — one connection per editor.
 
 Subscribes to ``topology.<id>.>`` on the :class:`~decnet.bus.base.BaseBus`

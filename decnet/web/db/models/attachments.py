@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """Observed-attachment intel — purpose-built table for the per-hash
 keyspace of attachments delivered by attackers.
 

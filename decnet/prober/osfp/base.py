@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """OS-fingerprint provider protocol + OsMatch result shape.
 
 Each concrete provider (p0f v2 today; nmap-osdb / DECNET-observed DB

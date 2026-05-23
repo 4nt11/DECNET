@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
 import asyncio
 from datetime import datetime, timedelta, timezone
 from typing import Optional, Any

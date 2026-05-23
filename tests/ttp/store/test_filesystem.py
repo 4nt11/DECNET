@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """E.2.14b — Filesystem-specific RuleStore properties.
 
 Pins behavior that's unique to :class:`FilesystemRuleStore`:

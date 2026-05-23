@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """Wire protocol for the DECNET bus UNIX-socket transport.
 
 Frame layout:

@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """abuse.ch ThreatFox provider — per-IOC query API.
 
 Endpoint: ``POST https://threatfox-api.abuse.ch/api/v1/``

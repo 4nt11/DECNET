@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """Topology edge CRUD + status-event log."""
 from __future__ import annotations
 

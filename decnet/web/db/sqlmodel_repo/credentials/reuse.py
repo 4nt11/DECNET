@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """Credential-reuse correlation: ``CredentialReuse`` finding rows that
 group ``Credential`` attempts sharing the same (secret_sha256,
 secret_kind, principal) triple."""

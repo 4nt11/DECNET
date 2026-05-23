@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """Agent FastAPI app — static/contract checks only.
 
 We deliberately do NOT spin uvicorn up in-process here: the mTLS layer is

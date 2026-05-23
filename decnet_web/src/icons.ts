@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
 /* Centralised lucide re-export.
  *
  * Per-icon paths instead of the 'lucide-react' barrel: Vite's dep

@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """Shared column/validator helpers used across model domain modules."""
 from datetime import datetime
 from typing import Annotated, Any, Optional

@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """``environmental.*`` feature functions.
 
 Phase F ships the five environmental primitives plus F.0's shared

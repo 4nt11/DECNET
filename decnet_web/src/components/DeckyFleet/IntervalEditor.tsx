@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
 import React, { useState } from 'react';
 import { RefreshCw } from '../../icons';
 import Modal from '../Modal/Modal';

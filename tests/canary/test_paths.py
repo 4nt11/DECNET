@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """Coverage for the persona-aware path resolver + placement validator."""
 from __future__ import annotations
 

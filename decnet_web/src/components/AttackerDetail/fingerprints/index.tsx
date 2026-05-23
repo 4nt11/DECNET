@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
 export { FingerprintGroup } from './renderers';
 export {
   FpTlsHashes, FpLatency, FpResumption, FpCertificate, FpJarm,

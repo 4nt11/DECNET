@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """Step G.0: command-intent lexicon + lexical counter pass.
 
 No primitive emitted by this commit — it's the shared infrastructure

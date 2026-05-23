@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """Webhook dispatcher — bus consumer → HTTP egress.
 
 Spawns one asyncio task per (subscription, pattern) pair. Each task

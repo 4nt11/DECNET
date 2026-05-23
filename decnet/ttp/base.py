@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """Tagger ABC — input shape, base class, tolerant mixin.
 
 Contract step E.1.3 of ``development/TTP_TAGGING.md``. Defines the type

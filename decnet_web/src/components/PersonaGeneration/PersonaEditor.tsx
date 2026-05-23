@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
 import React from 'react';
 import { Mail, Plus, Check, AlertTriangle } from '../../icons';
 import Modal from '../Modal/Modal';

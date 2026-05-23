@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """SSE stream of campaign events — one connection per viewer.
 
 Subscribes to ``campaign.>`` on the bus for the duration of the

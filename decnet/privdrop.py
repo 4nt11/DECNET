@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """
 Helpers for dropping root ownership on files created during privileged
 operations (e.g. `sudo decnet deploy` needs root for MACVLAN, but its log

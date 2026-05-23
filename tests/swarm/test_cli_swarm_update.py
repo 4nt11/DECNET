@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """CLI `decnet swarm update` — target resolution, tarring, push aggregation.
 
 The UpdaterClient is stubbed: we are testing the CLI's orchestration, not

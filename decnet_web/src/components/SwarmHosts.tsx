@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
 import React, { useState } from 'react';
 import EmptyState from './EmptyState/EmptyState';
 import EnrollmentWizard from './SwarmHosts/EnrollmentWizard';

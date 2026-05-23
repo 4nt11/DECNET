@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """``temporal.*`` feature functions — per-session subset.
 
 Phase E ships the four ``temporal.*`` primitives that don't need

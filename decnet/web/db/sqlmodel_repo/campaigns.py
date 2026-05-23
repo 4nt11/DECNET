@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """Campaign reads + writes.
 
 Campaign = the second-tier clustering output that groups multiple

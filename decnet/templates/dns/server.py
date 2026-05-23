@@ -1,4 +1,5 @@
 #!/usr/bin/env python3
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """
 DNS server (UDP+TCP/53) — BIND 9.x persona.
 

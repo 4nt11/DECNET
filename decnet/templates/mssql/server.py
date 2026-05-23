@@ -1,4 +1,5 @@
 #!/usr/bin/env python3
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """
 MSSQL (TDS)server.
 Reads TDS pre-login and login7 packets, extracts username, responds with

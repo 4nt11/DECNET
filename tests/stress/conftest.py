@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """
 Stress-test fixtures: real uvicorn server + out-of-process Locust runner.
 

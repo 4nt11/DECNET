@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """GET /api/v1/ttp/export/navigator{,/identity/{uuid}} — Navigator JSON layer.
 
 Empty-but-valid Navigator layer at contract phase per TTP_TAGGING.md

@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """Threat-intel enrichment subsystem — out-of-band lookups for attacker IPs.
 
 Sibling to :mod:`decnet.geoip` and :mod:`decnet.asn`, but runs as a

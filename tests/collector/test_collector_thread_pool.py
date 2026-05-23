@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """Verify that the collector and sniffer use dedicated thread pools
 instead of the default asyncio executor — preventing starvation of
 short-lived ``asyncio.to_thread`` calls in the web API layer."""

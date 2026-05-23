@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """GET /swarm/deckies — list decky shards with their worker host's identity.
 
 The DeckyShard table maps decky_name → host_uuid; users want to see which

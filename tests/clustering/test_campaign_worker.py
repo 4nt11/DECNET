@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """End-to-end tests for the campaign-clusterer worker shell + tick.
 
 Mirrors :mod:`tests.clustering.test_clusterer_worker` for the layer

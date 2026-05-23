@@ -1,4 +1,5 @@
 #!/usr/bin/env python3
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """
 Classify the shape of a memray usage_over_time.csv as plateau, climb,
 or climb-and-drop. Operates on the `memory_size_bytes` column.

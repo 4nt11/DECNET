@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """GET /deckies/lifecycle?ids=… — poll lifecycle rows by id.
 
 The wizard polls this endpoint every ~2 s after POSTing /deckies/deploy

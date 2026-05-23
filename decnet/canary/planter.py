@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """Plant / revoke canary artifacts inside running decky containers.
 
 Single entry point per operation:

@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """
 averify_password / ahash_password run bcrypt on a thread so the event
 loop can serve other requests while hashing. Contract: they must produce

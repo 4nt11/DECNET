@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """Clusterer publishes ``identity.formed`` and ``identity.merged``.
 
 Pins the producer wiring. The clusterer reports its tick output via a

@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """Async deploy/mutate lifecycle runner.
 
 The runner is invoked by the master API handlers (deploy + mutate) after

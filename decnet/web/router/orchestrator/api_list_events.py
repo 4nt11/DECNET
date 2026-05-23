@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """GET /api/v1/orchestrator/events — paginated orchestrator activity.
 
 Two underlying tables back this endpoint:

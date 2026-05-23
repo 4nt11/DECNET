@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
 /** Shared types for the AttackerDetail page surface. The canonical
  *  definitions live here; AttackerDetail.tsx re-exports the public
  *  ones (BehaviouralObservation, AttributionPrimitiveState) so

@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """Identity-level fingerprint rollup.
 
 The clusterer mints :class:`AttackerIdentity` rows (and merges them) from

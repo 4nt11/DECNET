@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """Long-running campaign-clusterer worker.
 
 Mirrors :mod:`decnet.clustering.worker` for the layer above. Bus-woken

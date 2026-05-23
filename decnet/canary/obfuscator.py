@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """Per-mint JS obfuscator wrapper.
 
 Thin Python wrapper around the ``javascript-obfuscator`` Node package.

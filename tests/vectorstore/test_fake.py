@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """Tests for :class:`FakeVectorStore` and :class:`NullVectorStore`.
 
 The fake is the reference implementation of the BaseVectorStore

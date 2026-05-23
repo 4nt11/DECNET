@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """Tarpit connection watcher — edge-triggered enter/exit log events.
 
 Polls active tarpit rules every ``DECNET_TARPIT_POLL_INTERVAL`` seconds

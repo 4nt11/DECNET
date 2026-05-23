@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """Phase 3 Step 3 — write endpoints: create / delete / deploy."""
 from __future__ import annotations
 

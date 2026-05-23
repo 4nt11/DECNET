@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """Tests for the HTML/SVG fingerprint canary generators.
 
 Skipped when the Node toolchain (or vendored javascript-obfuscator) is

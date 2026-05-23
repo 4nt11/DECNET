@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """LLM status surfaces in the orchestrator's heartbeat ``extra``.
 
 Exposes the realism subsystem's LLM backend / model / circuit-breaker

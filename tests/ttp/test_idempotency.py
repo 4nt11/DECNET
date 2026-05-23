@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """Idempotency and replay-safety tests for ``compute_tag_uuid`` (E.2.2).
 
 The deterministic UUIDv5 derivation is the load-bearing primitive

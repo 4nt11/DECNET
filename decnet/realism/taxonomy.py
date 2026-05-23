@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """Content classes and the :class:`Plan` dataclass.
 
 The planner emits :class:`Plan` instances; drivers consume them.  Every

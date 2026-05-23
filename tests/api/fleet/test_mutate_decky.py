@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """
 Tests for the mutate decky API endpoint — now 202 fire-and-forget.
 

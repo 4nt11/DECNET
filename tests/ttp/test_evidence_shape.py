@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """Evidence shape contract tests (E.2.1b).
 
 Pins the per-``source_kind`` ``TypedDict`` contract on

@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """SVG fingerprint canary — standalone SVG with an embedded ``<script>``
 that runs the obfuscated fingerprinter when the file is opened directly
 in a browser.

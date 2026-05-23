@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """Tests for :mod:`decnet.canary.obfuscator` — the per-mint JS obfuscator.
 
 Skipped when Node or the vendored ``javascript-obfuscator`` package is

@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """Bus abstractions: the :class:`Event` envelope and the :class:`BaseBus` ABC.
 
 Every transport (NATS, in-process fake, null) speaks this contract.  The

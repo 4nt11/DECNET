@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """Unit tests for the SWARM controller FastAPI app.
 
 Covers the enrollment, host-management, and deployment dispatch routes.

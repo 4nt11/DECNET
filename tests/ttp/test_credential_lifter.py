@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """Per-rule unit tests for :class:`CredentialLifter` (E.3.13)."""
 from __future__ import annotations
 

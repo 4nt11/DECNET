@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """Classifier unit tests for decnet.correlation.event_kinds."""
 from __future__ import annotations
 

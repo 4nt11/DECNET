@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """Real-PDF honeydoc generator (uses :mod:`pikepdf`).
 
 Builds a one-page PDF with the same Q3-review body as the HTML/DOCX

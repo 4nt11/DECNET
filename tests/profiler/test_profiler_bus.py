@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """Bus wiring for the profiler worker (DEBT-031, worker 4).
 
 The profiler publishes ``attacker.scored`` once per profile upsert.

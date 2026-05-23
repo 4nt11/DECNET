@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """Smoke coverage for the deploy-time canary baseline seed.
 
 The deployer hook calls ``decnet.canary.planter.seed_baseline`` for

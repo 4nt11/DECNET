@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """POST/GET/DELETE /api/v1/topologies/{topology_id}/deckies/{decky_name}/tarpit
 
 Same tc netem logic as the fleet tarpit, but scoped to a MazeNET topology.

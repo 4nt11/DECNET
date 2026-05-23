@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """User-Agent classifier — enriches http_useragent bounty payload."""
 from __future__ import annotations
 

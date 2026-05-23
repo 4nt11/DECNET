@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """POST /swarm/enroll — issue a worker cert bundle and register the host.
 
 Enrollment is master-driven: the controller holds the CA private key,

@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """GET /deckies/lifecycle?ids=… — poll endpoint for the wizard."""
 from __future__ import annotations
 

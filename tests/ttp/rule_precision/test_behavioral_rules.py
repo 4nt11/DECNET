@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """R0031-R0040 — behavioral / cross-event cohort.
 
 Every rule here is consumed by the :class:`BehavioralLifter` (E.3.9).

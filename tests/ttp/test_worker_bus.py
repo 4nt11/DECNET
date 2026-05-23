@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """E.2.12 — TTP worker bus integration tests.
 
 Pins the bus surface from ``development/TTP_TAGGING.md`` §"Bus topics",

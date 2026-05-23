@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
 import React from 'react';
 import { Save, X } from '../../icons';
 import type { FormState, SimpleEvent } from './types';

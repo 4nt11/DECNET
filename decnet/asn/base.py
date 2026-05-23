@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """ASN provider protocol — mirror of :mod:`decnet.geoip.base`.
 
 Concrete providers (e.g. :mod:`decnet.asn.iptoasn`) implement this.

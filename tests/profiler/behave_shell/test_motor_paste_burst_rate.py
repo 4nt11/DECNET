@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """Step 3: ``motor.paste_burst_rate`` — none / occasional / habitual."""
 from __future__ import annotations
 

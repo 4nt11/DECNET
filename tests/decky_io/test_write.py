@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """Unit coverage for decnet.decky_io.write — the docker-exec wrapper.
 
 Mirrors the canary planter's subprocess-mock pattern: we patch

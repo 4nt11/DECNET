@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """Step G.3: ``operational.cleanup_behavior`` ∈ {thorough, partial, none}."""
 from __future__ import annotations
 

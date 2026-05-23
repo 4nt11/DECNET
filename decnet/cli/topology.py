@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """MazeNET topology CLI: generate / deploy / teardown / list / show."""
 from __future__ import annotations
 

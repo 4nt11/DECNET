@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """Prompt builder for the email content class.
 
 The LLM gets a tightly-scoped instruction and a small handful of

@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """Unit tests for :mod:`decnet.web.services.systemd_control`.
 
 These tests monkeypatch :func:`asyncio.create_subprocess_exec` so we

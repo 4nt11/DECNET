@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """
 Tests for the CLI service pool — verifies that --randomize-services draws
 from all registered services, not just the original hardcoded 5.

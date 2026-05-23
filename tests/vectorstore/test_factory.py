@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """Tests for :func:`decnet.vectorstore.factory.get_vectorstore` dispatch."""
 from __future__ import annotations
 

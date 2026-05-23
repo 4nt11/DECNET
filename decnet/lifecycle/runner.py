@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """Async deploy/mutate orchestration entry points.
 
 Called by the master API handlers right after they create the lifecycle

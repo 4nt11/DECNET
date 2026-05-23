@@ -1,4 +1,5 @@
 #!/usr/bin/env python3
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """
 Kubernetes APIserver.
 Serves a fake K8s REST API on port 6443 (HTTPS-ish, plain HTTP) and 8080.

@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """Tests for shared emitter helpers in templates/syslog_bridge.py.
 
 The canonical file is what gets propagated into per-template build

@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """Replay one calibration-corpus shard through the BEHAVE-SHELL handler.
 
 Phase 6 smoke helper. Drives the production handler

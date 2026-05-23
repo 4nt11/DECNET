@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """GET /api/v1/attackers/{uuid}/attribution — per-primitive
 attribution state for one attacker.
 

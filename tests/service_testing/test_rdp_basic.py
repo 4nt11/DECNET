@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """Tests for decnet/templates/rdp/server.py — X.224 CR cookie capture.
 
 Drives the asyncio handler with an in-memory StreamReader, asserts:

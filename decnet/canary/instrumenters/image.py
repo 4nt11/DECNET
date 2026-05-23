@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """Image instrumenter — requires :mod:`PIL` (optional dependency).
 
 For PNG/JPEG/GIF we append a tEXt/EXIF chunk carrying the slug so

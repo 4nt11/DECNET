@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """DECNET attribution engine — v0 aggregation library.
 
 Pure library: per-(identity, primitive) state machine over BEHAVE-SHELL

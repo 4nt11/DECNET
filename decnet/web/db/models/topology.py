@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """MazeNET topology tables + the REST DTOs that wrap them."""
 import json
 from datetime import datetime, timezone

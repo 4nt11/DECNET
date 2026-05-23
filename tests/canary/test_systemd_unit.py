@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """Sanity check on the decnet-canary.service unit + decnet.target.
 
 Tests are deliberately static (no rendering, no systemd) — they just

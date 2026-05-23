@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """POST /topologies/reap-orphans — remove Docker resources for topology
 ids the DB no longer knows about.
 

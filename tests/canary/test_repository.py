@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """Repository CRUD coverage for canary blobs / tokens / triggers.
 
 Same harness as the rest of :mod:`tests.db` — spin up a SQLite-backed

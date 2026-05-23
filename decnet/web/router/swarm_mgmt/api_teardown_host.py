@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """POST /swarm/hosts/{uuid}/teardown — remote teardown on a swarm worker.
 
 Body: ``{"decky_id": "..."}`` (optional). When ``decky_id`` is null/omitted

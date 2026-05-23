@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """R0041-R0048 — email cohort.
 
 EmailLifter (E.3.12) consumes these by rule_id. The v0

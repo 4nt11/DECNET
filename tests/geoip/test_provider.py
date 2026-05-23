@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """RirProvider + factory + public API tests."""
 from __future__ import annotations
 

@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """Step C.1: ``motor.shell_mastery.tab_completion``."""
 from __future__ import annotations
 

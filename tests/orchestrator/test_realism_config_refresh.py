@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """The orchestrator pulls operator-tuned weights from realism_config.
 
 §3c contract: the planner reads in-memory module globals, but the

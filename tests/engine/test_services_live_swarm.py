@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """Swarm propagation coverage for services_live.
 
 Three mutation paths (add / remove / update_config) need to re-dispatch the

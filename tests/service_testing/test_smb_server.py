@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """Tests for decnet/templates/smb/server.py — hand-rolled SMB2 framer.
 
 Drives the asyncio handler with an in-memory StreamReader and a mocked

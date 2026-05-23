@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """Reuse correlator publishes ``credential.reuse.detected``.
 
 Pins the producer wiring so a regression that silently drops the

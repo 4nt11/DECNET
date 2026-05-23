@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """Module-level session helpers shared by every repository mixin.
 
 ``_safe_session`` and ``_detach_close`` make session cleanup robust under

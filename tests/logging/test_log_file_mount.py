@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """Tests for compose generation — logging block and absence of volume mounts."""
 
 from decnet.composer import generate_compose, _DOCKER_LOGGING

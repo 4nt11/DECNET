@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """``attacker.session.ended`` handler — Phase 4 wiring.
 
 Pure handler module: takes a payload (from bus or poll fallback),

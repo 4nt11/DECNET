@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
 /** Wire + UI types for the DeckyFleet page surface. The canonical
  *  definitions live here; DeckyFleet.tsx re-exports the public ones
  *  through this barrel so external siblings can import without

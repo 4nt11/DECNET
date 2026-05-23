@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """GET /swarm/health — controller liveness (no I/O)."""
 from __future__ import annotations
 

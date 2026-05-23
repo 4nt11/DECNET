@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """Self-updater uvicorn launcher.
 
 Parallels ``decnet/agent/server.py`` but uses a distinct bundle directory

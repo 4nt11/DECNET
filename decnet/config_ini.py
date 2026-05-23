@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """Parse /etc/decnet/decnet.ini and seed os.environ defaults.
 
 The INI file is a convenience layer on top of the existing DECNET_* env

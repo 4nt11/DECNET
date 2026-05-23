@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """MazeNET topology generator.
 
 Produces a :class:`GeneratedTopology` — an in-memory DAG of LANs and

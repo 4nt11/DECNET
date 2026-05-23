@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """LLM-enriched body generation with deterministic fallback."""
 from __future__ import annotations
 

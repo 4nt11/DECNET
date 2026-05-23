@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """
 IP-to-ASN enrichment — maps attacker IPs to BGP-announced AS numbers and
 org names for attacker intelligence.

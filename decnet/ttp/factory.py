@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """Tagger factory + composite tagger.
 
 Contract step E.1.4 of ``development/TTP_TAGGING.md``. Mirrors the

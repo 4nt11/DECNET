@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """Step G.6: ``emotional_valence.arousal`` ∈ {low_calm, medium_engaged,
 high_agitated}.
 

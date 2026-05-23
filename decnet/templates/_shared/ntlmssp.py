@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """NTLMSSP Type 3 (Authenticate) message parser.
 
 Standalone module shared between any honeypot template that wants to

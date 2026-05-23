@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """PKI roundtrip tests for the DECNET swarm CA."""
 from __future__ import annotations
 

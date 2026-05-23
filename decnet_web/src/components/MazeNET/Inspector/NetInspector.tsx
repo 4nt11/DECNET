@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
 import React from 'react';
 import { GitMerge, Globe, Plus, Trash2 } from '../../../icons';
 import type { MazeNode, Net } from '../types';

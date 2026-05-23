@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """Per-rule unit tests for :class:`EmailLifter` (E.3.12).
 
 Pins R0041–R0048 predicates and the EmailEvidence PII discipline:

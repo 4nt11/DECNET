@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """Long-running threat-intel enrichment worker.
 
 Fans out per attacker IP across the configured intel providers

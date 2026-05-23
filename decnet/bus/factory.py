@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """Bus factory — selects a :class:`~decnet.bus.base.BaseBus` implementation.
 
 Dispatch key: the ``DECNET_BUS_TYPE`` environment variable.

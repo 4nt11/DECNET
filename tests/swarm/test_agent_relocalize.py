@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """Worker agent re-localizes master-built configs to its own NIC/subnet.
 
 The master ships a DecnetConfig populated from *its own* network (master

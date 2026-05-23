@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """
 Deploy, teardown, and status via Docker SDK + subprocess docker compose.
 """

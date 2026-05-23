@@ -1,4 +1,5 @@
 #!/usr/bin/env python3
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """
 SNMP server (UDP 161).
 Parses SNMPv1/v2c GetRequest PDUs, logs the community string and OID list,

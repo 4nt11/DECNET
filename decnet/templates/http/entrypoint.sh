@@ -1,4 +1,5 @@
 #!/bin/bash
+# SPDX-License-Identifier: AGPL-3.0-or-later
 set -e
 
 # Parse HTTP_VERSIONS JSON → Caddy protocol tokens (h1 / h2c)

@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """GET/PUT ``/api/v1/realism/personas`` — global persona pool CRUD.
 
 The "global pool" is a JSON file consumed by the realism content

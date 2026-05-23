@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """Canary generator / instrumenter ABCs and the artifact dataclass.
 
 Two flavors of producer share the same return shape:

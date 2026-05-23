@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """decnet.lifecycle: runner + strategy tests.
 
 All docker calls and AgentClient I/O are mocked; we exercise the

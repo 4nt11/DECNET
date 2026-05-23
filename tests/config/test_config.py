@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """
 Tests for decnet.config — Pydantic models, save/load/clear state.
 Covers the uncovered lines: validators, save_state, load_state, clear_state.

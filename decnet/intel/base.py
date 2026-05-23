@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """Threat-intel provider protocol.
 
 Each concrete provider (:mod:`decnet.intel.greynoise`,

@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """In-process fake backend for tests.
 
 Returns a canned string so the driver path can be exercised without an

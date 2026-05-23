@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """
 RFC 5424 log line parser for the DECNET correlation engine.
 

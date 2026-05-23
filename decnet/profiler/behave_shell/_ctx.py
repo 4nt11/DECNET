@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """SessionContext: precomputed bundle every feature function reads from.
 
 A naïve engine re-walks the event stream once per primitive. We don't

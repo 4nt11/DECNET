@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """Activity drivers for the orchestrator.
 
 Concrete drivers register dispatch in :func:`get_driver_for`.  Same

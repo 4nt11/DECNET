@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """BEHAVE-SHELL extraction engine — DECNET's official implementation.
 
 Per ``development/BEHAVE-EXTRACTOR.md``: this package is a pure

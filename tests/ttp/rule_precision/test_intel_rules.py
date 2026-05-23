@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """R0054-R0058 — intel verdict cohort.
 
 IntelLifter (E.3.10) reads ``AttackerIntel`` provider columns

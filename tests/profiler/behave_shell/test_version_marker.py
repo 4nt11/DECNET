@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """Step H.5-pre: extractor ``__version__`` marker.
 
 The version marker is the engine's own identifier; it does NOT need

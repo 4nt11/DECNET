@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """Built-in honeydoc — a minimal HTML "report" with a tracking pixel.
 
 This is the *fallback* honeydoc used when the operator hasn't

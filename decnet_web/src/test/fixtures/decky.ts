@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
 import type { Decky } from '../../components/DeckyFleet/types';
 
 export type DeckyFixture = Decky;

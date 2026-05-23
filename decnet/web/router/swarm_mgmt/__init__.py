@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """Swarm management endpoints for the React dashboard.
 
 These are *not* the unauthenticated /swarm routes mounted on the separate

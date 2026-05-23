@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """Contract tests for the six per-source lifters (E.1.6).
 
 Scoped to the contract surface: each lifter is a :class:`TolerantTagger`

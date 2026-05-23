@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """Bus topic naming tests for the TTP family (CDD step E.2.3).
 
 Pins the wire vocabulary the worker (E.1.7), the API router (E.3.8),

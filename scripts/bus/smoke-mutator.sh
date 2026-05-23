@@ -1,4 +1,5 @@
 #!/usr/bin/env bash
+# SPDX-License-Identifier: AGPL-3.0-or-later
 # Mutator-family topic smoke test: boots a bus worker, subscribes to
 # `topology.>`, publishes one event per mutation-lifecycle state
 # (enqueued → applying → applied) plus a topology.status transition,

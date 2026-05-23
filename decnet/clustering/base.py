@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """Identity-resolution clusterer protocol.
 
 Each concrete clusterer (``decnet.clustering.impl.connected_components``,

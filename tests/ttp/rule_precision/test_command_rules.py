@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """Per-rule precision asserts for the command cohort (R0001-R0030).
 
 Drives the labelled corpus through a real :class:`RuleEngine` populated

@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """Pre-deploy mutation repo methods: pending-only, version-aware."""
 from __future__ import annotations
 

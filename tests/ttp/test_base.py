@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """Contract tests for :mod:`decnet.ttp.base` (E.1.3 + E.2.4).
 
 E.1.3 contract surface: shape of TaggerEvent, abstractness of

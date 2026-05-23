@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
 import React, { useState } from 'react';
 import { X, Key, Package, Copy, Send, Ban, FileText, Mail, Download, AlertTriangle } from '../icons';
 import { useToast } from './Toasts/useToast';

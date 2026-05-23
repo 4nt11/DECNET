@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """In-process registry that aggregates worker heartbeats from the bus.
 
 The API process subscribes to ``system.*.health`` (plus the bare

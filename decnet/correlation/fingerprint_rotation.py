@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """Attacker substrate-fingerprint rotation detection.
 
 Called inline from the prober at each fingerprint emit site.  Looks up

@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """Stealth-egress httpx.AsyncClient factory.
 
 Per the project's stealth posture, outbound calls to *third-party*

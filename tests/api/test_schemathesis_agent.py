@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """Schemathesis contract tests for the worker-side agent API
 (``decnet.agent.app``).
 

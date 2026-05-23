@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """SSE events stream + list — /api/v1/orchestrator/events{,/stream}."""
 from __future__ import annotations
 

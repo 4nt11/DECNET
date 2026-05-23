@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """Step 0 smoke: prove the wiring before any logic.
 
 Before any feature function lands, verify:

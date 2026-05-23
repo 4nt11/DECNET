@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """Campaign — operation-level grouping of resolved attacker identities."""
 from datetime import datetime, timezone
 from typing import Any, List, Optional

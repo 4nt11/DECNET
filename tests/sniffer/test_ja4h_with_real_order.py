@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """
 Verify that JA4H computed from canonical header order (as emitted by the
 decnet_fp listener wrapper via syslog_bridge._compute_ja4h) matches the

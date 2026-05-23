@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """Step H.1: registry-coverage test.
 
 Static assertion that every Tier-A primitive in

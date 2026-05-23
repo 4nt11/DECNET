@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
 import React, { useMemo } from 'react';
 import { Search } from '../../icons';
 import type { CanaryTokenRow } from '../CanaryTokenDrawer';

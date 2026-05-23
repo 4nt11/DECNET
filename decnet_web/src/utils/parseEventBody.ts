@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
 // Some producers (notably the SSH PROMPT_COMMAND hook via rsyslog) emit
 // k=v pairs inside the syslog MSG body instead of RFC5424 structured-data.
 // When the backend's `fields` is empty we salvage those pairs here so the

@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
 import { useEffect, type RefObject } from 'react';
 
 const FOCUSABLE =

@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """Step D.5: ``cognitive.error_resilience.retry_tactic``."""
 from __future__ import annotations
 

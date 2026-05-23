@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """Per-content-class body generators (deterministic templates).
 
 Stage 3 of the realism migration ships deterministic per-class

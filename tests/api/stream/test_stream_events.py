@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """
 Tests for the SSE stream endpoint (decnet/web/router/stream/api_stream_events.py).
 """

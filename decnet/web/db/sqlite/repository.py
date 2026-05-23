@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
 from typing import Any, List, Optional
 
 from sqlalchemy import func, select, text, literal_column

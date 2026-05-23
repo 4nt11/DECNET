@@ -1,3 +1,4 @@
+/* SPDX-License-Identifier: AGPL-3.0-or-later */
 /* DeckyFleet — design-handoff port, scoped to the fleet view. */
 
 .fleet-root { display: flex; flex-direction: column; gap: 24px; }

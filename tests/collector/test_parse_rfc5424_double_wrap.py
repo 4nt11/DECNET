@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """Collector parser unwraps double-wrapped RFC5424 lines.
 
 Honeypot SSH containers export a ``PROMPT_COMMAND`` that calls

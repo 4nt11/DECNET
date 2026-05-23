@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """Step 6: ``cognitive.command_branch_diversity``."""
 from __future__ import annotations
 

@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """DB-backed LLM provider configuration for the realism subsystem.
 
 The module holds a process-level cached backend that callers obtain via

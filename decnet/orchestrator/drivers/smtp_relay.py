@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """SMTP probe-relay driver.
 
 Forwards the attacker's first probe email via the master's real internet

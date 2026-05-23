@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """Tests for decnet.fleet.reconciler — pure-function reconcile pass.
 
 Uses a fake repository (in-memory dict) and a stub docker client so the

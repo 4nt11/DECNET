@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """Unit coverage for engine.services_live add/remove flows.
 
 We don't shell out to docker — :func:`engine.deployer._compose` is

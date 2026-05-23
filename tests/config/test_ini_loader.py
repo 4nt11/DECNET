@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """
 Tests for the INI loader — subsection parsing, custom service definitions,
 and per-service config propagation.

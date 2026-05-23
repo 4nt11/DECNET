@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """Role-based CLI gating.
 
 MAINTAINERS: when you add a new Typer command (or add_typer group) that is

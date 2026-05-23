@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """SSE events stream — GET /topologies/{id}/events (DEBT-030)."""
 from __future__ import annotations
 

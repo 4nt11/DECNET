@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """GET /api/v1/ttp/by-attacker/{attacker_uuid} — per-IP TTP slice.
 
 Backs the AttackerDetail page's TTP section. See TTP_TAGGING.md

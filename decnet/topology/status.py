@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """MazeNET topology status state machine.
 
 Seven states — six active in v1.  ``degraded`` is schema-reserved for the

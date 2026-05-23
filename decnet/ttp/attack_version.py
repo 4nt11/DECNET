@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """Pinned MITRE ATT&CK Enterprise STIX bundle version.
 
 Bumping ``ATTACK_BUNDLE_VERSION`` is the *only* code change required

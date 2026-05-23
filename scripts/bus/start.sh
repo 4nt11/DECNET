@@ -1,4 +1,5 @@
 #!/usr/bin/env bash
+# SPDX-License-Identifier: AGPL-3.0-or-later
 # Start a local `decnet bus` worker for manual smoke-testing.
 # Uses /tmp so it works without root and without the `decnet` POSIX group.
 # Usage: scripts/bus/start.sh [heartbeat-seconds]

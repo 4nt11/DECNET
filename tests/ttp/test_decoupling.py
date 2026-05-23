@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """E.2.7 — Static decoupling lint for ``decnet/ttp/``.
 
 The "no SPOF" decoupling rule §2 of TTP_TAGGING.md: tagging code

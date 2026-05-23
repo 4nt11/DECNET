@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """Thin async wrapper over ``systemctl`` for DECNET worker units.
 
 The API process runs as the unprivileged ``decnet`` user and delegates

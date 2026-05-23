@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """Unit tests for decnet/ttp/stix_custom.py custom STIX types.
 
 Verifies that:

@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """GET /api/v1/orchestrator/events/stats — authoritative failure count.
 
 The dashboard's failure-count badge previously derived its number from

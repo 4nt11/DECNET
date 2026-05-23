@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """
 Unit tests for the JA3/JA3S parsing logic in decnet/templates/sniffer/server.py.
 

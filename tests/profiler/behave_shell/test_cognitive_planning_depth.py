@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """Step D.3: ``cognitive.planning_depth``."""
 from __future__ import annotations
 

@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """Direct async tests for MazeNET topology persistence.
 
 Exercises the repository layer without going through the HTTP stack or

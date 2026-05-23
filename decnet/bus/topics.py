@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """Canonical topic hierarchy for the DECNET ServiceBus.
 
 Locked early so consumers can subscribe with stable wildcard patterns.

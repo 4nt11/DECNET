@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
 /** Wire + UI types for the CanaryTokens page surface. */
 
 export interface BlobRow {

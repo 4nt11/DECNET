@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """Phase 5 — cross-primitive multi_actor correlator.
 
 Periodic tick over attribution_state rows; fires

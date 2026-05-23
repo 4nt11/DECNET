@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """RFC 2822 thread-chain bookkeeping.
 
 A thread is a worker-side UUID that groups one or more emails between

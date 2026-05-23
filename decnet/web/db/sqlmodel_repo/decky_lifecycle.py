@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """DeckyLifecycle CRUD + sweep.
 
 One row per (decky, operation) attempt.  States: pending → running →

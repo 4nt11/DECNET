@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """End-to-end coverage for the live service add/remove endpoints.
 
 Covers both scopes:

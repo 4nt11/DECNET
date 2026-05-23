@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """Unit tests for the _run_probe generic driver."""
 
 from __future__ import annotations

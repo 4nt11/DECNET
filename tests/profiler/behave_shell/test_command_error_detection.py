@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """Step D.0: per-command error-signal helper.
 
 The helper is infrastructure (no primitive emit) — these tests pin

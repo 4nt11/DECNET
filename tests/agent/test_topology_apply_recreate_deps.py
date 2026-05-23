@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """apply() must pass --always-recreate-deps to docker compose up.
 
 Regression guard for the stale-netns-share bug: deckie service containers

@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """Shared helpers for TTP API contract tests (E.2.8).
 
 The base ``tests/api/conftest.py`` already provides ``client``,

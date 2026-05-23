@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """Tests for decnet.realism.llm.config and the updated factory DB-first path."""
 from __future__ import annotations
 

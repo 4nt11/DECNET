@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """Plain-text / config-file instrumenter.
 
 Two embedding strategies, picked in order:

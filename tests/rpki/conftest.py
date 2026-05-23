@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """Sandbox the RPKI validator into a tmp dir so no real
 /var/lib/decnet paths get touched and no real RIPE STAT calls are made."""
 from __future__ import annotations

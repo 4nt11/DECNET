@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """DECNET orchestrator — synthetic life-injection worker.
 
 Drives realistic-looking activity between deckies (inter-decky traffic and

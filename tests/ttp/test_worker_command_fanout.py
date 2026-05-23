@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """E.3.18b — Worker fans `attacker.session.ended` into per-command events.
 
 Pins the fan-out from ``development/TTP_TAGGING.md`` §"Worker shape" +

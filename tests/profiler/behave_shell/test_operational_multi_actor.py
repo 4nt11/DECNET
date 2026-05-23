@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """Step G.4: ``operational.multi_actor_indicators`` ∈ {solo, handoff_detected}.
 
 ``team_coordinated`` is Tier B (cross-session) — never emitted here.

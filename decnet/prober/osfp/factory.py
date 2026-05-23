@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """OS-fingerprint provider factory.
 
 Dispatch is env-driven (``DECNET_OSFP_PROVIDERS``, comma-separated),

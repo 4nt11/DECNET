@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """Phase 3 Step 1 — parity between repo dict output and Pydantic DTOs.
 
 These tests pin the contract that repo-hydrated dicts deserialize

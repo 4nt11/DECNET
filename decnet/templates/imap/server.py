@@ -1,4 +1,5 @@
 #!/usr/bin/env python3
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """
 IMAP server (port 143).
 Full IMAP4rev1 state machine with bait mailbox.

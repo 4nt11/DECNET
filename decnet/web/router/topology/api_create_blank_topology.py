@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """POST /topologies/blank — create an empty editable topology.
 
 Produces a minimal ``pending`` topology seeded with exactly one DMZ LAN

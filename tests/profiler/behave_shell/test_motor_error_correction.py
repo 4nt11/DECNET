@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """Step B.3: ``motor.error_correction``."""
 from __future__ import annotations
 

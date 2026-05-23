@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """
 Mutation Engine for DECNET.
 Handles dynamic rotation of exposed honeypot services over time.

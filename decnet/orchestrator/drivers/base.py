@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """Driver ABC for orchestrator actions.
 
 Each concrete driver (SSH, Email, future HTTP/SMB/MySQL) maps one

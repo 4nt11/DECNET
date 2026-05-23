@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """GET /swarm-updates/hosts — per-host updater health + release slots.
 
 Fans out an ``UpdaterClient.health()`` probe to every enrolled host that

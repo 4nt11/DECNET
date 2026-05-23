@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """MazeNET generator determinism + DAG shape tests."""
 from __future__ import annotations
 

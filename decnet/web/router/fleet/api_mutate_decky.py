@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """POST /deckies/{name}/mutate — operator-triggered single-decky mutate.
 
 Returns 202 Accepted with one ``lifecycle_id`` per mutated decky.  The

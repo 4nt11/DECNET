@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """Per-user concurrent SSE connection gate.
 
 SSE connections are long-lived — a client that opens one per tab

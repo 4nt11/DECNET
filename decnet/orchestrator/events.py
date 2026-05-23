@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """DB-row + bus-topic helpers for the orchestrator."""
 from __future__ import annotations
 

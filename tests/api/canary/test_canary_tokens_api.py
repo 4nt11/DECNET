@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """End-to-end coverage for /api/v1/canary/* via the live FastAPI app.
 
 The planter's docker-exec call is patched so we don't need a real

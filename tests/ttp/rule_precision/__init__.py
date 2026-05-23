@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """Per-rule precision suite for TTP rule pack v0.
 
 One test module per rule cohort (command / behavioral / email / canary /

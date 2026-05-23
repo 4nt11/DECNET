@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """Tests for GET /api/v1/attackers/export/stix — fleet-wide STIX bundle."""
 from __future__ import annotations
 

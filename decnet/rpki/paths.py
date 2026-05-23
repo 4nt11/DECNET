@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """Filesystem layout for RPKI data — mirror of :mod:`decnet.asn.paths`.
 
 ``RPKI_ROOT`` is where the validator stores its SQLite cache.

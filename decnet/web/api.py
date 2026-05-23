@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
 import asyncio
 # Local binding for the DB-retry sleep so tests can patch it without
 # affecting `asyncio.sleep` globally (which would otherwise starve the

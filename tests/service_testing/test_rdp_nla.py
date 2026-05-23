@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """Tests for the RDP NLA / CredSSP credential-capture path.
 
 The TLS layer is exercised end-to-end in deploy verification; here we

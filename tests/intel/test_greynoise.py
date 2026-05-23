@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """Unit tests for the GreyNoise Community provider.
 
 Mocks httpx via ``MockTransport`` and asserts:

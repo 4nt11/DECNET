@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """YAML-backed loader for intel-provider → ATT&CK technique mappings.
 
 Replaces the ``_*_TO_TECHNIQUES`` ``Final[dict]`` tables that used to

@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """Step E.2: ``temporal.escalation_pattern``."""
 from __future__ import annotations
 

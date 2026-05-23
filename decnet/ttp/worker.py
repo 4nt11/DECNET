@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """Long-running TTP-tagging worker.
 
 E.3.14 of ``development/TTP_TAGGING.md``. Drains the bus topics

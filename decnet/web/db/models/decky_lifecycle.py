@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """DeckyLifecycle table + DTOs.
 
 Tracks one row per (decky, operation) attempt — `deploy` or `mutate` —

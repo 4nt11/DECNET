@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """``operational.*`` feature functions (Phase G).
 
 Step G.1: ``operational.objective``.

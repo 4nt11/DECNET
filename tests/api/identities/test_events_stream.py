@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """SSE events stream — GET /api/v1/identities/events.
 
 Mirrors :mod:`tests.api.topology.test_events_stream` — the route is

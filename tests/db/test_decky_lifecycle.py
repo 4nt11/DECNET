@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """DeckyLifecycle repo CRUD + sweep tests.
 
 State machine: pending → running → succeeded | failed.  Rows are

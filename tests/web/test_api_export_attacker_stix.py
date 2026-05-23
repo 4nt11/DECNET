@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """Tests for GET /api/v1/attackers/{uuid}/export/stix.
 
 Tests call the handler directly (no TestClient). The attack_stix bundle

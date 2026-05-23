@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """Topology table CRUD + the optimistic-locking helpers that the
 sibling LAN / decky / edge / mutation mixins call through MRO."""
 from __future__ import annotations

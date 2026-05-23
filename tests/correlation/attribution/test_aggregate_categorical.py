@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """Pure-function tests for the categorical merger — every state
 transition the engine claims to detect, exercised by synthetic
 observation lists. No DB, no bus.

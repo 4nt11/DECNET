@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """POST /swarm-updates/rollback — manual rollback on a single host.
 
 Calls the worker updater's ``/rollback`` which swaps the ``current``

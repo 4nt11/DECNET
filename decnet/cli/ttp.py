@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """``decnet ttp`` — TTP-tagging worker and admin commands.
 
 Two flat commands share this module:

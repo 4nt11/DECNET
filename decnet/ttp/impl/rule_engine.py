@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """Rule engine contract — `CompiledRule`, `RuleEngine`, `RuleSchema`.
 
 Contract step E.1.5 of ``development/TTP_TAGGING.md``. Shape only — no

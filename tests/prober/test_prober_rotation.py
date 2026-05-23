@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """Integration test: _run_probe threads the rotation recorder through to probes.
 
 The prober worker constructs the recorder closure at startup; here we

@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """Schema-driven service config: descriptors, validation, compose round-trip."""
 
 import base64

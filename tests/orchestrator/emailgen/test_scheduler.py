@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """Scheduler.pick() — async, takes a repo-shaped object."""
 from __future__ import annotations
 

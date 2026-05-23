@@ -1,4 +1,5 @@
 #!/usr/bin/env python3
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """
 LLMNR / mDNS poisoning detector (UDP 5355 and UDP 5353).
 Listens for any incoming name-resolution queries. Any traffic here is a

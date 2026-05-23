@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """Unit coverage for decnet.decky_io.resolve — container-name helpers."""
 from __future__ import annotations
 

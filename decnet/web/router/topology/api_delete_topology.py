@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """DELETE /topologies/{id} — cascade-delete a pending or torn-down topology."""
 from __future__ import annotations
 

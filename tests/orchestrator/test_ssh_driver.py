@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """Driver tests with the docker subprocess mocked.
 
 We don't need a real Docker daemon to validate the driver's contract:

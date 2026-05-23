@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """Fake SSH private key with the callback host in the comment.
 
 OpenSSH private keys carry a free-form comment field — typically

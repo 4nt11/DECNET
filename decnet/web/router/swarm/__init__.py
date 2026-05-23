@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """Swarm controller routers.
 
 One file per endpoint, aggregated under the ``/swarm`` prefix. Mounted

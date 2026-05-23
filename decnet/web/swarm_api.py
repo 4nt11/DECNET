@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """DECNET SWARM Controller — master-side control plane.
 
 Runs as an independent FastAPI/uvicorn process.  Isolated from

@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """iptoasn.com bulk dump download.
 
 One file: ``ip2asn-v4.tsv.gz``, ~5 MB compressed, refreshed daily.

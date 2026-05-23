@@ -1,4 +1,5 @@
 #!/usr/bin/env bash
+# SPDX-License-Identifier: AGPL-3.0-or-later
 # Run a `decnet` subcommand under cProfile and write a .prof file for snakeviz.
 # Usage: scripts/profile/cprofile-cli.sh services
 #        scripts/profile/cprofile-cli.sh status

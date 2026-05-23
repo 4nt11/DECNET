@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """
 Unit tests for decnet.sniffer.seq_class.classify_sequence.
 

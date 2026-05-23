@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """AttributionStateRow + identity-stub repo tests — Phase 1 substrate.
 
 Mirrors ``tests/db/test_observations.py``: SQLite ``tmp_path`` factory,

@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """The JWT secret must be lazy: agent/updater subcommands should import
 `decnet.env` without DECNET_JWT_SECRET being set."""
 from __future__ import annotations

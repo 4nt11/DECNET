@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """Filesystem store for operator-uploaded canary blobs.
 
 Blobs live under ``/var/lib/decnet/canary/blobs/<sha256>`` (override

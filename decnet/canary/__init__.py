@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """Canary tokens — decoy artifacts planted in decky filesystems.
 
 Public surface is exported here so callers can ``from decnet.canary

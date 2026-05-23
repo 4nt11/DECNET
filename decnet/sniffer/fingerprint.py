@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """
 TLS fingerprinting engine for the fleet-wide MACVLAN sniffer.
 

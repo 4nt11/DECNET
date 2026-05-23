@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """Coverage for the canary bus-topic builder + constants.
 
 The builder shares :func:`_reject_tokens` with every other family in

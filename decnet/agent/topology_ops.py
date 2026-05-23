@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """Agent-side topology apply/teardown/state primitives.
 
 Wraps the compose + bridge machinery from :mod:`decnet.engine.deployer`

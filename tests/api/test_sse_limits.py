@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """Per-user SSE connection cap — F6/D mitigation."""
 import pytest
 from fastapi import HTTPException

@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """POST /swarm/deploy — shard a DecnetConfig across enrolled workers.
 
 Per worker we build a filtered copy containing only the deckies assigned

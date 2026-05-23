@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """Stealth-egress HTTP client must NOT advertise DECNET.
 
 Captures the request that the client emits (using httpx's MockTransport)

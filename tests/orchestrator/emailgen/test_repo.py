@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """record / list / count / prune orchestrator_emails on a real SQLite repo."""
 from __future__ import annotations
 

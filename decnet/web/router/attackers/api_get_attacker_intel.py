@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """GET /api/v1/attackers/{uuid}/intel — latest threat-intel row for an attacker."""
 from typing import Any
 

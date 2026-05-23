@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """Hot-swappable rule registry shared by RuleEngine and per-source lifters.
 
 The dispatch index originally lived inline on

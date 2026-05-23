@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """
 TTL-cache contract for /stats, /logs total count, and /attackers total count.
 

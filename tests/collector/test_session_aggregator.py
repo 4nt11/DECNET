@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """Collector session aggregator emits ``attacker.session.ended``.
 
 Pins the producer-side fix that closes the gap surfaced in TTP

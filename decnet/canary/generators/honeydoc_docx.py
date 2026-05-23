@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """Real-DOCX honeydoc generator.
 
 Synthesises a minimal but structurally valid DOCX from scratch via

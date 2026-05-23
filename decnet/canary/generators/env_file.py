@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """Fake ``.env`` with embedded callback URLs.
 
 Modern web stacks read environment variables for everything from

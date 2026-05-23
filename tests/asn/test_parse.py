@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """Parser tests for the iptoasn TSV dump."""
 from __future__ import annotations
 

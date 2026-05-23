@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """``GET /api/v1/ttp/tags/by-{scope}/{uuid}/{technique_id}``.
 
 Backs the operator-facing TTP inspector — when a user clicks a

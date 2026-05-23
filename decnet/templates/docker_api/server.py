@@ -1,4 +1,5 @@
 #!/usr/bin/env python3
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """
 Docker APIserver.
 Serves a fake Docker REST API on port 2375. Responds to common recon

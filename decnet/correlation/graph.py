@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """
 Traversal graph data types for the DECNET correlation engine.
 

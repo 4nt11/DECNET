@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """Router-level coverage for GET /api/v1/ttp/techniques/{tid}/groups.
 
 Calls the handler directly (no TestClient) — the auth dependency is

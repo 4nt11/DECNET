@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """Campaign-clusterer factory.
 
 Mirrors :mod:`decnet.clustering.factory` for the campaign layer.

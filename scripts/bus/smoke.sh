@@ -1,4 +1,5 @@
 #!/usr/bin/env bash
+# SPDX-License-Identifier: AGPL-3.0-or-later
 # End-to-end bus smoke test: boots a worker, subscribes, publishes,
 # verifies the event lands, tears everything down. Exits non-zero if
 # anything misbehaves.

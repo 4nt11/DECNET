@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """Similarity-graph primitives for the campaign clusterer.
 
 The campaign clusterer reads ``AttackerIdentity`` rows (the layer below)

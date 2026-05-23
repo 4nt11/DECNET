@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """Shared network helpers.
 
 Currently houses :mod:`decnet.net.http` — the canonical stealth-egress

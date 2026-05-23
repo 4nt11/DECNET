@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """Step F.0: prompt-line detector.
 
 The detector is shared infrastructure (no primitive emit). These tests

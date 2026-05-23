@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """Ollama backend — subprocess (local) or HTTP (remote).
 
 **Subprocess mode** (default, ``base_url=None``)
