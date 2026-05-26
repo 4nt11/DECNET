@@ -1,8 +1,8 @@
 # DECNET
 
-A honeypot deception network framework. Spin up a fleet of fake machines — called **deckies** — that appear as real, heterogeneous LAN hosts to anyone scanning the network. Each decky gets its own MAC address, IP, hostname, services, OS fingerprint, and log pipeline.
+A honeypot deception network framework. Spin up a fleet of fake machines — called **deckies** — that appear as real, heterogeneous LAN hosts to anyone scanning the network. Each decky gets its own MAC address, IP, hostname, services, OS fingerprint, and log pipeline. Attackers probe the network, DECNET traps every interaction, and a full intelligence stack profiles, clusters, and attributes their behaviour.
 
-Attackers probe the network, DECNET traps every interaction, and you watch from a safe, isolated logging stack.
+[![ko-fi](https://ko-fi.com/img/githubbutton_sm.svg)](https://ko-fi.com/C0C31YDLB5)
 
 ---
 
@@ -12,15 +12,24 @@ Attackers probe the network, DECNET traps every interaction, and you watch from 
 - [Requirements](#requirements)
 - [Installation](#installation)
 - [Quick Start](#quick-start)
+- [Architecture](#architecture)
 - [CLI Reference](#cli-reference)
+- [REST API & Web Dashboard](#rest-api--web-dashboard)
+- [Swarm Mode](#swarm-mode)
+- [Agent Mode](#agent-mode)
+- [Service Bus](#service-bus)
+- [Attacker Intelligence](#attacker-intelligence)
+- [MazeNET Topology](#mazenet-topology)
+- [Canary Tokens](#canary-tokens)
+- [TTP Tagging & Export](#ttp-tagging--export)
 - [Archetypes](#archetypes)
 - [Services](#services)
 - [OS Fingerprint Spoofing](#os-fingerprint-spoofing)
 - [Distro Profiles](#distro-profiles)
 - [Config File](#config-file)
+- [Environment Configuration](#environment-configuration)
 - [Logging](#logging)
 - [Network Drivers](#network-drivers)
-- [Architecture](#architecture)
 - [Writing a Custom Service Plugin](#writing-a-custom-service-plugin)
 - [Development & Testing](#development--testing)
 
@@ -41,10 +50,13 @@ Attacker scans 192.168.1.110–119
   │  ...                                         │
   └──────────────────────────────────────────────┘
          │
-         ▼ all interactions forwarded via RFC 5424 syslog
-  ┌──────────────────────┐
-  │   ELK / SIEM stack   │  (isolated network — not reachable from decoys)
-  └──────────────────────┘
+         ▼ RFC 5424 syslog-over-TLS (cross-host) / UNIX socket (local)
+  ┌──────────────────────────────────────────────┐
+  │           DECNET Master Node                 │
+  │  FastAPI REST API  ·  Web Dashboard          │
+  │  Profiler  ·  Clusterer  ·  Correlator       │
+  │  MazeNET  ·  Canary  ·  TTP Engine           │
+  └──────────────────────────────────────────────┘
 ```
 
 Each decky is a small cluster of Docker containers sharing one network namespace:
@@ -52,7 +64,7 @@ Each decky is a small cluster of Docker containers sharing one network namespace
 - **Base container** — holds the MACVLAN IP, sets TCP/IP stack sysctls for OS fingerprint spoofing, runs `sleep infinity`.
 - **Service containers** — one per honeypot service, all sharing the base's network so they appear to come from the same IP.
 
-From the outside a decky looks identical to a real machine: it has its own MAC address (assigned by MACVLAN), its own IP, its own hostname, and its TCP/IP stack behaves like the OS it is pretending to be.
+From the outside a decky looks identical to a real machine: its own MAC address, IP, hostname, and a TCP/IP stack tuned to the OS it impersonates. Internally, every attacker interaction flows through a log collector, the service bus, and into the intelligence pipeline.
 
 ---
 
@@ -60,7 +72,7 @@ From the outside a decky looks identical to a real machine: it has its own MAC a
 
 - Linux host (bare metal or VM — WSL has MACVLAN limitations)
 - Docker Engine 24+
-- Python 3.11+
+- Python 3.11–3.13 (Python 3.14 is not yet supported — see [stress test notes](#stress-testing))
 - Root / `sudo` for network setup (MACVLAN creation, host interface config)
 - NIC in promiscuous mode for MACVLAN (or use `--ipvlan` on WiFi)
 
@@ -69,9 +81,15 @@ From the outside a decky looks identical to a real machine: it has its own MAC a
 ## Installation
 
 ```bash
-git clone <repo-url> DECNET
+git clone https://git.resacachile.cl/anti/DECNET
 cd DECNET
 pip install -e .
+```
+
+With optional tracing (OpenTelemetry):
+
+```bash
+pip install -e ".[tracing]"
 ```
 
 Verify:
@@ -99,16 +117,11 @@ decnet deploy --mode unihost --deckies 5 --randomize-services --dry-run
 sudo decnet deploy --mode unihost --deckies 5 --interface eth0 --randomize-services
 ```
 
-### Deploy a specific role
+### Start the API server and web dashboard
 
 ```bash
-sudo decnet deploy --mode unihost --deckies 3 --archetype windows-workstation
-```
-
-### Deploy from a config file
-
-```bash
-sudo decnet deploy --config test-full.ini
+decnet api start        # REST API on :8000
+decnet web start        # Dashboard on :8080
 ```
 
 ### Check status
@@ -126,57 +139,362 @@ sudo decnet teardown --id decky-02   # single decky
 
 ---
 
+## Architecture
+
+```
+decnet/
+├── cli/                  # Typer CLI commands (one module per group)
+├── web/
+│   ├── api.py            # FastAPI app factory, lifespan, workers
+│   ├── auth.py           # JWT + bcrypt authentication
+│   ├── router/           # Route modules (attackers, deckies, logs, topology, …)
+│   ├── db/
+│   │   ├── models/       # SQLModel tables (one file per domain)
+│   │   ├── sqlite/       # SQLite backend
+│   │   └── mysql/        # MySQL/asyncmy backend
+│   ├── ingester.py       # Log ingestion worker (bus → DB)
+│   └── worker_registry.py
+├── bus/                  # DECNET ServiceBus (UNIX socket pub/sub)
+│   ├── topics.py         # Canonical topic hierarchy
+│   ├── unix_server.py    # Broker process
+│   └── unix_client.py
+├── collector/            # Local Docker log collector → bus
+├── profiler/             # Attacker behavioural profiling
+│   ├── behavioral.py     # Session fingerprinting
+│   ├── fingerprint.py    # JA3 / tool signatures
+│   ├── classify.py       # Attacker classification
+│   ├── timing.py         # Inter-probe timing analysis
+│   ├── phases.py         # Kill-chain phase detection
+│   └── behave_shell/     # BEHAVE framework adapter
+├── clustering/           # UKC attacker clustering
+│   └── impl/
+├── correlation/          # Identity / campaign formation
+│   ├── engine.py         # Correlation rule engine
+│   ├── attribution/      # Attribution state machine
+│   └── graph.py          # Attacker relationship graph
+├── canary/               # Canary token system
+│   ├── planter.py        # Token placement
+│   ├── cultivator.py     # Trigger detection
+│   ├── dns_server.py     # DNS canary listener
+│   └── generators/       # Token type generators
+├── ttp/                  # TTP tagging & threat intelligence
+│   ├── attack_stix.py    # MITRE ATT&CK STIX 2.1 parser
+│   ├── stix_export.py    # STIX bundle export
+│   ├── misp_export.py    # MISP event export
+│   └── store/            # Inotify-backed rule store
+├── agent/                # Remote DECNET agent (swarm node)
+│   ├── server.py         # Agent FastAPI app
+│   ├── heartbeat.py      # Master heartbeat
+│   └── topology_ops.py   # Agent-side topology operations
+├── engine/               # Decky container lifecycle engine
+│   ├── deployer.py       # Docker bring-up / teardown
+│   └── reaper.py         # Stranded container cleanup
+├── fleet/                # Fleet reconciler (desired vs actual state)
+├── lifecycle/            # Decky lifecycle state machine
+├── orchestrator/         # Synthetic traffic / file / email injection
+├── mutator/              # Behavioural mutation engine
+├── tarpit/               # Connection tarpitting
+├── sniffer/              # Passive packet capture
+├── geoip/                # GeoIP + RIR lookup
+├── asn/                  # ASN lookup (ip-to-asn)
+├── intel/                # Threat intelligence feed integration
+├── artifacts/            # Captured file artifact storage
+├── net/                  # Subnet allocation helpers
+├── archetypes.py         # Machine archetype profiles
+├── distros.py            # OS distro profiles, hostname generation
+├── os_fingerprint.py     # TCP/IP sysctl profiles per OS family
+├── composer.py           # Generates docker-compose.yml
+├── config.py             # Pydantic config models + state persistence
+├── config_ini.py / ini_loader.py
+├── telemetry.py          # OpenTelemetry tracing (optional)
+└── env.py                # Environment variable declarations
+```
+
+### Container model
+
+```
+decky-01  (base)        ← MACVLAN IP owner; sleep infinity; sysctls applied here
+  ├─ decky-01-ssh       ← network_mode: service:decky-01  (shares IP + MAC)
+  ├─ decky-01-http      ← network_mode: service:decky-01
+  └─ decky-01-smb       ← network_mode: service:decky-01
+```
+
+---
+
 ## CLI Reference
 
-### `decnet deploy`
+The full command tree has grown significantly. Commands are gated by deployment mode — master-only commands are hidden when `DECNET_MODE=agent`.
+
+### Decky deployment
+
+| Command | Description |
+|---|---|
+| `decnet deploy` | Deploy deckies (unihost or swarm mode) |
+| `decnet lifecycle start\|stop\|restart\|status` | Manage individual decky lifecycle |
+| `decnet teardown` | Stop and remove deckies |
+| `decnet status` | Print fleet state table |
+| `decnet reconcile` | Reconcile desired fleet state with Docker reality |
+| `decnet inventory` | List all known deckies and their metadata |
+
+#### `decnet deploy` flags
 
 | Flag | Default | Description |
 |---|---|---|
-| `--mode` | `unihost` | Deployment mode: `unihost` or `swarm` |
-| `--deckies` / `-n` | — | Number of deckies to deploy (required without `--config`) |
-| `--interface` / `-i` | auto-detected | Host NIC to attach MACVLAN to |
-| `--subnet` | auto-detected | LAN subnet CIDR, e.g. `192.168.1.0/24` |
-| `--ip-start` | auto | First IP to assign to deckies |
-| `--services` | — | Comma-separated service slugs, e.g. `ssh,smb,rdp` |
-| `--randomize-services` | false | Assign random services to each decky |
-| `--distro` | auto-cycled | Comma-separated distro slugs, e.g. `debian,ubuntu22` |
-| `--randomize-distros` | false | Assign a random distro to each decky |
-| `--archetype` / `-a` | — | Machine archetype slug (sets services + OS family automatically) |
-| `--log-target` | — | Forward logs to `ip:port` (RFC 5424 syslog) |
-| `--log-file` | — | Write logs to this path inside containers |
-| `--ipvlan` | false | Use IPvlan L2 instead of MACVLAN (required on WiFi) |
-| `--dry-run` | false | Generate compose file without starting containers |
+| `--mode` | `unihost` | `unihost` or `swarm` |
+| `--deckies` / `-n` | — | Number of deckies |
+| `--interface` / `-i` | auto | Host NIC for MACVLAN |
+| `--subnet` | auto | LAN CIDR |
+| `--ip-start` | auto | First decky IP |
+| `--services` | — | Comma-separated service slugs |
+| `--randomize-services` | false | Random services per decky |
+| `--distro` | auto-cycled | Distro slugs |
+| `--randomize-distros` | false | Random distro per decky |
+| `--archetype` / `-a` | — | Machine archetype slug |
+| `--log-target` | — | `ip:port` RFC 5424 syslog target |
+| `--log-file` | — | Log path inside containers |
+| `--ipvlan` | false | IPvlan L2 instead of MACVLAN |
+| `--dry-run` | false | Generate compose without starting |
 | `--no-cache` | false | Force rebuild all images |
-| `--config` / `-c` | — | Path to INI config file |
+| `--config` / `-c` | — | INI config file path |
 
-### `decnet status`
+### Services & intelligence
 
-Print a table of all deployed deckies, their IPs, services, hostnames, and container states.
-
-### `decnet teardown`
-
-| Flag | Description |
+| Command | Description |
 |---|---|
-| `--all` | Tear down all deckies and remove the MACVLAN network |
-| `--id <name>` | Stop and remove a single decky by name |
+| `decnet api start\|stop\|status` | Manage the REST API server |
+| `decnet web start\|stop\|status` | Manage the web dashboard |
+| `decnet bus start\|stop\|status` | Manage the service bus broker |
+| `decnet workers start\|stop\|status` | Manage background workers |
+| `decnet profiler start\|stop\|status` | Manage the attacker profiler worker |
+| `decnet orchestrator start\|stop\|status` | Manage synthetic traffic injection |
+| `decnet sniffer start\|stop\|status` | Manage passive packet capture |
+| `decnet forwarder start\|stop\|status` | Manage syslog-over-TLS forwarder |
+| `decnet listener start\|stop\|status` | Manage inbound syslog listener |
 
-### `decnet services`
+### Topology, canary & intelligence
 
-List all registered honeypot service plugins with their ports and Docker images.
+| Command | Description |
+|---|---|
+| `decnet topology list\|create\|deploy\|teardown` | Manage MazeNET topologies |
+| `decnet canary plant\|list\|revoke` | Manage canary tokens |
+| `decnet ttp list\|tag\|export` | TTP tagging and STIX/MISP export |
+| `decnet geoip lookup` | GeoIP + ASN enrichment |
+| `decnet webhook list\|create\|delete\|test` | Manage alert webhooks |
 
-### `decnet distros`
+### Swarm & agent
 
-List all available OS distro profiles.
+| Command | Description |
+|---|---|
+| `decnet swarm add\|remove\|list` | Manage swarm hosts |
+| `decnet swarmctl deploy\|status\|teardown` | Control remote swarm agents |
+| `decnet agent start\|stop\|status` | Run this host as an agent node |
+| `decnet updater push\|rollback` | Push package updates to swarm agents |
 
-### `decnet archetypes`
+### Utilities
 
-List all machine archetype profiles with their default services and descriptions.
+| Command | Description |
+|---|---|
+| `decnet services` | List all 25 registered honeypot service plugins |
+| `decnet distros` | List OS distro profiles |
+| `decnet archetypes` | List machine archetype profiles |
+| `decnet db reset\|migrate` | Database operations |
+| `decnet realism start\|stop` | Background LAN traffic generation |
+| `decnet init` | Initialise a new DECNET deployment directory |
+
+---
+
+## REST API & Web Dashboard
+
+### Start
+
+```bash
+cp .env.example .env.local    # edit JWT secret, ports, DB backend
+decnet api start              # :8000
+decnet web start              # :8080
+```
+
+### Authentication
+
+All API endpoints (except `POST /api/v1/auth/login`) require a JWT bearer token. The health endpoint returns 401 without a token; liveness probes should accept 401 as healthy.
+
+```bash
+curl -X POST http://localhost:8000/api/v1/auth/login \
+  -H 'Content-Type: application/json' \
+  -d '{"username":"admin","password":"admin"}'
+```
+
+### Key API resource groups
+
+| Prefix | Description |
+|---|---|
+| `/api/v1/auth/` | Login, change password, user management |
+| `/api/v1/attackers/` | Attacker profiles, events, transcripts, exports |
+| `/api/v1/identities/` | Clustered attacker identities |
+| `/api/v1/campaigns/` | Attack campaigns |
+| `/api/v1/deckies/` | Fleet state, deploy, lifecycle |
+| `/api/v1/logs/` | Ingested log events, histogram |
+| `/api/v1/topology/` | MazeNET topology CRUD and deployment |
+| `/api/v1/canary/` | Canary token management |
+| `/api/v1/bounty/` | Attacker reward/score board |
+| `/api/v1/config/` | Runtime configuration |
+| `/api/v1/health/` | API and worker health |
+| `/api/v1/swarm/` | Swarm host management |
+| `/api/v1/webhooks/` | Webhook management |
+| `/api/v1/stream` | SSE live event stream |
+
+### Database backends
+
+| Backend | Driver | Use case |
+|---|---|---|
+| SQLite | `aiosqlite` | Single-host, dev, low-traffic |
+| MySQL | `asyncmy` | Multi-host swarm, production |
+
+Set `DECNET_DB_BACKEND=mysql` and configure `DECNET_DB_*` env vars.
+
+---
+
+## Swarm Mode
+
+DECNET supports multi-host deployments. One host runs as **master** (API + intelligence stack); others run as **agents** (decky engine only).
+
+```bash
+# On master
+decnet swarm add --host 192.168.0.20 --name edge-01 --cert /path/to/cert.pem
+decnet swarmctl deploy --host edge-01 --config mynet.ini
+
+# On agent host
+decnet agent start
+```
+
+Agents authenticate to the master with per-host mTLS client certificates. The master verifies each agent's certificate fingerprint against `SwarmHost.client_cert_fingerprint` — CA-issued but not fingerprint-pinned is rejected.
+
+Update distribution:
+
+```bash
+decnet updater push --host edge-01          # push new package version
+decnet updater rollback --host edge-01      # rollback to previous
+```
+
+---
+
+## Agent Mode
+
+When a host runs as an agent (`DECNET_MODE=agent`), the master-only commands and the full REST API are disabled. The agent exposes a minimal internal API for the master to drive topology operations, heartbeat, and log forwarding.
+
+```bash
+DECNET_MODE=agent decnet agent start
+```
+
+Cross-host log forwarding uses RFC 5425 syslog-over-TLS on port 6514 with mutual TLS. Plaintext syslog is only permitted on loopback.
+
+---
+
+## Service Bus
+
+All internal events flow through the DECNET ServiceBus — a UNIX socket broker with NATS-style wildcard subscriptions.
+
+```
+topology.{id}.mutation.{state}
+decky.{id}.state
+attacker.observed
+attacker.scored
+attacker.session.started / ended
+attacker.observation.{primitive}
+identity.formed / merged / unmerged
+campaign.formed / merged
+credential.captured / reuse.detected
+canary.{token_id}.triggered / placed / revoked
+ttp.tagged / ttp.rule.fired.{technique_id}
+orchestrator.traffic.{decky_id}
+system.{worker}.health
+```
+
+Workers subscribe to topics and react in real time. The profiler, clusterer, correlator, canary cultivator, and TTP engine are all bus consumers.
+
+---
+
+## Attacker Intelligence
+
+### Profiler
+
+The attacker profiler runs as a background worker (or embedded in the API process via `DECNET_EMBED_PROFILER=true`). It consumes `attacker.observed` bus events and enriches each attacker record with:
+
+- **Behavioural fingerprinting** — tool signatures, JA3 hashes, keystroke dynamics
+- **Kill-chain phase detection** — reconnaissance, exploitation, lateral movement, exfiltration
+- **Inter-probe timing analysis** — human vs. automated, scan speed estimation
+- **BEHAVE primitives** — structured observation envelopes from the BEHAVE framework
+
+### Clustering (UKC)
+
+The UKC (Unified Knowledge Clustering) engine groups attacker sessions into identities based on behavioural similarity. It publishes `identity.formed` / `identity.merged` events to the bus.
+
+### Correlation & Attribution
+
+The correlation engine tracks relationships across identities and forms campaigns from groups of related attacker activity. Attribution state is tracked per identity primitive, with `identity_uuid` as the canonical primary key.
+
+### GeoIP & ASN
+
+All inbound attacker IPs are enriched with:
+- Country, city, organisation (MaxMind-style database)
+- ASN / network block (ip-to-asn dataset bundled under `decnet/asn/iptoasn/`)
+- RIR allocation data
+
+### Credentials
+
+Captured credentials from SSH, SMB, RDP, and web honeypots are deduplicated and stored. Credential reuse across sessions triggers `credential.reuse.detected` bus events and is surfaced in the dashboard.
+
+---
+
+## MazeNET Topology
+
+MazeNET is DECNET's visual network-of-networks canvas. It lets you design multi-subnet deception environments, deploy them as live decky fleets, and observe attacker movement across segments.
+
+```bash
+decnet topology list
+decnet topology create --name corp-lan --config mynet.ini
+decnet topology deploy --id <topology-id>
+decnet topology teardown --id <topology-id>
+```
+
+Topologies are designed in the web dashboard with a drag-and-drop canvas. Each node is either a **decky** (managed honeypot) or an **observed entity** (read-only attacker-pool node). Canvas positions persist per topology in the dashboard.
+
+Topology mutations are async — the API returns immediately and the deployment status is polled via `GET /api/v1/topology/{id}/mutations/latest` or streamed via SSE.
+
+---
+
+## Canary Tokens
+
+Canary tokens are deception artefacts planted inside decky filesystems, emails, documents, and DNS responses. When triggered, they fire `canary.{token_id}.triggered` bus events and optionally call configured webhooks.
+
+```bash
+decnet canary plant --type url --decky decky-01 --label "corp-vpn-creds"
+decnet canary plant --type dns --label "internal-share"
+decnet canary list
+decnet canary revoke --id <token-id>
+```
+
+Token types include: URL, DNS, document (PDF), image, email link. The `decnet canary-install-toolchain` command installs the Node.js tools used for obfuscated token generation.
+
+---
+
+## TTP Tagging & Export
+
+DECNET maps observed attacker behaviours to MITRE ATT&CK techniques using an inotify-backed rule store. Matched techniques are published as `ttp.tagged` bus events.
+
+```bash
+decnet ttp list        # list techniques in loaded ATT&CK bundle
+decnet ttp tag --attacker-id <id>
+decnet ttp export stix --attacker-id <id> --output bundle.json
+decnet ttp export misp --attacker-id <id> --output event.json
+```
+
+Exports produce standard STIX 2.1 bundles and MISP events. DECNET uses the official MITRE ATT&CK STIX enterprise bundle and the CIRCL misp-stix converter. STIX custom extensions follow inter-DECNET round-trip semantics first; MISP/OpenCTI compatibility is secondary.
 
 ---
 
 ## Archetypes
 
-Archetypes are pre-packaged machine identities. One slug sets services, preferred distros, and OS fingerprint all at once — no need to think about individual components.
+Archetypes are pre-packaged machine identities. One slug sets services, preferred distros, and OS fingerprint all at once.
 
 | Slug | Services | OS Fingerprint | Description |
 |---|---|---|---|
@@ -196,25 +514,15 @@ Archetypes are pre-packaged machine identities. One slug sets services, preferre
 | `monitoring-node` | snmp, ssh | linux | Infrastructure monitoring host |
 | `devops-host` | docker_api, ssh, k8s | linux | CI/CD / container host |
 
-#### CLI
-
 ```bash
 sudo decnet deploy --deckies 4 --archetype windows-workstation
-```
-
-#### INI
-
-```ini
-[corp-workstations]
-archetype = windows-workstation
-amount    = 4
 ```
 
 ---
 
 ## Services
 
-25 honeypot services are registered out of the box. Use their slug in `--services` or `services=` in a config file.
+25 honeypot services are registered out of the box.
 
 | Slug | Ports | Protocol / Role |
 |---|---|---|
@@ -244,36 +552,48 @@ amount    = 4
 | `docker_api` | 2375, 2376 | Docker Remote API |
 | `conpot` | 502, 161, 80 | ICS/SCADA (Modbus, S7, DNP3) |
 
-List live at any time with `decnet services`.
-
 ### Per-service persona config
 
-Most services accept persona configuration to make honeypot responses more convincing. Config is passed via INI subsections (`[decky-name.service]`) or the `service_config` field in code.
-
 ```ini
-[deaddeck-1]
-amount=1
-archetype=deaddeck
-ssh.password=admin
+[decky-01.ssh]
+ssh_version    = OpenSSH_8.9p1 Ubuntu-3ubuntu0.6
+kernel_version = 5.15.0-91-generic
+users          = root:toor,admin:admin123
 
-[decky-webmail.http]
-server_header = Apache/2.4.54 (Debian)
+[decky-01.http]
+server_header = nginx/1.18.0
 fake_app      = wordpress
 
 [decky-winbox.smb]
 workgroup   = CORP
 server_name = WINSRV-DC01
 os_version  = Windows Server 2016
-
-[decky-legacy.ssh]
-ssh_version    = OpenSSH_7.4p1 Debian-10+deb9u7
-kernel_version = 4.9.0-19-amd64
-users          = root:root,admin:password
 ```
 
-### Bring-your-own service (BYOS)
+Accepted keys per service:
 
-Drop in a custom service definition using the `custom-` prefix in an INI config:
+| Service | Keys |
+|---|---|
+| `ssh` | `ssh_version`, `kernel_version`, `users` |
+| `http` | `server_header`, `response_code`, `fake_app` |
+| `smtp` | `smtp_banner`, `smtp_mta` |
+| `smb` | `workgroup`, `server_name`, `os_version` |
+| `rdp` | `os_version`, `build` |
+| `mysql` | `mysql_version`, `mysql_banner` |
+| `redis` | `redis_version` |
+| `postgres` | `pg_version` |
+| `mongodb` | `mongo_version` |
+| `elasticsearch` | `es_version`, `cluster_name` |
+| `ldap` | `base_dn`, `domain` |
+| `snmp` | `snmp_community`, `sys_descr`, `snmp_archetype` |
+| `mqtt` | `mqtt_version` |
+| `sip` | `sip_server`, `sip_domain` |
+| `k8s` | `k8s_version` |
+| `docker_api` | `docker_version` |
+| `vnc` | `vnc_version` |
+| `mssql` | `mssql_version` |
+
+### Bring-your-own service (BYOS)
 
 ```ini
 [custom-myapp]
@@ -282,17 +602,11 @@ exec   = /usr/bin/myapp -p 9999
 ports  = 9999
 ```
 
-The service is registered at runtime and can be referenced as `myapp` in any decky's `services=` list.
-
 ---
 
 ## OS Fingerprint Spoofing
 
-DECNET injects Linux kernel TCP/IP stack parameters (`sysctls`) into each decky's base container so that active OS detection (e.g. `nmap -O`) returns the expected OS rather than "Linux".
-
-The most important probe nmap uses is the IP TTL. Secondary tuning covers TCP SYN retry behaviour and initial receive window size.
-
-### OS families
+DECNET injects Linux kernel TCP/IP `sysctls` into each decky's base container so that active OS detection (e.g. `nmap -O`) returns the expected OS.
 
 | Family | TTL | `tcp_syn_retries` | Notes |
 |---|---|---|---|
@@ -302,44 +616,17 @@ The most important probe nmap uses is the IP TTL. Secondary tuning covers TCP SY
 | `embedded` | 255 | 3 | Printers, IoT, PLCs |
 | `cisco` | 255 | 2 | Network devices |
 
-Because service containers share the base container's network namespace (`network_mode: service:<base>`), the spoofed stack applies to **all** traffic from the decky — no per-service config needed.
-
-### Automatic via archetype
-
-Archetypes set `nmap_os` automatically. A `windows-workstation` decky comes with TTL 128 out of the box.
-
-### Explicit in INI
-
 ```ini
 [decky-winbox]
 services = rdp, smb, mssql
-nmap_os  = windows          # also accepts nmap-os=
-
-[decky-iot]
-services = mqtt, snmp
-nmap_os  = embedded
-
-[decky-legacy]
-services = telnet, vnc, ssh
-nmap_os  = bsd
+nmap_os  = windows
 ```
 
-Priority: **explicit `nmap_os=`** > archetype default > `linux`.
-
-### Verify with nmap
-
-```bash
-sudo nmap -O 192.168.1.114    # should report Windows
-sudo nmap -O 192.168.1.117    # should report embedded / network device
-```
-
-> **Note:** Linux kernel containers cannot perfectly replicate every nmap OS probe (sequence generation, ECN flags, etc.). TTL and TCP window tuning cover the most reliable detection vectors. Full impersonation would require a userspace TCP stack.
+Priority: explicit `nmap_os=` > archetype default > `linux`.
 
 ---
 
 ## Distro Profiles
-
-The distro controls which Docker base image is used for the IP-holding base container, giving each decky a different OS identity at the image layer and varying the hostname style.
 
 | Slug | Docker Image | Display Name |
 |---|---|---|
@@ -355,47 +642,26 @@ The distro controls which Docker base image is used for the IP-holding base cont
 
 When no distro is specified, DECNET cycles through all profiles in round-robin to maximise heterogeneity automatically.
 
-```bash
-# Explicit single distro
-sudo decnet deploy --deckies 3 --services ssh --distro rocky9
-
-# Mix of distros (cycled)
-sudo decnet deploy --deckies 6 --services ssh --distro debian,ubuntu22,rocky9
-
-# Fully random
-sudo decnet deploy --deckies 5 --randomize-services --randomize-distros
-```
-
 ---
 
 ## Config File
-
-For anything beyond a handful of deckies, use an INI config file. It gives you per-decky IPs, per-service personas, archetype pools, and custom service definitions all in one place.
 
 ```bash
 decnet deploy --config mynet.ini --dry-run
 sudo decnet deploy --config mynet.ini --log-target 192.168.1.200:5140
 ```
 
-### Structure
-
 ```ini
-# ── Global settings ───────────────────────────────────────────────────────────
-
 [general]
-net        = 192.168.1.0/24      # subnet CIDR
-gw         = 192.168.1.1         # gateway IP
-interface  = eth0                # host NIC (optional, auto-detected if omitted)
-log_target = 192.168.1.200:5140  # syslog forwarding target (optional)
-
-# ── Decky sections ────────────────────────────────────────────────────────────
+net        = 192.168.1.0/24
+gw         = 192.168.1.1
+interface  = eth0
+log_target = 192.168.1.200:5140
 
 [decky-01]
-ip       = 192.168.1.110        # optional; auto-allocated if omitted
-services = ssh, http             # comma-separated service slugs
-nmap_os  = linux                 # OS fingerprint family (optional, default: linux)
-
-# ── Per-service persona ───────────────────────────────────────────────────────
+ip       = 192.168.1.110
+services = ssh, http
+nmap_os  = linux
 
 [decky-01.ssh]
 ssh_version    = OpenSSH_8.9p1 Ubuntu-3ubuntu0.6
@@ -406,13 +672,9 @@ users          = root:toor,admin:admin123
 server_header = nginx/1.18.0
 fake_app      = wordpress
 
-# ── Archetype shorthand ───────────────────────────────────────────────────────
-
 [corp-workstations]
-archetype = windows-workstation  # sets services, distros, and nmap_os automatically
-amount    = 10                   # spawn 10 deckies from this definition
-
-# ── Bring-your-own service ────────────────────────────────────────────────────
+archetype = windows-workstation
+amount    = 10
 
 [custom-myapp]
 binary = my-image:latest
@@ -420,67 +682,67 @@ exec   = /usr/bin/myapp -p 9999
 ports  = 9999
 ```
 
-### Field reference
-
 #### `[general]`
 
 | Key | Required | Description |
 |---|---|---|
-| `net` | Yes | Subnet CIDR for the decoy LAN |
+| `net` | Yes | Subnet CIDR |
 | `gw` | Yes | Gateway IP |
 | `interface` | No | Host NIC; auto-detected if absent |
-| `log_target` | No | `ip:port` for RFC 5424 syslog forwarding |
+| `log_target` | No | `ip:port` for RFC 5424 syslog |
 
 #### Decky sections
 
 | Key | Required | Description |
 |---|---|---|
-| `ip` | No | Static IP; auto-allocated from subnet if absent |
+| `ip` | No | Static IP; auto-allocated if absent |
 | `services` | See note | Comma-separated service slugs |
-| `archetype` | See note | Archetype slug; sets services + nmap_os unless overridden |
-| `nmap_os` | No | OS fingerprint family: `linux` / `windows` / `bsd` / `embedded` / `cisco` |
-| `amount` | No | Spawn N deckies from this block (default: 1); cannot combine with `ip=` |
+| `archetype` | See note | Sets services + nmap_os unless overridden |
+| `nmap_os` | No | `linux` / `windows` / `bsd` / `embedded` / `cisco` |
+| `amount` | No | Spawn N deckies from this block; cannot combine with `ip=` |
 
 > One of `services=`, `archetype=`, or `--randomize-services` is required per decky.
 
-#### Per-service subsections `[decky-name.service]`
+See [`test-full.ini`](test-full.ini) for a complete example covering all 25 services.
 
-Key/value pairs are passed directly to the service plugin as persona config. Common keys:
+---
 
-| Service | Accepted keys |
-|---|---|
-| `ssh` | `ssh_version`, `kernel_version`, `users` |
-| `http` | `server_header`, `response_code`, `fake_app` |
-| `smtp` | `smtp_banner`, `smtp_mta` |
-| `smb` | `workgroup`, `server_name`, `os_version` |
-| `rdp` | `os_version`, `build` |
-| `mysql` | `mysql_version`, `mysql_banner` |
-| `redis` | `redis_version` |
-| `postgres` | `pg_version` |
-| `mongodb` | `mongo_version` |
-| `elasticsearch` | `es_version`, `cluster_name` |
-| `ldap` | `base_dn`, `domain` |
-| `snmp` | `snmp_community`, `sys_descr` |
-| `mqtt` | `mqtt_version` |
-| `sip` | `sip_server`, `sip_domain` |
-| `k8s` | `k8s_version` |
-| `docker_api` | `docker_version` |
-| `vnc` | `vnc_version` |
-| `mssql` | `mssql_version` |
+## Environment Configuration
 
-When using `amount=`, a subsection like `[group-name.ssh]` automatically propagates to all expanded deckies (`group-name-01`, `group-name-02`, …).
+Copy `.env.example` to `.env.local`:
 
-### Full example
+```ini
+# API
+DECNET_API_HOST=0.0.0.0
+DECNET_API_PORT=8000
+DECNET_JWT_SECRET=supersecretkey12345
 
-See [`test-full.ini`](test-full.ini) — covers all 25 services across 10 role-themed deckies with per-service personas, archetype pools, OS fingerprint assignments, and inline comments explaining each choice.
+# Web dashboard
+DECNET_WEB_HOST=0.0.0.0
+DECNET_WEB_PORT=8080
+DECNET_ADMIN_USER=admin
+DECNET_ADMIN_PASSWORD=admin
+
+# Database
+DECNET_DB_BACKEND=sqlite          # or mysql
+DECNET_DB_POOL_SIZE=20
+DECNET_DB_MAX_OVERFLOW=40
+
+# Log ingestion
+DECNET_INGEST_LOG_FILE=/var/log/decnet/decnet.log
+
+# Tracing (optional — requires pip install -e ".[tracing]")
+DECNET_TRACING=false
+
+# Deployment mode
+DECNET_MODE=master                 # or agent
+```
 
 ---
 
 ## Logging
 
-All attacker interactions are forwarded off the decoy network to an isolated logging sink. The log pipeline lives on a separate internal Docker bridge (`decnet_logs`) that is not reachable from the fake LAN.
-
-### Syslog forwarding (RFC 5424)
+All attacker interactions are forwarded off the decoy network to an isolated logging sink. Cross-host log forwarding uses RFC 5425 syslog-over-TLS on port 6514 with mTLS. Plaintext syslog is only permitted on loopback.
 
 ```bash
 sudo decnet deploy --config mynet.ini --log-target 192.168.1.200:5140
@@ -492,23 +754,9 @@ Or in `[general]`:
 log_target = 192.168.1.200:5140
 ```
 
-### File logging
-
-```bash
-sudo decnet deploy --config mynet.ini --log-file /var/log/decnet/decnet.log
-```
-
-The log directory is bind-mounted into every service container. Log entries follow RFC 5424 syslog format.
-
 ### Log target health check
 
-Before deployment, DECNET probes the log target and warns if it is unreachable:
-
-```
-Warning: log target 192.168.1.200:5140 is unreachable. Logs will be lost if it stays down.
-```
-
-Deployment continues regardless — the log target can come up later.
+Before deployment, DECNET probes the log target and warns if unreachable. Deployment continues regardless.
 
 ---
 
@@ -516,59 +764,17 @@ Deployment continues regardless — the log target can come up later.
 
 ### MACVLAN (default)
 
-Each decky gets a unique MAC address assigned by the kernel, making it appear as a distinct physical machine on the LAN. Requires the host NIC to support promiscuous mode.
+Each decky gets a unique MAC address, appearing as a distinct physical machine. Requires promiscuous mode on the host NIC.
 
-```bash
-sudo decnet deploy --interface eth0 --deckies 5 --randomize-services
-```
-
-**Known limitation:** The host cannot communicate directly with its own MACVLAN children by default. DECNET automatically creates a `decnet_macvlan0` host-side interface as a hairpin workaround so that `decnet status` and log collection continue to work from the host.
+DECNET automatically creates a `decnet_macvlan0` host-side hairpin interface so status checks and log collection continue to work from the master host.
 
 ### IPvlan L2 (`--ipvlan`)
 
-Use IPvlan L2 when MACVLAN is not available — typically on WiFi interfaces where the access point filters non-registered MACs. IPvlan shares the host MAC and gives each decky a unique IP only.
+Use when MACVLAN is not available — typically on WiFi where the AP filters non-registered MACs. Shares the host MAC; gives each decky a unique IP only.
 
 ```bash
 sudo decnet deploy --interface wlp6s0 --ipvlan --deckies 3 --randomize-services
 ```
-
----
-
-## Architecture
-
-```
-decnet/
-├── cli.py            # Typer CLI entry point; builds DecnetConfig from flags/INI
-├── config.py         # Pydantic models: DeckyConfig, DecnetConfig; state persistence
-├── composer.py       # Generates docker-compose.yml from DecnetConfig
-├── deployer.py       # Docker SDK: bring-up, teardown, status
-├── network.py        # MACVLAN/IPvlan creation, IP allocation, hairpin interface
-├── archetypes.py     # Machine archetype profiles (14 built-in)
-├── distros.py        # OS distro profiles (9 built-in), hostname generation
-├── os_fingerprint.py # TCP/IP sysctl profiles per OS family for nmap spoofing
-├── ini_loader.py     # INI config file parser
-├── custom_service.py # Bring-your-own service runtime registration
-├── services/
-│   ├── base.py       # BaseService ABC — contract every plugin must implement
-│   ├── registry.py   # Auto-discovers and registers all BaseService subclasses
-│   └── *.py          # 25 individual honeypot service plugins
-├── logging/
-│   ├── forwarder.py  # RFC 5424 syslog UDP forwarder
-│   ├── file_handler.py
-│   └── syslog_formatter.py
-└── templates/        # Dockerfiles and service entrypoint scripts
-```
-
-### Container model
-
-```
-decky-01  (base)        ← MACVLAN IP owner; sleep infinity; sysctls applied here
-  ├─ decky-01-ssh       ← network_mode: service:decky-01  (shares IP + MAC)
-  ├─ decky-01-http      ← network_mode: service:decky-01
-  └─ decky-01-smb       ← network_mode: service:decky-01
-```
-
-Service containers carry no network config of their own. From the outside, every port on a decky appears to belong to a single machine.
 
 ---
 
@@ -596,21 +802,13 @@ class MyService(BaseService):
         }
 ```
 
-2. The registry auto-discovers all `BaseService` subclasses at import time — no registration step needed.
+2. The registry auto-discovers all `BaseService` subclasses — no registration step needed.
 
-3. Use it immediately:
-
-```bash
-decnet services                               # myservice appears in the list
-sudo decnet deploy --deckies 2 --services myservice
-```
-
-For services that require a custom Dockerfile, set `default_image = "build"` and override `dockerfile_context()` to return the path to your build context directory. The composer injects `BASE_IMAGE` as a build arg so your Dockerfile picks up the correct distro image automatically:
+3. For services requiring a custom Dockerfile, set `default_image = "build"` and override `dockerfile_context()`. The composer injects `BASE_IMAGE` as a build arg:
 
 ```dockerfile
 ARG BASE_IMAGE=debian:bookworm-slim
 FROM ${BASE_IMAGE}
-...
 ```
 
 ---
@@ -618,25 +816,82 @@ FROM ${BASE_IMAGE}
 ## Development & Testing
 
 ```bash
-pip install -e .
-python -m pytest          # 478 tests, < 1 second
+pip install -e ".[dev]"
+source .311/bin/activate
+pytest tests/                  # ~5050 tests, ~2 min
 ```
 
-The test suite covers:
+Scoped runs (skip heavy categories):
 
-| File | What it tests |
-|---|---|
-| `test_composer.py` | Compose generation, BASE_IMAGE injection, distro heterogeneity |
-| `test_os_fingerprint.py` | OS sysctl profiles, compose injection, archetype coverage, CLI propagation |
-| `test_ini_loader.py` | INI parsing, subsection propagation, custom services, `nmap_os` |
-| `test_services.py` | Per-service persona config, compose fragments |
-| `test_network.py` | IP allocation, range calculation |
-| `test_log_file_mount.py` | Log directory bind-mount injection |
-| `test_syslog_formatter.py` | RFC 5424 syslog formatting |
-| `test_archetypes.py` | Archetype validation and field correctness |
-| `test_cli_service_pool.py` | CLI service resolution |
+```bash
+pytest tests/unit/             # fast unit tests only
+pytest tests/api/              # API contract tests
+```
 
-Every new feature requires passing tests before merging.
+The test suite is split into several categories controlled by markers:
+
+| Marker | How to run | Description |
+|---|---|---|
+| _(default)_ | `pytest tests/` | Unit + integration tests |
+| `fuzz` | `pytest -m fuzz` | Hypothesis fuzz tests |
+| `stress` | `pytest -m stress tests/stress/` | Locust throughput tests |
+| `bench` | `pytest -m bench` | pytest-benchmark micro-benchmarks |
+| `live` | `pytest -m live` | Live subprocess service tests |
+| `live_docker` | `DECNET_LIVE_DOCKER=1 pytest -m live_docker` | Live Docker tests |
+
+### Stress Testing
+
+A [Locust](https://locust.io)-based stress test suite lives in `tests/stress/`.
+
+```bash
+pytest -m stress tests/stress/ -v -x -n0 -s
+STRESS_USERS=2000 STRESS_SPAWN_RATE=200 STRESS_DURATION=120 \
+  pytest -m stress tests/stress/ -v -x -n0 -s
+
+# Standalone Locust web UI
+locust -f tests/stress/locustfile.py --host http://localhost:8000
+```
+
+| Env var | Default | Description |
+|---|---|---|
+| `STRESS_USERS` | `500` | Total simulated users |
+| `STRESS_SPAWN_RATE` | `50` | Users spawned per second |
+| `STRESS_DURATION` | `60` | Test duration in seconds |
+| `STRESS_WORKERS` | CPU count (max 4) | Uvicorn workers |
+| `STRESS_MIN_RPS` | `500` | Minimum RPS to pass |
+| `STRESS_MAX_P99_MS` | `200` | Maximum p99 latency (ms) to pass |
+
+#### Measured baseline (MySQL backend, asyncmy driver)
+
+| Metric | 500u, tracing on | 1500u, tracing on | 1500u, tracing **off** | 1500u, off, **12 workers** |
+|---|---|---|---|---|
+| Throughput (RPS) | ~960 | ~880 | ~990 | ~1,585 |
+| Median (p50) | 100 ms | 690 ms | 340 ms | 700 ms |
+| p95 | 1.9 s | 6.5 s | 5.7 s | 2.7 s |
+| p99 | 2.9 s | 9.5 s | 8.4 s | 4.2 s |
+| Failures | 0 | 0 | 0 | 0 |
+
+Tuning notes:
+
+- **Tracing off** halves p50 at 1500 users (690 → 340 ms).
+- **12 workers** scales RPS ~1.6× over one worker. DB-bound — MySQL `max_connections` needs bumping beyond the default 151 for multi-worker load.
+- **Router-level TTL caches** on hot count/stats endpoints collapse concurrent duplicate DB queries — essential for high single-worker RPS.
+- **Python 3.14 is not supported** — the reworked GC segfaults under heavy concurrent async load (`_PyGC_Collect` / `mark_all_reachable`). Use Python 3.11–3.13.
+
+#### System tuning
+
+Under 500+ concurrent users, the default Linux open file limit (1024) causes `OSError: Too many open files`:
+
+```bash
+ulimit -n 65536                   # session
+# or permanent via /etc/security/limits.conf:
+*  soft  nofile  65536
+*  hard  nofile  65536
+```
+
+For systemd units: `LimitNOFILE=65536`.
+
+---
 
 # AI Disclosure
 
