@@ -1,13 +1,20 @@
 # SPDX-License-Identifier: AGPL-3.0-or-later
-"""Build a gzipped tarball of the master's working tree for pushing to workers.
+"""Build a gzipped tarball of the installable DECNET package for workers.
 
-Always excludes the obvious large / secret / churn paths: ``.venv/``,
-``__pycache__/``, ``.git/``, ``wiki-checkout/``, ``*.db*``, ``*.log``. The
-caller can supply additional exclude globs.
+The tarball is extracted and ``pip install``-ed on each worker, so it ships
+*only* what that build needs — enumerated by an INCLUDE allowlist, never a
+blocklist. This is the trust-boundary rule: a bundle crossing to another host
+enumerates what it carries, so a stray ``.env.local``, TLS private key, SQLite
+DB, or the operator's whole working tree can never be swept in by an exclude
+list that simply forgot a pattern.
 
-Deliberately does NOT invoke git — the tree is what the operator has on
-disk (staged + unstaged + untracked). That's the whole point; the scp
-workflow we're replacing also shipped the live tree.
+``DEFAULT_INCLUDES`` is the package surface (``decnet/`` + packaging metadata);
+``_HYGIENE_PATTERNS`` is a defensive second layer that drops secret-/churn-
+shaped files even if one somehow lives under an included directory. Callers may
+pass ``extra_excludes`` to narrow further, but cannot add anything outside the
+allowlist.
+
+Deliberately does NOT invoke git — the included dirs are taken from disk as-is.
 """
 from __future__ import annotations
 
@@ -17,22 +24,26 @@ import pathlib
 import tarfile
 from typing import Iterable, Optional
 
-DEFAULT_EXCLUDES = (
-    ".venv", ".venv/*",
-    "**/.venv/*",
-    "__pycache__", "**/__pycache__", "**/__pycache__/*",
-    ".git", ".git/*",
-    "wiki-checkout", "wiki-checkout/*",
+# The ONLY top-level paths shipped to a worker: the importable package plus the
+# metadata `pip install .` needs (setuptools build-meta + license-files=LICENSE).
+# decnet/ carries its own package-data (templates/, canary/*). Everything else
+# in the working tree — secrets, DBs, logs, the dashboard source, tests, build
+# artifacts — is excluded by construction.
+DEFAULT_INCLUDES = (
+    "pyproject.toml",
+    "LICENSE",
+    "README.md",
+    "decnet",
+)
+
+# Defensive hygiene applied WITHIN an included path: never ship build churn or
+# anything secret-shaped, matched on the basename so it catches any nesting.
+_HYGIENE_PATTERNS = (
     "*.pyc", "*.pyo",
-    "*.db", "*.db-wal", "*.db-shm",
+    "*.db", "*.db-wal", "*.db-shm", "*.db-journal",
     "*.log",
-    ".pytest_cache", ".pytest_cache/*",
-    ".mypy_cache", ".mypy_cache/*",
-    ".tox", ".tox/*",
-    "*.egg-info", "*.egg-info/*",
-    "decnet-state.json",
-    "master.log", "master.json",
-    "decnet.db*",
+    ".env", ".env.*", "*.env",
+    "*.key", "*.pem", "*.crt", "*.p12", "*.pfx",
 )
 
 
@@ -41,39 +52,57 @@ def _is_excluded(rel: str, patterns: Iterable[str]) -> bool:
     for pat in patterns:
         if fnmatch.fnmatch(rel, pat):
             return True
-        # Also match the pattern against every leading subpath — this is
-        # what catches nested `.venv/...` without forcing callers to spell
-        # out every `**/` glob.
+        # Also match the pattern against every leading subpath so a caller can
+        # exclude a whole subtree without spelling out every `**/` glob.
         for i in range(1, len(parts) + 1):
             if fnmatch.fnmatch("/".join(parts[:i]), pat):
                 return True
     return False
 
 
+def _hygiene_skip(rel: str) -> bool:
+    """True for build-churn / secret-shaped files anywhere in the tree."""
+    p = pathlib.PurePosixPath(rel)
+    if "__pycache__" in p.parts:
+        return True
+    return any(fnmatch.fnmatch(p.name, pat) for pat in _HYGIENE_PATTERNS)
+
+
 def tar_working_tree(
     root: pathlib.Path,
     extra_excludes: Optional[Iterable[str]] = None,
+    includes: Optional[Iterable[str]] = None,
 ) -> bytes:
-    """Return the gzipped tarball bytes of ``root``.
+    """Return the gzipped tarball of the installable package under ``root``.
 
-    Entries are added with paths relative to ``root`` (no leading ``/``,
-    no ``..``). The updater rejects unsafe paths on the receiving side.
+    Only paths in ``includes`` (default :data:`DEFAULT_INCLUDES`) are walked;
+    ``extra_excludes`` narrows further but can never widen the set. Entries are
+    added with paths relative to ``root`` (no leading ``/``, no ``..``). The
+    updater rejects unsafe paths on the receiving side.
     """
-    patterns = list(DEFAULT_EXCLUDES) + list(extra_excludes or ())
+    include_roots = list(includes) if includes is not None else list(DEFAULT_INCLUDES)
+    extra = list(extra_excludes or ())
     buf = io.BytesIO()
 
+    def _admit(path: pathlib.Path) -> None:
+        rel = path.relative_to(root).as_posix()
+        if _hygiene_skip(rel) or _is_excluded(rel, extra):
+            return
+        tar.add(path, arcname=rel, recursive=False)
+
     with tarfile.open(fileobj=buf, mode="w:gz") as tar:
-        for path in sorted(root.rglob("*")):
-            rel = path.relative_to(root).as_posix()
-            if _is_excluded(rel, patterns):
+        for entry in include_roots:
+            base = root / entry
+            if not base.exists() or base.is_symlink():
                 continue
-            if path.is_symlink():
-                # Symlinks inside a repo tree are rare and often break
-                # portability; skip them rather than ship dangling links.
+            if base.is_file():
+                _admit(base)
                 continue
-            if path.is_dir():
-                continue
-            tar.add(path, arcname=rel, recursive=False)
+            for path in sorted(base.rglob("*")):
+                # Skip symlinks (dangling/portability) and dirs (added implicitly).
+                if path.is_symlink() or path.is_dir():
+                    continue
+                _admit(path)
 
     return buf.getvalue()
 
