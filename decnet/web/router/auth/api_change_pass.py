@@ -1,4 +1,5 @@
 # SPDX-License-Identifier: AGPL-3.0-or-later
+from datetime import datetime, timezone
 from typing import Any, Optional
 
 from fastapi import APIRouter, Depends, HTTPException, status
@@ -32,5 +33,8 @@ async def change_password(request: ChangePasswordRequest, current_user: str = De
 
     _new_hash: str = await ahash_password(request.new_password)
     await repo.update_user_password(current_user, _new_hash, must_change_password=False)
+    # Changing a password revokes every existing session for this user (incl.
+    # the current one): the caller's next request 401s and re-authenticates.
+    await repo.set_tokens_valid_from(current_user, datetime.now(timezone.utc))
     invalidate_user_cache(current_user)
     return {"message": "Password updated successfully"}

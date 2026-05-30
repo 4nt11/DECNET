@@ -1,5 +1,6 @@
 # SPDX-License-Identifier: AGPL-3.0-or-later
 import uuid as _uuid
+from datetime import datetime, timezone
 
 from fastapi import APIRouter, Depends, HTTPException
 
@@ -77,6 +78,8 @@ async def api_delete_user(
     deleted = await repo.delete_user(user_uuid)
     if not deleted:
         raise HTTPException(status_code=404, detail="User not found")
+    # No token bump needed: the user row is gone, so _resolve_token already
+    # 401s any of their tokens (user lookup returns None).
     invalidate_user_cache(user_uuid)
     invalidate_list_users_cache()
     return {"message": "User deleted"}
@@ -108,6 +111,9 @@ async def api_update_user_role(
         raise HTTPException(status_code=404, detail="User not found")
 
     await repo.update_user_role(user_uuid, req.role)
+    # Revoke the target's sessions so a privilege change can't be outrun by an
+    # in-flight token carrying the old role.
+    await repo.set_tokens_valid_from(user_uuid, datetime.now(timezone.utc))
     invalidate_user_cache(user_uuid)
     invalidate_list_users_cache()
     return {"message": "User role updated"}
@@ -140,6 +146,9 @@ async def api_reset_user_password(
         await ahash_password(req.new_password),
         must_change_password=True,
     )
+    # Admin reset implies the old credential is burned — revoke the target's
+    # existing sessions so a leaked token can't survive the reset.
+    await repo.set_tokens_valid_from(user_uuid, datetime.now(timezone.utc))
     invalidate_user_cache(user_uuid)
     invalidate_list_users_cache()
     return {"message": "Password reset successfully"}

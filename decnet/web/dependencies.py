@@ -195,8 +195,13 @@ async def _resolve_token(token: str) -> tuple[str, dict[str, Any]]:
     if not jti:
         raise _CREDENTIALS_EXCEPTION
     # 2. Bulk cutoff: password/role change moves tokens_valid_from forward.
+    #    JWT iat is whole-seconds, so floor the cutoff to whole seconds too —
+    #    otherwise a re-login landing in the SAME second as the change gets an
+    #    iat that truncates below a sub-second cutoff and is wrongly rejected.
+    #    Cost: tokens issued earlier in that same second survive (≤1s), which is
+    #    negligible against a 24h lifetime.
     cutoff = user.get("tokens_valid_from")
-    if cutoff is not None and _epoch(payload.get("iat", 0)) < _epoch(cutoff):
+    if cutoff is not None and _epoch(payload.get("iat", 0)) < int(_epoch(cutoff)):
         raise _CREDENTIALS_EXCEPTION
     # 3. Single-token denylist (logout).
     if await _is_revoked_cached(jti):
