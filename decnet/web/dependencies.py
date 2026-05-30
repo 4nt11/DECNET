@@ -219,13 +219,15 @@ async def _resolve_request(request: Request) -> tuple[str, dict[str, Any]]:
     return await _resolve_token(token)
 
 
-def get_token_claims(request: Request) -> dict[str, Any]:
+async def get_token_claims(request: Request) -> dict[str, Any]:
     """Return the validated claims of the presented Bearer token (decode +
-    signature + revocation checks). Used by logout, which needs the token's own
-    ``jti``/``exp`` to denylist *this* session even for must_change users."""
+    signature + user-exists + revocation checks, but NOT must_change). Used by
+    logout, which needs the token's own ``jti``/``exp`` to denylist *this*
+    session — and must still reject an already-revoked token."""
     token = _bearer_from_header(request)
     if not token:
         raise _CREDENTIALS_EXCEPTION
+    await _resolve_token(token)  # enforce user-exists + revocation; raises 401
     return _decode_payload(token)
 
 

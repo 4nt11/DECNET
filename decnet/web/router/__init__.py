@@ -3,6 +3,7 @@ from fastapi import APIRouter
 
 from .auth.api_login import router as login_router
 from .auth.api_change_pass import router as change_pass_router
+from .auth.api_logout import router as logout_router
 from .logs.api_get_logs import router as logs_router
 from .logs.api_get_histogram import router as histogram_router
 from .bounty.api_get_bounties import router as bounty_router
@@ -89,6 +90,7 @@ api_router = APIRouter(
 # Authentication
 api_router.include_router(login_router)
 api_router.include_router(change_pass_router)
+api_router.include_router(logout_router)
 
 # Logs & Analytics
 api_router.include_router(logs_router)
