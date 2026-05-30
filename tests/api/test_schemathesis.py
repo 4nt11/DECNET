@@ -47,7 +47,11 @@ pytestmark = pytest.mark.xdist_group("schemathesis")
 import decnet.web.auth
 decnet.web.auth.SECRET_KEY = TEST_SECRET
 
-TEST_TOKEN = create_access_token({"uuid": "00000000-0000-0000-0000-000000000001"})
+# jti is mandatory post token-revocation; the matching user is seeded by the
+# server under DECNET_CONTRACT_TEST (sqlmodel_repo._ensure_contract_user).
+TEST_TOKEN = create_access_token(
+    {"uuid": "00000000-0000-0000-0000-000000000001", "jti": "contract-test-jti"}
+)
 
 ALL_CHECKS = (
     not_a_server_error,

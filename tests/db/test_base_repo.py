@@ -72,6 +72,9 @@ class DummyRepo(BaseRepository):
     async def list_users(self): await super().list_users()
     async def delete_user(self, u): await super().delete_user(u)
     async def update_user_role(self, u, r): await super().update_user_role(u, r)
+    async def revoke_token(self, j, u, e): await super().revoke_token(j, u, e)
+    async def is_token_revoked(self, j): await super().is_token_revoked(j); return False
+    async def set_tokens_valid_from(self, u, ts): await super().set_tokens_valid_from(u, ts)
     async def purge_logs_and_bounties(self): await super().purge_logs_and_bounties()
     async def get_attacker_artifacts(self, uuid): await super().get_attacker_artifacts(uuid)
     async def get_attacker_transcripts(self, uuid): await super().get_attacker_transcripts(uuid)
@@ -275,6 +278,10 @@ async def test_base_repo_coverage():
     # is ``pass`` (returns None), the rest raise NotImplementedError.
     from datetime import datetime, timezone
     await dr.get_log_histogram()
+    # Token-revocation surface (JWT denylist + bulk cutoff).
+    await dr.revoke_token("jti-x", "user-x", datetime.now(timezone.utc))
+    await dr.is_token_revoked("jti-x")
+    await dr.set_tokens_valid_from("user-x", datetime.now(timezone.utc))
     with pytest.raises(NotImplementedError):
         await dr.has_observations_for_evidence("shard:x#1")
     with pytest.raises(NotImplementedError):

@@ -16,11 +16,22 @@ from decnet.web.auth import create_access_token
 class TestGetCurrentUser:
     @pytest.mark.asyncio
     async def test_valid_token(self):
+        # Post token-revocation, get_current_user resolves the user and checks
+        # the denylist, so a valid token must carry a jti, name a live user, and
+        # not be revoked.
+        from decnet.web import dependencies as deps
         from decnet.web.dependencies import get_current_user
-        token = create_access_token({"uuid": "test-uuid-123"})
+        deps._reset_user_cache()
+        token = create_access_token({"uuid": "test-uuid-123", "jti": "jti-1"})
         request = MagicMock()
         request.headers = {"Authorization": f"Bearer {token}"}
-        result = await get_current_user(request)
+        user = {
+            "uuid": "test-uuid-123", "role": "viewer",
+            "must_change_password": False, "tokens_valid_from": None,
+        }
+        with patch.object(deps.repo, "get_user_by_uuid", AsyncMock(return_value=user)), \
+             patch.object(deps.repo, "is_token_revoked", AsyncMock(return_value=False)):
+            result = await get_current_user(request)
         assert result == "test-uuid-123"
 
     @pytest.mark.asyncio

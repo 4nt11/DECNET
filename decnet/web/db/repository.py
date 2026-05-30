@@ -115,6 +115,25 @@ class BaseRepository(ABC):
         pass
 
     @abstractmethod
+    async def revoke_token(self, jti: str, user_uuid: str, expires_at: datetime) -> None:
+        """Add a token's ``jti`` to the logout denylist.
+
+        Implementations also prune rows whose ``expires_at`` has passed, so the
+        denylist never outgrows the set of live-but-revoked tokens.
+        """
+        pass
+
+    @abstractmethod
+    async def is_token_revoked(self, jti: str) -> bool:
+        """True if ``jti`` is currently on the logout denylist."""
+        pass
+
+    @abstractmethod
+    async def set_tokens_valid_from(self, user_uuid: str, ts: datetime) -> None:
+        """Bulk-revoke: reject every token for this user issued before ``ts``."""
+        pass
+
+    @abstractmethod
     async def purge_logs_and_bounties(self) -> dict[str, int]:
         """Delete all logs, bounties, and attacker profiles. Returns counts of deleted rows."""
         pass

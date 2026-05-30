@@ -2,11 +2,12 @@
 """User CRUD."""
 from __future__ import annotations
 
+from datetime import datetime, timezone
 from typing import Any, Optional
 
-from sqlalchemy import select, update
+from sqlalchemy import delete, select, update
 
-from decnet.web.db.models import User
+from decnet.web.db.models import RevokedToken, User
 
 
 from decnet.web.db.sqlmodel_repo._helpers import _MixinBase
@@ -73,5 +74,31 @@ class AuthMixin(_MixinBase):
         async with self._session() as session:
             await session.execute(
                 update(User).where(User.uuid == uuid).values(role=role)
+            )
+            await session.commit()
+
+    async def revoke_token(self, jti: str, user_uuid: str, expires_at: datetime) -> None:
+        async with self._session() as session:
+            # Opportunistic prune — the denylist only needs unexpired tokens, so
+            # purge stale rows on every insert instead of a separate vacuum job.
+            await session.execute(
+                delete(RevokedToken).where(
+                    RevokedToken.expires_at < datetime.now(timezone.utc)
+                )
+            )
+            if await session.get(RevokedToken, jti) is None:
+                session.add(
+                    RevokedToken(jti=jti, user_uuid=user_uuid, expires_at=expires_at)
+                )
+            await session.commit()
+
+    async def is_token_revoked(self, jti: str) -> bool:
+        async with self._session() as session:
+            return await session.get(RevokedToken, jti) is not None
+
+    async def set_tokens_valid_from(self, user_uuid: str, ts: datetime) -> None:
+        async with self._session() as session:
+            await session.execute(
+                update(User).where(User.uuid == user_uuid).values(tokens_valid_from=ts)
             )
             await session.commit()

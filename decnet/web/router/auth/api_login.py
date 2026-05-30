@@ -1,6 +1,7 @@
 # SPDX-License-Identifier: AGPL-3.0-or-later
 from datetime import timedelta
 from typing import Any, Optional
+from uuid import uuid4
 
 from fastapi import APIRouter, HTTPException, Request, status
 
@@ -52,9 +53,11 @@ async def login(request: Request, payload: LoginRequest) -> dict[str, Any]:
         )
 
     _access_token_expires: timedelta = timedelta(minutes=ACCESS_TOKEN_EXPIRE_MINUTES)
-    # Token uses uuid instead of sub
+    # Token uses uuid instead of sub; jti is the per-token id the denylist
+    # keys on (logout). create_access_token stamps exp + iat.
     _access_token: str = create_access_token(
-        data={"uuid": _user["uuid"]}, expires_delta=_access_token_expires
+        data={"uuid": _user["uuid"], "jti": uuid4().hex},
+        expires_delta=_access_token_expires,
     )
     return {
         "access_token": _access_token,

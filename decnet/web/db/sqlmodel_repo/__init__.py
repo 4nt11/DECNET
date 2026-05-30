@@ -14,6 +14,7 @@ from __future__ import annotations
 
 import asyncio
 import json
+import os
 
 import orjson
 import uuid
@@ -56,6 +57,11 @@ from decnet.web.db.sqlmodel_repo.topology import TopologyMixin
 from decnet.web.db.sqlmodel_repo.tarpit import TarpitMixin
 from decnet.web.db.sqlmodel_repo.ttp import TTPMixin
 from decnet.web.db.sqlmodel_repo.webhooks import WebhooksMixin
+
+# Fixed principal the schemathesis contract harness mints its token for; seeded
+# only under DECNET_CONTRACT_TEST (see _ensure_contract_user). Kept in sync with
+# tests/api/test_schemathesis.py.
+CONTRACT_TEST_USER_UUID = "00000000-0000-0000-0000-000000000001"
 
 
 class SQLModelRepository(
@@ -105,6 +111,7 @@ class SQLModelRepository(
         async with self.engine.begin() as conn:
             await conn.run_sync(SQLModel.metadata.create_all)
         await self._ensure_admin_user()
+        await self._ensure_contract_user()
 
     async def reinitialize(self) -> None:
         """Re-create schema (for tests / reset flows). Does NOT drop existing tables."""
@@ -112,6 +119,7 @@ class SQLModelRepository(
         async with self.engine.begin() as conn:
             await conn.run_sync(SQLModel.metadata.create_all)
         await self._ensure_admin_user()
+        await self._ensure_contract_user()
 
     async def _ensure_admin_user(self) -> None:
         async with self._session() as session:
@@ -136,6 +144,28 @@ class SQLModelRepository(
                 existing.password_hash = get_password_hash(DECNET_ADMIN_PASSWORD)
                 session.add(existing)
                 await session.commit()
+
+    async def _ensure_contract_user(self) -> None:
+        """Seed the fixed-uuid principal the schemathesis contract/fuzz harness
+        authenticates as. Gated on DECNET_CONTRACT_TEST so it NEVER runs in a
+        real deployment. Since the post-revocation auth path now requires the
+        token's user to exist (and not be revoked), the harness's locally-minted
+        fixed-uuid token must resolve to a live, admin, non-revoked user. The
+        password hash is random and unusable, so /auth/login can never
+        authenticate as this principal — only the minted token works."""
+        if os.environ.get("DECNET_CONTRACT_TEST") != "true":
+            return
+        async with self._session() as session:
+            if await session.get(User, CONTRACT_TEST_USER_UUID) is not None:
+                return
+            session.add(User(
+                uuid=CONTRACT_TEST_USER_UUID,
+                username="contract-test",
+                password_hash=get_password_hash(uuid.uuid4().hex),
+                role="admin",
+                must_change_password=False,
+            ))
+            await session.commit()
 
     async def _migrate_attackers_table(self) -> None:
         """Legacy-schema cleanup. Override per dialect (DDL introspection is non-portable)."""
