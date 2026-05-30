@@ -4,9 +4,12 @@
 Mirrors the shape of ``decnet/agent/app.py``: bare FastAPI, docs disabled,
 handlers delegate to ``decnet.updater.executor``.
 
-Mounted by uvicorn via ``decnet.updater.server`` with ``--ssl-cert-reqs 2``;
-the CN on the peer cert tells us which endpoints are legal (``updater@*``
-only — agent certs are rejected).
+Mounted by uvicorn via ``decnet.updater.server`` with ``--ssl-cert-reqs 2``,
+so every caller already presents a CA-signed cert. On top of that transport
+guarantee, the mutating endpoints app-gate the *client* CN to the master
+(``decnet-master``, the identity ``UpdaterClient`` presents via
+``ensure_master_identity``): a compromised worker/agent cert must never be
+able to pip-install and re-exec arbitrary code on a peer worker.
 """
 from __future__ import annotations
 
@@ -17,7 +20,10 @@ import pathlib
 from contextlib import asynccontextmanager
 from typing import Optional
 
-from fastapi import FastAPI, File, Form, HTTPException, UploadFile
+# Importing this shim patches uvicorn so the TLS peer cert lands in the ASGI
+# scope, where require_master_cert can read it. Must import before serving.
+from decnet.web import _uvicorn_tls_scope  # noqa: F401
+from fastapi import Depends, FastAPI, File, Form, HTTPException, Request, UploadFile
 from pydantic import BaseModel
 
 from decnet.bus.factory import get_bus
@@ -25,8 +31,26 @@ from decnet.bus.publish import run_health_heartbeat
 from decnet.logging import get_logger
 from decnet.swarm import pki
 from decnet.updater import executor as _exec
+from decnet.web._mtls import extract_peer_cert
 
 log = get_logger("updater.app")
+
+# Only the master may push code to a worker's updater. UpdaterClient presents
+# the master identity (CN=decnet-master); worker/agent certs are rejected.
+_PUSHER_CN = "decnet-master"
+
+
+def require_master_cert(request: Request) -> None:
+    """Reject any caller whose client-cert CN is not the master's.
+
+    Transport mTLS has proven the cert is CA-signed; this stops a non-master
+    CA-signed cert (e.g. a worker agent's) from driving an update/rollback.
+    Fails closed when no cert is present.
+    """
+    peer = extract_peer_cert(request.scope)
+    if peer is None or peer.cn != _PUSHER_CN:
+        log.warning("updater: rejected push from cn=%r", peer.cn if peer else None)
+        raise HTTPException(status_code=403, detail="master certificate required")
 
 
 _bus_heartbeat_task: Optional[asyncio.Task] = None
@@ -122,7 +146,7 @@ async def health() -> dict:
 
 
 @app.get("/releases")
-async def releases() -> dict:
+async def releases(_pusher: None = Depends(require_master_cert)) -> dict:
     return {"releases": [r.to_dict() for r in _exec.list_releases(_Config.install_dir)]}
 
 
@@ -131,7 +155,12 @@ async def update(
     tarball: UploadFile = File(..., description="tar.gz of the working tree"),
     sha: str = Form("", description="git SHA of the tree for provenance"),
     sha256: str = Form("", description="hex SHA-256 of the tarball bytes; verified before extract"),
+    _pusher: None = Depends(require_master_cert),
 ) -> dict:
+    if not sha256:
+        # Mandatory: guarantees _verify_tarball_sha256 runs before we extract +
+        # pip-install. An update with no integrity check is refused outright.
+        raise HTTPException(status_code=400, detail="sha256 of the tarball is required")
     body = await tarball.read()
     try:
         return _exec.run_update(
@@ -153,12 +182,15 @@ async def update_self(
     sha: str = Form(""),
     sha256: str = Form("", description="hex SHA-256 of the tarball bytes; verified before extract"),
     confirm_self: str = Form("", description="Must be 'true' to proceed"),
+    _pusher: None = Depends(require_master_cert),
 ) -> dict:
     if confirm_self.lower() != "true":
         raise HTTPException(
             status_code=400,
             detail="self-update requires confirm_self=true (no auto-rollback)",
         )
+    if not sha256:
+        raise HTTPException(status_code=400, detail="sha256 of the tarball is required")
     body = await tarball.read()
     try:
         return _exec.run_update_self(
@@ -174,7 +206,7 @@ async def update_self(
 
 
 @app.post("/rollback")
-async def rollback() -> dict:
+async def rollback(_pusher: None = Depends(require_master_cert)) -> dict:
     try:
         return _exec.run_rollback(
             install_dir=_Config.install_dir, agent_dir=_Config.agent_dir,
