@@ -46,12 +46,18 @@ def _require_env(name: str) -> str:
             f"Environment variable '{name}' is set to an insecure default ('{value}'). "
             f"Choose a strong, unique value before starting DECNET."
         )
+    _developer = os.environ.get("DECNET_DEVELOPER", "False").lower() == "true"
     if name == "DECNET_JWT_SECRET" and len(value) < 32:
-        _developer = os.environ.get("DECNET_DEVELOPER", "False").lower() == "true"
         if not _developer:
             raise ValueError(
                 f"DECNET_JWT_SECRET is too short ({len(value)} bytes). "
                 f"Use at least 32 characters to satisfy HS256 requirements (RFC 7518 §3.2)."
+            )
+    if name == "DECNET_ADMIN_PASSWORD" and len(value) < 12:
+        if not _developer:
+            raise ValueError(
+                f"DECNET_ADMIN_PASSWORD is too short ({len(value)} chars). "
+                f"Use at least 12 characters, or set DECNET_DEVELOPER=true for local runs."
             )
     return value
 
@@ -132,7 +138,9 @@ DECNET_BATCH_MAX_WAIT_MS: int = int(os.environ.get("DECNET_BATCH_MAX_WAIT_MS", "
 DECNET_WEB_HOST: str = os.environ.get("DECNET_WEB_HOST", "127.0.0.1")
 DECNET_WEB_PORT: int = _port("DECNET_WEB_PORT", 8080)
 DECNET_ADMIN_USER: str = os.environ.get("DECNET_ADMIN_USER", "admin")
-DECNET_ADMIN_PASSWORD: str = os.environ.get("DECNET_ADMIN_PASSWORD", "admin")
+# DECNET_ADMIN_PASSWORD is resolved lazily via __getattr__ (like DECNET_JWT_SECRET)
+# so it is validated only on the master processes that seed the admin user, and
+# never silently defaults to "admin". See _require_env + __getattr__ below.
 DECNET_DEVELOPER: bool = os.environ.get("DECNET_DEVELOPER", "False").lower() == "true"
 
 # Host role — seeded by /etc/decnet/decnet.ini or exported directly.
@@ -277,6 +285,6 @@ def validate_public_binding() -> None:
 
 def __getattr__(name: str) -> str:
     """Lazy resolution for secrets only the master web/api process needs."""
-    if name == "DECNET_JWT_SECRET":
-        return _require_env("DECNET_JWT_SECRET")
+    if name in ("DECNET_JWT_SECRET", "DECNET_ADMIN_PASSWORD"):
+        return _require_env(name)
     raise AttributeError(f"module 'decnet.env' has no attribute {name!r}")
