@@ -42,6 +42,12 @@ log = get_logger("swarm.mtls")
 # or tear the fleet down.
 OPERATOR_CNS = frozenset({"decnet-master", "swarmctl"})
 
+# Hosts treated as "the master box itself". A certless request is only accepted
+# from these — the single-operator loopback boundary (same model as
+# docker.sock). Any routable bind is forced onto mTLS by the swarmctl startup
+# guard, so a certless request can never legitimately arrive from off-box.
+LOOPBACK_HOSTS = frozenset({"127.0.0.1", "::1", "localhost"})
+
 
 @dataclass(frozen=True)
 class PeerCert:
@@ -131,17 +137,37 @@ def extract_peer_fingerprint(scope: MutableMapping[str, Any]) -> Optional[str]:
     return hashlib.sha256(der).hexdigest().lower()
 
 
-def require_operator_cert(request: Request) -> PeerCert:
-    """FastAPI dependency: require a CA-signed cert whose CN is an operator.
+def _client_is_loopback(request: Request) -> bool:
+    """True iff the request originated from the master box's loopback."""
+    client = getattr(request, "client", None)
+    host = getattr(client, "host", None) if client is not None else None
+    return host in LOOPBACK_HOSTS
 
-    Transport-layer mTLS (``--ssl-cert-reqs 2``) has already proven the cert is
-    CA-signed; here we enforce that its CN is in :data:`OPERATOR_CNS`. Worker
-    and ``updater@*`` certs are rejected with 403.
+
+def require_operator_cert(request: Request) -> PeerCert:
+    """FastAPI dependency authorizing a swarm control-plane operation.
+
+    Two accepted paths, matching the deployment posture:
+
+    * **mTLS on** (any routable bind — enforced by the swarmctl startup guard):
+      a peer cert is present. Transport already proved it is CA-signed; we
+      additionally require its CN to be in :data:`OPERATOR_CNS`. Worker and
+      ``updater@*`` certs are rejected — a worker's still-valid cert must never
+      drive enroll/deploy/teardown.
+    * **Loopback plaintext** (single-host master, the shipping default): no peer
+      cert, but the request came from ``127.0.0.1``/``::1``. Accepted as the
+      local operator — the same trust boundary as ``docker.sock``.
+
+    A certless request from any non-loopback client is refused (fail-closed);
+    in practice the startup guard prevents that combination from arising.
     """
     peer = extract_peer_cert(request.scope)
-    if peer is None:
-        raise HTTPException(status_code=403, detail="peer cert unavailable")
-    if peer.cn not in OPERATOR_CNS:
-        log.warning("rejected non-operator cert on control plane: cn=%r", peer.cn)
-        raise HTTPException(status_code=403, detail="operator certificate required")
-    return peer
+    if peer is not None:
+        if peer.cn not in OPERATOR_CNS:
+            log.warning("rejected non-operator cert on control plane: cn=%r", peer.cn)
+            raise HTTPException(status_code=403, detail="operator certificate required")
+        return peer
+    if _client_is_loopback(request):
+        # Local operator on the master box; no client cert over plaintext loopback.
+        return PeerCert(sha256="", cn=None)
+    raise HTTPException(status_code=403, detail="operator certificate required")

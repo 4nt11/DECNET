@@ -57,7 +57,8 @@ def client(repo, ca_dir):
         return repo
 
     app.dependency_overrides[get_repo] = _override
-    with TestClient(app) as c:
+    # loopback client so operator-gated /swarm/enroll accepts the local operator.
+    with TestClient(app, client=("127.0.0.1", 50000)) as c:
         yield c
     app.dependency_overrides.clear()
 

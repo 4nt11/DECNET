@@ -79,9 +79,10 @@ def test_extract_fingerprint_works_on_non_cert_der() -> None:
 # ------------------------- require_operator_cert ---------------------------
 
 
-def _request_with(scope: dict) -> MagicMock:
+def _request_with(scope: dict, client_host: str | None = None) -> MagicMock:
     req = MagicMock()
     req.scope = scope
+    req.client = None if client_host is None else MagicMock(host=client_host)
     return req
 
 
@@ -96,10 +97,14 @@ def test_require_operator_accepts_swarmctl(ca) -> None:
 
 
 def test_require_operator_rejects_worker_cn(ca) -> None:
+    # A worker cert is CA-signed but must not drive the control plane, even
+    # from loopback — the CN gate fires before the loopback fallback.
     from fastapi import HTTPException
 
     with pytest.raises(HTTPException) as ei:
-        _mtls.require_operator_cert(_request_with(_scope_with(_der_for(ca, "worker-1"))))
+        _mtls.require_operator_cert(
+            _request_with(_scope_with(_der_for(ca, "worker-1")), client_host="127.0.0.1")
+        )
     assert ei.value.status_code == 403
 
 
@@ -111,10 +116,25 @@ def test_require_operator_rejects_updater_cn(ca) -> None:
     assert ei.value.status_code == 403
 
 
-def test_require_operator_rejects_no_cert() -> None:
+def test_require_operator_allows_certless_loopback() -> None:
+    # Shipping default: plaintext loopback, no client cert → local operator.
+    peer = _mtls.require_operator_cert(_request_with({}, client_host="127.0.0.1"))
+    assert peer.cn is None and peer.sha256 == ""
+
+
+def test_require_operator_rejects_certless_non_loopback() -> None:
+    # No cert from off-box → fail closed (the startup guard makes this
+    # unreachable in practice, but defense in depth).
     from fastapi import HTTPException
 
     with pytest.raises(HTTPException) as ei:
-        _mtls.require_operator_cert(_request_with({}))
+        _mtls.require_operator_cert(_request_with({}, client_host="10.0.0.9"))
     assert ei.value.status_code == 403
-    assert "unavailable" in ei.value.detail
+
+
+def test_require_operator_rejects_certless_unknown_client() -> None:
+    from fastapi import HTTPException
+
+    with pytest.raises(HTTPException) as ei:
+        _mtls.require_operator_cert(_request_with({}, client_host=None))
+    assert ei.value.status_code == 403

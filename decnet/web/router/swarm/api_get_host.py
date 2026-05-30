@@ -6,6 +6,7 @@ from fastapi import APIRouter, Depends, HTTPException
 
 from decnet.web.db.repository import BaseRepository
 from decnet.web.dependencies import get_repo
+from decnet.web.router.swarm._mtls import PeerCert, require_operator_cert
 from decnet.web.db.models import SwarmHostView
 
 router = APIRouter()
@@ -20,6 +21,7 @@ router = APIRouter()
 async def api_get_host(
     uuid: str,
     repo: BaseRepository = Depends(get_repo),
+    _operator: PeerCert = Depends(require_operator_cert),
 ) -> SwarmHostView:
     row = await repo.get_swarm_host_by_uuid(uuid)
     if row is None:

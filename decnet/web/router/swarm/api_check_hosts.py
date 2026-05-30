@@ -16,6 +16,7 @@ from decnet.logging import get_logger
 from decnet.swarm.client import AgentClient
 from decnet.web.db.repository import BaseRepository
 from decnet.web.dependencies import get_repo
+from decnet.web.router.swarm._mtls import PeerCert, require_operator_cert
 from decnet.web.db.models import SwarmCheckResponse, SwarmHostHealth
 
 log = get_logger("swarm.check")
@@ -26,6 +27,7 @@ router = APIRouter()
 @router.post("/check", response_model=SwarmCheckResponse, tags=["Swarm Health"])
 async def api_check_hosts(
     repo: BaseRepository = Depends(get_repo),
+    _operator: PeerCert = Depends(require_operator_cert),
 ) -> SwarmCheckResponse:
     hosts = await repo.list_swarm_hosts()
 

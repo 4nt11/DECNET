@@ -56,7 +56,10 @@ def client(repo, ca_dir: pathlib.Path):
         return repo
 
     app.dependency_overrides[get_repo] = _override
-    with TestClient(app) as c:
+    # client=loopback so the operator-cert gate takes its certless-loopback
+    # path (the shipping single-host default); TestClient otherwise reports
+    # host "testclient", which the gate treats as off-box.
+    with TestClient(app, client=("127.0.0.1", 50000)) as c:
         yield c
     app.dependency_overrides.clear()
 

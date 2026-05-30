@@ -6,8 +6,10 @@ generates a fresh worker keypair + CA-signed cert, and returns the full
 bundle to the operator. Bundle delivery to the worker (scp/sshpass/etc.)
 is outside this process's trust boundary.
 
-Rationale: the worker agent speaks ONLY mTLS; there is no pre-auth
-bootstrap endpoint, so nothing to attack before the worker is enrolled.
+Authorization: this mints a CA-signed identity (and its private key), so it
+is gated by :func:`require_operator_cert` — an operator-CN client cert when
+the controller runs mTLS, or a local request when it is loopback-bound.
+A worker's own cert cannot enroll further hosts.
 """
 from __future__ import annotations
 
@@ -20,6 +22,7 @@ from fastapi import APIRouter, Depends, HTTPException, status
 from decnet.swarm import pki
 from decnet.web.db.repository import BaseRepository
 from decnet.web.dependencies import get_repo
+from decnet.web.router.swarm._mtls import PeerCert, require_operator_cert
 from decnet.web.db.models import SwarmEnrolledBundle, SwarmEnrollRequest, SwarmUpdaterBundle
 
 router = APIRouter()
@@ -39,6 +42,7 @@ router = APIRouter()
 async def api_enroll_host(
     req: SwarmEnrollRequest,
     repo: BaseRepository = Depends(get_repo),
+    _operator: PeerCert = Depends(require_operator_cert),
 ) -> SwarmEnrolledBundle:
     existing = await repo.get_swarm_host_by_name(req.name)
     if existing is not None:

@@ -13,6 +13,34 @@ from . import utils as _utils
 from .gating import _require_master_mode
 from .utils import console, log
 
+# Hosts that keep the controller on the master box itself. A routable bind
+# (anything else, incl. 0.0.0.0) exposes the control plane to the network and
+# MUST run mTLS — the app-layer operator gate trusts the transport to have
+# verified a CA-signed client cert. See decnet/web/router/swarm/_mtls.py.
+_LOOPBACK_HOSTS = frozenset({"127.0.0.1", "::1", "localhost"})
+
+
+def _guard_bind(host: str, tls: bool) -> None:
+    """Fail closed: refuse to bind a routable interface without --tls.
+
+    On loopback the controller may run plaintext (single-operator master box,
+    same boundary as docker.sock); off-box it would be an UNAUTHENTICATED
+    control plane, so we hard-refuse to start.
+    """
+    if host not in _LOOPBACK_HOSTS and not tls:
+        console.print(
+            f"[red]Refusing to bind the swarm controller to {host} without --tls.[/]"
+        )
+        console.print(
+            "[red]A routable bind without mTLS exposes an UNAUTHENTICATED control "
+            "plane (enroll / deploy / teardown).[/]"
+        )
+        console.print(
+            "[yellow]Re-run with --tls for mutual-TLS, or bind 127.0.0.1 for a "
+            "local-only master.[/]"
+        )
+        raise typer.Exit(code=2)
+
 
 def register(app: typer.Typer) -> None:
     @app.command()
@@ -50,6 +78,7 @@ def register(app: typer.Typer) -> None:
         if you need a publicly-trusted or externally-managed cert.
         """
         _require_master_mode("swarmctl")
+        _guard_bind(host, tls)
         if daemon:
             log.info("swarmctl daemonizing host=%s port=%d", host, port)
             _utils._daemonize()

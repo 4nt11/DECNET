@@ -11,6 +11,7 @@ from decnet.logging import get_logger
 from decnet.swarm.client import AgentClient
 from decnet.web.db.repository import BaseRepository
 from decnet.web.dependencies import get_repo
+from decnet.web.router.swarm._mtls import PeerCert, require_operator_cert
 from decnet.web.db.models import (
     SwarmDeployResponse,
     SwarmHostResult,
@@ -35,6 +36,7 @@ router = APIRouter()
 async def api_teardown_swarm(
     req: SwarmTeardownRequest,
     repo: BaseRepository = Depends(get_repo),
+    _operator: PeerCert = Depends(require_operator_cert),
 ) -> SwarmDeployResponse:
     if req.host_uuid is not None:
         row = await repo.get_swarm_host_by_uuid(req.host_uuid)

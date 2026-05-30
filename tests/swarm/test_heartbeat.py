@@ -51,7 +51,9 @@ def client(repo, ca_dir: pathlib.Path):
         return repo
 
     app.dependency_overrides[get_repo] = _override
-    with TestClient(app) as c:
+    # loopback client so /swarm/enroll (operator-gated) accepts the certless
+    # local-operator path during test setup.
+    with TestClient(app, client=("127.0.0.1", 50000)) as c:
         yield c
     app.dependency_overrides.clear()
 
