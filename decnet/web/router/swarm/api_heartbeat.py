@@ -14,7 +14,6 @@ Mismatch (or decommissioned host) → 403.
 """
 from __future__ import annotations
 
-import hashlib
 import json
 from datetime import datetime, timezone
 from collections.abc import MutableMapping
@@ -28,6 +27,7 @@ from decnet.config import DeckyConfig
 from decnet.logging import get_logger
 from decnet.web.db.repository import BaseRepository
 from decnet.web.dependencies import get_repo
+from decnet.web.router.swarm import _mtls
 
 log = get_logger("swarm.heartbeat")
 
@@ -49,47 +49,13 @@ class HeartbeatRequest(BaseModel):
 def _extract_peer_fingerprint(scope: MutableMapping[str, Any]) -> Optional[str]:
     """Pull the peer cert's SHA-256 fingerprint from an ASGI scope.
 
-    Tries two extraction paths because uvicorn has historically stashed
-    the TLS peer cert in different scope keys across versions:
-
-    1. Primary: ``scope["extensions"]["tls"]["client_cert_chain"][0]``
-       (uvicorn ≥ 0.30 ASGI TLS extension).
-    2. Fallback: the transport object's ``ssl_object.getpeercert(binary_form=True)``
-       (older uvicorn builds + some other servers).
-
-    Returns the lowercase hex SHA-256 of the DER-encoded cert, or None
-    when neither path yields bytes. The endpoint fails closed on None.
+    Thin wrapper over :func:`decnet.web.router.swarm._mtls.extract_peer_fingerprint`
+    kept as a module-level name so ``_verify_peer_matches_host`` resolves it via
+    the module global (and tests can monkeypatch it). Returns the lowercase hex
+    SHA-256 of the DER-encoded peer cert, or None when no cert is present; the
+    endpoint fails closed on None.
     """
-    peer_der: Optional[bytes] = None
-    source = "none"
-
-    try:
-        chain = scope.get("extensions", {}).get("tls", {}).get("client_cert_chain")
-        if chain:
-            peer_der = chain[0]
-            source = "primary"
-    except (AttributeError, KeyError, TypeError):
-        # scope["extensions"]["tls"] structure varies across uvicorn versions
-        peer_der = None
-
-    if peer_der is None:
-        transport = scope.get("transport")
-        try:
-            ssl_obj = transport.get_extra_info("ssl_object") if transport else None
-            if ssl_obj is not None:
-                peer_der = ssl_obj.getpeercert(binary_form=True)
-                if peer_der:
-                    source = "fallback"
-        except (AttributeError, OSError):
-            # transport may not be an SSL transport, or the handshake may be incomplete
-            peer_der = None
-
-    if not peer_der:
-        log.debug("heartbeat: peer cert extraction failed via none")
-        return None
-
-    log.debug("heartbeat: peer cert extraction succeeded via %s", source)
-    return hashlib.sha256(peer_der).hexdigest().lower()
+    return _mtls.extract_peer_fingerprint(scope)
 
 
 async def _verify_peer_matches_host(
