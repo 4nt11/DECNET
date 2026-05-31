@@ -5,11 +5,11 @@ from typing import Optional, Any
 import jwt
 import bcrypt
 
-from decnet.env import DECNET_JWT_SECRET
+from decnet.env import DECNET_JWT_SECRET, DECNET_JWT_EXP_MINUTES
 
 SECRET_KEY: str = DECNET_JWT_SECRET
 ALGORITHM: str = "HS256"
-ACCESS_TOKEN_EXPIRE_MINUTES: int = 1440
+ACCESS_TOKEN_EXPIRE_MINUTES: int = DECNET_JWT_EXP_MINUTES
 
 
 def verify_password(plain_password: str, hashed_password: str) -> bool:

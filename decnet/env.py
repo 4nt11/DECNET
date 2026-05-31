@@ -28,6 +28,17 @@ def _port(name: str, default: int) -> int:
     return value
 
 
+def _pos_int(name: str, default: int) -> int:
+    raw = os.environ.get(name, str(default))
+    try:
+        value = int(raw)
+    except ValueError:
+        raise ValueError(f"Environment variable '{name}' must be an integer, got '{raw}'.")
+    if value < 1:
+        raise ValueError(f"Environment variable '{name}' must be a positive integer, got {value}.")
+    return value
+
+
 def _require_env(name: str) -> str:
     """Return the env var value or raise at startup if it is unset or a known-bad default."""
     _KNOWN_BAD = {"fallback-secret-key-change-me", "admin", "secret", "password", "changeme"}
@@ -138,6 +149,11 @@ DECNET_BATCH_MAX_WAIT_MS: int = int(os.environ.get("DECNET_BATCH_MAX_WAIT_MS", "
 DECNET_WEB_HOST: str = os.environ.get("DECNET_WEB_HOST", "127.0.0.1")
 DECNET_WEB_PORT: int = _port("DECNET_WEB_PORT", 8080)
 DECNET_ADMIN_USER: str = os.environ.get("DECNET_ADMIN_USER", "admin")
+# Access-token lifetime in minutes. Default 4h — short enough to bound the
+# passive window of a stolen token (active revocation is immediate→≤10s), long
+# enough that the operator is not re-authenticating constantly. Shortening this
+# meaningfully (e.g. 15m) requires a refresh-token mechanism; deferred to v1.
+DECNET_JWT_EXP_MINUTES: int = _pos_int("DECNET_JWT_EXP_MINUTES", 240)
 # DECNET_ADMIN_PASSWORD is resolved lazily via __getattr__ (like DECNET_JWT_SECRET)
 # so it is validated only on the master processes that seed the admin user, and
 # never silently defaults to "admin". See _require_env + __getattr__ below.
