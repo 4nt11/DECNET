@@ -13,18 +13,27 @@ from typing import Optional
 from fastapi import APIRouter, Depends
 
 from decnet.web.db.repository import BaseRepository
-from decnet.web.dependencies import get_repo
+from decnet.web.dependencies import get_repo, require_admin
 from decnet.web.router.swarm._mtls import PeerCert, require_operator_cert
 from decnet.web.db.models import DeckyShardView
 
 router = APIRouter()
 
 
-@router.get("/deckies", response_model=list[DeckyShardView], tags=["Swarm Deckies"])
+@router.get(
+    "/deckies",
+    response_model=list[DeckyShardView],
+    tags=["Swarm Deckies"],
+    responses={
+        401: {"description": "Missing or invalid admin JWT"},
+        403: {"description": "Authenticated user is not an admin, or operator cert missing"},
+    },
+)
 async def api_list_deckies(
     host_uuid: Optional[str] = None,
     state: Optional[str] = None,
     repo: BaseRepository = Depends(get_repo),
+    _admin: dict = Depends(require_admin),
     _operator: PeerCert = Depends(require_operator_cert),
 ) -> list[DeckyShardView]:
     shards = await repo.list_decky_shards(host_uuid)

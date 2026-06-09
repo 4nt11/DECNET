@@ -10,7 +10,7 @@ from fastapi import APIRouter, Depends, HTTPException
 from decnet.logging import get_logger
 from decnet.swarm.client import AgentClient
 from decnet.web.db.repository import BaseRepository
-from decnet.web.dependencies import get_repo
+from decnet.web.dependencies import get_repo, require_admin
 from decnet.web.router.swarm._mtls import PeerCert, require_operator_cert
 from decnet.web.db.models import (
     SwarmDeployResponse,
@@ -29,6 +29,8 @@ router = APIRouter()
     tags=["Swarm Deployments"],
     responses={
         400: {"description": "Bad Request (malformed JSON body)"},
+        401: {"description": "Missing or invalid admin JWT"},
+        403: {"description": "Authenticated user is not an admin, or operator cert missing"},
         404: {"description": "A targeted host does not exist"},
         422: {"description": "Request body validation error"},
     },
@@ -36,6 +38,7 @@ router = APIRouter()
 async def api_teardown_swarm(
     req: SwarmTeardownRequest,
     repo: BaseRepository = Depends(get_repo),
+    _admin: dict = Depends(require_admin),
     _operator: PeerCert = Depends(require_operator_cert),
 ) -> SwarmDeployResponse:
     if req.host_uuid is not None:

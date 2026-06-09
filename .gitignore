@@ -71,3 +71,4 @@ enterprise-attack-*.json
 
 # pytest failure dump files
 testfail
+.phaseloop/

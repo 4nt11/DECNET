@@ -6,10 +6,15 @@ generates a fresh worker keypair + CA-signed cert, and returns the full
 bundle to the operator. Bundle delivery to the worker (scp/sshpass/etc.)
 is outside this process's trust boundary.
 
-Authorization: this mints a CA-signed identity (and its private key), so it
-is gated by :func:`require_operator_cert` — an operator-CN client cert when
-the controller runs mTLS, or a local request when it is loopback-bound.
-A worker's own cert cannot enroll further hosts.
+Authorization (defense-in-depth, both must pass):
+
+* :func:`require_admin` — an admin-role JWT. This is the primary
+  application-layer gate: enrollment is operator-driven (admin UI / CLI),
+  so the caller always carries operator credentials. A worker agent has no
+  JWT and therefore cannot enroll further hosts.
+* :func:`require_operator_cert` — the transport gate: an operator-CN client
+  cert when the controller runs mTLS, or a loopback request on the shipping
+  single-host default.
 """
 from __future__ import annotations
 
@@ -21,7 +26,7 @@ from fastapi import APIRouter, Depends, HTTPException, status
 
 from decnet.swarm import pki
 from decnet.web.db.repository import BaseRepository
-from decnet.web.dependencies import get_repo
+from decnet.web.dependencies import get_repo, require_admin
 from decnet.web.router.swarm._mtls import PeerCert, require_operator_cert
 from decnet.web.db.models import SwarmEnrolledBundle, SwarmEnrollRequest, SwarmUpdaterBundle
 
@@ -35,6 +40,8 @@ router = APIRouter()
     tags=["Swarm Hosts"],
     responses={
         400: {"description": "Bad Request (malformed JSON body)"},
+        401: {"description": "Missing or invalid admin JWT"},
+        403: {"description": "Authenticated user is not an admin, or operator cert missing"},
         409: {"description": "A worker with this name is already enrolled"},
         422: {"description": "Request body validation error"},
     },
@@ -42,6 +49,7 @@ router = APIRouter()
 async def api_enroll_host(
     req: SwarmEnrollRequest,
     repo: BaseRepository = Depends(get_repo),
+    _admin: dict = Depends(require_admin),
     _operator: PeerCert = Depends(require_operator_cert),
 ) -> SwarmEnrolledBundle:
     existing = await repo.get_swarm_host_by_name(req.name)

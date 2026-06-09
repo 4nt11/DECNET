@@ -20,7 +20,7 @@ from decnet.config import DecnetConfig, DeckyConfig
 from decnet.logging import get_logger
 from decnet.swarm.client import AgentClient
 from decnet.web.db.repository import BaseRepository
-from decnet.web.dependencies import get_repo
+from decnet.web.dependencies import get_repo, require_admin
 from decnet.web.router.swarm._mtls import PeerCert, require_operator_cert
 from decnet.web.db.models import (
     SwarmDeployRequest,
@@ -155,12 +155,15 @@ async def dispatch_decnet_config(
     tags=["Swarm Deployments"],
     responses={
         400: {"description": "Deployment mode must be 'swarm'"},
+        401: {"description": "Missing or invalid admin JWT"},
+        403: {"description": "Authenticated user is not an admin, or operator cert missing"},
         404: {"description": "A referenced host_uuid is not enrolled"},
     },
 )
 async def api_deploy_swarm(
     req: SwarmDeployRequest,
     repo: BaseRepository = Depends(get_repo),
+    _admin: dict = Depends(require_admin),
     _operator: PeerCert = Depends(require_operator_cert),
 ) -> SwarmDeployResponse:
     if req.config.mode != "swarm":

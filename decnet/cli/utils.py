@@ -199,11 +199,27 @@ def _swarmctl_base_url(url: Optional[str]) -> str:
     return url or os.environ.get("DECNET_SWARMCTL_URL") or _DEFAULT_SWARMCTL_URL
 
 
+def _swarmctl_auth_headers() -> dict[str, str]:
+    """Bearer header for swarm-controller calls.
+
+    The controller now requires an admin-role JWT on every control-plane route
+    (defense-in-depth on top of the loopback/mTLS transport gate). Operators
+    export ``DECNET_API_TOKEN`` (the access_token from POST /api/v1/auth/login)
+    so the CLI can authenticate. Absent the var we send no header and the
+    controller answers 401 — fail closed, with a clear hint surfaced by
+    :func:`_http_request`.
+    """
+    token = os.environ.get("DECNET_API_TOKEN")
+    return {"Authorization": f"Bearer {token}"} if token else {}
+
+
 def _http_request(method: str, url: str, *, json_body: Optional[dict] = None, timeout: float = 30.0):
     """Tiny sync wrapper around httpx; avoids leaking async into the CLI."""
     import httpx
     try:
-        resp = httpx.request(method, url, json=json_body, timeout=timeout)
+        resp = httpx.request(
+            method, url, json=json_body, timeout=timeout, headers=_swarmctl_auth_headers()
+        )
     except httpx.HTTPError as exc:
         console.print(f"[red]Could not reach swarm controller at {url}: {exc}[/]")
         console.print("[dim]Is `decnet swarmctl` running?[/]")
@@ -214,5 +230,14 @@ def _http_request(method: str, url: str, *, json_body: Optional[dict] = None, ti
         except Exception:  # nosec B110
             detail = resp.text
         console.print(f"[red]{method} {url} failed: {resp.status_code} — {detail}[/]")
+        if resp.status_code in (401, 403):
+            console.print(
+                "[dim]The swarm controller requires an admin JWT. Export "
+                "DECNET_API_TOKEN with an access_token from "
+                "POST /api/v1/auth/login (admin user). "
+                "If you receive 403 'Password change required', change the "
+                "password first (POST /api/v1/auth/change-password), then "
+                "log in again to obtain a fresh token.[/]"
+            )
         raise typer.Exit(1)
     return resp

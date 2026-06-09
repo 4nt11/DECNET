@@ -17,7 +17,7 @@ from fastapi import APIRouter, Depends, HTTPException, status
 from decnet.logging import get_logger
 from decnet.swarm.client import AgentClient
 from decnet.web.db.repository import BaseRepository
-from decnet.web.dependencies import get_repo
+from decnet.web.dependencies import get_repo, require_admin
 from decnet.web.router.swarm._mtls import PeerCert, require_operator_cert
 
 log = get_logger("swarm.decommission")
@@ -28,11 +28,16 @@ router = APIRouter()
     "/hosts/{uuid}",
     status_code=status.HTTP_204_NO_CONTENT,
     tags=["Swarm Hosts"],
-    responses={404: {"description": "No host with this UUID is enrolled"}},
+    responses={
+        401: {"description": "Missing or invalid admin JWT"},
+        403: {"description": "Authenticated user is not an admin, or operator cert missing"},
+        404: {"description": "No host with this UUID is enrolled"},
+    },
 )
 async def api_decommission_host(
     uuid: str,
     repo: BaseRepository = Depends(get_repo),
+    _admin: dict = Depends(require_admin),
     _operator: PeerCert = Depends(require_operator_cert),
 ) -> None:
     row = await repo.get_swarm_host_by_uuid(uuid)

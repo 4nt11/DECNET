@@ -15,7 +15,7 @@ from fastapi import APIRouter, Depends
 from decnet.logging import get_logger
 from decnet.swarm.client import AgentClient
 from decnet.web.db.repository import BaseRepository
-from decnet.web.dependencies import get_repo
+from decnet.web.dependencies import get_repo, require_admin
 from decnet.web.router.swarm._mtls import PeerCert, require_operator_cert
 from decnet.web.db.models import SwarmCheckResponse, SwarmHostHealth
 
@@ -24,9 +24,18 @@ log = get_logger("swarm.check")
 router = APIRouter()
 
 
-@router.post("/check", response_model=SwarmCheckResponse, tags=["Swarm Health"])
+@router.post(
+    "/check",
+    response_model=SwarmCheckResponse,
+    tags=["Swarm Health"],
+    responses={
+        401: {"description": "Missing or invalid admin JWT"},
+        403: {"description": "Authenticated user is not an admin, or operator cert missing"},
+    },
+)
 async def api_check_hosts(
     repo: BaseRepository = Depends(get_repo),
+    _admin: dict = Depends(require_admin),
     _operator: PeerCert = Depends(require_operator_cert),
 ) -> SwarmCheckResponse:
     hosts = await repo.list_swarm_hosts()

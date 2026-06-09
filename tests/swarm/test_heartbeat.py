@@ -15,6 +15,12 @@ from decnet.web.db.factory import get_repository
 from decnet.web.dependencies import get_repo
 from decnet.web.router.swarm import api_heartbeat as hb_mod
 
+# NOTE: /swarm/enroll now requires an admin JWT (V4.1.1). The autouse
+# `_bypass_swarm_admin_gate` fixture in tests/swarm/conftest.py installs a
+# no-op require_admin override so this behavior suite's enroll-based setup
+# keeps working. /swarm/heartbeat itself stays worker-facing (cert fingerprint
+# pinning, no JWT) and is unaffected by the gate.
+
 
 # ------------------------- shared fixtures (mirror test_swarm_api.py) ---
 
@@ -51,8 +57,9 @@ def client(repo, ca_dir: pathlib.Path):
         return repo
 
     app.dependency_overrides[get_repo] = _override
-    # loopback client so /swarm/enroll (operator-gated) accepts the certless
-    # local-operator path during test setup.
+    # loopback client so /swarm/enroll accepts the certless local-operator
+    # transport path; the admin gate is bypassed by the autouse conftest
+    # fixture (this suite tests heartbeat, not the JWT gate).
     with TestClient(app, client=("127.0.0.1", 50000)) as c:
         yield c
     app.dependency_overrides.clear()
