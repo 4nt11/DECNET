@@ -67,6 +67,16 @@ class Credential(SQLModel, table=True):
     __table_args__ = (
         Index("ix_credentials_secret_service", "secret_sha256", "service"),
         Index("ix_credentials_principal_service", "principal", "service"),
+        # Dedup constraint: same (attacker_ip, decky, service, secret_kind,
+        # secret_sha256, principal_key) → one row.  ``principal_key`` is
+        # the non-null canonical form of ``principal`` (empty string when
+        # principal is NULL) so the constraint is UNIQUE-safe under SQLite's
+        # NULL-distinct behaviour and MySQL's standard UNIQUE semantics.
+        UniqueConstraint(
+            "attacker_ip", "decky_name", "service",
+            "secret_kind", "secret_sha256", "principal_key",
+            name="uq_credentials_dedup",
+        ),
     )
     id: Optional[int] = Field(default=None, primary_key=True)
     # Keyed by attacker IP (not attackers.uuid) on the write path to
@@ -81,6 +91,11 @@ class Credential(SQLModel, table=True):
     decky_name: str = Field(index=True)
     service: str = Field(index=True)
     principal: Optional[str] = Field(default=None, index=True, max_length=256)
+    # Non-null canonical form of ``principal`` used in ``uq_credentials_dedup``.
+    # Empty string when ``principal`` is NULL so the UNIQUE constraint behaves
+    # correctly under SQLite's NULL-distinct semantics (same pattern as
+    # ``CredentialReuse.principal_key``).
+    principal_key: str = Field(default="", max_length=256)
     # Discriminator for what `secret_b64` actually contains. Default
     # ``"plaintext"`` — a recoverable password the attacker sent on the
     # wire (SSH/Telnet/FTP/IMAP/POP3/SMTP/Redis/LDAP/MQTT). Other kinds:

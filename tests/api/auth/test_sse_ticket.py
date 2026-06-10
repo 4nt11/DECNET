@@ -80,6 +80,43 @@ async def test_sse_ticket_endpoint_mints_and_redeems(
     assert "uuid" in identity and identity["role"] in ("admin", "viewer")
 
 
+@pytest.mark.anyio
+async def test_sse_header_jwt_rejects_must_change_password(monkeypatch) -> None:
+    """V4.1.5: the header-JWT SSE branch must enforce must_change_password the
+    same way require_role does. A user blocked from every REST endpoint must not
+    be able to subscribe to live SSE streams with their existing token."""
+    async def _fake_resolve(token: str):
+        return "user-1", {"uuid": "user-1", "role": "viewer", "must_change_password": True}
+
+    monkeypatch.setattr(deps, "_resolve_token", _fake_resolve)
+
+    class _Req:
+        headers = {"Authorization": "Bearer some.jwt.token"}
+
+    gate = deps.require_stream_role("viewer", "admin")
+    with pytest.raises(HTTPException) as exc:
+        await gate(_Req(), ticket=None)  # type: ignore[arg-type]
+    assert exc.value.status_code == 403
+    assert "Password change required" in exc.value.detail
+
+
+@pytest.mark.anyio
+async def test_sse_header_jwt_allows_cleared_user(monkeypatch) -> None:
+    """Control: a user who has cleared must_change_password passes the header-JWT
+    SSE gate (proves the new guard didn't break the happy path)."""
+    async def _fake_resolve(token: str):
+        return "user-1", {"uuid": "user-1", "role": "viewer", "must_change_password": False}
+
+    monkeypatch.setattr(deps, "_resolve_token", _fake_resolve)
+
+    class _Req:
+        headers = {"Authorization": "Bearer some.jwt.token"}
+
+    gate = deps.require_stream_role("viewer", "admin")
+    user = await gate(_Req(), ticket=None)  # type: ignore[arg-type]
+    assert user["uuid"] == "user-1"
+
+
 def test_raw_jwt_in_sse_query_rejected() -> None:
     """V3.1.1: a raw JWT is not a valid opaque ticket — _redeem_sse_ticket rejects
     any token that wasn't minted by mint_sse_ticket (unknown key → 401)."""

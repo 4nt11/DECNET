@@ -8,6 +8,7 @@ from pathlib import Path
 import pytest
 
 from decnet.web.db.factory import get_repository
+from decnet.web.db.models import Credential
 
 
 @pytest.fixture
@@ -167,3 +168,103 @@ async def test_filters(repo) -> None:
     assert len(rows) == 1 and rows[0]["service"] == "ssh"
     assert await repo.get_total_credentials(service="ssh") == 1
     assert await repo.get_total_credentials() == 2
+
+
+@pytest.mark.anyio
+async def test_concurrent_upsert_hits_integrity_retry_branch(
+    repo, monkeypatch
+) -> None:
+    """BUG-12 regression: deterministically exercise the IntegrityError
+    retry branch in ``upsert_credential``.
+
+    The prior asyncio.gather test proved nothing — aiosqlite serializes
+    both calls through one worker thread, so the second's dedup SELECT
+    runs only AFTER the first commits and takes the 'existing is not None'
+    fast path. The except-IntegrityError handler NEVER executed; the test
+    passed with or without the fix.
+
+    Here we force the race deterministically: the first upsert creates the
+    row normally. For the second upsert we monkeypatch the module-level
+    ``select`` so its FIRST call (the dedup SELECT) yields a statement that
+    matches NOTHING — simulating two callers who both saw 'not found'. The
+    second upsert then attempts an INSERT that hits the UNIQUE constraint
+    → IntegrityError → rollback → re-SELECT (a fresh, un-poisoned ``select``
+    call) finds the winner row → returns its id + increments attempt_count.
+
+    Red-before/green-after: if the ``except IntegrityError`` handler is
+    removed, the IntegrityError propagates out of the second upsert and
+    this test fails (raises instead of returning a matching id).
+    """
+    from decnet.web.db.sqlmodel_repo.credentials import _core
+
+    payload = {
+        "attacker_ip": "10.0.0.99",
+        "decky_name": "decky-concurrent",
+        "service": "ssh",
+        "principal": "root",
+        "secret_sha256": _sha256("racepassword"),
+        "secret_b64": "cmFjZXBhc3N3b3Jk",
+        "secret_printable": "racepassword",
+        "fields": {},
+    }
+
+    # First upsert: lands the row normally.
+    id_a = await repo.upsert_credential(payload)
+
+    # Poison ONLY the first select() call of the next upsert so the dedup
+    # SELECT matches nothing (the simulated race). All later select() calls
+    # — including the post-IntegrityError re-SELECT — behave normally.
+    real_select = _core.select
+    calls = {"n": 0}
+
+    def _poisoned_select(*args, **kwargs):
+        stmt = real_select(*args, **kwargs)
+        calls["n"] += 1
+        if calls["n"] == 1:
+            # Append an always-false predicate so the dedup SELECT returns
+            # None even though the row exists → forces the INSERT path.
+            stmt = stmt.where(Credential.id == -1)
+        return stmt
+
+    monkeypatch.setattr(_core, "select", _poisoned_select)
+
+    # Second upsert: dedup SELECT misses → INSERT → IntegrityError → retry.
+    id_b = await repo.upsert_credential(payload)
+
+    monkeypatch.undo()
+
+    assert id_a == id_b, "retry branch must return the existing winner's id"
+    rows = await repo.get_credentials()
+    assert len(rows) == 1, f"expected 1 row, got {len(rows)} (duplicate inserts)"
+    assert rows[0]["attempt_count"] == 2, (
+        "retry branch must increment attempt_count on the winner row"
+    )
+
+
+@pytest.mark.anyio
+async def test_none_and_empty_principal_canonicalize_to_one_row(repo) -> None:
+    """BUG-12 canonicalization: principal=None and principal='' canonicalize
+    to the SAME principal_key ('') and, with an otherwise-identical dedup
+    tuple, must dedup to ONE row — not crash on the UNIQUE constraint.
+
+    Before the fix the dedup SELECT distinguished None from '' (it branched
+    on ``is_(None)`` vs ``== principal``) while the constraint keyed on
+    principal_key='' for both → the second upsert's SELECT missed, the
+    INSERT collided, and the re-SELECT used the wrong (mismatched) filter
+    → re-raise / crash. Now SELECT and constraint agree on principal_key.
+    """
+    base = {
+        "attacker_ip": "10.0.0.7",
+        "decky_name": "decky-canon",
+        "service": "ssh",
+        "secret_sha256": _sha256("hunter2"),
+        "secret_b64": "aHVudGVyMg==",
+        "secret_printable": "hunter2",
+        "fields": {},
+    }
+    id_none = await repo.upsert_credential({**base, "principal": None})
+    id_empty = await repo.upsert_credential({**base, "principal": ""})
+    assert id_none == id_empty, "None and '' must dedup to the same row"
+    rows = await repo.get_credentials()
+    assert len(rows) == 1, f"expected 1 row, got {len(rows)}"
+    assert rows[0]["attempt_count"] == 2

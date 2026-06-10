@@ -2,7 +2,27 @@
 """POST /api/v1/swarm-updates/push — happy paths, rollback, validation."""
 from __future__ import annotations
 
+import re
+
 import pytest
+
+# ---------------------------------------------------------------------------
+# Helpers
+# ---------------------------------------------------------------------------
+
+_INTERNAL_LEAK_RE = re.compile(
+    r"Errno|ConnectionRefused|TimeoutError|OSError|RuntimeError|Exception|"
+    r"Traceback|\w+Error:\s|\w+Exception:\s|File \"|line \d+",
+    re.IGNORECASE,
+)
+
+def _assert_no_internal_detail(detail: str | None) -> None:
+    """Assert the detail string does not contain any internal exception noise."""
+    if detail is None:
+        return
+    assert not _INTERNAL_LEAK_RE.search(detail), (
+        f"V7.1.2: internal exception detail leaked to client: {detail!r}"
+    )
 
 
 @pytest.mark.anyio
@@ -60,6 +80,49 @@ async def test_push_all_aggregates_mixed_results(client, auth_token, add_host, f
     assert resp.status_code == 200
     statuses = {r["host_name"]: r["status"] for r in resp.json()["results"]}
     assert statuses == {"alpha": "updated", "beta": "failed"}
+
+
+@pytest.mark.anyio
+async def test_transport_exception_detail_does_not_leak_internals(
+    client, auth_token, add_host, fake_updater,
+):
+    """V7.1.2: a raw transport exception must never appear in the response body."""
+    await add_host("alpha", "10.0.0.1")
+    fake_updater["client"].update_responses = {
+        "alpha": OSError("[Errno 111] Connection refused"),
+    }
+
+    resp = await client.post(
+        "/api/v1/swarm-updates/push",
+        headers={"Authorization": f"Bearer {auth_token}"},
+        json={"all": True},
+    )
+    assert resp.status_code == 200
+    result = resp.json()["results"][0]
+    assert result["status"] == "failed"
+    _assert_no_internal_detail(result.get("detail"))
+
+
+@pytest.mark.anyio
+async def test_include_self_failure_detail_does_not_leak_internals(
+    client, auth_token, add_host, fake_updater,
+):
+    """V7.1.2: include_self transport failure must not expose exception class/msg."""
+    await add_host("alpha", "10.0.0.1")
+    fake_updater["client"].update_self_responses = {
+        "alpha": OSError("[Errno 104] Connection reset by peer"),
+    }
+
+    resp = await client.post(
+        "/api/v1/swarm-updates/push",
+        headers={"Authorization": f"Bearer {auth_token}"},
+        json={"all": True, "include_self": True},
+    )
+    assert resp.status_code == 200
+    result = resp.json()["results"][0]
+    # status is self-failed (non-expected drop)
+    assert result["status"] == "self-failed"
+    _assert_no_internal_detail(result.get("detail"))
 
 
 @pytest.mark.anyio

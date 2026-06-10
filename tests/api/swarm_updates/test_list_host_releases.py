@@ -34,7 +34,10 @@ async def test_admin_lists_reachable_and_unreachable_hosts(
     assert hosts["alpha"]["current_sha"] == "aaaa111"
     assert hosts["alpha"]["previous_sha"] == "0000000"
     assert hosts["beta"]["reachable"] is False
-    assert "TLS handshake" in hosts["beta"]["detail"]
+    # V7.1.2: internal exception text must not leak to the response body.
+    assert "TLS handshake" not in hosts["beta"]["detail"]
+    assert "RuntimeError" not in hosts["beta"]["detail"]
+    assert hosts["beta"]["detail"] == "host unreachable"
 
 
 @pytest.mark.anyio

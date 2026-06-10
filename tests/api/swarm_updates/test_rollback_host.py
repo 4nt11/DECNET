@@ -50,7 +50,10 @@ async def test_rollback_transport_failure_reported(client, auth_token, add_host,
     assert resp.status_code == 200
     body = resp.json()
     assert body["status"] == "failed"
-    assert "TLS handshake" in body["detail"]
+    # V7.1.2: internal exception text must not leak to the response body.
+    assert "TLS handshake" not in body["detail"]
+    assert "RuntimeError" not in body["detail"]
+    assert body["detail"] == "transport failure"
 
 
 @pytest.mark.anyio

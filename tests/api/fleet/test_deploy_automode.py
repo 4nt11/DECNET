@@ -190,3 +190,15 @@ async def test_deployment_mode_endpoint(client, auth_token, monkeypatch):
     assert body["role"] == "master"
     assert body["mode"] == "unihost"
     assert body["swarm_host_count"] == 0
+
+
+@pytest.mark.anyio
+async def test_deployment_mode_endpoint_requires_auth(client):
+    # V4.1.6: the response leaks host role + enrolled-worker count, so the
+    # endpoint must not be reachable without a valid viewer/admin JWT. The
+    # dashboard only ever calls it from inside the post-login app shell.
+    resp = await client.get("/api/v1/system/deployment-mode")
+    assert resp.status_code == 401
+    # Body must not leak the recon fields on the unauthenticated path.
+    assert "role" not in resp.text
+    assert "swarm_host_count" not in resp.text

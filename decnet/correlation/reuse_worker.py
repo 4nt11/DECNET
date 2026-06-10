@@ -107,13 +107,13 @@ async def run_reuse_loop(
                     event_type=_topics.CREDENTIAL_REUSE_DETECTED,
                 )
 
+            wake.clear()
             try:
                 await asyncio.wait_for(
                     wake.wait(), timeout=float(poll_interval_secs),
                 )
             except asyncio.TimeoutError:
                 pass
-            wake.clear()
     except (asyncio.CancelledError, KeyboardInterrupt):
         log.info("reuse correlator stopped")
     finally:

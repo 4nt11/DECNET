@@ -16,6 +16,7 @@ exercise:
 from __future__ import annotations
 
 import asyncio
+import logging
 import pathlib
 import socket
 
@@ -255,3 +256,213 @@ async def test_listener_tolerates_client_dropping_mid_stream(
             await asyncio.wait_for(listener_task, timeout=5)
         except asyncio.TimeoutError:
             listener_task.cancel()
+
+
+# ----------------------------------------------------- V9.1.3 fail-closed CN
+
+
+class _FakeWriter:
+    """Minimal asyncio.StreamWriter stand-in for _handle_connection.
+
+    Records close()/wait_closed() so a test can assert the connection was
+    torn down without binding a real socket.
+    """
+
+    def __init__(self, ssl_object: object = None, peername: object = ("1.2.3.4", 4242)) -> None:
+        self._extra = {"ssl_object": ssl_object, "peername": peername}
+        self.closed = False
+        self.wait_closed_called = False
+        self.written: list[bytes] = []
+
+    def get_extra_info(self, key: str, default: object = None) -> object:
+        return self._extra.get(key, default)
+
+    def close(self) -> None:
+        self.closed = True
+
+    async def wait_closed(self) -> None:
+        self.wait_closed_called = True
+
+    def write(self, data: bytes) -> None:  # pragma: no cover - not expected
+        self.written.append(data)
+
+
+def _drained_reader(frame: bytes) -> asyncio.StreamReader:
+    r = asyncio.StreamReader()
+    r.feed_data(frame)
+    r.feed_eof()
+    return r
+
+
+@pytest.mark.asyncio
+async def test_listener_rejects_unknown_cn_ingests_nothing(
+    tmp_path: pathlib.Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """V9.1.3 FAIL-CLOSED: a peer whose cert yields CN='unknown'
+    (malformed/empty/missing CN) must be closed and ingest NOTHING — even
+    though the frame on the wire is a perfectly valid RFC 5424 line."""
+    master_log = tmp_path / "master.log"
+    master_json = tmp_path / "master.json"
+    cfg = lst.ListenerConfig(
+        log_path=master_log, json_path=master_json,
+        bind_host="127.0.0.1", bind_port=0, ca_dir=tmp_path / "ca",
+    )
+
+    # Force peer_cn -> "unknown" regardless of the (absent) ssl object.
+    monkeypatch.setattr(lst, "peer_cn", lambda _ssl: "unknown")
+
+    payload = b'<13>1 2026-04-18T00:00:00Z decky01 svc - - - should-not-ingest'
+    reader = _drained_reader(f"{len(payload)} ".encode() + payload)
+    writer = _FakeWriter()
+
+    await lst._handle_connection(reader, writer, cfg)  # type: ignore[arg-type]
+
+    assert writer.closed, "unknown-CN connection must be closed"
+    assert writer.wait_closed_called
+    # Nothing must have been ingested into either sink.
+    assert not master_log.exists() or master_log.stat().st_size == 0
+    assert not master_json.exists() or master_json.stat().st_size == 0
+
+
+@pytest.mark.asyncio
+async def test_listener_processes_valid_cn_normally(
+    tmp_path: pathlib.Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """A peer with a parseable CN is still processed and tagged with its
+    provenance — the fail-closed guard does not regress the happy path."""
+    master_log = tmp_path / "master.log"
+    master_json = tmp_path / "master.json"
+    cfg = lst.ListenerConfig(
+        log_path=master_log, json_path=master_json,
+        bind_host="127.0.0.1", bind_port=0, ca_dir=tmp_path / "ca",
+    )
+
+    monkeypatch.setattr(lst, "peer_cn", lambda _ssl: "worker-good")
+
+    payload = (
+        b'<13>1 2026-04-18T00:00:00Z decky01 svc 1 - '
+        b'[decnet@53595 decky="decky01" service="svc" event_type="connect" '
+        b'attacker_ip="1.2.3.4" attacker_port="4242"] hello-good'
+    )
+    reader = _drained_reader(f"{len(payload)} ".encode() + payload)
+    writer = _FakeWriter()
+
+    await lst._handle_connection(reader, writer, cfg)  # type: ignore[arg-type]
+
+    assert writer.closed
+    assert master_log.exists() and b"hello-good" in master_log.read_bytes()
+    # Provenance tagged from the (good) CN in the JSON sink.
+    assert master_json.exists() and "worker-good" in master_json.read_text()
+
+
+# ------------------------------------------------------- BUG-16 shutdown errors
+
+
+@pytest.mark.asyncio
+async def test_listener_shutdown_surfaces_serve_task_error(
+    tmp_path: pathlib.Path, monkeypatch: pytest.MonkeyPatch, caplog: pytest.LogCaptureFixture
+) -> None:
+    """BUG-16: a non-CancelledError raised by the serve task during shutdown
+    must be logged, not silently swallowed."""
+
+    class _BoomServer:
+        def __init__(self) -> None:
+            self.sockets: tuple = ()
+
+        async def serve_forever(self) -> None:
+            # Run until cancelled, then raise a REAL error instead of honoring
+            # the CancelledError — emulates an OSError surfacing as the serve
+            # task is awaited after server.close()/cancel() during shutdown.
+            try:
+                await asyncio.Event().wait()  # block until cancelled
+            except asyncio.CancelledError:
+                raise OSError("boom during serve") from None
+
+        def close(self) -> None:
+            pass
+
+        async def __aenter__(self) -> "_BoomServer":
+            return self
+
+        async def __aexit__(self, *exc: object) -> None:
+            pass
+
+    async def _fake_start_server(*_a: object, **_kw: object) -> _BoomServer:
+        return _BoomServer()
+
+    monkeypatch.setattr(lst.asyncio, "start_server", _fake_start_server)
+    monkeypatch.setattr(lst, "build_listener_ssl_context", lambda _ca: None)
+
+    cfg = lst.ListenerConfig(
+        log_path=tmp_path / "m.log", json_path=tmp_path / "m.json",
+        bind_host="127.0.0.1", bind_port=0, ca_dir=tmp_path / "ca",
+    )
+    stop = asyncio.Event()
+
+    async def _stop_soon() -> None:
+        # Let the serve task actually start before we request shutdown, so
+        # the cancel path (not a never-scheduled task) is what surfaces.
+        await asyncio.sleep(0.05)
+        stop.set()
+
+    waiter = asyncio.create_task(_stop_soon())
+    with caplog.at_level(logging.ERROR, logger="swarm.listener"):
+        await lst.run_listener(cfg, stop_event=stop)
+    await waiter
+
+    assert any(
+        "serve task errored during shutdown" in r.getMessage() for r in caplog.records
+    ), "listener swallowed a real serve-task error on shutdown"
+
+
+@pytest.mark.asyncio
+async def test_forwarder_shutdown_surfaces_heartbeat_error(
+    tmp_path: pathlib.Path, monkeypatch: pytest.MonkeyPatch, caplog: pytest.LogCaptureFixture
+) -> None:
+    """BUG-16: a non-CancelledError from the heartbeat task during forwarder
+    shutdown must be logged, not silently suppressed."""
+
+    started = asyncio.Event()
+
+    async def _boom_heartbeat(*_a: object, **_kw: object) -> None:
+        # Signal that we actually ran, then fail — guarantees the task has a
+        # stored exception (not just a pending cancel) by shutdown time.
+        started.set()
+        raise RuntimeError("heartbeat boom")
+
+    # Bus unavailable -> bus=None path; heartbeat task still created.
+    def _no_bus(*_a: object, **_kw: object):
+        raise RuntimeError("no bus in test")
+
+    # Make the connect attempt fail with OSError so run_forwarder takes its
+    # caught backoff branch (which yields control, letting the heartbeat task
+    # run and raise) instead of propagating an uncaught error.
+    def _boom_ctx(*_a: object, **_kw: object):
+        raise OSError("no ssl context in test")
+
+    monkeypatch.setattr(fwd, "get_bus", _no_bus)
+    monkeypatch.setattr(fwd, "run_health_heartbeat", _boom_heartbeat)
+    monkeypatch.setattr(fwd, "build_worker_ssl_context", _boom_ctx)
+
+    cfg = fwd.ForwarderConfig(
+        log_path=tmp_path / "decnet.log",
+        master_host="127.0.0.1", master_port=0,
+        agent_dir=tmp_path / "agent",
+        state_db=tmp_path / "fwd.db",
+    )
+    stop = asyncio.Event()
+
+    async def _stop_after_heartbeat_ran() -> None:
+        # Let the heartbeat task get scheduled and raise before we ask the
+        # forwarder to shut down, so the finally block observes the error.
+        await started.wait()
+        stop.set()
+
+    waiter = asyncio.create_task(_stop_after_heartbeat_ran())
+    with caplog.at_level(logging.ERROR, logger="swarm.forwarder"):
+        await fwd.run_forwarder(cfg, poll_interval=0.01, stop_event=stop)
+    await waiter
+
+    assert any(
+        "heartbeat task errored during shutdown" in r.getMessage() for r in caplog.records
+    ), "forwarder swallowed a real heartbeat-task error on shutdown"

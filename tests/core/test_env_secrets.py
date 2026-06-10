@@ -51,11 +51,32 @@ def test_admin_password_strong_value_passes(monkeypatch: pytest.MonkeyPatch) -> 
     assert val == "a-strong-unique-password"
 
 
-def test_pytest_short_circuit_returns_value_unchecked() -> None:
-    # Under live pytest (PYTEST_* present), _require_env returns the configured
-    # value without the production checks — documents why the dev loop is safe.
-    # conftest sets a strong value, so this also proves lazy resolution works.
+def test_testing_flag_short_circuit_returns_value_unchecked() -> None:
+    # Under the test harness (DECNET_TESTING=1, set in conftest), _require_env
+    # returns the configured value without the production checks — documents
+    # why the dev loop is safe. conftest sets a strong value, so this also
+    # proves lazy resolution works.
     assert envmod._require_env("DECNET_ADMIN_PASSWORD") == "test-password-123"
+
+
+def test_pytest_var_leak_does_not_bypass_validation(monkeypatch: pytest.MonkeyPatch) -> None:
+    # V2.1.7 regression: a leaked PYTEST_* env var must NOT disable strength
+    # validation. With DECNET_TESTING unset, a known-bad / short secret is
+    # still rejected even though a PYTEST_* var is present.
+    monkeypatch.setattr(
+        envmod.os,
+        "environ",
+        {"PYTEST_CURRENT_TEST": "x", "DECNET_ADMIN_PASSWORD": "admin"},
+    )
+    with pytest.raises(ValueError):
+        envmod._require_env("DECNET_ADMIN_PASSWORD")
+    monkeypatch.setattr(
+        envmod.os,
+        "environ",
+        {"PYTEST_CURRENT_TEST": "x", "DECNET_ADMIN_PASSWORD": "short1"},
+    )
+    with pytest.raises(ValueError):
+        envmod._require_env("DECNET_ADMIN_PASSWORD")
 
 
 def test_lazy_getattr_resolves_admin_password() -> None:

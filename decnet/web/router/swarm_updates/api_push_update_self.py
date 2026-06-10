@@ -56,12 +56,12 @@ async def _push_self_one(host: dict[str, Any], tarball: bytes, sha: str) -> Push
             http_status=http_status, sha=sha,
             detail=detail, stderr=stderr,
         )
-    except Exception as exc:  # noqa: BLE001
+    except Exception:  # noqa: BLE001
         log.exception("swarm_updates.push_self failed host=%s", host.get("name"))
         return PushUpdateResult(
             host_uuid=host["uuid"], host_name=host["name"],
             status="self-failed",
-            detail=f"{type(exc).__name__}: {exc}",
+            detail="transport failure",
         )
 
 

@@ -113,6 +113,24 @@ async def _handle_connection(
     ssl_obj = writer.get_extra_info("ssl_object")
     cn = peer_cn(ssl_obj)
     peer = writer.get_extra_info("peername")
+
+    # V9.1.3 — FAIL CLOSED on unattributable provenance. The CA gates
+    # enrollment at the TLS handshake, but a CA-signed cert with a
+    # malformed/empty/missing CN subject slips through with an opaque
+    # 'unknown' label. We refuse to ingest anything we cannot attribute:
+    # close the connection immediately and ingest NOTHING.
+    if cn == "unknown":
+        log.warning(
+            "listener rejecting unattributable peer (CN=unknown) peer=%s — closing, ingesting nothing",
+            peer,
+        )
+        writer.close()
+        try:
+            await writer.wait_closed()
+        except Exception:  # nosec B110 — socket cleanup is best-effort
+            pass
+        return
+
     log.info("listener accepted worker=%s peer=%s", cn, peer)
 
     # Lazy import to avoid a circular dep if the collector pulls in logger setup.
@@ -191,5 +209,9 @@ async def run_listener(
             serve_task.cancel()
             try:
                 await serve_task
-            except (asyncio.CancelledError, Exception):  # nosec B110
+            except asyncio.CancelledError:
                 pass
+            except Exception:
+                # BUG-16 — do NOT swallow real shutdown errors (OSError etc).
+                # Surface them so a wedged/erroring serve task is visible.
+                log.exception("listener serve task errored during shutdown")

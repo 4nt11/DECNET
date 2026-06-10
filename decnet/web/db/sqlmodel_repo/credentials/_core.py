@@ -7,6 +7,7 @@ from datetime import datetime, timezone
 from typing import Any, List, Optional
 
 from sqlalchemy import desc, func, or_, select, update
+from sqlalchemy.exc import IntegrityError
 from sqlmodel import col
 from sqlmodel.sql.expression import SelectOfScalar
 
@@ -31,18 +32,32 @@ class CredentialsCoreMixin(_MixinBase):
             payload["fields"] = json.dumps(payload["fields"], ensure_ascii=True)
 
         principal = payload.get("principal")
+        # Non-null canonical form used by the uq_credentials_dedup constraint
+        # AND by the dedup SELECT — both MUST key on the SAME value or the
+        # SELECT can miss a row that the constraint then collides on
+        # (e.g. principal=None and principal="" both canonicalize to ""):
+        # the SELECT would treat them as distinct, INSERT, hit IntegrityError,
+        # then re-SELECT with the wrong filter and re-raise. ``principal or ""``
+        # collapses None and "" identically — mirrors CredentialReuse and the
+        # constraint key. (BUG-12: canonicalization must not diverge.)
+        principal_key = principal or ""
         secret_kind = payload.get("secret_kind") or "plaintext"
-        async with self._session() as session:
-            stmt = select(Credential).where(
+
+        def _build_dedup_filter():
+            return (
                 Credential.attacker_ip == payload["attacker_ip"],
                 Credential.decky_name == payload["decky_name"],
                 Credential.service == payload["service"],
                 Credential.secret_kind == secret_kind,
                 Credential.secret_sha256 == payload["secret_sha256"],
-                # NULL == NULL is False under SQL — branch the predicate.
-                (Credential.principal == principal) if principal is not None
-                else col(Credential.principal).is_(None),
+                # Key the SELECT on principal_key — the SAME canonical value
+                # the UNIQUE constraint uses — so SELECT and constraint never
+                # disagree about which rows collide.
+                Credential.principal_key == principal_key,
             )
+
+        async with self._session() as session:
+            stmt = select(Credential).where(*_build_dedup_filter())
             existing = (await session.execute(stmt)).scalar_one_or_none()
             now = datetime.now(timezone.utc)
             if existing is not None:
@@ -58,6 +73,7 @@ class CredentialsCoreMixin(_MixinBase):
                 decky_name=payload["decky_name"],
                 service=payload["service"],
                 principal=principal,
+                principal_key=principal_key,
                 secret_kind=secret_kind,
                 secret_sha256=payload["secret_sha256"],
                 secret_b64=payload.get("secret_b64"),
@@ -69,7 +85,25 @@ class CredentialsCoreMixin(_MixinBase):
                 attempt_count=1,
             )
             session.add(row)
-            await session.commit()
+            try:
+                await session.commit()
+            except IntegrityError:
+                # Concurrent upsert for the same dedup key beat us — re-SELECT
+                # the winner row and increment its counter in a fresh session.
+                await session.rollback()
+                async with self._session() as session2:
+                    stmt2 = select(Credential).where(*_build_dedup_filter())
+                    existing2 = (await session2.execute(stmt2)).scalar_one_or_none()
+                    if existing2 is None:
+                        # Extremely unlikely (e.g. deleted between races); bail.
+                        raise
+                    existing2.attempt_count = (existing2.attempt_count or 1) + 1
+                    existing2.last_seen = now
+                    if payload.get("outcome") is not None:
+                        existing2.outcome = payload["outcome"]
+                    session2.add(existing2)
+                    await session2.commit()
+                    return existing2.id
             await session.refresh(row)
             return row.id  # type: ignore[return-value]
 

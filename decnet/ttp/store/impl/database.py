@@ -231,6 +231,9 @@ class DatabaseRuleStore(RuleStore):
         self._subscribers: list[asyncio.Queue[RuleChange]] = []
         self._tail_task: asyncio.Task[None] | None = None
         self._tail_watermark: datetime | None = None
+        # rule_ids already emitted at the current watermark timestamp; reset
+        # whenever the watermark advances (BUG-13 dedup across same-ts rows).
+        self._tail_seen_ids: set[str] = set()
         self._sync_task: asyncio.Task[None] | None = None
         self._stop = asyncio.Event()
         self._lazy_lock = asyncio.Lock()
@@ -504,6 +507,10 @@ class DatabaseRuleStore(RuleStore):
         receive per-rule definition changes without a shared bus
         round-trip. The watermark advances on every observed row;
         first poll initializes it to "now" so we don't replay history.
+
+        Single-poller only: the instance state ``_tail_watermark`` /
+        ``_tail_seen_ids`` is NOT safe for concurrent pollers on the same
+        store instance.
         """
         repo = await self._ensure_repo()
         if self._tail_watermark is None:
@@ -511,14 +518,31 @@ class DatabaseRuleStore(RuleStore):
         while not self._stop.is_set():
             try:
                 async with repo._session() as session:  # type: ignore[attr-defined]
+                    # Use >= so rules whose updated_at equals the watermark are
+                    # not silently skipped on the next poll (BUG-13 fix).
+                    # Rows at exactly the watermark timestamp are deduplicated
+                    # by rule_id so we don't re-emit rules we already fired.
                     rows = (
                         await session.execute(
                             sa_select(TTPRule).where(
-                                col(TTPRule.updated_at) > self._tail_watermark,
+                                col(TTPRule.updated_at) >= self._tail_watermark,
                             ),
                         )
                     ).scalars().all()
+                max_ts: datetime | None = None
+                emitted_at_ts: dict[str, datetime] = {}
                 for rule_row in rows:
+                    # Normalize to UTC-aware before comparison so naive
+                    # datetimes stored by the DB don't cause TypeError.
+                    row_ts = rule_row.updated_at
+                    if row_ts.tzinfo is None:
+                        row_ts = row_ts.replace(tzinfo=timezone.utc)
+                    # Skip rules we already emitted at exactly this watermark.
+                    if (
+                        row_ts == self._tail_watermark
+                        and rule_row.rule_id in self._tail_seen_ids
+                    ):
+                        continue
                     state = await self.get_state(rule_row.rule_id)
                     compiled = _yaml_to_compiled(rule_row.yaml_content, state)
                     await self._emit_change(
@@ -529,11 +553,31 @@ class DatabaseRuleStore(RuleStore):
                             "rule_version": compiled.rule_version,
                         },
                     )
-                    if (
-                        self._tail_watermark is None
-                        or rule_row.updated_at > self._tail_watermark
-                    ):
-                        self._tail_watermark = rule_row.updated_at
+                    emitted_at_ts[rule_row.rule_id] = row_ts
+                    if max_ts is None or row_ts > max_ts:
+                        max_ts = row_ts
+                if max_ts is not None:
+                    # Keep the watermark AT max_ts — do NOT add 1 µs. On coarse
+                    # second-resolution timestamps (MySQL DATETIME) a 1 µs bump
+                    # would land inside the same whole-second bucket and the
+                    # next `>= watermark` query would silently drop a rule
+                    # saved later in that same second (reintroducing BUG-13).
+                    # We rely SOLELY on _tail_seen_ids to dedup already-emitted
+                    # rule_ids at the watermark timestamp.
+                    if max_ts > self._tail_watermark:
+                        # A strictly-newer timestamp appeared: advance the
+                        # watermark and reset seen-ids to only the rule_ids
+                        # AT the new max_ts (rows below it cannot reappear in a
+                        # future `>= max_ts` query, so they need no dedup).
+                        self._tail_watermark = max_ts
+                        self._tail_seen_ids = {
+                            rid for rid, ts in emitted_at_ts.items()
+                            if ts == max_ts
+                        }
+                    else:
+                        # All emitted rows share the current watermark
+                        # timestamp; record them so the next poll skips them.
+                        self._tail_seen_ids.update(emitted_at_ts)
             except Exception:  # noqa: BLE001
                 _log.exception("ttp.store.db: tail poll failed")
             try:

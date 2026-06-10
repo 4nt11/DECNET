@@ -39,13 +39,14 @@ async def _probe_host(host: dict[str, Any]) -> HostReleaseInfo:
     try:
         async with UpdaterClient(host=host) as u:
             body = await u.health()
-    except Exception as exc:  # noqa: BLE001
+    except Exception:  # noqa: BLE001
+        log.warning("swarm_updates.list probe unreachable host=%s", host.get("name"), exc_info=True)
         return HostReleaseInfo(
             host_uuid=host["uuid"],
             host_name=host["name"],
             address=host["address"],
             reachable=False,
-            detail=f"{type(exc).__name__}: {exc}",
+            detail="host unreachable",
         )
     releases = body.get("releases") or []
     current, previous = _extract_shas(releases)

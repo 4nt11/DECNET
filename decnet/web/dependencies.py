@@ -37,6 +37,17 @@ oauth2_scheme = OAuth2PasswordBearer(tokenUrl="/api/v1/auth/login")
 # Per-request user lookup was the hidden tax behind every authed endpoint —
 # SELECT users WHERE uuid=? ran once per call, serializing through aiosqlite.
 # 10s TTL is well below JWT expiry and we invalidate on all user writes.
+#
+# REVOCATION-WINDOW NOTE (V2.1.8, accept-risk): these per-process caches bound
+# how long a *stale* user/username/denylist row can be served. Single-process:
+# a role downgrade or password change is reflected within ~_USER_TTL (10s) even
+# if the in-process invalidate_user_cache hook is missed; the local write path
+# invalidates immediately. Multi-worker (gunicorn/uvicorn --workers>1) gives
+# each worker its own cache, so the worst-case cross-worker staleness is also
+# ~10s and would need a shared cache (Redis) to collapse to zero. This staleness
+# is NOT the authoritative revocation control: JWT bulk-revoke via the user's
+# tokens_valid_from cutoff (enforced in _resolve_token) is the hard cutoff and
+# is unaffected by these caches.
 _USER_TTL = 10.0
 _user_cache: dict[str, tuple[Optional[dict[str, Any]], float]] = {}
 _user_cache_lock: Optional[asyncio.Lock] = None
@@ -389,6 +400,11 @@ def require_stream_role(*allowed_roles: str):
         header_token = _bearer_from_header(request)
         if header_token:
             _user_uuid, user = await _resolve_token(header_token)
+            if user.get("must_change_password"):
+                raise HTTPException(
+                    status_code=status.HTTP_403_FORBIDDEN,
+                    detail="Password change required before accessing this resource",
+                )
             if user["role"] not in allowed_roles:
                 raise HTTPException(
                     status_code=status.HTTP_403_FORBIDDEN,

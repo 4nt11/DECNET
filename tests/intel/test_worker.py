@@ -19,7 +19,7 @@ from typing import Optional
 import pytest
 
 from decnet.intel.base import IntelProvider, IntelResult
-from decnet.intel.worker import run_intel_loop, _aggregate
+from decnet.intel.worker import run_intel_loop, _aggregate, _enrich_one
 from decnet.web.db.factory import get_repository
 
 
@@ -204,6 +204,54 @@ async def test_provider_error_does_not_poison_row(repo):
     assert row["abuseipdb_score"] is None
     # Aggregate reflects only the providers that responded.
     assert row["aggregate_verdict"] == "benign"
+
+
+@pytest.mark.anyio
+async def test_unexpected_provider_raise_does_not_lose_other_results():
+    """BUG-15 regression: an unexpected exception from one provider must
+    not cancel sibling providers or swallow their results.
+
+    Before the fix ``asyncio.gather(..., return_exceptions=False)`` let an
+    unexpected raise propagate immediately, cancelling all sibling tasks
+    and losing their results for the whole IP batch.
+
+    After the fix ``return_exceptions=True`` is used; exception results are
+    filtered out and logged, while valid :class:`IntelResult` objects from
+    other providers are processed normally.
+    """
+
+    class _RaisingProvider(IntelProvider):
+        """Simulates an unexpected (non-contractual) exception."""
+        concurrency = 1
+        min_dispatch_interval_s = 0.0
+        name = "exploding"
+
+        async def lookup(self, ip: str) -> IntelResult:
+            raise RuntimeError("unexpected boom")
+
+    good = _FakeProvider(
+        "greynoise",
+        verdict="benign",
+        column_updates={
+            "greynoise_classification": "benign",
+            "greynoise_raw": {},
+            "greynoise_queried_at": datetime.now(timezone.utc),
+        },
+    )
+    bad = _RaisingProvider()
+
+    row = await _enrich_one(
+        attacker_uuid="test-uuid",
+        ip="10.0.0.1",
+        providers=[good, bad],
+        ttl_hours=24,
+    )
+
+    # The good provider's data must be present despite the bad one raising.
+    assert row["greynoise_classification"] == "benign"
+    assert row["aggregate_verdict"] == "benign"
+    # The bad provider did not poison the row or raise to the caller.
+    assert good.calls == ["10.0.0.1"]
 
 
 @pytest.mark.anyio

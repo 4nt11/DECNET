@@ -75,7 +75,7 @@ async def api_drop_file(
         content = base64.b64decode(req.content_b64, validate=True)
     except (ValueError, TypeError) as exc:
         raise HTTPException(
-            status_code=400, detail=f"content_b64 is not valid base64: {exc}",
+            status_code=400, detail="content_b64 is not valid base64",
         ) from exc
 
     container = await _resolve_container_or_4xx(req.decky_name, req.topology_id)

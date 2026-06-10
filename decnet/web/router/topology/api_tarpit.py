@@ -76,7 +76,11 @@ async def api_enable_tarpit(
     try:
         await asyncio.to_thread(_apply_tarpit, veth, req.ports, req.delay_ms)
     except RuntimeError as exc:
-        raise HTTPException(status_code=409, detail=str(exc)) from exc
+        log.warning(
+            "tarpit enable failed topology=%s decky=%s: %s",
+            topology_id, decky_name, exc, exc_info=True,
+        )
+        raise HTTPException(status_code=409, detail="tarpit command failed") from exc
 
     db_key = _db_key(topology_id, decky_name)
     ports_json = json.dumps(req.ports)
@@ -175,7 +179,11 @@ async def api_disable_tarpit(
     try:
         await asyncio.to_thread(_remove_tarpit, veth)
     except RuntimeError as exc:
-        raise HTTPException(status_code=409, detail=str(exc)) from exc
+        log.warning(
+            "tarpit disable failed topology=%s decky=%s: %s",
+            topology_id, decky_name, exc, exc_info=True,
+        )
+        raise HTTPException(status_code=409, detail="tarpit command failed") from exc
 
     db_key = _db_key(topology_id, decky_name)
     await repo.delete_tarpit_rule(db_key)

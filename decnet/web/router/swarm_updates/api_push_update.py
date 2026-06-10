@@ -96,10 +96,14 @@ async def _push_one(
                     # Connection drop on update-self is expected and not an error.
                     self_ok = _is_expected_connection_drop(exc)
                     if not self_ok:
+                        log.warning(
+                            "swarm_updates.push self-update transport failure host=%s: %s",
+                            host.get("name"), exc,
+                        )
                         return PushUpdateResult(
                             host_uuid=host["uuid"], host_name=host["name"],
                             status="self-failed", http_status=r.status_code, sha=sha,
-                            detail=f"agent updated OK but self-update failed: {exc}",
+                            detail="agent updated OK but self-update transport failure",
                             stderr=stderr,
                         )
                 status = "self-updated" if self_ok else "self-failed"
@@ -110,12 +114,12 @@ async def _push_one(
                 detail=body.get("error") or body.get("probe") if isinstance(body, dict) else None,
                 stderr=stderr,
             )
-    except Exception as exc:  # noqa: BLE001
+    except Exception:  # noqa: BLE001
         log.exception("swarm_updates.push failed host=%s", host.get("name"))
         return PushUpdateResult(
             host_uuid=host["uuid"], host_name=host["name"],
             status="failed",
-            detail=f"{type(exc).__name__}: {exc}",
+            detail="transport failure",
         )
 
 

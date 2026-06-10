@@ -49,12 +49,12 @@ async def api_rollback_host(
     try:
         async with UpdaterClient(host=host) as u:
             r = await u.rollback()
-    except Exception as exc:  # noqa: BLE001
+    except Exception:  # noqa: BLE001
         log.exception("swarm_updates.rollback transport failure host=%s", host["name"])
         return RollbackResponse(
             host_uuid=host["uuid"], host_name=host["name"],
             status="failed",
-            detail=f"{type(exc).__name__}: {exc}",
+            detail="transport failure",
         )
 
     body = r.json() if r.content else {}

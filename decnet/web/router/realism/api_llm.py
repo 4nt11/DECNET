@@ -145,23 +145,26 @@ async def put_llm_config(
         try:
             from decnet.web.db.secrets import encrypt_secret
             merged["api_key_ciphertext"] = encrypt_secret(str(api_key_raw))
-        except RuntimeError as exc:
+        except RuntimeError:
+            log.exception("api.realism.put_llm: secret encryption unavailable")
             raise HTTPException(
                 status_code=500,
-                detail=f"Secret encryption unavailable: {exc}",
-            ) from exc
+                detail="Secret encryption unavailable; check server configuration.",
+            ) from None
 
     try:
         cfg = LLMConfig(**merged)
     except Exception as exc:
-        raise HTTPException(status_code=400, detail=str(exc)) from exc
+        log.warning("api.realism.put_llm: LLMConfig validation failed: %s", exc)
+        raise HTTPException(status_code=400, detail="Invalid LLM configuration payload.") from exc
 
     try:
         llm_config.apply(cfg)
-    except Exception as exc:
+    except Exception:
+        log.exception("api.realism.put_llm: backend init failed")
         raise HTTPException(
-            status_code=400, detail=f"Backend init failed: {exc}"
-        ) from exc
+            status_code=400, detail="Backend init failed; check provider/model settings."
+        ) from None
 
     await repo.set_realism_config(_CONFIG_KEY, json.dumps(merged))
     _hydrated = True

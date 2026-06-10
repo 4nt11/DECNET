@@ -62,8 +62,10 @@ async def _check_database_cached() -> ComponentHealth:
         try:
             await repo.get_total_logs()
             _db_component = ComponentHealth(status="ok")
-        except Exception as exc:
-            _db_component = ComponentHealth(status="failing", detail=str(exc))
+        except Exception:
+            import logging as _logging
+            _logging.getLogger("api.get_health").exception("database liveness check failed")
+            _db_component = ComponentHealth(status="failing", detail="database unavailable")
         _db_last_check = time.monotonic()
         return _db_component
 
@@ -95,7 +97,7 @@ async def get_health(user: dict = Depends(require_viewer)) -> Any:
                 detail = "cancelled"
             else:
                 exc = task.exception()
-                detail = f"exited: {exc}" if exc else "exited unexpectedly"
+                detail = "exited unexpectedly" if not exc else "exited with error"
             components[name] = ComponentHealth(status="failing", detail=detail)
         else:
             components[name] = ComponentHealth(status="ok")
@@ -112,10 +114,12 @@ async def get_health(user: dict = Depends(require_viewer)) -> Any:
             await asyncio.to_thread(_docker_client.ping)  # type: ignore[union-attr]
             _docker_healthy = True
             _docker_detail = ""
-        except Exception as exc:
+        except Exception:
+            import logging as _logging
+            _logging.getLogger("api.get_health").exception("docker daemon ping failed")
             _docker_client = None
             _docker_healthy = False
-            _docker_detail = str(exc)
+            _docker_detail = "docker daemon unavailable"
         _docker_last_check = now
 
     if _docker_healthy:

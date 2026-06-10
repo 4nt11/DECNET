@@ -15,6 +15,10 @@ from ipaddress import IPv4Address, IPv4Interface, IPv4Network
 
 import docker
 
+from decnet.logging import get_logger
+
+log = get_logger("network")
+
 MACVLAN_NETWORK_NAME = "decnet_lan"
 HOST_MACVLAN_IFACE = "decnet_macvlan0"
 HOST_IPVLAN_IFACE = "decnet_ipvlan0"
@@ -491,9 +495,12 @@ def get_container_veth(container_name: str) -> str:
         check=False,
     )
     if result.returncode != 0:
-        raise LookupError(
-            f"container {container_name!r} not reachable: {result.stderr.strip()}"
+        log.warning(
+            "get_container_veth: docker exec failed for container %r: %s",
+            container_name,
+            result.stderr.strip(),
         )
+        raise LookupError(f"container {container_name!r} not reachable")
     peer_index = result.stdout.strip()
     links = _run(["ip", "link", "show"])
     for line in links.stdout.splitlines():

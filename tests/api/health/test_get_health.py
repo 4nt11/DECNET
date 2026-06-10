@@ -5,14 +5,16 @@ from unittest.mock import AsyncMock, MagicMock, patch
 import httpx
 import pytest
 
-from decnet.web.router.health.api_get_health import _reset_docker_cache
+from decnet.web.router.health.api_get_health import _reset_docker_cache, _reset_db_cache
 
 
 @pytest.fixture(autouse=True)
-def _clear_docker_cache():
+def _clear_health_caches():
     _reset_docker_cache()
+    _reset_db_cache()
     yield
     _reset_docker_cache()
+    _reset_db_cache()
 
 
 @pytest.mark.anyio
@@ -144,7 +146,9 @@ async def test_health_docker_failing(client: httpx.AsyncClient, auth_token: str)
 
     comp = resp.json()["components"]["docker"]
     assert comp["status"] == "failing"
-    assert "connection refused" in comp["detail"]
+    # Internal exception message must NOT be in the detail (V7.1.2 fix).
+    assert "connection refused" not in comp["detail"]
+    assert comp["detail"] == "docker daemon unavailable"
 
 
 @pytest.mark.anyio
@@ -161,7 +165,9 @@ async def test_health_database_failing(client: httpx.AsyncClient, auth_token: st
 
     comp = resp.json()["components"]["database"]
     assert comp["status"] == "failing"
-    assert "disk full" in comp["detail"]
+    # Internal exception message must NOT be in the detail (V7.1.2 fix).
+    assert "disk full" not in comp["detail"]
+    assert comp["detail"] == "database unavailable"
 
 
 @pytest.mark.anyio
@@ -181,7 +187,50 @@ async def test_health_worker_exited_with_exception(client: httpx.AsyncClient, au
 
     comp = resp.json()["components"]["collector_worker"]
     assert comp["status"] == "failing"
-    assert "segfault" in comp["detail"]
+    # Internal exception message must NOT be in the detail (V7.1.2 fix).
+    assert "segfault" not in comp["detail"]
+    assert comp["detail"] == "exited with error"
+
+
+# ── V7.1.2: no internal exception detail in response body ────────────────────
+
+@pytest.mark.anyio
+async def test_health_db_failure_does_not_leak_exception_class(
+    client: httpx.AsyncClient, auth_token: str,
+) -> None:
+    """V7.1.2: DB exception class/message must not appear in the HTTP response."""
+    from decnet.web.dependencies import repo as real_repo
+
+    with patch("decnet.web.api.get_background_tasks") as mock_tasks, \
+         patch("docker.from_env") as mock_docker, \
+         patch.object(
+             real_repo, "get_total_logs",
+             new=AsyncMock(side_effect=OSError("[Errno 28] No space left on device")),
+         ):
+        _make_all_running(mock_tasks)
+        mock_docker.return_value = MagicMock()
+        resp = await client.get("/api/v1/health", headers={"Authorization": f"Bearer {auth_token}"})
+
+    detail = resp.json()["components"]["database"].get("detail", "")
+    assert "Errno" not in detail
+    assert "No space left" not in detail
+    assert "OSError" not in detail
+
+
+@pytest.mark.anyio
+async def test_health_docker_failure_does_not_leak_exception_class(
+    client: httpx.AsyncClient, auth_token: str,
+) -> None:
+    """V7.1.2: Docker socket exception must not appear in the HTTP response."""
+    with patch("decnet.web.api.get_background_tasks") as mock_tasks, \
+         patch("docker.from_env", side_effect=OSError("[Errno 111] Connection refused")):
+        _make_all_running(mock_tasks)
+        resp = await client.get("/api/v1/health", headers={"Authorization": f"Bearer {auth_token}"})
+
+    detail = resp.json()["components"]["docker"].get("detail", "")
+    assert "Errno" not in detail
+    assert "Connection refused" not in detail
+    assert "OSError" not in detail
 
 
 # ── Helpers ──────────────────────────────────────────────────────────────────

@@ -13,7 +13,7 @@ from fastapi import APIRouter, Depends
 from pydantic import BaseModel
 
 from decnet.web.db.repository import BaseRepository
-from decnet.web.dependencies import get_repo
+from decnet.web.dependencies import get_repo, require_viewer
 
 router = APIRouter()
 
@@ -24,9 +24,15 @@ class DeploymentModeResponse(BaseModel):
     swarm_host_count: int
 
 
+# Auth-gated (V4.1.6): the response leaks host role + enrolled-worker count,
+# which is recon-useful to an unauthenticated attacker. The dashboard only ever
+# calls this from inside the post-login app shell (App.tsx gates the whole app
+# behind a valid token), so there is no pre-auth UI-mode use case to preserve —
+# gate the entire endpoint behind require_viewer rather than splitting it.
 @router.get("/deployment-mode", response_model=DeploymentModeResponse)
 async def get_deployment_mode(
     repo: BaseRepository = Depends(get_repo),
+    _user: dict = Depends(require_viewer),
 ) -> DeploymentModeResponse:
     role = os.environ.get("DECNET_MODE", "master").lower()
     hosts = 0

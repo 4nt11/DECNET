@@ -20,7 +20,7 @@ from __future__ import annotations
 
 import inspect
 import sys
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import Any
 
@@ -209,3 +209,185 @@ emits:
             await sync_task
         except (asyncio.CancelledError, Exception):  # noqa: BLE001
             pass
+
+
+# ---------------------------------------------------------------------------
+# BUG-13 regression: tail_db must not drop rules updated AT the watermark
+# ---------------------------------------------------------------------------
+
+_SHARED_YAML_TEMPLATE = """\
+rule_id: {rule_id}
+rule_version: 1
+name: {name}
+applies_to: [command]
+match:
+  pattern: 'test'
+emits:
+  - tactic: TA0007
+    technique_id: T1033
+    confidence: 0.85
+"""
+
+
+async def test_tail_db_same_timestamp_both_rules_emitted(
+    db_store: DatabaseRuleStore, tmp_path: Path,
+) -> None:
+    """BUG-13 regression: two rules with the SAME updated_at timestamp are
+    BOTH emitted by tail_db across the watermark boundary (none dropped).
+
+    The pre-fix code used ``updated_at > watermark`` which silently
+    dropped rules whose timestamp equalled the watermark.  The fix
+    changes to ``>=`` and deduplicates by rule_id within the window,
+    advancing the watermark by 1 µs after emitting to prevent re-emission.
+    """
+    import asyncio  # noqa: PLC0415
+
+    # Pin a past watermark so both rules are in scope on the first poll.
+    shared_ts = datetime(2024, 1, 1, 12, 0, 0, tzinfo=timezone.utc)
+    db_store._tail_watermark = shared_ts
+
+    # Insert two TTPRule rows with identical updated_at.
+    repo = db_store._repo
+    assert repo is not None
+    for rule_id, name in (("R1001", "rule one"), ("R1002", "rule two")):
+        yaml_content = _SHARED_YAML_TEMPLATE.format(rule_id=rule_id, name=name)
+        async with repo._session() as session:  # type: ignore[attr-defined]
+            row = TTPRule(
+                rule_id=rule_id,
+                rule_version=1,
+                source_path=f"./rules/ttp/{rule_id}.yaml",
+                yaml_content=yaml_content,
+                updated_at=shared_ts,
+                updated_by="test",
+            )
+            session.add(row)
+            await session.commit()
+
+    # Patch _emit_change to capture rule_ids without touching subscribers.
+    emitted_via_tail: set[str] = set()
+    original_emit = db_store._emit_change
+
+    async def _capture_emit(change, **kwargs):  # type: ignore[no-untyped-def]
+        emitted_via_tail.add(change.rule_id)
+        await original_emit(change, **kwargs)
+
+    db_store._emit_change = _capture_emit  # type: ignore[assignment]
+    db_store._stop.clear()
+
+    # Run tail_db for one short cycle then stop.
+    poll_task = asyncio.create_task(db_store.tail_db(poll_interval=0.01))
+    await asyncio.sleep(0.08)
+    db_store._stop.set()
+    try:
+        await asyncio.wait_for(poll_task, timeout=2.0)
+    except (asyncio.CancelledError, asyncio.TimeoutError):
+        poll_task.cancel()
+
+    assert "R1001" in emitted_via_tail, "R1001 must be emitted by tail_db"
+    assert "R1002" in emitted_via_tail, "R1002 must be emitted by tail_db"
+    # After emitting both rules at shared_ts, the seen-ids set must record
+    # them so that a second poll at the same watermark skips re-emission.
+    # The watermark itself stays at shared_ts (no newer rows existed) but
+    # _tail_seen_ids acts as the dedup guard.
+    assert "R1001" in db_store._tail_seen_ids, "R1001 must be in _tail_seen_ids"
+    assert "R1002" in db_store._tail_seen_ids, "R1002 must be in _tail_seen_ids"
+
+    # Simulate a second poll — the rules should NOT be re-emitted.
+    emitted_via_tail.clear()
+    db_store._stop.clear()
+    poll_task2 = asyncio.create_task(db_store.tail_db(poll_interval=0.01))
+    await asyncio.sleep(0.08)
+    db_store._stop.set()
+    try:
+        await asyncio.wait_for(poll_task2, timeout=2.0)
+    except (asyncio.CancelledError, asyncio.TimeoutError):
+        poll_task2.cancel()
+
+    assert "R1001" not in emitted_via_tail, "R1001 must NOT be re-emitted on second poll"
+    assert "R1002" not in emitted_via_tail, "R1002 must NOT be re-emitted on second poll"
+
+
+async def test_tail_db_coarse_timestamp_late_rule_still_emitted(
+    db_store: DatabaseRuleStore, tmp_path: Path,
+) -> None:
+    """BUG-13 (microsecond-advance regression): on coarse second-resolution
+    timestamps (MySQL DATETIME) a rule saved at the SAME whole-second AFTER
+    a poll must STILL be emitted on the next poll — not dropped.
+
+    The defective fix advanced the watermark to ``max_ts + 1 µs`` after a
+    poll. On second-resolution storage that bump lands inside the same
+    whole-second bucket, so a row written later in that same second has
+    ``updated_at < watermark`` and the ``>= watermark`` query silently drops
+    it — reintroducing the same-timestamp bug.
+
+    The correct fix keeps the watermark AT max_ts and relies solely on
+    ``_tail_seen_ids`` for dedup. This test simulates coarse storage by
+    writing every row at the identical whole-second timestamp.
+
+    Red-before/green-after: with ``max_ts + 1 µs`` the second rule
+    (written at the same whole second after the first poll) is dropped and
+    this test fails; keeping the watermark at max_ts emits it.
+    """
+    import asyncio  # noqa: PLC0415
+
+    coarse_ts = datetime(2024, 6, 1, 9, 0, 0, tzinfo=timezone.utc)
+    # Start the watermark strictly BEFORE the rows so the first poll takes
+    # the advancing (max_ts > watermark) branch — the exact branch where the
+    # defective +1 µs bump skips past same-second late arrivals.
+    db_store._tail_watermark = coarse_ts - timedelta(seconds=5)
+
+    repo = db_store._repo
+    assert repo is not None
+
+    async def _insert(rule_id: str) -> None:
+        yaml_content = _SHARED_YAML_TEMPLATE.format(rule_id=rule_id, name=rule_id)
+        async with repo._session() as session:  # type: ignore[attr-defined]
+            session.add(TTPRule(
+                rule_id=rule_id,
+                rule_version=1,
+                source_path=f"./rules/ttp/{rule_id}.yaml",
+                yaml_content=yaml_content,
+                updated_at=coarse_ts,  # identical whole-second timestamp
+                updated_by="test",
+            ))
+            await session.commit()
+
+    emitted: list[str] = []
+    original_emit = db_store._emit_change
+
+    async def _capture_emit(change, **kwargs):  # type: ignore[no-untyped-def]
+        emitted.append(change.rule_id)
+        await original_emit(change, **kwargs)
+
+    db_store._emit_change = _capture_emit  # type: ignore[assignment]
+
+    # First poll: only R2001 exists yet.
+    await _insert("R2001")
+    db_store._stop.clear()
+    poll1 = asyncio.create_task(db_store.tail_db(poll_interval=0.01))
+    await asyncio.sleep(0.05)
+    db_store._stop.set()
+    try:
+        await asyncio.wait_for(poll1, timeout=2.0)
+    except (asyncio.CancelledError, asyncio.TimeoutError):
+        poll1.cancel()
+
+    assert "R2001" in emitted
+    # Watermark stayed at the coarse second; seen-ids guards re-emission.
+    assert db_store._tail_watermark == coarse_ts
+    assert "R2001" in db_store._tail_seen_ids
+
+    # A rule arrives LATER, in the same whole second (coarse resolution).
+    emitted.clear()
+    await _insert("R2002")
+    db_store._stop.clear()
+    poll2 = asyncio.create_task(db_store.tail_db(poll_interval=0.01))
+    await asyncio.sleep(0.05)
+    db_store._stop.set()
+    try:
+        await asyncio.wait_for(poll2, timeout=2.0)
+    except (asyncio.CancelledError, asyncio.TimeoutError):
+        poll2.cancel()
+
+    assert "R2002" in emitted, "late same-second rule must NOT be dropped"
+    assert "R2001" not in emitted, "already-emitted rule must not re-fire"

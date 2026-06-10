@@ -16,6 +16,11 @@ os.environ.setdefault("DECNET_LOG_FILE", os.path.join(_TEST_LOG_DIR, "decnet.log
 os.environ.setdefault("DECNET_INGEST_LOG_FILE", os.path.join(_TEST_LOG_DIR, "decnet.log"))
 os.environ.setdefault("DECNET_AGENT_LOG_FILE", os.path.join(_TEST_LOG_DIR, "agent.log"))
 
+# Explicit test-harness flag: tells env._require_env to skip secret-strength
+# validation so the suite can run with weak/short secrets. This is the ONLY
+# bypass — it replaced the old "any PYTEST* var present" fail-open check (V2.1.7).
+os.environ["DECNET_TESTING"] = "1"
+
 os.environ["DECNET_JWT_SECRET"] = "stable-test-secret-key-at-least-32-chars-long"
 os.environ["DECNET_ADMIN_PASSWORD"] = "test-password-123"
 os.environ["DECNET_DEVELOPER"] = "true"

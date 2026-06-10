@@ -102,13 +102,13 @@ async def run_clusterer_loop(
 
             await _publish_result(bus, result)
 
+            wake.clear()
             try:
                 await asyncio.wait_for(
                     wake.wait(), timeout=float(poll_interval_secs),
                 )
             except asyncio.TimeoutError:
                 pass
-            wake.clear()
     except (asyncio.CancelledError, KeyboardInterrupt):
         log.info("clusterer stopped")
     finally:

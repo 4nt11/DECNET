@@ -49,7 +49,12 @@ def _require_env(name: str) -> str:
             f"Set it in .env.local or export it before starting DECNET."
         )
 
-    if any(k.startswith("PYTEST") for k in os.environ):
+    # Strength validation is bypassed ONLY under the explicit, non-attacker-
+    # injectable DECNET_TESTING=1 flag (set by the test harness). The old
+    # "any PYTEST* var present" check was a fail-open bug: PYTEST* is an
+    # attacker-controllable namespace, so leaking one into a prod environment
+    # silently disabled the known-bad/length guards. Fail closed (V2.1.7).
+    if os.environ.get("DECNET_TESTING") == "1":
         return value
 
     if value.lower() in _KNOWN_BAD:

@@ -50,7 +50,8 @@ def _apply_tarpit(veth: str, ports: list[int], delay_ms: int) -> None:
     for args in steps:
         r = _tc(*args)
         if r.returncode != 0:
-            raise RuntimeError(r.stderr.strip())
+            log.warning("tarpit tc apply failed veth=%s cmd=%s stderr=%r", veth, args[0], r.stderr.strip())
+            raise RuntimeError("tarpit command failed")
 
     for port in ports:
         r = _tc(
@@ -60,7 +61,8 @@ def _apply_tarpit(veth: str, ports: list[int], delay_ms: int) -> None:
             "flowid", "1:1",
         )
         if r.returncode != 0:
-            raise RuntimeError(r.stderr.strip())
+            log.warning("tarpit tc filter failed veth=%s port=%d stderr=%r", veth, port, r.stderr.strip())
+            raise RuntimeError("tarpit command failed")
 
 
 def _remove_tarpit(veth: str) -> bool:
@@ -69,7 +71,8 @@ def _remove_tarpit(veth: str) -> bool:
     if r.returncode != 0:
         if "Cannot find" in r.stderr or "No such" in r.stderr:
             return False
-        raise RuntimeError(r.stderr.strip())
+        log.warning("tarpit tc remove failed veth=%s stderr=%r", veth, r.stderr.strip())
+        raise RuntimeError("tarpit command failed")
     return True
 
 
@@ -126,7 +129,8 @@ async def api_enable_tarpit(
     try:
         await asyncio.to_thread(_apply_tarpit, veth, req.ports, req.delay_ms)
     except RuntimeError as exc:
-        raise HTTPException(status_code=409, detail=str(exc)) from exc
+        log.warning("tarpit enable failed decky=%s: %s", decky_name, exc, exc_info=True)
+        raise HTTPException(status_code=409, detail="tarpit command failed") from exc
 
     ports_json = json.dumps(req.ports)
     await repo.set_tarpit_rule({
@@ -212,7 +216,8 @@ async def api_disable_tarpit(
     try:
         await asyncio.to_thread(_remove_tarpit, veth)
     except RuntimeError as exc:
-        raise HTTPException(status_code=409, detail=str(exc)) from exc
+        log.warning("tarpit disable failed decky=%s: %s", decky_name, exc, exc_info=True)
+        raise HTTPException(status_code=409, detail="tarpit command failed") from exc
 
     await repo.delete_tarpit_rule(decky_name)
     await repo.add_log({

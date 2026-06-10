@@ -9,6 +9,10 @@ from decnet.env import DECNET_JWT_SECRET, DECNET_JWT_EXP_MINUTES
 
 SECRET_KEY: str = DECNET_JWT_SECRET
 ALGORITHM: str = "HS256"
+# Live constant — sourced from env DECNET_JWT_EXP_MINUTES (default 240 / 4 h).
+# Idle/inactivity timeout is intentionally not implemented: jti denylist covers
+# explicit logout and the 4 h absolute TTL bounds the worst-case exposure window.
+# Accept-risk: LOW / pre-v1 — revisit at v1 when user-facing session UX lands.
 ACCESS_TOKEN_EXPIRE_MINUTES: int = DECNET_JWT_EXP_MINUTES
 
 # Pinned issuer/audience/type so a token signed with DECNET_JWT_SECRET for any
@@ -21,6 +25,9 @@ JWT_TYPE: str = "access"
 
 
 def verify_password(plain_password: str, hashed_password: str) -> bool:
+    # [:72] is a defensive safety-net against bcrypt silent truncation.
+    # Validated callers already reject >72-byte passwords via field_validator,
+    # so this slice is unreachable for well-formed input.
     return bcrypt.checkpw(
         plain_password.encode("utf-8")[:72],
         hashed_password.encode("utf-8")
@@ -28,7 +35,9 @@ def verify_password(plain_password: str, hashed_password: str) -> bool:
 
 
 def get_password_hash(password: str) -> str:
-    # Use a cost factor of 12 (default for passlib/bcrypt)
+    # Use a cost factor of 12 (default for passlib/bcrypt).
+    # [:72] is a defensive safety-net; field_validator rejects >72-byte input
+    # before it reaches this function.
     _salt: bytes = bcrypt.gensalt(rounds=12)
     _hashed: bytes = bcrypt.hashpw(password.encode("utf-8")[:72], _salt)
     return _hashed.decode("utf-8")

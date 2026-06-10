@@ -3,8 +3,16 @@
 from datetime import datetime, timezone
 from typing import List, Literal, Optional
 
-from pydantic import BaseModel, Field as PydanticField
+from pydantic import BaseModel, Field as PydanticField, field_validator
 from sqlmodel import Field, SQLModel
+
+
+def _reject_over_72_bytes(v: str) -> str:
+    """bcrypt silently truncates at 72 bytes; reject instead to avoid
+    collision/confusion between passwords that share a 72-byte prefix."""
+    if len(v.encode("utf-8")) > 72:
+        raise ValueError("password must not exceed 72 UTF-8 bytes (bcrypt limit)")
+    return v
 
 
 class User(SQLModel, table=True):
@@ -55,6 +63,11 @@ class ChangePasswordRequest(BaseModel):
     # floor a seeded admin could clear must_change_password with a 1-char secret.
     new_password: str = PydanticField(..., min_length=12, max_length=72)
 
+    @field_validator("old_password", "new_password", mode="after")
+    @classmethod
+    def _check_byte_limit(cls, v: str) -> str:
+        return _reject_over_72_bytes(v)
+
 
 class SSETicketResponse(BaseModel):
     """Single-use, short-lived opaque ticket the dashboard exchanges its header
@@ -68,8 +81,13 @@ class SSETicketResponse(BaseModel):
 
 class CreateUserRequest(BaseModel):
     username: str = PydanticField(..., min_length=1, max_length=64)
-    password: str = PydanticField(..., min_length=8, max_length=72)
+    password: str = PydanticField(..., min_length=12, max_length=72)
     role: Literal["admin", "viewer"] = "viewer"
+
+    @field_validator("password", mode="after")
+    @classmethod
+    def _check_byte_limit(cls, v: str) -> str:
+        return _reject_over_72_bytes(v)
 
 
 class UpdateUserRoleRequest(BaseModel):
@@ -77,7 +95,12 @@ class UpdateUserRoleRequest(BaseModel):
 
 
 class ResetUserPasswordRequest(BaseModel):
-    new_password: str = PydanticField(..., min_length=8, max_length=72)
+    new_password: str = PydanticField(..., min_length=12, max_length=72)
+
+    @field_validator("new_password", mode="after")
+    @classmethod
+    def _check_byte_limit(cls, v: str) -> str:
+        return _reject_over_72_bytes(v)
 
 
 class DeploymentLimitRequest(BaseModel):

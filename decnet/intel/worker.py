@@ -108,10 +108,19 @@ async def _enrich_one(
         async with p._semaphore:
             return await p.lookup(ip)
 
-    results: list[IntelResult] = await asyncio.gather(
+    raw = await asyncio.gather(
         *(_guarded_lookup(p, ip) for p in providers),
-        return_exceptions=False,  # providers contractually never raise
+        return_exceptions=True,
     )
+    results: list[IntelResult] = []
+    for r in raw:
+        if isinstance(r, BaseException):
+            log.warning(
+                "intel: provider raised unexpectedly for ip=%s: %s",
+                ip, r,
+            )
+        else:
+            results.append(r)
 
     now = datetime.now(timezone.utc)
     row: dict[str, Any] = {
@@ -220,13 +229,13 @@ async def run_intel_loop(
                             attacker_uuid, ip,
                         )
 
+            wake.clear()
             try:
                 await asyncio.wait_for(
                     wake.wait(), timeout=float(poll_interval_secs),
                 )
             except asyncio.TimeoutError:
                 pass
-            wake.clear()
     except (asyncio.CancelledError, KeyboardInterrupt):
         log.info("intel worker stopped")
     finally:

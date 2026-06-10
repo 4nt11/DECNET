@@ -14,6 +14,7 @@ import json
 
 from fastapi import APIRouter, Depends, HTTPException, status
 from pydantic import BaseModel, Field as PydanticField
+from sqlalchemy.exc import IntegrityError
 
 from decnet.telemetry import traced as _traced
 from decnet.topology.allocator import SubnetAllocator, reserved_subnets
@@ -62,8 +63,13 @@ async def api_create_blank_topology(
                 "config_snapshot": json.dumps({"blank": True}),
             }
         )
-    except Exception as exc:  # noqa: BLE001 — surface duplicate-name as 409
-        raise HTTPException(status_code=409, detail=str(exc)) from exc
+    except IntegrityError as exc:
+        # Unique constraint on topologies.name — report the collision without
+        # leaking the raw DB message.
+        raise HTTPException(
+            status_code=409,
+            detail=f"A topology named {body.name!r} already exists.",
+        ) from exc
 
     # 2. DMZ LAN with auto-allocated subnet
     try:

@@ -240,8 +240,14 @@ async def run_forwarder(
                 backoff = min(_MAX_BACKOFF, backoff * 2)
     finally:
         heartbeat_task.cancel()
-        with contextlib.suppress(asyncio.CancelledError, Exception):
+        try:
             await heartbeat_task
+        except asyncio.CancelledError:
+            pass
+        except Exception:
+            # BUG-16 — don't silently swallow a real heartbeat-task error on
+            # shutdown; log it so a failing heartbeat coroutine is visible.
+            log.exception("forwarder heartbeat task errored during shutdown")
         if bus is not None:
             with contextlib.suppress(Exception):
                 await bus.close()
