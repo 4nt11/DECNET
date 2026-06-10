@@ -278,6 +278,54 @@ def test_apply_change_continues_on_error(caplog: pytest.LogCaptureFixture) -> No
     assert idx.get("R_BAD") is None
 
 
+def test_install_evicts_stale_kinds_on_reinstall() -> None:
+    """BUG-4 regression: re-installing a rule with a narrower applies_to must
+    remove the rule from kinds it no longer claims.
+
+    Before the fix, install() only added the rule to new kind-buckets;
+    it never cleaned up the old buckets. A rule installed for {A, B} then
+    re-installed for {A} would remain in B's bucket indefinitely.
+    """
+    idx = RuleIndex()
+    # First install: rule covers both "command" and "email" kinds.
+    r1 = _rule("R_AB", applies_to=frozenset({"command", "email"}))
+    idx.install(r1)
+    assert idx.get("R_AB") is r1
+    assert any(r.rule_id == "R_AB" for r in idx.by_kind("command"))
+    assert any(r.rule_id == "R_AB" for r in idx.by_kind("email"))
+
+    # Re-install with a narrower set: only "command" now.
+    r2 = _rule("R_AB", rule_version=2, applies_to=frozenset({"command"}))
+    idx.install(r2)
+
+    assert idx.get("R_AB") is r2
+    # Rule must still be in "command".
+    assert any(r.rule_id == "R_AB" for r in idx.by_kind("command"))
+    # BUG-4: rule must NO LONGER be in "email" — the stale entry must be evicted.
+    assert not any(r.rule_id == "R_AB" for r in idx.by_kind("email")), (
+        "Stale kind bucket 'email' still contains R_AB after re-install with "
+        "applies_to={command}; eviction on reinstall is broken"
+    )
+
+
+def test_install_eviction_does_not_affect_other_rules_in_same_kind() -> None:
+    """Evicting stale kinds for one rule must leave other rules in those kinds intact."""
+    idx = RuleIndex()
+    r_ab = _rule("R_AB", applies_to=frozenset({"command", "email"}))
+    r_email = _rule("R_EMAIL_ONLY", applies_to=frozenset({"email"}))
+    idx.install(r_ab)
+    idx.install(r_email)
+
+    # Re-install R_AB without "email".
+    r_ab_v2 = _rule("R_AB", rule_version=2, applies_to=frozenset({"command"}))
+    idx.install(r_ab_v2)
+
+    # R_EMAIL_ONLY must still be in "email".
+    assert any(r.rule_id == "R_EMAIL_ONLY" for r in idx.by_kind("email"))
+    # R_AB must be gone from "email".
+    assert not any(r.rule_id == "R_AB" for r in idx.by_kind("email"))
+
+
 def test_expired_state_treated_as_disabled_by_is_active() -> None:
     """Sanity check on the helper used by both engine and lifters."""
     from decnet.ttp.impl._state import is_active

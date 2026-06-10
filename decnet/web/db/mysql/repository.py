@@ -118,10 +118,10 @@ class MySQLRepository(SQLModelRepository):
                 await lock_conn.execute(text("SELECT RELEASE_LOCK('decnet_schema_init')"))
                 await lock_conn.close()
 
-    def _json_field_equals(self, key: str):
+    def _json_field_equals(self, key: str, param_name: str = "val"):
         # MySQL 5.7+ exposes JSON_EXTRACT; quoted string result returned for
         # TEXT-stored JSON, same behavior we rely on in SQLite.
-        return text(f"JSON_UNQUOTE(JSON_EXTRACT(fields, '$.{key}')) = :val")
+        return text(f"JSON_UNQUOTE(JSON_EXTRACT(fields, '$.{key}')) = :{param_name}")
 
     async def _insert_tags_or_ignore(self, rows: list[TTPTag]) -> int:
         """Bulk-insert with MySQL's ``INSERT IGNORE`` on the ``uuid`` PK.

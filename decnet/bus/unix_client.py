@@ -105,14 +105,25 @@ class UnixSocketBus(BaseBus):
     # ─── Lifecycle ──────────────────────────────────────────────────────────
 
     async def connect(self) -> None:
+        # Double-checked locking: the cheap unlocked check fast-paths the
+        # already-connected case, but the actual connect must hold ``_lock``
+        # so two coroutines racing on a fresh bus (e.g. concurrent
+        # publish()/subscribe() both lazily calling connect()) can't each
+        # open a socket and spawn a reader task — the loser would orphan a
+        # live FD and an uncancelled reader_loop that close() never reaps.
         if self._writer is not None:
             return
-        if self._closed:
-            raise RuntimeError("connect on closed bus")
-        self._reader, self._writer = await asyncio.open_unix_connection(str(self._path))
-        await self._send(protocol.encode(protocol.HELLO, args=self._client_name))
-        self._reader_task = asyncio.create_task(self._reader_loop())
-        log.debug("bus.client: connected to %s as %s", self._path, self._client_name)
+        async with self._lock:
+            # Re-check under the lock: a racing caller may have connected
+            # while we awaited the lock.
+            if self._writer is not None:
+                return
+            if self._closed:
+                raise RuntimeError("connect on closed bus")
+            self._reader, self._writer = await asyncio.open_unix_connection(str(self._path))
+            await self._send(protocol.encode(protocol.HELLO, args=self._client_name))
+            self._reader_task = asyncio.create_task(self._reader_loop())
+            log.debug("bus.client: connected to %s as %s", self._path, self._client_name)
 
     async def close(self) -> None:
         if self._closed:

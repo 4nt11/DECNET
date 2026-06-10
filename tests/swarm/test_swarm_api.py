@@ -437,6 +437,43 @@ def test_check_marks_hosts_active(client: TestClient, stub_agent) -> None:
     assert one["last_heartbeat"] is not None
 
 
+# V7.1.1: a probe failure must mark the host unreachable WITHOUT leaking the
+# raw exception text (file paths, TLS internals) back to the caller.
+_LEAKY_PROBE_SECRET = "/etc/decnet/tls/worker-7.key: permission denied [TLSV1_ALERT]"
+
+
+class _LeakyAgentClient(_StubAgentClient):
+    async def __aenter__(self) -> "_LeakyAgentClient":
+        raise RuntimeError(_LEAKY_PROBE_SECRET)
+
+
+def test_check_unreachable_does_not_leak_exception_text(
+    client: TestClient, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from decnet.web.router.swarm import api_check_hosts as check_mod
+
+    monkeypatch.setattr(check_mod, "AgentClient", _LeakyAgentClient)
+
+    h = client.post(
+        "/swarm/enroll",
+        json={"name": "leaky-w", "address": "10.0.0.13", "agent_port": 8765},
+    ).json()
+
+    resp = client.post("/swarm/check")
+    assert resp.status_code == 200
+    results = resp.json()["results"]
+    assert len(results) == 1
+    assert results[0]["reachable"] is False
+    # Generic message only — the internal exception string must be absent.
+    assert results[0]["detail"] == "probe failed"
+    assert _LEAKY_PROBE_SECRET not in resp.text
+    assert "permission denied" not in resp.text
+
+    # The host is still correctly marked unreachable server-side.
+    one = client.get(f"/swarm/hosts/{h['host_uuid']}").json()
+    assert one["status"] == "unreachable"
+
+
 # ---------------------------------------------------------------- /deckies
 
 

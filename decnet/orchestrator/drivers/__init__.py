@@ -13,7 +13,7 @@ from decnet.orchestrator.drivers.base import (
     ActivityResult,
     Driver,
 )
-from decnet.orchestrator.scheduler import Action, FileAction, TrafficAction
+from decnet.orchestrator.scheduler import Action, EditAction, FileAction, TrafficAction
 
 __all__ = [
     "ActivityDriver",
@@ -58,7 +58,7 @@ def get_driver_for(action: Action) -> ActivityDriver:
     # modules out of every importer's graph.
     from decnet.orchestrator.drivers.ssh import SSHDriver
 
-    if isinstance(action, (TrafficAction, FileAction)):
+    if isinstance(action, (TrafficAction, FileAction, EditAction)):
         return SSHDriver()
     # EmailAction lands in stage 5; reachable only after that import is
     # added to scheduler.  Importing inside the branch avoids a cycle
@@ -66,7 +66,7 @@ def get_driver_for(action: Action) -> ActivityDriver:
     try:
         from decnet.orchestrator.emailgen.scheduler import EmailAction
     except ImportError:  # pragma: no cover - scheduler always exists
-        EmailAction = None  # type: ignore[assignment, misc]
+        EmailAction = None  # type: ignore[misc]
     if EmailAction is not None and isinstance(action, EmailAction):
         from decnet.orchestrator.drivers.email import EmailDriver
         return EmailDriver()

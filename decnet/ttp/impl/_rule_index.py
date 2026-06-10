@@ -68,6 +68,15 @@ class RuleIndex:
         if not rule.applies_to and not rule.emits:
             self.evict(rule.rule_id)
             return
+        # Evict stale kind-buckets for any kinds the updated rule no longer
+        # claims, so re-install with a narrower applies_to doesn't leave
+        # ghost entries in the old buckets.
+        old = self._by_rule.get(rule.rule_id)
+        if old is not None:
+            stale_kinds = old.applies_to - rule.applies_to
+            for kind in stale_kinds:
+                current = self._by_kind.get(kind, [])
+                self._by_kind[kind] = [r for r in current if r.rule_id != rule.rule_id]
         self._by_rule[rule.rule_id] = rule
         for kind in rule.applies_to:
             current = self._by_kind.get(kind, [])

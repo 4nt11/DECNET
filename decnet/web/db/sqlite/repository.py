@@ -56,9 +56,9 @@ class SQLiteRepository(SQLModelRepository):
                     "ALTER TABLE attackers ADD COLUMN country_source VARCHAR(16)"
                 ))
 
-    def _json_field_equals(self, key: str):
+    def _json_field_equals(self, key: str, param_name: str = "val"):
         # SQLite stores JSON as text; json_extract is the canonical accessor.
-        return text(f"json_extract(fields, '$.{key}') = :val")
+        return text(f"json_extract(fields, '$.{key}') = :{param_name}")
 
     async def _insert_tags_or_ignore(self, rows: list[TTPTag]) -> int:
         """Bulk-insert with SQLite's ``ON CONFLICT DO NOTHING`` on the

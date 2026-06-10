@@ -84,6 +84,7 @@ class LogsMixin(_MixinBase):
                 "attacker_ip": Log.attacker_ip,
             }
 
+            _json_token_idx = 0
             for token in tokens:
                 if ":" in token:
                     key, val = token.split(":", 1)
@@ -92,9 +93,15 @@ class LogsMixin(_MixinBase):
                     else:
                         key_safe = re.sub(r"[^a-zA-Z0-9_]", "", key)
                         if key_safe:
+                            # Each JSON-field filter needs its own bind-param
+                            # name; sharing `:val` across multiple tokens means
+                            # only the last `.params(val=...)` call survives
+                            # and earlier filters match the wrong value.
+                            param_name = f"jval_{_json_token_idx}"
+                            _json_token_idx += 1
                             statement = statement.where(
-                                self._json_field_equals(key_safe)
-                            ).params(val=val)
+                                self._json_field_equals(key_safe, param_name)
+                            ).params(**{param_name: val})
                 else:
                     lk = f"%{token}%"
                     statement = statement.where(
@@ -107,15 +114,17 @@ class LogsMixin(_MixinBase):
                     )
         return statement
 
-    def _json_field_equals(self, key: str):
-        """Return a text() predicate that matches rows where fields->key == :val.
+    def _json_field_equals(self, key: str, param_name: str = "val"):
+        """Return a text() predicate that matches rows where fields->key == :<param_name>.
 
         Both SQLite and MySQL expose a ``JSON_EXTRACT`` function; MySQL also
         exposes the same function under ``json_extract`` (case-insensitive).
-        The ``:val`` parameter is bound separately and must be supplied with
-        ``.params(val=...)`` by the caller, which keeps us safe from injection.
+        The bind parameter is supplied with ``.params(<param_name>=...)`` by
+        the caller. Pass a distinct ``param_name`` for each token so that
+        multiple JSON-field filters in the same query each bind their own
+        value instead of sharing the last-written ``:val``.
         """
-        return text(f"JSON_EXTRACT(fields, '$.{key}') = :val")
+        return text(f"JSON_EXTRACT(fields, '$.{key}') = :{param_name}")
 
     async def get_logs(
         self,

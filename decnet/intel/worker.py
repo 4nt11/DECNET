@@ -104,8 +104,12 @@ async def _enrich_one(
     value the providers see and is denormalised onto the row for SIEM /
     audit consumers.
     """
+    async def _guarded_lookup(p: IntelProvider, ip: str) -> IntelResult:
+        async with p._semaphore:
+            return await p.lookup(ip)
+
     results: list[IntelResult] = await asyncio.gather(
-        *(p.lookup(ip) for p in providers),
+        *(_guarded_lookup(p, ip) for p in providers),
         return_exceptions=False,  # providers contractually never raise
     )
 

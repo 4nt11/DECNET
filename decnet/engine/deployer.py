@@ -1091,6 +1091,18 @@ async def deploy_topology(repo, topology_id: str, *, dry_run: bool = False) -> N
         lambda: _compose_ps(compose_path, project=compose_project),
     )
     bad: list[str] = []
+    # Build the set of expected decky base names so we can distinguish base
+    # containers from service containers without relying on a hyphen heuristic.
+    # The generator names every decky "decky-<NNN>" (which contains a hyphen),
+    # so `"-" not in service_name` would never match generator-named deckies.
+    # Instead, explicitly check membership in the known decky name set.
+    expected_decky_names: set[str] = set()
+    for _d in hydrated.get("deckies", []):
+        _cfg = _d.get("decky_config") or {}
+        _dn = _cfg.get("name") or _d.get("name")
+        if _dn:
+            expected_decky_names.add(_dn)
+
     # Build the per-decky state map.  The base container's compose
     # service name == decky name, which is what we cache on the
     # TopologyDecky row.  Service containers (named ``<decky>-<svc>``)
@@ -1100,8 +1112,8 @@ async def deploy_topology(repo, topology_id: str, *, dry_run: bool = False) -> N
     for row in ps_rows:
         state = str(row.get("State", "")).lower()
         service_name = str(row.get("Service") or "")
-        if service_name and "-" not in service_name:
-            # Plain decky base; cache its docker state.
+        if service_name and service_name in expected_decky_names:
+            # This is a decky base container; cache its docker state.
             decky_state_by_name[service_name] = state or "unknown"
         if state and state != "running":
             name = str(row.get("Name") or row.get("Service") or "?")

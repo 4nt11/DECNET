@@ -59,6 +59,9 @@ async def api_check_hosts(
                 detail=body,
             )
         except Exception as exc:
+            # Log the real exception server-side; never surface internal
+            # exception text (file paths, TLS internals, library guts) to the
+            # caller. Same fail-closed posture as the global 500 handler.
             log.warning("swarm.check unreachable host=%s err=%s", host["name"], exc)
             await repo.update_swarm_host(host["uuid"], {"status": "unreachable"})
             return SwarmHostHealth(
@@ -66,7 +69,7 @@ async def api_check_hosts(
                 name=host["name"],
                 address=host["address"],
                 reachable=False,
-                detail=str(exc),
+                detail="probe failed",
             )
 
     results = await asyncio.gather(*(_probe(h) for h in hosts))
