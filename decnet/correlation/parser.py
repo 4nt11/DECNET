@@ -19,7 +19,7 @@ from __future__ import annotations
 
 import re
 from dataclasses import dataclass, field
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import Literal
 
 # RFC 5424 line structure
@@ -159,6 +159,8 @@ def parse_line(line: str) -> LogEvent | None:
         timestamp = datetime.fromisoformat(ts_raw)
     except ValueError:
         return None
+    if timestamp.tzinfo is None:
+        timestamp = timestamp.replace(tzinfo=timezone.utc)
 
     fields = _parse_sd_params(sd_rest)
     if sd_rest.startswith("-"):

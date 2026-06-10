@@ -22,6 +22,11 @@ import httpx
 import orjson
 
 from decnet.logging import get_logger
+from decnet.webhook.ssrf import (
+    ValidatedDestination,
+    WebhookDestinationError,
+    validate_webhook_url,
+)
 
 log = get_logger("webhook.client")
 
@@ -121,6 +126,51 @@ def _jittered(delay: float) -> float:
     return delay * random.uniform(_JITTER_LOW, _JITTER_HIGH)  # nosec B311
 
 
+def _build_pinned_request(
+    client: httpx.AsyncClient,
+    url: str,
+    dest: ValidatedDestination,
+    body: bytes,
+    headers: dict[str, str],
+) -> httpx.Request:
+    """Build a POST request pinned to a validated IP.
+
+    Defeats DNS rebinding: instead of letting httpx re-resolve the hostname
+    at connect time (which an attacker-controlled DNS could flip to an
+    internal IP after our check passed), we point the connection at one of
+    the IPs we already validated, while preserving the original ``Host``
+    header and TLS SNI so the receiver and certificate validation still see
+    the real hostname.
+    """
+    pinned_ip = dest.ip_addresses[0]
+    # httpx brackets IPv6 hosts itself — pass the bare IP.
+    pinned_url = httpx.URL(url).copy_with(host=pinned_ip)
+
+    req_headers = dict(headers)
+    # Preserve virtual-host routing on the receiver.
+    req_headers.setdefault("Host", _host_header(dest.host, dest.port, dest.scheme))
+
+    # Keep TLS SNI + cert hostname validation bound to the real host, not
+    # the bare IP we connect to.
+    extensions = {"sni_hostname": dest.host} if dest.scheme == "https" else {}
+
+    return client.build_request(
+        "POST",
+        pinned_url,
+        content=body,
+        headers=req_headers,
+        extensions=extensions,
+    )
+
+
+def _host_header(host: str, port: int, scheme: str) -> str:
+    default_port = 443 if scheme == "https" else 80
+    host_part = f"[{host}]" if ":" in host else host
+    if port == default_port:
+        return host_part
+    return f"{host_part}:{port}"
+
+
 async def deliver(
     sub: dict[str, Any],
     event: Any,
@@ -148,6 +198,15 @@ async def deliver(
     headers = _build_headers(sub["secret"], body, topic, eid)
     url = sub["url"]
 
+    # SSRF guard: resolve + validate the destination before any connect.
+    # Fail closed and treat a forbidden destination as terminal (no retry —
+    # the URL itself is the problem, not a transient network condition).
+    try:
+        dest = validate_webhook_url(url)
+    except WebhookDestinationError as e:
+        log.warning("webhook delivery blocked by SSRF guard: %s", e)
+        return DeliveryResult(ok=False, status_code=None, error=str(e), attempts=0)
+
     owns_client = client is None
     if client is None:
         client = httpx.AsyncClient(timeout=timeout_s)
@@ -157,7 +216,8 @@ async def deliver(
     try:
         for attempt in range(1, max_attempts + 1):
             try:
-                resp = await client.post(url, content=body, headers=headers)
+                request = _build_pinned_request(client, url, dest, body, headers)
+                resp = await client.send(request, follow_redirects=False)
                 last_status = resp.status_code
                 if 200 <= resp.status_code < 300:
                     return DeliveryResult(

@@ -204,13 +204,26 @@ _cors_raw: str = os.environ.get("DECNET_CORS_ORIGINS", _cors_default)
 DECNET_CORS_ORIGINS: list[str] = [o.strip() for o in _cors_raw.split(",") if o.strip()]
 
 
-# Master→worker mTLS hostname verification. Off by default because legacy
-# enrollments were issued certs with operator-supplied SAN lists that may
-# not match the URL the master uses to connect; set to "true" on a fresh
-# production deploy where you control enrollment to get TLS hostname checks
-# on top of CA + fingerprint pinning.
+# Master→worker mTLS hostname verification. ON by default — the worker's
+# cert SAN must match the address the master connects to, on top of CA +
+# SHA-256 fingerprint pinning. Operators with legacy enrollments whose
+# operator-supplied SAN lists don't match the connect URL can opt OUT
+# explicitly with DECNET_VERIFY_HOSTNAME=false, but that is a downgrade:
+# it drops SAN binding and leans entirely on CA + per-host pinning.
 DECNET_VERIFY_HOSTNAME: bool = (
-    os.environ.get("DECNET_VERIFY_HOSTNAME", "false").lower() == "true"
+    os.environ.get("DECNET_VERIFY_HOSTNAME", "true").lower() == "true"
+)
+
+
+# Webhook egress SSRF guard. By default DECNET refuses to deliver a webhook
+# to a private (RFC1918), loopback, link-local (incl. 169.254.169.254 cloud
+# metadata), unspecified, reserved, or multicast destination, and rejects
+# such URLs at registration time. Operators who genuinely need to target an
+# internal receiver (e.g. an on-box SIEM) opt IN explicitly by setting
+# DECNET_WEBHOOK_ALLOW_PRIVATE=true. Fails closed: anything other than the
+# literal "true" leaves the guard fully enabled.
+DECNET_WEBHOOK_ALLOW_PRIVATE: bool = (
+    os.environ.get("DECNET_WEBHOOK_ALLOW_PRIVATE", "false").lower() == "true"
 )
 
 

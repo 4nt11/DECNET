@@ -112,11 +112,11 @@ class AgentClient:
         """Either pass a SwarmHost dict, or explicit address/port.
 
         ``verify_hostname`` defers to ``DECNET_VERIFY_HOSTNAME`` when the
-        caller doesn't pass an explicit value — production deploys flip
-        the env var on so the worker's cert SAN must match the address
-        the master connects to, on top of the existing CA + fingerprint
-        pin. Defaults to False so dev/test enrollments with mismatched
-        SANs keep working unchanged.
+        caller doesn't pass an explicit value — the worker's cert SAN must
+        match the address the master connects to, on top of the existing CA
+        + fingerprint pin. Defaults to True; operators opt out explicitly
+        via ``DECNET_VERIFY_HOSTNAME=false`` for dev/test enrollments with
+        mismatched SANs.
         """
         if verify_hostname is None:
             from decnet.env import DECNET_VERIFY_HOSTNAME
@@ -155,9 +155,10 @@ class AgentClient:
         )
         ctx.load_verify_locations(cafile=str(self._identity.ca_cert_path))
         ctx.verify_mode = ssl.CERT_REQUIRED
-        # Pin by CA + cert chain, not by DNS — workers enroll with arbitrary
-        # SANs (IPs, hostnames) and we don't want to force operators to keep
-        # those in sync with whatever URL the master happens to use.
+        # Pin by CA + cert chain; hostname verification is on by default
+        # (DECNET_VERIFY_HOSTNAME=true) so the cert SAN must match the
+        # master's connect address.  Operators set the env var to false only
+        # for dev/test enrollments with mismatched SANs.
         ctx.check_hostname = self._verify_hostname
         return httpx.AsyncClient(
             base_url=f"https://{self._address}:{self._port}",

@@ -8,8 +8,9 @@ Server-Sent Event to the browser. Emits a one-shot snapshot on connect
 fetch to initialise.
 
 Authorization mirrors :mod:`decnet.web.router.topology.api_events` — a
-JWT passed via the ``?token=`` query parameter (EventSource can't set
-arbitrary headers) + ``require_stream_viewer`` role gate.
+single-use opaque ticket passed via the ``?ticket=`` query parameter
+(EventSource can't set arbitrary headers) + ``require_stream_viewer``
+role gate.
 
 The endpoint is broadly scoped (every identity event, not per-uuid)
 because both ``AttackerDetail`` and ``IdentityDetail`` need the same

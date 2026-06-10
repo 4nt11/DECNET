@@ -10,8 +10,9 @@ stream's attacker. Emits a one-shot snapshot on connect (latest
 observation per primitive) so the panel hydrates immediately.
 
 Authorization mirrors :mod:`decnet.web.router.topology.api_events` —
-JWT via the ``?token=`` query parameter (EventSource can't set
-arbitrary headers) + ``require_stream_viewer`` role gate. The 404
+a single-use opaque ticket via the ``?ticket=`` query parameter
+(EventSource can't set arbitrary headers) + ``require_stream_viewer``
+role gate. The 404
 fires after auth so an existence probe can't leak an attacker UUID
 to an unauthenticated caller.
 

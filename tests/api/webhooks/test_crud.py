@@ -9,6 +9,80 @@ import pytest
 PATH = "/api/v1/webhooks/"
 
 
+@pytest.fixture(autouse=True)
+def _public_dns(monkeypatch: pytest.MonkeyPatch):
+    """Resolve hostnames to a public IP so the registration-time SSRF guard
+    passes for the functional CRUD cases without touching the network.
+
+    IP-literal URLs (e.g. the loopback-rejection test) don't hit DNS, so
+    this stub doesn't mask them.
+    """
+    import socket
+
+    from decnet.webhook import ssrf
+
+    def fake_getaddrinfo(host, port, *a, **k):
+        return [(socket.AF_INET, socket.SOCK_STREAM, 6, "", ("93.184.216.34", port))]
+
+    monkeypatch.setattr(ssrf.socket, "getaddrinfo", fake_getaddrinfo)
+
+
+@pytest.mark.asyncio
+async def test_create_rejects_loopback_url(
+    client: httpx.AsyncClient, auth_token: str
+):
+    res = await client.post(
+        PATH,
+        json={
+            "name": "wh-ssrf",
+            "url": "http://127.0.0.1:8080/inbound",
+            "topic_patterns": ["system.>"],
+        },
+        headers={"Authorization": f"Bearer {auth_token}"},
+    )
+    assert res.status_code == 422, res.text
+    assert "forbidden" in res.text.lower()
+
+
+@pytest.mark.asyncio
+async def test_create_rejects_metadata_url(
+    client: httpx.AsyncClient, auth_token: str
+):
+    res = await client.post(
+        PATH,
+        json={
+            "name": "wh-meta",
+            "url": "http://169.254.169.254/latest/meta-data/",
+            "topic_patterns": ["system.>"],
+        },
+        headers={"Authorization": f"Bearer {auth_token}"},
+    )
+    assert res.status_code == 422, res.text
+
+
+@pytest.mark.asyncio
+async def test_update_rejects_loopback_url(
+    client: httpx.AsyncClient, auth_token: str
+):
+    create = await client.post(
+        PATH,
+        json={
+            "name": "wh-upd-ssrf",
+            "url": "https://good.example/x",
+            "topic_patterns": ["system.>"],
+        },
+        headers={"Authorization": f"Bearer {auth_token}"},
+    )
+    assert create.status_code == 201, create.text
+    uuid = create.json()["uuid"]
+    res = await client.patch(
+        f"{PATH}{uuid}",
+        json={"url": "http://10.0.0.1/x"},
+        headers={"Authorization": f"Bearer {auth_token}"},
+    )
+    assert res.status_code == 422, res.text
+
+
 @pytest.mark.asyncio
 async def test_create_requires_patterns(client: httpx.AsyncClient, auth_token: str):
     res = await client.post(

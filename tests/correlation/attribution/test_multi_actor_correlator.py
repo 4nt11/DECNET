@@ -223,3 +223,62 @@ async def test_independent_dedup_per_identity(
     seen = {c["payload"]["identity_uuid"] for c in captured}
     assert seen == {iuid_a, iuid_b}
     await bus.close()
+
+
+@pytest.mark.anyio
+async def test_rearms_for_sub_threshold_identity_in_candidates(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """BUG-10 regression: seen_now.add() must run AFTER the threshold guard.
+
+    If an identity is returned by the repo with < MULTI_ACTOR_MIN_PRIMITIVES
+    (defensive path) it must NOT be added to seen_now.  That means it stays
+    absent from seen_now → gets removed from last_fired on the stale-rearm
+    sweep → re-fires when primitives climb back above threshold.
+
+    Before fix: seen_now.add() ran before the continue, so the identity
+    was treated as present-and-seen even though it was below threshold,
+    and last_fired was never cleared → no rearm.
+    """
+    bus = FakeBus()
+    await bus.connect()
+    captured: list[dict[str, Any]] = []
+
+    async def cap(_b, t, p, *, event_type=""):
+        captured.append({"topic": t, "payload": p})
+
+    monkeypatch.setattr(_aw, "publish_safely", cap)
+
+    iuid = "test-rearm-uuid"
+
+    class _StubRepo:
+        def __init__(self, entries: list[dict]) -> None:
+            self._entries = entries
+
+        async def list_multi_actor_identities(self) -> list[dict]:
+            return list(self._entries)
+
+    # First tick: identity fires with 2 primitives.
+    repo_above = _StubRepo([
+        {"identity_uuid": iuid, "primitives": ["prim.a", "prim.b"]},
+    ])
+    last_fired: dict[str, Any] = {}
+    await _aw.tick_multi_actor(bus, repo_above, last_fired)  # type: ignore[arg-type]
+    assert len(captured) == 1
+    assert iuid in last_fired
+
+    # Second tick: identity returned by repo but with only 1 primitive
+    # (sub-threshold defensive path).  last_fired[iuid] must be cleared.
+    repo_below = _StubRepo([
+        {"identity_uuid": iuid, "primitives": ["prim.a"]},
+    ])
+    await _aw.tick_multi_actor(bus, repo_below, last_fired)  # type: ignore[arg-type]
+    assert iuid not in last_fired, (
+        "sub-threshold identity must be removed from last_fired so it re-arms"
+    )
+
+    # Third tick: identity climbs back above threshold — must re-fire.
+    await _aw.tick_multi_actor(bus, repo_above, last_fired)  # type: ignore[arg-type]
+    assert len(captured) == 2, "identity must re-fire after rearm"
+
+    await bus.close()

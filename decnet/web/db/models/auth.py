@@ -50,7 +50,18 @@ class LoginRequest(BaseModel):
 
 class ChangePasswordRequest(BaseModel):
     old_password: str = PydanticField(..., max_length=72)
-    new_password: str = PydanticField(..., max_length=72)
+    # min_length=12 aligns with the DECNET_ADMIN_PASSWORD >=12 policy. The
+    # forced first-login flow routes through /auth/change-password, so without a
+    # floor a seeded admin could clear must_change_password with a 1-char secret.
+    new_password: str = PydanticField(..., min_length=12, max_length=72)
+
+
+class SSETicketResponse(BaseModel):
+    """Single-use, short-lived opaque ticket the dashboard exchanges its header
+    JWT for, then passes to an SSE endpoint as ?ticket= (EventSource cannot set
+    an Authorization header). See decnet.web.dependencies SSE ticket store."""
+    ticket: str
+    expires_in: int
 
 
 # --- Configuration Models ---

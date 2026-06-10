@@ -9,6 +9,8 @@ must agree with the collector's ``parse_rfc5424`` so that
 """
 from __future__ import annotations
 
+from datetime import timezone
+
 from decnet.correlation.parser import parse_line
 
 
@@ -71,3 +73,41 @@ def test_outer_msgid_set_does_not_recurse() -> None:
     assert e.event_type == "auth_attempt"
     assert e.decky == "omega-decky"
     assert e.service == "auth-helper"
+
+
+# ---------------------------------------------------------------------------
+# BUG-11 regression: naive datetime normalization
+# ---------------------------------------------------------------------------
+
+_NAIVE_TS_LINE = (
+    "<14>1 2026-05-02T06:22:48.089309 omega-decky smtp - disconnect "
+    "[relay@55555 src_ip=\"10.0.0.1\"]"
+)
+
+_AWARE_TS_LINE = (
+    "<14>1 2026-05-02T06:22:48.089309+00:00 omega-decky smtp - disconnect "
+    "[relay@55555 src_ip=\"10.0.0.2\"]"
+)
+
+
+def test_naive_timestamp_normalized_to_utc() -> None:
+    """BUG-11 regression: a log line with a naïve ISO timestamp (no tz offset)
+    must parse to a tz-aware UTC datetime so it sorts alongside aware ones
+    without TypeError.  Before fix, fromisoformat returned a naïve datetime
+    which crashed min/max/sort with aware datetimes downstream."""
+    e = parse_line(_NAIVE_TS_LINE)
+    assert e is not None
+    assert e.timestamp.tzinfo is not None
+    assert e.timestamp.tzinfo == timezone.utc
+
+
+def test_naive_and_aware_timestamps_sortable_together() -> None:
+    """A naïve-source entry and an aware-source entry must compare
+    without raising TypeError."""
+    naive_entry = parse_line(_NAIVE_TS_LINE)
+    aware_entry = parse_line(_AWARE_TS_LINE)
+    assert naive_entry is not None
+    assert aware_entry is not None
+    # min/max would raise TypeError pre-fix
+    earliest = min(naive_entry.timestamp, aware_entry.timestamp)
+    assert earliest is not None

@@ -76,57 +76,6 @@ class TestGetCurrentUser:
             await get_current_user(request)
 
 
-# ── get_stream_user ───────────────────────────────────────────────────────────
-
-class TestGetStreamUser:
-    @pytest.mark.asyncio
-    async def test_bearer_header(self):
-        from decnet.web.dependencies import get_stream_user
-        token = create_access_token({"uuid": "stream-uuid"})
-        request = MagicMock()
-        request.headers = {"Authorization": f"Bearer {token}"}
-        result = await get_stream_user(request, token=None)
-        assert result == "stream-uuid"
-
-    @pytest.mark.asyncio
-    async def test_query_param_fallback(self):
-        from decnet.web.dependencies import get_stream_user
-        token = create_access_token({"uuid": "query-uuid"})
-        request = MagicMock()
-        request.headers = {}
-        result = await get_stream_user(request, token=token)
-        assert result == "query-uuid"
-
-    @pytest.mark.asyncio
-    async def test_no_token_raises(self):
-        from fastapi import HTTPException
-        from decnet.web.dependencies import get_stream_user
-        request = MagicMock()
-        request.headers = {}
-        with pytest.raises(HTTPException) as exc_info:
-            await get_stream_user(request, token=None)
-        assert exc_info.value.status_code == 401
-
-    @pytest.mark.asyncio
-    async def test_invalid_token_raises(self):
-        from fastapi import HTTPException
-        from decnet.web.dependencies import get_stream_user
-        request = MagicMock()
-        request.headers = {}
-        with pytest.raises(HTTPException):
-            await get_stream_user(request, token="bad-token")
-
-    @pytest.mark.asyncio
-    async def test_missing_uuid_raises(self):
-        from fastapi import HTTPException
-        from decnet.web.dependencies import get_stream_user
-        token = create_access_token({"sub": "no-uuid"})
-        request = MagicMock()
-        request.headers = {"Authorization": f"Bearer {token}"}
-        with pytest.raises(HTTPException):
-            await get_stream_user(request, token=None)
-
-
 # ── web/api.py lifespan ──────────────────────────────────────────────────────
 
 class TestLifespan:

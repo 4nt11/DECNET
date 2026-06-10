@@ -139,12 +139,19 @@ def record_fingerprint(
         "ts": ts.isoformat(),
     }
 
-    if publish_fn is not None:
-        publish_fn(_ROTATED_EVENT_TYPE, payload)
-    if syslog_fn is not None:
-        syslog_fn(_ROTATED_EVENT_TYPE, payload)
-
     session.commit()
+
+    try:
+        if publish_fn is not None:
+            publish_fn(_ROTATED_EVENT_TYPE, payload)
+        if syslog_fn is not None:
+            syslog_fn(_ROTATED_EVENT_TYPE, payload)
+    except Exception:  # noqa: BLE001
+        import logging as _logging
+        _logging.getLogger(__name__).warning(
+            "fingerprint_rotation: post-commit emit failed (state already durable)",
+            exc_info=True,
+        )
 
     return RotationOutcome(
         kind="rotated",

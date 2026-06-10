@@ -345,9 +345,18 @@ def test_expired_state_treated_as_disabled_by_is_active() -> None:
 def test_apply_ceiling_only_clamps_clipped() -> None:
     from decnet.ttp.impl._state import apply_ceiling
 
+    # ceiling is ignored unless state is clipped
     enabled = RuleState(state="enabled", confidence_max=0.5)
-    assert apply_ceiling(0.9, enabled) == 0.9  # ceiling ignored unless clipped
+    assert apply_ceiling(0.9, enabled) == 0.9
+
+    # clipped + base > ceiling → clamped to ceiling (not scaled)
     clipped = RuleState(state="clipped", confidence_max=0.5)
-    assert apply_ceiling(0.9, clipped) == pytest.approx(0.45)
+    assert apply_ceiling(0.9, clipped) == pytest.approx(0.5)
+
+    # clipped + base <= ceiling → base passes through unchanged
+    clipped_below = RuleState(state="clipped", confidence_max=0.8)
+    assert apply_ceiling(0.6, clipped_below) == pytest.approx(0.6)
+
+    # clipped + no ceiling declared → base passes through
     clipped_no_max = RuleState(state="clipped", confidence_max=None)
     assert apply_ceiling(0.9, clipped_no_max) == 0.9

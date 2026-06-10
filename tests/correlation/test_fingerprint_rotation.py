@@ -235,3 +235,69 @@ def test_multiple_rotations_increment_counter(engine, now):
         row = session.exec(select(AttackerFingerprintState)).one()
         assert row.rotation_count == 2
         assert row.last_hash == "h3"
+
+
+def test_emit_after_commit_raising_publish_does_not_lose_row(engine, now) -> None:
+    """BUG-9 regression: publish_fn is called AFTER session.commit().
+
+    A raising publish_fn must not roll back / lose the committed rotation
+    row.  Before fix, publish was called before commit so a raise in
+    publish_fn left the session without a commit and the state row was lost.
+    """
+    later = now + timedelta(hours=1)
+
+    call_order: list[str] = []
+
+    class _OrderRecorder:
+        def __call__(self, event_type: str, payload: dict) -> None:
+            call_order.append("emit")
+            raise RuntimeError("downstream unavailable")
+
+    publish = _OrderRecorder()
+
+    with Session(engine) as session:
+        # Patch session.commit to record ordering.
+        original_commit = session.commit
+
+        def _recording_commit() -> None:
+            call_order.append("commit")
+            original_commit()
+
+        session.commit = _recording_commit  # type: ignore[method-assign]
+
+        _seed_attacker(session)
+
+    with Session(engine) as session:
+        original_commit2 = session.commit
+
+        def _recording_commit2() -> None:
+            call_order.append("commit")
+            original_commit2()
+
+        session.commit = _recording_commit2  # type: ignore[method-assign]
+
+        # first_sighting — no publish yet
+        record_fingerprint(
+            session,
+            attacker_ip="1.2.3.4", port=22, probe_type="hassh",
+            new_hash="h1", ts=now,
+        )
+        call_order.clear()
+
+        # rotation — publish_fn raises after commit
+        outcome = record_fingerprint(
+            session,
+            attacker_ip="1.2.3.4", port=22, probe_type="hassh",
+            new_hash="h2", ts=later,
+            publish_fn=publish,
+        )
+
+    assert outcome.kind == "rotated"
+    # commit must come before emit
+    assert call_order.index("commit") < call_order.index("emit")
+
+    # The rotation row must be persisted despite publish raising
+    with Session(engine) as session:
+        row = session.exec(select(AttackerFingerprintState)).one()
+        assert row.last_hash == "h2"
+        assert row.rotation_count == 1

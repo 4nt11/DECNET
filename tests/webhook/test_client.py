@@ -30,6 +30,23 @@ def _sub(url: str = "https://webhook.example/inbound", secret: str = "s" * 32) -
     return {"uuid": "w1", "url": url, "secret": secret}
 
 
+@pytest.fixture(autouse=True)
+def _public_dns(monkeypatch: pytest.MonkeyPatch):
+    """Resolve every hostname to a routable public IP so the SSRF guard
+    passes for the HMAC/retry behavioral tests without touching the network.
+
+    SSRF-specific tests below override this with their own resolution.
+    """
+    import socket
+
+    from decnet.webhook import ssrf
+
+    def fake_getaddrinfo(host, port, *a, **k):
+        return [(socket.AF_INET, socket.SOCK_STREAM, 6, "", ("93.184.216.34", port))]
+
+    monkeypatch.setattr(ssrf.socket, "getaddrinfo", fake_getaddrinfo)
+
+
 def test_sign_matches_known_vector():
     body = b'{"hello":"world"}'
     secret = "0123456789abcdef"
@@ -144,3 +161,141 @@ async def test_deliver_receiver_can_verify_signature():
         ).hexdigest()
     )
     assert captured["sig"] == expected
+
+
+# ----------------------------- SSRF egress guard ----------------------------
+
+
+def _resolve_to(monkeypatch, ip: str) -> None:
+    import socket as _socket
+
+    from decnet.webhook import ssrf
+
+    def fake(host, port, *a, **k):
+        return [(_socket.AF_INET, _socket.SOCK_STREAM, 6, "", (ip, port))]
+
+    monkeypatch.setattr(ssrf.socket, "getaddrinfo", fake)
+
+
+@pytest.mark.parametrize(
+    "url",
+    [
+        "https://127.0.0.1/inbound",  # loopback literal
+        "https://169.254.169.254/latest/meta-data",  # cloud metadata
+        "https://10.1.2.3/inbound",  # RFC1918 literal
+        "https://192.168.1.5/x",  # RFC1918 literal
+        "https://[::1]/x",  # IPv6 loopback
+    ],
+)
+@pytest.mark.asyncio
+async def test_deliver_blocks_forbidden_ip_literal(url):
+    sent = {"n": 0}
+
+    async def handler(request: httpx.Request) -> httpx.Response:
+        sent["n"] += 1
+        return httpx.Response(200)
+
+    transport = httpx.MockTransport(handler)
+    async with httpx.AsyncClient(transport=transport) as client:
+        result = await deliver(_sub(url=url), _EVENT, retry_schedule=[], client=client)
+    assert result.ok is False
+    assert result.attempts == 0  # never left the guard
+    assert sent["n"] == 0  # transport never hit
+
+
+@pytest.mark.asyncio
+async def test_deliver_blocks_hostname_resolving_to_private(monkeypatch):
+    _resolve_to(monkeypatch, "10.0.0.7")
+    sent = {"n": 0}
+
+    async def handler(request: httpx.Request) -> httpx.Response:
+        sent["n"] += 1
+        return httpx.Response(200)
+
+    transport = httpx.MockTransport(handler)
+    async with httpx.AsyncClient(transport=transport) as client:
+        result = await deliver(
+            _sub(url="https://rebind.evil.example/x"), _EVENT,
+            retry_schedule=[], client=client,
+        )
+    assert result.ok is False
+    assert sent["n"] == 0
+    assert "forbidden" in (result.error or "").lower()
+
+
+@pytest.mark.asyncio
+async def test_deliver_blocks_non_http_scheme():
+    result = await deliver(
+        _sub(url="file:///etc/passwd"), _EVENT, retry_schedule=[],
+    )
+    assert result.ok is False
+    assert "scheme" in (result.error or "").lower()
+
+
+@pytest.mark.asyncio
+async def test_deliver_public_url_passes(monkeypatch):
+    _resolve_to(monkeypatch, "93.184.216.34")
+
+    async def handler(request: httpx.Request) -> httpx.Response:
+        return httpx.Response(200)
+
+    transport = httpx.MockTransport(handler)
+    async with httpx.AsyncClient(transport=transport) as client:
+        result = await deliver(
+            _sub(url="https://good.example/inbound"), _EVENT,
+            retry_schedule=[], client=client,
+        )
+    assert result.ok is True
+
+
+@pytest.mark.asyncio
+async def test_deliver_allow_private_escape_hatch(monkeypatch):
+    # Operator opt-in flips the guard off for internal targets.
+    import decnet.env as env
+
+    monkeypatch.setattr(env, "DECNET_WEBHOOK_ALLOW_PRIVATE", True)
+
+    async def handler(request: httpx.Request) -> httpx.Response:
+        return httpx.Response(200)
+
+    transport = httpx.MockTransport(handler)
+    async with httpx.AsyncClient(transport=transport) as client:
+        result = await deliver(
+            _sub(url="https://127.0.0.1/inbound"), _EVENT,
+            retry_schedule=[], client=client,
+        )
+    assert result.ok is True
+
+
+@pytest.mark.asyncio
+async def test_deliver_does_not_follow_redirect_to_internal(monkeypatch):
+    """A 302 pointing at an IMDS address must never be followed.
+
+    deliver() sets follow_redirects=False on every send() call regardless of
+    the injected client's config, so the response is the raw 302 and the
+    internal IP is never contacted.
+    """
+    requests_seen: list[str] = []
+
+    async def handler(request: httpx.Request) -> httpx.Response:
+        requests_seen.append(str(request.url))
+        # First request: public host returns a redirect to the cloud metadata IP.
+        return httpx.Response(
+            302,
+            headers={"Location": "http://169.254.169.254/latest/meta-data/"},
+        )
+
+    transport = httpx.MockTransport(handler)
+    # Deliberately build the client with follow_redirects=True to prove that
+    # deliver() overrides it at the send() level.
+    async with httpx.AsyncClient(
+        transport=transport, follow_redirects=True
+    ) as client:
+        result = await deliver(_sub(), _EVENT, retry_schedule=[], client=client)
+
+    # Only the initial request to the public host should have been made.
+    assert len(requests_seen) == 1
+    assert "169.254.169.254" not in requests_seen[0]
+    # deliver() treats the 302 as a non-retryable non-2xx.
+    assert result.ok is False
+    assert result.status_code == 302

@@ -40,7 +40,7 @@ def apply_ceiling(base: float, state: "RuleState") -> float:
     """Apply the operator's confidence ceiling, downward only.
 
     A ``clipped`` state with ``confidence_max < 1.0`` clamps the emitted
-    confidence to ``min(base, base * ceiling)``. Any other state is a
+    confidence to ``min(base, ceiling)``. Any other state is a
     no-op. The clamp is downward by construction — operator clips can
     never raise a rule's confidence above its YAML-declared base, per
     TTP_TAGGING.md §"Confidence model".
@@ -50,7 +50,7 @@ def apply_ceiling(base: float, state: "RuleState") -> float:
     ceiling = state.confidence_max
     if ceiling is None or ceiling >= 1.0:
         return base
-    return min(base, base * ceiling)
+    return min(base, ceiling)
 
 
 __all__ = ["is_active", "apply_ceiling"]

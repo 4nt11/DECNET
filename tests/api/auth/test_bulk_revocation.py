@@ -18,7 +18,14 @@ import pytest
 from sqlalchemy import select
 
 from decnet.env import DECNET_ADMIN_USER, DECNET_ADMIN_PASSWORD
-from decnet.web.auth import ALGORITHM, SECRET_KEY, get_password_hash
+from decnet.web.auth import (
+    ALGORITHM,
+    JWT_AUDIENCE,
+    JWT_ISSUER,
+    JWT_TYPE,
+    SECRET_KEY,
+    get_password_hash,
+)
 from decnet.web.db.models import User
 from decnet.web.dependencies import repo
 
@@ -54,7 +61,17 @@ def _aged_token(uuid: str, *, seconds_old: int = 30) -> str:
     change sets to 'now', so it is deterministically revoked once bumped."""
     now = int(time.time())
     return jwt.encode(
-        {"uuid": uuid, "jti": f"aged-{uuid}", "iat": now - seconds_old, "exp": now + 3600},
+        {
+            "uuid": uuid,
+            "jti": f"aged-{uuid}",
+            "iat": now - seconds_old,
+            "exp": now + 3600,
+            # The verifier now pins issuer/audience/type (V2.1.1 / V3.1.2); a
+            # manually-encoded token must carry them or decode rejects it.
+            "iss": JWT_ISSUER,
+            "aud": JWT_AUDIENCE,
+            "typ": JWT_TYPE,
+        },
         SECRET_KEY, algorithm=ALGORITHM,
     )
 

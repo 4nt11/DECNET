@@ -4,6 +4,7 @@ from fastapi import APIRouter
 from .auth.api_login import router as login_router
 from .auth.api_change_pass import router as change_pass_router
 from .auth.api_logout import router as logout_router
+from .auth.api_sse_ticket import router as sse_ticket_router
 from .logs.api_get_logs import router as logs_router
 from .logs.api_get_histogram import router as histogram_router
 from .bounty.api_get_bounties import router as bounty_router
@@ -75,9 +76,12 @@ from .ttp.api_export_navigator import router as ttp_navigator_router
 from .ttp.api_get_groups_for_technique import router as ttp_groups_for_technique_router
 
 api_router = APIRouter(
-    # Every route under /api/v1 is auth-guarded (either by an explicit
-    # require_* Depends or by the global auth middleware). Document 401/403
-    # here so the OpenAPI schema reflects reality for contract tests.
+    # Auth is enforced PER ROUTE via explicit ``require_*`` Depends (see
+    # decnet.web.dependencies) — there is NO global auth middleware. A route
+    # without a require_* dependency is unauthenticated BY DESIGN; the only such
+    # routes are /health (liveness) and /auth/login (credential exchange).
+    # The 401/403 entries below are documented here so the OpenAPI schema
+    # reflects reality for contract tests, not because a middleware applies them.
     responses={
         400: {"description": "Malformed request body"},
         401: {"description": "Missing or invalid credentials"},
@@ -91,6 +95,7 @@ api_router = APIRouter(
 api_router.include_router(login_router)
 api_router.include_router(change_pass_router)
 api_router.include_router(logout_router)
+api_router.include_router(sse_ticket_router)
 
 # Logs & Analytics
 api_router.include_router(logs_router)

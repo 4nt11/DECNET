@@ -277,6 +277,29 @@ async def test_one_tick_email_branch_records_orchestrator_email(
 
 
 @pytest.mark.asyncio
+async def test_smtp_probe_listener_get_bus_raises_no_unbound_error(
+    repo, monkeypatch,
+) -> None:
+    """BUG-7 regression: if get_bus() raises, the finally block must not
+    produce an UnboundLocalError on ``bus``; the function must return
+    cleanly (RuntimeError is logged+swallowed by the outer except handler)."""
+    import asyncio
+    from decnet.orchestrator import worker as _w
+
+    def bad_get_bus(**_kw):
+        raise RuntimeError("bus factory unavailable")
+
+    monkeypatch.setattr(_w, "get_bus", bad_get_bus)
+
+    shutdown = asyncio.Event()
+    shutdown.set()
+
+    # Before fix: UnboundLocalError escaped from finally because ``bus``
+    # was never assigned.  After fix: completes without any exception.
+    await _w._run_smtp_probe_listener(repo, shutdown)
+
+
+@pytest.mark.asyncio
 async def test_tick_is_noop_when_no_running_deckies(repo, fake_bus, monkeypatch):
     called = False
 

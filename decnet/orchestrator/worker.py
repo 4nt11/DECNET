@@ -498,6 +498,7 @@ async def _run_smtp_probe_listener(
     probe_limit times — if not, forward via the master's real internet
     connection and store a probe_relay bounty with the result.
     """
+    bus = None
     try:
         bus = get_bus(client_name="orchestrator-probe")
         await bus.connect()
@@ -515,8 +516,9 @@ async def _run_smtp_probe_listener(
     except Exception as exc:  # noqa: BLE001
         logger.warning("smtp probe listener: bus unavailable: %s", exc)
     finally:
-        with contextlib.suppress(Exception):
-            await bus.close()
+        if bus is not None:
+            with contextlib.suppress(Exception):
+                await bus.close()
 
 
 async def _handle_probe_pending(repo: BaseRepository, payload: dict) -> None:

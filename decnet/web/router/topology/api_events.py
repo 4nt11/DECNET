@@ -8,8 +8,9 @@ a Server-Sent Event to the browser.  Emits a one-shot snapshot on connect
 separate fetch to initialise the "pending" buffer.
 
 Authorization matches :mod:`decnet.web.router.stream.api_stream_events`
-— a JWT passed via the ``?token=`` query parameter (EventSource can't
-set arbitrary headers) + ``require_stream_viewer`` role gate.  The
+— a single-use opaque ticket passed via the ``?ticket=`` query
+parameter (EventSource can't set arbitrary headers) +
+``require_stream_viewer`` role gate.  The
 per-topology 404 is enforced after auth so existence probes can't leak
 a topology id to an unauthenticated caller.
 """

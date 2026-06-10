@@ -34,6 +34,7 @@ from decnet.swarm.bundle_builder import build_tarball, render_bootstrap
 from decnet.web.db.models.swarm import EnrollBundleRequest, EnrollBundleResponse
 from decnet.web.db.repository import BaseRepository
 from decnet.web.dependencies import get_repo, require_admin
+from decnet.web.limiter import limiter
 
 log = get_logger("swarm_mgmt.enroll_bundle")
 
@@ -117,8 +118,10 @@ async def _lookup_live(token: str) -> _Bundle:
         403: {"description": "Insufficient permissions"},
         409: {"description": "A worker with this name is already enrolled"},
         422: {"description": "Request body validation error"},
+        429: {"description": "Too many enroll-bundle requests — retry after the window resets"},
     },
 )
+@limiter.limit("10/minute")
 async def create_enroll_bundle(
     req: EnrollBundleRequest,
     request: Request,
@@ -251,6 +254,14 @@ async def get_payload(
     # The agent's first connect-back — its source IP is the reachable address
     # the master will later use to probe it. Backfill the SwarmHost row here
     # so the operator sees the real address instead of an empty placeholder.
+    #
+    # PROXY TRUST WARNING: `request.client.host` is the TCP peer's IP.
+    # If this endpoint sits behind a TCP-terminating reverse proxy (nginx,
+    # HAProxy, etc.) the recorded address will be the proxy's IP, not the
+    # agent's. Either bind the API directly on the network reachable by
+    # agents, or configure the proxy to preserve the original source IP
+    # (e.g. PROXY Protocol on a loopback listener, *not* X-Forwarded-For
+    # which is trivially spoofable). See THREAT_MODEL.md §DA-08.
     client_host = request.client.host if request.client else ""
     if client_host:
         try:

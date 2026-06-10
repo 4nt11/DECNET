@@ -1,5 +1,6 @@
 # SPDX-License-Identifier: AGPL-3.0-or-later
 import asyncio
+import secrets
 import time
 from datetime import datetime, timezone
 from typing import Any, Optional
@@ -8,7 +9,13 @@ import jwt
 from fastapi import HTTPException, status, Request
 from fastapi.security import OAuth2PasswordBearer
 
-from decnet.web.auth import ALGORITHM, SECRET_KEY
+from decnet.web.auth import (
+    ALGORITHM,
+    JWT_AUDIENCE,
+    JWT_ISSUER,
+    JWT_TYPE,
+    SECRET_KEY,
+)
 from decnet.web.db.repository import BaseRepository
 from decnet.web.db.factory import get_repository
 
@@ -168,12 +175,29 @@ def _epoch(value: Any) -> float:
 
 
 def _decode_payload(token: str) -> dict[str, Any]:
-    """Decode + signature/expiry-verify a raw JWT, or raise 401."""
+    """Decode + signature/expiry-verify a raw JWT, or raise 401.
+
+    Beyond signature + expiry, this pins the issuer and audience and requires
+    the registered claims to be present, so a token minted with the same shared
+    secret for a different purpose (or omitting exp/iat/iss/aud) is rejected.
+    ``uuid`` (not ``sub``) is this app's identity claim, so it is in ``require``.
+    ``typ`` is a custom payload claim PyJWT does not validate natively, so it is
+    checked explicitly below.
+    """
     try:
-        payload: dict[str, Any] = jwt.decode(token, SECRET_KEY, algorithms=[ALGORITHM])
+        payload: dict[str, Any] = jwt.decode(
+            token,
+            SECRET_KEY,
+            algorithms=[ALGORITHM],
+            audience=JWT_AUDIENCE,
+            issuer=JWT_ISSUER,
+            options={"require": ["exp", "iat", "iss", "aud", "uuid"]},
+        )
     except jwt.PyJWTError:
         raise _CREDENTIALS_EXCEPTION
     if payload.get("uuid") is None:
+        raise _CREDENTIALS_EXCEPTION
+    if payload.get("typ") != JWT_TYPE:
         raise _CREDENTIALS_EXCEPTION
     return payload
 
@@ -236,17 +260,70 @@ async def get_token_claims(request: Request) -> dict[str, Any]:
     return _decode_payload(token)
 
 
-async def get_stream_user(request: Request, token: Optional[str] = None) -> str:
-    """Auth dependency for SSE endpoints — accepts Bearer header OR ?token= query param.
-    EventSource does not support custom headers, so the query-string fallback is intentional here only.
+# ---------------------------------------------------------------------------
+# SSE stream tickets (V3.1.1)
+# ---------------------------------------------------------------------------
+# EventSource cannot set an Authorization header, so SSE auth historically rode
+# in ?token=<JWT>, leaking the full-lifetime bearer into access/proxy logs,
+# browser history, and Referer. Instead the client exchanges its header JWT for
+# a single-use, short-lived OPAQUE ticket via POST /api/v1/auth/sse-ticket and
+# connects with ?ticket=<opaque>. The JWT never appears in any URL.
+#
+# Security-boundary store — FAIL CLOSED. The map is keyed on the opaque ticket
+# and holds (expiry_monotonic, bound_identity). Redemption validates presence +
+# freshness, then DELETES the entry (single-use). Unknown / expired / reused
+# tickets all resolve to 401.
+#
+# This is a MODULE-LEVEL dict: tickets live only in the process that minted
+# them. A multi-process / multi-worker deployment needs a SHARED store (Redis,
+# DB) so a ticket minted on worker A can be redeemed on worker B — out of scope
+# here, deliberately. No background sweeper daemon (project rule: library, not
+# new worker); expiry is enforced opportunistically on every redeem + mint.
+_SSE_TICKET_TTL = 60.0  # seconds
+_sse_tickets: dict[str, tuple[float, dict[str, Any]]] = {}
+
+
+def _reset_sse_tickets() -> None:
+    """Test hook: drop all outstanding stream tickets."""
+    _sse_tickets.clear()
+
+
+def _sweep_sse_tickets(now: Optional[float] = None) -> None:
+    """Opportunistic eviction of expired tickets. O(n) over a tiny map (tickets
+    are single-use and 60s-lived), called on every mint/redeem — no daemon."""
+    _now = time.monotonic() if now is None else now
+    expired = [t for t, (exp, _) in _sse_tickets.items() if exp <= _now]
+    for t in expired:
+        _sse_tickets.pop(t, None)
+
+
+def mint_sse_ticket(user_uuid: str, role: str) -> str:
+    """Mint a single-use, 60s opaque SSE ticket bound to ``user_uuid``+``role``.
+
+    Called by POST /auth/sse-ticket AFTER the header JWT has been validated, so
+    the bound identity is already trusted. Returns the opaque token the client
+    passes as ?ticket=. Sweeps expired entries on the way in.
     """
-    resolved = _bearer_from_header(request) or token
-    if not resolved:
+    _sweep_sse_tickets()
+    ticket = secrets.token_urlsafe(32)
+    expiry = time.monotonic() + _SSE_TICKET_TTL
+    _sse_tickets[ticket] = (expiry, {"uuid": user_uuid, "role": role})
+    return ticket
+
+
+def _redeem_sse_ticket(ticket: str) -> dict[str, Any]:
+    """Redeem a stream ticket: validate exists + unexpired, then DELETE it
+    (single-use). Returns the bound ``{"uuid","role"}`` identity or raises 401.
+    Fail closed: unknown / expired / already-redeemed all raise."""
+    now = time.monotonic()
+    _sweep_sse_tickets(now)
+    entry = _sse_tickets.pop(ticket, None)  # pop = single-use, even on expiry
+    if entry is None:
         raise _CREDENTIALS_EXCEPTION
-    # Decode-only: returns the uuid. Revocation/role enforcement happens in
-    # require_stream_role (the sole production caller), which runs the full
-    # _resolve_token path. Kept thin so its decode contract stays unit-testable.
-    return _decode_payload(resolved)["uuid"]
+    expiry, identity = entry
+    if expiry <= now:
+        raise _CREDENTIALS_EXCEPTION
+    return identity
 
 
 async def get_current_user(request: Request) -> str:
@@ -298,18 +375,35 @@ def require_role(*allowed_roles: str):
 
 
 def require_stream_role(*allowed_roles: str):
-    """Like ``require_role`` but for SSE endpoints that accept a query-param token."""
-    async def _check(request: Request, token: Optional[str] = None) -> dict:
-        resolved = _bearer_from_header(request) or token
-        if not resolved:
+    """Like ``require_role`` but for SSE endpoints.
+
+    Two ingress paths:
+      * Bearer header → full ``_resolve_token`` (revocation + cutoff enforced).
+      * ?ticket=<opaque> → single-use stream ticket minted by /auth/sse-ticket,
+        which already validated the header JWT and bound the uuid+role. The
+        ticket carries no jti, so the per-token denylist cannot apply here; the
+        60s single-use lifetime is the bounded exposure we accept for SSE.
+
+    Raw ?token=<JWT> is intentionally NOT accepted (V3.1.1)."""
+    async def _check(request: Request, ticket: Optional[str] = None) -> dict:
+        header_token = _bearer_from_header(request)
+        if header_token:
+            _user_uuid, user = await _resolve_token(header_token)
+            if user["role"] not in allowed_roles:
+                raise HTTPException(
+                    status_code=status.HTTP_403_FORBIDDEN,
+                    detail="Insufficient permissions",
+                )
+            return user
+        if not ticket:
             raise _CREDENTIALS_EXCEPTION
-        _user_uuid, user = await _resolve_token(resolved)
-        if user["role"] not in allowed_roles:
+        identity = _redeem_sse_ticket(ticket)
+        if identity["role"] not in allowed_roles:
             raise HTTPException(
                 status_code=status.HTTP_403_FORBIDDEN,
                 detail="Insufficient permissions",
             )
-        return user
+        return identity
     return _check
 
 

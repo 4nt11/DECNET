@@ -7,7 +7,7 @@ import secrets
 from datetime import datetime, timezone
 from typing import Any, cast
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Request
 
 from decnet.bus import topics as _topics
 from decnet.bus.app import get_app_bus
@@ -22,11 +22,26 @@ from decnet.web.db.models import (
 )
 from decnet.web.db.models.webhooks import _row_to_response_dict
 from decnet.web.dependencies import repo, require_admin
+from decnet.web.limiter import limiter
 from decnet.webhook.enums import merge_patterns
+from decnet.webhook.ssrf import WebhookDestinationError, validate_webhook_url
 
 log = get_logger("api.webhooks")
 
 router = APIRouter()
+
+
+def _validate_url_or_422(url: str) -> None:
+    """Reject a webhook URL that resolves to a forbidden destination.
+
+    Runs the same SSRF guard the delivery path enforces, but at
+    registration time so a bad URL is surfaced to the operator as a clear
+    422 instead of being silently dropped on every delivery attempt.
+    """
+    try:
+        validate_webhook_url(url)
+    except WebhookDestinationError as e:
+        raise HTTPException(status_code=422, detail=str(e)) from e
 
 
 async def _notify_subscriptions_changed() -> None:
@@ -60,10 +75,14 @@ def _row_to_response(row: dict[str, Any]) -> WebhookResponse:
     responses={
         400: {"description": "At least one of simple_events / topic_patterns required"},
         409: {"description": "Name already in use"},
+        422: {"description": "URL resolves to a forbidden (internal) destination"},
+        429: {"description": "Too many webhook-create requests — retry after the window resets"},
     },
 )
+@limiter.limit("20/minute")
 @_traced("api.webhook.create")
 async def api_create_webhook(
+    request: Request,
     req: WebhookCreateRequest,
     admin: dict = Depends(require_admin),
 ) -> WebhookCreateResponse:
@@ -77,6 +96,8 @@ async def api_create_webhook(
     existing = await repo.get_webhook_subscription_by_name(req.name)
     if existing:
         raise HTTPException(status_code=409, detail="Webhook name already exists")
+
+    _validate_url_or_422(str(req.url))
 
     # Auto-generate a URL-safe secret if the caller didn't provide one.
     # 32 bytes of os-entropy is the same ballpark as a CSRF token.
@@ -146,6 +167,7 @@ async def api_get_webhook(
         400: {"description": "Empty or invalid patch"},
         404: {"description": "Webhook not found"},
         409: {"description": "Name already in use"},
+        422: {"description": "URL resolves to a forbidden (internal) destination"},
     },
 )
 @_traced("api.webhook.update")
@@ -167,6 +189,7 @@ async def api_update_webhook(
         patch["name"] = req.name
 
     if req.url is not None:
+        _validate_url_or_422(str(req.url))
         patch["url"] = str(req.url)
 
     if req.secret is not None:

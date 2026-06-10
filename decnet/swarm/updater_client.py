@@ -13,14 +13,20 @@ the connection on purpose (the updater re-execs itself mid-response).
 """
 from __future__ import annotations
 
+import asyncio
 import hashlib
+import socket
 import ssl
 from typing import Any, Optional
 
 import httpx
 
 from decnet.logging import get_logger
-from decnet.swarm.client import MasterIdentity, ensure_master_identity
+from decnet.swarm.client import (
+    FingerprintMismatchError,
+    MasterIdentity,
+    ensure_master_identity,
+)
 
 log = get_logger("swarm.updater_client")
 
@@ -47,11 +53,19 @@ class UpdaterClient:
         if host is not None:
             self._address = host["address"]
             self._host_name = host.get("name")
+            # SHA-256 of the worker's UPDATER leaf cert, recorded at enroll
+            # time (api_enroll_host.py writes ``updater_cert_fingerprint``).
+            # This is a distinct identity from the agent cert AgentClient
+            # pins — the updater channel pip-installs code as root, so it
+            # gets its own pin against its own cert.
+            fp = host.get("updater_cert_fingerprint")
+            self._expected_fingerprint = fp.lower() if isinstance(fp, str) else None
         else:
             if address is None:
                 raise ValueError("UpdaterClient requires host dict or address")
             self._address = address
             self._host_name = None
+            self._expected_fingerprint = None
         self._port = updater_port
         self._identity = identity or ensure_master_identity()
         self._client: Optional[httpx.AsyncClient] = None
@@ -70,8 +84,64 @@ class UpdaterClient:
             timeout=timeout,
         )
 
+    def _fetch_peer_fingerprint(self) -> str:
+        """Open a throwaway TLS connection to the updater port and return the
+        SHA-256 hex of the leaf cert it presents. Mirrors
+        ``AgentClient._fetch_peer_fingerprint`` exactly."""
+        ctx = ssl.SSLContext(ssl.PROTOCOL_TLS_CLIENT)
+        ctx.load_cert_chain(
+            str(self._identity.cert_path), str(self._identity.key_path),
+        )
+        ctx.load_verify_locations(cafile=str(self._identity.ca_cert_path))
+        ctx.verify_mode = ssl.CERT_REQUIRED
+        ctx.check_hostname = self._verify_hostname
+        sock = socket.create_connection((self._address, self._port), timeout=10.0)
+        try:
+            server_hostname = self._address if self._verify_hostname else None
+            with ctx.wrap_socket(sock, server_hostname=server_hostname) as ssock:
+                der = ssock.getpeercert(binary_form=True)
+        finally:
+            try:
+                sock.close()
+            except OSError:
+                pass
+        if not der:
+            raise FingerprintMismatchError(
+                f"{self._address}:{self._port}", self._expected_fingerprint or "", ""
+            )
+        return hashlib.sha256(der).hexdigest().lower()
+
+    async def _verify_pin(self) -> None:
+        """Fail closed unless the updater leaf cert SHA-256 matches the pin.
+
+        Unlike ``AgentClient`` (which falls through to CA-only when no pin is
+        recorded), the updater channel pip-installs code as root — so a host
+        with NO recorded ``updater_cert_fingerprint`` is rejected outright
+        rather than accepted on CA validity alone. A missing pin means the
+        host was never enrolled with an updater identity; we refuse to drive
+        code into it."""
+        if not self._expected_fingerprint:
+            raise FingerprintMismatchError(
+                f"{self._address}:{self._port}",
+                "<no updater_cert_fingerprint recorded for host>",
+                "",
+            )
+        actual = await asyncio.to_thread(self._fetch_peer_fingerprint)
+        if actual != self._expected_fingerprint:
+            raise FingerprintMismatchError(
+                f"{self._address}:{self._port}",
+                self._expected_fingerprint,
+                actual,
+            )
+
     async def __aenter__(self) -> "UpdaterClient":
         self._client = self._build_client(_TIMEOUT_CONTROL)
+        try:
+            await self._verify_pin()
+        except BaseException:
+            await self._client.aclose()
+            self._client = None
+            raise
         return self
 
     async def __aexit__(self, *exc: Any) -> None:

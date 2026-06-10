@@ -4,6 +4,7 @@ import pytest
 from hypothesis import given, strategies as st, settings
 import httpx
 from decnet.env import DECNET_ADMIN_USER, DECNET_ADMIN_PASSWORD
+from decnet.web.limiter import limiter as _limiter
 from ..conftest import _FUZZ_SETTINGS
 
 @pytest.mark.anyio
@@ -57,6 +58,46 @@ async def test_fuzz_change_password(client: httpx.AsyncClient, old_password: str
             json=_payload,
             headers={"Authorization": f"Bearer {_token}"}
         )
-        assert _response.status_code in (200, 401, 422)
+        # 400: schema-guard middleware rejects bad length/shape (e.g. a
+        # new_password below the 12-char floor) before the handler runs.
+        assert _response.status_code in (200, 400, 401, 422)
     except (UnicodeEncodeError, json.JSONDecodeError):
         pass
+
+
+# ─── Rate-limit enforcement ─────────────────────────────────────────────────
+
+
+@pytest.mark.anyio
+async def test_change_password_rate_limit_trips_after_5(client: httpx.AsyncClient) -> None:
+    """5 change-password attempts from one IP → 6th returns 429."""
+    login_resp = await client.post(
+        "/api/v1/auth/login",
+        json={"username": DECNET_ADMIN_USER, "password": DECNET_ADMIN_PASSWORD},
+    )
+    token = login_resp.json()["access_token"]
+
+    for i in range(5):
+        r = await client.post(
+            "/api/v1/auth/change-password",
+            json={"old_password": f"wrong-{i}", "new_password": "does-not-matter-x!"},
+            headers={"Authorization": f"Bearer {token}"},
+        )
+        # 401 (bad old password) or 429 if the limiter fires — either is fine
+        assert r.status_code in (401, 429), f"attempt {i}: got {r.status_code}"
+
+    # The 6th attempt must trip the rate limiter (limit is 5/minute).
+    r = await client.post(
+        "/api/v1/auth/change-password",
+        json={"old_password": "still-wrong", "new_password": "does-not-matter-x!"},
+        headers={"Authorization": f"Bearer {token}"},
+    )
+    assert r.status_code == 429
+
+
+@pytest.mark.anyio
+async def test_change_password_route_has_rate_limit_decorator() -> None:
+    """Contract test: change_password handler must be wrapped by slowapi."""
+    from decnet.web.router.auth import api_change_pass as _mod
+
+    assert getattr(_mod.change_password, "__wrapped__", None) is not None

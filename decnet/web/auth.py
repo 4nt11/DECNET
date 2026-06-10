@@ -11,6 +11,14 @@ SECRET_KEY: str = DECNET_JWT_SECRET
 ALGORITHM: str = "HS256"
 ACCESS_TOKEN_EXPIRE_MINUTES: int = DECNET_JWT_EXP_MINUTES
 
+# Pinned issuer/audience/type so a token signed with DECNET_JWT_SECRET for any
+# OTHER purpose (or by a future co-tenant of the secret) is not accepted by the
+# dashboard verifier. Issuance stamps these; _decode_payload requires + verifies
+# them. Keep these two modules in lockstep — they are a single trust contract.
+JWT_ISSUER: str = "decnet"
+JWT_AUDIENCE: str = "decnet-dashboard"
+JWT_TYPE: str = "access"
+
 
 def verify_password(plain_password: str, hashed_password: str) -> bool:
     return bcrypt.checkpw(
@@ -45,5 +53,10 @@ def create_access_token(data: dict[str, Any], expires_delta: Optional[timedelta]
 
     _to_encode.update({"exp": _expire})
     _to_encode.update({"iat": datetime.now(timezone.utc)})
+    # Pin issuer / audience / token-type so the verifier can reject tokens
+    # minted for any other purpose with the same shared secret.
+    _to_encode.setdefault("iss", JWT_ISSUER)
+    _to_encode.setdefault("aud", JWT_AUDIENCE)
+    _to_encode.setdefault("typ", JWT_TYPE)
     _encoded_jwt: str = jwt.encode(_to_encode, SECRET_KEY, algorithm=ALGORITHM)
     return _encoded_jwt

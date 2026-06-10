@@ -19,6 +19,20 @@ from decnet.webhook.worker import (
 )
 
 
+@pytest.fixture(autouse=True)
+def _public_dns(monkeypatch: pytest.MonkeyPatch):
+    """Resolve the test webhook host to a public IP so the egress SSRF guard
+    passes for these integration tests without touching the network."""
+    import socket
+
+    from decnet.webhook import ssrf
+
+    def fake_getaddrinfo(host, port, *a, **k):
+        return [(socket.AF_INET, socket.SOCK_STREAM, 6, "", ("93.184.216.34", port))]
+
+    monkeypatch.setattr(ssrf.socket, "getaddrinfo", fake_getaddrinfo)
+
+
 def _sub(
     uuid: str,
     name: str,

@@ -12,12 +12,13 @@ from __future__ import annotations
 
 import pathlib
 
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, Request, status
 
 from decnet.logging import get_logger
 from decnet.swarm.client import AgentClient
 from decnet.web.db.repository import BaseRepository
 from decnet.web.dependencies import get_repo, require_admin
+from decnet.web.limiter import limiter
 from decnet.web.router.swarm._mtls import PeerCert, require_operator_cert
 
 log = get_logger("swarm.decommission")
@@ -32,10 +33,13 @@ router = APIRouter()
         401: {"description": "Missing or invalid admin JWT"},
         403: {"description": "Authenticated user is not an admin, or operator cert missing"},
         404: {"description": "No host with this UUID is enrolled"},
+        429: {"description": "Too many decommission requests — retry after the window resets"},
     },
 )
+@limiter.limit("20/minute")
 async def api_decommission_host(
     uuid: str,
+    request: Request,
     repo: BaseRepository = Depends(get_repo),
     _admin: dict = Depends(require_admin),
     _operator: PeerCert = Depends(require_operator_cert),

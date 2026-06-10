@@ -6,8 +6,9 @@ request and forwards each matching event as a Server-Sent Event.
 Emits a one-shot snapshot on connect (current paginated campaign
 list).
 
-Mirror of :mod:`decnet.web.router.identities.api_events`. Auth: JWT
-via ``?token=`` query param + ``require_stream_viewer`` role.
+Mirror of :mod:`decnet.web.router.identities.api_events`. Auth:
+single-use opaque ticket via ``?ticket=`` query param +
+``require_stream_viewer`` role.
 """
 from __future__ import annotations
 

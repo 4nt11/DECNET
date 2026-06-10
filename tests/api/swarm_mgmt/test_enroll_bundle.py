@@ -379,3 +379,31 @@ async def test_host_row_persisted_after_enroll(client, auth_token):
     assert row is not None
     assert row["name"] == "eta"
     assert row["status"] == "enrolled"
+
+
+# ─── Rate-limit enforcement ─────────────────────────────────────────────────
+
+
+@pytest.mark.anyio
+async def test_enroll_bundle_rate_limit_trips_after_10(client, auth_token):
+    """10 enroll-bundle POSTs from one IP → 11th returns 429.
+
+    Each request uses a unique agent name (otherwise the 2nd hits the 409
+    duplicate-name guard before the rate check fires).  The limiter is
+    10/minute for this endpoint.
+    """
+    for i in range(10):
+        r = await _post(client, auth_token, agent_name=f"rl-node-{i}")
+        # 201 (created) or 429 if limiter fires early — accept both.
+        assert r.status_code in (201, 429), f"attempt {i}: got {r.status_code}"
+
+    r = await _post(client, auth_token, agent_name="rl-node-overflow")
+    assert r.status_code == 429
+
+
+@pytest.mark.anyio
+async def test_enroll_bundle_route_has_rate_limit_decorator() -> None:
+    """Contract test: create_enroll_bundle must be wrapped by slowapi."""
+    from decnet.web.router.swarm_mgmt import api_enroll_bundle as _mod
+
+    assert getattr(_mod.create_enroll_bundle, "__wrapped__", None) is not None

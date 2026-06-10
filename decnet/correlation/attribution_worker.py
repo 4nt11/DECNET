@@ -344,11 +344,11 @@ async def tick_multi_actor(
     for entry in candidates:
         identity_uuid = str(entry["identity_uuid"])
         primitives: list[str] = sorted(entry.get("primitives") or [])
-        seen_now.add(identity_uuid)
         if len(primitives) < _T.MULTI_ACTOR_MIN_PRIMITIVES:
             # Repo already filters to >= 2 today; defensive against
             # future schema drift.
             continue
+        seen_now.add(identity_uuid)
         signature = frozenset(primitives)
         if last_fired.get(identity_uuid) == signature:
             continue
