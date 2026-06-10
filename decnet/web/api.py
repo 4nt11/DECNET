@@ -15,6 +15,8 @@ from fastapi.exceptions import RequestValidationError
 from fastapi.responses import ORJSONResponse, Response
 from pydantic import ValidationError
 from fastapi.middleware.cors import CORSMiddleware
+from starlette.middleware.base import BaseHTTPMiddleware
+from starlette.responses import Response as StarletteResponse
 
 from decnet.env import (
     DECNET_CORS_ORIGINS,
@@ -59,6 +61,20 @@ def get_background_tasks() -> dict[str, Optional[asyncio.Task[Any]]]:
     }
 
 
+def _check_cors_origins(origins: list[str]) -> None:
+    """V13.1.4 — raise at startup if a wildcard CORS origin is configured.
+
+    Called from the lifespan so the error surfaces before any worker or DB
+    comes up, making misconfiguration immediately visible in uvicorn logs.
+    Exposed as a module-level function so tests can exercise it directly
+    without needing to reload the module.
+    """
+    if "*" in origins:
+        raise ValueError(
+            "DECNET_CORS_ORIGINS must not contain a wildcard '*' — list explicit origin URLs"
+        )
+
+
 @asynccontextmanager
 async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
     global ingestion_task, collector_task, attacker_task, sniffer_task
@@ -78,6 +94,10 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
     # CORS origin while bound to 0.0.0.0, plaintext canary base, etc.).
     # Raises ValueError with an actionable message; uvicorn surfaces it.
     validate_public_binding()
+
+    # V13.1.4 — CORS wildcard guard: wildcard '*' bypasses SOP and must be
+    # rejected at startup so the operator sees an actionable error immediately.
+    _check_cors_origins(DECNET_CORS_ORIGINS)
 
     # Defence-in-depth on top of the CLI mode gating. Typer hides master-only
     # commands when DECNET_MODE=agent, but a misconfigured systemd unit or
@@ -253,6 +273,43 @@ app.add_middleware(
     allow_methods=["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
     allow_headers=["Authorization", "Content-Type", "Last-Event-ID"],
 )
+
+# V13.1.5 — Content-Type enforcement: POST/PUT/PATCH with a non-empty body
+# under /api/ must send application/json.  Multipart/form-data endpoints
+# (file-drop, canary blob upload) are exempt by their Content-Type prefix.
+_MULTIPART_EXEMPT_PATHS: frozenset[str] = frozenset({
+    "/api/v1/deckies/files",
+    "/api/v1/canary/blobs",
+})
+_JSON_ENFORCE_METHODS: frozenset[str] = frozenset({"POST", "PUT", "PATCH"})
+
+
+class _ContentTypeMiddleware(BaseHTTPMiddleware):
+    async def dispatch(self, request: Request, call_next: Any) -> StarletteResponse:
+        if (
+            request.method in _JSON_ENFORCE_METHODS
+            and request.url.path.startswith("/api/")
+        ):
+            # Allow through if the path belongs to a multipart-exempt route.
+            path = request.url.path
+            exempt = any(path.startswith(p) for p in _MULTIPART_EXEMPT_PATHS)
+            if not exempt:
+                ct = request.headers.get("content-type", "")
+                # Only enforce when a body is actually present (non-zero Content-Length
+                # or chunked transfer), so empty-body POST health-checks stay clean.
+                cl = request.headers.get("content-length", "")
+                te = request.headers.get("transfer-encoding", "")
+                has_body = (cl not in ("", "0")) or ("chunked" in te.lower())
+                if has_body and not ct.lower().startswith("application/json"):
+                    return StarletteResponse(
+                        content="Unsupported Media Type — Content-Type must be application/json",
+                        status_code=415,
+                        media_type="text/plain",
+                    )
+        return await call_next(request)
+
+
+app.add_middleware(_ContentTypeMiddleware)
 
 if DECNET_PROFILE_REQUESTS:
     import time

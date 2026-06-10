@@ -139,7 +139,7 @@ async def stream_events(
             except asyncio.CancelledError:
                 pass
             except Exception:
-                log.exception("SSE stream error for user %s", last_event_id)
+                log.exception("SSE stream error for user %s", user["uuid"])
                 yield f"event: error\ndata: {orjson.dumps({'type': 'error', 'message': 'Stream interrupted'}).decode()}\n\n"
 
     return StreamingResponse(

@@ -8,6 +8,7 @@ against a ``tmp_path`` install dir.
 """
 from __future__ import annotations
 
+import hashlib
 import io
 import pathlib
 import subprocess
@@ -30,6 +31,11 @@ def _make_tarball(files: dict[str, str]) -> bytes:
             info.size = len(data)
             tar.addfile(info, io.BytesIO(data))
     return buf.getvalue()
+
+
+def _digest(tarball: bytes) -> str:
+    """SHA-256 hex of the tarball — now mandatory on run_update/run_update_self."""
+    return hashlib.sha256(tarball).hexdigest()
 
 
 class _PipOK:
@@ -207,6 +213,40 @@ def test_run_update_rejects_malformed_sha256(
         )
 
 
+@pytest.mark.parametrize("missing", ["", "   ", None])
+def test_run_update_rejects_missing_sha256_fail_closed(
+    install_dir: pathlib.Path, agent_dir: pathlib.Path, missing: Any,
+) -> None:
+    """V12.1.2 fail-closed: an absent/empty digest is rejected BEFORE any
+    extraction or pip-install. No staging tree is produced."""
+    tb = _make_tarball({"x.txt": "y"})
+    with pytest.raises(ex.UpdateError, match="required but was missing or empty"):
+        ex.run_update(
+            tb, sha="S", expected_sha256=missing,  # type: ignore[arg-type]
+            install_dir=install_dir, agent_dir=agent_dir,
+        )
+    assert not (install_dir / "releases" / "active.new").exists()
+
+
+@pytest.mark.parametrize("missing", ["", "   ", None])
+def test_run_update_self_rejects_missing_sha256_fail_closed(
+    install_dir: pathlib.Path, missing: Any,
+) -> None:
+    active = install_dir / "releases" / "active"
+    active.mkdir()
+    (active / "marker").write_text("old-updater")
+    tb = _make_tarball({"marker": "new-updater"})
+    with pytest.raises(ex.UpdateError, match="required but was missing or empty"):
+        ex.run_update_self(
+            tb, sha="U", updater_install_dir=install_dir,
+            expected_sha256=missing,  # type: ignore[arg-type]
+            exec_cb=lambda a: None,
+        )
+    # Active untouched, nothing staged.
+    assert (install_dir / "releases" / "active" / "marker").read_text() == "old-updater"
+    assert not (install_dir / "releases" / "active.new").exists()
+
+
 def test_clean_stale_staging(install_dir: pathlib.Path) -> None:
     staging = install_dir / "releases" / "active.new"
     staging.mkdir()
@@ -229,7 +269,7 @@ def test_update_rotates_and_probes(
     monkeypatch.setattr(ex, "_probe_agent", lambda **_: (True, "ok"))
 
     tb = _make_tarball({"marker.txt": "new"})
-    result = ex.run_update(tb, sha="NEWSHA", install_dir=install_dir, agent_dir=agent_dir)
+    result = ex.run_update(tb, sha="NEWSHA", expected_sha256=_digest(tb), install_dir=install_dir, agent_dir=agent_dir)
 
     assert result["status"] == "updated"
     assert result["release"]["sha"] == "NEWSHA"
@@ -252,7 +292,7 @@ def test_update_first_install_without_previous(
     monkeypatch.setattr(ex, "_probe_agent", lambda **_: (True, "ok"))
 
     tb = _make_tarball({"marker.txt": "first"})
-    result = ex.run_update(tb, sha="S1", install_dir=install_dir, agent_dir=agent_dir)
+    result = ex.run_update(tb, sha="S1", expected_sha256=_digest(tb), install_dir=install_dir, agent_dir=agent_dir)
     assert result["status"] == "updated"
     assert not (install_dir / "releases" / "prev").exists()
 
@@ -273,7 +313,7 @@ def test_update_pip_failure_aborts_before_rotation(
 
     tb = _make_tarball({"marker.txt": "new"})
     with pytest.raises(ex.UpdateError, match="pip install failed") as ei:
-        ex.run_update(tb, sha="S", install_dir=install_dir, agent_dir=agent_dir)
+        ex.run_update(tb, sha="S", expected_sha256=_digest(tb), install_dir=install_dir, agent_dir=agent_dir)
     assert "resolver error" in ei.value.stderr
 
     # Nothing rotated — old active still live, no prev created.
@@ -309,7 +349,7 @@ def test_update_probe_failure_rolls_back(
 
     tb = _make_tarball({"marker.txt": "new"})
     with pytest.raises(ex.UpdateError, match="health probe") as ei:
-        ex.run_update(tb, sha="NEWSHA", install_dir=install_dir, agent_dir=agent_dir)
+        ex.run_update(tb, sha="NEWSHA", expected_sha256=_digest(tb), install_dir=install_dir, agent_dir=agent_dir)
     assert ei.value.rolled_back is True
     assert "connection refused" in ei.value.stderr
 
@@ -381,6 +421,7 @@ def test_update_self_rotates_and_calls_exec_cb(
     tb = _make_tarball({"marker": "new-updater"})
     result = ex.run_update_self(
         tb, sha="USHA", updater_install_dir=install_dir,
+        expected_sha256=_digest(tb),
         exec_cb=lambda argv: seen_argv.append(argv),
     )
     assert result["status"] == "self_update_queued"
@@ -412,7 +453,7 @@ def test_update_self_under_systemd_defers_to_systemctl(
     monkeypatch.setattr(ex.os, "execv", lambda *a, **k: pytest.fail("execv taken under systemd"))
 
     tb = _make_tarball({"marker": "new-updater"})
-    result = ex.run_update_self(tb, sha="USHA", updater_install_dir=install_dir)
+    result = ex.run_update_self(tb, sha="USHA", updater_install_dir=install_dir, expected_sha256=_digest(tb))
     assert result == {"status": "self_update_queued", "via": "systemd"}
     assert len(popen_calls) == 1
     sh_cmd = popen_calls[0]
@@ -431,7 +472,7 @@ def test_update_self_pip_failure_leaves_active_intact(
 
     tb = _make_tarball({"marker": "new-updater"})
     with pytest.raises(ex.UpdateError, match="pip install failed"):
-        ex.run_update_self(tb, sha="U", updater_install_dir=install_dir, exec_cb=lambda a: None)
+        ex.run_update_self(tb, sha="U", updater_install_dir=install_dir, expected_sha256=_digest(tb), exec_cb=lambda a: None)
     assert (install_dir / "releases" / "active" / "marker").read_text() == "old-updater"
     assert not (install_dir / "releases" / "active.new").exists()
 

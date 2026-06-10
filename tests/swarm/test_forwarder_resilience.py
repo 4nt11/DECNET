@@ -69,6 +69,18 @@ async def _wait_for(pred, timeout: float = 5.0, interval: float = 0.1) -> bool:
 # ----------------------------------------------------------- pure helpers
 
 
+def test_worker_ssl_context_pins_tls12_floor(_pki_env: dict) -> None:
+    """V9.1.4: forwarder client context must set an explicit TLS 1.2 floor."""
+    ctx = fwd.build_worker_ssl_context(_pki_env["worker_dir"])
+    assert ctx.minimum_version == ssl.TLSVersion.TLSv1_2
+
+
+def test_listener_ssl_context_pins_tls12_floor(_pki_env: dict) -> None:
+    """V9.1.4: listener server context must set an explicit TLS 1.2 floor."""
+    ctx = lst.build_listener_ssl_context(_pki_env["ca_dir"])
+    assert ctx.minimum_version == ssl.TLSVersion.TLSv1_2
+
+
 def test_peer_cn_returns_unknown_when_no_ssl_object() -> None:
     assert lst.peer_cn(None) == "unknown"
 

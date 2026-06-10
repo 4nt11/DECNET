@@ -50,12 +50,14 @@ def build_mysql_url(
     if password is None:
         password = os.environ.get("DECNET_DB_PASSWORD") or ""
 
-    # Allow empty passwords during tests (pytest sets PYTEST_* env vars).
-    # Outside tests, an empty MySQL password is almost never intentional.
-    if not password and not any(k.startswith("PYTEST") for k in os.environ):
+    # Allow empty passwords during tests, gated on the explicit, non-attacker-
+    # injectable DECNET_TESTING=1 flag (set by the test harness) rather than
+    # the attacker-controllable PYTEST* namespace (V2.1.7). Outside tests, an
+    # empty MySQL password is almost never intentional.
+    if not password and os.environ.get("DECNET_TESTING") != "1":
         raise ValueError(
             "DECNET_DB_PASSWORD is not set. Either export it, set DECNET_DB_URL, "
-            "or run under pytest for an empty-password default."
+            "or run under the test harness (DECNET_TESTING=1) for an empty-password default."
         )
 
     pw_enc = quote_plus(password)

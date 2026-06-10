@@ -1,9 +1,9 @@
 # SPDX-License-Identifier: AGPL-3.0-or-later
 """validate_public_binding refuses footgun configs at master startup.
 
-The validator no-ops under pytest by design (so unit tests in unrelated
-modules don't have to set five env vars per fixture); these tests strip
-the PYTEST_* vars before calling it so the real code path runs.
+The validator no-ops under the test harness (DECNET_TESTING=1) by design (so
+unit tests in unrelated modules don't have to set five env vars per fixture);
+these tests clear that flag before calling it so the real code path runs.
 """
 from __future__ import annotations
 
@@ -20,18 +20,17 @@ def _reimport_env(monkeypatch: pytest.MonkeyPatch):
     return importlib.import_module("decnet.env")
 
 
-def _strip_pytest_vars(monkeypatch: pytest.MonkeyPatch) -> None:
-    import os
-    for k in list(os.environ):
-        if k.startswith("PYTEST"):
-            monkeypatch.delenv(k, raising=False)
+def _strip_test_flag(monkeypatch: pytest.MonkeyPatch) -> None:
+    # The validator short-circuits on DECNET_TESTING=1 (set globally by
+    # conftest). Clear it so the real production code path runs.
+    monkeypatch.delenv("DECNET_TESTING", raising=False)
 
 
 def test_validator_noop_on_loopback_binding(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setenv("DECNET_API_HOST", "127.0.0.1")
     monkeypatch.setenv("DECNET_CORS_ORIGINS", "http://localhost:8080")
     env = _reimport_env(monkeypatch)
-    _strip_pytest_vars(monkeypatch)
+    _strip_test_flag(monkeypatch)
     env.validate_public_binding()  # no raise
 
 
@@ -41,7 +40,7 @@ def test_validator_rejects_loopback_cors_on_public_bind(
     monkeypatch.setenv("DECNET_API_HOST", "0.0.0.0")
     monkeypatch.setenv("DECNET_CORS_ORIGINS", "http://localhost:8080")
     env = _reimport_env(monkeypatch)
-    _strip_pytest_vars(monkeypatch)
+    _strip_test_flag(monkeypatch)
     with pytest.raises(ValueError, match="loopback origin"):
         env.validate_public_binding()
 
@@ -52,7 +51,7 @@ def test_validator_accepts_public_cors_on_public_bind(
     monkeypatch.setenv("DECNET_API_HOST", "0.0.0.0")
     monkeypatch.setenv("DECNET_CORS_ORIGINS", "https://dashboard.example.com")
     env = _reimport_env(monkeypatch)
-    _strip_pytest_vars(monkeypatch)
+    _strip_test_flag(monkeypatch)
     env.validate_public_binding()  # no raise
 
 
@@ -63,7 +62,7 @@ def test_validator_rejects_plaintext_canary_on_public_bind(
     monkeypatch.setenv("DECNET_CORS_ORIGINS", "https://dashboard.example.com")
     monkeypatch.setenv("DECNET_CANARY_HTTP_BASE", "http://canary.example.com:8088")
     env = _reimport_env(monkeypatch)
-    _strip_pytest_vars(monkeypatch)
+    _strip_test_flag(monkeypatch)
     with pytest.raises(ValueError, match="plaintext HTTP"):
         env.validate_public_binding()
 
@@ -77,14 +76,28 @@ def test_validator_allows_loopback_canary_even_on_public_bind(
     monkeypatch.setenv("DECNET_CORS_ORIGINS", "https://dashboard.example.com")
     monkeypatch.setenv("DECNET_CANARY_HTTP_BASE", "http://localhost:8088")
     env = _reimport_env(monkeypatch)
-    _strip_pytest_vars(monkeypatch)
+    _strip_test_flag(monkeypatch)
     env.validate_public_binding()  # no raise
 
 
-def test_validator_skips_under_pytest(monkeypatch: pytest.MonkeyPatch) -> None:
-    # With PYTEST_* still in env (default), even a misconfigured env passes —
-    # this is the deliberate bypass so unrelated tests don't trip on it.
+def test_validator_skips_under_test_harness(monkeypatch: pytest.MonkeyPatch) -> None:
+    # With DECNET_TESTING=1 still in env (set by conftest), even a misconfigured
+    # env passes — this is the deliberate bypass so unrelated tests don't trip.
+    monkeypatch.setenv("DECNET_TESTING", "1")
     monkeypatch.setenv("DECNET_API_HOST", "0.0.0.0")
     monkeypatch.setenv("DECNET_CORS_ORIGINS", "http://localhost:8080")
     env = _reimport_env(monkeypatch)
     env.validate_public_binding()  # no raise — guard short-circuits
+
+
+def test_validator_pytest_var_leak_does_not_bypass(monkeypatch: pytest.MonkeyPatch) -> None:
+    # V2.1.7 regression: a leaked PYTEST_* env var must NOT disable the guard.
+    # With DECNET_TESTING cleared, a misconfigured public binding still raises
+    # even though a PYTEST_* var is present.
+    monkeypatch.delenv("DECNET_TESTING", raising=False)
+    monkeypatch.setenv("PYTEST_CURRENT_TEST", "x")
+    monkeypatch.setenv("DECNET_API_HOST", "0.0.0.0")
+    monkeypatch.setenv("DECNET_CORS_ORIGINS", "http://localhost:8080")
+    env = _reimport_env(monkeypatch)
+    with pytest.raises(ValueError, match="loopback origin"):
+        env.validate_public_binding()

@@ -58,8 +58,10 @@ def _require_env(name: str) -> str:
         return value
 
     if value.lower() in _KNOWN_BAD:
+        # Do NOT echo the rejected value — that leaks the secret into logs /
+        # stderr / crash reporters (V7.1.3). Name the variable, not its value.
         raise ValueError(
-            f"Environment variable '{name}' is set to an insecure default ('{value}'). "
+            f"Environment variable '{name}' is set to a known-insecure default. "
             f"Choose a strong, unique value before starting DECNET."
         )
     _developer = os.environ.get("DECNET_DEVELOPER", "False").lower() == "true"
@@ -275,10 +277,14 @@ def validate_public_binding() -> None:
       slip past unmentioned on a public binding.
 
     Called from the FastAPI lifespan so it surfaces at startup, not on
-    first request. Skipped automatically when running under pytest so
-    the test suite doesn't have to set five env vars per fixture.
+    first request. Skipped automatically under the explicit, non-attacker-
+    injectable DECNET_TESTING=1 flag (set by the test harness) so the test
+    suite doesn't have to set five env vars per fixture. The old "any PYTEST*
+    var present" check was fail-open: PYTEST* is an attacker-controllable
+    namespace, so leaking one into a prod environment silently disabled the
+    public-binding guard. Fail closed (V2.1.7).
     """
-    if any(k.startswith("PYTEST") for k in os.environ):
+    if os.environ.get("DECNET_TESTING") == "1":
         return
     if DECNET_API_HOST in _LOOPBACK_HOSTS:
         return  # not exposed; nothing to validate

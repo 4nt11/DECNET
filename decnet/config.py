@@ -79,9 +79,12 @@ def _configure_logging(dev: bool) -> None:
     stream_handler.setFormatter(fmt)
     root.addHandler(stream_handler)
 
-    # Skip the file handler during pytest runs to avoid polluting the test cwd.
-    _in_pytest = any(k.startswith("PYTEST") for k in os.environ)
-    if not _in_pytest:
+    # Skip the file handler during test runs to avoid polluting the test cwd.
+    # Gated on the explicit, non-attacker-injectable DECNET_TESTING=1 flag
+    # (set by the test harness) rather than the attacker-controllable PYTEST*
+    # namespace (V2.1.7).
+    _in_test = os.environ.get("DECNET_TESTING") == "1"
+    if not _in_test:
         _log_path = os.environ.get("DECNET_SYSTEM_LOGS", "decnet.system.log")
         # Never let file-handler attach failure kill the process. The
         # stream handler above is already installed, so losing the file

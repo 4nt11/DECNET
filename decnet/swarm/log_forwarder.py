@@ -108,6 +108,9 @@ def build_worker_ssl_context(agent_dir: pathlib.Path) -> ssl.SSLContext:
             f"no worker bundle at {agent_dir} — enroll from the master first"
         )
     ctx = ssl.SSLContext(ssl.PROTOCOL_TLS_CLIENT)
+    # Pin an explicit TLS 1.2 floor so it can't silently regress if a future
+    # runtime lowers the implicit default (ASVS V9.1.4).
+    ctx.minimum_version = ssl.TLSVersion.TLSv1_2
     ctx.load_cert_chain(
         certfile=str(agent_dir / "worker.crt"),
         keyfile=str(agent_dir / "worker.key"),

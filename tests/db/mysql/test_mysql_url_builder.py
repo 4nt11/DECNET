@@ -13,7 +13,7 @@ def test_build_url_defaults(monkeypatch):
     for v in ("DECNET_DB_HOST", "DECNET_DB_PORT", "DECNET_DB_NAME",
               "DECNET_DB_USER", "DECNET_DB_PASSWORD", "DECNET_DB_URL"):
         monkeypatch.delenv(v, raising=False)
-    # PYTEST_* is set by pytest itself, so empty password is allowed here.
+    # DECNET_TESTING=1 is set by conftest, so empty password is allowed here.
     url = build_mysql_url()
     assert url == "mysql+asyncmy://decnet:@localhost:3306/decnet"
 
@@ -66,14 +66,13 @@ def test_resolve_url_falls_back_to_components(monkeypatch):
     assert url.startswith("mysql+asyncmy://")
 
 
-def test_build_url_requires_password_outside_pytest(monkeypatch):
-    """Without a password and not in a pytest run, construction must fail loudly."""
+def test_build_url_requires_password_outside_tests(monkeypatch):
+    """Without a password and not under the test harness, construction must fail loudly."""
     for v in ("DECNET_DB_URL", "DECNET_DB_PASSWORD"):
         monkeypatch.delenv(v, raising=False)
-    # Strip every PYTEST_* env var so the safety check trips.
-    import os
-    for k in list(os.environ):
-        if k.startswith("PYTEST"):
-            monkeypatch.delenv(k, raising=False)
+    # Clear the test-harness flag so the safety check trips. A leaked PYTEST_*
+    # var must NOT re-enable the bypass (V2.1.7).
+    monkeypatch.delenv("DECNET_TESTING", raising=False)
+    monkeypatch.setenv("PYTEST_CURRENT_TEST", "x")
     with pytest.raises(ValueError, match="DECNET_DB_PASSWORD is not set"):
         build_mysql_url()

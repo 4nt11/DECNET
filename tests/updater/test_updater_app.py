@@ -54,10 +54,13 @@ def test_health_returns_role_and_releases(client: TestClient, monkeypatch: pytes
 
 
 def test_update_happy_path(client: TestClient, monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.setattr(
-        ex, "run_update",
-        lambda data, sha, install_dir, agent_dir, expected_sha256=None: {"status": "updated", "release": {"slot": "active", "sha": sha}, "probe": "ok"},
-    )
+    seen: dict[str, object] = {}
+
+    def _run_update(data, sha, expected_sha256, install_dir, agent_dir):
+        seen["expected_sha256"] = expected_sha256
+        return {"status": "updated", "release": {"slot": "active", "sha": sha}, "probe": "ok"}
+
+    monkeypatch.setattr(ex, "run_update", _run_update)
     r = client.post(
         "/update",
         files={"tarball": ("tree.tgz", _tarball(), "application/gzip")},
@@ -65,6 +68,8 @@ def test_update_happy_path(client: TestClient, monkeypatch: pytest.MonkeyPatch) 
     )
     assert r.status_code == 200, r.text
     assert r.json()["release"]["sha"] == "ABC123"
+    # Route forwards the digest verbatim — executor verifies it before extract.
+    assert seen["expected_sha256"] == "0" * 64
 
 
 def test_update_rollback_returns_409(client: TestClient, monkeypatch: pytest.MonkeyPatch) -> None:
@@ -104,10 +109,13 @@ def test_update_self_requires_confirm(client: TestClient) -> None:
 
 
 def test_update_self_happy_path(client: TestClient, monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.setattr(
-        ex, "run_update_self",
-        lambda data, sha, updater_install_dir, expected_sha256=None: {"status": "self_update_queued", "argv": ["python", "-m", "decnet", "updater"]},
-    )
+    seen: dict[str, object] = {}
+
+    def _run_update_self(data, sha, updater_install_dir, expected_sha256):
+        seen["expected_sha256"] = expected_sha256
+        return {"status": "self_update_queued", "argv": ["python", "-m", "decnet", "updater"]}
+
+    monkeypatch.setattr(ex, "run_update_self", _run_update_self)
     r = client.post(
         "/update-self",
         files={"tarball": ("t.tgz", _tarball(), "application/gzip")},
@@ -115,6 +123,7 @@ def test_update_self_happy_path(client: TestClient, monkeypatch: pytest.MonkeyPa
     )
     assert r.status_code == 200
     assert r.json()["status"] == "self_update_queued"
+    assert seen["expected_sha256"] == "0" * 64
 
 
 def test_rollback_happy(client: TestClient, monkeypatch: pytest.MonkeyPatch) -> None:
@@ -156,6 +165,47 @@ def test_update_without_sha256_is_rejected(client: TestClient) -> None:
     )
     assert r.status_code == 400
     assert "sha256" in r.json()["detail"]
+
+
+def test_update_with_empty_sha256_is_rejected(client: TestClient) -> None:
+    # An explicit empty form value is treated the same as absent → 400.
+    r = client.post(
+        "/update",
+        files={"tarball": ("t.tgz", _tarball(), "application/gzip")},
+        data={"sha": "ABC", "sha256": ""},
+    )
+    assert r.status_code == 400
+    assert "sha256" in r.json()["detail"]
+
+
+def test_update_self_without_sha256_is_rejected(client: TestClient) -> None:
+    r = client.post(
+        "/update-self",
+        files={"tarball": ("t.tgz", _tarball(), "application/gzip")},
+        data={"confirm_self": "true"},
+    )
+    assert r.status_code == 400
+    assert "sha256" in r.json()["detail"]
+
+
+def test_update_mismatched_sha256_is_rejected_before_apply(
+    client: TestClient, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """End-to-end through the REAL executor verify: a non-matching digest is a
+    500 UpdateError and no extraction/pip happens (extract/_run_pip would be
+    reached only AFTER the digest check, so we assert they are never called)."""
+    called: list[str] = []
+    monkeypatch.setattr(ex, "extract_tarball", lambda *a, **k: called.append("extract"))
+    monkeypatch.setattr(ex, "_run_pip", lambda *a, **k: called.append("pip"))
+
+    r = client.post(
+        "/update",
+        files={"tarball": ("t.tgz", _tarball(), "application/gzip")},
+        data={"sha": "ABC", "sha256": "0" * 64},  # wrong digest for this tarball
+    )
+    assert r.status_code == 500, r.text
+    assert "mismatch" in r.json()["detail"]["error"]
+    assert called == []  # rejected before any extract/install
 
 
 # ------------------------- master-cert gate ---------------------------------

@@ -4,7 +4,7 @@
 DECNET_ADMIN_PASSWORD must never silently default to "admin": it is resolved
 lazily and validated like DECNET_JWT_SECRET. These tests drive _require_env
 against a controlled environ so the production raise paths (which are bypassed
-under live pytest) are actually exercised.
+under the test harness via DECNET_TESTING=1) are actually exercised.
 """
 from __future__ import annotations
 
@@ -14,8 +14,8 @@ import decnet.env as envmod
 
 
 def _require(monkeypatch: pytest.MonkeyPatch, environ: dict[str, str]) -> str:
-    # Replace the whole environ for the call so the PYTEST_* short-circuit in
-    # _require_env doesn't fire — we want the real production behaviour.
+    # Replace the whole environ for the call so the DECNET_TESTING short-circuit
+    # in _require_env doesn't fire — we want the real production behaviour.
     monkeypatch.setattr(envmod.os, "environ", dict(environ))
     return envmod._require_env("DECNET_ADMIN_PASSWORD")
 
@@ -34,6 +34,20 @@ def test_admin_password_known_bad_default_raises(monkeypatch: pytest.MonkeyPatch
 def test_admin_password_other_known_bad_raises(monkeypatch: pytest.MonkeyPatch, bad: str) -> None:
     with pytest.raises(ValueError, match="insecure default"):
         _require(monkeypatch, {"DECNET_ADMIN_PASSWORD": bad})
+
+
+def test_known_bad_message_does_not_leak_secret_value(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    # V7.1.3: the known-bad rejection must NOT echo the rejected secret value
+    # (it would land in logs / stderr / crash reporters). Name the variable,
+    # not its value.
+    secret = "admin"
+    with pytest.raises(ValueError) as exc:
+        _require(monkeypatch, {"DECNET_ADMIN_PASSWORD": secret})
+    msg = str(exc.value)
+    assert secret not in msg
+    assert "DECNET_ADMIN_PASSWORD" in msg
 
 
 def test_admin_password_too_short_raises_in_production(monkeypatch: pytest.MonkeyPatch) -> None:

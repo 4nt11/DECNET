@@ -576,19 +576,22 @@ def _point_current_at(install_dir: pathlib.Path, target: pathlib.Path) -> None:
     os.replace(tmp, link)
 
 
-def _verify_tarball_sha256(tarball_bytes: bytes, expected_sha256: Optional[str]) -> None:
+def _verify_tarball_sha256(tarball_bytes: bytes, expected_sha256: str) -> None:
     """Refuse to extract a tarball whose SHA-256 disagrees with the operator-supplied digest.
 
     mTLS already authenticates the master, so a network MITM can't forge
-    bytes. This check exists for two narrower cases: catching corruption
+    bytes. This check is mandatory defense-in-depth: it catches corruption
     in transit (proxies, broken disks) before we explode a half-decoded
-    archive into the staging tree, and giving the operator a way to pin
-    "exactly these bytes" when distributing a vetted release. The form
-    field is optional — if the caller doesn't send one, we skip the
-    check rather than reject (no breaking change for older masters).
+    archive into the staging tree, and pins "exactly these bytes" when
+    distributing a vetted release. It runs BEFORE extraction or any
+    pip-install. There is no skip path: a missing/empty digest is a
+    fail-closed REJECT — every caller (UpdaterClient) computes and sends
+    the digest, so an absent one means an untrusted/malformed request.
     """
-    if not expected_sha256:
-        return
+    if not expected_sha256 or not expected_sha256.strip():
+        raise UpdateError(
+            "tarball sha256 digest is required but was missing or empty — refusing to extract"
+        )
     expected = expected_sha256.strip().lower()
     if len(expected) != 64 or any(c not in "0123456789abcdef" for c in expected):
         raise UpdateError(f"sha256 digest is not a 64-char hex string: {expected_sha256!r}")
@@ -602,9 +605,9 @@ def _verify_tarball_sha256(tarball_bytes: bytes, expected_sha256: Optional[str])
 def run_update(
     tarball_bytes: bytes,
     sha: Optional[str],
+    expected_sha256: str,
     install_dir: pathlib.Path = DEFAULT_INSTALL_DIR,
     agent_dir: pathlib.Path = pki.DEFAULT_AGENT_DIR,
-    expected_sha256: Optional[str] = None,
 ) -> dict[str, Any]:
     """Apply an update atomically. Rolls back on probe failure."""
     log.info("update received sha=%s bytes=%d install_dir=%s", sha, len(tarball_bytes), install_dir)
@@ -699,8 +702,8 @@ def run_update_self(
     tarball_bytes: bytes,
     sha: Optional[str],
     updater_install_dir: pathlib.Path,
+    expected_sha256: str,
     exec_cb: Optional[Callable[[list[str]], None]] = None,
-    expected_sha256: Optional[str] = None,
 ) -> dict[str, Any]:
     """Replace the updater's own source tree, then re-exec this process.
 
