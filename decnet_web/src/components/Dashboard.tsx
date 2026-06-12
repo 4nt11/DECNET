@@ -4,6 +4,7 @@ import { useNavigate } from 'react-router-dom';
 import './Dashboard.css';
 import { Shield, Users, Activity, Clock, Paperclip, Crosshair, Flame, Archive, ShieldOff, Server, LayoutDashboard } from '../icons';
 import { parseEventBody } from '../utils/parseEventBody';
+import { mintSseTicket } from '../utils/sseTicket';
 import ArtifactDrawer from './ArtifactDrawer';
 import EmptyState from './EmptyState/EmptyState';
 
@@ -93,12 +94,24 @@ const Dashboard: React.FC<DashboardProps> = ({ searchQuery }) => {
   const logsContainerRef = useRef<HTMLDivElement | null>(null);
 
   useEffect(() => {
-    const connect = () => {
+    let cancelled = false;
+
+    const connect = async () => {
       if (eventSourceRef.current) eventSourceRef.current.close();
 
-      const token = localStorage.getItem('token');
+      let ticket: string;
+      try {
+        ticket = await mintSseTicket();
+      } catch {
+        if (!cancelled) {
+          reconnectTimerRef.current = setTimeout(connect, 3000);
+        }
+        return;
+      }
+      if (cancelled) return;
+
       const baseUrl = import.meta.env.VITE_API_URL || 'http://localhost:8000/api/v1';
-      let url = `${baseUrl}/stream?token=${token}`;
+      let url = `${baseUrl}/stream?ticket=${encodeURIComponent(ticket)}`;
       if (searchQuery) url += `&search=${encodeURIComponent(searchQuery)}`;
 
       const es = new EventSource(url);
@@ -125,13 +138,16 @@ const Dashboard: React.FC<DashboardProps> = ({ searchQuery }) => {
       es.onerror = () => {
         es.close();
         eventSourceRef.current = null;
-        reconnectTimerRef.current = setTimeout(connect, 3000);
+        if (!cancelled) {
+          reconnectTimerRef.current = setTimeout(connect, 3000);
+        }
       };
     };
 
     connect();
 
     return () => {
+      cancelled = true;
       if (reconnectTimerRef.current) clearTimeout(reconnectTimerRef.current);
       if (eventSourceRef.current) eventSourceRef.current.close();
     };

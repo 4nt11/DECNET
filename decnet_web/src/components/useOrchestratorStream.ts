@@ -5,6 +5,7 @@
  * caller. Mirror of `useCampaignStream`.
  */
 import { useEffect, useRef } from 'react';
+import { mintSseTicket } from '../utils/sseTicket';
 
 export type OrchestratorStreamEventName =
   | 'snapshot'
@@ -49,12 +50,26 @@ export function useOrchestratorStream({
   useEffect(() => {
     if (!enabled) return;
 
-    const connect = () => {
+    let cancelled = false;
+
+    const connect = async () => {
       if (esRef.current) esRef.current.close();
       onStatusRef.current?.('connecting');
-      const token = localStorage.getItem('token') ?? '';
+
+      let ticket: string;
+      try {
+        ticket = await mintSseTicket();
+      } catch {
+        onStatusRef.current?.('error');
+        if (!cancelled) {
+          reconnectRef.current = setTimeout(connect, 3000);
+        }
+        return;
+      }
+      if (cancelled) return;
+
       const baseUrl = import.meta.env.VITE_API_URL || 'http://localhost:8000/api/v1';
-      const url = `${baseUrl}/orchestrator/events/stream?token=${encodeURIComponent(token)}`;
+      const url = `${baseUrl}/orchestrator/events/stream?ticket=${encodeURIComponent(ticket)}`;
 
       const es = new EventSource(url);
       esRef.current = es;
@@ -84,13 +99,16 @@ export function useOrchestratorStream({
         es.close();
         esRef.current = null;
         onStatusRef.current?.('error');
-        reconnectRef.current = setTimeout(connect, 3000);
+        if (!cancelled) {
+          reconnectRef.current = setTimeout(connect, 3000);
+        }
       };
     };
 
     connect();
 
     return () => {
+      cancelled = true;
       if (reconnectRef.current) clearTimeout(reconnectRef.current);
       if (esRef.current) esRef.current.close();
       esRef.current = null;

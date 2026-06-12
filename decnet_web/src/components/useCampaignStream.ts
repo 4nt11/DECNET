@@ -9,6 +9,7 @@
  * fires.
  */
 import { useEffect, useRef } from 'react';
+import { mintSseTicket } from '../utils/sseTicket';
 
 export type CampaignStreamEventName =
   | 'snapshot'
@@ -54,11 +55,25 @@ export function useCampaignStream({
   useEffect(() => {
     if (!enabled) return;
 
-    const connect = () => {
+    let cancelled = false;
+
+    const connect = async () => {
       if (esRef.current) esRef.current.close();
-      const token = localStorage.getItem('token') ?? '';
+
+      let ticket: string;
+      try {
+        ticket = await mintSseTicket();
+      } catch {
+        onErrorRef.current?.();
+        if (!cancelled) {
+          reconnectRef.current = setTimeout(connect, 3000);
+        }
+        return;
+      }
+      if (cancelled) return;
+
       const baseUrl = import.meta.env.VITE_API_URL || 'http://localhost:8000/api/v1';
-      const url = `${baseUrl}/campaigns/events?token=${encodeURIComponent(token)}`;
+      const url = `${baseUrl}/campaigns/events?ticket=${encodeURIComponent(ticket)}`;
 
       const es = new EventSource(url);
       esRef.current = es;
@@ -86,13 +101,16 @@ export function useCampaignStream({
         es.close();
         esRef.current = null;
         onErrorRef.current?.();
-        reconnectRef.current = setTimeout(connect, 3000);
+        if (!cancelled) {
+          reconnectRef.current = setTimeout(connect, 3000);
+        }
       };
     };
 
     connect();
 
     return () => {
+      cancelled = true;
       if (reconnectRef.current) clearTimeout(reconnectRef.current);
       if (esRef.current) esRef.current.close();
       esRef.current = null;

@@ -8,6 +8,7 @@ import {
 } from '../icons';
 import api from '../utils/api';
 import { parseEventBody } from '../utils/parseEventBody';
+import { mintSseTicket } from '../utils/sseTicket';
 import ArtifactDrawer from './ArtifactDrawer';
 import EmptyState from './EmptyState/EmptyState';
 import './Dashboard.css';
@@ -75,34 +76,6 @@ const LiveLogs: React.FC = () => {
     }
   };
 
-  const setupSSE = () => {
-    if (eventSourceRef.current) eventSourceRef.current.close();
-
-    const token = localStorage.getItem('token');
-    const baseUrl = import.meta.env.VITE_API_URL || 'http://localhost:8000/api/v1';
-    let url = `${baseUrl}/stream?token=${token}&search=${encodeURIComponent(query)}`;
-    const startTime = startTimeParam();
-    if (startTime) url += `&start_time=${startTime}`;
-
-    const es = new EventSource(url);
-    eventSourceRef.current = es;
-
-    es.onmessage = (event) => {
-      try {
-        const payload = JSON.parse(event.data);
-        if (payload.type === 'logs') {
-          setLogs(prev => [...payload.data, ...prev].slice(0, 500));
-        } else if (payload.type === 'stats') {
-          setTotalLogs(payload.data.total_logs);
-        }
-      } catch (err) {
-        console.error('Failed to parse SSE payload', err);
-      }
-    };
-
-    es.onerror = () => console.error('SSE connection lost, reconnecting...');
-  };
-
   // Always seed with REST backlog on mount / filter changes.
   useEffect(() => {
     fetchData();
@@ -110,13 +83,56 @@ const LiveLogs: React.FC = () => {
 
   // SSE follows the streaming toggle independently.
   useEffect(() => {
-    if (streaming) {
-      setupSSE();
-    } else if (eventSourceRef.current) {
-      eventSourceRef.current.close();
-      eventSourceRef.current = null;
+    if (!streaming) {
+      if (eventSourceRef.current) {
+        eventSourceRef.current.close();
+        eventSourceRef.current = null;
+      }
+      return;
     }
+
+    let cancelled = false;
+
+    const setupSSE = async () => {
+      if (eventSourceRef.current) eventSourceRef.current.close();
+
+      let ticket: string;
+      try {
+        ticket = await mintSseTicket();
+      } catch {
+        console.error('SSE ticket mint failed, will not connect stream');
+        return;
+      }
+      if (cancelled) return;
+
+      const baseUrl = import.meta.env.VITE_API_URL || 'http://localhost:8000/api/v1';
+      let url = `${baseUrl}/stream?ticket=${encodeURIComponent(ticket)}&search=${encodeURIComponent(query)}`;
+      const startTime = startTimeParam();
+      if (startTime) url += `&start_time=${startTime}`;
+
+      const es = new EventSource(url);
+      eventSourceRef.current = es;
+
+      es.onmessage = (event) => {
+        try {
+          const payload = JSON.parse(event.data);
+          if (payload.type === 'logs') {
+            setLogs(prev => [...payload.data, ...prev].slice(0, 500));
+          } else if (payload.type === 'stats') {
+            setTotalLogs(payload.data.total_logs);
+          }
+        } catch (err) {
+          console.error('Failed to parse SSE payload', err);
+        }
+      };
+
+      es.onerror = () => console.error('SSE connection lost, reconnecting...');
+    };
+
+    setupSSE();
+
     return () => {
+      cancelled = true;
       if (eventSourceRef.current) {
         eventSourceRef.current.close();
         eventSourceRef.current = null;
