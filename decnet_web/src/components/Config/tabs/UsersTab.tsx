@@ -54,8 +54,8 @@ export const UsersTab: React.FC<Props> = ({
   };
 
   const handleResetPassword = async (uuid: string) => {
-    if (!resetPassword.trim() || resetPassword.length < 8) {
-      alert('Password must be at least 8 characters');
+    if (!resetPassword.trim() || resetPassword.length < 12) {
+      alert('Password must be at least 12 characters');
       return;
     }
     const r = await onResetUserPassword(uuid, resetPassword);
@@ -193,7 +193,7 @@ export const UsersTab: React.FC<Props> = ({
               value={newPassword}
               onChange={(e) => setNewPassword(e.target.value)}
               required
-              minLength={8}
+              minLength={12}
               maxLength={72}
             />
           </div>

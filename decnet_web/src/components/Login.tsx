@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 import React, { useState } from 'react';
 import api from '../utils/api';
+import { validateNewPassword } from '../utils/passwordPolicy';
 import './Login.css';
 import { Activity } from '../icons';
 
@@ -45,6 +46,12 @@ const Login: React.FC<LoginProps> = ({ onLogin }) => {
     e.preventDefault();
     if (newPassword !== confirmPassword) {
       setError('Passwords do not match');
+      return;
+    }
+    // Client-side policy guard — API is the enforcement boundary; this prevents
+    // the opaque 400 "Schema structural violation" from reaching the user.
+    if (!validateNewPassword(newPassword).ok) {
+      setError('Password does not meet the requirements below');
       return;
     }
     
@@ -113,32 +120,57 @@ const Login: React.FC<LoginProps> = ({ onLogin }) => {
               <p className="violet-accent">MANDATORY SECURITY UPDATE</p>
               <p style={{ fontSize: '0.8rem', opacity: 0.7 }}>Please establish a new access key</p>
             </div>
-            
+
             <div className="form-group">
               <label>NEW ACCESS KEY</label>
-              <input 
-                type="password" 
-                value={newPassword} 
-                onChange={(e) => setNewPassword(e.target.value)} 
-                required 
-                minLength={8}
+              <input
+                type="password"
+                value={newPassword}
+                onChange={(e) => setNewPassword(e.target.value)}
+                required
+                minLength={12}
               />
             </div>
 
             <div className="form-group">
               <label>CONFIRM KEY</label>
-              <input 
-                type="password" 
-                value={confirmPassword} 
-                onChange={(e) => setConfirmPassword(e.target.value)} 
-                required 
-                minLength={8}
+              <input
+                type="password"
+                value={confirmPassword}
+                onChange={(e) => setConfirmPassword(e.target.value)}
+                required
+                minLength={12}
               />
             </div>
 
+            {(() => {
+              const { checks, classes } = validateNewPassword(newPassword);
+              return (
+                <div className="pw-checklist" aria-label="Password requirements">
+                  {checks.map((chk) => (
+                    <div key={chk.id} className={`pw-check ${chk.passed ? 'passed' : 'failed'}`}>
+                      <span className="pw-check-icon">{chk.passed ? '✓' : '✗'}</span>
+                      {chk.label}
+                      {chk.id === 'char-classes' && (
+                        <span className="pw-class-hints">
+                          <span className={`pw-class-hint${classes.lower ? ' active' : ''}`}>a–z</span>
+                          <span className={`pw-class-hint${classes.upper ? ' active' : ''}`}>A–Z</span>
+                          <span className={`pw-class-hint${classes.digit ? ' active' : ''}`}>0–9</span>
+                          <span className={`pw-class-hint${classes.special ? ' active' : ''}`}>#!@…</span>
+                        </span>
+                      )}
+                    </div>
+                  ))}
+                </div>
+              );
+            })()}
+
             {error && <div className="error-msg">{error}</div>}
 
-            <button type="submit" disabled={loading}>
+            <button
+              type="submit"
+              disabled={loading || !validateNewPassword(newPassword).ok || newPassword !== confirmPassword}
+            >
               {loading ? 'UPDATING...' : 'UPDATE SECURE KEY'}
             </button>
           </form>
