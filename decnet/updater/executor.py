@@ -519,6 +519,7 @@ def _probe_agent(
     if not (worker_key.is_file() and worker_crt.is_file() and ca.is_file()):
         return False, f"no mTLS bundle at {agent_dir}"
     ctx = ssl.SSLContext(ssl.PROTOCOL_TLS_CLIENT)
+    ctx.minimum_version = ssl.TLSVersion.TLSv1_2
     ctx.load_cert_chain(certfile=str(worker_crt), keyfile=str(worker_key))
     ctx.load_verify_locations(cafile=str(ca))
     ctx.verify_mode = ssl.CERT_REQUIRED

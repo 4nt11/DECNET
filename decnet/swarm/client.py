@@ -150,6 +150,7 @@ class AgentClient:
         # purpose/ALPN/default-CA logic that doesn't compose with private-CA
         # mTLS in all combinations.  A bare SSLContext is predictable.
         ctx = ssl.SSLContext(ssl.PROTOCOL_TLS_CLIENT)
+        ctx.minimum_version = ssl.TLSVersion.TLSv1_2
         ctx.load_cert_chain(
             str(self._identity.cert_path), str(self._identity.key_path)
         )
@@ -168,6 +169,7 @@ class AgentClient:
 
     def _fetch_peer_fingerprint(self) -> str:
         ctx = ssl.SSLContext(ssl.PROTOCOL_TLS_CLIENT)
+        ctx.minimum_version = ssl.TLSVersion.TLSv1_2
         ctx.load_cert_chain(
             str(self._identity.cert_path), str(self._identity.key_path)
         )

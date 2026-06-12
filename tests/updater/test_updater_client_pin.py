@@ -192,3 +192,34 @@ async def test_build_client_constructs_with_flag(updater_env) -> None:
         assert isinstance(built, httpx.AsyncClient)
         assert c._verify_hostname is flag
         await built.aclose()
+
+
+@pytest.mark.asyncio
+async def test_build_client_pins_tls12_floor(updater_env, monkeypatch) -> None:
+    """V9.1.4 sweep: the updater mTLS client context pins a TLS 1.2 floor.
+
+    The context is embedded in _build_client (passed to httpx as verify=), so
+    spy on httpx.AsyncClient to capture the real context and assert the floor.
+    Spying on httpx (not ssl) leaves the genuine SSLContext setter intact.
+    """
+    import ssl as _ssl
+    import httpx
+    from decnet.swarm import updater_client as uc
+
+    captured: dict[str, object] = {}
+    real_client = httpx.AsyncClient
+
+    def _spy(*args, **kwargs):  # type: ignore[no-untyped-def]
+        captured["verify"] = kwargs.get("verify")
+        return real_client(*args, **kwargs)
+
+    monkeypatch.setattr(uc.httpx, "AsyncClient", _spy)
+    _worker_dir, port, master_id = updater_env
+    c = UpdaterClient(address="127.0.0.1", updater_port=port, identity=master_id)
+    built = c._build_client(httpx.Timeout(5.0))
+    try:
+        ctx = captured.get("verify")
+        assert isinstance(ctx, _ssl.SSLContext), "context not passed to httpx"
+        assert ctx.minimum_version == _ssl.TLSVersion.TLSv1_2
+    finally:
+        await built.aclose()

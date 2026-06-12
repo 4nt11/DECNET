@@ -72,6 +72,7 @@ class UpdaterClient:
 
     def _build_client(self, timeout: httpx.Timeout) -> httpx.AsyncClient:
         ctx = ssl.SSLContext(ssl.PROTOCOL_TLS_CLIENT)
+        ctx.minimum_version = ssl.TLSVersion.TLSv1_2
         ctx.load_cert_chain(
             str(self._identity.cert_path), str(self._identity.key_path),
         )
@@ -89,6 +90,7 @@ class UpdaterClient:
         SHA-256 hex of the leaf cert it presents. Mirrors
         ``AgentClient._fetch_peer_fingerprint`` exactly."""
         ctx = ssl.SSLContext(ssl.PROTOCOL_TLS_CLIENT)
+        ctx.minimum_version = ssl.TLSVersion.TLSv1_2
         ctx.load_cert_chain(
             str(self._identity.cert_path), str(self._identity.key_path),
         )
