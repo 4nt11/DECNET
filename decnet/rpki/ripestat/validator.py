@@ -17,7 +17,7 @@ import logging
 import sqlite3
 import urllib.request
 from datetime import datetime, timezone
-from typing import Optional
+from typing import Any, Optional, cast
 
 from decnet.rpki import cache as _cache
 from decnet.rpki.base import RpkiResult, RpkiStatus, Validator
@@ -68,13 +68,13 @@ class RipeStatValidator(Validator):
         )
         raw = data.get("data", {}).get("status", "unknown")
         if raw in ("valid", "invalid", "not-found"):
-            return raw
+            return cast(RpkiStatus, raw)
         return "unknown"
 
-    def _fetch(self, url: str) -> dict:
+    def _fetch(self, url: str) -> dict[Any, Any]:
         req = urllib.request.Request(url, headers={"User-Agent": _UA})
         with urllib.request.urlopen(req, timeout=_TIMEOUT_S) as resp:  # nosec B310 — HTTPS RIPE STAT base URL only; IP/ASN components are validated upstream
-            return json.loads(resp.read())
+            return cast(dict[Any, Any], json.loads(resp.read()))
 
     def _store(
         self, ip: str, asn: int, status: str, prefix: Optional[str]

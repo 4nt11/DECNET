@@ -17,7 +17,7 @@ env-driven dispatch, optional telemetry wrapping).  Callers MUST use
 from __future__ import annotations
 
 import os
-from typing import Any
+from typing import Any, cast
 
 from decnet.bus.base import BaseBus
 
@@ -81,6 +81,6 @@ def _maybe_wrap_telemetry(bus: BaseBus) -> BaseBus:
     except ImportError:
         return bus
     try:
-        return wrap_repository(bus)
+        return cast(BaseBus, wrap_repository(bus))
     except Exception:  # pragma: no cover - defensive
         return bus

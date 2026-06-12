@@ -21,7 +21,7 @@ from __future__ import annotations
 
 import uuid as _uuid
 from datetime import datetime, timezone
-from typing import Any, Optional
+from typing import Any, Optional, cast
 
 from sqlalchemy import func, select
 from sqlmodel import col
@@ -66,7 +66,7 @@ class AttributionMixin(_MixinBase):
             if attacker_row is None:
                 return None
             if attacker_row.identity_id:
-                return attacker_row.identity_id
+                return cast(str, attacker_row.identity_id)
             new_uuid = _uuid.uuid4().hex
             now = datetime.now(timezone.utc)
             session.add(

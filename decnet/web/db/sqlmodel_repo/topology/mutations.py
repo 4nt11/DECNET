@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from datetime import datetime, timezone
-from typing import Any, Optional
+from typing import Any, Optional, cast
 
 import orjson
 from sqlalchemy import asc, desc, select, text
@@ -102,7 +102,7 @@ class TopologyMutationsMixin(_MixinBase):
             _ = now
             if row is None:
                 return None
-            return row.model_dump(mode="json")
+            return cast(dict[str, Any], row.model_dump(mode="json"))
 
     async def mark_mutation_applied(self, mutation_id: str) -> None:
         async with self._session() as session:

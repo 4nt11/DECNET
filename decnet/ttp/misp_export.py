@@ -16,7 +16,7 @@ build_fleet_misp_collection → dict  ({"response": [event, ...]})
 from __future__ import annotations
 
 import json
-from typing import Any
+from typing import Any, cast
 
 from misp_stix_converter import ExternalSTIX2toMISPParser
 
@@ -35,7 +35,7 @@ def _parse_bundle(bundle: Any) -> dict[str, Any]:
     event = parser.misp_events
     if event is None:
         return {}
-    return json.loads(event.to_json())
+    return cast(dict[str, Any], json.loads(event.to_json()))
 
 
 def build_attacker_misp_event(

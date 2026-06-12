@@ -5,7 +5,7 @@ from __future__ import annotations
 import json
 import uuid
 from datetime import datetime, timezone
-from typing import Any, Optional
+from typing import Any, Optional, cast
 
 from sqlalchemy import select
 
@@ -47,7 +47,7 @@ class TarpitMixin(_MixinBase):
                 return None
             d = row.model_dump(mode="json")
             d["ports"] = json.loads(d["ports"])
-            return d
+            return cast(dict[str, Any], d)
 
     async def delete_tarpit_rule(self, decky_name: str) -> bool:
         async with self._session() as session:

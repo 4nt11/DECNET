@@ -14,7 +14,7 @@
 from __future__ import annotations
 
 import asyncio
-from typing import Any
+from typing import Any, cast
 
 from decnet.bus.base import (
     BaseBus,
@@ -51,7 +51,7 @@ class _FakeSubscription(Subscription):
         item = await self._queue.get()
         if item is _CLOSE_SENTINEL:
             raise StopAsyncIteration
-        return item
+        return cast(Event, item)
 
     async def _aclose(self) -> None:
         self._bus._unregister(self)

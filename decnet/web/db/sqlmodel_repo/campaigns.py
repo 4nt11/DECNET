@@ -9,7 +9,7 @@ the reads.
 from __future__ import annotations
 
 from datetime import datetime, timezone
-from typing import Any, Optional
+from typing import Any, Optional, cast
 
 from sqlalchemy import desc, func, select, update
 from sqlmodel import col
@@ -36,9 +36,9 @@ class CampaignsMixin(_MixinBase):
                 if campaign is None:
                     return None
                 if campaign.merged_into_uuid is None:
-                    return campaign.model_dump(mode="json")
+                    return cast(dict[str, Any], campaign.model_dump(mode="json"))
                 current_uuid = campaign.merged_into_uuid
-            return campaign.model_dump(mode="json")
+            return cast(dict[str, Any], campaign.model_dump(mode="json"))
 
     async def list_campaigns(
         self, limit: int = 50, offset: int = 0,

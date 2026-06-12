@@ -10,7 +10,7 @@ from __future__ import annotations
 
 import json
 import uuid as _uuid
-from typing import Any, List, Optional
+from typing import Any, List, Optional, cast
 
 from sqlalchemy import desc, func, outerjoin, select
 from sqlmodel import col
@@ -47,7 +47,7 @@ class AttackersCoreMixin(_MixinBase):
                 data = {**data, "uuid": row_uuid}
                 session.add(Attacker(**data))
             await session.commit()
-            return row_uuid
+            return cast(str, row_uuid)
 
     async def get_attacker_uuid_by_ip(self, ip: str) -> Optional[str]:
         """Return the :class:`Attacker` UUID for *ip*, or ``None``.
@@ -61,7 +61,7 @@ class AttackersCoreMixin(_MixinBase):
             result = await session.execute(
                 select(col(Attacker.uuid)).where(Attacker.ip == ip)
             )
-            return result.scalar_one_or_none()
+            return cast(Optional[str], result.scalar_one_or_none())
 
     async def get_attacker_by_uuid(self, uuid: str) -> Optional[dict[str, Any]]:
         async with self._session() as session:

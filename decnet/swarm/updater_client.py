@@ -17,7 +17,7 @@ import asyncio
 import hashlib
 import socket
 import ssl
-from typing import Any, Optional
+from typing import Any, Optional, cast
 
 import httpx
 
@@ -159,12 +159,12 @@ class UpdaterClient:
     async def health(self) -> dict[str, Any]:
         r = await self._require().get("/health")
         r.raise_for_status()
-        return r.json()
+        return cast(dict[str, Any], r.json())
 
     async def releases(self) -> dict[str, Any]:
         r = await self._require().get("/releases")
         r.raise_for_status()
-        return r.json()
+        return cast(dict[str, Any], r.json())
 
     async def update(self, tarball: bytes, sha: str = "") -> httpx.Response:
         """POST /update. Returns the Response so the caller can distinguish

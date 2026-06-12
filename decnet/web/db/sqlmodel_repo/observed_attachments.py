@@ -13,7 +13,7 @@ caller is upgrading ``False/None`` to ``True``.
 from __future__ import annotations
 
 from datetime import datetime, timezone
-from typing import Optional
+from typing import Optional, cast
 
 from sqlalchemy import select
 
@@ -106,4 +106,4 @@ class ObservedAttachmentsMixin(_MixinBase):
                 row.mal_hash_match_at = now
             session.add(row)
             await session.commit()
-            return row.uuid
+            return cast(str, row.uuid)

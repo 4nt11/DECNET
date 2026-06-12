@@ -147,7 +147,7 @@ _MONGO_SET_NAME = os.environ.get("MONGO_REPL_SET", "")  # empty = standalone
 
 def _new_objectid() -> bytes:
     """12-byte BSON ObjectId — fresh per call."""
-    return _seed.fresh_bytes(12)
+    return cast(bytes, _seed.fresh_bytes(12))
 
 # Minimal BSON helpers
 def _bson_str(key: str, val: str) -> bytes:

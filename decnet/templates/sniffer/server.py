@@ -28,7 +28,7 @@ import hashlib
 import os
 import struct
 import time
-from typing import Any
+from typing import Any, cast
 
 from scapy.layers.inet import IP, TCP
 from scapy.sendrecv import sniff
@@ -841,14 +841,14 @@ _dedup_last_cleanup: float = 0.0
 def _dedup_key_for(event_type: str, fields: dict[str, Any]) -> str:
     """Build a dedup fingerprint from the most significant fields."""
     if event_type == "tls_client_hello":
-        return fields.get("ja3", "") + "|" + fields.get("ja4", "")
+        return cast(str, fields.get("ja3", "") + "|" + fields.get("ja4", ""))
     if event_type == "tls_session":
-        return (fields.get("ja3", "") + "|" + fields.get("ja3s", "") +
+        return cast(str, fields.get("ja3", "") + "|" + fields.get("ja3s", "") +
                 "|" + fields.get("ja4", "") + "|" + fields.get("ja4s", ""))
     if event_type == "tls_certificate":
-        return fields.get("subject_cn", "") + "|" + fields.get("issuer", "")
+        return cast(str, fields.get("subject_cn", "") + "|" + fields.get("issuer", ""))
     # tls_resumption or unknown — dedup on mechanisms
-    return fields.get("mechanisms", fields.get("resumption", ""))
+    return cast(str, fields.get("mechanisms", fields.get("resumption", "")))
 
 
 def _is_duplicate(event_type: str, fields: dict[str, Any]) -> bool:

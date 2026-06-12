@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import json
 from datetime import datetime, timezone
-from typing import Any, Optional
+from typing import Any, Optional, cast
 
 from sqlalchemy import desc, func, select, update
 
@@ -26,7 +26,7 @@ class CanaryMixin(_MixinBase):
             )
             row = existing.scalar_one_or_none()
             if row:
-                return row.model_dump(mode="json")
+                return cast(dict[str, Any], row.model_dump(mode="json"))
             row = CanaryBlob(**data)
             session.add(row)
             await session.commit()
@@ -155,7 +155,7 @@ class CanaryMixin(_MixinBase):
                 .values(state=state, last_error=last_error)
             )
             await session.commit()
-            return result.rowcount > 0
+            return cast(bool, result.rowcount > 0)
 
     async def record_canary_trigger(self, data: dict[str, Any]) -> str:
         # Persist the trigger row + bump the token's counters in the same
@@ -204,4 +204,4 @@ class CanaryMixin(_MixinBase):
                 .values(attacker_id=attacker_id)
             )
             await session.commit()
-            return result.rowcount > 0
+            return cast(bool, result.rowcount > 0)

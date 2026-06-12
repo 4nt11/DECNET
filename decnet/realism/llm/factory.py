@@ -19,7 +19,7 @@ graph cycle-free and the env contract auditable in one place.
 from __future__ import annotations
 
 import os
-from typing import Any
+from typing import Any, cast
 
 from decnet.realism.llm.base import LLMBackend
 
@@ -45,7 +45,7 @@ def get_llm(*, model: str | None = None, **kwargs: Any) -> LLMBackend:
         from decnet.realism.llm.config import get_cached_backend
         cached = get_cached_backend()
         if cached is not None:
-            return cached
+            return cast(LLMBackend, cached)
 
     backend_key = os.environ.get("DECNET_REALISM_LLM", "ollama").lower()
 

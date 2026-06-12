@@ -20,7 +20,7 @@ import json
 import secrets
 from dataclasses import dataclass
 from datetime import datetime, timezone
-from typing import Any, Optional, Sequence
+from typing import Any, Optional, Sequence, cast
 
 from decnet.realism import personas_pool
 from decnet.realism.personas import EmailPersona, parse_personas
@@ -256,7 +256,7 @@ def _persona_by_name(
     for decky in enriched:
         for persona in decky.get("_realism_personas") or []:
             if persona.name == name:
-                return persona
+                return cast(EmailPersona, persona)
     return None
 
 

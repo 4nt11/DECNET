@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from datetime import datetime, timedelta, timezone
-from typing import Any, Optional
+from typing import Any, Optional, cast
 
 from sqlalchemy import desc, func, select, update
 
@@ -92,7 +92,7 @@ class RealismMixin(_MixinBase):
             row = result.scalars().first()
             if row is None:
                 return None
-            return row.model_dump(mode="json")
+            return cast(dict[str, Any], row.model_dump(mode="json"))
 
     async def get_realism_config(
         self, key: str,
@@ -103,7 +103,7 @@ class RealismMixin(_MixinBase):
             row = result.scalars().first()
             if row is None:
                 return None
-            return row.model_dump(mode="json")
+            return cast(dict[str, Any], row.model_dump(mode="json"))
 
     async def set_realism_config(
         self, key: str, value: str,
@@ -157,4 +157,4 @@ class RealismMixin(_MixinBase):
             row = result.scalars().first()
             if row is None:
                 return None
-            return row.model_dump(mode="json")
+            return cast(dict[str, Any], row.model_dump(mode="json"))

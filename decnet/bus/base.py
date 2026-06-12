@@ -22,7 +22,7 @@ import asyncio
 import time
 import uuid
 from dataclasses import dataclass, field
-from typing import Any, AsyncIterator
+from typing import Any, AsyncIterator, cast
 
 EVENT_SCHEMA_VERSION = 1
 
@@ -203,4 +203,4 @@ async def _next_or_stop(queue: "asyncio.Queue[Any]") -> Event:
     item = await queue.get()
     if item is _CLOSE_SENTINEL:
         raise StopAsyncIteration
-    return item
+    return cast(Event, item)

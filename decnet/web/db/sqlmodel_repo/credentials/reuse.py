@@ -7,7 +7,7 @@ from __future__ import annotations
 import json
 import uuid as _uuid
 from datetime import datetime, timezone
-from typing import Any, List, Optional
+from typing import Any, List, Optional, cast
 
 from sqlalchemy import desc, func, select
 from sqlmodel import col
@@ -137,7 +137,7 @@ class CredentialReuseMixin(_MixinBase):
             d = existing.model_dump(mode="json")
             d["inserted"] = False
             d["changed"] = changed
-            return d
+            return cast(dict[str, Any], d)
 
     async def find_credential_reuse_candidates(
         self, min_targets: int = 2
@@ -236,7 +236,7 @@ class CredentialReuseMixin(_MixinBase):
                 except (json.JSONDecodeError, TypeError):
                     d[key] = []
             await self._enrich_with_secret(session, [d])
-            return d
+            return cast(dict[str, Any], d)
 
     @staticmethod
     async def _enrich_with_secret(

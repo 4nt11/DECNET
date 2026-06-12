@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import json
 from datetime import datetime, timezone
-from typing import Any, List, Optional
+from typing import Any, List, Optional, cast
 
 from sqlalchemy import desc, func, or_, select, update
 from sqlalchemy.exc import IntegrityError
@@ -67,7 +67,7 @@ class CredentialsCoreMixin(_MixinBase):
                     existing.outcome = payload["outcome"]
                 session.add(existing)
                 await session.commit()
-                return existing.id
+                return cast(int, existing.id)
             row = Credential(
                 attacker_ip=payload["attacker_ip"],
                 decky_name=payload["decky_name"],
@@ -103,7 +103,7 @@ class CredentialsCoreMixin(_MixinBase):
                         existing2.outcome = payload["outcome"]
                     session2.add(existing2)
                     await session2.commit()
-                    return existing2.id
+                    return cast(int, existing2.id)
             await session.refresh(row)
             return row.id  # type: ignore[return-value]
 

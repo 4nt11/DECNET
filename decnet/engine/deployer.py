@@ -9,6 +9,7 @@ import shutil
 import subprocess  # nosec B404
 import time
 from pathlib import Path
+from typing import cast
 
 import anyio
 import docker
@@ -853,7 +854,7 @@ async def _resolve_swarm_host(repo, host_uuid: str) -> dict:
         raise ValueError(
             f"topology pinned to unknown swarm host {host_uuid!r}"
         )
-    return host
+    return cast(dict, host)
 
 
 async def _deploy_on_agent(repo, topology_id: str, hydrated: dict) -> None:

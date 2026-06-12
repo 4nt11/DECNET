@@ -12,7 +12,7 @@ import signal
 import subprocess  # nosec B404
 import sys
 from pathlib import Path
-from typing import Any, Callable, Optional
+from typing import Any, Callable, Optional, cast
 
 import typer
 from rich.console import Console
@@ -91,7 +91,7 @@ def _is_running(match_fn) -> int | None:
         try:
             cmd = proc.info["cmdline"]
             if cmd and match_fn(cmd):
-                return proc.info["pid"]
+                return cast(int, proc.info["pid"])
         except (psutil.NoSuchProcess, psutil.AccessDenied):
             continue
     return None

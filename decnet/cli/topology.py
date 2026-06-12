@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import asyncio
-from typing import Optional
+from typing import Any, Optional, cast
 
 import typer
 from rich.console import Console
@@ -96,9 +96,9 @@ def _list() -> None:
     """List all topologies."""
     _require_master_mode("topology list")
 
-    async def _go() -> list[dict]:
+    async def _go() -> list[dict[Any, Any]]:
         repo = await _repo()
-        return await repo.list_topologies()
+        return cast(list[dict[Any, Any]], await repo.list_topologies())
 
     rows = asyncio.run(_go())
     if not rows:
@@ -140,7 +140,7 @@ def _show(topology_id: str = typer.Argument(..., help="Topology id")) -> None:
 
     def _decky_name(d: dict) -> str:
         cfg = d.get("decky_config") or {}
-        return cfg.get("name") or d.get("name") or d["uuid"]
+        return cast(str, cfg.get("name") or d.get("name") or d["uuid"])
 
     deckies_by_name = {_decky_name(d): d for d in hydrated["deckies"]}
     edges_by_lan: dict[str, list[dict]] = {}
@@ -296,9 +296,9 @@ def _mutate(
 
     async def _go() -> str:
         repo = await _repo()
-        return await repo.enqueue_topology_mutation(
+        return cast(str, await repo.enqueue_topology_mutation(
             topology_id, op, payload, expected_version=expected_version,
-        )
+        ))
 
     mid = asyncio.run(_go())
     _console.print(
@@ -319,9 +319,9 @@ def _mutations(
     """List queued/applied mutations for a topology."""
     _require_master_mode("topology mutations")
 
-    async def _go() -> list[dict]:
+    async def _go() -> list[dict[Any, Any]]:
         repo = await _repo()
-        return await repo.list_topology_mutations(topology_id, state=state)
+        return cast(list[dict[Any, Any]], await repo.list_topology_mutations(topology_id, state=state))
 
     rows = asyncio.run(_go())
     if not rows:

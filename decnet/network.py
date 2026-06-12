@@ -12,6 +12,7 @@ Handles:
 import os
 import subprocess  # nosec B404
 from ipaddress import IPv4Address, IPv4Interface, IPv4Network
+from typing import cast
 
 import docker
 
@@ -38,7 +39,7 @@ def detect_interface() -> str:
     for line in result.stdout.splitlines():
         parts = line.split()
         if "dev" in parts:
-            return parts[parts.index("dev") + 1]
+            return cast(str, parts[parts.index("dev") + 1])
     raise RuntimeError("Could not auto-detect network interface. Use --interface.")
 
 
@@ -79,7 +80,7 @@ def get_host_ip(interface: str) -> str:
     for line in result.stdout.splitlines():
         line = line.strip()
         if line.startswith("inet ") and not line.startswith("inet6"):
-            return line.split()[1].split("/")[0]
+            return cast(str, line.split()[1].split("/")[0])
     raise RuntimeError(f"Could not determine host IP for interface {interface}.")
 
 
@@ -297,7 +298,7 @@ def create_bridge_network(
         pools = (net.attrs.get("IPAM") or {}).get("Config") or []
         cur = pools[0] if pools else {}
         if net.attrs.get("Driver") == "bridge" and cur.get("Subnet") == subnet:
-            return net.id
+            return cast(str, net.id)
         for cid in (net.attrs.get("Containers") or {}):
             try:
                 net.disconnect(cid, force=True)
@@ -332,7 +333,7 @@ def create_bridge_network(
             pool_configs=[docker.types.IPAMPool(subnet=subnet)],
         ),
     )
-    return net.id
+    return cast(str, net.id)
 
 
 def remove_bridge_network(client: docker.DockerClient, name: str) -> None:
@@ -480,7 +481,7 @@ def get_container_pid(container_name: str) -> int:
     pid = container.attrs["State"]["Pid"]
     if not pid:
         raise LookupError(f"container {container_name!r} is not running (PID=0)")
-    return pid
+    return cast(int, pid)
 
 
 def get_container_veth(container_name: str) -> str:
@@ -507,7 +508,7 @@ def get_container_veth(container_name: str) -> str:
         if line.startswith(f"{peer_index}:"):
             # Format: "42: veth3a4b5c@if41: <BROADCAST,...>"
             iface = line.split(":")[1].strip().split("@")[0]
-            return iface
+            return cast(str, iface)
     raise LookupError(
         f"no host veth found for container {container_name!r} (peer ifindex {peer_index})"
     )

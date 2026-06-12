@@ -190,6 +190,7 @@ ignore_missing_imports = true
 check_untyped_defs = true
 warn_redundant_casts = true
 warn_unused_ignores = true
+warn_return_any = true
 
 [[tool.mypy.overrides]]
 # The pydantic plugin types SQLModel class-level field descriptors as their

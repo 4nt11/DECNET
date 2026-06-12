@@ -18,7 +18,7 @@ from __future__ import annotations
 import hashlib
 import socket
 import ssl
-from typing import Any
+from typing import Any, cast
 
 from cryptography import x509
 from cryptography.hazmat.backends import default_backend
@@ -42,7 +42,7 @@ def _iso_utc(dt: Any) -> str:
     and ``not_valid_before_utc`` (timezone-aware) — prefer the latter
     when available so we always emit explicit-Z ISO strings.
     """
-    return dt.strftime("%Y-%m-%dT%H:%M:%SZ")
+    return cast(str, dt.strftime("%Y-%m-%dT%H:%M:%SZ"))
 
 
 def _extract_sans(cert: x509.Certificate) -> list[str]:

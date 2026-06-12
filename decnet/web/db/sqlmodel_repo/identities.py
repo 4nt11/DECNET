@@ -9,7 +9,7 @@ the reads.
 from __future__ import annotations
 
 from datetime import datetime, timezone
-from typing import Any, Optional
+from typing import Any, Optional, cast
 
 from sqlalchemy import desc, func, select, update
 from sqlmodel import col
@@ -42,10 +42,10 @@ class IdentitiesMixin(_MixinBase):
                 if identity is None:
                     return None
                 if identity.merged_into_uuid is None:
-                    return identity.model_dump(mode="json")
+                    return cast(dict[str, Any], identity.model_dump(mode="json"))
                 current_uuid = identity.merged_into_uuid
             # Hit the hop cap — surface what we have rather than recurse.
-            return identity.model_dump(mode="json")
+            return cast(dict[str, Any], identity.model_dump(mode="json"))
 
     async def list_identities(
         self, limit: int = 50, offset: int = 0,

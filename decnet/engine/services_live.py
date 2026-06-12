@@ -24,7 +24,7 @@ from __future__ import annotations
 
 import subprocess  # nosec B404
 from pathlib import Path
-from typing import Any, Literal, Optional
+from typing import Any, Literal, Optional, cast
 
 import anyio
 
@@ -217,7 +217,7 @@ async def _topology_decky(
         cfg = d.get("decky_config") or {}
         name = cfg.get("name") or d.get("name")
         if name == decky_name:
-            return d
+            return cast(dict[str, Any], d)
     raise ServiceNotFoundError(
         f"decky {decky_name!r} is not in topology {topology_id!r}"
     )
@@ -343,7 +343,7 @@ def _fleet_state_or_raise() -> tuple[Any, Path]:
         raise ServiceMutationError(
             "no fleet state on disk — run `decnet up` first"
         )
-    return state
+    return cast(tuple[Any, Path], state)
 
 
 def _fleet_find_decky(config: Any, decky_name: str) -> Any:

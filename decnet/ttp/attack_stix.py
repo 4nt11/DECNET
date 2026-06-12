@@ -39,7 +39,7 @@ from dataclasses import dataclass
 from functools import lru_cache
 from pathlib import Path
 from threading import Lock
-from typing import TYPE_CHECKING, Final
+from typing import TYPE_CHECKING, Final, cast
 
 if TYPE_CHECKING:
     from mitreattack.stix20 import MitreAttackData
@@ -310,7 +310,7 @@ def subtechnique_parent_name(technique_id: str) -> str | None:
     )
     if not parents:
         return None
-    return parents[0]["object"].name
+    return cast(str, parents[0]["object"].name)
 
 
 def is_subtechnique(technique_id: str) -> bool:
@@ -335,7 +335,7 @@ def tactic_id_for_short_name(short_name: str) -> str | None:
         return None
     for ref in obj.get("external_references", []):
         if ref.get("source_name") == "mitre-attack":
-            return ref.get("external_id")
+            return cast(str | None, ref.get("external_id"))
     return None
 
 

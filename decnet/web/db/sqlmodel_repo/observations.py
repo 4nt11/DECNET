@@ -21,7 +21,7 @@ not validate values — that happens at construction time by the BEHAVE
 from __future__ import annotations
 
 import uuid as _uuid
-from typing import Any, Optional
+from typing import Any, Optional, cast
 
 from sqlalchemy import desc, func, select
 from sqlmodel import col
@@ -85,7 +85,7 @@ class ObservationsMixin(_MixinBase):
                 row_data = {**data, "id": row_id}
                 session.add(ObservationRow(**row_data))
             await session.commit()
-            return row_id
+            return cast(str, row_id)
 
     async def latest_observation_per_primitive(
         self, attacker_uuid: str,
@@ -178,7 +178,7 @@ class ObservationsMixin(_MixinBase):
             row = (await session.execute(stmt)).scalar_one_or_none()
             if not row:
                 return None
-            return row.model_dump(mode="json")
+            return cast(dict[str, Any], row.model_dump(mode="json"))
 
     async def observations_for_identity_primitive(
         self, identity_uuid: str, primitive: str,

@@ -10,7 +10,7 @@ from __future__ import annotations
 
 import uuid as _uuid
 from datetime import datetime, timezone
-from typing import Any, Optional
+from typing import Any, Optional, cast
 
 from sqlalchemy import desc, or_, select
 from sqlmodel import col
@@ -44,7 +44,7 @@ class AttackerIntelMixin(_MixinBase):
                 row_uuid = _uuid.uuid4().hex
                 session.add(AttackerIntel(uuid=row_uuid, **data))
             await session.commit()
-            return row_uuid
+            return cast(str, row_uuid)
 
     async def get_attacker_intel_row_by_uuid(
         self,
@@ -54,7 +54,7 @@ class AttackerIntelMixin(_MixinBase):
             result = await session.execute(
                 select(AttackerIntel).where(AttackerIntel.attacker_uuid == uuid)
             )
-            return result.scalar_one_or_none()
+            return cast(Optional[AttackerIntel], result.scalar_one_or_none())
 
     async def get_attacker_intel_by_uuid(
         self,
@@ -67,7 +67,7 @@ class AttackerIntelMixin(_MixinBase):
             row = result.scalar_one_or_none()
             if not row:
                 return None
-            return row.model_dump(mode="json")
+            return cast(dict[str, Any], row.model_dump(mode="json"))
 
     async def get_unenriched_attackers(
         self, limit: int = 100,

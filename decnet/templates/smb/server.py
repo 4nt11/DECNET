@@ -22,6 +22,7 @@ from __future__ import annotations
 import asyncio
 import os
 import struct
+from typing import cast
 
 import instance_seed
 from ntlmssp import find_ntlmssp, parse_type3
@@ -184,7 +185,7 @@ def _negotiate_response(message_id: int) -> bytes:
         + struct.pack("<H", 0)              # SecurityBufferLength
         + struct.pack("<I", 0)              # Reserved2
     )
-    return _smb2_header(SMB2_NEGOTIATE, STATUS_SUCCESS, message_id) + body
+    return cast(bytes, _smb2_header(SMB2_NEGOTIATE, STATUS_SUCCESS, message_id) + body)
 
 
 def _session_setup_response(message_id: int, session_id: int, sec_blob: bytes, status: int) -> bytes:

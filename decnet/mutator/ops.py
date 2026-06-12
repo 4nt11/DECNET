@@ -25,7 +25,7 @@ Design notes
 from __future__ import annotations
 
 import json
-from typing import Any, Awaitable, Callable, Optional
+from typing import Any, Awaitable, Callable, Optional, cast
 
 from decnet.logging import get_logger
 from decnet.topology.allocator import IPAllocator, reserved_subnets, SubnetAllocator
@@ -301,7 +301,7 @@ async def _live_topology_or_none(
             topology_id,
         )
         return None
-    return topology
+    return cast(dict[str, Any], topology)
 
 
 async def _rerender_compose(repo: Any, topology_id: str) -> None:

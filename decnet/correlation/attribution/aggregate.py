@@ -25,7 +25,7 @@ from __future__ import annotations
 
 from collections import Counter
 from dataclasses import dataclass
-from typing import Any, Sequence
+from typing import Any, Sequence, cast
 
 from decnet.correlation.attribution import _thresholds as _T
 
@@ -250,7 +250,7 @@ def _coef_of_variation(values: Sequence[float], mean: float) -> float:
     stdev = variance ** 0.5
     if mean == 0:
         return 0.0 if stdev == 0 else 1e9
-    return stdev / abs(mean)
+    return cast(float, stdev / abs(mean))
 
 
 def _safe_float(value: Any) -> float:

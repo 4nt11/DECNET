@@ -8,7 +8,7 @@ import os
 import traceback
 import uuid
 from contextlib import asynccontextmanager
-from typing import Any, AsyncGenerator, Optional
+from typing import Any, AsyncGenerator, Optional, cast
 
 from fastapi import FastAPI, Request, status
 from fastapi.exceptions import RequestValidationError
@@ -306,7 +306,7 @@ class _ContentTypeMiddleware(BaseHTTPMiddleware):
                         status_code=415,
                         media_type="text/plain",
                     )
-        return await call_next(request)
+        return cast(StarletteResponse, await call_next(request))
 
 
 app.add_middleware(_ContentTypeMiddleware)

@@ -205,7 +205,7 @@ def _seed_dict_to_rfc822(entry: dict) -> str | None:
     date = str(entry.get("date") or "")
     body = entry["body"]
     if "\r\n\r\n" in body or "\n\n" in body:
-        return body  # already a full RFC 822 message
+        return cast(str, body)  # already a full RFC 822 message
     return (
         f"Date: {date}\r\n"
         f"From: {from_name} <{from_addr}>\r\n"

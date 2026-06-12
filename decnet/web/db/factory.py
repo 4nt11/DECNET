@@ -6,7 +6,7 @@ Repository factory — selects a :class:`BaseRepository` implementation based on
 from __future__ import annotations
 
 import os
-from typing import Any
+from typing import Any, cast
 
 from decnet.web.db.repository import BaseRepository
 
@@ -32,4 +32,4 @@ def get_repository(**kwargs: Any) -> BaseRepository:
         raise ValueError(f"Unsupported database type: {db_type}")
 
     from decnet.telemetry import wrap_repository
-    return wrap_repository(repo)
+    return cast(BaseRepository, wrap_repository(repo))

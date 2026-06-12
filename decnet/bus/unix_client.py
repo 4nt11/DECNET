@@ -26,7 +26,7 @@ import asyncio
 import contextlib
 import os
 import pathlib
-from typing import Any
+from typing import Any, cast
 
 from decnet.bus import protocol
 from decnet.bus.base import (
@@ -61,7 +61,7 @@ class _UnixSubscription(Subscription):
         item = await self._queue.get()
         if item is _CLOSE_SENTINEL:
             raise StopAsyncIteration
-        return item
+        return cast(Event, item)
 
     async def _aclose(self) -> None:
         await self._bus._unregister(self)

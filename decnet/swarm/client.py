@@ -23,7 +23,7 @@ import pathlib
 import socket
 import ssl
 from dataclasses import dataclass
-from typing import Any, Optional
+from typing import Any, Optional, cast
 
 import httpx
 
@@ -229,12 +229,12 @@ class AgentClient:
     async def health(self) -> dict[str, Any]:
         resp = await self._require_client().get("/health")
         resp.raise_for_status()
-        return resp.json()
+        return cast(dict[str, Any], resp.json())
 
     async def status(self) -> dict[str, Any]:
         resp = await self._require_client().get("/status")
         resp.raise_for_status()
-        return resp.json()
+        return cast(dict[str, Any], resp.json())
 
     async def deploy(
         self,
@@ -254,7 +254,7 @@ class AgentClient:
         # need for the long deploy timeout here.
         resp = await self._require_client().post("/deploy", json=body)
         resp.raise_for_status()
-        return resp.json()
+        return cast(dict[str, Any], resp.json())
 
     async def mutate(
         self,
@@ -271,20 +271,20 @@ class AgentClient:
         # Worker /mutate is async (202): control-timeout is right.
         resp = await self._require_client().post("/mutate", json=body)
         resp.raise_for_status()
-        return resp.json()
+        return cast(dict[str, Any], resp.json())
 
     async def teardown(self, decky_id: Optional[str] = None) -> dict[str, Any]:
         resp = await self._require_client().post(
             "/teardown", json={"decky_id": decky_id}
         )
         resp.raise_for_status()
-        return resp.json()
+        return cast(dict[str, Any], resp.json())
 
     async def self_destruct(self) -> dict[str, Any]:
         """Trigger the worker to stop services and wipe its install."""
         resp = await self._require_client().post("/self-destruct")
         resp.raise_for_status()
-        return resp.json()
+        return cast(dict[str, Any], resp.json())
 
     # ------------------------------------------------------------ topology
 
@@ -309,7 +309,7 @@ class AgentClient:
         finally:
             self._require_client().timeout = old
         resp.raise_for_status()
-        return resp.json()
+        return cast(dict[str, Any], resp.json())
 
     async def teardown_topology(self, topology_id: str) -> dict[str, Any]:
         """Ask the agent to dismantle the named topology."""
@@ -323,13 +323,13 @@ class AgentClient:
         finally:
             self._require_client().timeout = old
         resp.raise_for_status()
-        return resp.json()
+        return cast(dict[str, Any], resp.json())
 
     async def get_topology_state(self) -> dict[str, Any]:
         """Snapshot of the agent's applied topology + live docker state."""
         resp = await self._require_client().get("/topology/state")
         resp.raise_for_status()
-        return resp.json()
+        return cast(dict[str, Any], resp.json())
 
     # -------------------------------------------------------------- diagnostics
 

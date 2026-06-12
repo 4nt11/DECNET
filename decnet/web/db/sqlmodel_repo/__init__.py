@@ -18,7 +18,7 @@ import os
 
 import orjson
 import uuid
-from typing import Any, Optional, List
+from typing import Any, Optional, List, cast
 
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncEngine, AsyncSession, async_sessionmaker
@@ -183,7 +183,7 @@ class SQLModelRepository(
             result = await session.execute(statement)
             state = result.scalar_one_or_none()
             if state:
-                return json.loads(state.value)
+                return cast(dict[str, Any], json.loads(state.value))
             return None
 
     async def set_state(self, key: str, value: Any) -> None:  # noqa: ANN401

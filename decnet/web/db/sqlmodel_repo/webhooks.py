@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from datetime import datetime, timezone
-from typing import Any, Optional
+from typing import Any, Optional, cast
 
 from sqlalchemy import select, update
 from sqlmodel import col
@@ -65,7 +65,7 @@ class WebhooksMixin(_MixinBase):
                 .values(**patch)
             )
             await session.commit()
-            return result.rowcount > 0
+            return cast(bool, result.rowcount > 0)
 
     async def delete_webhook_subscription(self, uuid: str) -> bool:
         async with self._session() as session:

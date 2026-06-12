@@ -14,7 +14,7 @@ import hashlib
 import struct
 import time
 from collections import deque
-from typing import Any, Callable
+from typing import Any, Callable, cast
 
 from decnet.logging import get_logger
 from decnet.prober.tcpfp import _extract_options_order
@@ -1058,18 +1058,18 @@ class SnifferEngine:
 
     def _dedup_key_for(self, event_type: str, fields: dict[str, Any]) -> str:
         if event_type == "tls_client_hello":
-            return fields.get("ja3", "") + "|" + fields.get("ja4", "")
+            return cast(str, fields.get("ja3", "") + "|" + fields.get("ja4", ""))
         if event_type == "tls_session":
-            return (fields.get("ja3", "") + "|" + fields.get("ja3s", "") +
+            return cast(str, fields.get("ja3", "") + "|" + fields.get("ja3s", "") +
                     "|" + fields.get("ja4", "") + "|" + fields.get("ja4s", ""))
         if event_type == "tls_certificate":
-            return fields.get("subject_cn", "") + "|" + fields.get("issuer", "")
+            return cast(str, fields.get("subject_cn", "") + "|" + fields.get("issuer", ""))
         if event_type == "tcp_syn_fingerprint":
             # Dedupe per (OS signature, options layout, sequence-pattern
             # classification). Including ipid_class/isn_class lets each
             # transition (unknown → random/incremental/zero/constant) emit
             # exactly one fresh event as samples accumulate.
-            return (
+            return cast(str,
                 fields.get("os_guess", "")
                 + "|" + fields.get("options_sig", "")
                 + "|" + fields.get("ipid_class", "")
@@ -1080,14 +1080,14 @@ class SnifferEngine:
             # excluded so a port scanner rotating source ports only produces
             # one timing event per dedup window. Behavior cadence doesn't
             # need per-ephemeral-port fidelity.
-            return fields.get("dst_ip", "") + "|" + fields.get("dst_port", "")
+            return cast(str, fields.get("dst_ip", "") + "|" + fields.get("dst_port", ""))
         if event_type == "quic_client_hello":
-            return fields.get("src_ip", "") + "|" + fields.get("ja4_quic", "")
+            return cast(str, fields.get("src_ip", "") + "|" + fields.get("ja4_quic", ""))
         if event_type == "http_request_fingerprint":
-            return fields.get("src_ip", "") + "|" + fields.get("ja4h", "")
+            return cast(str, fields.get("src_ip", "") + "|" + fields.get("ja4h", ""))
         if event_type in ("http2_settings", "http3_settings"):
-            return fields.get("src_ip", "") + "|" + str(fields.get("settings_hash", ""))
-        return fields.get("mechanisms", fields.get("resumption", ""))
+            return cast(str, fields.get("src_ip", "") + "|" + str(fields.get("settings_hash", "")))
+        return cast(str, fields.get("mechanisms", fields.get("resumption", "")))
 
     def _is_duplicate(self, event_type: str, fields: dict[str, Any]) -> bool:
         if self._dedup_ttl <= 0:
