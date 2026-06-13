@@ -237,21 +237,27 @@ const DeckyFleet: React.FC<FleetProps> = ({ searchQuery = '' }) => {
         )}
       </div>
 
-      <DeployWizard
-        open={showDeploy}
-        archetypes={archetypes}
-        fleetSize={deckies.length}
-        onClose={() => setShowDeploy(false)}
-        onComplete={(count) => {
-          setShowDeploy(false);
-          void refresh();
-          push({
-            text: `DEPLOYED · ${count} DECK${count === 1 ? 'Y' : 'IES'}`,
-            tone: 'matrix',
-            icon: 'check-circle',
-          });
-        }}
-      />
+      {/* Mounted only while open so closing tears down the wizard's hooks
+          (lifecycle polling, the auto-close effect). Leaving it permanently
+          mounted kept those effects alive after close and, combined with the
+          inline onComplete below, drove a runaway /deckies + toast loop. */}
+      {showDeploy && (
+        <DeployWizard
+          open={showDeploy}
+          archetypes={archetypes}
+          fleetSize={deckies.length}
+          onClose={() => setShowDeploy(false)}
+          onComplete={(count) => {
+            setShowDeploy(false);
+            void refresh();
+            push({
+              text: `DEPLOYED · ${count} DECK${count === 1 ? 'Y' : 'IES'}`,
+              tone: 'matrix',
+              icon: 'check-circle',
+            });
+          }}
+        />
+      )}
 
       <IntervalEditor
         key={intervalEditor?.name ?? 'closed'}

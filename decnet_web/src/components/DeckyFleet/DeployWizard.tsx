@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { PlusCircle } from '../../icons';
 import { useLifecyclePolling } from '../../hooks/useLifecyclePolling';
 import api from '../../utils/api';
@@ -197,11 +197,19 @@ export const DeployWizard: React.FC<Props> = ({
   );
   const deployOk = lifecycleDone && deployFailures.length === 0;
 
+  // Fire onComplete exactly once per deploy. onComplete is an inline arrow in
+  // the parent (new ref every render) and it triggers a parent refresh, so
+  // without this guard the effect re-runs on every re-render and reschedules
+  // onComplete forever — a runaway loop of /deckies refetches + toasts. Reset
+  // in startDeploy so a subsequent deploy can complete again.
+  const completedRef = useRef(false);
+
   // When every row reaches terminal status, auto-close on full success
   // (or stay open so the operator can read failures).
   useEffect(() => {
-    if (!lifecycleDone) return;
+    if (!lifecycleDone || completedRef.current) return;
     if (deployFailures.length === 0) {
+      completedRef.current = true;
       const t = window.setTimeout(() => onComplete(count), 700);
       return () => window.clearTimeout(t);
     }
@@ -215,6 +223,7 @@ export const DeployWizard: React.FC<Props> = ({
     setDeployErr(null);
     setLog([]);
     setLifecycleIds([]);
+    completedRef.current = false;
     setDeploying(true);
     // Roll the per-service forms into the compact payload the server
     // expects — empty values dropped, types coerced where the schema
