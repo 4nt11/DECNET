@@ -128,4 +128,44 @@ describe('DeployWizard', () => {
     await new Promise((r) => setTimeout(r, 1200));
     expect(onComplete).toHaveBeenCalledTimes(1);
   });
+
+  it('still closes when re-renders land during the 700ms close countdown', async () => {
+    // Regression: the close timer must survive re-renders inside its window.
+    // A naive completedRef guard whose effect cleanup cleared the timer would
+    // cancel the pending onComplete on the first in-window re-render and the
+    // wizard would never close. The timer lives in a ref to prevent that.
+    (api.post as Mock).mockResolvedValue({
+      data: { lifecycle_ids: ['lc-1'], message: 'ok', mode: 'unihost' },
+    });
+    (api.get as Mock).mockResolvedValue({
+      data: { rows: [{
+        id: 'lc-1', decky_name: 'qa-01', host_uuid: null, operation: 'deploy',
+        status: 'succeeded', error: null,
+        started_at: '2026-01-01T00:00:00', updated_at: '2026-01-01T00:00:00',
+        completed_at: '2026-01-01T00:00:00',
+      }] },
+    });
+
+    const onComplete = vi.fn();
+    const user = userEvent.setup();
+    const props = { open: true, onClose: () => {}, archetypes, fleetSize: 0 };
+    const { rerender } = render(
+      <DeployWizard {...props} onComplete={() => onComplete()} />,
+    );
+
+    await user.click(screen.getByText('Web Server'));
+    await user.click(screen.getByText('NEXT →'));
+    await user.click(screen.getByText('NEXT →'));
+    await user.click(screen.getByText('NEXT →'));
+    await user.click(screen.getByText('ESTABLISH FLEET'));
+
+    // Hammer fresh-onComplete re-renders across the close countdown window.
+    for (let i = 0; i < 8; i++) {
+      rerender(<DeployWizard {...props} onComplete={() => onComplete()} />);
+      await new Promise((r) => setTimeout(r, 40));
+    }
+
+    // The close must still fire exactly once despite the in-window churn.
+    await waitFor(() => expect(onComplete).toHaveBeenCalledTimes(1), { timeout: 3000 });
+  });
 });

@@ -177,12 +177,24 @@ export const DeployWizard: React.FC<Props> = ({
   // Atmospheric backdrop (one-shot, decoupled from real progress now
   // that the lifecycle rows carry truth).  Runs once when DEPLOYING
   // begins so the operator sees activity before the first poll lands.
+  // The guard is load-bearing: effectiveServices is recomputed each render
+  // (and lifecycle polling re-renders every 2s during deploy), so without it
+  // the effect re-ran and restarted the line sequence mid-stream, duplicating
+  // the transcript. Reset in startDeploy. (Effect deps kept for lint; the ref
+  // is what enforces once-per-deploy.)
+  const placeholderStartedRef = useRef(false);
   useEffect(() => {
     if (step !== 3 || !deploying || lifecycleIds.length === 0) return;
+    if (placeholderStartedRef.current) return;
+    placeholderStartedRef.current = true;
     const msgs = PLACEHOLDER_LINES(effectiveArchetypeName, effectiveServices, count, fleetSize);
     let i = 0;
     const t = window.setInterval(() => {
-      setLog((prev) => [...prev, msgs[i]]);
+      // Capture the line NOW. React 18 auto-batches setInterval updaters, so a
+      // `prev => [...prev, msgs[i]]` updater runs after i++ has advanced i,
+      // reading the wrong index — skipping some lines and duplicating others.
+      const line = msgs[i];
+      setLog((prev) => [...prev, line]);
       i++;
       if (i >= msgs.length) window.clearInterval(t);
     }, 420);
@@ -197,12 +209,16 @@ export const DeployWizard: React.FC<Props> = ({
   );
   const deployOk = lifecycleDone && deployFailures.length === 0;
 
-  // Fire onComplete exactly once per deploy. onComplete is an inline arrow in
-  // the parent (new ref every render) and it triggers a parent refresh, so
-  // without this guard the effect re-runs on every re-render and reschedules
-  // onComplete forever — a runaway loop of /deckies refetches + toasts. Reset
-  // in startDeploy so a subsequent deploy can complete again.
+  // Schedule the auto-close exactly once per deploy. onComplete is an inline
+  // arrow in the parent (new ref every render) and it triggers a parent
+  // refresh, so the effect re-runs on every re-render. completedRef gates
+  // re-entry so we never reschedule (which would loop /deckies refetches +
+  // toasts). Crucially, the timer lives in a ref — NOT the effect's cleanup —
+  // so a re-render inside the 700ms window (e.g. the [OK] terminal-log
+  // append) can't clear the pending close and leave the wizard stuck open.
+  // Reset in startDeploy so a subsequent deploy can complete again.
   const completedRef = useRef(false);
+  const closeTimerRef = useRef<number | undefined>(undefined);
 
   // When every row reaches terminal status, auto-close on full success
   // (or stay open so the operator can read failures).
@@ -210,10 +226,15 @@ export const DeployWizard: React.FC<Props> = ({
     if (!lifecycleDone || completedRef.current) return;
     if (deployFailures.length === 0) {
       completedRef.current = true;
-      const t = window.setTimeout(() => onComplete(count), 700);
-      return () => window.clearTimeout(t);
+      closeTimerRef.current = window.setTimeout(() => onComplete(count), 700);
     }
   }, [lifecycleDone, deployFailures.length, count, onComplete]);
+
+  // Clear a pending auto-close only on unmount (e.g. CANCEL mid-countdown),
+  // never on the re-renders that would otherwise cancel a successful close.
+  useEffect(() => () => {
+    if (closeTimerRef.current !== undefined) window.clearTimeout(closeTimerRef.current);
+  }, []);
 
   const canNext = step === 0
     ? (pickMode === 'archetype' ? !!archetype : selectedServices.length > 0)
@@ -224,6 +245,7 @@ export const DeployWizard: React.FC<Props> = ({
     setLog([]);
     setLifecycleIds([]);
     completedRef.current = false;
+    placeholderStartedRef.current = false;
     setDeploying(true);
     // Roll the per-service forms into the compact payload the server
     // expects — empty values dropped, types coerced where the schema
