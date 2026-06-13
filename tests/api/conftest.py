@@ -211,6 +211,47 @@ def mock_state_file(patch_state_file: Path):
     patch_state_file.write_text(json.dumps(_test_state))
     yield _test_state
 
+
+@pytest.fixture
+async def mock_fleet_deckies():
+    """Seed fleet_deckies with two deckies — the store get_deckies() reads
+    under the Option-D source-of-truth model (development/ADR-001-...md).
+    Mirrors the data mock_state_file used to put in decnet-state.json."""
+    from decnet.config import DeckyConfig
+    from decnet.web.db.models import LOCAL_HOST_SENTINEL
+    from decnet.web.dependencies import repo
+
+    async def _clear() -> None:
+        for row in await repo.list_fleet_deckies():
+            await repo.delete_fleet_decky(
+                host_uuid=row.get("host_uuid") or LOCAL_HOST_SENTINEL,
+                name=row["name"],
+            )
+
+    specs = [
+        ("test-decky-1", "192.168.1.10", ["ssh"], "debian", "test-host-1",
+         {"ssh": {"banner": "SSH-2.0-OpenSSH_8.9"}}, "deaddeck"),
+        ("test-decky-2", "192.168.1.11", ["http"], "ubuntu", "test-host-2",
+         {}, None),
+    ]
+    await _clear()
+    for name, ip, services, distro, hostname, svc_cfg, arche in specs:
+        cfg = DeckyConfig(
+            name=name, ip=ip, services=services, distro=distro,
+            base_image=distro, hostname=hostname,
+            service_config=svc_cfg, archetype=arche,
+        )
+        await repo.upsert_fleet_decky({
+            "host_uuid": LOCAL_HOST_SENTINEL,
+            "name": name,
+            "services": services,
+            "decky_config": cfg.model_dump(mode="json"),
+            "decky_ip": ip,
+            "state": "running",
+        })
+    yield
+    await _clear()
+
 # Share fuzz settings across API tests
 # FUZZ_EXAMPLES: keep low for dev speed; bump via HYPOTHESIS_MAX_EXAMPLES env var in CI
 _FUZZ_EXAMPLES = int(_os.environ.get("HYPOTHESIS_MAX_EXAMPLES", "10"))

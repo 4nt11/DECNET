@@ -12,7 +12,6 @@ backends.  Dialect-specific behavior lives in subclasses:
 """
 from __future__ import annotations
 
-import asyncio
 import json
 import os
 
@@ -23,7 +22,6 @@ from typing import Any, Optional, List, cast
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncEngine, AsyncSession, async_sessionmaker
 
-from decnet.config import load_state
 from decnet.env import DECNET_ADMIN_USER, DECNET_ADMIN_PASSWORD
 from decnet.web.auth import get_password_hash
 from decnet.web.db.repository import BaseRepository
@@ -172,8 +170,14 @@ class SQLModelRepository(
         return None
 
     async def get_deckies(self) -> List[dict]:
-        _state = await asyncio.to_thread(load_state)
-        return [_d.model_dump() for _d in _state[0].deckies] if _state else []
+        # The fleet inventory the UI/API sees is fleet_deckies — the
+        # engine-mirrored table written on EVERY deploy/teardown (CLI or web),
+        # per the source-of-truth model documented in fleet/reconciler.py.
+        # Each row's decky_config column is a full DeckyConfig.model_dump(
+        # mode="json"), so it rehydrates to the same shape load_state() used
+        # to return. See development/ADR-001-FLEET-SOURCE-OF-TRUTH.md.
+        rows = await self.list_fleet_deckies()
+        return [r["decky_config"] for r in rows if r.get("decky_config")]
 
     # --------------------------------------------------------------- users
 

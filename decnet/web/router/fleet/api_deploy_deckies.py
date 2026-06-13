@@ -8,7 +8,7 @@ from decnet.bus.factory import get_bus
 from decnet.lifecycle.runner import run_deploy
 from decnet.logging import get_logger
 from decnet.telemetry import traced as _traced
-from decnet.config import DEFAULT_MUTATE_INTERVAL, DecnetConfig, _ROOT
+from decnet.config import DEFAULT_MUTATE_INTERVAL, DecnetConfig, DeckyConfig, _ROOT
 from decnet.ini_loader import load_ini_from_string
 from decnet.network import detect_interface, detect_subnet, get_host_ip
 from decnet.web.dependencies import require_admin, repo
@@ -17,6 +17,39 @@ from decnet.web.db.models import DeployIniRequest, DeployResponse
 log = get_logger("api")
 
 router = APIRouter()
+
+
+async def _commit_fleet_to_db(deckies: list[DeckyConfig], *, replace_fleet: bool) -> None:
+    """Synchronously reconcile ``fleet_deckies`` to *deckies*.
+
+    fleet_deckies is the source of truth the deploy guard now reads
+    (``existing_deckies``). Committing the intended shape here — before the
+    async deploy task's engine mirror runs — means rapid sequential web
+    deploys each read a current fleet (no self-wipe) and the dashboard
+    observes the new shape immediately. Mirrors the payload shape of
+    ``engine.deployer._mirror_fleet_deploy_to_db``.
+
+    In replace mode, rows absent from *deckies* are deleted so the committed
+    inventory matches the desired set; the async reconciler/teardown mirror
+    converges the actual containers separately.
+    """
+    from decnet.web.db.models import LOCAL_HOST_SENTINEL
+
+    keep = {(d.host_uuid or LOCAL_HOST_SENTINEL, d.name) for d in deckies}
+    if replace_fleet:
+        for row in await repo.list_fleet_deckies():
+            host = row.get("host_uuid") or LOCAL_HOST_SENTINEL
+            if (host, row.get("name")) not in keep:
+                await repo.delete_fleet_decky(host_uuid=host, name=row["name"])
+    for d in deckies:
+        await repo.upsert_fleet_decky({
+            "host_uuid": d.host_uuid or LOCAL_HOST_SENTINEL,
+            "name": d.name,
+            "services": list(d.services),
+            "decky_config": d.model_dump(mode="json"),
+            "decky_ip": d.ip,
+            "state": "running",
+        })
 
 
 @router.post(
@@ -81,7 +114,19 @@ async def api_deploy_deckies(req: DeployIniRequest, admin: dict = Depends(requir
     # config below) so additive collision checks compare new against prior
     # rather than against themselves. Existing IPs are passed into
     # build_deckies_from_ini as reserved so auto-allocation skips them.
-    existing_deckies = list(config.deckies) if config is not None else []
+    # The existing fleet comes from fleet_deckies (engine-mirrored on CLI
+    # *and* web deploys), NOT from config.deckies carried by the
+    # State["deployment"] key. A CLI/seed-established fleet never lands in
+    # that key, so the additive collision guard ran blind and the reconciler
+    # wiped the fleet — root cause of BUG-2. fleet_deckies is the store the
+    # source-of-truth model (fleet/reconciler.py) names as the API's view.
+    # See development/ADR-001-FLEET-SOURCE-OF-TRUTH.md.
+    existing_rows = await repo.list_fleet_deckies()
+    existing_deckies = [
+        DeckyConfig(**r["decky_config"])
+        for r in existing_rows
+        if r.get("decky_config")
+    ]
     reserved_ips: set[str] | None = (
         {d.ip for d in existing_deckies if d.ip}
         if not req.replace_fleet and existing_deckies
@@ -192,6 +237,11 @@ async def api_deploy_deckies(req: DeployIniRequest, admin: dict = Depends(requir
         ),
     }
     await repo.set_state("deployment", new_state_payload)
+    # Commit the intended fleet to fleet_deckies — the store the deploy guard
+    # and get_deckies() now read. set_state("deployment") above is retained
+    # for the mutate handlers / mutator engine that still coordinate through
+    # that key (their consolidation is tracked in the ADR, open question 7).
+    await _commit_fleet_to_db(config.deckies, replace_fleet=req.replace_fleet)
 
     # Lifecycle rows track THIS call's deployments only. In additive mode
     # the existing deckies are already running and don't get a new

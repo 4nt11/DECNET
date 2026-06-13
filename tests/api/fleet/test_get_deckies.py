@@ -5,7 +5,7 @@ from hypothesis import given, settings, strategies as st
 from ..conftest import _FUZZ_SETTINGS
 
 @pytest.mark.anyio
-async def test_get_deckies_endpoint(mock_state_file, client: httpx.AsyncClient, auth_token: str):
+async def test_get_deckies_endpoint(mock_fleet_deckies, client: httpx.AsyncClient, auth_token: str):
     _response = await client.get("/api/v1/deckies", headers={"Authorization": f"Bearer {auth_token}"})
     assert _response.status_code == 200
     _data = _response.json()
