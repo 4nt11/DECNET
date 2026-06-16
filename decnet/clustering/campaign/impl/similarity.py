@@ -42,6 +42,8 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from typing import Mapping, Optional
 
+from decnet.util.simhash import hamming64
+
 
 # ─── Identity-level projection ──────────────────────────────────────────────
 
@@ -73,6 +75,11 @@ class IdentityFeatures:
 
     c2_endpoints: frozenset[str] = field(default_factory=frozenset)
     """Aggregated C2 endpoints across member observations."""
+
+    kd_digraph_simhash: Optional[int] = None
+    """Identity's keystroke-rhythm centroid as a 64-bit int (the
+    ``AttackerIdentity.kd_digraph_simhash`` column). ``None`` until the
+    identity has enough live-typed sessions for a fingerprint."""
 
     decky_set: frozenset[str] = field(default_factory=frozenset)
     """Aggregated decky IDs the identity touched."""
@@ -305,11 +312,22 @@ def cohort_weight(a: IdentityFeatures, b: IdentityFeatures) -> float:
 #: 0; ASN+decky overlap fires cohort but at 0.1 stays well below
 #: threshold. F2 vpn_hopping is folded by the identity layer first,
 #: so the campaign clusterer sees one identity → one campaign.
+#: Max Hamming distance (of 64 bits) at which two identities' keystroke-
+#: rhythm centroids still count as the same typist. Beyond this the
+#: biometric contributes nothing. Conservative — same-typist hashes are
+#: typically <6 bits apart (see toolchain.payload.payload_simhash notes).
+KD_HAMMING_MAX: int = 8
+
 CAMPAIGN_TIER_WEIGHTS: dict[str, float] = {
     "phase_handoff": 1.0,
     "shared_infra": 1.0,
     "temporal_overlap": 0.4,
     "cohort": 0.1,
+    # Keystroke biometric is a strong *supporting* signal — 0.6 means a
+    # typing match plus temporal overlap (0.4) reaches threshold, but a
+    # typing match alone never merges two identities (FP guard: terminal
+    # timing is noisy and the bucketing is coarse).
+    "keystroke": 0.6,
 }
 
 #: Threshold a combined campaign-edge weight must meet to survive
@@ -337,7 +355,24 @@ def combined_campaign_weight(
         + CAMPAIGN_TIER_WEIGHTS["temporal_overlap"]
         * temporal_overlap_weight(a, b)
         + CAMPAIGN_TIER_WEIGHTS["cohort"] * cohort_weight(a, b)
+        + CAMPAIGN_TIER_WEIGHTS["keystroke"] * keystroke_weight(a, b)
     )
+
+
+def keystroke_weight(a: IdentityFeatures, b: IdentityFeatures) -> float:
+    """Keystroke-rhythm proximity ∈ [0, 1] from the two identities'
+    digraph-SimHash centroids.
+
+    Graded by Hamming distance: identical rhythm → 1.0, fading linearly
+    to 0.0 at ``KD_HAMMING_MAX`` bits apart (and beyond). ``0.0`` when
+    either identity has no centroid yet. Pure / time-agnostic.
+    """
+    if a.kd_digraph_simhash is None or b.kd_digraph_simhash is None:
+        return 0.0
+    dist = hamming64(a.kd_digraph_simhash, b.kd_digraph_simhash)
+    if dist >= KD_HAMMING_MAX:
+        return 0.0
+    return 1.0 - dist / KD_HAMMING_MAX
 
 
 # ─── Adapter for synthetic-fixture tests ────────────────────────────────────
@@ -432,6 +467,7 @@ __all__ = [
     "shared_infra_weight",
     "temporal_overlap_weight",
     "cohort_weight",
+    "keystroke_weight",
     "combined_campaign_weight",
     "from_synthetic_identity",
     "HANDOFF_OUT_PHASES",
@@ -439,4 +475,5 @@ __all__ = [
     "DEFAULT_HANDOFF_WINDOW_S",
     "CAMPAIGN_TIER_WEIGHTS",
     "CAMPAIGN_EDGE_THRESHOLD",
+    "KD_HAMMING_MAX",
 ]

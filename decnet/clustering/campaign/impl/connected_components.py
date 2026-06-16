@@ -31,6 +31,7 @@ from decnet.clustering.campaign.impl.similarity import (
     combined_campaign_weight,
 )
 from decnet.logging import get_logger
+from decnet.util.simhash import from_bytes8
 from decnet.web.db.repository import BaseRepository
 
 log = get_logger("clustering.campaign.connected_components")
@@ -94,6 +95,7 @@ def from_identity_row(
 
     payload_hashes = _parse_json_list(row.get("payload_simhashes"))
     c2_endpoints = _parse_json_list(row.get("c2_endpoints"))
+    kd_digraph_simhash = _parse_kd_simhash(row.get("kd_digraph_simhash"))
 
     first_phase_per_decky: dict[str, str] = {}
     last_phase_per_decky: dict[str, str] = {}
@@ -127,12 +129,31 @@ def from_identity_row(
         identity_uuid=row["uuid"],
         payload_hashes=frozenset(payload_hashes),
         c2_endpoints=frozenset(c2_endpoints),
+        kd_digraph_simhash=kd_digraph_simhash,
         decky_set=frozenset(decky_set),
         first_phase_per_decky=first_phase_per_decky,
         last_phase_per_decky=last_phase_per_decky,
         first_seen_per_decky=first_seen_per_decky,
         last_seen_per_decky=last_seen_per_decky,
     )
+
+
+def _parse_kd_simhash(raw: Any) -> Optional[int]:
+    """Project the ``kd_digraph_simhash`` column into a 64-bit int.
+
+    The column is 8 raw bytes (BINARY(8) / BLOB) or NULL; a hex string
+    is tolerated for fixture rows. Returns ``None`` on absent/malformed.
+    """
+    if raw is None:
+        return None
+    if isinstance(raw, (bytes, bytearray)) and len(raw) == 8:
+        return from_bytes8(bytes(raw))
+    if isinstance(raw, str) and len(raw) == 16:
+        try:
+            return from_bytes8(bytes.fromhex(raw))
+        except ValueError:
+            return None
+    return None
 
 
 def _parse_json_list(raw: Optional[str]) -> list[str]:
