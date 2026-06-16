@@ -111,7 +111,7 @@
 - [x] **HASSH / HASSHServer** — SSH KEX algo, cipher, MAC order → tool fingerprint
 - [x] **HTTP/2 fingerprint** — GREASE values, settings frame order, header pseudo-field ordering
 - [x] **QUIC fingerprint** — Connection ID length, transport parameters order
-- [ ] **DNS behavior** — Query patterns, recursion flags, EDNS0 options, resolver fingerprint
+- [x] **DNS behavior** — Query patterns, recursion flags, EDNS0 options, resolver fingerprint
 - [x] **HTTP header ordering** — Tool-specific capitalization and ordering quirks
 
 ### Network Topology Leakage
@@ -119,11 +119,11 @@
 - [x] **ICMP error messages** — Internal IP leakage from misconfigured attacker infra
 - [x] **ICMPv6 error messages** — Internal IP leakage from misconfigured attacker infra
 - [x] **IPv6 link-local leakage** — IPv6 addrs leaked even over IPv4 VPN (common opsec fail)
-- [ ] **mDNS/LLMNR leakage** — Attacker hostname/device info from misconfigured systems
+- [~] **mDNS/LLMNR leakage** — Attacker hostname/device info from misconfigured systems - Deferred to v2.
 
 ### Geolocation & Infrastructure
 - [x] **ASN lookup** — Source IP autonomous system number and org name
-- [ ] **BGP prefix / RPKI validity** — Route origin legitimacy
+- [x] **BGP prefix / RPKI validity** — Route origin legitimacy
 - [x] **PTR records** — rDNS for attacker IPs (catches infra with forgotten reverse DNS)
 - [~] **Latency triangulation** — JA4L RTT estimates for rough geolocation. - Deferred to Federation release.
 

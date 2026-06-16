@@ -37,14 +37,14 @@ const tempIdSuffix = (): string => {
   return r.slice(0, 4);
 };
 
-const NET_GRID_W    = 300;
-const NET_GRID_H    = 240;
-const NET_GRID_GAP  = 40;
-const NET_GRID_COLS = 3;
+const NET_GRID_W = 300;
+const NET_GRID_H = 240;
 
 async function _dropNetwork(
   drag: PaletteDrag,
+  world: { x: number; y: number },
   topologyId: string,
+  live: boolean,
   nets: Net[],
   api: ReturnType<typeof useMazeApi>,
   editor: ReturnType<typeof useTopologyEditor>,
@@ -57,12 +57,18 @@ async function _dropNetwork(
     flashErr(null, 'topology already has a DMZ');
     return;
   }
-  const i = nets.filter((n) => n.kind !== 'internet').length;
-  const x = NET_GRID_GAP + (i % NET_GRID_COLS) * (NET_GRID_W + NET_GRID_GAP);
-  const y = NET_GRID_GAP + Math.floor(i / NET_GRID_COLS) * (NET_GRID_H + NET_GRID_GAP);
+  // Place the box centred on the drop point (canvas/world coords), not in a
+  // grid slot — dropping should land where the cursor released.
+  const x = Math.round(world.x - NET_GRID_W / 2);
+  const y = Math.round(world.y - NET_GRID_H / 2);
   const name = isDmz ? `dmz-${tempIdSuffix()}` : `subnet-${tempIdSuffix()}`;
   try {
-    const subnet = await api.getNextSubnet().catch(() => undefined);
+    // On a live topology edits are STAGED and applied as a batch, so a
+    // server-side next-subnet lookup would hand every staged net the SAME
+    // free subnet (the prior ones aren't committed yet) → SUBNET_OVERLAP on
+    // commit. Leave it unset and let apply_add_lan allocate at apply time;
+    // the mutator drains sequentially so each sees the previous one.
+    const subnet = live ? undefined : await api.getNextSubnet().catch(() => undefined);
     const lanRes = await editor.createLan(topologyId, { name, is_dmz: isDmz, x, y, ...(subnet ? { subnet } : {}) });
     if (lanRes.kind !== 'applied') {
       const tempId = `pending-lan-${name}`;
@@ -185,7 +191,7 @@ const MazeNET: React.FC = () => {
   const {
     nets, setNets, nodes, setNodes, edges, setEdges,
     topoMeta, services, archetypes,
-    loadErr, actionErr, commitErr, clearCommitErr, flashErr, setRefetchPaused,
+    loadErr, actionErr, commitErr, clearCommitErr, flashErr,
     deploying, onDeploy,
     streamLive, lastEventAt, streamEnabled,
     refetch,
@@ -289,7 +295,8 @@ const MazeNET: React.FC = () => {
     async (drag: PaletteDrag, world: { x: number; y: number }, overNetId: string | null, overNodeId: string | null) => {
       if (!topologyId) return;
       if (drag.kind === 'network-subnet' || drag.kind === 'network-dmz') {
-        await _dropNetwork(drag, topologyId, nets, api, editor, setNets, setNodes, flashErr);
+        const liveNow = topoStatus === 'active' || topoStatus === 'degraded';
+        await _dropNetwork(drag, world, topologyId, liveNow, nets, api, editor, setNets, setNodes, flashErr);
       } else if (drag.kind === 'archetype' && overNetId) {
         await _dropArchetype(drag, world, overNetId, topologyId, nets, archetypes, editor, setNodes, flashErr);
       } else if (drag.kind === 'service' && overNodeId) {
@@ -541,30 +548,27 @@ const MazeNET: React.FC = () => {
   const deckyNodes = nodes.filter((n) => n.kind === 'decky');
   const runningDeckies = deckyNodes.filter((n) => n.status === 'active').length;
 
-  /* UPDATE button: flush the staged changeset as one sequential mutation
-     batch. SSE refetch is paused so per-mutation applied events don't wipe
-     still-staged placeholders mid-batch; one refetch reconciles at the end
-     (success or failure). A failed op throws MutationFailedError, which
-     flashErr pins as a persistent banner. */
+  /* UPDATE button: enqueue the staged changeset (async). We await only the
+     enqueue POSTs — sequentially, so expected_version stays ordered — then
+     return. The mutator drains the rows on its own loop; the SSE stream
+     drives refetch as each lands and surfaces any apply failure as the
+     persistent commitErr banner. No per-op polling (that flooded the API
+     and froze the UI). */
   const handleCommit = useCallback(async () => {
     if (!topologyId || pendingCount === 0) return;
-    const n = pendingCount;
     setCommitting(true);
-    setRefetchPaused(true);
     try {
-      const applied = await editor.commitStaged();
+      const queued = await editor.commitStaged();
       pushToast({
-        text: `UPDATED · ${applied} CHANGE${applied === 1 ? '' : 'S'}`,
-        tone: 'matrix', icon: 'check-circle',
+        text: `QUEUED · ${queued} CHANGE${queued === 1 ? '' : 'S'} APPLYING`,
+        tone: 'violet', icon: 'terminal',
       });
     } catch (err) {
-      flashErr(err, `update failed after ${n - editor.pendingCount}/${n} changes`);
+      flashErr(err, 'failed to queue changes');
     } finally {
-      setRefetchPaused(false);
-      await refetch();
       setCommitting(false);
     }
-  }, [editor, topologyId, pendingCount, refetch, pushToast, flashErr, setRefetchPaused]);
+  }, [editor, topologyId, pendingCount, pushToast, flashErr]);
 
   return (
     <div className="maze-page">

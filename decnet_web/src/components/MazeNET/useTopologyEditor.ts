@@ -27,20 +27,6 @@ import type {
   MutationOp,
 } from './useMazeApi';
 
-/** Thrown by a live primitive when its mutation settles as ``failed``.
- *  Carries the op + backend reason so the page can surface a loud,
- *  persistent error instead of a transient toast. */
-export class MutationFailedError extends Error {
-  readonly op: string;
-  readonly reason: string;
-  constructor(op: string, reason: string) {
-    super(`mutation ${op} failed: ${reason}`);
-    this.name = 'MutationFailedError';
-    this.op = op;
-    this.reason = reason;
-  }
-}
-
 export interface UseTopologyEditorOptions {
   api: MazeApi;
   /** Current topology status from :func:`getTopology`. */
@@ -171,26 +157,27 @@ export function useTopologyEditor(
   const commitStaged = useCallback(async (): Promise<number> => {
     const ops = staged;
     if (ops.length === 0) return 0;
-    let applied = 0;
+    // ASYNC queue: enqueue the batch and return. We await only the enqueue
+    // POSTs (sequentially, so expected_version stays ordered — the server
+    // bumps it per enqueue), NOT each mutation's apply. The mutator drains
+    // the rows on its own loop and the SSE stream reports applied/failed;
+    // polling every row to a terminal state here flooded the API (200+ GET
+    // /mutations per session) and froze the UI. Apply-time failures surface
+    // loudly via the SSE 'mutation.failed' handler in useTopologyData.
+    let enqueued = 0;
     try {
       for (const o of ops) {
         const expected = cursorRef.current;
-        const res = await api.enqueueMutation(o.topologyId, o.op, o.payload, expected);
-        // Advance even if the apply fails below — enqueue already bumped
-        // the server version.
+        await api.enqueueMutation(o.topologyId, o.op, o.payload, expected);
         cursorRef.current = expected + 1;
-        const row = await api.waitForMutation(o.topologyId, res.mutation_id);
-        if (row.state === 'failed') {
-          throw new MutationFailedError(o.op, row.reason ?? 'unknown reason');
-        }
-        applied += 1;
+        enqueued += 1;
       }
       setStaged([]);
-      return applied;
+      return enqueued;
     } catch (err) {
-      // Drop the applied prefix; keep the failing op + the rest so the user
-      // can fix and retry without re-staging everything.
-      setStaged(ops.slice(applied));
+      // Enqueue-level failure (e.g. 409 version conflict / network). Drop
+      // the ops that did enqueue; keep the rest staged for retry.
+      setStaged(ops.slice(enqueued));
       throw err;
     }
   }, [staged, api]);

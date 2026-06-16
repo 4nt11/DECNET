@@ -18,9 +18,11 @@ import pytest
 from decnet.mutator.ops import (
     MutationError,
     apply_add_decky,
+    apply_add_lan,
     apply_attach_decky,
     apply_detach_decky,
     apply_remove_decky,
+    apply_remove_lan,
     apply_update_decky,
     apply_update_lan,
 )
@@ -241,6 +243,40 @@ async def test_detach_decky_calls_network_disconnect(repo, stubs):
     })
 
     stubs["network"].disconnect.assert_called_once()
+
+
+# ---------------- apply_remove_lan -------------------------------------
+
+
+@pytest.mark.anyio
+async def test_remove_lan_detaches_bridge_members(repo, stubs):
+    """Removing a LAN must prune bridge (non-home) members' ips_by_lan +
+    edges, not just delete the LAN — else the orphaned ips_by_lan entry
+    fails post-apply validation (IP_UNKNOWN_LAN) and degrades the topology.
+    """
+    tid = await _make_active(repo)
+    deckies = await repo.list_topology_deckies(tid)
+    target = deckies[0]
+    target_name = (target.decky_config or {})["name"]
+
+    # New empty LAN (no home deckies), then bridge an existing decky into it.
+    await apply_add_lan(repo, tid, {"name": "transit-lan", "subnet": "10.250.0.0/24"})
+    await apply_attach_decky(repo, tid, {"decky": target_name, "lan": "transit-lan"})
+
+    mid = next(d for d in await repo.list_topology_deckies(tid)
+               if (d.decky_config or {})["name"] == target_name)
+    assert "transit-lan" in (mid.decky_config or {})["ips_by_lan"]
+
+    # The bug: this used to raise MutationError(IP_UNKNOWN_LAN).
+    await apply_remove_lan(repo, tid, {"name": "transit-lan"})
+
+    lans = await repo.list_lans_for_topology(tid)
+    assert all(l.name != "transit-lan" for l in lans)
+    after = next(d for d in await repo.list_topology_deckies(tid)
+                 if (d.decky_config or {})["name"] == target_name)
+    assert "transit-lan" not in (after.decky_config or {})["ips_by_lan"]
+    # The bridge member was disconnected from the doomed LAN's network.
+    stubs["network"].disconnect.assert_called()
 
 
 # ---------------- apply_update_decky -----------------------------------

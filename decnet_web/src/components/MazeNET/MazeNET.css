@@ -48,7 +48,7 @@ body.maze-fullscreen .maze-shell {
   transition: all 0.3s;
 }
 .maze-btn:hover { background: var(--matrix); color: var(--bg); box-shadow: var(--matrix-glow); }
-.maze-btn.ghost { border-color: var(--border); color: var(--matrix); opacity: 0.7; }
+.maze-btn.ghost { border-color: var(--border); color: var(--matrix); opacity: 0.92; }
 .maze-btn.ghost:hover {
   background: transparent; color: var(--matrix); opacity: 1;
   border-color: var(--matrix); box-shadow: var(--matrix-glow);
@@ -323,11 +323,17 @@ html[data-theme="light"] .maze-net-box.inactive {
 
 /* ── Canvas overlays ────────────────────────── */
 .maze-toolbar { position: absolute; top: 12px; left: 12px; display: flex; gap: 8px; z-index: 5; }
+/* Solid theme-aware backing (same as the legend) so the toolbar buttons
+   stay legible over net boxes in both themes — a hardcoded dark fill went
+   ink-on-ink in light mode. Full opacity; matched-specificity hover keeps
+   the fill behaviour. */
+.maze-toolbar .maze-btn { background: var(--panel); opacity: 1; }
+.maze-toolbar .maze-btn:hover { background: var(--matrix); }
 .maze-status {
   position: absolute; bottom: 12px; left: 12px;
   display: flex; gap: 12px; z-index: 5;
-  font-size: 0.62rem; opacity: 0.6; letter-spacing: 1px;
-  background: rgba(0, 0, 0, 0.6); padding: 6px 10px; border: 1px solid var(--border);
+  font-size: 0.62rem; opacity: 0.92; letter-spacing: 1px;
+  background: rgba(0, 0, 0, 0.8); padding: 6px 10px; border: 1px solid var(--border);
 }
 .maze-legend {
   position: absolute; bottom: 12px; right: 12px; z-index: 5;
@@ -349,7 +355,7 @@ html[data-theme="light"] .maze-net-box.inactive {
 /* Status bar segments */
 .maze-status .status-seg { display: inline-flex; align-items: center; gap: 6px; white-space: nowrap; }
 .maze-status .status-seg.live   { color: var(--matrix); opacity: 0.9; }
-.maze-status .status-seg.dim    { opacity: 0.45; }
+.maze-status .status-seg.dim    { opacity: 0.75; }
 
 /* Toolbar button sizing override */
 .maze-toolbar .maze-btn.small {

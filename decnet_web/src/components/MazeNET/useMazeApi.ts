@@ -37,15 +37,6 @@ export interface EdgeRow {
   forwards_l3: boolean;
 }
 
-export type MutationState = 'pending' | 'applying' | 'applied' | 'failed';
-
-export interface MutationRow {
-  id: string;
-  topology_id: string;
-  op: string;
-  state: MutationState;
-  reason: string | null;
-}
 
 export interface TopologySummary {
   id: string;
@@ -75,11 +66,12 @@ export interface HydratedTopology {
  *  placement. Decky-to-decky traffic edges are derived from
  *  shared-LAN co-membership for visualization only. */
 export function adaptTopology(detail: TopologyDetail): HydratedTopology {
-  // Auto-layout: DMZ pinned top-left, subnets flow in a grid to the right.
-  // We ignore lan.x/lan.y from the backend because canvas position
-  // persistence is deferred (handled via localStorage in a later pass).
-  // Computing layout from the graph keeps the canvas readable no matter
-  // how sloppy the original drop points were.
+  // Layout: honour the backend's stored x/y (the drop coords sent at
+  // create time) when present, falling back to a DMZ-first grid for
+  // topologies that never set canvas coords (e.g. generated ones). Without
+  // this, every refetch re-grids — so committing a staged edit yanked all
+  // nets back to the grid. localStorage (applyLayout) still overlays any
+  // later drags on top of this baseline.
   const NET_W = 300;
   const NET_H = 240;
   const GAP_X = 40;
@@ -94,8 +86,8 @@ export function adaptTopology(detail: TopologyDetail): HydratedTopology {
     label: lan.name.toUpperCase(),
     cidr: lan.subnet,
     kind: lan.is_dmz ? 'dmz' : 'subnet',
-    x: GAP_X + (i % COLS) * (NET_W + GAP_X),
-    y: GAP_Y + Math.floor(i / COLS) * (NET_H + GAP_Y),
+    x: lan.x ?? GAP_X + (i % COLS) * (NET_W + GAP_X),
+    y: lan.y ?? GAP_Y + Math.floor(i / COLS) * (NET_H + GAP_Y),
     w: NET_W,
     h: NET_H,
   }));
@@ -138,9 +130,9 @@ export function adaptTopology(detail: TopologyDetail): HydratedTopology {
     firstLanFor.set(e.decky_uuid, e.lan_id);
   }
 
-  // Layout deckies in a 2-column grid inside their home LAN so two
-  // members never overlap regardless of backend x/y. Same reasoning as
-  // the LAN grid above.
+  // Deckies: honour stored x/y (drop coords) when present, else a
+  // 2-column grid inside their home LAN. Same baseline-vs-grid logic as
+  // the LAN layout above.
   const NODE_COL_W = 140;
   const NODE_ROW_H = 82;
   const NODE_X0 = 12;
@@ -158,8 +150,8 @@ export function adaptTopology(detail: TopologyDetail): HydratedTopology {
       archetype: (d.decky_config as { archetype?: string } | null)?.archetype ?? 'linux-server',
       services: d.services,
       status: d.state === 'running' ? 'active' : d.state === 'failed' ? 'hot' : 'idle',
-      x: NODE_X0 + (idx % 2) * NODE_COL_W,
-      y: NODE_Y0 + Math.floor(idx / 2) * NODE_ROW_H,
+      x: d.x ?? NODE_X0 + (idx % 2) * NODE_COL_W,
+      y: d.y ?? NODE_Y0 + Math.floor(idx / 2) * NODE_ROW_H,
       ip: d.ip ?? undefined,
       decky_config: d.decky_config ?? undefined,
     };
@@ -176,6 +168,16 @@ export function adaptTopology(detail: TopologyDetail): HydratedTopology {
   for (const [lanId, members] of byLan) {
     for (let i = 0; i < members.length; i++) {
       for (let j = i + 1; j < members.length; j++) {
+        // Draw an edge between two co-members of a LAN only when at least
+        // one of them is HOME here. A pair that are both merely *visiting*
+        // (multi-homed bridges, e.g. a subnet's L3 gateway whose home is
+        // the DMZ) would otherwise render a line between their two display
+        // homes — drawing a phantom link to the DMZ/root from any net you
+        // bridge into. The home↔visitor edge still carries the real
+        // connection (e.g. subnet→gateway shows the subnet reaching root).
+        const iHome = firstLanFor.get(members[i]) === lanId;
+        const jHome = firstLanFor.get(members[j]) === lanId;
+        if (!iHome && !jHome) continue;
         const key = `${members[i]}::${members[j]}`;
         if (seen.has(key)) continue;
         seen.add(key);
@@ -258,16 +260,6 @@ export interface MazeApi {
     payload: Record<string, unknown>,
     expectedVersion?: number,
   ) => Promise<EnqueueMutationResponse>;
-
-  /** Poll the mutation queue until ``mutationId`` reaches a terminal
-   *  state (``applied`` | ``failed``). Resolves with that row; rejects
-   *  only on timeout. A ``failed`` row resolves (not rejects) so callers
-   *  can read ``reason`` — the editor turns it into a loud error. */
-  waitForMutation: (
-    topologyId: string,
-    mutationId: string,
-    opts?: { timeoutMs?: number; intervalMs?: number },
-  ) => Promise<MutationRow>;
 
   deployTopology: (topologyId: string) => Promise<void>;
 }
@@ -413,36 +405,6 @@ export function useMazeApi(): MazeApi {
     [],
   );
 
-  const waitForMutation = useCallback(
-    async (
-      topologyId: string,
-      mutationId: string,
-      opts: { timeoutMs?: number; intervalMs?: number } = {},
-    ): Promise<MutationRow> => {
-      const { timeoutMs = 30000, intervalMs = 400 } = opts;
-      const deadline = Date.now() + timeoutMs;
-      // ponytail: poll the existing list endpoint; the SSE stream also
-      // carries mutation.applied/failed but wiring a one-shot waiter into
-      // it couples the editor to the stream hook for no real gain here.
-      for (;;) {
-        const { data } = await api.get<MutationRow[]>(
-          `/topologies/${topologyId}/mutations`,
-        );
-        const row = data.find((r) => r.id === mutationId);
-        if (row && (row.state === 'applied' || row.state === 'failed')) {
-          return row;
-        }
-        if (Date.now() >= deadline) {
-          throw new Error(
-            `mutation ${mutationId} did not settle within ${timeoutMs}ms`,
-          );
-        }
-        await new Promise((res) => setTimeout(res, intervalMs));
-      }
-    },
-    [],
-  );
-
   const enqueueMutation = useCallback(
     async (
       topologyId: string,
@@ -468,7 +430,7 @@ export function useMazeApi(): MazeApi {
       createLan, updateLan, deleteLan,
       createDecky, updateDecky, deleteDecky,
       attachEdge, detachEdge,
-      enqueueMutation, waitForMutation,
+      enqueueMutation,
       deployTopology,
     }),
     [
@@ -477,7 +439,7 @@ export function useMazeApi(): MazeApi {
       createLan, updateLan, deleteLan,
       createDecky, updateDecky, deleteDecky,
       attachEdge, detachEdge,
-      enqueueMutation, waitForMutation,
+      enqueueMutation,
       deployTopology,
     ],
   );

@@ -619,6 +619,35 @@ async def apply_remove_lan(
                 f"{d['decky_config']['name']!r}; remove the decky first"
             )
     lan_name = lan["name"]
+
+    # Detach every bridge (non-home) member still attached to this LAN
+    # before dropping it. The home-LAN refusal above guarantees survivors
+    # are all multi-homed visitors; if we leave their edge + ips_by_lan
+    # entry behind, the row points at a LAN that no longer exists and
+    # _assert_valid_after raises IP_UNKNOWN_LAN — degrading the topology
+    # on a plain delete. Mirrors apply_detach_decky's per-decky cleanup.
+    for e in hydrated["edges"]:
+        if e["lan_id"] != lan["id"]:
+            continue
+        decky = next(
+            (d for d in hydrated["deckies"] if d["uuid"] == e["decky_uuid"]),
+            None,
+        )
+        if decky is not None:
+            new_cfg = dict(decky["decky_config"])
+            new_ips = dict(new_cfg.get("ips_by_lan", {}))
+            new_ips.pop(lan_name, None)
+            new_cfg["ips_by_lan"] = new_ips
+            await repo.update_topology_decky(
+                decky["uuid"], {"decky_config": new_cfg}
+            )
+            await _materialise_decky_disconnect(
+                repo, topology_id,
+                decky_name=decky["decky_config"]["name"],
+                lan_name=lan_name,
+            )
+        await repo.delete_topology_edge(e["id"], enforce_pending=False)
+
     # enforce_pending=False: the mutator queue is the live-editing
     # surface, gated on topology status by us before we got here.  The
     # repo's pending-only guard is for HTTP CRUD callers that mustn't

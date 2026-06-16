@@ -257,7 +257,7 @@ const TopologyList: React.FC = () => {
                   <Power size={10} /> {armed === `td:${r.id}` ? 'CONFIRM?' : 'TEARDOWN'}
                 </button>
               )}
-              {!['active', 'degraded', 'deploying'].includes(r.status) && (
+              {!['active', 'degraded', 'deploying', 'tearing_down'].includes(r.status) && (
                 <button
                   type="button"
                   className={`tlist-btn small danger ${armed === r.id ? 'armed' : ''}`}

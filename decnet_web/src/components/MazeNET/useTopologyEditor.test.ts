@@ -5,12 +5,11 @@
 import { describe, it, expect, vi } from 'vitest';
 import { act, renderHook } from '@testing-library/react';
 
-import { useTopologyEditor, MutationFailedError } from './useTopologyEditor';
+import { useTopologyEditor } from './useTopologyEditor';
 import type { MazeApi } from './useMazeApi';
 
 const buildApi = (overrides: Partial<MazeApi> = {}): MazeApi => ({
   enqueueMutation: vi.fn().mockResolvedValue({ mutation_id: 'm', state: 'pending' }),
-  waitForMutation: vi.fn().mockResolvedValue({ state: 'applied', reason: null }),
   ...overrides,
 } as unknown as MazeApi);
 
@@ -20,7 +19,7 @@ const editorFor = (api: MazeApi, topoVersion = 5) =>
   );
 
 describe('useTopologyEditor live staging', () => {
-  it('stages live edits without sending; commit flushes them in order with a version cursor', async () => {
+  it('stages live edits without sending; commit enqueues them in order with a version cursor', async () => {
     const enqueue = vi.fn().mockResolvedValue({ mutation_id: 'm', state: 'pending' });
     const api = buildApi({ enqueueMutation: enqueue });
     const { result } = editorFor(api, 5);
@@ -38,18 +37,20 @@ describe('useTopologyEditor live staging', () => {
       await result.current.commitStaged();
     });
 
+    // Enqueued (not waited-on): no apply polling.
     expect(enqueue).toHaveBeenCalledTimes(2);
     expect(enqueue.mock.calls[0][3]).toBe(5); // first uses server version
     expect(enqueue.mock.calls[1][3]).toBe(6); // second advanced by the cursor
     expect(result.current.pendingCount).toBe(0);
   });
 
-  it('commit stops loudly on a failed op, keeps the remainder, and retries cleanly', async () => {
-    const wait = vi
+  it('keeps the un-enqueued remainder staged when an enqueue POST fails', async () => {
+    const enqueue = vi
       .fn()
-      .mockResolvedValueOnce({ state: 'failed', reason: 'post-apply validation failed: IP_COLLISION' })
-      .mockResolvedValue({ state: 'applied', reason: null });
-    const api = buildApi({ waitForMutation: wait });
+      .mockResolvedValueOnce({ mutation_id: 'm', state: 'pending' })
+      .mockRejectedValueOnce(new Error('409 version conflict'))
+      .mockResolvedValue({ mutation_id: 'm', state: 'pending' });
+    const api = buildApi({ enqueueMutation: enqueue });
     const { result } = editorFor(api, 1);
 
     await act(async () => {
@@ -59,12 +60,11 @@ describe('useTopologyEditor live staging', () => {
     expect(result.current.pendingCount).toBe(2);
 
     await act(async () => {
-      await expect(result.current.commitStaged()).rejects.toBeInstanceOf(MutationFailedError);
+      await expect(result.current.commitStaged()).rejects.toThrow('409');
     });
-    // First op failed → nothing applied → both stay staged for retry.
-    expect(result.current.pendingCount).toBe(2);
+    // First op enqueued, second threw → one remains staged for retry.
+    expect(result.current.pendingCount).toBe(1);
 
-    // Retry: waitForMutation now resolves 'applied' for both.
     await act(async () => {
       await result.current.commitStaged();
     });

@@ -1,11 +1,10 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import type { ApiError } from '../../utils/api';
 import type { Net, MazeNode, Edge } from './types';
 import { DEFAULT_SERVICES, ARCHETYPES as DEFAULT_ARCHETYPES } from './data';
 import type { Archetype, ServiceDef } from './data';
 import type { MazeApi } from './useMazeApi';
-import { MutationFailedError } from './useTopologyEditor';
 import { useTopologyStream, type TopologyStreamEvent } from './useTopologyStream';
 
 export interface TopoMeta {
@@ -48,10 +47,6 @@ export interface UseTopologyDataResult {
   commitErr: string | null;
   clearCommitErr: () => void;
   flashErr: (err: unknown, fallback: string) => void;
-  /** Pause SSE-driven refetch while a commit batch is in flight, so the
-   *  per-mutation ``applied`` events don't wipe the still-staged
-   *  placeholders mid-batch. The committer does one refetch at the end. */
-  setRefetchPaused: (paused: boolean) => void;
 
   // Deploy
   deploying: boolean;
@@ -91,18 +86,7 @@ export function useTopologyData(
 
   const clearCommitErr = useCallback(() => setCommitErr(null), []);
 
-  const refetchPausedRef = useRef(false);
-  const setRefetchPaused = useCallback((paused: boolean) => {
-    refetchPausedRef.current = paused;
-  }, []);
-
   const flashErr = useCallback((err: unknown, fallback: string) => {
-    // A failed live mutation is loud + persistent: the queue halted and
-    // the topology probably degraded — don't let it vanish in 4s.
-    if (err instanceof MutationFailedError) {
-      setCommitErr(err.message);
-      return;
-    }
     const msg = (err as ApiError)?.response?.data?.detail ?? (err as ApiError)?.message ?? fallback;
     setActionErr(msg);
     setTimeout(() => setActionErr(null), 4000);
@@ -122,7 +106,22 @@ export function useTopologyData(
       const h = await api.getTopology(topologyId);
       setNets(h.nets);
       setNodes(h.nodes);
-      setEdges(h.edges);
+      // Keep optimistic bridge edges (those carrying a backendEdgeId) alive
+      // across refetches until the server actually derives the equivalent
+      // pair. A bridge attach is best-effort and applies asynchronously, so
+      // wholesale-replacing edges here would blink the just-drawn link out
+      // until the mutator catches up. We only retain ones whose endpoints
+      // still exist and that the server hasn't yet produced.
+      const pairKey = (a: string, b: string) => (a < b ? `${a}::${b}` : `${b}::${a}`);
+      const serverPairs = new Set(h.edges.map((e) => pairKey(e.from, e.to)));
+      const nodeIds = new Set(h.nodes.map((n) => n.id));
+      setEdges((prev) => {
+        const pending = prev.filter((e) =>
+          e.backendEdgeId
+          && !serverPairs.has(pairKey(e.from, e.to))
+          && nodeIds.has(e.from) && nodeIds.has(e.to));
+        return [...h.edges, ...pending];
+      });
       setTopoMeta({
         status: h.topology.status,
         name: h.topology.name,
@@ -152,18 +151,21 @@ export function useTopologyData(
       setLastEventAt(new Date());
     }
     if (event.name === 'mutation.failed') {
+      // A queued mutation failed to apply (the topology likely degraded).
+      // Loud + persistent — this is the async equivalent of the old
+      // blocking commit's thrown error; dismissed via clearCommitErr.
       const p = event.payload ?? {};
       const reason = typeof p.reason === 'string' ? p.reason
         : typeof p.error === 'string' ? p.error
         : 'mutation failed — check mutator logs';
-      setActionErr(`mutation failed: ${reason}`);
-      setTimeout(() => setActionErr(null), 6000);
+      setCommitErr(`mutation failed: ${reason}`);
     }
     if (event.name === 'mutation.applied'
       || event.name === 'mutation.failed'
       || event.name === 'status') {
-      // Suppressed mid-commit — the committer drives one refetch at the end.
-      if (!refetchPausedRef.current) void refetch();
+      // Async queue: each row draining emits one of these; refetch to
+      // reconcile optimistic placeholders to server truth as they land.
+      void refetch();
     }
     // Live service mutations from another tab / admin: optimistically
     // patch local state so the chip set reflects shape without a full
@@ -213,7 +215,7 @@ export function useTopologyData(
     edges, setEdges,
     topoMeta,
     services, archetypes,
-    loadErr, actionErr, commitErr, clearCommitErr, flashErr, setRefetchPaused,
+    loadErr, actionErr, commitErr, clearCommitErr, flashErr,
     deploying, onDeploy,
     streamLive, lastEventAt, streamEnabled,
     refetch,
