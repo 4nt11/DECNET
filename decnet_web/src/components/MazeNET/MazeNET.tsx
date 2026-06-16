@@ -124,10 +124,14 @@ async function _dropArchetype(
       { name, services: dServices, x: nx, y: ny, decky_config: { archetype: drag.slug } },
       overNetId, net.name,
     );
-    if (dRes.kind !== 'applied') return;
-    const decky = dRes.data;
+    // On a live topology the add is STAGED (kind 'enqueued') — no server
+    // uuid yet, so use a temp id and render the node optimistically.
+    // Without this the decky is invisible until UPDATE + refetch. Mirrors
+    // the pending-net placeholder in _dropNetwork.
+    const id = dRes.kind === 'applied' ? dRes.data.uuid : `pending-decky-${name}`;
+    const nodeName = dRes.kind === 'applied' ? dRes.data.name : name;
     setNodes((p) => [...p, {
-      kind: 'decky', id: decky.uuid, netId: overNetId, name: decky.name,
+      kind: 'decky', id, netId: overNetId, name: nodeName,
       archetype: drag.slug, services: dServices, status: 'idle', x: nx, y: ny,
     } as DeckyNode]);
   } catch (err) {
@@ -181,7 +185,7 @@ const MazeNET: React.FC = () => {
   const {
     nets, setNets, nodes, setNodes, edges, setEdges,
     topoMeta, services, archetypes,
-    loadErr, actionErr, commitErr, clearCommitErr, flashErr,
+    loadErr, actionErr, commitErr, clearCommitErr, flashErr, setRefetchPaused,
     deploying, onDeploy,
     streamLive, lastEventAt, streamEnabled,
     refetch,
@@ -531,8 +535,36 @@ const MazeNET: React.FC = () => {
   }, []);
 
   const canDeploy = topoStatus === 'pending' && nets.length > 0;
+  const liveTopo = topoStatus === 'active' || topoStatus === 'degraded';
+  const pendingCount = editor.pendingCount;
+  const [committing, setCommitting] = useState(false);
   const deckyNodes = nodes.filter((n) => n.kind === 'decky');
   const runningDeckies = deckyNodes.filter((n) => n.status === 'active').length;
+
+  /* UPDATE button: flush the staged changeset as one sequential mutation
+     batch. SSE refetch is paused so per-mutation applied events don't wipe
+     still-staged placeholders mid-batch; one refetch reconciles at the end
+     (success or failure). A failed op throws MutationFailedError, which
+     flashErr pins as a persistent banner. */
+  const handleCommit = useCallback(async () => {
+    if (!topologyId || pendingCount === 0) return;
+    const n = pendingCount;
+    setCommitting(true);
+    setRefetchPaused(true);
+    try {
+      const applied = await editor.commitStaged();
+      pushToast({
+        text: `UPDATED · ${applied} CHANGE${applied === 1 ? '' : 'S'}`,
+        tone: 'matrix', icon: 'check-circle',
+      });
+    } catch (err) {
+      flashErr(err, `update failed after ${n - editor.pendingCount}/${n} changes`);
+    } finally {
+      setRefetchPaused(false);
+      await refetch();
+      setCommitting(false);
+    }
+  }, [editor, topologyId, pendingCount, refetch, pushToast, flashErr, setRefetchPaused]);
 
   return (
     <div className="maze-page">
@@ -592,8 +624,13 @@ const MazeNET: React.FC = () => {
             {fullscreen ? <Minimize2 size={12} /> : <Maximize2 size={12} />}
             {fullscreen ? ' EXIT FULL' : ' FULLSCREEN'}
           </button>
-          <button type="button" className="maze-btn ghost" onClick={refetch} title="Revert local state to server">
-            <RotateCcw size={12} /> REFRESH
+          <button
+            type="button"
+            className="maze-btn ghost"
+            onClick={() => { editor.discardStaged(); void refetch(); }}
+            title={pendingCount > 0 ? 'Discard staged changes + reload from server' : 'Reload from server'}
+          >
+            <RotateCcw size={12} /> {pendingCount > 0 ? `DISCARD (${pendingCount})` : 'REFRESH'}
           </button>
           <button
             type="button"
@@ -604,15 +641,31 @@ const MazeNET: React.FC = () => {
           >
             <Mail size={12} /> PERSONAS
           </button>
-          <button
-            type="button"
-            className="maze-btn"
-            disabled={!canDeploy || deploying}
-            onClick={onDeploy}
-            title={canDeploy ? 'Deploy topology' : 'Deploy requires pending status + at least one network'}
-          >
-            <UploadCloud size={12} /> {deploying ? 'DEPLOYING…' : 'DEPLOY'}
-          </button>
+          {liveTopo ? (
+            <button
+              type="button"
+              className="maze-btn"
+              disabled={pendingCount === 0 || committing}
+              onClick={handleCommit}
+              title={pendingCount > 0
+                ? `Apply ${pendingCount} staged change(s) to the live topology`
+                : 'No staged changes'}
+            >
+              <UploadCloud size={12} /> {committing
+                ? 'UPDATING…'
+                : pendingCount > 0 ? `UPDATE (${pendingCount})` : 'UPDATE'}
+            </button>
+          ) : (
+            <button
+              type="button"
+              className="maze-btn"
+              disabled={!canDeploy || deploying}
+              onClick={onDeploy}
+              title={canDeploy ? 'Deploy topology' : 'Deploy requires pending status + at least one network'}
+            >
+              <UploadCloud size={12} /> {deploying ? 'DEPLOYING…' : 'DEPLOY'}
+            </button>
+          )}
         </div>
       </div>
 

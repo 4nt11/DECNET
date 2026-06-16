@@ -16,7 +16,7 @@
  * primitive because mutation ops are name-keyed while direct CRUD is
  * uuid-keyed. Callers plumb both.
  */
-import { useCallback, useEffect, useMemo, useRef } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import type {
   CreateDeckyBody,
   CreateLanBody,
@@ -52,6 +52,12 @@ export interface UseTopologyEditorOptions {
 export type PrimitiveResult<T> =
   | { kind: 'applied'; data: T }
   | { kind: 'enqueued'; mutationId: string };
+
+interface StagedOp {
+  topologyId: string;
+  op: MutationOp;
+  payload: Record<string, unknown>;
+}
 
 export interface UseTopologyEditor {
   createLan(topologyId: string, body: CreateLanBody): Promise<PrimitiveResult<LANRow>>;
@@ -108,6 +114,18 @@ export interface UseTopologyEditor {
     deckyName: string,
     lanName: string,
   ): Promise<PrimitiveResult<void>>;
+
+  // ── Staging (live topologies only) ───────────────────────────────────
+  /** Count of staged-but-unsent live edits. 0 on a pending topology. */
+  pendingCount: number;
+  /** Flush staged edits as one sequential mutation batch (version-cursored,
+   *  each awaited to a terminal state). Stops on the first failure, keeping
+   *  the failing op + remainder staged, and rethrows MutationFailedError so
+   *  the caller can surface it. Resolves with the count applied. */
+  commitStaged(): Promise<number>;
+  /** Drop all staged edits without sending (paired with a refetch to wipe
+   *  their optimistic placeholders). */
+  discardStaged(): void;
 }
 
 export function useTopologyEditor(
@@ -116,19 +134,19 @@ export function useTopologyEditor(
   const { api, topoStatus, topoVersion } = opts;
   const live = topoStatus === 'active' || topoStatus === 'degraded';
 
-  // Serialised mutation submission. Two problems this solves, both
-  // proven against the live backend:
-  //   1. expected_version is bumped at ENQUEUE (not at apply), so two
-  //      ops fired back-to-back race: whichever HTTP request the server
-  //      sees second carries a stale version and 409s.  We chain submits
-  //      so only one enqueue is ever in flight, in submission order.
-  //   2. A failed mutation silently degrades the topology.  We await each
-  //      mutation to a terminal state and throw MutationFailedError on
-  //      'failed' so the caller can surface it loudly.
-  const chainRef = useRef<Promise<unknown>>(Promise.resolve());
+  // Live edits STAGE rather than send. Each live primitive records its
+  // op here and returns immediately; nothing hits the backend until
+  // commitStaged() flushes the batch (the UPDATE button). Staging is what
+  // lets the user assemble a coherent changeset (e.g. add a net AND bridge
+  // it) before any of it lands — and it kills the per-action SSE-refetch
+  // race that duplicated optimistic placeholders.
+  const [staged, setStaged] = useState<StagedOp[]>([]);
+
   // Optimistic expected_version cursor. enqueue bumps the server version
-  // by exactly 1, so we advance locally rather than waiting for a refetch
-  // between queued ops (onReparent fires detach + attach in one handler).
+  // by exactly 1, so within a commit batch we advance locally rather than
+  // waiting for a refetch between ops. NB: a *failed* mutation still bumps
+  // the version (the check happens at enqueue), so we advance after enqueue
+  // regardless of the apply outcome.
   const cursorRef = useRef<number>(topoVersion);
   useEffect(() => {
     // Adopt a higher server version (a refetch landed, or another editor
@@ -139,25 +157,45 @@ export function useTopologyEditor(
 
   const submit = useCallback(
     (topologyId: string, op: MutationOp, payload: Record<string, unknown>): Promise<string> => {
-      const task = chainRef.current.then(async () => {
-        const expected = cursorRef.current;
-        const res = await api.enqueueMutation(topologyId, op, payload, expected);
-        cursorRef.current = expected + 1;
-        const row = await api.waitForMutation(topologyId, res.mutation_id);
-        if (row.state === 'failed') {
-          throw new MutationFailedError(op, row.reason ?? 'unknown reason');
-        }
-        return res.mutation_id;
-      });
-      // Keep the chain alive after a rejection so one failed op doesn't
-      // wedge every subsequent submit.
-      chainRef.current = task.then(() => undefined, () => undefined);
-      return task;
+      setStaged((prev) => [...prev, { topologyId, op, payload }]);
+      // Sentinel id — callers thread this into optimistic state but it
+      // never reaches the backend; the post-commit refetch reconciles to
+      // real ids.
+      return Promise.resolve('staged');
     },
-    [api],
+    [],
   );
 
-  return useMemo<UseTopologyEditor>(() => ({
+  const discardStaged = useCallback(() => setStaged([]), []);
+
+  const commitStaged = useCallback(async (): Promise<number> => {
+    const ops = staged;
+    if (ops.length === 0) return 0;
+    let applied = 0;
+    try {
+      for (const o of ops) {
+        const expected = cursorRef.current;
+        const res = await api.enqueueMutation(o.topologyId, o.op, o.payload, expected);
+        // Advance even if the apply fails below — enqueue already bumped
+        // the server version.
+        cursorRef.current = expected + 1;
+        const row = await api.waitForMutation(o.topologyId, res.mutation_id);
+        if (row.state === 'failed') {
+          throw new MutationFailedError(o.op, row.reason ?? 'unknown reason');
+        }
+        applied += 1;
+      }
+      setStaged([]);
+      return applied;
+    } catch (err) {
+      // Drop the applied prefix; keep the failing op + the rest so the user
+      // can fix and retry without re-staging everything.
+      setStaged(ops.slice(applied));
+      throw err;
+    }
+  }, [staged, api]);
+
+  const primitives = useMemo<Omit<UseTopologyEditor, 'pendingCount' | 'commitStaged' | 'discardStaged'>>(() => ({
     // ── LAN ────────────────────────────────────────────────────────────
     async createLan(topologyId, body) {
       if (!live) {
@@ -274,4 +312,9 @@ export function useTopologyEditor(
       return { kind: 'enqueued', mutationId };
     },
   }), [api, live, submit]);
+
+  return useMemo<UseTopologyEditor>(
+    () => ({ ...primitives, pendingCount: staged.length, commitStaged, discardStaged }),
+    [primitives, staged.length, commitStaged, discardStaged],
+  );
 }

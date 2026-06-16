@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import type { ApiError } from '../../utils/api';
 import type { Net, MazeNode, Edge } from './types';
 import { DEFAULT_SERVICES, ARCHETYPES as DEFAULT_ARCHETYPES } from './data';
@@ -48,6 +48,10 @@ export interface UseTopologyDataResult {
   commitErr: string | null;
   clearCommitErr: () => void;
   flashErr: (err: unknown, fallback: string) => void;
+  /** Pause SSE-driven refetch while a commit batch is in flight, so the
+   *  per-mutation ``applied`` events don't wipe the still-staged
+   *  placeholders mid-batch. The committer does one refetch at the end. */
+  setRefetchPaused: (paused: boolean) => void;
 
   // Deploy
   deploying: boolean;
@@ -86,6 +90,11 @@ export function useTopologyData(
   const [deploying, setDeploying] = useState(false);
 
   const clearCommitErr = useCallback(() => setCommitErr(null), []);
+
+  const refetchPausedRef = useRef(false);
+  const setRefetchPaused = useCallback((paused: boolean) => {
+    refetchPausedRef.current = paused;
+  }, []);
 
   const flashErr = useCallback((err: unknown, fallback: string) => {
     // A failed live mutation is loud + persistent: the queue halted and
@@ -153,7 +162,8 @@ export function useTopologyData(
     if (event.name === 'mutation.applied'
       || event.name === 'mutation.failed'
       || event.name === 'status') {
-      void refetch();
+      // Suppressed mid-commit — the committer drives one refetch at the end.
+      if (!refetchPausedRef.current) void refetch();
     }
     // Live service mutations from another tab / admin: optimistically
     // patch local state so the chip set reflects shape without a full
@@ -203,7 +213,7 @@ export function useTopologyData(
     edges, setEdges,
     topoMeta,
     services, archetypes,
-    loadErr, actionErr, commitErr, clearCommitErr, flashErr,
+    loadErr, actionErr, commitErr, clearCommitErr, flashErr, setRefetchPaused,
     deploying, onDeploy,
     streamLive, lastEventAt, streamEnabled,
     refetch,

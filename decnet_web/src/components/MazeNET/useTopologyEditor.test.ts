@@ -19,27 +19,32 @@ const editorFor = (api: MazeApi, topoVersion = 5) =>
     useTopologyEditor({ api, topoStatus: 'active', topoVersion }),
   );
 
-describe('useTopologyEditor live mutation queue', () => {
-  it('serialises concurrent submits and advances expected_version per enqueue', async () => {
+describe('useTopologyEditor live staging', () => {
+  it('stages live edits without sending; commit flushes them in order with a version cursor', async () => {
     const enqueue = vi.fn().mockResolvedValue({ mutation_id: 'm', state: 'pending' });
     const api = buildApi({ enqueueMutation: enqueue });
     const { result } = editorFor(api, 5);
 
-    // Fire two structural ops in the SAME tick — the pre-fix bug was both
-    // sending expected_version=5 and the loser 409ing.
     await act(async () => {
-      await Promise.all([
-        result.current.createLan('t', { name: 'a', is_dmz: false, x: 0, y: 0 }),
-        result.current.deleteLan('t', 'lid', 'b'),
-      ]);
+      await result.current.createLan('t', { name: 'a', is_dmz: false, x: 0, y: 0 });
+      await result.current.deleteLan('t', 'lid', 'b');
+    });
+
+    // Staged, not sent.
+    expect(result.current.pendingCount).toBe(2);
+    expect(enqueue).not.toHaveBeenCalled();
+
+    await act(async () => {
+      await result.current.commitStaged();
     });
 
     expect(enqueue).toHaveBeenCalledTimes(2);
     expect(enqueue.mock.calls[0][3]).toBe(5); // first uses server version
     expect(enqueue.mock.calls[1][3]).toBe(6); // second advanced by the cursor
+    expect(result.current.pendingCount).toBe(0);
   });
 
-  it('throws MutationFailedError on a failed mutation but keeps the queue alive', async () => {
+  it('commit stops loudly on a failed op, keeps the remainder, and retries cleanly', async () => {
     const wait = vi
       .fn()
       .mockResolvedValueOnce({ state: 'failed', reason: 'post-apply validation failed: IP_COLLISION' })
@@ -48,16 +53,36 @@ describe('useTopologyEditor live mutation queue', () => {
     const { result } = editorFor(api, 1);
 
     await act(async () => {
-      await expect(
-        result.current.createLan('t', { name: 'a', is_dmz: false, x: 0, y: 0 }),
-      ).rejects.toBeInstanceOf(MutationFailedError);
+      await result.current.createLan('t', { name: 'a', is_dmz: false, x: 0, y: 0 });
+      await result.current.deleteLan('t', 'lid', 'b');
     });
+    expect(result.current.pendingCount).toBe(2);
 
-    // A failed op must not wedge the chain — the next submit still resolves.
     await act(async () => {
-      await expect(
-        result.current.deleteLan('t', 'lid', 'b'),
-      ).resolves.toEqual({ kind: 'enqueued', mutationId: 'm' });
+      await expect(result.current.commitStaged()).rejects.toBeInstanceOf(MutationFailedError);
     });
+    // First op failed → nothing applied → both stay staged for retry.
+    expect(result.current.pendingCount).toBe(2);
+
+    // Retry: waitForMutation now resolves 'applied' for both.
+    await act(async () => {
+      await result.current.commitStaged();
+    });
+    expect(result.current.pendingCount).toBe(0);
+  });
+
+  it('discardStaged drops the batch without sending', async () => {
+    const enqueue = vi.fn().mockResolvedValue({ mutation_id: 'm', state: 'pending' });
+    const api = buildApi({ enqueueMutation: enqueue });
+    const { result } = editorFor(api, 1);
+
+    await act(async () => {
+      await result.current.createLan('t', { name: 'a', is_dmz: false, x: 0, y: 0 });
+    });
+    expect(result.current.pendingCount).toBe(1);
+
+    act(() => result.current.discardStaged());
+    expect(result.current.pendingCount).toBe(0);
+    expect(enqueue).not.toHaveBeenCalled();
   });
 });
