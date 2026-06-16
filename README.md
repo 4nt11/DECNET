@@ -1,8 +1,24 @@
-# DECNET
+<div align="center">
 
-A honeypot deception network framework. Spin up a fleet of fake machines — called **deckies** — that appear as real, heterogeneous LAN hosts to anyone scanning the network. Each decky gets its own MAC address, IP, hostname, services, OS fingerprint, and log pipeline. Attackers probe the network, DECNET traps every interaction, and a full intelligence stack profiles, clusters, and attributes their behaviour.
+<img src="assets/decnet-logo.svg" alt="DECNET — Deception Network" width="560">
+
+**A honeypot deception network framework.**
+
+Spin up a fleet of fake machines — **deckies** — that look like real, heterogeneous LAN hosts to anyone scanning the network. Each decky gets its own MAC, IP, hostname, services, OS fingerprint, and log pipeline. Attackers probe; DECNET traps every interaction; a full intelligence stack profiles, clusters, and attributes their behaviour.
+
+<br>
+
+[![PyPI version](https://img.shields.io/pypi/v/decnet.svg)](https://pypi.org/project/decnet/)
+[![Python](https://img.shields.io/pypi/pyversions/decnet.svg)](https://pypi.org/project/decnet/)
+[![License: AGPL-3.0](https://img.shields.io/badge/license-AGPL--3.0-blue.svg)](LICENSE)
+[![Ruff](https://img.shields.io/badge/lint-ruff-261230.svg?logo=ruff&logoColor=white)](https://github.com/astral-sh/ruff)
+[![Platform](https://img.shields.io/badge/platform-Linux-333.svg?logo=linux&logoColor=white)](#requirements)
+
+[Quick Start](#quick-start) · [Architecture](#architecture) · [REST API](#rest-api--web-dashboard) · [MazeNET](#mazenet-topology) · [Support](https://ko-fi.com/C0C31YDLB5)
 
 [![ko-fi](https://ko-fi.com/img/githubbutton_sm.svg)](https://ko-fi.com/C0C31YDLB5)
+
+</div>
 
 ---
 
