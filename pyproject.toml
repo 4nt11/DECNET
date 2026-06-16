@@ -34,6 +34,9 @@ dependencies = [
     "psutil>=5.9.0",
     "python-dotenv>=1.0.0",
     "sqlmodel>=0.0.16",
+    # Schema migrations. Runtime dep (not dev-only): the API runs
+    # `alembic upgrade head` at boot for managed DBs (see db/migrate.py).
+    "alembic>=1.13",
     "scapy>=2.6.1",
     "orjson>=3.10",
     "cryptography>=48.0.1",

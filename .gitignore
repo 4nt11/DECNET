@@ -19,6 +19,8 @@ decnet-topology-*-compose.yml
 .docker/
 decnet-state.json
 *.ini
+# tracked: Alembic CLI config (migrations live in decnet/web/db/migrations)
+!alembic.ini
 decnet.log*
 *.loggy
 *.nmap

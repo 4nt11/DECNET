@@ -13,7 +13,7 @@ from datetime import datetime, timezone
 from typing import Any, List, Optional
 
 from pydantic import BaseModel
-from sqlalchemy import BINARY, Column, Text, UniqueConstraint
+from sqlalchemy import BINARY, Column, LargeBinary, Text, UniqueConstraint
 from sqlmodel import Field, SQLModel
 
 from ._base import _BIG_TEXT
@@ -238,10 +238,18 @@ class AttackerIdentity(SQLModel, table=True):
     # registry); this column is the rollup the (future) attribution
     # engine will write into so the federation gossip layer
     # has one identity-level fingerprint to compare across operators.
-    # BINARY(8) so MySQL can index without a prefix length.
+    # BINARY(8) so MySQL can index without a prefix length. SQLite has no
+    # fixed-width binary type (BINARY → NUMERIC affinity, which reflects back
+    # as NUMERIC and trips `alembic check`), so use a BLOB variant there —
+    # bytes round-trip identically and the type matches what SQLite reports.
     kd_digraph_simhash: Optional[bytes] = Field(
         default=None,
-        sa_column=Column("kd_digraph_simhash", BINARY(8), nullable=True, index=True),
+        sa_column=Column(
+            "kd_digraph_simhash",
+            BINARY(8).with_variant(LargeBinary(), "sqlite"),
+            nullable=True,
+            index=True,
+        ),
     )
     # Soft-merge audit trail. When the clusterer collapses two
     # identities, the loser's row stays in place with this set to the
