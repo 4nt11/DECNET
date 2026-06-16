@@ -5,6 +5,7 @@ import type { Net, MazeNode, Edge } from './types';
 import { DEFAULT_SERVICES, ARCHETYPES as DEFAULT_ARCHETYPES } from './data';
 import type { Archetype, ServiceDef } from './data';
 import type { MazeApi } from './useMazeApi';
+import { MutationFailedError } from './useTopologyEditor';
 import { useTopologyStream, type TopologyStreamEvent } from './useTopologyStream';
 
 export interface TopoMeta {
@@ -42,6 +43,10 @@ export interface UseTopologyDataResult {
   // Errors + transient banners
   loadErr: string | null;
   actionErr: string | null;
+  /** Persistent (no auto-clear) error from a failed live mutation —
+   *  the topology likely went degraded. Dismissed via clearCommitErr. */
+  commitErr: string | null;
+  clearCommitErr: () => void;
   flashErr: (err: unknown, fallback: string) => void;
 
   // Deploy
@@ -77,9 +82,18 @@ export function useTopologyData(
 
   const [loadErr, setLoadErr] = useState<string | null>(null);
   const [actionErr, setActionErr] = useState<string | null>(null);
+  const [commitErr, setCommitErr] = useState<string | null>(null);
   const [deploying, setDeploying] = useState(false);
 
+  const clearCommitErr = useCallback(() => setCommitErr(null), []);
+
   const flashErr = useCallback((err: unknown, fallback: string) => {
+    // A failed live mutation is loud + persistent: the queue halted and
+    // the topology probably degraded — don't let it vanish in 4s.
+    if (err instanceof MutationFailedError) {
+      setCommitErr(err.message);
+      return;
+    }
     const msg = (err as ApiError)?.response?.data?.detail ?? (err as ApiError)?.message ?? fallback;
     setActionErr(msg);
     setTimeout(() => setActionErr(null), 4000);
@@ -189,7 +203,7 @@ export function useTopologyData(
     edges, setEdges,
     topoMeta,
     services, archetypes,
-    loadErr, actionErr, flashErr,
+    loadErr, actionErr, commitErr, clearCommitErr, flashErr,
     deploying, onDeploy,
     streamLive, lastEventAt, streamEnabled,
     refetch,

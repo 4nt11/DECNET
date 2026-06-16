@@ -16,7 +16,7 @@
  * primitive because mutation ops are name-keyed while direct CRUD is
  * uuid-keyed. Callers plumb both.
  */
-import { useMemo } from 'react';
+import { useCallback, useEffect, useMemo, useRef } from 'react';
 import type {
   CreateDeckyBody,
   CreateLanBody,
@@ -24,7 +24,22 @@ import type {
   EdgeRow,
   LANRow,
   MazeApi,
+  MutationOp,
 } from './useMazeApi';
+
+/** Thrown by a live primitive when its mutation settles as ``failed``.
+ *  Carries the op + backend reason so the page can surface a loud,
+ *  persistent error instead of a transient toast. */
+export class MutationFailedError extends Error {
+  readonly op: string;
+  readonly reason: string;
+  constructor(op: string, reason: string) {
+    super(`mutation ${op} failed: ${reason}`);
+    this.name = 'MutationFailedError';
+    this.op = op;
+    this.reason = reason;
+  }
+}
 
 export interface UseTopologyEditorOptions {
   api: MazeApi;
@@ -101,6 +116,47 @@ export function useTopologyEditor(
   const { api, topoStatus, topoVersion } = opts;
   const live = topoStatus === 'active' || topoStatus === 'degraded';
 
+  // Serialised mutation submission. Two problems this solves, both
+  // proven against the live backend:
+  //   1. expected_version is bumped at ENQUEUE (not at apply), so two
+  //      ops fired back-to-back race: whichever HTTP request the server
+  //      sees second carries a stale version and 409s.  We chain submits
+  //      so only one enqueue is ever in flight, in submission order.
+  //   2. A failed mutation silently degrades the topology.  We await each
+  //      mutation to a terminal state and throw MutationFailedError on
+  //      'failed' so the caller can surface it loudly.
+  const chainRef = useRef<Promise<unknown>>(Promise.resolve());
+  // Optimistic expected_version cursor. enqueue bumps the server version
+  // by exactly 1, so we advance locally rather than waiting for a refetch
+  // between queued ops (onReparent fires detach + attach in one handler).
+  const cursorRef = useRef<number>(topoVersion);
+  useEffect(() => {
+    // Adopt a higher server version (a refetch landed, or another editor
+    // advanced it) but never walk the cursor backwards under an in-flight
+    // batch that has already advanced past the last-seen server version.
+    if (topoVersion > cursorRef.current) cursorRef.current = topoVersion;
+  }, [topoVersion]);
+
+  const submit = useCallback(
+    (topologyId: string, op: MutationOp, payload: Record<string, unknown>): Promise<string> => {
+      const task = chainRef.current.then(async () => {
+        const expected = cursorRef.current;
+        const res = await api.enqueueMutation(topologyId, op, payload, expected);
+        cursorRef.current = expected + 1;
+        const row = await api.waitForMutation(topologyId, res.mutation_id);
+        if (row.state === 'failed') {
+          throw new MutationFailedError(op, row.reason ?? 'unknown reason');
+        }
+        return res.mutation_id;
+      });
+      // Keep the chain alive after a rejection so one failed op doesn't
+      // wedge every subsequent submit.
+      chainRef.current = task.then(() => undefined, () => undefined);
+      return task;
+    },
+    [api],
+  );
+
   return useMemo<UseTopologyEditor>(() => ({
     // ── LAN ────────────────────────────────────────────────────────────
     async createLan(topologyId, body) {
@@ -114,8 +170,8 @@ export function useTopologyEditor(
       if (body.is_dmz !== undefined) payload.is_dmz = body.is_dmz;
       if (body.x !== undefined) payload.x = body.x;
       if (body.y !== undefined) payload.y = body.y;
-      const res = await api.enqueueMutation(topologyId, 'add_lan', payload, topoVersion);
-      return { kind: 'enqueued', mutationId: res.mutation_id };
+      const mutationId = await submit(topologyId, 'add_lan', payload);
+      return { kind: 'enqueued', mutationId };
     },
     async updateLan(topologyId, lanId, lanName, patch) {
       if (!live) {
@@ -129,18 +185,16 @@ export function useTopologyEditor(
         else patchFields[k] = v;
       }
       if (Object.keys(patchFields).length > 0) payload.patch = patchFields;
-      const res = await api.enqueueMutation(topologyId, 'update_lan', payload, topoVersion);
-      return { kind: 'enqueued', mutationId: res.mutation_id };
+      const mutationId = await submit(topologyId, 'update_lan', payload);
+      return { kind: 'enqueued', mutationId };
     },
     async deleteLan(topologyId, lanId, lanName) {
       if (!live) {
         await api.deleteLan(topologyId, lanId);
         return { kind: 'applied', data: undefined };
       }
-      const res = await api.enqueueMutation(
-        topologyId, 'remove_lan', { name: lanName }, topoVersion,
-      );
-      return { kind: 'enqueued', mutationId: res.mutation_id };
+      const mutationId = await submit(topologyId, 'remove_lan', { name: lanName });
+      return { kind: 'enqueued', mutationId };
     },
 
     // ── Decky ──────────────────────────────────────────────────────────
@@ -172,8 +226,8 @@ export function useTopologyEditor(
       if (fwd !== undefined) payload.forwards_l3 = fwd;
       if (body.x !== undefined) payload.x = body.x;
       if (body.y !== undefined) payload.y = body.y;
-      const res = await api.enqueueMutation(topologyId, 'add_decky', payload, topoVersion);
-      return { kind: 'enqueued', mutationId: res.mutation_id };
+      const mutationId = await submit(topologyId, 'add_decky', payload);
+      return { kind: 'enqueued', mutationId };
     },
     async updateDecky(topologyId, uuid, deckyName, patch, extras) {
       if (!live) {
@@ -188,18 +242,16 @@ export function useTopologyEditor(
       }
       if (Object.keys(patchFields).length > 0) payload.patch = patchFields;
       if (extras?.force) payload.force = true;
-      const res = await api.enqueueMutation(topologyId, 'update_decky', payload, topoVersion);
-      return { kind: 'enqueued', mutationId: res.mutation_id };
+      const mutationId = await submit(topologyId, 'update_decky', payload);
+      return { kind: 'enqueued', mutationId };
     },
     async deleteDecky(topologyId, uuid, deckyName) {
       if (!live) {
         await api.deleteDecky(topologyId, uuid);
         return { kind: 'applied', data: undefined };
       }
-      const res = await api.enqueueMutation(
-        topologyId, 'remove_decky', { decky: deckyName }, topoVersion,
-      );
-      return { kind: 'enqueued', mutationId: res.mutation_id };
+      const mutationId = await submit(topologyId, 'remove_decky', { decky: deckyName });
+      return { kind: 'enqueued', mutationId };
     },
 
     // ── Edges ──────────────────────────────────────────────────────────
@@ -210,18 +262,16 @@ export function useTopologyEditor(
       }
       const payload: Record<string, unknown> = { decky: deckyName, lan: lanName };
       if (body.forwards_l3 !== undefined) payload.forwards_l3 = body.forwards_l3;
-      const res = await api.enqueueMutation(topologyId, 'attach_decky', payload, topoVersion);
-      return { kind: 'enqueued', mutationId: res.mutation_id };
+      const mutationId = await submit(topologyId, 'attach_decky', payload);
+      return { kind: 'enqueued', mutationId };
     },
     async detachEdge(topologyId, edgeId, deckyName, lanName) {
       if (!live) {
         await api.detachEdge(topologyId, edgeId);
         return { kind: 'applied', data: undefined };
       }
-      const res = await api.enqueueMutation(
-        topologyId, 'detach_decky', { decky: deckyName, lan: lanName }, topoVersion,
-      );
-      return { kind: 'enqueued', mutationId: res.mutation_id };
+      const mutationId = await submit(topologyId, 'detach_decky', { decky: deckyName, lan: lanName });
+      return { kind: 'enqueued', mutationId };
     },
-  }), [api, live, topoVersion]);
+  }), [api, live, submit]);
 }

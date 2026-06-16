@@ -181,7 +181,7 @@ const MazeNET: React.FC = () => {
   const {
     nets, setNets, nodes, setNodes, edges, setEdges,
     topoMeta, services, archetypes,
-    loadErr, actionErr, flashErr,
+    loadErr, actionErr, commitErr, clearCommitErr, flashErr,
     deploying, onDeploy,
     streamLive, lastEventAt, streamEnabled,
     refetch,
@@ -560,6 +560,17 @@ const MazeNET: React.FC = () => {
             )}
             {loadErr && <span className="alert-text"> · {loadErr}</span>}
             {actionErr && <span className="alert-text"> · {actionErr}</span>}
+            {commitErr && (
+              <span className="alert-text"> · UPDATE FAILED: {commitErr}
+                <button
+                  type="button"
+                  className="maze-btn ghost"
+                  style={{ marginLeft: 6, padding: '0 6px' }}
+                  onClick={clearCommitErr}
+                  title="Dismiss"
+                >✕</button>
+              </span>
+            )}
           </div>
         </div>
         <div className="maze-page-actions">

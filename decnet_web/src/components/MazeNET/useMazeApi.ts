@@ -37,6 +37,16 @@ export interface EdgeRow {
   forwards_l3: boolean;
 }
 
+export type MutationState = 'pending' | 'applying' | 'applied' | 'failed';
+
+export interface MutationRow {
+  id: string;
+  topology_id: string;
+  op: string;
+  state: MutationState;
+  reason: string | null;
+}
+
 export interface TopologySummary {
   id: string;
   name: string;
@@ -249,6 +259,16 @@ export interface MazeApi {
     expectedVersion?: number,
   ) => Promise<EnqueueMutationResponse>;
 
+  /** Poll the mutation queue until ``mutationId`` reaches a terminal
+   *  state (``applied`` | ``failed``). Resolves with that row; rejects
+   *  only on timeout. A ``failed`` row resolves (not rejects) so callers
+   *  can read ``reason`` — the editor turns it into a loud error. */
+  waitForMutation: (
+    topologyId: string,
+    mutationId: string,
+    opts?: { timeoutMs?: number; intervalMs?: number },
+  ) => Promise<MutationRow>;
+
   deployTopology: (topologyId: string) => Promise<void>;
 }
 
@@ -393,6 +413,36 @@ export function useMazeApi(): MazeApi {
     [],
   );
 
+  const waitForMutation = useCallback(
+    async (
+      topologyId: string,
+      mutationId: string,
+      opts: { timeoutMs?: number; intervalMs?: number } = {},
+    ): Promise<MutationRow> => {
+      const { timeoutMs = 30000, intervalMs = 400 } = opts;
+      const deadline = Date.now() + timeoutMs;
+      // ponytail: poll the existing list endpoint; the SSE stream also
+      // carries mutation.applied/failed but wiring a one-shot waiter into
+      // it couples the editor to the stream hook for no real gain here.
+      for (;;) {
+        const { data } = await api.get<MutationRow[]>(
+          `/topologies/${topologyId}/mutations`,
+        );
+        const row = data.find((r) => r.id === mutationId);
+        if (row && (row.state === 'applied' || row.state === 'failed')) {
+          return row;
+        }
+        if (Date.now() >= deadline) {
+          throw new Error(
+            `mutation ${mutationId} did not settle within ${timeoutMs}ms`,
+          );
+        }
+        await new Promise((res) => setTimeout(res, intervalMs));
+      }
+    },
+    [],
+  );
+
   const enqueueMutation = useCallback(
     async (
       topologyId: string,
@@ -418,7 +468,7 @@ export function useMazeApi(): MazeApi {
       createLan, updateLan, deleteLan,
       createDecky, updateDecky, deleteDecky,
       attachEdge, detachEdge,
-      enqueueMutation,
+      enqueueMutation, waitForMutation,
       deployTopology,
     }),
     [
@@ -427,7 +477,7 @@ export function useMazeApi(): MazeApi {
       createLan, updateLan, deleteLan,
       createDecky, updateDecky, deleteDecky,
       attachEdge, detachEdge,
-      enqueueMutation,
+      enqueueMutation, waitForMutation,
       deployTopology,
     ],
   );
