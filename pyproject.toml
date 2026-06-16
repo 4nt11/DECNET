@@ -4,8 +4,10 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "decnet"
-version = "0.2.0"
+version = "1.0.0"
 description = "Deception network: deploy honeypot deckies that appear as real LAN hosts"
+readme = "README.md"
+authors = [{ name = "Samuel Paschuan", email = "samuel.paschuan@xmartlab.com" }]
 license = "AGPL-3.0-or-later"
 license-files = ["LICENSE"]
 requires-python = ">=3.11"
@@ -71,6 +73,10 @@ dependencies = [
     "stix2>=3.0",
     "mitreattack-python>=3.0",
 ]
+
+[project.urls]
+Homepage = "https://decnet.cl"
+Repository = "https://git.resacachile.cl/anti/DECNET"
 
 [project.optional-dependencies]
 tracing = [
@@ -164,7 +170,9 @@ skip_covered = false
 
 [tool.setuptools.packages.find]
 where = ["."]
-include = ["decnet*"]
+# "decnet*" also globs decnet_web/ and pulls in stray node_modules .py files;
+# pin to the actual package so the wheel/sdist stay clean.
+include = ["decnet", "decnet.*"]
 
 [tool.setuptools.package-data]
 # Ship docker build contexts + syslog_bridge.py as package data so they land
