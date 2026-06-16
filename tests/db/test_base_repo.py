@@ -96,8 +96,8 @@ class DummyRepo(BaseRepository):
     async def set_attacker_identity_id(self, a, i): await super().set_attacker_identity_id(a, i)
     async def list_all_identities(self): await super().list_all_identities(); return []
     async def update_identity_merged_into(self, u, w): await super().update_identity_merged_into(u, w)
-    async def update_identity_fingerprints(self, u, *, ja3_hashes=None, hassh_hashes=None, tls_cert_sha256=None):
-        await super().update_identity_fingerprints(u, ja3_hashes=ja3_hashes, hassh_hashes=hassh_hashes, tls_cert_sha256=tls_cert_sha256)
+    async def update_identity_fingerprints(self, u, *, ja3_hashes=None, hassh_hashes=None, tls_cert_sha256=None, kd_digraph_simhash=None):
+        await super().update_identity_fingerprints(u, ja3_hashes=ja3_hashes, hassh_hashes=hassh_hashes, tls_cert_sha256=tls_cert_sha256, kd_digraph_simhash=kd_digraph_simhash)
     # Campaign clustering (this PR)
     async def get_campaign_by_uuid(self, u): await super().get_campaign_by_uuid(u)
     async def list_campaigns(self, limit=50, offset=0): await super().list_campaigns(limit, offset); return []
@@ -260,7 +260,7 @@ async def test_base_repo_coverage():
     await dr.list_all_identities()
     await dr.update_identity_merged_into("a", "b")
     await dr.update_identity_merged_into("a", None)
-    await dr.update_identity_fingerprints("a", ja3_hashes='["x"]', hassh_hashes=None, tls_cert_sha256='["y"]')
+    await dr.update_identity_fingerprints("a", ja3_hashes='["x"]', hassh_hashes=None, tls_cert_sha256='["y"]', kd_digraph_simhash=b"\x00" * 8)
     await dr.get_campaign_by_uuid("a")
     await dr.list_campaigns()
     await dr.count_campaigns()

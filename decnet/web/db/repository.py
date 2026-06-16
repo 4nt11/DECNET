@@ -683,15 +683,19 @@ class BaseRepository(ABC):
         ja3_hashes: Optional[str] = None,
         hassh_hashes: Optional[str] = None,
         tls_cert_sha256: Optional[str] = None,
+        kd_digraph_simhash: Optional[bytes] = None,
     ) -> None:
         """Set the fingerprint summary columns on one ``AttackerIdentity``.
 
-        Each argument is a JSON-encoded ``list[str]`` (the federation
-        wire shape) or ``None`` to leave the corresponding column at
-        ``NULL``. Always overwrites — the rollup writer is the source
-        of truth for these columns, computed deterministically from
-        the identity's member observations every clusterer tick. Also
-        bumps ``updated_at`` so cache subscribers can invalidate.
+        ``ja3_hashes`` / ``hassh_hashes`` / ``tls_cert_sha256`` are
+        JSON-encoded ``list[str]`` (the federation wire shape) or
+        ``None``. ``kd_digraph_simhash`` is the 8-byte keystroke-rhythm
+        centroid (bitwise majority over the identity's session-level
+        ``motor.digraph_simhash`` observations) or ``None``. Always
+        overwrites — the rollup writer is the source of truth for these
+        columns, recomputed deterministically from the identity's member
+        observations every clusterer tick. Also bumps ``updated_at`` so
+        cache subscribers can invalidate.
         """
         pass
 

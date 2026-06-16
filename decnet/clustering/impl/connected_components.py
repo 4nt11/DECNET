@@ -43,9 +43,14 @@ from decnet.clustering.impl.similarity import (
 )
 from decnet.logging import get_logger
 from decnet.profiler.identity_rollup import extract_fp_summaries
+from decnet.util.simhash import from_bytes8, to_bytes8
 from decnet.web.db.repository import BaseRepository
 
 log = get_logger("clustering.connected_components")
+
+# Per-session SimHash observations of the keystroke-rhythm biometric; the
+# rollup folds them into one identity-level centroid.
+_DIGRAPH_PRIMITIVE = "motor.digraph_simhash"
 
 
 def cluster_observations(
@@ -354,6 +359,38 @@ async def _link(
         return False
 
 
+async def _digraph_centroid(
+    repo: BaseRepository, identity_uuid: str,
+) -> Optional[bytes]:
+    """Fold the identity's session-level ``motor.digraph_simhash``
+    observations into one 8-byte bitwise-majority centroid.
+
+    Bit *i* is set iff a majority of the identity's session SimHashes
+    have it set — denoises per-session jitter so the centroid is the
+    stable keystroke-rhythm fingerprint for Hamming comparison. Returns
+    ``None`` when the identity has no usable digraph observations yet.
+    """
+    obs = await repo.observations_for_identity_primitive(
+        identity_uuid, _DIGRAPH_PRIMITIVE,
+    )
+    hashes: list[int] = []
+    for o in obs:
+        value = o.get("value")
+        if isinstance(value, str) and len(value) == 16:
+            try:
+                hashes.append(from_bytes8(bytes.fromhex(value)))
+            except ValueError:
+                continue
+    if not hashes:
+        return None
+    n = len(hashes)
+    centroid = 0
+    for i in range(64):
+        if sum((h >> i) & 1 for h in hashes) * 2 > n:
+            centroid |= (1 << i)
+    return to_bytes8(centroid)
+
+
 async def _roll_up_fingerprints(
     repo: BaseRepository,
     identity_uuid: str,
@@ -365,8 +402,11 @@ async def _roll_up_fingerprints(
     next pass."""
     summaries = extract_fp_summaries(member_rows)
     fp_kwargs = {k: v for k, v in summaries.items() if k in {"ja3_hashes", "hassh_hashes", "tls_cert_sha256"}}
+    kd_centroid = await _digraph_centroid(repo, identity_uuid)
     try:
-        await repo.update_identity_fingerprints(identity_uuid, **fp_kwargs)
+        await repo.update_identity_fingerprints(
+            identity_uuid, kd_digraph_simhash=kd_centroid, **fp_kwargs,
+        )
     except Exception:  # noqa: BLE001
         log.exception(
             "clusterer: failed to roll up fingerprints for identity=%s",

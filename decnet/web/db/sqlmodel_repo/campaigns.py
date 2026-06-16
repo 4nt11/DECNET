@@ -105,6 +105,7 @@ class CampaignsMixin(_MixinBase):
             AttackerIdentity.hassh_hashes,
             AttackerIdentity.payload_simhashes,
             AttackerIdentity.c2_endpoints,
+            AttackerIdentity.kd_digraph_simhash,
         ).order_by(AttackerIdentity.created_at)
         if limit is not None:
             statement = statement.limit(limit)
@@ -129,6 +130,7 @@ class CampaignsMixin(_MixinBase):
                     "hassh_hashes": row.hassh_hashes,
                     "payload_simhashes": row.payload_simhashes,
                     "c2_endpoints": row.c2_endpoints,
+                    "kd_digraph_simhash": row.kd_digraph_simhash,
                 }
                 for row in result.all()
             ]

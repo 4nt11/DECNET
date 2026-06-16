@@ -173,6 +173,7 @@ class IdentitiesMixin(_MixinBase):
         ja3_hashes: Optional[str] = None,
         hassh_hashes: Optional[str] = None,
         tls_cert_sha256: Optional[str] = None,
+        kd_digraph_simhash: Optional[bytes] = None,
     ) -> None:
         statement = (
             update(AttackerIdentity)
@@ -181,6 +182,7 @@ class IdentitiesMixin(_MixinBase):
                 ja3_hashes=ja3_hashes,
                 hassh_hashes=hassh_hashes,
                 tls_cert_sha256=tls_cert_sha256,
+                kd_digraph_simhash=kd_digraph_simhash,
                 updated_at=datetime.now(timezone.utc),
             )
         )
