@@ -6,8 +6,7 @@ Contains all dialect-portable query code used by the SQLite and MySQL
 backends.  Dialect-specific behavior lives in subclasses:
 
 * engine/session construction (``__init__``)
-* ``_migrate_attackers_table`` (legacy schema check; DDL introspection
-  is not portable)
+* ``_apply_schema`` (MySQL wraps the Alembic upgrade in an advisory lock)
 * ``get_log_histogram`` (date-bucket expression differs per dialect)
 """
 from __future__ import annotations
@@ -103,13 +102,26 @@ class SQLModelRepository(
     # ------------------------------------------------------------ lifecycle
 
     async def initialize(self) -> None:
-        """Create tables if absent and seed the admin user."""
-        from sqlmodel import SQLModel
-        await self._migrate_attackers_table()
-        async with self.engine.begin() as conn:
-            await conn.run_sync(SQLModel.metadata.create_all)
+        """Bring the schema up to date and seed the admin user."""
+        await self._apply_schema()
         await self._ensure_admin_user()
         await self._ensure_contract_user()
+
+    async def _apply_schema(self) -> None:
+        """Create/upgrade tables.
+
+        Real boots run Alembic migrations — the schema is owned by the
+        versioned migration history. Test/ephemeral DBs (``DECNET_TESTING=1``)
+        skip Alembic and use ``create_all``: faster, and an in-memory/throwaway
+        DB never needs an upgrade path.
+        """
+        from sqlmodel import SQLModel
+        if os.environ.get("DECNET_TESTING") == "1":
+            async with self.engine.begin() as conn:
+                await conn.run_sync(SQLModel.metadata.create_all)
+            return
+        from decnet.web.db.migrate import run_migrations
+        await run_migrations(self.engine)
 
     async def reinitialize(self) -> None:
         """Re-create schema (for tests / reset flows). Does NOT drop existing tables."""
@@ -164,10 +176,6 @@ class SQLModelRepository(
                 must_change_password=False,
             ))
             await session.commit()
-
-    async def _migrate_attackers_table(self) -> None:
-        """Legacy-schema cleanup. Override per dialect (DDL introspection is non-portable)."""
-        return None
 
     async def get_deckies(self) -> List[dict]:
         # The fleet inventory the UI/API sees is fleet_deckies — the
