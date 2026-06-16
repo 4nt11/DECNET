@@ -1,13 +1,27 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
 from pathlib import Path
-from decnet.services.base import BaseService
+from decnet.services.base import BaseService, ServiceConfigField
 
-TEMPLATES_DIR = Path(__file__).parent.parent.parent / "templates" / "rdp"
+TEMPLATES_DIR = Path(__file__).parent.parent / "templates" / "rdp"
 
 
 class RDPService(BaseService):
     name = "rdp"
     ports = [3389]
     default_image = "build"
+
+    config_schema = [
+        ServiceConfigField(
+            key="nla",
+            label="Enable CredSSP / NLA",
+            type="bool",
+            default=False,
+            help=(
+                "Off by default — basic X.224 cookie capture is enough for most "
+                "attacker traffic and avoids the openssl cert-gen at container start."
+            ),
+        ),
+    ]
 
     def compose_fragment(self, decky_name: str, log_target: str | None = None, service_cfg: dict | None = None) -> dict:
         fragment: dict = {
@@ -20,6 +34,11 @@ class RDPService(BaseService):
         }
         if log_target:
             fragment["environment"]["LOG_TARGET"] = log_target
+        # Opt into the CredSSP / NLA capture path. Off by default — basic
+        # X.224 cookie capture is sufficient for most attacker traffic and
+        # avoids the openssl cert-gen overhead at container start.
+        if service_cfg and service_cfg.get("nla"):
+            fragment["environment"]["RDP_ENABLE_NLA"] = "true"
         return fragment
 
     def dockerfile_context(self) -> Path | None:

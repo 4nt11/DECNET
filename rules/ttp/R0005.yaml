@@ -1,0 +1,18 @@
+rule_id: R0005
+rule_version: 1
+name: valid_account_use
+description: |
+  Successful authentication on a previously-brute-forced account.
+  CredentialLifter (E.3.13).
+applies_to:
+  - auth_attempt
+match:
+  kind: lifter:credential_valid_account_use
+  require_prior_brute: true
+emits:
+  - tactic: TA0001
+    technique_id: T1078
+    confidence: 0.7
+evidence_fields:
+  - username
+  - service

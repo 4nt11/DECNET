@@ -1,0 +1,215 @@
+/* SPDX-License-Identifier: AGPL-3.0-or-later */
+/* Synthetic Files — layered on DeckyFleet.css.
+   Adds: filter row of label+select pairs, the file table itself, the
+   right-side detail drawer, and a TRUNCATED chip for capped bodies. */
+
+.synthetic-files-root .mono { font-family: var(--font-mono); }
+
+.synthetic-files-root .info-banner {
+  background: var(--matrix-tint-5);
+  border: 1px solid var(--border);
+  border-left: 3px solid var(--violet);
+  padding: 10px 14px;
+  font-size: 0.78rem;
+  line-height: 1.5;
+}
+.synthetic-files-root .info-banner em { color: var(--matrix); font-style: normal; }
+
+/* Filter row — three label+select pairs. */
+.synthetic-files-root .filters {
+  display: flex;
+  gap: 12px;
+  flex-wrap: wrap;
+  align-items: flex-end;
+}
+.synthetic-files-root .filter-group { display: flex; flex-direction: column; gap: 4px; }
+.synthetic-files-root .filter-group label {
+  font-size: 0.62rem;
+  letter-spacing: 1.5px;
+  color: var(--dim);
+  text-transform: uppercase;
+}
+.synthetic-files-root select.filter-input {
+  background: var(--bg-elev, rgba(0, 0, 0, 0.3));
+  border: 1px solid var(--border);
+  color: var(--text);
+  padding: 6px 10px;
+  font-family: inherit;
+  font-size: 0.8rem;
+  outline: none;
+  cursor: pointer;
+  min-width: 180px;
+  transition: border-color 0.15s, box-shadow 0.15s;
+}
+.synthetic-files-root select.filter-input:focus {
+  border-color: var(--violet);
+  box-shadow: 0 0 0 1px var(--violet);
+}
+
+/* File table. */
+.synthetic-files-root .files-table-wrap {
+  border: 1px solid var(--border);
+  background: var(--panel);
+  overflow-x: auto;
+}
+.synthetic-files-root .files-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.82rem;
+}
+.synthetic-files-root .files-table thead tr {
+  border-bottom: 1px solid var(--border);
+}
+.synthetic-files-root .files-table th {
+  padding: 10px 12px;
+  text-align: left;
+  font-size: 0.62rem;
+  letter-spacing: 1.5px;
+  color: var(--dim);
+  font-weight: 600;
+  text-transform: uppercase;
+}
+.synthetic-files-root .files-table tbody tr {
+  border-bottom: 1px solid var(--matrix-tint-5);
+  cursor: pointer;
+  transition: background 0.1s;
+}
+.synthetic-files-root .files-table tbody tr:hover {
+  background: var(--matrix-tint-10, rgba(0, 255, 65, 0.04));
+}
+.synthetic-files-root .files-table td {
+  padding: 8px 12px;
+  vertical-align: middle;
+}
+.synthetic-files-root .files-table td.path { font-family: var(--font-mono); word-break: break-all; }
+.synthetic-files-root .files-table td.cls.canary { color: var(--amber, #f59e0b); }
+.synthetic-files-root .files-table td.hash {
+  font-family: var(--font-mono);
+  color: var(--dim);
+}
+.synthetic-files-root .files-table td.dim-time {
+  color: var(--dim);
+  font-variant-numeric: tabular-nums;
+}
+.synthetic-files-root .files-table .empty-row td {
+  padding: 24px;
+  text-align: center;
+  opacity: 0.5;
+  font-size: 0.78rem;
+  letter-spacing: 1px;
+  text-transform: uppercase;
+}
+
+/* Pagination row. */
+.synthetic-files-root .pager {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-top: 4px;
+}
+.synthetic-files-root .pager .page-counter {
+  font-family: var(--font-mono);
+  font-size: 0.72rem;
+  color: var(--dim);
+  letter-spacing: 1px;
+}
+
+/* Drawer — right-side detail panel. */
+.synthetic-files-root .drawer-backdrop {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.6);
+  display: flex;
+  justify-content: flex-end;
+  z-index: 1000;
+}
+.synthetic-files-root .drawer {
+  width: min(720px, 100%);
+  height: 100%;
+  background: var(--bg-color, #0d1117);
+  border-left: 1px solid var(--border);
+  padding: 24px;
+  overflow-y: auto;
+  color: var(--text);
+}
+.synthetic-files-root .drawer-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  margin-bottom: 16px;
+  gap: 16px;
+}
+.synthetic-files-root .drawer-eyebrow {
+  font-size: 0.62rem;
+  letter-spacing: 1.5px;
+  color: var(--dim);
+  text-transform: uppercase;
+}
+.synthetic-files-root .drawer-title {
+  font-family: var(--font-mono);
+  font-size: 0.95rem;
+  font-weight: 700;
+  margin-top: 4px;
+  word-break: break-all;
+  color: var(--matrix);
+}
+.synthetic-files-root .drawer-close {
+  background: none;
+  border: none;
+  color: var(--text);
+  cursor: pointer;
+  padding: 0;
+}
+
+/* Drawer meta grid — label / value rows. */
+.synthetic-files-root .meta-grid {
+  display: grid;
+  grid-template-columns: 140px 1fr;
+  row-gap: 6px;
+  font-size: 0.85rem;
+  margin-bottom: 16px;
+  padding-bottom: 12px;
+  border-bottom: 1px solid var(--border);
+}
+.synthetic-files-root .meta-grid .label {
+  color: var(--dim);
+  font-size: 0.62rem;
+  letter-spacing: 1.5px;
+  text-transform: uppercase;
+  align-self: center;
+}
+.synthetic-files-root .meta-grid .value-canary { color: var(--amber, #f59e0b); }
+
+/* Body preview block. */
+.synthetic-files-root .body-head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 8px;
+  font-size: 0.62rem;
+  letter-spacing: 1.5px;
+  color: var(--dim);
+  text-transform: uppercase;
+}
+.synthetic-files-root .body-pre {
+  font-family: var(--font-mono);
+  white-space: pre-wrap;
+  word-break: break-word;
+  background: var(--matrix-tint-5);
+  border: 1px solid var(--border);
+  padding: 12px;
+  font-size: 0.78rem;
+  max-height: 60vh;
+  overflow-y: auto;
+}
+
+.synthetic-files-root .truncated-chip {
+  display: inline-flex;
+  align-items: center;
+  padding: 1px 8px;
+  border: 1px solid var(--amber, #f59e0b);
+  color: var(--amber, #f59e0b);
+  font-size: 0.6rem;
+  letter-spacing: 1.5px;
+  text-transform: uppercase;
+}

@@ -1,0 +1,20 @@
+rule_id: R0026
+rule_version: 1
+name: redis_ssh_key_persistence
+description: |
+  redis-cli / nc abuse setting CONFIG dir to /root/.ssh +
+  writing an authorized_keys SET. Per-command match; the lifter
+  composes them across a session, but either single command in
+  isolation still scores the technique.
+applies_to:
+  - command
+match:
+  field: command_text
+  pattern: '(?i)\bredis(?:-cli)?\b.*\b(?:config\s+set\s+dir|set\s+\S+\s+["'']?ssh-(?:rsa|ed25519|dss))\b'
+emits:
+  - tactic: TA0003
+    technique_id: T1098
+    sub_technique_id: T1098.004
+    confidence: 0.9
+evidence_fields:
+  - command_text

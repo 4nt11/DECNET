@@ -1,13 +1,15 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
 from pathlib import Path
 from decnet.services.base import BaseService
 
-TEMPLATES_DIR = Path(__file__).parent.parent.parent / "templates" / "docker_api"
+TEMPLATES_DIR = Path(__file__).parent.parent / "templates" / "docker_api"
 
 
 class DockerAPIService(BaseService):
     name = "docker_api"
     ports = [2375, 2376]
     default_image = "build"
+    # config_schema: no user-tunable fields yet — TODO add when compose_fragment grows cfg reads
 
     def compose_fragment(self, decky_name: str, log_target: str | None = None, service_cfg: dict | None = None) -> dict:
         fragment: dict = {

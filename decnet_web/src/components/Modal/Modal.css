@@ -1,0 +1,25 @@
+/* SPDX-License-Identifier: AGPL-3.0-or-later */
+/* Drawer-right variant: reuses .modal-backdrop + .modal base from DeckyFleet.css
+   and shifts the panel to the right edge as a full-height side panel. */
+
+.modal-backdrop.drawer {
+  justify-content: flex-end;
+  align-items: stretch;
+}
+
+.modal.modal-drawer-right {
+  width: 520px;
+  max-width: 96vw;
+  max-height: 100vh;
+  height: 100vh;
+  border-left: 1px solid var(--matrix);
+  border-top: none;
+  border-right: none;
+  border-bottom: none;
+  box-shadow: -8px 0 30px rgba(0, 0, 0, 0.6);
+}
+
+.modal.modal-drawer-right.violet {
+  border-left-color: var(--violet);
+  box-shadow: -8px 0 30px var(--violet);
+}

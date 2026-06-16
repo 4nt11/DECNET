@@ -1,0 +1,276 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
+"""POST /swarm/heartbeat — agent→master liveness + decky snapshot refresh.
+
+Workers call this every ~30 s with the output of ``executor.status()``.
+The master bumps ``SwarmHost.last_heartbeat`` and re-upserts each
+``DeckyShard`` with the fresh ``DeckyConfig`` snapshot + runtime-derived
+state so the dashboard stays current without a master-pull probe.
+
+Security: CA-signed mTLS is necessary but not sufficient — a
+decommissioned worker's still-valid cert must not resurrect ghost
+shards. We pin the presented peer cert's SHA-256 to the
+``client_cert_fingerprint`` stored for the claimed ``host_uuid``.
+Mismatch (or decommissioned host) → 403.
+"""
+from __future__ import annotations
+
+import json
+from datetime import datetime, timezone
+from collections.abc import MutableMapping
+from typing import Any, Optional
+
+from fastapi import APIRouter, Depends, HTTPException, Request
+from pydantic import BaseModel, ValidationError
+from sqlalchemy.exc import SQLAlchemyError
+
+from decnet.config import DeckyConfig
+from decnet.logging import get_logger
+from decnet.web.db.repository import BaseRepository
+from decnet.web.dependencies import get_repo
+from decnet.web.router.swarm import _mtls
+
+log = get_logger("swarm.heartbeat")
+
+router = APIRouter()
+
+
+class HeartbeatRequest(BaseModel):
+    host_uuid: str
+    agent_version: Optional[str] = None
+    status: dict[str, Any]
+    topology: Optional[dict[str, Any]] = None
+    # Per-decky lifecycle deltas the worker pushes on /deploy or /mutate
+    # completion (success / failure).  Master pivots each one onto the
+    # matching open DeckyLifecycle row.  Optional + best-effort: a missing
+    # field is fine, an unknown decky_name is logged-and-dropped.
+    lifecycle: Optional[list[dict[str, Any]]] = None
+
+
+def _extract_peer_fingerprint(scope: MutableMapping[str, Any]) -> Optional[str]:
+    """Pull the peer cert's SHA-256 fingerprint from an ASGI scope.
+
+    Thin wrapper over :func:`decnet.web.router.swarm._mtls.extract_peer_fingerprint`
+    kept as a module-level name so ``_verify_peer_matches_host`` resolves it via
+    the module global (and tests can monkeypatch it). Returns the lowercase hex
+    SHA-256 of the DER-encoded peer cert, or None when no cert is present; the
+    endpoint fails closed on None.
+    """
+    return _mtls.extract_peer_fingerprint(scope)
+
+
+async def _verify_peer_matches_host(
+    request: Request, host_uuid: str, repo: BaseRepository
+) -> dict[str, Any]:
+    host = await repo.get_swarm_host_by_uuid(host_uuid)
+    if host is None:
+        raise HTTPException(status_code=404, detail="unknown host")
+    fp = _extract_peer_fingerprint(request.scope)
+    if fp is None:
+        raise HTTPException(status_code=403, detail="peer cert unavailable")
+    expected = (host.get("client_cert_fingerprint") or "").lower()
+    if not expected or fp != expected:
+        raise HTTPException(status_code=403, detail="cert fingerprint mismatch")
+    return host
+
+
+async def _reconcile_topology_report(
+    repo: BaseRepository,
+    host_uuid: str,
+    reported: Optional[dict[str, Any]],
+) -> None:
+    """Compare the agent's reported applied_version_hash against what
+    master expects for any topology pinned to *host_uuid*.
+
+    Sets ``needs_resync=True`` when:
+    - master has an ACTIVE topology targeted here but the agent reports
+      a different hash, OR
+    - master has an ACTIVE topology targeted here but the agent reports
+      no topology at all (fresh boot / wiped cache).
+
+    The actual re-push is handled by the mutator reconcile loop so the
+    heartbeat endpoint stays cheap.
+    """
+    from decnet.topology.hashing import canonical_hash
+    from decnet.topology.persistence import hydrate
+    from decnet.topology.status import TopologyStatus
+
+    try:
+        topos = await repo.list_topologies(status=TopologyStatus.ACTIVE)
+    except SQLAlchemyError:
+        # Non-fatal: reconcile is best-effort; the host stays alive regardless
+        log.exception("heartbeat: could not list active topologies")
+        return
+    mine = [t for t in topos if t.target_host_uuid == host_uuid]
+    if not mine:
+        return
+
+    reported_id = (reported or {}).get("topology_id")
+    reported_hash = (reported or {}).get("applied_version_hash")
+
+    for topo in mine:
+        tid = topo.id
+        if topo.needs_resync:
+            continue
+        expected: Optional[str] = None
+        if reported_id == tid and reported_hash:
+            try:
+                hydrated = await hydrate(repo, tid)
+            except (SQLAlchemyError, KeyError, TypeError):
+                # Non-fatal: skip this topology; mutator reconcile loop will retry
+                log.exception("heartbeat: hydrate failed tid=%s", tid)
+                continue
+            if hydrated is None:
+                continue
+            expected = canonical_hash(hydrated)
+            if expected == reported_hash:
+                continue
+        # Either mismatch or agent reports no/other topology — flag it.
+        try:
+            await repo.set_topology_resync(tid, True)
+            log.info(
+                "heartbeat: flagged topology %s for resync (host=%s "
+                "reported_id=%s reported_hash=%s expected=%s)",
+                tid, host_uuid, reported_id, reported_hash, expected,
+            )
+        except SQLAlchemyError:
+            # Non-fatal: mutator reconcile loop will detect the mismatch again next heartbeat
+            log.exception("heartbeat: failed to flag resync tid=%s", tid)
+
+
+async def _apply_lifecycle_deltas(
+    repo: BaseRepository,
+    host_uuid: str,
+    deltas: Optional[list[dict[str, Any]]],
+) -> None:
+    """Pivot worker-side completion records onto the open
+    DeckyLifecycle rows for this host.
+
+    Each delta: ``{decky_name, operation, status, error?, completed_at?}``.
+    We find the most-recently-started open row for that (decky_name,
+    operation, host_uuid) and apply the terminal status + error.  A
+    missing open row is logged and dropped — the worker may be pushing
+    a stale duplicate after a master sweep, or the row was already
+    sealed by an earlier delta.  Either way it's not an error.
+    """
+    if not deltas:
+        return
+    from decnet.lifecycle.events import emit_lifecycle
+    try:
+        from decnet.bus.factory import get_bus
+        bus = get_bus(client_name="swarm.heartbeat")
+    except Exception:
+        bus = None
+    for delta in deltas:
+        try:
+            decky_name = str(delta["decky_name"])
+            operation = str(delta["operation"])
+            status = str(delta["status"])
+        except (KeyError, TypeError):
+            log.warning("heartbeat lifecycle: malformed delta host=%s payload=%s",
+                        host_uuid, delta)
+            continue
+        if status not in ("running", "succeeded", "failed"):
+            log.warning(
+                "heartbeat lifecycle: unexpected status=%r host=%s decky=%s",
+                status, host_uuid, decky_name,
+            )
+            continue
+        try:
+            row = await repo.find_open_lifecycle(
+                decky_name=decky_name, operation=operation, host_uuid=host_uuid,
+            )
+        except SQLAlchemyError:
+            log.exception(
+                "heartbeat lifecycle: find_open_lifecycle failed host=%s decky=%s",
+                host_uuid, decky_name,
+            )
+            continue
+        if row is None:
+            log.info(
+                "heartbeat lifecycle: no open row for host=%s decky=%s op=%s "
+                "(stale duplicate or already-sealed)",
+                host_uuid, decky_name, operation,
+            )
+            continue
+        fields: dict[str, Any] = {"status": status}
+        if delta.get("error") is not None:
+            fields["error"] = str(delta["error"])[:2000]
+        if delta.get("completed_at") is not None:
+            try:
+                fields["completed_at"] = datetime.fromisoformat(
+                    str(delta["completed_at"]),
+                )
+            except ValueError:
+                # Bad timestamp from worker — let the repo stamp its own.
+                pass
+        try:
+            await repo.update_lifecycle(row["id"], fields)
+        except SQLAlchemyError:
+            log.exception(
+                "heartbeat lifecycle: update_lifecycle failed id=%s",
+                row.get("id"),
+            )
+            continue
+        await emit_lifecycle(
+            bus,
+            lifecycle_id=row["id"],
+            decky_name=decky_name,
+            operation=operation,
+            status=status,
+            error=fields.get("error"),
+        )
+
+
+@router.post(
+    "/heartbeat",
+    status_code=204,
+    tags=["Swarm Health"],
+    responses={
+        400: {"description": "Bad Request (malformed JSON body)"},
+        403: {"description": "Peer cert missing, or its fingerprint does not match the host's pinned cert"},
+        404: {"description": "host_uuid is not enrolled"},
+        422: {"description": "Request body validation error"},
+    },
+)
+async def heartbeat(
+    req: HeartbeatRequest,
+    request: Request,
+    repo: BaseRepository = Depends(get_repo),
+) -> None:
+    await _verify_peer_matches_host(request, req.host_uuid, repo)
+
+    now = datetime.now(timezone.utc)
+    await repo.update_swarm_host(
+        req.host_uuid,
+        {"status": "active", "last_heartbeat": now},
+    )
+
+    await _reconcile_topology_report(repo, req.host_uuid, req.topology)
+    await _apply_lifecycle_deltas(repo, req.host_uuid, req.lifecycle)
+
+    status_body = req.status or {}
+    if not status_body.get("deployed"):
+        return
+
+    runtime = status_body.get("runtime") or {}
+    for decky_dict in status_body.get("deckies") or []:
+        try:
+            d = DeckyConfig(**decky_dict)
+        except (ValidationError, TypeError):
+            log.exception("heartbeat: skipping malformed decky payload host=%s", req.host_uuid)
+            continue
+        rstate = runtime.get(d.name) or {}
+        is_up = bool(rstate.get("running"))
+        await repo.upsert_decky_shard(
+            {
+                "decky_name": d.name,
+                "host_uuid": req.host_uuid,
+                "services": json.dumps(d.services),
+                "decky_config": d.model_dump_json(),
+                "decky_ip": d.ip,
+                "state": "running" if is_up else "degraded",
+                "last_error": None,
+                "last_seen": now,
+                "updated_at": now,
+            }
+        )

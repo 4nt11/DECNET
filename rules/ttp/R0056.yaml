@@ -1,0 +1,31 @@
+rule_id: R0056
+rule_version: 1
+last_reviewed: "2026-05-02"
+next_review: "2026-08-02"
+name: feodo_tracker_hit
+description: |
+  Source IP listed by abuse.ch Feodo Tracker — known C2 infra,
+  family attribution attached.
+
+  No drift in 2026-05-02 ship-time audit: Feodo's data shape is
+  feed-driven (one entry per listed IP), no enum to bump. Family
+  flows through evidence as a string and does not need a code-level
+  taxonomy. Reviewed and unchanged.
+applies_to:
+  - intel
+match:
+  kind: lifter:intel_feodo
+  provider: feodo
+emits:
+  - tactic: TA0011
+    technique_id: T1071
+    sub_technique_id: T1071.001
+    confidence: 0.85
+  - tactic: TA0042
+    technique_id: T1588
+    sub_technique_id: T1588.001
+    confidence: 0.85
+evidence_fields:
+  - feodo_listed
+  - feodo_malware_family
+  - first_seen_feodo

@@ -1,0 +1,50 @@
+[Unit]
+Description=DECNET Orchestrator (synthetic life-injection — inter-decky traffic, file plants, email drops)
+Documentation=https://git.resacachile.cl/anti/DECNET/wiki/Workers#orchestrator
+After=network-online.target decnet-bus.service
+Wants=network-online.target decnet-bus.service
+
+[Service]
+Type=simple
+User={{ user }}
+Group={{ group }}
+WorkingDirectory={{ install_dir }}
+EnvironmentFile=-{{ install_dir }}/.env.local
+Environment=DECNET_SYSTEM_LOGS=/var/log/decnet/decnet.orchestrator.log
+# Realism content engine — LLM + persona-pool config used by the
+# email + (post-stage-6) file-class enrichment paths.  See
+# decnet/realism/llm/factory.py and decnet/realism/personas_pool.py.
+Environment=DECNET_REALISM_LLM=ollama
+Environment=DECNET_REALISM_MODEL=llama3.1
+Environment=DECNET_REALISM_TIMEOUT=60
+Environment=DECNET_REALISM_PERSONAS=/etc/decnet/email_personas.json
+ExecStart={{ venv_dir }}/bin/decnet orchestrate
+StandardOutput=append:/var/log/decnet/decnet.orchestrator.log
+StandardError=append:/var/log/decnet/decnet.orchestrator.log
+
+# The orchestrator drives `docker exec` against decky containers, so it
+# needs membership in the docker group.  It does NOT bind to the network,
+# launch new containers, or write outside its own logs and install dir.
+SupplementaryGroups=docker
+
+CapabilityBoundingSet=
+AmbientCapabilities=
+
+# Security Hardening
+NoNewPrivileges=yes
+ProtectSystem=full
+ProtectHome=read-only
+PrivateTmp=yes
+ProtectKernelTunables=yes
+ProtectKernelModules=yes
+ProtectControlGroups=yes
+RestrictSUIDSGID=yes
+LockPersonality=yes
+ReadWritePaths={{ install_dir }} /var/log/decnet
+
+Restart=on-failure
+RestartSec=5
+TimeoutStopSec=15
+
+[Install]
+WantedBy=multi-user.target

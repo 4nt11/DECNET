@@ -1,0 +1,45 @@
+[Unit]
+Description=DECNET Attribution Engine v0 (per-(identity, primitive) state machine)
+Documentation=https://git.resacachile.cl/anti/DECNET/wiki/Workers#attribution
+After=network-online.target decnet-bus.service
+Wants=network-online.target decnet-bus.service
+
+[Service]
+Type=simple
+User={{ user }}
+Group={{ group }}
+WorkingDirectory={{ install_dir }}
+EnvironmentFile=-{{ install_dir }}/.env.local
+Environment=DECNET_SYSTEM_LOGS=/var/log/decnet/decnet.attribution.log
+# Subscribes to attacker.observation.> and, for each event, ensures a
+# stub AttackerIdentity row, runs the per-ValueKind merger over the
+# full identity-keyed observation series, upserts the derived state in
+# attribution_state, and publishes attribution.profile.state_changed
+# only on transition. Periodic tick (default 60s) fires
+# attribution.profile.multi_actor_suspected when >= 2 primitives flag
+# the same identity. Closes DEBT-051.
+ExecStart={{ venv_dir }}/bin/decnet attribution
+StandardOutput=append:/var/log/decnet/decnet.attribution.log
+StandardError=append:/var/log/decnet/decnet.attribution.log
+
+CapabilityBoundingSet=
+AmbientCapabilities=
+
+# Security Hardening
+NoNewPrivileges=yes
+ProtectSystem=full
+ProtectHome=read-only
+PrivateTmp=yes
+ProtectKernelTunables=yes
+ProtectKernelModules=yes
+ProtectControlGroups=yes
+RestrictSUIDSGID=yes
+LockPersonality=yes
+ReadWritePaths={{ install_dir }} /var/log/decnet
+
+Restart=on-failure
+RestartSec=5
+TimeoutStopSec=15
+
+[Install]
+WantedBy=multi-user.target

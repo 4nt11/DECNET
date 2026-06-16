@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """
 Generates a docker-compose.yml from a DecnetConfig.
 
@@ -6,6 +7,12 @@ Network model:
   All service containers for that decky share the base's network namespace
   via `network_mode: "service:<base>"`.  From the outside, every service on
   a given decky appears to come from the same IP — exactly like a real host.
+
+Logging model:
+  Service containers write RFC 5424 lines to stdout.  Docker captures them
+  via the json-file driver.  The host-side collector (decnet.web.collector)
+  streams those logs and writes them to the host log file for the ingester
+  and rsyslog to consume.  No bind mounts or shared volumes are needed.
 """
 
 from pathlib import Path
@@ -17,34 +24,18 @@ from decnet.network import MACVLAN_NETWORK_NAME
 from decnet.os_fingerprint import get_os_sysctls
 from decnet.services.registry import get_service
 
-_CONTAINER_LOG_DIR = "/var/log/decnet"
-
-_LOG_NETWORK = "decnet_logs"
-
-
-def _resolve_log_file(log_file: str) -> tuple[str, str]:
-    """
-    Return (host_dir, container_log_path) for a user-supplied log file path.
-
-    The host path is resolved to absolute so Docker can bind-mount it.
-    All containers share the same host directory, mounted at _CONTAINER_LOG_DIR.
-    """
-    host_path = Path(log_file).resolve()
-    host_dir = str(host_path.parent)
-    container_path = f"{_CONTAINER_LOG_DIR}/{host_path.name}"
-    return host_dir, container_path
+_DOCKER_LOGGING = {
+    "driver": "json-file",
+    "options": {
+        "max-size": "10m",
+        "max-file": "5",
+    },
+}
 
 
 def generate_compose(config: DecnetConfig) -> dict:
     """Build and return the full docker-compose data structure."""
     services: dict = {}
-
-    log_host_dir: str | None = None
-    log_container_path: str | None = None
-    if config.log_file:
-        log_host_dir, log_container_path = _resolve_log_file(config.log_file)
-        # Ensure the host log directory exists so Docker doesn't create it as root-owned
-        Path(log_host_dir).mkdir(parents=True, exist_ok=True)
 
     for decky in config.deckies:
         base_key = decky.name  # e.g. "decky-01"
@@ -62,8 +53,6 @@ def generate_compose(config: DecnetConfig) -> dict:
                 }
             },
         }
-        if config.log_target:
-            base["networks"][_LOG_NETWORK] = {}
 
         # Inject TCP/IP stack sysctls to spoof the claimed OS fingerprint.
         # Only the base container needs this — service containers inherit the
@@ -76,24 +65,21 @@ def generate_compose(config: DecnetConfig) -> dict:
         # --- Service containers: share base network namespace ---
         for svc_name in decky.services:
             svc = get_service(svc_name)
+            if svc.fleet_singleton:
+                continue
             svc_cfg = decky.service_config.get(svc_name, {})
-            fragment = svc.compose_fragment(
-                decky.name, log_target=config.log_target, service_cfg=svc_cfg
-            )
+            fragment = svc.compose_fragment(decky.name, service_cfg=svc_cfg)
 
             # Inject the per-decky base image into build services so containers
             # vary by distro and don't all fingerprint as debian:bookworm-slim.
+            # Services that need a fixed upstream image (e.g. conpot) can pre-set
+            # build.args.BASE_IMAGE in their compose_fragment() to opt out.
             if "build" in fragment:
-                fragment["build"].setdefault("args", {})["BASE_IMAGE"] = decky.build_base
+                args = fragment["build"].setdefault("args", {})
+                args.setdefault("BASE_IMAGE", decky.build_base)
 
             fragment.setdefault("environment", {})
             fragment["environment"]["HOSTNAME"] = decky.hostname
-            if log_host_dir and log_container_path:
-                fragment["environment"]["DECNET_LOG_FILE"] = log_container_path
-                fragment.setdefault("volumes", [])
-                mount = f"{log_host_dir}:{_CONTAINER_LOG_DIR}"
-                if mount not in fragment["volumes"]:
-                    fragment["volumes"].append(mount)
 
             # Share the base container's network — no own IP needed
             fragment["network_mode"] = f"service:{base_key}"
@@ -103,6 +89,22 @@ def generate_compose(config: DecnetConfig) -> dict:
             fragment.pop("hostname", None)
             fragment.pop("networks", None)
 
+            # Rotate Docker logs so disk usage is bounded
+            fragment["logging"] = _DOCKER_LOGGING
+
+            # Stamp DECNET ownership labels so the collector's docker-events
+            # watcher can identify newly-started containers without consulting
+            # decnet-state.json (which is written and read out-of-band with
+            # `docker compose up`, leaving a race window where freshly started
+            # containers were silently ignored).
+            labels = dict(fragment.get("labels") or {})
+            labels.update({
+                "decnet.fleet.service": "true",
+                "decnet.fleet.decky": decky.name,
+                "decnet.fleet.service_name": svc_name,
+            })
+            fragment["labels"] = labels
+
             services[f"{decky.name}-{svc_name}"] = fragment
 
     # Network definitions
@@ -111,8 +113,6 @@ def generate_compose(config: DecnetConfig) -> dict:
             "external": True,  # created by network.py before compose up
         }
     }
-    if config.log_target:
-        networks[_LOG_NETWORK] = {"driver": "bridge", "internal": True}
 
     return {
         "version": "3.8",

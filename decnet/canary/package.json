@@ -1,0 +1,10 @@
+{
+  "name": "decnet-canary-obfuscator",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Node helper for decnet.canary.obfuscator — javascript-obfuscator wrapper invoked via subprocess.",
+  "main": "_obfuscate_helper.js",
+  "dependencies": {
+    "javascript-obfuscator": "^5.4.2"
+  }
+}

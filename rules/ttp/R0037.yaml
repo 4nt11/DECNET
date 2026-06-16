@@ -1,0 +1,22 @@
+rule_id: R0037
+rule_version: 1
+name: k8s_service_account_token
+description: |
+  Reading /api/v1/namespaces/*/secrets or /var/run/secrets/k8s.io/
+  serviceaccount/token — kube SA harvest.
+applies_to:
+  - session
+  - http_request
+match:
+  kind: lifter:behavioral_k8s_sa_token
+  paths:
+    - '/api/v1/namespaces/[^/]+/secrets'
+    - '/var/run/secrets/kubernetes\.io/serviceaccount'
+emits:
+  - tactic: TA0006
+    technique_id: T1552
+    sub_technique_id: T1552.007
+    confidence: 0.95
+evidence_fields:
+  - matched_path
+  - namespace

@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """
 Machine archetype profiles for DECNET deckies.
 
@@ -148,7 +149,7 @@ ARCHETYPES: dict[str, Archetype] = {
         slug="deaddeck",
         display_name="Deaddeck (Entry Point)",
         description="Internet-facing entry point with real interactive SSH — no honeypot emulation",
-        services=["real_ssh"],
+        services=["ssh"],
         preferred_distros=["debian", "ubuntu22"],
         nmap_os="linux",
     ),
@@ -167,4 +168,4 @@ def all_archetypes() -> dict[str, Archetype]:
 
 
 def random_archetype() -> Archetype:
-    return random.choice(list(ARCHETYPES.values()))
+    return random.choice(list(ARCHETYPES.values()))  # nosec B311

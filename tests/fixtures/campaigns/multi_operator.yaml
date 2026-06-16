@@ -1,0 +1,108 @@
+# Fixture 5 (multi_operator) — see development/CAMPAIGN_CLUSTERING.md §2.
+#
+# One campaign, two operators with distinct UKC roles. Phase-handoff is
+# the load-bearing signal; this fixture is what proves the algorithm
+# needs it.
+#
+#   Actor A (night shift, hours 22-03 UTC):
+#     Delivery → Exploitation → Persistence → Command-and-Control
+#
+#   Actor B (day shift, hours 10-15 UTC):
+#     Discovery → Lateral Movement → Collection → Exfiltration
+#
+# Different IPs, different ASNs, different JA3+HASSH (different
+# tools — A is the access broker, B is the post-exploitation
+# operator). What ties them is shared C2 callback and shared
+# stage-1 payload hash.
+#
+# Pass condition: a clusterer that resolves on shared C2 callback
+# (or, more generally, the planned similarity graph's payload +
+# C2 + phase-handoff signals) folds the two actors into one
+# campaign cluster. Demonstrated by `c2_callback_clusterer`.
+#
+# Adversarial condition: `shift_clusterer` (group attackers by
+# majority shift bucket — night/day/swing) puts A in "night" and B
+# in "day", fragmenting the campaign. Completeness collapses; the
+# bound floor on completeness rejects the bad clusterer. This is
+# the canonical demonstration that operational-schedule overlap is
+# NOT a campaign signal — different operators on different shifts
+# can still be one campaign.
+#
+# Like fixture 4, this is a CAMPAIGN-LEVEL fixture only. The two
+# DSL actors mint two distinct truth_identity_id rows by design
+# (different operators, different tools — they are different
+# identities even though they're one campaign). Identity-level
+# scoring is fixture 2's job.
+campaign:
+  id: multi-operator-001
+  duration_days: 3
+  actors:
+    - id: ops-broker-night
+      asn: 64530
+      ip_pool: sticky
+      # Tool A's TLS stack — older OpenSSL signature.
+      ja3: "771,49195-49199-49196-49200-156-157-47-53,0-23-65281-10-11-35-16-5-13-18-51-45-43-27,29-23-24,0"
+      hassh: "ops-broker-eeeeeeee-eeeeeeee-eeeeeeee"
+      hours_active_utc: [22, 23, 0, 1, 2, 3]
+      jitter_seconds: 60
+    - id: ops-postex-day
+      asn: 64531
+      ip_pool: sticky
+      # Tool B's TLS stack — distinctly different from A.
+      ja3: "769,49162-49161-49171-49172-51-50-47,0-10-11-13-23-65281,29-23-24-25,0"
+      hassh: "ops-postex-ffffffff-ffffffff-ffffffff"
+      hours_active_utc: [9, 10, 11, 12, 13]
+      jitter_seconds: 60
+  phases:
+    # Actor A — initial access path, owns the foothold.
+    - name: delivery
+      actor: ops-broker-night
+      tool_signature:
+        c2_callback: "c2.shared-op.example"
+      target_selector: { service: ssh, count: 2 }
+      dwell_seconds: 1
+    - name: exploitation
+      actor: ops-broker-night
+      tool_signature:
+        payload_hash: "shared-op-stage1-payload"
+        c2_callback: "c2.shared-op.example"
+      target_selector: { service: ssh, count: 2 }
+      dwell_seconds: 5
+    - name: persistence
+      actor: ops-broker-night
+      tool_signature:
+        c2_callback: "c2.shared-op.example"
+      target_selector: { decky: previous_success, count: 1 }
+      dwell_seconds: 5
+    - name: command_and_control
+      actor: ops-broker-night
+      tool_signature:
+        c2_callback: "c2.shared-op.example"
+      target_selector: { decky: previous_success, count: 1 }
+      dwell_seconds: 5
+    # Actor B — picks up after A's foothold; shares C2 + payload.
+    - name: discovery
+      actor: ops-postex-day
+      tool_signature:
+        c2_callback: "c2.shared-op.example"
+      target_selector: { decky: previous_success, count: 2 }
+      dwell_seconds: 5
+    - name: lateral_movement
+      actor: ops-postex-day
+      tool_signature:
+        c2_callback: "c2.shared-op.example"
+      target_selector: { service: ssh, count: 2 }
+      dwell_seconds: 5
+    - name: collection
+      actor: ops-postex-day
+      tool_signature:
+        payload_hash: "shared-op-stage1-payload"
+        c2_callback: "c2.shared-op.example"
+      target_selector: { service: ssh, count: 2 }
+      dwell_seconds: 5
+    - name: exfiltration
+      actor: ops-postex-day
+      tool_signature:
+        c2_callback: "c2.shared-op.example"
+      target_selector: { service: ssh, count: 2 }
+      dwell_seconds: 5

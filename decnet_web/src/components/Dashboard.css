@@ -1,0 +1,620 @@
+/* SPDX-License-Identifier: AGPL-3.0-or-later */
+.dashboard {
+  display: flex;
+  flex-direction: column;
+  gap: 24px;
+  height: 100%;
+}
+
+/* Detail/scroll pages: grow with content instead of locking to viewport */
+.dashboard.page-scroll {
+  height: auto;
+  min-height: 0;
+}
+
+/* Page header */
+.page-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-end;
+  border-bottom: 1px solid var(--border-color);
+  padding-bottom: 16px;
+  gap: 24px;
+}
+
+.page-title-group {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.page-title-group h1 {
+  font-size: 1.3rem;
+  letter-spacing: 4px;
+  font-weight: 700;
+}
+
+.page-sub {
+  font-size: 0.7rem;
+  opacity: 0.5;
+  letter-spacing: 1px;
+}
+
+/* Chips */
+.chip {
+  font-size: 0.65rem;
+  padding: 2px 8px;
+  border-radius: 4px;
+  border: 1px solid var(--accent);
+  color: var(--accent);
+  background: var(--accent-tint-10);
+  letter-spacing: 1px;
+  white-space: nowrap;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.chip.violet {
+  border-color: var(--violet);
+  color: var(--violet);
+  background: var(--violet-tint-10);
+}
+
+.chip.matrix {
+  border-color: var(--matrix);
+  color: var(--matrix);
+  background: var(--matrix-tint-10);
+}
+
+.chip.dim-chip {
+  border-color: var(--border-color);
+  color: var(--fg-3);
+  background: transparent;
+}
+
+.chip.alert-chip {
+  border-color: var(--alert);
+  color: var(--alert);
+  background: var(--alert-tint-10);
+}
+
+/* Key-value chips in the live-feed event column. Values are unbounded
+   (attacker-supplied command strings, URLs, base64 payloads), so these
+   must wrap inside the chip rather than inherit the default nowrap —
+   otherwise a single `cmd: echo <2KB>` blows out the table width. */
+.chip.chip-kv {
+  white-space: normal;
+  word-break: break-word;
+  overflow-wrap: anywhere;
+  max-width: 100%;
+  align-items: flex-start;
+  line-height: 1.35;
+}
+.chip.chip-kv > .dim {
+  flex-shrink: 0;
+}
+
+/* Breach banner */
+.breach-banner {
+  background: var(--alert-tint-10);
+  border: 1px solid var(--alert);
+  padding: 12px 20px;
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  font-size: 0.78rem;
+  letter-spacing: 1.5px;
+  color: var(--alert);
+}
+
+.breach-banner .pulse {
+  width: 10px;
+  height: 10px;
+  background: var(--alert);
+  border-radius: 50%;
+  animation: decnet-pulse 0.7s infinite alternate;
+  flex-shrink: 0;
+}
+
+.breach-banner button {
+  background: transparent;
+  border: 1px solid var(--alert);
+  color: var(--alert);
+  padding: 6px 14px;
+  font-size: 0.7rem;
+  letter-spacing: 1.5px;
+  cursor: pointer;
+  font-family: inherit;
+}
+
+.breach-banner button:hover {
+  background: var(--alert-tint-10);
+}
+
+/* Stats */
+.stats-grid {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 16px;
+}
+
+.stat-card {
+  background-color: var(--secondary-color);
+  border: 1px solid var(--border-color);
+  padding: 16px 18px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  transition: border-color 0.2s ease, box-shadow 0.2s ease, transform 0.2s ease;
+}
+
+.stat-card:hover {
+  border-color: var(--accent);
+  box-shadow: var(--accent-glow);
+  transform: translateY(-2px);
+}
+
+.stat-card.alert {
+  border-color: var(--alert);
+}
+
+.stat-card .row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 8px;
+}
+
+.stat-icon {
+  color: var(--accent);
+  display: flex;
+  align-items: center;
+}
+
+.stat-label {
+  font-size: 0.65rem;
+  opacity: 0.6;
+  letter-spacing: 1.5px;
+}
+
+.stat-value {
+  font-size: 1.8rem;
+  font-weight: bold;
+  font-variant-numeric: tabular-nums;
+}
+
+.stat-value .dim {
+  opacity: 0.5;
+}
+
+.stat-delta {
+  font-size: 0.65rem;
+  letter-spacing: 1px;
+  opacity: 0.8;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.stat-delta.up {
+  color: var(--alert);
+}
+
+/* Sparkline */
+.spark {
+  display: flex;
+  align-items: flex-end;
+  gap: 2px;
+  height: 22px;
+  min-width: 80px;
+}
+
+.spark span {
+  flex: 1;
+  background: var(--accent);
+  opacity: 0.5;
+  min-height: 2px;
+}
+
+.spark.alert span {
+  background: var(--alert);
+}
+
+/* Section header (logs, panels) */
+.logs-section {
+  background-color: var(--secondary-color);
+  border: 1px solid var(--border-color);
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+}
+
+.section-header {
+  padding: 14px 20px;
+  border-bottom: 1px solid var(--border-color);
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 12px;
+}
+
+.section-title {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  font-size: 0.8rem;
+  letter-spacing: 2px;
+  font-weight: 700;
+}
+
+.section-actions {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  font-size: 0.62rem;
+  opacity: 0.6;
+  letter-spacing: 1px;
+}
+
+.section-header h2 {
+  font-size: 0.9rem;
+  letter-spacing: 2px;
+}
+
+/* Dashboard grid */
+.dash-grid {
+  display: grid;
+  grid-template-columns: 2fr 1fr;
+  gap: 16px;
+  flex: 1;
+  min-height: 0;
+}
+
+.dash-grid > .logs-section {
+  overflow: clip;
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+}
+
+.dash-grid > .logs-section .logs-table-container {
+  flex: 1;
+  overflow-y: auto;
+  min-height: 0;
+  max-height: none;
+}
+
+.dash-side {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  min-height: 0;
+  height: 100%;
+}
+
+.dash-side > .logs-section {
+  flex: 1;
+  min-height: 0;
+  overflow: clip;
+}
+
+.dash-side > .logs-section .panel-body {
+  overflow-y: auto;
+  flex: 1;
+  min-height: 0;
+}
+
+/* Attacker/siege rows */
+.attacker-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  font-size: 0.75rem;
+  padding: 6px 0;
+  border-bottom: 1px solid rgba(48, 54, 61, 0.4);
+  cursor: pointer;
+}
+
+.attacker-row:hover {
+  background: var(--matrix-tint-5);
+}
+
+.attacker-row:last-child {
+  border-bottom: none;
+}
+
+.attacker-bar-wrap {
+  flex: 1;
+  height: 4px;
+  background: rgba(48, 54, 61, 0.5);
+  position: relative;
+}
+
+.attacker-bar {
+  height: 100%;
+  background: var(--matrix);
+}
+
+.attacker-bar.hot {
+  background: var(--alert);
+}
+
+.panel-body {
+  padding: 12px 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.panel-empty {
+  padding: 20px 16px;
+  text-align: center;
+  opacity: 0.4;
+  font-size: 0.7rem;
+  letter-spacing: 1px;
+}
+
+/* Status dots (hot / warn / active) */
+.status-dot {
+  display: inline-block;
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+
+.status-dot.active {
+  background: var(--matrix);
+  box-shadow: 0 0 8px var(--matrix);
+}
+
+.status-dot.warn {
+  background: var(--warn);
+  box-shadow: 0 0 6px var(--warn);
+}
+
+.status-dot.hot {
+  background: var(--alert);
+  box-shadow: 0 0 8px var(--alert);
+  animation: decnet-pulse 1s infinite alternate;
+}
+
+/* Row-enter animation */
+@keyframes row-enter {
+  from {
+    background: var(--matrix-tint-30);
+    opacity: 0;
+    transform: translateY(-4px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+.row-enter {
+  animation: row-enter 0.6s var(--ease);
+}
+
+/* Logs table (existing) */
+.logs-table-container {
+  overflow-x: auto;
+  overflow-y: auto;
+  max-height: 420px;
+  min-height: 0;
+}
+
+.logs-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.8rem;
+  text-align: left;
+}
+
+.logs-table th {
+  padding: 12px 20px;
+  border-bottom: 1px solid var(--border-color);
+  opacity: 0.5;
+  font-weight: normal;
+  position: sticky;
+  top: 0;
+  background: var(--secondary-color);
+  z-index: 1;
+}
+
+.logs-table td {
+  padding: 10px 20px;
+  border-bottom: 1px solid rgba(48, 54, 61, 0.5);
+}
+
+.logs-table tr:not(.empty-row):hover {
+  background-color: var(--matrix-tint-5);
+}
+
+.logs-table tr.empty-row td {
+  border-bottom: none;
+  height: 360px;
+}
+
+.logs-table tr.empty-row .empty-state {
+  height: 100%;
+  min-height: 0;
+}
+
+.raw-line {
+  max-width: 400px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.dim {
+  opacity: 0.5;
+}
+
+.loader {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  height: 200px;
+  letter-spacing: 4px;
+  animation: pulse 1s infinite alternate;
+}
+
+@keyframes pulse {
+  from { opacity: 0.5; }
+  to { opacity: 1; }
+}
+
+.spin {
+  animation: spin 1.5s linear infinite;
+}
+
+@keyframes spin {
+  from { transform: rotate(0deg); }
+  to { transform: rotate(360deg); }
+}
+
+/* Attacker Profiles (Attackers page) */
+.attacker-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(340px, 1fr));
+  gap: 16px;
+  padding: 16px;
+}
+
+.attacker-card {
+  background: var(--secondary-color);
+  border: 1px solid var(--border-color);
+  padding: 16px;
+  cursor: pointer;
+  transition: transform 0.15s ease, box-shadow 0.15s ease, border-color 0.15s ease;
+}
+
+.attacker-card:hover {
+  transform: translateY(-2px);
+  border-color: var(--accent);
+  box-shadow: var(--accent-glow);
+}
+
+.traversal-badge {
+  font-size: 0.65rem;
+  padding: 2px 8px;
+  border: 1px solid var(--accent-color);
+  background: var(--violet-tint-10);
+  color: var(--accent-color);
+  letter-spacing: 2px;
+}
+
+.service-badge {
+  font-size: 0.7rem;
+  padding: 2px 8px;
+  border: 1px solid var(--text-color);
+  background: var(--matrix-tint-5);
+  color: var(--text-color);
+}
+
+.rpki-status-badge {
+  font-size: 0.65rem;
+  padding: 2px 8px;
+  letter-spacing: 1px;
+}
+.rpki-status-badge.valid {
+  border: 1px solid var(--matrix);
+  background: var(--matrix-tint-5);
+  color: var(--matrix);
+}
+.rpki-status-badge.invalid {
+  border: 1px solid var(--alert);
+  background: var(--alert-tint-10);
+  color: var(--alert);
+}
+
+.back-button {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 16px;
+  border: 1px solid var(--border-color);
+  background: transparent;
+  color: var(--text-color);
+  cursor: pointer;
+  font-size: 0.8rem;
+  letter-spacing: 2px;
+  transition: border-color 0.15s ease, box-shadow 0.15s ease;
+}
+
+.back-button:hover {
+  border-color: var(--accent);
+  box-shadow: var(--accent-glow);
+}
+
+/* Fingerprint cards */
+.fp-card {
+  border: 1px solid var(--border-color);
+  background: rgba(0, 0, 0, 0.2);
+  transition: border-color 0.15s ease;
+}
+
+.fp-card:hover {
+  border-color: var(--accent-color);
+}
+
+.fp-card-header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 16px;
+  border-bottom: 1px solid var(--border-color);
+}
+
+.fp-card-icon {
+  color: var(--accent-color);
+  display: flex;
+  align-items: center;
+}
+
+.fp-card-label {
+  font-size: 0.7rem;
+  letter-spacing: 2px;
+  opacity: 0.7;
+}
+
+.fp-card-body {
+  padding: 12px 16px;
+}
+
+/* Identity / Campaign fingerprint groupings — used inside a logs-section */
+.fp-group {
+  margin-bottom: 12px;
+}
+.fp-group:last-child { margin-bottom: 0; }
+
+.fp-group-label {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 0.7rem;
+  letter-spacing: 2px;
+  opacity: 0.7;
+  margin-bottom: 6px;
+}
+
+.fp-group-items {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+/* Align EmptyState color and font with the dim-grey convention used across
+   all other section containers (logs-root, attackers-root, bounty-root…).
+   Without this, the global body color (var(--matrix) green) bleeds in. */
+.dashboard .empty-state .empty-state-icon {
+  color: var(--violet);
+}
+.dashboard .empty-state .type-label {
+  color: var(--text-dim, #888);
+  font-size: 0.7rem;
+  letter-spacing: 2px;
+}

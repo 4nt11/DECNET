@@ -1,0 +1,18 @@
+rule_id: R0029
+rule_version: 1
+name: sudo_abuse
+description: |
+  sudo -l (enumerate available privileged commands) or
+  sudo su / sudo -i / sudo -s for an interactive privilege escalation.
+applies_to:
+  - command
+match:
+  field: command_text
+  pattern: '^(?:\s*)sudo\s+(?:-l\b|-i\b|-s\b|su\b)'
+emits:
+  - tactic: TA0004
+    technique_id: T1548
+    sub_technique_id: T1548.003
+    confidence: 0.75
+evidence_fields:
+  - command_text

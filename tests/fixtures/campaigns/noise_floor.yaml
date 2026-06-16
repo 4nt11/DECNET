@@ -1,0 +1,34 @@
+# Fixture 6 (noise_floor) — see development/CAMPAIGN_CLUSTERING.md §2.
+#
+# Composite of all five prior fixtures plus N additional Delivery-only
+# noise scanners. Tests that the clusterer holds every campaign
+# together AND keeps every noise observation as its own singleton
+# in the presence of cross-fixture interference.
+#
+# This is a CONTROL fixture: if any of the five constituent fixtures
+# regresses inside the combined corpus but passes individually, the
+# regression is in cross-corpus interaction (signal collisions,
+# clusterer ambiguity, factory ID re-use, …). Catches a class of bugs
+# that single-corpus fixtures cannot.
+#
+# Composition is expressed by listing the constituent fixtures here;
+# the test file's loader expands this into a full `corpus.campaigns`
+# spec at load time so the factory itself stays unaware. This format
+# is fixture-6-specific — no other fixture uses ``include_fixtures``.
+#
+# Pass condition: ``composite_signals_clusterer`` (fingerprint OR C2
+# union-find — see fixture_harness.py) resolves every campaign and
+# leaves every noise scanner singleton. The bounds in
+# ``noise_floor.expected.yaml`` are global across the merged corpus.
+#
+# No standalone adversarial test for fixture 6 — each constituent
+# fixture already ships its own. What this fixture catches is
+# CROSS-fixture interference, which is a different failure mode from
+# the in-fixture adversarial cases.
+include_fixtures:
+  - shared_wordlist.yaml
+  - vpn_hopping.yaml
+  - lone_wolf.yaml
+  - paused_campaign.yaml
+  - multi_operator.yaml
+extra_noise_scanners: 10

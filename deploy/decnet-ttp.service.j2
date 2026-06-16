@@ -1,0 +1,57 @@
+[Unit]
+Description=DECNET TTP Tagger (MITRE ATT&CK technique tagging)
+Documentation=https://git.resacachile.cl/anti/DECNET/wiki/Workers#ttp-tagger
+After=network-online.target decnet-bus.service decnet-clusterer.service decnet-enrich.service decnet-reuse-correlator.service
+Wants=network-online.target decnet-bus.service
+
+[Service]
+Type=simple
+User={{ user }}
+Group={{ group }}
+WorkingDirectory={{ install_dir }}
+EnvironmentFile=-{{ install_dir }}/.env.local
+Environment=DECNET_SYSTEM_LOGS=/var/log/decnet/decnet.ttp.log
+# Subscribes to attacker.session.ended (primary), attacker.observed,
+# attacker.intel.enriched, identity.formed, identity.merged,
+# credential.reuse.detected, email.received, and canary.> ; falls back
+# to a 60s slow-tick poll when the bus is idle or unavailable. Each
+# event is dispatched through the CompositeTagger (RuleEngine +
+# Behavioral / Intel / Email / CanaryFingerprint / Identity /
+# Credential lifters), persisted via the idempotent INSERT OR IGNORE
+# repo write, and ttp.tagged + ttp.rule.fired.<technique_id> are
+# published only when the insert returned a non-zero rowcount
+# (loop-prevention invariant — see TTP_TAGGING.md §"Bus topics").
+#
+# Master-only: gated via MASTER_ONLY_COMMANDS in decnet/cli/gating.py.
+# Sits one layer above the identity / intel / reuse-correlator
+# workers — the After= dependencies ensure their bus topics are live
+# before the TTP worker subscribes.
+ExecStart={{ venv_dir }}/bin/decnet ttp
+StandardOutput=append:/var/log/decnet/decnet.ttp.log
+StandardError=append:/var/log/decnet/decnet.ttp.log
+
+CapabilityBoundingSet=
+AmbientCapabilities=
+
+# Security Hardening
+NoNewPrivileges=yes
+ProtectSystem=full
+# Dev installs under /home need ProtectHome=read-only (the worker
+# reads ./rules/ttp/ from the project root, which lives under /home
+# on dev boxes — read-only suffices because the FilesystemRuleStore
+# only reads YAMLs, never writes).
+ProtectHome=read-only
+PrivateTmp=yes
+ProtectKernelTunables=yes
+ProtectKernelModules=yes
+ProtectControlGroups=yes
+RestrictSUIDSGID=yes
+LockPersonality=yes
+ReadWritePaths={{ install_dir }} /var/log/decnet
+
+Restart=on-failure
+RestartSec=5
+TimeoutStopSec=15
+
+[Install]
+WantedBy=multi-user.target

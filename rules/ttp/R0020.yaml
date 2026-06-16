@@ -1,0 +1,17 @@
+rule_id: R0020
+rule_version: 1
+name: network_config_discovery
+description: |
+  ip addr / ifconfig / route / arp / iwconfig — network-interface
+  enumeration.
+applies_to:
+  - command
+match:
+  field: command_text
+  pattern: '\b(?:ip\s+(?:a|addr|link|route|-c\s+addr)|ifconfig(?:\s+-\w+)?|route\s+-\w+|arp\s+-\w+|iwconfig)\b'
+emits:
+  - tactic: TA0007
+    technique_id: T1016
+    confidence: 0.75
+evidence_fields:
+  - command_text

@@ -1,0 +1,18 @@
+rule_id: R0049
+rule_version: 1
+name: navigator_webdriver_flag
+description: |
+  navigator.webdriver === true in the canary fingerprint payload —
+  Selenium / Puppeteer / Playwright telltale.
+applies_to:
+  - canary_fingerprint
+match:
+  kind: lifter:canary_webdriver
+  signal: navigator.webdriver_true
+emits:
+  - tactic: TA0002
+    technique_id: T1059
+    confidence: 0.85
+evidence_fields:
+  - navigator_webdriver
+  - ua_signature

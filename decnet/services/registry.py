@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """
 Service plugin registry.
 
@@ -28,7 +29,7 @@ def _load_plugins() -> None:
     for cls in BaseService.__subclasses__():
         if not cls.__module__.startswith("decnet.services."):
             continue
-        instance = cls()
+        instance = cls()  # type: ignore[abstract]
         _registry[instance.name] = instance
     _loaded = True
 

@@ -1,0 +1,211 @@
+/* SPDX-License-Identifier: AGPL-3.0-or-later */
+/* Schema-driven per-service config form.
+ *
+ * Used inside both the Fleet DeckyCard and the MazeNET Inspector — the
+ * styles intentionally don't depend on either page's root class so the
+ * form looks identical in both surfaces. Vocabulary mirrors the
+ * existing INSPECTOR kvs grid (small uppercase labels, dark transparent
+ * inputs, matrix/violet accents).
+ */
+
+.service-config-form {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin-top: 10px;
+  padding-top: 10px;
+  border-top: 1px dashed var(--border);
+  font-family: var(--font-mono);
+}
+
+.svc-cfg-row {
+  display: grid;
+  grid-template-columns: 96px 1fr;
+  gap: 4px 10px;
+  align-items: center;
+}
+
+.svc-cfg-label {
+  grid-column: 1 / 2;
+  grid-row: 1 / 2;
+  font-size: 0.6rem;
+  letter-spacing: 1px;
+  text-transform: uppercase;
+  opacity: 0.55;
+  align-self: center;
+}
+
+.svc-cfg-secret-tag {
+  font-size: 0.52rem;
+  opacity: 0.5;
+  letter-spacing: 1px;
+  margin-left: 4px;
+}
+
+.svc-cfg-input,
+textarea.svc-cfg-input,
+select.svc-cfg-input {
+  grid-column: 2 / 3;
+  grid-row: 1 / 2;
+  width: 100%;
+  box-sizing: border-box;
+  font-family: var(--font-mono);
+  font-size: 0.72rem;
+  padding: 4px 6px;
+  background: var(--panel);
+  border: 1px solid var(--border);
+  border-radius: 0;
+  color: var(--matrix);
+  outline: none;
+  transition: border-color 80ms linear;
+}
+
+.svc-cfg-input:focus,
+textarea.svc-cfg-input:focus,
+select.svc-cfg-input:focus {
+  border-color: var(--violet);
+}
+
+textarea.svc-cfg-input {
+  min-height: 48px;
+  resize: vertical;
+  line-height: 1.3;
+}
+
+select.svc-cfg-input {
+  appearance: none;
+  -webkit-appearance: none;
+  padding-right: 18px;
+  background-image:
+    linear-gradient(45deg, transparent 50%, var(--matrix) 50%),
+    linear-gradient(135deg, var(--matrix) 50%, transparent 50%);
+  background-position:
+    calc(100% - 10px) 50%,
+    calc(100% - 6px) 50%;
+  background-size: 4px 4px, 4px 4px;
+  background-repeat: no-repeat;
+}
+
+/* Checkbox sits left-aligned in the input column. */
+.svc-cfg-row input[type="checkbox"] {
+  grid-column: 2 / 3;
+  grid-row: 1 / 2;
+  justify-self: start;
+  width: 14px;
+  height: 14px;
+  accent-color: var(--violet);
+}
+
+/* Password row: input + reveal button share the input column. */
+.svc-cfg-pw-wrap {
+  grid-column: 2 / 3;
+  grid-row: 1 / 2;
+  display: flex;
+  gap: 6px;
+  align-items: stretch;
+}
+.svc-cfg-pw-wrap .svc-cfg-input { grid-column: auto; grid-row: auto; flex: 1; }
+
+/* Help text: full-width row under the input. */
+.svc-cfg-help {
+  grid-column: 1 / 3;
+  grid-row: 2 / 3;
+  font-size: 0.58rem;
+  opacity: 0.45;
+  line-height: 1.35;
+  margin-top: 2px;
+}
+
+/* Action row matches .maze-btn.small visual weight. */
+.svc-cfg-actions {
+  display: flex;
+  gap: 6px;
+  align-items: center;
+  justify-content: flex-end;
+  margin-top: 6px;
+}
+
+.svc-cfg-dirty-tag {
+  font-size: 0.58rem;
+  letter-spacing: 1px;
+  color: var(--violet);
+  margin-right: auto;
+  opacity: 0.85;
+}
+
+.svc-cfg-btn {
+  font-family: var(--font-mono);
+  font-size: 0.62rem;
+  letter-spacing: 1px;
+  text-transform: uppercase;
+  padding: 4px 10px;
+  background: transparent;
+  border: 1px solid var(--matrix);
+  color: var(--matrix);
+  cursor: pointer;
+  transition: background 80ms linear, color 80ms linear, box-shadow 80ms linear;
+}
+.svc-cfg-btn:hover:not(:disabled) {
+  background: var(--matrix);
+  color: var(--bg);
+}
+.svc-cfg-btn.violet { border-color: var(--violet); color: var(--violet); }
+.svc-cfg-btn.violet:hover:not(:disabled) { background: var(--violet); color: var(--bg); }
+.svc-cfg-btn:disabled { opacity: 0.3; cursor: not-allowed; }
+
+.svc-cfg-pw-toggle {
+  font-family: var(--font-mono);
+  font-size: 0.55rem;
+  letter-spacing: 1px;
+  padding: 0 6px;
+  background: transparent;
+  border: 1px solid var(--border);
+  color: inherit;
+  cursor: pointer;
+  opacity: 0.7;
+}
+.svc-cfg-pw-toggle:hover { opacity: 1; border-color: var(--violet); }
+
+.svc-cfg-toggle-btn {
+  background: transparent;
+  border: none;
+  color: inherit;
+  cursor: pointer;
+  padding: 0;
+  font: inherit;
+  letter-spacing: inherit;
+}
+
+.svc-cfg-status {
+  font-size: 0.62rem;
+  opacity: 0.7;
+  font-style: italic;
+}
+.svc-cfg-status.alert-text { font-style: normal; }
+
+/* multi_enum checkbox group — sits in the input column, stacks vertically. */
+.svc-cfg-multi-enum {
+  grid-column: 2 / 3;
+  grid-row: 1 / 2;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  border: none;
+  padding: 0;
+  margin: 0;
+}
+.svc-cfg-multi-enum-option {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 0.68rem;
+  cursor: pointer;
+  user-select: none;
+}
+.svc-cfg-multi-enum-option input[type="checkbox"] {
+  width: 13px;
+  height: 13px;
+  accent-color: var(--violet);
+  cursor: pointer;
+  flex-shrink: 0;
+}

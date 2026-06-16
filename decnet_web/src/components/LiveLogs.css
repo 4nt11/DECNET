@@ -1,0 +1,183 @@
+/* SPDX-License-Identifier: AGPL-3.0-or-later */
+.logs-root {
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+}
+
+/* Button system (mirrors DeckyFleet.css scoping) */
+.logs-root .btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 7px 14px;
+  font-family: inherit;
+  font-size: 0.78rem;
+  letter-spacing: 1.5px;
+  background: transparent;
+  border: 1px solid var(--matrix);
+  color: var(--matrix);
+  cursor: pointer;
+  transition: all 0.3s ease;
+}
+.logs-root .btn:hover {
+  background: var(--matrix);
+  color: var(--bg);
+  box-shadow: var(--matrix-glow);
+}
+.logs-root .btn.violet { border-color: var(--violet); color: var(--violet); }
+.logs-root .btn.violet:hover { background: var(--violet); color: var(--bg); box-shadow: var(--violet-glow); }
+.logs-root .btn.ghost { border-color: var(--border); color: var(--matrix); opacity: 0.7; }
+.logs-root .btn.ghost:hover { opacity: 1; border-color: var(--matrix); background: transparent; box-shadow: var(--matrix-glow); }
+.logs-root .btn:disabled { opacity: 0.3; cursor: not-allowed; }
+
+/* Control row */
+.logs-root .logs-controls {
+  display: flex;
+  gap: 12px;
+  align-items: stretch;
+}
+.logs-root .logs-controls .search-container { flex: 1; max-width: none; }
+.logs-root .time-select {
+  background: var(--panel);
+  border: 1px solid var(--border);
+  color: var(--matrix);
+  padding: 8px 14px;
+  font-family: inherit;
+  font-size: 0.72rem;
+  letter-spacing: 2px;
+  cursor: pointer;
+}
+.logs-root .time-select:focus { outline: none; border-color: var(--accent); }
+
+/* Histogram */
+.logs-root .histogram-wrap {
+  background: var(--panel);
+  border: 1px solid var(--border);
+  padding: 14px 18px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+.logs-root .histogram-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  font-size: 0.65rem;
+  letter-spacing: 1.5px;
+  opacity: 0.75;
+}
+.logs-root .histogram-header .violet-accent {
+  color: var(--violet);
+  opacity: 1;
+}
+.logs-root .histogram-header .clear-sel {
+  cursor: pointer;
+  text-decoration: underline;
+  margin-left: 4px;
+}
+.logs-root .histogram {
+  display: flex;
+  align-items: flex-end;
+  gap: 3px;
+  height: 80px;
+}
+.logs-root .histogram .bar {
+  flex: 1;
+  min-height: 2px;
+  background: var(--accent);
+  opacity: 0.4;
+  cursor: pointer;
+  transition: opacity 0.15s ease, background 0.15s ease, box-shadow 0.15s ease;
+}
+.logs-root .histogram .bar:hover { opacity: 0.8; }
+.logs-root .histogram .bar.selected {
+  background: var(--violet);
+  opacity: 1;
+  box-shadow: var(--violet-glow);
+}
+.logs-root .histogram .bar.has-bounty { background: var(--warn); opacity: 0.7; }
+.logs-root .histogram .bar.has-bounty.selected { background: var(--violet); }
+.logs-root .histogram-axis {
+  display: flex;
+  justify-content: space-between;
+  font-size: 0.6rem;
+  opacity: 0.5;
+  letter-spacing: 1px;
+}
+
+/* Table tweaks */
+.logs-root .logs-table td.t-time { font-size: 0.72rem; opacity: 0.55; white-space: nowrap; }
+.logs-root .logs-table td.t-decky { color: var(--violet); }
+.logs-root .logs-table td.t-svc { color: var(--matrix); }
+.logs-root .logs-table td.t-event .event-head {
+  font-weight: 700;
+  color: var(--matrix);
+  font-size: 0.85rem;
+}
+.logs-root .logs-table td.t-event .event-tail { font-weight: normal; opacity: 0.75; }
+.logs-root .logs-table td.t-event .badges {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+  margin-top: 6px;
+}
+.logs-root .field-badge {
+  font-size: 0.68rem;
+  padding: 2px 8px;
+  border-radius: 3px;
+  background: var(--matrix-tint-10);
+  border: 1px solid var(--matrix-tint-30);
+  word-break: break-all;
+}
+.logs-root .field-badge .k { opacity: 0.6; margin-right: 4px; }
+.logs-root .artifact-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 0.68rem;
+  padding: 2px 8px;
+  border-radius: 3px;
+  background: var(--warn-tint-10);
+  border: 1px solid var(--warn);
+  color: var(--warn);
+  cursor: pointer;
+  font-family: inherit;
+}
+.logs-root .artifact-btn:hover {
+  background: var(--warn-tint-10);
+  box-shadow: 0 0 8px var(--warn);
+}
+
+/* Empty state */
+.logs-root .empty-state {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  padding: 40px 20px;
+  opacity: 0.45;
+}
+.logs-root .empty-state .type-label {
+  font-size: 0.7rem;
+  letter-spacing: 2px;
+}
+
+/* Pagination */
+.logs-root .pager {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  font-size: 0.7rem;
+}
+.logs-root .pager button {
+  padding: 4px;
+  border: 1px solid var(--border);
+  background: transparent;
+  color: var(--matrix);
+  display: flex;
+  cursor: pointer;
+}
+.logs-root .pager button:disabled { opacity: 0.3; cursor: not-allowed; }
+.logs-root .pager button:hover:not(:disabled) { border-color: var(--accent); }

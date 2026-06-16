@@ -1,0 +1,23 @@
+rule_id: R0038
+rule_version: 1
+name: docker_host_escape
+description: |
+  Privileged container creation or bind-mount of host /, /etc, or
+  /var/run/docker.sock — host-escape primitive. Lifter inspects
+  the structured Docker-API event payload.
+applies_to:
+  - session
+match:
+  kind: lifter:behavioral_docker_escape
+  signals:
+    - 'privileged:true'
+    - 'bind:/:/'
+    - 'bind:/etc'
+    - 'bind:/var/run/docker.sock'
+emits:
+  - tactic: TA0004
+    technique_id: T1611
+    confidence: 0.95
+evidence_fields:
+  - matched_signal
+  - container_image

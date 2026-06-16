@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """
 Rotating file handler for DECNET syslog output.
 
@@ -13,29 +14,37 @@ import logging.handlers
 import os
 from pathlib import Path
 
+from decnet.logging.inode_aware_handler import InodeAwareRotatingFileHandler
+from decnet.privdrop import chown_to_invoking_user, chown_tree_to_invoking_user
+from decnet.telemetry import traced as _traced
+
 _LOG_FILE_ENV = "DECNET_LOG_FILE"
 _DEFAULT_LOG_FILE = "/var/log/decnet/decnet.log"
 _MAX_BYTES = 10 * 1024 * 1024  # 10 MB
 _BACKUP_COUNT = 5
 
-_handler: logging.handlers.RotatingFileHandler | None = None
+_handler: InodeAwareRotatingFileHandler | None = None
 _logger: logging.Logger | None = None
 
 
-def _get_logger() -> logging.Logger:
+@_traced("logging.init_file_handler")
+def _init_file_handler() -> logging.Logger:
+    """One-time initialisation of the rotating file handler."""
     global _handler, _logger
-    if _logger is not None:
-        return _logger
 
     log_path = Path(os.environ.get(_LOG_FILE_ENV, _DEFAULT_LOG_FILE))
     log_path.parent.mkdir(parents=True, exist_ok=True)
+    # When running under sudo, hand the parent dir back to the invoking user
+    # so a subsequent non-root `decnet api` can also write to it.
+    chown_tree_to_invoking_user(log_path.parent)
 
-    _handler = logging.handlers.RotatingFileHandler(
+    _handler = InodeAwareRotatingFileHandler(
         log_path,
         maxBytes=_MAX_BYTES,
         backupCount=_BACKUP_COUNT,
         encoding="utf-8",
     )
+    chown_to_invoking_user(log_path)
     _handler.setFormatter(logging.Formatter("%(message)s"))
 
     _logger = logging.getLogger("decnet.syslog")
@@ -46,13 +55,18 @@ def _get_logger() -> logging.Logger:
     return _logger
 
 
+def _get_logger() -> logging.Logger:
+    if _logger is not None:
+        return _logger
+    return _init_file_handler()
+
+
 def write_syslog(line: str) -> None:
     """Write a single RFC 5424 syslog line to the rotating log file."""
     try:
-        _get_logger().info(line)
-    except Exception:
+       _get_logger().info(line)
+    except Exception:  # nosec B110
         pass
-
 
 def get_log_path() -> Path:
     """Return the configured log file path (for tests/inspection)."""

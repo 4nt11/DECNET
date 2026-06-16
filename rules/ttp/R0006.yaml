@@ -1,0 +1,25 @@
+rule_id: R0006
+rule_version: 1
+name: default_credentials
+description: |
+  Login attempt with a known default credential pair (root/root,
+  admin/admin, etc.). CredentialLifter (E.3.13) reads credentials
+  table.
+applies_to:
+  - auth_attempt
+match:
+  kind: lifter:credential_default_credentials
+  pairs:
+    - [root, root]
+    - [admin, admin]
+    - [admin, password]
+    - [root, ""]
+    - [pi, raspberry]
+emits:
+  - tactic: TA0001
+    technique_id: T1078
+    sub_technique_id: T1078.001
+    confidence: 0.9
+evidence_fields:
+  - username
+  - service

@@ -1,0 +1,28 @@
+rule_id: R0050
+rule_version: 1
+name: automation_canvas_audio_hash
+description: |
+  Canvas / audio / WebGL fingerprint hash matches a known automation
+  tooling cohort (Puppeteer / Playwright / Selenium / curl-impersonate).
+applies_to:
+  - canary_fingerprint
+match:
+  kind: lifter:canary_automation_hash
+  catalogues:
+    - puppeteer
+    - playwright
+    - selenium
+    - curl_impersonate
+emits:
+  - tactic: TA0002
+    technique_id: T1059
+    confidence: 0.85
+  - tactic: TA0042
+    technique_id: T1588
+    sub_technique_id: T1588.002
+    confidence: 0.85
+evidence_fields:
+  - canvas_hash
+  - audio_hash
+  - webgl_hash
+  - matched_tool

@@ -1,0 +1,23 @@
+rule_id: R0031
+rule_version: 1
+name: beaconing
+description: |
+  Periodic outbound activity with low jitter — classic C2 beacon.
+  Read from AttackerBehavior.beacon_interval_s / .beacon_jitter_pct
+  by the BehavioralLifter (E.3.9).
+applies_to:
+  - session
+match:
+  kind: lifter:behavioral_beaconing
+  max_jitter_pct: 0.15
+  min_interval_s: 10
+emits:
+  - tactic: TA0011
+    technique_id: T1071
+    confidence: 0.8
+  - tactic: TA0011
+    technique_id: T1029
+    confidence: 0.85
+evidence_fields:
+  - beacon_interval_s
+  - beacon_jitter_pct

@@ -1,0 +1,49 @@
+[Unit]
+Description=DECNET Service Bus (host-local UNIX-socket pub/sub)
+Documentation=https://git.resacachile.cl/anti/DECNET/wiki/Service-Bus
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User={{ user }}
+Group={{ group }}
+WorkingDirectory={{ install_dir }}
+EnvironmentFile=-{{ install_dir }}/.env.local
+# /run/decnet is created automatically with the RuntimeDirectory= directive
+# below (mode 0755, owned by User/Group) and cleaned up on stop. The bus
+# socket is placed inside it with 0660 perms so only the configured
+# DECNET group (--group) can connect. That group is rendered here so
+# `decnet init --group anti` results in a socket every worker running
+# as anti can actually connect() to — otherwise every worker falls
+# back to bus=None and the Workers panel sees no heartbeats.
+RuntimeDirectory=decnet
+RuntimeDirectoryMode=0755
+Environment=DECNET_SYSTEM_LOGS=/var/log/decnet/decnet.bus.log
+ExecStart={{ venv_dir }}/bin/decnet bus \
+    --socket /run/decnet/bus.sock \
+    --group {{ group }}
+StandardOutput=append:/var/log/decnet/decnet.bus.log
+StandardError=append:/var/log/decnet/decnet.bus.log
+
+# No privileged network operations — UNIX-domain socket only.
+CapabilityBoundingSet=
+AmbientCapabilities=
+
+# Security Hardening
+NoNewPrivileges=yes
+ProtectSystem=full
+ProtectHome=read-only
+PrivateTmp=yes
+ProtectKernelTunables=yes
+ProtectKernelModules=yes
+ProtectControlGroups=yes
+RestrictSUIDSGID=yes
+LockPersonality=yes
+ReadWritePaths=/run/decnet /var/log/decnet
+
+Restart=on-failure
+RestartSec=5
+
+[Install]
+WantedBy=multi-user.target

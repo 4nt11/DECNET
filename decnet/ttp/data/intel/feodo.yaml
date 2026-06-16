@@ -1,0 +1,20 @@
+# Feodo Tracker → ATT&CK technique mapping.
+#
+# Feodo Tracker is a binary listed/not-listed feed; there are no
+# per-signal subtypes to enumerate. Both T1071 (Application Layer
+# Protocol) and T1588 (Obtain Capabilities) fire whenever an attacker
+# IP is on the Feodo blocklist. Keeping this as a single ``feodo_listed``
+# signal preserves the structured-mapping shape for the future
+# STIX/MISP exporter without inventing fake categories.
+provider: feodo
+mapping_version: "1"
+attack_release: ">=15.1"
+signals:
+  - id: feodo_listed
+    label: "Listed on Feodo Tracker"
+    external_reference:
+      source_name: feodo
+      url: "https://feodotracker.abuse.ch/about/"
+    techniques:
+      - technique_id: T1071
+      - technique_id: T1588

@@ -1,0 +1,17 @@
+rule_id: R0012
+rule_version: 1
+name: ingress_tool_transfer
+description: |
+  wget/curl/tftp/scp pulling a payload from a remote URL. Anchors
+  on the verb-then-URL shape; bare 'curl' alone won't fire.
+applies_to:
+  - command
+match:
+  field: command_text
+  pattern: '(?i)\b(wget|curl|tftp|scp|ftpget)\s+(?:-\S+\s+)*(?:[^|;\s]+\s+)*https?://|\b(wget|curl)\s+-O\s'
+emits:
+  - tactic: TA0011
+    technique_id: T1105
+    confidence: 0.85
+evidence_fields:
+  - command_text

@@ -1,62 +1,136 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """
 Pydantic models for DECNET configuration and runtime state.
 State is persisted to decnet-state.json in the working directory.
 """
 
 import json
+import logging
+import os
+import socket as _socket
+from datetime import datetime, timezone
 from pathlib import Path
-from typing import Literal
 
-from pydantic import BaseModel, field_validator
+from decnet.models import DeckyConfig, DecnetConfig  # noqa: F401
 
 from decnet.distros import random_hostname as _random_hostname
 
-STATE_FILE = Path("decnet-state.json")
+# ---------------------------------------------------------------------------
+# RFC 5424 syslog formatter
+# ---------------------------------------------------------------------------
+# Severity mapping: Python level → syslog severity (RFC 5424 §6.2.1)
+_SYSLOG_SEVERITY: dict[int, int] = {
+    logging.CRITICAL: 2,  # Critical
+    logging.ERROR:    3,  # Error
+    logging.WARNING:  4,  # Warning
+    logging.INFO:     6,  # Informational
+    logging.DEBUG:    7,  # Debug
+}
+_FACILITY_LOCAL0 = 16  # local0 (RFC 5424 §6.2.1 / POSIX)
+
+
+class Rfc5424Formatter(logging.Formatter):
+    """Formats log records as RFC 5424 syslog messages.
+
+    Output:
+        <PRIVAL>1 TIMESTAMP HOSTNAME APP-NAME PROCID MSGID STRUCTURED-DATA MSG
+
+    Example:
+        <134>1 2026-04-12T21:48:03.123456+00:00 host decnet 1234 decnet.config - Dev mode active
+    """
+
+    _hostname: str = _socket.gethostname()
+    _app: str = "decnet"
+
+    def format(self, record: logging.LogRecord) -> str:
+        severity = _SYSLOG_SEVERITY.get(record.levelno, 6)
+        prival   = (_FACILITY_LOCAL0 * 8) + severity
+        ts       = datetime.fromtimestamp(record.created, tz=timezone.utc).isoformat(timespec="microseconds")
+        msg      = record.getMessage()
+        if record.exc_info:
+            msg += "\n" + self.formatException(record.exc_info)
+        app = getattr(record, "decnet_component", self._app)
+        return (
+            f"<{prival}>1 {ts} {self._hostname} {app}"
+            f" {os.getpid()} {record.name} - {msg}"
+        )
+
+
+def _configure_logging(dev: bool) -> None:
+    """Install RFC 5424 handlers on the root logger (idempotent).
+
+    Always adds a StreamHandler (stderr).  Also adds a RotatingFileHandler
+    writing to DECNET_SYSTEM_LOGS (default: decnet.system.log in $PWD) so
+    all microservice daemons — which redirect stderr to /dev/null — still
+    produce readable logs.  File handler is skipped under pytest.
+    """
+    from decnet.logging.inode_aware_handler import InodeAwareRotatingFileHandler
+
+    root = logging.getLogger()
+    # Guard: if our StreamHandler is already installed, all handlers are set.
+    if any(isinstance(h, logging.StreamHandler) and isinstance(h.formatter, Rfc5424Formatter)
+           for h in root.handlers):
+        return
+
+    fmt = Rfc5424Formatter()
+    root.setLevel(logging.DEBUG if dev else logging.INFO)
+
+    stream_handler = logging.StreamHandler()
+    stream_handler.setFormatter(fmt)
+    root.addHandler(stream_handler)
+
+    # Skip the file handler during test runs to avoid polluting the test cwd.
+    # Gated on the explicit, non-attacker-injectable DECNET_TESTING=1 flag
+    # (set by the test harness) rather than the attacker-controllable PYTEST*
+    # namespace (V2.1.7).
+    _in_test = os.environ.get("DECNET_TESTING") == "1"
+    if not _in_test:
+        _log_path = os.environ.get("DECNET_SYSTEM_LOGS", "decnet.system.log")
+        # Never let file-handler attach failure kill the process. The
+        # stream handler above is already installed, so losing the file
+        # handler just means 'tail syslog / journalctl instead' — the
+        # daemon itself must keep running. This path trips most
+        # commonly under systemd with ProtectSystem=full + ProtectHome=
+        # read-only when an operator hasn't passed a writable
+        # DECNET_SYSTEM_LOGS yet.
+        try:
+            file_handler = InodeAwareRotatingFileHandler(
+                _log_path,
+                mode="a",
+                maxBytes=10 * 1024 * 1024,  # 10 MB
+                backupCount=5,
+                encoding="utf-8",
+            )
+            file_handler.setFormatter(fmt)
+            root.addHandler(file_handler)
+            # Drop root ownership when invoked via sudo so non-root follow-up
+            # commands (e.g. `decnet api` after `sudo decnet deploy`) can append.
+            from decnet.privdrop import chown_to_invoking_user
+            chown_to_invoking_user(_log_path)
+        except OSError as exc:
+            logging.getLogger(__name__).warning(
+                "could not open %s (%s); continuing with stderr-only logging. "
+                "Set DECNET_SYSTEM_LOGS to a writable path to silence this.",
+                _log_path, exc,
+            )
+
+
+_dev = os.environ.get("DECNET_DEVELOPER", "").lower() == "true"
+_configure_logging(_dev)
+
+log = logging.getLogger(__name__)
+
+if _dev:
+    log.debug("Developer mode: debug logging active")
+
+# Calculate absolute path to the project root (where the config file resides)
+_ROOT: Path = Path(__file__).parent.parent.absolute()
+STATE_FILE: Path = _ROOT / "decnet-state.json"
+DEFAULT_MUTATE_INTERVAL: int = 30  # default rotation interval in minutes
 
 
 def random_hostname(distro_slug: str = "debian") -> str:
     return _random_hostname(distro_slug)
-
-
-class DeckyConfig(BaseModel):
-    name: str
-    ip: str
-    services: list[str]
-    distro: str          # slug from distros.DISTROS, e.g. "debian", "ubuntu22"
-    base_image: str      # Docker image for the base/IP-holder container
-    build_base: str = "debian:bookworm-slim"  # apt-compatible image for service Dockerfiles
-    hostname: str
-    archetype: str | None = None  # archetype slug if spawned from an archetype profile
-    service_config: dict[str, dict] = {}  # optional per-service persona config
-    nmap_os: str = "linux"        # OS family for TCP/IP stack spoofing (see os_fingerprint.py)
-
-    @field_validator("services")
-    @classmethod
-    def services_not_empty(cls, v: list[str]) -> list[str]:
-        if not v:
-            raise ValueError("A decky must have at least one service.")
-        return v
-
-
-class DecnetConfig(BaseModel):
-    mode: Literal["unihost", "swarm"]
-    interface: str
-    subnet: str
-    gateway: str
-    deckies: list[DeckyConfig]
-    log_target: str | None = None  # "ip:port" or None
-    log_file: str | None = None    # path for RFC 5424 syslog file output
-    ipvlan: bool = False           # use IPvlan L2 instead of MACVLAN (WiFi-friendly)
-
-    @field_validator("log_target")
-    @classmethod
-    def validate_log_target(cls, v: str | None) -> str | None:
-        if v is None:
-            return v
-        parts = v.rsplit(":", 1)
-        if len(parts) != 2 or not parts[1].isdigit():
-            raise ValueError("log_target must be in ip:port format, e.g. 192.168.1.5:5140")
-        return v
 
 
 def save_state(config: DecnetConfig, compose_path: Path) -> None:

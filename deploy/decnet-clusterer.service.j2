@@ -1,0 +1,47 @@
+[Unit]
+Description=DECNET Identity Clusterer (per-IP observations → identities)
+Documentation=https://git.resacachile.cl/anti/DECNET/wiki/Workers#identity-clusterer
+After=network-online.target decnet-bus.service
+Wants=network-online.target decnet-bus.service
+
+[Service]
+Type=simple
+User={{ user }}
+Group={{ group }}
+WorkingDirectory={{ install_dir }}
+EnvironmentFile=-{{ install_dir }}/.env.local
+Environment=DECNET_SYSTEM_LOGS=/var/log/decnet/decnet.clusterer.log
+# Subscribes to attacker.observed and attacker.scored; falls back to a
+# 60s slow-tick poll when the bus is idle or unavailable. Reads
+# Attacker rows, projects per-IP observations into the similarity
+# graph (JA3 / HASSH / payload-hash / C2-endpoint), runs union-find,
+# writes attacker_identities rows + sets attackers.identity_id, and
+# publishes identity.formed / identity.observation.linked /
+# identity.merged / identity.unmerged.
+#
+# Master-only: gated via MASTER_ONLY_COMMANDS in decnet/cli/gating.py.
+ExecStart={{ venv_dir }}/bin/decnet clusterer
+StandardOutput=append:/var/log/decnet/decnet.clusterer.log
+StandardError=append:/var/log/decnet/decnet.clusterer.log
+
+CapabilityBoundingSet=
+AmbientCapabilities=
+
+# Security Hardening
+NoNewPrivileges=yes
+ProtectSystem=full
+ProtectHome=read-only
+PrivateTmp=yes
+ProtectKernelTunables=yes
+ProtectKernelModules=yes
+ProtectControlGroups=yes
+RestrictSUIDSGID=yes
+LockPersonality=yes
+ReadWritePaths={{ install_dir }} /var/log/decnet
+
+Restart=on-failure
+RestartSec=5
+TimeoutStopSec=15
+
+[Install]
+WantedBy=multi-user.target

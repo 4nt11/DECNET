@@ -1,0 +1,74 @@
+# GreyNoise tag → ATT&CK technique mapping.
+#
+# Mirrors what _GREYNOISE_TAG_TO_TECHNIQUES used to encode in
+# decnet/ttp/impl/intel_lifter.py. Note: GreyNoise's Community
+# endpoint does not return tags; these fire only when operators wire
+# a non-Community provider (Visualizer / Enterprise / RIOT). Kept
+# canonical here so the upgrade path is a column populate, not a
+# code change. Decision-flow constants for bare ``classification ==
+# "scanner"`` (T1595) and bare ``classification == "malicious"``
+# (T1071 at 0.5×) stay in code — they're not table rows.
+provider: greynoise
+mapping_version: "1"
+attack_release: ">=15.1"
+signals:
+  - id: tor_exit_node
+    label: "Tor exit node"
+    external_reference:
+      source_name: greynoise
+      url: "https://docs.greynoise.io/docs/understanding-greynoise-tags"
+      external_id: tor_exit_node
+    techniques:
+      - technique_id: T1090
+  - id: ssh_bruteforcer
+    label: "SSH brute-forcer"
+    external_reference:
+      source_name: greynoise
+      url: "https://docs.greynoise.io/docs/understanding-greynoise-tags"
+      external_id: ssh_bruteforcer
+    techniques:
+      - technique_id: T1110
+  - id: web_crawler
+    label: "Web crawler"
+    external_reference:
+      source_name: greynoise
+      url: "https://docs.greynoise.io/docs/understanding-greynoise-tags"
+      external_id: web_crawler
+    techniques:
+      - technique_id: T1595
+  - id: cobalt_strike
+    label: "Cobalt Strike"
+    external_reference:
+      source_name: greynoise
+      url: "https://docs.greynoise.io/docs/understanding-greynoise-tags"
+      external_id: cobalt_strike
+    techniques:
+      - technique_id: T1071
+      - technique_id: T1588
+  - id: metasploit
+    label: "Metasploit"
+    external_reference:
+      source_name: greynoise
+      url: "https://docs.greynoise.io/docs/understanding-greynoise-tags"
+      external_id: metasploit
+    techniques:
+      - technique_id: T1071
+      - technique_id: T1588
+  - id: sliver
+    label: "Sliver"
+    external_reference:
+      source_name: greynoise
+      url: "https://docs.greynoise.io/docs/understanding-greynoise-tags"
+      external_id: sliver
+    techniques:
+      - technique_id: T1071
+      - technique_id: T1588
+  - id: havoc
+    label: "Havoc"
+    external_reference:
+      source_name: greynoise
+      url: "https://docs.greynoise.io/docs/understanding-greynoise-tags"
+      external_id: havoc
+    techniques:
+      - technique_id: T1071
+      - technique_id: T1588

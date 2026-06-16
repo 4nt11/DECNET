@@ -1,0 +1,25 @@
+rule_id: R0058
+rule_version: 1
+last_reviewed: "2026-05-02"
+next_review: "2026-08-02"
+name: aggregate_malicious_verdict_bump
+description: |
+  Aggregate intel verdict = "malicious" with no specific provider
+  mapping. Per Appendix B: confidence-bump existing tags only,
+  never emits a fresh tag. emits is intentionally a single
+  zero-confidence sentinel so the rule still validates and the
+  catalogue surfaces it; the IntelLifter inspects rule_id and
+  bumps existing tags' confidence rather than calling the engine
+  fanout.
+applies_to:
+  - intel
+match:
+  kind: lifter:intel_aggregate_bump
+  bump_amount: 0.05
+emits:
+  - tactic: TA0042
+    technique_id: T1588
+    confidence: 0.0
+evidence_fields:
+  - aggregate_verdict
+  - bumped_rule_ids

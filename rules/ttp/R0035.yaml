@@ -1,0 +1,21 @@
+rule_id: R0035
+rule_version: 1
+name: db_mass_read
+description: |
+  SELECT/COPY/RETR pulling many rows or whole tables from a DB
+  honeypot. BehavioralLifter (E.3.9) reads the per-session
+  query-byte aggregate.
+applies_to:
+  - session
+match:
+  kind: lifter:behavioral_db_mass_read
+  min_rows: 10000
+  min_bytes: 5242880
+emits:
+  - tactic: TA0009
+    technique_id: T1213
+    confidence: 0.85
+evidence_fields:
+  - service
+  - rows_read
+  - bytes_read

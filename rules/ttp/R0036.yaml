@@ -1,0 +1,25 @@
+rule_id: R0036
+rule_version: 1
+name: credentials_in_files
+description: |
+  Reading .env / .git/config / cloud credential files —
+  credential-from-file harvesting. Lifter-driven so the rule
+  composes the file-access signal with the path discriminator.
+applies_to:
+  - session
+  - http_request
+match:
+  kind: lifter:behavioral_credentials_in_files
+  paths:
+    - '\.env'
+    - '\.git/config'
+    - '\.aws/credentials'
+    - '\.ssh/id_rsa'
+    - 'wp-config\.php'
+emits:
+  - tactic: TA0006
+    technique_id: T1552
+    sub_technique_id: T1552.001
+    confidence: 0.9
+evidence_fields:
+  - matched_path

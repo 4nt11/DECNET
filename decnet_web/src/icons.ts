@@ -1,0 +1,107 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
+/* Centralised lucide re-export.
+ *
+ * Per-icon paths instead of the 'lucide-react' barrel: Vite's dep
+ * optimiser would otherwise pre-bundle the full barrel in dev
+ * (slower HMR), and prod tree-shaking is marginally tighter when
+ * each icon is its own module. Adding a new icon: add one line
+ * below, keep sorted. */
+
+export type { LucideIcon } from 'lucide-react';
+
+export { default as Activity } from 'lucide-react/dist/esm/icons/activity';
+export { default as AlertTriangle } from 'lucide-react/dist/esm/icons/triangle-alert';
+export { default as Archive } from 'lucide-react/dist/esm/icons/archive';
+export { default as ArrowLeft } from 'lucide-react/dist/esm/icons/arrow-left';
+export { default as ArrowRight } from 'lucide-react/dist/esm/icons/arrow-right';
+export { default as AtSign } from 'lucide-react/dist/esm/icons/at-sign';
+export { default as Ban } from 'lucide-react/dist/esm/icons/ban';
+export { default as BarChart3 } from 'lucide-react/dist/esm/icons/chart-column';
+export { default as Bell } from 'lucide-react/dist/esm/icons/bell';
+export { default as Box } from 'lucide-react/dist/esm/icons/box';
+export { default as Check } from 'lucide-react/dist/esm/icons/check';
+export { default as CheckCircle } from 'lucide-react/dist/esm/icons/circle-check-big';
+export { default as ChevronDown } from 'lucide-react/dist/esm/icons/chevron-down';
+export { default as ChevronLeft } from 'lucide-react/dist/esm/icons/chevron-left';
+export { default as ChevronRight } from 'lucide-react/dist/esm/icons/chevron-right';
+export { default as ChevronUp } from 'lucide-react/dist/esm/icons/chevron-up';
+export { default as Circle } from 'lucide-react/dist/esm/icons/circle';
+export { default as Clock } from 'lucide-react/dist/esm/icons/clock';
+export { default as Copy } from 'lucide-react/dist/esm/icons/copy';
+export { default as Cpu } from 'lucide-react/dist/esm/icons/cpu';
+export { default as Crosshair } from 'lucide-react/dist/esm/icons/crosshair';
+export { default as Database } from 'lucide-react/dist/esm/icons/database';
+export { default as Download } from 'lucide-react/dist/esm/icons/download';
+export { default as Eye } from 'lucide-react/dist/esm/icons/eye';
+export { default as FileKey } from 'lucide-react/dist/esm/icons/file-key';
+export { default as FileText } from 'lucide-react/dist/esm/icons/file-text';
+export { default as Filter } from 'lucide-react/dist/esm/icons/funnel';
+export { default as Fingerprint } from 'lucide-react/dist/esm/icons/fingerprint-pattern';
+export { default as Flame } from 'lucide-react/dist/esm/icons/flame';
+export { default as Folder } from 'lucide-react/dist/esm/icons/folder';
+export { default as GitMerge } from 'lucide-react/dist/esm/icons/git-merge';
+export { default as Globe } from 'lucide-react/dist/esm/icons/globe';
+export { default as HardDrive } from 'lucide-react/dist/esm/icons/hard-drive';
+export { default as Info } from 'lucide-react/dist/esm/icons/info';
+export { default as Key } from 'lucide-react/dist/esm/icons/key';
+export { default as KeyRound } from 'lucide-react/dist/esm/icons/key-round';
+export { default as Keyboard } from 'lucide-react/dist/esm/icons/keyboard';
+export { default as LayoutDashboard } from 'lucide-react/dist/esm/icons/layout-dashboard';
+export { default as LayoutGrid } from 'lucide-react/dist/esm/icons/layout-grid';
+export { default as Lock } from 'lucide-react/dist/esm/icons/lock';
+export { default as LogOut } from 'lucide-react/dist/esm/icons/log-out';
+export { default as Mail } from 'lucide-react/dist/esm/icons/mail';
+export { default as Maximize2 } from 'lucide-react/dist/esm/icons/maximize-2';
+export { default as Menu } from 'lucide-react/dist/esm/icons/menu';
+export { default as Minimize2 } from 'lucide-react/dist/esm/icons/minimize-2';
+export { default as Monitor } from 'lucide-react/dist/esm/icons/monitor';
+export { default as MousePointer2 } from 'lucide-react/dist/esm/icons/mouse-pointer-2';
+export { default as Network } from 'lucide-react/dist/esm/icons/network';
+export { default as Package } from 'lucide-react/dist/esm/icons/package';
+export { default as Palette } from 'lucide-react/dist/esm/icons/palette';
+export { default as PanelLeftClose } from 'lucide-react/dist/esm/icons/panel-left-close';
+export { default as PanelLeftOpen } from 'lucide-react/dist/esm/icons/panel-left-open';
+export { default as PanelRightClose } from 'lucide-react/dist/esm/icons/panel-right-close';
+export { default as PanelRightOpen } from 'lucide-react/dist/esm/icons/panel-right-open';
+export { default as Paperclip } from 'lucide-react/dist/esm/icons/paperclip';
+export { default as Pause } from 'lucide-react/dist/esm/icons/pause';
+export { default as Pencil } from 'lucide-react/dist/esm/icons/pencil';
+export { default as Phone } from 'lucide-react/dist/esm/icons/phone';
+export { default as Play } from 'lucide-react/dist/esm/icons/play';
+export { default as Plus } from 'lucide-react/dist/esm/icons/plus';
+export { default as PlusCircle } from 'lucide-react/dist/esm/icons/circle-plus';
+export { default as Power } from 'lucide-react/dist/esm/icons/power';
+export { default as PowerOff } from 'lucide-react/dist/esm/icons/power-off';
+export { default as Radio } from 'lucide-react/dist/esm/icons/radio';
+export { default as RefreshCw } from 'lucide-react/dist/esm/icons/refresh-cw';
+export { default as RotateCcw } from 'lucide-react/dist/esm/icons/rotate-ccw';
+export { default as Save } from 'lucide-react/dist/esm/icons/save';
+export { default as Search } from 'lucide-react/dist/esm/icons/search';
+export { default as SearchX } from 'lucide-react/dist/esm/icons/search-x';
+export { default as Send } from 'lucide-react/dist/esm/icons/send';
+export { default as Server } from 'lucide-react/dist/esm/icons/server';
+export { default as Settings } from 'lucide-react/dist/esm/icons/settings';
+export { default as Shield } from 'lucide-react/dist/esm/icons/shield';
+export { default as ShieldAlert } from 'lucide-react/dist/esm/icons/shield-alert';
+export { default as ShieldOff } from 'lucide-react/dist/esm/icons/shield-off';
+export { default as Skull } from 'lucide-react/dist/esm/icons/skull';
+export { default as Sliders } from 'lucide-react/dist/esm/icons/sliders-vertical';
+export { default as Sparkles } from 'lucide-react/dist/esm/icons/sparkles';
+export { default as Square } from 'lucide-react/dist/esm/icons/square';
+export { default as Target } from 'lucide-react/dist/esm/icons/target';
+export { default as Terminal } from 'lucide-react/dist/esm/icons/terminal';
+export { default as Timer } from 'lucide-react/dist/esm/icons/timer';
+export { default as Trash2 } from 'lucide-react/dist/esm/icons/trash-2';
+export { default as Upload } from 'lucide-react/dist/esm/icons/upload';
+export { default as Moon } from 'lucide-react/dist/esm/icons/moon';
+export { default as Sun } from 'lucide-react/dist/esm/icons/sun';
+export { default as UploadCloud } from 'lucide-react/dist/esm/icons/cloud-upload';
+export { default as UserPlus } from 'lucide-react/dist/esm/icons/user-plus';
+export { default as Users } from 'lucide-react/dist/esm/icons/users';
+export { default as Webhook } from 'lucide-react/dist/esm/icons/webhook';
+export { default as Wifi } from 'lucide-react/dist/esm/icons/wifi';
+export { default as WifiOff } from 'lucide-react/dist/esm/icons/wifi-off';
+export { default as X } from 'lucide-react/dist/esm/icons/x';
+export { default as Zap } from 'lucide-react/dist/esm/icons/zap';
+export { default as ZoomIn } from 'lucide-react/dist/esm/icons/zoom-in';
+export { default as ZoomOut } from 'lucide-react/dist/esm/icons/zoom-out';

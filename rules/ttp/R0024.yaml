@@ -1,0 +1,18 @@
+rule_id: R0024
+rule_version: 1
+name: local_account_creation
+description: |
+  useradd / adduser / direct write to /etc/passwd creating a new
+  local account — persistence primitive.
+applies_to:
+  - command
+match:
+  field: command_text
+  pattern: '\b(?:useradd|adduser)\s+(?:-\S+\s+)*\w+|echo\s+[^\n]*>>\s*/etc/passwd\b'
+emits:
+  - tactic: TA0003
+    technique_id: T1136
+    sub_technique_id: T1136.001
+    confidence: 0.95
+evidence_fields:
+  - command_text

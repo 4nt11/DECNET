@@ -1,4 +1,11 @@
 .venv/
+.venv*/
+docker-compose.yaml
+.311/
+.3[0-9][0-9]/
+logs/
+.claude/*
+CLAUDE.md
 __pycache__/
 *.pyc
 *.pyo
@@ -6,13 +13,64 @@ __pycache__/
 dist/
 build/
 decnet-compose.yml
+# Per-topology compose fragments emitted by `decnet topology deploy`.
+decnet-topology-*-compose.yml
+# Docker build context cache.
+.docker/
 decnet-state.json
 *.ini
-.env
+# tracked: Alembic CLI config (migrations live in decnet/web/db/migrations)
+!alembic.ini
 decnet.log*
 *.loggy
 *.nmap
 linterfails.log
-test-scan
 webmail
 windows1
+*.db
+*.db-shm
+*.db-wal
+decnet.*.log
+# Rotated copies (logrotate appends .1, .2, .gz...) — the existing
+# decnet.*.log glob doesn't catch the suffix.
+decnet.*.log.*
+decnet.json
+.env*
+.env.local
+.coverage
+.hypothesis/
+profiles/*
+tests/test_decnet.db*
+
+# Nested git clone of the wiki — not a submodule, just a local
+# working copy so we can edit docs without a full round-trip.
+wiki-checkout/
+
+# Scratch test/debug outputs that leak from saved `pytest > hang.log`
+# or `pytest > schem` redirections.
+hang.log
+schem
+*.pytest.log
+
+# pydeps-style dependency graph dumps from local analysis runs.
+deps.txt
+
+# Node modules vendored under decnet/canary/ for the obfuscator helper.
+# The package.json is the source of truth; modules are reinstalled at
+# build/deploy time.
+node_modules/
+package-lock.json
+
+# TTP rule-precision corpus pulled from prod sqlite. Real attacker
+# payloads — operator-only artifact. The synthetic ``seed_*.jsonl``
+# files alongside ARE committed and exercise the harness in CI.
+tests/ttp/rule_precision/corpus/*.jsonl
+tests/ttp/rule_precision/corpus/seed_*.jsonl
+threatfox-api.json
+
+# MITRE ATT&CK STIX bundle — 50 MB, fetched at runtime via attack_stix.py
+enterprise-attack-*.json
+
+# pytest failure dump files
+testfail
+.phaseloop/

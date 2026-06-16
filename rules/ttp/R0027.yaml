@@ -1,0 +1,19 @@
+rule_id: R0027
+rule_version: 1
+name: webshell_install
+description: |
+  Drop a PHP/JSP/ASPX webshell into a webroot via shell redirect
+  or wget/curl-to-file. Conservative — we want the shell pattern
+  AND a webroot path, not just any echo > x.php.
+applies_to:
+  - command
+match:
+  field: command_text
+  pattern: '(?:echo|printf|cat\s*<<\w+|wget\s+-O|curl\s+-o)\s+[^\n;|]*(?:<\?php|<%@|system\(|eval\(|exec\()[^\n;|]*>\s*[^\n;|]*\.(?:php|jsp|aspx|jspx|phtml)\b|>\s*/var/www/[^\s;|]+\.(?:php|jsp|aspx|jspx)\b'
+emits:
+  - tactic: TA0003
+    technique_id: T1505
+    sub_technique_id: T1505.003
+    confidence: 0.9
+evidence_fields:
+  - command_text

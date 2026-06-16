@@ -1,0 +1,381 @@
+/* SPDX-License-Identifier: AGPL-3.0-or-later */
+@import url('https://fonts.googleapis.com/css2?family=Ubuntu+Mono:ital,wght@0,400;0,700;1,400;1,700&display=swap');
+
+:root {
+  /* ── Brand ─────────────────────────────────────── */
+  --bg:              #000000;
+  --matrix:          #00ff41;
+  --violet:          #ee82ee;
+  --panel:           #0d1117;
+  --border:          #30363d;
+  --alert:           #ff4141;
+  --warn:            #e0a040;   /* amber — degraded / passive / stale */
+  --amber:           var(--warn);
+  --crit:            #e74c3c;   /* hot/critical, distinct from --alert */
+
+  /* Back-compat names used across the codebase */
+  --background-color: var(--bg);
+  --bg-color:         var(--bg);    /* used by drawers and other inline styles */
+  --text-color:       var(--matrix);
+  --accent-color:     var(--violet);
+  --secondary-color:  var(--panel);
+  --border-color:     var(--border);
+  --dim-color:        var(--fg-3);  /* dimmed body text (~60-70% of base) */
+  --danger-color:     var(--alert); /* red icon/text — was undefined, fell back to #f88 */
+
+  /* Cyan/info — REPLAY buttons, neutral status that's neither
+   * "good/active" (matrix) nor "stop" (alert). */
+  --info:             #22d3ee;
+  --info-tint-10:     rgba(34, 211, 238, 0.10);
+  --info-tint-30:     rgba(34, 211, 238, 0.30);
+
+  /* Benign/healthy — semantic alias for "verified good". Stays
+   * matrix in dark, picks up a darker emerald in light so a
+   * BENIGN pill still reads as "green check" without the dark-mode
+   * neon. */
+  --ok:               var(--matrix);
+
+  /* ── Foreground opacities ──────────────────────── */
+  --fg-1: var(--matrix);
+  --fg-2: rgba(0, 255, 65, 0.80);
+  --fg-3: rgba(0, 255, 65, 0.60);
+  --fg-4: rgba(0, 255, 65, 0.40);
+
+  /* ── Tinted surfaces ───────────────────────────── */
+  --matrix-tint-5:   rgba(0, 255, 65, 0.05);
+  --matrix-tint-10:  rgba(0, 255, 65, 0.10);
+  --matrix-tint-30:  rgba(0, 255, 65, 0.30);
+  --violet-tint-10:  rgba(238, 130, 238, 0.10);
+  --alert-tint-10:   rgba(255, 65, 65, 0.10);
+  --warn-tint-10:    rgba(224, 160, 64, 0.10);
+  --crit-tint-10:    rgba(231, 76, 60, 0.10);
+
+  /* ── Glows ─────────────────────────────────────── */
+  --matrix-glow:       0 0 10px rgba(0, 255, 65, 0.5);
+  --matrix-green-glow: var(--matrix-glow);   /* back-compat */
+  --violet-glow:       0 0 10px rgba(238, 130, 238, 0.5);
+  --matrix-glow-lg:    0 0 20px rgba(0, 255, 65, 0.4);
+  --shadow-panel:      0 0 20px rgba(0, 0, 0, 0.5);
+
+  /* ── Grid texture ──────────────────────────────── */
+  --grid-line: rgba(0, 255, 65, 0.05);
+  --grid-size: 20px;
+
+  /* ── Type ──────────────────────────────────────── */
+  --font-mono: 'Ubuntu Mono', 'SF Mono', Menlo, Consolas, monospace;
+
+  --fs-micro:   0.6rem;
+  --fs-mini:    0.7rem;
+  --fs-tiny:    0.75rem;
+  --fs-small:   0.8rem;
+  --fs-body:    0.85rem;
+  --fs-ui:      0.9rem;
+  --fs-base:    1rem;
+  --fs-head:    1.2rem;
+  --fs-page:    1.5rem;
+  --fs-hero:    1.8rem;
+  --fs-display: 2.5rem;
+
+  --lh-default: 1.5;
+
+  --ls-tight:   0;
+  --ls-label:   1px;
+  --ls-nav:     2px;
+  --ls-title:   4px;
+  --ls-brand:   10px;
+
+  /* ── Spacing ───────────────────────────────────── */
+  --space-1:  4px;
+  --space-2:  8px;
+  --space-3:  12px;
+  --space-4:  16px;
+  --space-5:  20px;
+  --space-6:  24px;
+  --space-8:  32px;
+  --space-10: 40px;
+
+  /* ── Radii ─────────────────────────────────────── */
+  --radius-0: 0;
+  --radius-1: 2px;
+  --radius-2: 4px;
+  --radius-pill: 999px;
+
+  /* ── Layout ────────────────────────────────────── */
+  --sidebar-open:    240px;
+  --sidebar-closed:   70px;
+  --topbar-h:         64px;
+
+  /* ── Motion ────────────────────────────────────── */
+  --ease: cubic-bezier(0.4, 0, 0.2, 1);
+  --dur-quick: 0.2s;
+  --dur-base:  0.3s;
+  --dur-slow:  1s;
+
+  --blink-dur: 2s;
+  --pulse-dur: 1s;
+  --spin-dur:  1.5s;
+
+  /* ── Accent swap (matrix default) ──────────────── */
+  --accent:         var(--matrix);
+  --accent-tint-10: var(--matrix-tint-10);
+  --accent-tint-30: var(--matrix-tint-30);
+  --accent-glow:    var(--matrix-glow);
+}
+
+html[data-accent="violet"] {
+  --accent:         var(--violet);
+  --accent-tint-10: var(--violet-tint-10);
+  --accent-tint-30: rgba(238, 130, 238, 0.30);
+  --accent-glow:    var(--violet-glow);
+}
+
+/* ── Light theme ────────────────────────────────────────
+ * Brutalist ink-on-cream. Dark mode keeps its matrix vibe;
+ * light mode goes monotone — emerald/violet wash out on warm
+ * cream, so --matrix and --violet both resolve to near-ink
+ * shades. --alert stays the one saturated colour, the only
+ * thing that's allowed to "shout" in light mode.
+ *
+ * Activated by setting `data-theme="light"` on <html>;
+ * back-compat aliases (--background-color, --text-color,
+ * --accent-color) re-resolve through the cascade since they
+ * reference --bg/--matrix/--violet via var().
+ *
+ * Glows are removed entirely — light mode is hard 1px
+ * borders, not neon haloes. */
+html[data-theme="light"] {
+  --bg:              #dbdad6;
+  --matrix:          #0d0d0d;   /* ink — text + "active/live" status */
+  --violet:          #2d1b4e;   /* charcoal-purple — accents/drop-target */
+  --panel:           #c9c7c2;
+  --border:          #1a1a1a;
+  --alert:           #991b1b;
+  --warn:            #b45309;   /* darker amber — readable on cream */
+  --amber:           var(--warn);
+  --crit:            #b91c1c;   /* matches alert in light, distinct in dark */
+
+  --fg-1: var(--matrix);
+  --fg-2: rgba(13, 13, 13, 0.88);   /* near-ink — bumped from dark's 0.80 */
+  --fg-3: rgba(13, 13, 13, 0.70);   /* dim ink — bumped from 0.55 */
+  --fg-4: rgba(13, 13, 13, 0.50);   /* faint ink — bumped from 0.35 */
+
+  --matrix-tint-5:   rgba(13, 13, 13, 0.04);
+  --matrix-tint-10:  rgba(13, 13, 13, 0.08);
+  --matrix-tint-30:  rgba(13, 13, 13, 0.18);
+  --violet-tint-10:  rgba(45, 27, 78, 0.10);
+  --alert-tint-10:   rgba(153, 27, 27, 0.10);
+  --warn-tint-10:    rgba(180, 83, 9, 0.12);
+  --crit-tint-10:    rgba(185, 28, 28, 0.10);
+
+  /* Cyan/info dims to slate in light mode so REPLAY buttons read
+   * as a calm secondary against cream rather than an electric pop. */
+  --info:            #155e75;
+  --info-tint-10:    rgba(21, 94, 117, 0.10);
+  --info-tint-30:    rgba(21, 94, 117, 0.20);
+
+  /* Benign in light mode — emerald, the one "happy green" we keep,
+   * tuned dark enough to read on cream. */
+  --ok:              #047857;
+
+  /* Glows no-op'd — kept defined so .btn:hover etc. don't
+   * break, just produce no halo. */
+  --matrix-glow:       none;
+  --matrix-green-glow: none;
+  --violet-glow:       none;
+  --matrix-glow-lg:    none;
+  --shadow-panel:      0 1px 0 rgba(0, 0, 0, 0.08);
+
+  --grid-line: rgba(0, 0, 0, 0.06);
+}
+
+/* In light mode --accent collapses to ink regardless of
+ * data-accent — the matrix/violet flavour knob is a
+ * dark-mode-only concept; light mode is always monotone. */
+html[data-theme="light"] {
+  --accent:         var(--matrix);
+  --accent-tint-10: var(--matrix-tint-10);
+  --accent-tint-30: var(--matrix-tint-30);
+  --accent-glow:    none;
+}
+
+/* Hover behaviour in light mode.
+ *
+ * Dark mode hovers fully invert: bg fills with --matrix/--violet/
+ * --alert and text becomes --bg. That works on black-cream because
+ * neon-on-ink has obvious contrast. In light mode that same flip
+ * lands cream text on near-ink and reads as a jarring colour
+ * inversion every time the cursor moves.
+ *
+ * Light mode therefore tints instead of inverting — hover backgrounds
+ * use the matching --*-tint-10, text stays in its base colour.
+ * Targets every common scoped button class via [class*="-btn"] plus
+ * the unprefixed .btn/button selectors. */
+html[data-theme="light"]
+  :is(button, .btn, [class*="-btn"]):hover:not(:disabled) {
+  background: var(--matrix-tint-10);
+  color: var(--matrix);
+  box-shadow: none;
+}
+html[data-theme="light"]
+  :is(button, .btn, [class*="-btn"]).violet:hover:not(:disabled),
+html[data-theme="light"]
+  :is(button, .btn, [class*="-btn"]).primary:hover:not(:disabled) {
+  background: var(--violet-tint-10);
+  color: var(--violet);
+}
+html[data-theme="light"]
+  :is(button, .btn, [class*="-btn"]).alert:hover:not(:disabled),
+html[data-theme="light"]
+  :is(button, .btn, [class*="-btn"]).danger:hover:not(:disabled) {
+  background: var(--alert-tint-10);
+  color: var(--alert);
+}
+html[data-theme="light"]
+  :is(button, .btn, [class*="-btn"]).warn:hover:not(:disabled) {
+  background: var(--warn-tint-10);
+  color: var(--warn);
+}
+
+*, *::before, *::after {
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+}
+
+body {
+  font-family: var(--font-mono);
+  background-color: var(--bg);
+  color: var(--matrix);
+  line-height: var(--lh-default);
+  overflow-x: hidden;
+  -webkit-font-smoothing: antialiased;
+  text-rendering: geometricPrecision;
+}
+
+input, button, textarea, select {
+  font-family: inherit;
+}
+
+button {
+  cursor: pointer;
+  background: transparent;
+  border: 1px solid var(--matrix);
+  color: var(--matrix);
+  padding: 7px 14px;
+  font-family: inherit;
+  font-size: 0.78rem;
+  letter-spacing: 1.5px;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  transition: all 0.3s ease;
+}
+
+button:hover {
+  background: var(--matrix);
+  color: var(--bg);
+  box-shadow: var(--matrix-glow);
+}
+
+button:disabled {
+  opacity: 0.3;
+  cursor: not-allowed;
+}
+
+/* Shared .btn variants (unscoped) */
+.btn.violet { border-color: var(--violet); color: var(--violet); }
+.btn.violet:hover { background: var(--violet); color: var(--bg); box-shadow: var(--violet-glow); }
+.btn.alert { border-color: var(--alert); color: var(--alert); }
+.btn.alert:hover { background: var(--alert); color: var(--bg); box-shadow: 0 0 10px rgba(255, 65, 65, 0.5); }
+.btn.ghost { border-color: var(--border); color: var(--matrix); opacity: 0.7; }
+.btn.ghost:hover {
+  background: transparent; color: var(--matrix); opacity: 1;
+  border-color: var(--matrix); box-shadow: var(--matrix-glow);
+}
+.btn.small { padding: 4px 10px; font-size: 0.68rem; }
+
+input {
+  background: var(--panel);
+  border: 1px solid var(--border);
+  color: var(--matrix);
+  padding: 8px 12px;
+}
+
+input:focus {
+  outline: none;
+  border-color: var(--matrix);
+  box-shadow: var(--matrix-glow);
+}
+
+/* ── Primitive animations ──────────────────────── */
+@keyframes decnet-blink {
+  0%, 100% { opacity: 1; text-shadow: var(--matrix-glow); }
+  50%      { opacity: 0.5; }
+}
+@keyframes decnet-pulse {
+  from { opacity: 0.5; }
+  to   { opacity: 1;   }
+}
+@keyframes decnet-spin {
+  from { transform: rotate(0deg); }
+  to   { transform: rotate(360deg); }
+}
+
+.fx-blink { animation: decnet-blink var(--blink-dur) infinite; }
+.fx-pulse { animation: decnet-pulse var(--pulse-dur) infinite alternate; }
+.fx-spin  { animation: decnet-spin  var(--spin-dur)  linear infinite; }
+
+.fx-matrix-text { color: var(--matrix); }
+.fx-violet-text { color: var(--violet); filter: drop-shadow(var(--violet-glow)); }
+.fx-matrix-glow { text-shadow: var(--matrix-glow); }
+.fx-dim { opacity: 0.5; }
+
+.bg-scangrid {
+  background-color: var(--bg);
+  background-image:
+    linear-gradient(var(--grid-line) 1px, transparent 1px),
+    linear-gradient(90deg, var(--grid-line) 1px, transparent 1px);
+  background-size: var(--grid-size) var(--grid-size);
+}
+
+/* ── Theme transition ───────────────────────────
+ * Disables the default cross-fade so the JS-driven
+ * circle clip-path in useThemeToggle.ts owns the
+ * reveal entirely.
+ *
+ * Layering: the OLD theme sits behind, the NEW theme
+ * sits on top and grows outward from the click point
+ * via a clip-path animation. The JS animation runs
+ * with fill: 'both' so the new layer starts clipped
+ * to circle(0) immediately (no opening flash) and
+ * stays at the final keyframe until pseudo teardown
+ * (no closing flash). */
+::view-transition-old(root),
+::view-transition-new(root) {
+  animation: none;
+  mix-blend-mode: normal;
+}
+::view-transition-old(root) {
+  z-index: 0;
+}
+::view-transition-new(root) {
+  z-index: 1;
+  /* Default clip-path: a zero-radius circle at the click point
+   * (--reveal-x / --reveal-y are written to <html> by
+   * useThemeToggle.ts BEFORE startViewTransition runs). The
+   * pseudo therefore renders fully clipped on its very first
+   * frame — no opening flash possible. The web-animation then
+   * grows the circle outward; fill: 'both' pins the end. */
+  clip-path: circle(0px at var(--reveal-x, 50%) var(--reveal-y, 50%));
+}
+
+/* ── Scrollbar ─────────────────────────────────── */
+* {
+  scrollbar-width: thin;
+  scrollbar-color: var(--accent) transparent;
+}
+::-webkit-scrollbar              { width: 4px; height: 4px; }
+::-webkit-scrollbar-track        { background: transparent; }
+::-webkit-scrollbar-thumb        { background: var(--accent); border: none; border-radius: 2px; opacity: 0.6; }
+::-webkit-scrollbar-thumb:hover  { background: var(--accent); opacity: 1; }
+::-webkit-scrollbar-corner       { background: transparent; }

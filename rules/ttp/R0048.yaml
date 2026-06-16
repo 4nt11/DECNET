@@ -1,0 +1,23 @@
+rule_id: R0048
+rule_version: 1
+name: encoded_payload_in_body
+description: |
+  Base64-encoded blob ≥ N bytes embedded in the email body —
+  classic obfuscated-payload smuggling.
+applies_to:
+  - email
+match:
+  kind: lifter:email_encoded_payload
+  min_bytes: 4096
+  encoding: base64
+emits:
+  - tactic: TA0011
+    technique_id: T1071
+    sub_technique_id: T1071.003
+    confidence: 0.85
+  - tactic: TA0005
+    technique_id: T1027
+    confidence: 0.9
+evidence_fields:
+  - encoded_bytes
+  - decoded_preview

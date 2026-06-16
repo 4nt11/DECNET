@@ -1,0 +1,21 @@
+rule_id: R0034
+rule_version: 1
+name: exfil_over_web
+description: |
+  Outbound data exfil to a web service (POST with large body /
+  Content-Length, or many GETs encoding payload in path). Read
+  from session aggregates, not single requests.
+applies_to:
+  - session
+match:
+  kind: lifter:behavioral_exfil_over_web
+  min_payload_bytes: 1048576
+  request_threshold: 50
+emits:
+  - tactic: TA0010
+    technique_id: T1567
+    confidence: 0.85
+evidence_fields:
+  - bytes_out
+  - request_count
+  - target_host

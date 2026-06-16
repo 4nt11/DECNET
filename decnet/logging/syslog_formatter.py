@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """
 RFC 5424 syslog formatter for DECNET.
 
@@ -5,7 +6,7 @@ Produces fully-compliant syslog messages:
   <PRI>1 TIMESTAMP HOSTNAME APP-NAME PROCID MSGID [SD-ELEMENT] MSG
 
 Facility: local0 (16)
-PEN for structured data: decnet@55555
+PEN for structured data: relay@55555
 """
 
 from __future__ import annotations
@@ -16,7 +17,7 @@ from typing import Any
 
 FACILITY_LOCAL0 = 16
 NILVALUE = "-"
-_SD_ID = "decnet@55555"
+_SD_ID = "relay@55555"
 
 SEVERITY_INFO    = 6
 SEVERITY_WARNING = 4

@@ -1,0 +1,17 @@
+rule_id: R0018
+rule_version: 1
+name: system_info_discovery
+description: |
+  uname / lsb_release / hostnamectl / cat /etc/os-release —
+  classic system-information gathering.
+applies_to:
+  - command
+match:
+  field: command_text
+  pattern: '\b(?:uname\s+-\w+|lsb_release(?:\s|$)|hostnamectl(?:\s|$))\b|cat\s+/etc/(?:os-release|issue|debian_version|redhat-release)\b'
+emits:
+  - tactic: TA0007
+    technique_id: T1082
+    confidence: 0.7
+evidence_fields:
+  - command_text

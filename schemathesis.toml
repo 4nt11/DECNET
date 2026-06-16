@@ -1,0 +1,84 @@
+# Run: schemathesis run http://127.0.0.1:${DECNET_API_PORT}/openapi.json
+# Or:  schemathesis run --config schemathesis.toml http://127.0.0.1:8000/openapi.json
+
+[[project]]
+title                = "DECNET API"
+continue-on-failure  = true
+request-timeout      = 10.0
+#suppress-health-check = ["too_slow", "data_too_large", "filter_too_much", "large_base_example"]
+workers              = "auto"
+
+# ── Generation: throw everything at it ───────────────────────────────────────
+[generation]
+mode           = "all"          # valid AND invalid inputs
+max-examples   = 500            # 5× the default
+no-shrink      = false          # keep shrinking — you want minimal repros
+allow-x00      = true           # null bytes in strings
+unique-inputs  = true           # no duplicate test cases
+codec          = "utf-8"        # full unicode range
+maximize       = "response_time" # targeted: hunt for slow paths too
+
+# ── All phases on ─────────────────────────────────────────────────────────────
+[phases.examples]
+enabled       = true
+fill-missing  = true            # generate random cases even where no examples exist
+
+[phases.coverage]
+enabled                            = true
+generate-duplicate-query-parameters = true   # e.g. ?x=1&x=2 edge cases
+unexpected-methods                 = ["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS", "TRACE"]
+
+[phases.fuzzing]
+enabled = true
+
+[phases.stateful]
+enabled   = true
+max-steps = 20
+
+# ── Every check enabled ───────────────────────────────────────────────────────
+[checks]
+not_a_server_error.enabled          = true
+status_code_conformance.enabled     = true
+content_type_conformance.enabled    = true
+response_headers_conformance.enabled = true
+response_schema_conformance.enabled = true
+positive_data_acceptance.enabled    = true
+negative_data_rejection.enabled     = true
+missing_required_header.enabled     = true
+unsupported_method.enabled          = true
+use_after_free.enabled              = true
+ensure_resource_availability.enabled = true
+ignored_auth.enabled                = true
+max_response_time                   = 2.0   # anything slower than 2s is a failure
+
+# ── Per-operation timeouts ────────────────────────────────────────────────────
+# Auth — must be instant
+[[operations]]
+include-operation-id = "login_api_v1_auth_login_post"
+request-timeout      = 3.0
+
+[[operations]]
+include-operation-id = "change_password_api_v1_auth_change_password_post"
+request-timeout      = 3.0
+
+# Deploy — expensive by design, give it room but not infinite
+[[operations]]
+include-operation-id = "api_deploy_deckies_api_v1_deckies_deploy_post"
+request-timeout      = 30.0
+checks.max_response_time = 30.0  # override the global 2s threshold for this op
+
+# Mutate — engine work, allow some slack
+[[operations]]
+include-operation-id = "api_mutate_decky_api_v1_deckies__decky_name__mutate_post"
+request-timeout      = 15.0
+checks.max_response_time = 15.0
+
+# SSE stream — must not block the suite
+[[operations]]
+include-operation-id = "stream_events_api_v1_stream_get"
+request-timeout      = 2.0
+
+# Reinit — destructive, assert it never 500s regardless of state
+[[operations]]
+include-operation-id = "api_reinit_api_v1_config_reinit_delete"
+request-timeout      = 10.0

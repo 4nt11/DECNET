@@ -1,0 +1,9 @@
+{"source_kind": "email", "payload": {"subject": "Urgent wire transfer needed", "from_domain": "ceo@victim.example", "return_path_domain": "evil.example", "rcpt_count": 1, "body_text": "Please send 50k transfer to the attached account immediately confidential."}, "expected_rule_ids": ["R0045", "R0047"], "label": "bec_wire"}
+{"source_kind": "email", "payload": {"subject": "Newsletter", "from_domain": "marketing@legit.example", "rcpt_count": 1, "body_text": "Hello world."}, "expected_rule_ids": [], "label": "negative_newsletter"}
+{"source_kind": "email", "payload": {"subject": "Win a prize", "from_domain": "promo@evil.example", "rcpt_count": 250, "body_text": "Click here", "body_simhash": "abc123", "urls": ["http://evil.example/win"]}, "expected_rule_ids": ["R0042"], "label": "mass_phish"}
+{"source_kind": "email", "payload": {"rcpt_count": 50, "from_domain": "victim.example", "mail_from_domain": "evil.example"}, "expected_rule_ids": ["R0041", "R0045"], "label": "open_relay"}
+{"source_kind": "email", "payload": {"x_mailer": "PHPMailer 6.0 (kit-X)", "matched_kit": "kit-X"}, "expected_rule_ids": ["R0043"], "label": "xmailer_kit"}
+{"source_kind": "email", "payload": {"urls": ["https://xn--80ak6aa92e.com/login"]}, "expected_rule_ids": ["R0044"], "label": "idn_url"}
+{"source_kind": "email", "payload": {"from_domain": "ceo@victim.example", "return_path_domain": "evil.example"}, "expected_rule_ids": ["R0045"], "label": "from_returnpath_mismatch"}
+{"source_kind": "email", "payload": {"attachment_macros": true, "attachment_sha256s": ["d"]}, "expected_rule_ids": ["R0046"], "label": "macro_attach"}
+{"source_kind": "email", "payload": {"body_text": "see body", "body_base64_bytes": 8192}, "expected_rule_ids": ["R0048"], "label": "encoded_body"}

@@ -1,0 +1,18 @@
+rule_id: R0016
+rule_version: 1
+name: recursive_find
+description: |
+  Generic recursive find rooted at /, /home, /etc, /var, /opt,
+  /root, /tmp — broad file/directory discovery. Lower confidence
+  than R0015 because non-malicious admin sweeps look the same.
+applies_to:
+  - command
+match:
+  field: command_text
+  pattern: '\bfind\s+/(?:home|etc|var|opt|root|tmp|usr)?(?=\s|/|$)'
+emits:
+  - tactic: TA0007
+    technique_id: T1083
+    confidence: 0.65
+evidence_fields:
+  - command_text

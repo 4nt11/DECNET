@@ -1,0 +1,16 @@
+rule_id: R0023
+rule_version: 1
+name: smb_share_discovery
+description: |
+  smbclient -L / enum4linux / nbtscan / rpcclient share-listing.
+applies_to:
+  - command
+match:
+  field: command_text
+  pattern: '(?i)\bsmbclient\s+-L\b|\benum4linux\b|\bnbtscan\b|\brpcclient\b.*\b(?:enumdomusers|netshareenum|querydispinfo)\b'
+emits:
+  - tactic: TA0007
+    technique_id: T1135
+    confidence: 0.9
+evidence_fields:
+  - command_text

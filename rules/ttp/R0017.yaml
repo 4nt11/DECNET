@@ -1,0 +1,20 @@
+rule_id: R0017
+rule_version: 1
+name: network_service_scan
+description: |
+  Scanner invocation: nmap, masscan, zmap, rustscan, unicornscan,
+  hping3 in scan mode, or nc -zv sweeps.
+applies_to:
+  - command
+match:
+  field: command_text
+  pattern: '(?i)\b(nmap|masscan|zmap|rustscan|unicornscan|hping3)\b|\bnc\s+(?:-\w*z\w*|-zv|-vz)\b'
+emits:
+  - tactic: TA0007
+    technique_id: T1046
+    confidence: 0.9
+  - tactic: TA0043
+    technique_id: T1595
+    confidence: 0.9
+evidence_fields:
+  - command_text

@@ -1,0 +1,22 @@
+rule_id: R0015
+rule_version: 1
+name: suid_search
+description: |
+  find with -perm -u=s / -4000 / /4000 — explicit SUID-binary
+  hunting for privilege escalation. Two emits: discovery (T1083)
+  and the priv-esc abuse precursor (T1548.001).
+applies_to:
+  - command
+match:
+  field: command_text
+  pattern: '\bfind\b.*-perm\s+(?:-?u\+?=s|-?4000|/4000|-?2000)'
+emits:
+  - tactic: TA0007
+    technique_id: T1083
+    confidence: 0.85
+  - tactic: TA0004
+    technique_id: T1548
+    sub_technique_id: T1548.001
+    confidence: 0.95
+evidence_fields:
+  - command_text

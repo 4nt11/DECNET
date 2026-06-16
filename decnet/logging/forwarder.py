@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """
 Log forwarding helpers.
 
@@ -11,6 +12,8 @@ shared utilities for validating and parsing the log_target string.
 
 import socket
 
+from decnet.telemetry import traced as _traced
+
 
 def parse_log_target(log_target: str) -> tuple[str, int]:
     """
@@ -23,6 +26,7 @@ def parse_log_target(log_target: str) -> tuple[str, int]:
     return parts[0], int(parts[1])
 
 
+@_traced("logging.probe_log_target")
 def probe_log_target(log_target: str, timeout: float = 2.0) -> bool:
     """
     Return True if the log target is reachable (TCP connect succeeds).

@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """
 Parse DECNET INI deployment config files.
 
@@ -6,7 +7,6 @@ Format:
     net=192.168.1.0/24
     gw=192.168.1.1
     interface=wlp6s0
-    log_target=192.168.1.5:5140   # optional
 
     [hostname-1]
     ip=192.168.1.82               # optional
@@ -42,37 +42,8 @@ Format:
 """
 
 import configparser
-from dataclasses import dataclass, field
 from pathlib import Path
-
-
-@dataclass
-class DeckySpec:
-    name: str
-    ip: str | None = None
-    services: list[str] | None = None
-    archetype: str | None = None
-    service_config: dict[str, dict] = field(default_factory=dict)
-    nmap_os: str | None = None     # explicit OS family override (linux/windows/bsd/embedded/cisco)
-
-
-@dataclass
-class CustomServiceSpec:
-    """Spec for a user-defined (bring-your-own) service."""
-    name: str          # service slug, e.g. "myservice" (section is "custom-myservice")
-    image: str         # Docker image to use
-    exec_cmd: str      # command to run inside the container
-    ports: list[int] = field(default_factory=list)
-
-
-@dataclass
-class IniConfig:
-    subnet: str | None = None
-    gateway: str | None = None
-    interface: str | None = None
-    log_target: str | None = None
-    deckies: list[DeckySpec] = field(default_factory=list)
-    custom_services: list[CustomServiceSpec] = field(default_factory=list)
+from decnet.models import IniConfig, DeckySpec, CustomServiceSpec, validate_ini_string  # noqa: F401
 
 
 def load_ini(path: str | Path) -> IniConfig:
@@ -81,7 +52,21 @@ def load_ini(path: str | Path) -> IniConfig:
     read = cp.read(str(path))
     if not read:
         raise FileNotFoundError(f"Config file not found: {path}")
+    return _parse_configparser(cp)
 
+
+def load_ini_from_string(content: str) -> IniConfig:
+    """Parse a DECNET INI string and return an IniConfig."""
+    # Normalize line endings (CRLF → LF, bare CR → LF) so the validator
+    # and configparser both see the same line boundaries.
+    content = content.replace('\r\n', '\n').replace('\r', '\n')
+    validate_ini_string(content)
+    cp = configparser.ConfigParser(strict=False)
+    cp.read_string(content)
+    return _parse_configparser(cp)
+
+
+def _parse_configparser(cp: configparser.ConfigParser) -> IniConfig:
     cfg = IniConfig()
 
     if cp.has_section("general"):
@@ -89,14 +74,24 @@ def load_ini(path: str | Path) -> IniConfig:
         cfg.subnet = g.get("net")
         cfg.gateway = g.get("gw")
         cfg.interface = g.get("interface")
-        cfg.log_target = g.get("log_target") or g.get("log-target")
+
+    from decnet.services.registry import all_services
+    known_services = set(all_services().keys())
 
     # First pass: collect decky sections and custom service definitions
     for section in cp.sections():
         if section == "general":
             continue
+
+        # A service sub-section is identified if the section name has at least one dot
+        # AND the last segment is a known service name.
+        # e.g. "decky-01.ssh" -> sub-section
+        # e.g. "decky.webmail" -> decky section (if "webmail" is not a service)
         if "." in section:
-            continue  # subsections handled in second pass
+            _, _, last_segment = section.rpartition(".")
+            if last_segment in known_services:
+                continue  # sub-section handled in second pass
+
         if section.startswith("custom-"):
             # Bring-your-own service definition
             s = cp[section]
@@ -115,17 +110,30 @@ def load_ini(path: str | Path) -> IniConfig:
         services = [sv.strip() for sv in svc_raw.split(",")] if svc_raw else None
         archetype = s.get("archetype")
         nmap_os = s.get("nmap_os") or s.get("nmap-os") or None
+
+        mi_raw = s.get("mutate_interval") or s.get("mutate-interval")
+        mutate_interval = None
+        if mi_raw:
+            try:
+                mutate_interval = int(mi_raw)
+            except ValueError:
+                raise ValueError(f"[{section}] mutate_interval= must be an integer, got '{mi_raw}'")
+
         amount_raw = s.get("amount", "1")
         try:
             amount = int(amount_raw)
             if amount < 1:
                 raise ValueError
-        except ValueError:
+            if amount > 100:
+                raise ValueError(f"[{section}] amount={amount} exceeds maximum allowed (100).")
+        except ValueError as e:
+            if "exceeds maximum" in str(e):
+                raise e
             raise ValueError(f"[{section}] amount= must be a positive integer, got '{amount_raw}'")
 
         if amount == 1:
             cfg.deckies.append(DeckySpec(
-                name=section, ip=ip, services=services, archetype=archetype, nmap_os=nmap_os,
+                name=section, ip=ip, services=services, archetype=archetype, nmap_os=nmap_os, mutate_interval=mutate_interval,
             ))
         else:
             # Expand into N deckies; explicit ip is ignored (can't share one IP)
@@ -141,6 +149,7 @@ def load_ini(path: str | Path) -> IniConfig:
                     services=services,
                     archetype=archetype,
                     nmap_os=nmap_os,
+                    mutate_interval=mutate_interval,
                 ))
 
     # Second pass: collect per-service subsections [decky-name.service]
@@ -149,7 +158,11 @@ def load_ini(path: str | Path) -> IniConfig:
     for section in cp.sections():
         if "." not in section:
             continue
-        decky_name, _, svc_name = section.partition(".")
+
+        decky_name, dot, svc_name = section.rpartition(".")
+        if svc_name not in known_services:
+            continue # not a service sub-section
+
         svc_cfg = {k: v for k, v in cp[section].items()}
         if decky_name in decky_map:
             # Direct match — single decky

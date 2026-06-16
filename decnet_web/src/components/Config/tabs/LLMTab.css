@@ -1,0 +1,85 @@
+/* SPDX-License-Identifier: AGPL-3.0-or-later */
+/* LLMTab — layered on DeckyFleet.css + PersonaGeneration.css.
+   Scoped to .llm-tab-root. Same vocabulary as the old standalone page. */
+
+.llm-tab-root .info-banner {
+  background: var(--matrix-tint-5);
+  border: 1px solid var(--border);
+  border-left: 3px solid var(--violet);
+  padding: 10px 14px;
+  font-size: 0.78rem;
+  line-height: 1.5;
+  margin-bottom: 20px;
+}
+
+.llm-tab-root .info-banner em { color: var(--matrix); font-style: normal; }
+
+.llm-tab-root .form-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 16px;
+  margin-bottom: 20px;
+}
+
+.llm-tab-root .form-grid.single-col {
+  grid-template-columns: 1fr;
+}
+
+.llm-tab-root .tweak-group {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.llm-tab-root .tweak-group label {
+  font-size: 0.62rem;
+  letter-spacing: 1.5px;
+  color: var(--dim);
+  text-transform: uppercase;
+}
+
+.llm-tab-root .input {
+  background: var(--bg-elev, transparent);
+  border: 1px solid var(--border);
+  color: var(--text);
+  padding: 7px 10px;
+  font-family: inherit;
+  font-size: 0.8rem;
+  outline: none;
+  transition: border-color 0.15s;
+  width: 100%;
+  box-sizing: border-box;
+}
+
+.llm-tab-root .input:focus {
+  border-color: var(--violet);
+  box-shadow: 0 0 0 1px var(--violet);
+}
+
+.llm-tab-root select.input { cursor: pointer; }
+
+.llm-tab-root .key-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 0.7rem;
+  font-family: var(--font-mono);
+  color: var(--matrix);
+  letter-spacing: 0.5px;
+  margin-top: 2px;
+}
+
+.llm-tab-root .key-badge.unset { color: var(--dim); }
+
+.llm-tab-root .actions {
+  display: flex;
+  gap: 10px;
+  margin-top: 4px;
+}
+
+.llm-tab-root .field-hint {
+  font-size: 0.65rem;
+  opacity: 0.4;
+  letter-spacing: 0.4px;
+  margin-top: 2px;
+}

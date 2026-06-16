@@ -1,13 +1,24 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
 from pathlib import Path
-from decnet.services.base import BaseService
+from decnet.services.base import BaseService, ServiceConfigField
 
-TEMPLATES_DIR = Path(__file__).parent.parent.parent / "templates" / "mysql"
+TEMPLATES_DIR = Path(__file__).parent.parent / "templates" / "mysql"
 
 
 class MySQLService(BaseService):
     name = "mysql"
     ports = [3306]
     default_image = "build"
+
+    config_schema = [
+        ServiceConfigField(
+            key="version",
+            label="Advertised MySQL version",
+            type="string",
+            placeholder="8.0.36",
+            help="Sets the version banner the fake MySQL handshake reports.",
+        ),
+    ]
 
     def compose_fragment(
         self,

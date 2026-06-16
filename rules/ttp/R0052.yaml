@@ -1,0 +1,18 @@
+rule_id: R0052
+rule_version: 1
+name: tz_lang_geo_mismatch
+description: |
+  Browser timezone or accept-language doesn't match source-IP geo —
+  another proxy/VPN tell.
+applies_to:
+  - canary_fingerprint
+match:
+  kind: lifter:canary_tz_lang_mismatch
+emits:
+  - tactic: TA0011
+    technique_id: T1090
+    confidence: 0.7
+evidence_fields:
+  - browser_timezone
+  - browser_language
+  - source_country

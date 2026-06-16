@@ -1,0 +1,34 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
+"""GET /swarm/hosts/{uuid} — fetch a single worker by UUID."""
+from __future__ import annotations
+
+from fastapi import APIRouter, Depends, HTTPException
+
+from decnet.web.db.repository import BaseRepository
+from decnet.web.dependencies import get_repo, require_admin
+from decnet.web.router.swarm._mtls import PeerCert, require_operator_cert
+from decnet.web.db.models import SwarmHostView
+
+router = APIRouter()
+
+
+@router.get(
+    "/hosts/{uuid}",
+    response_model=SwarmHostView,
+    tags=["Swarm Hosts"],
+    responses={
+        401: {"description": "Missing or invalid admin JWT"},
+        403: {"description": "Authenticated user is not an admin, or operator cert missing"},
+        404: {"description": "No host with this UUID is enrolled"},
+    },
+)
+async def api_get_host(
+    uuid: str,
+    repo: BaseRepository = Depends(get_repo),
+    _admin: dict = Depends(require_admin),
+    _operator: PeerCert = Depends(require_operator_cert),
+) -> SwarmHostView:
+    row = await repo.get_swarm_host_by_uuid(uuid)
+    if row is None:
+        raise HTTPException(status_code=404, detail="host not found")
+    return SwarmHostView(**row)

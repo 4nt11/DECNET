@@ -1,7 +1,8 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
 from pathlib import Path
 from decnet.services.base import BaseService
 
-TEMPLATES_DIR = Path(__file__).parent.parent.parent / "templates" / "llmnr"
+TEMPLATES_DIR = Path(__file__).parent.parent / "templates" / "llmnr"
 
 
 class LLMNRService(BaseService):
@@ -15,6 +16,7 @@ class LLMNRService(BaseService):
     name = "llmnr"
     ports = [5355, 5353]
     default_image = "build"
+    # config_schema: no user-tunable fields yet — TODO add when compose_fragment grows cfg reads
 
     def compose_fragment(self, decky_name: str, log_target: str | None = None, service_cfg: dict | None = None) -> dict:
         fragment: dict = {

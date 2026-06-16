@@ -1,0 +1,84 @@
+# Fixture 1 (shared_wordlist) — see development/CAMPAIGN_CLUSTERING.md §2.
+#
+# Two distinct campaigns, both bruteforcing SSH with the SAME credential
+# wordlist (rockyou-top1k flavor). EVERYTHING ELSE diverges:
+#   - different ASNs (DigitalOcean vs Comcast residential)
+#   - different IP ranges (sticky pools, generated separately)
+#   - different JA3 / HASSH (different SSH client toolchains)
+#   - different active hours (UTC-day vs UTC-night)
+#
+# Pass condition: the clusterer must NOT merge these into one campaign.
+# Credential overlap alone is not enough signal — commodity wordlists are
+# shared by hundreds of unrelated actors. A clusterer that leans on
+# credential-list Jaccard alone will fail this fixture (we prove this in
+# the test file with a deliberately-bad credential-Jaccard reference
+# clusterer).
+corpus:
+  campaigns:
+    - campaign:
+        id: shared-wordlist-A
+        actors:
+          - id: actor-A
+            asn: 14061              # DigitalOcean
+            ip_pool: sticky
+            ja3: "771,4865-4866-4867-49195-49199-49196-49200,0-23-65281-10-11-35-16-5-13-18-51-45-43-27-17513,29-23-24,0"
+            hassh: "alpha-aaaaaaaa-aaaaaaaa-aaaaaaaa"
+            hours_active_utc: [10, 11, 12, 13, 14]
+            jitter_seconds: 60
+        phases:
+          - name: delivery
+            actor: actor-A
+            target_selector: { service: ssh, count: 1 }
+            dwell_seconds: 1
+          - name: credential_access
+            actor: actor-A
+            tool_signature:
+              commands: []
+              credentials:
+                - [admin, admin]
+                - [admin, password]
+                - [admin, "12345"]
+                - [root, root]
+                - [root, toor]
+                - [root, "123456"]
+                - [user, user]
+                - [test, test]
+            target_selector: { service: ssh, count: 3 }
+            dwell_seconds: 5
+        duration_days: 1
+
+    - campaign:
+        id: shared-wordlist-B
+        actors:
+          - id: actor-B
+            asn: 7922               # Comcast residential
+            ip_pool: sticky
+            ja3: "769,49195-49199-156-49162-49161-49171-49172-51-50-47,0-10-11-13-23-65281,29-23-24-25,0"
+            hassh: "beta-bbbbbbbb-bbbbbbbb-bbbbbbbb"
+            hours_active_utc: [22, 23, 0, 1, 2]
+            jitter_seconds: 60
+        phases:
+          - name: delivery
+            actor: actor-B
+            target_selector: { service: ssh, count: 1 }
+            dwell_seconds: 1
+          - name: credential_access
+            actor: actor-B
+            tool_signature:
+              commands: []
+              # IDENTICAL wordlist to campaign A — this is the trap.
+              credentials:
+                - [admin, admin]
+                - [admin, password]
+                - [admin, "12345"]
+                - [root, root]
+                - [root, toor]
+                - [root, "123456"]
+                - [user, user]
+                - [test, test]
+            target_selector: { service: ssh, count: 3 }
+            dwell_seconds: 5
+        duration_days: 1
+
+  noise:
+    scanner_count: 0

@@ -1,0 +1,11 @@
+{"source_kind": "session", "payload": {"beacon_interval_s": 60, "beacon_jitter_pct": 0.05}, "expected_rule_ids": ["R0031"], "label": "low_jitter_beacon"}
+{"source_kind": "session", "payload": {"beacon_interval_s": 0, "beacon_jitter_pct": 0}, "expected_rule_ids": [], "label": "negative_no_beacon"}
+{"source_kind": "session", "payload": {"command_text": "FLUSHALL", "op_text": "FLUSHALL"}, "expected_rule_ids": ["R0032"], "label": "redis_flushall"}
+{"source_kind": "session", "payload": {"body_text": "send 0.5 BTC to 1A1zP1eP5QGefi2DMPTfTL5SLmv7DivfNa to decrypt your files"}, "expected_rule_ids": ["R0033"], "label": "ransom_btc"}
+{"source_kind": "session", "payload": {"bytes_out": 5000000, "request_count": 200, "target_host": "exfil.example"}, "expected_rule_ids": ["R0034"], "label": "web_exfil_burst"}
+{"source_kind": "session", "payload": {"rows_read": 50000, "bytes_read": 0, "service": "mysql"}, "expected_rule_ids": ["R0035"], "label": "db_mass_read_rows"}
+{"source_kind": "http_request", "payload": {"request_path": "/var/www/html/.env"}, "expected_rule_ids": ["R0036"], "label": "creds_env_read"}
+{"source_kind": "http_request", "payload": {"request_path": "/api/v1/namespaces/default/secrets"}, "expected_rule_ids": ["R0037"], "label": "k8s_secrets_list"}
+{"source_kind": "session", "payload": {"signals": ["privileged:true", "image:nginx"], "container_image": "nginx"}, "expected_rule_ids": ["R0038"], "label": "docker_privileged_create"}
+{"source_kind": "session", "payload": {"llmnr_poisoned": true, "victim_host": "client01"}, "expected_rule_ids": ["R0039"], "label": "llmnr_responder"}
+{"source_kind": "session", "payload": {"tftp_filename": "router-startup-config", "source_host": "10.0.0.5"}, "expected_rule_ids": ["R0040"], "label": "tftp_router_cfg"}
