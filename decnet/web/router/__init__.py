@@ -15,6 +15,7 @@ from .fleet.api_get_deckies import router as get_deckies_router
 from .fleet.api_mutate_decky import router as mutate_decky_router
 from .fleet.api_mutate_interval import router as mutate_interval_router
 from .fleet.api_deploy_deckies import router as deploy_deckies_router
+from .fleet.api_teardown_decky import router as teardown_decky_router
 from .fleet.api_lifecycle import router as lifecycle_router
 from .stream.api_stream_events import router as stream_router
 from .attackers.api_get_attackers import router as attackers_router
@@ -195,6 +196,12 @@ api_router.include_router(topology_router)
 # attacker-facing surface separately via `decnet canary`).
 api_router.include_router(canary_router)
 api_router.include_router(deckies_router)
+
+# Single-decky teardown LAST among /deckies/* routes: its dynamic
+# DELETE /deckies/{decky_name} would otherwise shadow the fixed paths
+# (e.g. DELETE /deckies/files) since Starlette matches in registration
+# order. Fixed paths must be declared before the variable path.
+api_router.include_router(teardown_decky_router)
 
 # External webhook subscriptions (SIEM/SOAR egress)
 api_router.include_router(webhooks_router)
