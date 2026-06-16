@@ -98,6 +98,19 @@ describe('DeckyCard', () => {
     expect(screen.getByText('CONFIRM')).toBeInTheDocument();
   });
 
+  it('shows TEARDOWN for admin on a local (non-swarm) decky, keyed td:local:', () => {
+    const local = makeDecky({ name: 'decoy-local' });
+    const { rerender } = render(
+      <DeckyCard {...baseProps} isAdmin decky={local} />,
+    );
+    expect(screen.getByText('TEARDOWN')).toBeInTheDocument();
+
+    rerender(
+      <DeckyCard {...baseProps} isAdmin armed="td:local:decoy-local" decky={local} />,
+    );
+    expect(screen.getByText('CONFIRM')).toBeInTheDocument();
+  });
+
   it('clicking the card body fires onInspect', async () => {
     const onInspect = vi.fn();
     const user = userEvent.setup();

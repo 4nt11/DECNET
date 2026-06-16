@@ -38,7 +38,7 @@ export const DeckyCard: React.FC<Props> = ({
   const hits = hitsFor(decky);
   const hot = dot === 'hot';
   const dotClass = mutating ? 'mutating' : dot;
-  const tdKey = decky.swarm ? `td:${decky.swarm.host_uuid}:${decky.name}` : '';
+  const tdKey = `td:${decky.swarm?.host_uuid ?? 'local'}:${decky.name}`;
 
   // Live service mutation is local-only (admin, non-swarm). Swarm
   // deckies live on a remote agent — the W3 path runs docker compose
@@ -347,12 +347,12 @@ export const DeckyCard: React.FC<Props> = ({
               {mutating ? 'MUTATING' : 'FORCE MUTATE'}
             </button>
           )}
-          {decky.swarm && isAdmin && (
+          {isAdmin && (
             <button
               className="btn alert small"
               disabled={tdBusy}
               onClick={() => onTeardown(decky)}
-              title="Stop this decky on its host"
+              title={decky.swarm ? 'Stop this decky on its host' : 'Tear down this decky'}
             >
               <PowerOff size={10} />
               {tdBusy

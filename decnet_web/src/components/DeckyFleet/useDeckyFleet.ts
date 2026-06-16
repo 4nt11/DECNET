@@ -38,7 +38,7 @@ export interface UseDeckyFleetResult {
   mutate: (name: string) => Promise<MutateResult>;
   /** Update or clear a decky's periodic mutate interval. */
   setMutateInterval: (name: string, minutes: number | null) => Promise<boolean>;
-  /** Tear down a swarm-pinned decky on its host. */
+  /** Tear down a decky — swarm-pinned on its host, or local via DELETE. */
   teardown: (d: Decky) => Promise<TeardownResult>;
   /** Optimistically apply a server-returned services list to a card
    *  (used by DeckyCard's add/remove-service flow). */
@@ -171,10 +171,13 @@ export function useDeckyFleet(): UseDeckyFleetResult {
   );
 
   const teardown = useCallback(async (d: Decky): Promise<TeardownResult> => {
-    if (!d.swarm) return { ok: false, reason: 'not a swarm decky' };
     setTearingDown((prev) => new Set(prev).add(d.name));
     try {
-      await api.post(`/swarm/hosts/${d.swarm.host_uuid}/teardown`, { decky_id: d.name });
+      if (d.swarm) {
+        await api.post(`/swarm/hosts/${d.swarm.host_uuid}/teardown`, { decky_id: d.name });
+      } else {
+        await api.delete(`/deckies/${encodeURIComponent(d.name)}`);
+      }
       await fetchDeckies(deployMode?.mode);
       return { ok: true };
     } catch (err: unknown) {

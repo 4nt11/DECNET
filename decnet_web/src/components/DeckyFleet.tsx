@@ -113,8 +113,7 @@ const DeckyFleet: React.FC<FleetProps> = ({ searchQuery = '' }) => {
   // Two-step teardown: first click arms the button, second click within
   // 4s actually fires the POST. Keeps swarm hosts safe from misclicks.
   const handleTeardown = async (d: Decky) => {
-    if (!d.swarm) return;
-    const key = `td:${d.swarm.host_uuid}:${d.name}`;
+    const key = `td:${d.swarm?.host_uuid ?? 'local'}:${d.name}`;
     if (armed !== key) { arm(key); return; }
     setArmed(null);
     const r = await teardown(d);
