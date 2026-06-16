@@ -50,12 +50,21 @@ class TestStreamEvents:
             assert resp.status_code in (200, 500)
 
     @pytest.mark.asyncio
-    async def test_stream_with_query_token(self, client: httpx.AsyncClient, auth_token: str):
+    async def test_stream_with_query_ticket(self, client: httpx.AsyncClient, auth_token: str):
+        # EventSource can't set headers, so the stream authenticates via a
+        # single-use ?ticket= minted from the JWT; a raw ?token= is no longer
+        # accepted (it would leak the bearer into proxy/access logs).
         with patch("decnet.web.router.stream.api_stream_events.repo") as mock_repo:
             _mock_repo_prefetch(mock_repo)
+            tr = await client.post(
+                "/api/v1/auth/sse-ticket",
+                headers={"Authorization": f"Bearer {auth_token}"},
+            )
+            assert tr.status_code == 200, tr.text
+            ticket = tr.json()["ticket"]
             resp = await client.get(
                 "/api/v1/stream",
-                params={"token": auth_token, "lastEventId": "0"},
+                params={"ticket": ticket, "lastEventId": "0"},
             )
             assert resp.status_code in (200, 500)
 

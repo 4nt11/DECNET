@@ -39,7 +39,7 @@ async def test_admin_can_access_read_endpoints(client, auth_token, method, path)
 _ADMIN_ENDPOINTS = [
     ("PUT", "/api/v1/config/deployment-limit", {"deployment_limit": 5}),
     ("PUT", "/api/v1/config/global-mutation-interval", {"global_mutation_interval": "1d"}),
-    ("POST", "/api/v1/config/users", {"username": "rbac-test", "password": "pass123456", "role": "viewer"}),
+    ("POST", "/api/v1/config/users", {"username": "rbac-test", "password": "pass-123456789", "role": "viewer"}),
 ]
 
 

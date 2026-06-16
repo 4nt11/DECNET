@@ -106,9 +106,17 @@ async def test_events_missing_attacker_404(auth_token, _fake_app_bus):
     async with httpx.AsyncClient(
         transport=httpx.ASGITransport(app=app), base_url="http://test",
     ) as ac:
+        # SSE auth is a single-use ?ticket= minted from the JWT (EventSource
+        # can't set headers); a raw ?token= is no longer accepted.
+        tr = await ac.post(
+            "/api/v1/auth/sse-ticket",
+            headers={"Authorization": f"Bearer {auth_token}"},
+        )
+        assert tr.status_code == 200, tr.text
+        ticket = tr.json()["ticket"]
         r = await ac.get(
             f"{_V1}/{_OTHER_UUID}/events",
-            params={"token": auth_token},
+            params={"ticket": ticket},
         )
         assert r.status_code == 404
 
