@@ -109,6 +109,7 @@ PHASE_G_CONDITIONAL_PRIMITIVES: frozenset[str] = frozenset({
     "emotional_valence.arousal",            # needs typing bursts
     "emotional_valence.valence",            # needs ≥ 80 typed letters
     "emotional_valence.frustration_venting",  # needs ≥ 30 typed letters
+    "motor.digraph_simhash",                # needs ≥ 8 distinct digraphs / ≥ 20 samples
 })
 
 # Backwards-compatible aliases for any external import — earlier phases

@@ -292,6 +292,17 @@ CV_BURSTY_MAX: float = 1.50
 # Need this many input events before we'll claim a cadence at all.
 MIN_INPUTS_FOR_CADENCE: int = 5
 
+# ── motor.digraph_simhash (keystroke-rhythm biometric) ──────────────────────
+# A digraph is two consecutive single-char keystrokes; its flight time is the
+# inter-event gap. We need enough distinct pairs AND enough samples before the
+# SimHash is stable enough to fingerprint a typist — below this it's noise.
+MIN_DIGRAPHS_FOR_SIMHASH: int = 8
+MIN_DIGRAPH_SAMPLES: int = 20
+# Median flight time per digraph is quantized into these log-spaced buckets
+# (upper edges, seconds). Coarse on purpose: the same typist must land in the
+# same bucket despite jitter, while a clearly faster/slower typist separates.
+DIGRAPH_FLIGHT_BUCKETS_S: tuple[float, ...] = (0.03, 0.06, 0.12, 0.25, 0.5, 1.0)
+
 # ── motor.motor_stability (Step B.2) ────────────────────────────────────────
 # Tremor proxy: fraction of within-burst IATs below TREMOR_FAST_FLOOR_S
 # (30 ms — physiologically implausible double-press floor; humans can't

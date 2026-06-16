@@ -1139,6 +1139,25 @@ own plan.
 
 ---
 
+## Post-v0 addition — `motor.digraph_simhash` (38th Tier-A primitive)
+
+Added in behave-shell 0.1.2 (the v0 corpus above was 37). It is the
+**keystroke-rhythm biometric**: a 64-bit Charikar SimHash of the
+operator's per-digraph (two-key) flight times, bucketed per character
+pair. Locality-sensitive — the same typist lands Hamming-close across
+sessions and decoys, so it links one human behind multiple identities.
+
+- **Extractor:** `_features/motor.py:digraph_simhash`, `ValueKind.HASH`,
+  conditional (rides `MIN_DIGRAPHS_FOR_SIMHASH` / `MIN_DIGRAPH_SAMPLES`
+  floors; lives in `PHASE_G_CONDITIONAL_PRIMITIVES`). Live-typed input
+  only — pastes/escape bursts break the digraph chain.
+- **Rollup:** the identity clusterer folds the session SimHashes into a
+  bitwise-majority centroid written to `AttackerIdentity.kd_digraph_simhash`;
+  the campaign clusterer adds a Hamming-proximity edge. STIX export
+  carries the centroid (hex). Tier-A count is now **38**.
+
+---
+
 **Owner:** ANTI.
 **Implementation gate:** Step 0 starts after this doc is reviewed +
 Phase 1 of `BEHAVE-INTEGRATION.md` lands (storage table exists).

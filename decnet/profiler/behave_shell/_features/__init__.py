@@ -52,6 +52,7 @@ from decnet.profiler.behave_shell._features.temporal import (
 )
 from decnet.profiler.behave_shell._features.motor import (
     command_chunking,
+    digraph_simhash,
     error_correction,
     input_modality,
     keystroke_cadence,
@@ -68,6 +69,7 @@ FEATURES: tuple[FeatureFn, ...] = (
     input_modality,
     paste_burst_rate,
     keystroke_cadence,
+    digraph_simhash,
     motor_stability,
     error_correction,
     command_chunking,

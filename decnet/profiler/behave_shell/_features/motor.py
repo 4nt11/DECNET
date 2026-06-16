@@ -15,13 +15,18 @@ from behave_core.spec.envelope import Observation
 
 from decnet.profiler.behave_shell._ctx import SessionContext
 from decnet.profiler.behave_shell._features._emit import make_observation
+from decnet.util.simhash import simhash64
 from decnet.profiler.behave_shell._thresholds import (
     BACKSPACE_IMMEDIATE_MAX_S,
     CMD_CHUNKING_FLUENT_CV_MAX,
     CV_BURSTY_MAX,
     CV_MACHINE_MAX,
     CV_STEADY_MAX,
+    DIGRAPH_FLIGHT_BUCKETS_S,
     IKI_MACHINE_MAX_S,
+    IKI_THINK_MAX_S,
+    MIN_DIGRAPH_SAMPLES,
+    MIN_DIGRAPHS_FOR_SIMHASH,
     MIN_INPUTS_FOR_CADENCE,
     MODALITY_PASTED_MIN,
     MODALITY_TYPED_MAX,
@@ -419,5 +424,66 @@ def pipe_chaining_depth(ctx: SessionContext) -> Iterator[Observation]:
         ctx,
         primitive="motor.shell_mastery.pipe_chaining_depth",
         value=value,
+        confidence=confidence,
+    )
+
+
+def _flight_bucket(seconds: float) -> int:
+    """Quantize a digraph flight time into a coarse log bucket index.
+
+    Returns 0..len(DIGRAPH_FLIGHT_BUCKETS_S); the coarseness is what lets
+    the same typist collide across sessions despite per-keystroke jitter.
+    """
+    for i, edge in enumerate(DIGRAPH_FLIGHT_BUCKETS_S):
+        if seconds < edge:
+            return i
+    return len(DIGRAPH_FLIGHT_BUCKETS_S)
+
+
+def digraph_simhash(ctx: SessionContext) -> Iterator[Observation]:
+    """Emit ``motor.digraph_simhash`` — a 64-bit LSH fingerprint of the
+    operator's per-digraph keystroke flight times.
+
+    For each consecutive pair of single-char input keystrokes ``(c1, c2)``
+    the flight time is the inter-event gap. Pastes / escape sequences
+    (multi-char events) and think-pauses (> ``IKI_THINK_MAX_S``) break the
+    chain so they don't pollute timing. Each digraph's *median* flight is
+    bucketed; ``(c1c2, bucket)`` tokens are SimHashed (weighted by sample
+    count) so the same typist lands Hamming-close across sessions, while a
+    faster/slower or different-vocabulary operator separates.
+
+    Stays silent below ``MIN_DIGRAPHS_FOR_SIMHASH`` distinct pairs or
+    ``MIN_DIGRAPH_SAMPLES`` total samples — too little signal to fingerprint.
+    """
+    flights: dict[str, list[float]] = {}
+    prev_t: float | None = None
+    prev_c: str | None = None
+    for t, _kind, data in ctx.input_events:
+        if len(data) != 1:
+            # paste / control / escape burst — not a single keystroke
+            prev_t = prev_c = None
+            continue
+        if prev_c is not None and prev_t is not None:
+            dt = t - prev_t
+            if 0.0 < dt <= IKI_THINK_MAX_S:
+                flights.setdefault(prev_c + data, []).append(dt)
+        prev_t, prev_c = t, data
+
+    total = sum(len(v) for v in flights.values())
+    if len(flights) < MIN_DIGRAPHS_FOR_SIMHASH or total < MIN_DIGRAPH_SAMPLES:
+        return
+
+    tokens = {
+        f"{digraph}:{_flight_bucket(statistics.median(dts))}": len(dts)
+        for digraph, dts in flights.items()
+    }
+    # Confidence grows with the number of distinct digraphs (more pairs =
+    # more stable fingerprint), capped at 0.95 — never claim certainty on a
+    # biometric inferred from terminal timing.
+    confidence = min(0.95, 0.40 + 0.05 * len(flights))
+    yield make_observation(
+        ctx,
+        primitive="motor.digraph_simhash",
+        value=format(simhash64(tokens), "016x"),
         confidence=confidence,
     )

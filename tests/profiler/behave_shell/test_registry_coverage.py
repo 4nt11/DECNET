@@ -91,10 +91,14 @@ def test_no_extractor_set_drifts_from_registry() -> None:
     )
 
 
-def test_tier_a_count_is_37() -> None:
-    """Sanity check: Tier-A count matches the design doc (37 primitives)."""
-    assert len(_tier_a_primitives()) == 37, (
-        f"Expected 37 Tier-A primitives per BEHAVE-EXTRACTOR.md; "
+def test_tier_a_count_is_38() -> None:
+    """Sanity check: Tier-A count matches the design doc.
+
+    38 since behave-shell 0.1.2 added ``motor.digraph_simhash`` (the
+    keystroke-rhythm biometric); was 37.
+    """
+    assert len(_tier_a_primitives()) == 38, (
+        f"Expected 38 Tier-A primitives per BEHAVE-EXTRACTOR.md; "
         f"got {len(_tier_a_primitives())}. Update Phase H if the "
         f"spec genuinely changed, or adjust TIER_B_ALLOWLIST."
     )

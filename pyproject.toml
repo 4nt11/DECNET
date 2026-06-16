@@ -59,7 +59,7 @@ dependencies = [
     # bus event adapter consumed by decnet/profiler/behave_shell/. Pin
     # range tracks BEHAVE-INTEGRATION.md §"Versioning".
     "behave-core>=0.1.0,<0.2",
-    "behave-shell>=0.1.0,<0.2",
+    "behave-shell>=0.1.2,<0.2",
     # STIX → MISP conversion: CIRCL-maintained reference converter used by
     # MISP itself. Pulls pymisp transitively (needed for MISPEvent output).
     "misp-stix>=2026.4",
