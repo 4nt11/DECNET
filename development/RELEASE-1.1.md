@@ -75,6 +75,92 @@ the ORM into every worker. No production code imports `generate` from the packag
   restart + `MemoryMax`. **Medium.** Verify on the live fleet before adopting; keep the
   individual units as the fallback. Do C2–C4 first; C5 only if RAM still bites.
 
+## C4/C5 Consolidation design — HOW, not just which
+
+### The governing principle
+**Consolidate by failure domain, keep every worker independently extractable.**
+A worker's coroutine must not know whether it runs solo or hosted. "Hosted vs standalone"
+is a *deploy-time config decision*, never a code fork. That single rule makes consolidation
+reversible per-worker: if a co-located worker misbehaves, you pull it back to its own unit
+by editing a config list — no code change, no redeploy of others.
+
+### Two traps that kill the naive version
+
+1. **`asyncio.TaskGroup` is the WRONG primitive.** Its semantics are all-or-nothing: if one
+   task raises, the group cancels every sibling and propagates. That is the *opposite* of
+   worker isolation. A bug in `webhook` would cancel `collector`. We need independent
+   **supervision loops** — each worker wrapped in restart/backoff — gathered with
+   `return_exceptions=True`, NOT a bare TaskGroup/gather.
+
+2. **Consolidation silently discards systemd features we rely on.** Per-worker `Restart=`,
+   `MemoryMax=` (cgroup), journal tagging, `After=`/`Requires=` ordering. The supervisor must
+   *replace* the parts we used. `Restart=` → the in-process supervision loop below.
+   `MemoryMax=` → survives as a **per-group** cgroup limit on the group's systemd unit (you
+   lose per-*worker* granularity — that's the real cost, priced in below).
+
+### The supervision primitive (the one reusable bit — ~12 lines, no framework)
+```python
+async def supervise(name, run, *, max_backoff=30):
+    backoff = 1
+    while not _shutdown.is_set():
+        try:
+            await run()                       # the worker's own coroutine
+        except asyncio.CancelledError:
+            raise
+        except Exception:
+            log.exception("worker %s crashed; restart in %ds", name, backoff)
+            await asyncio.sleep(backoff); backoff = min(backoff * 2, max_backoff)
+        else:
+            break
+# host: await asyncio.gather(*(supervise(n, r) for n, r in group), return_exceptions=True)
+```
+This IS systemd `Restart=on-failure` with exponential backoff, in-process. Shutdown reuses
+the existing `system.{worker}.control` bus topic.
+
+### The decision axis: RAM ⟷ isolation (three coherent points)
+
+| Design | RAM win | Isolation kept | Verdict |
+|---|---|---|---|
+| **A. Single supervisor** (whole herd, 1 proc) | max (−600 MB) | crash-isolation only (via loop); shared OOM, no per-worker cgroup | too blunt — one leak starves all |
+| **B. Process groups by failure domain** ⭐ | ~−500 MB (4 floors vs ~13) | crash + group-level cgroup + reversible per-worker | **recommended start** |
+| **C. Prefork master** (import once, `gc.freeze()`, fork children) | potentially max, real-process isolation | full per-process isolation via CoW-shared floor | **the big-win follow-on, gated on a 3.14 CoW measurement** |
+
+### Recommended path: B now, measure C later
+
+**Stage 1 — build the primitive + ONE group.** Ship `decnet supervise --group <name>` reading
+a config list of `{worker: run-callable}`. Prove it on the safest group first.
+
+**Stage 2 — group by failure domain + resource profile** (not by convenience):
+
+| Group (1 systemd unit each) | Workers | Why they belong together |
+|---|---|---|
+| `supervise-io` | `forwarder`, `listener`, `mutate`, `webhook`† | pure IO, DB-light, rarely crash |
+| `supervise-batch` | `reconciler`, `enrich`, `orchestrator`, `canary` | periodic DB batch, similar churn |
+| `supervise-scapy` | `collect`, `probe`, `sniffer` | share the 76 MB scapy import once; tolerate blocking threads |
+| `supervise-cpu` | `clusterer`, `campaign-clusterer`, `attribution`, `reuse-correlate` | bursty/reactive CPU; GIL OK while idle, offload heavy kernels to a shared `ProcessPoolExecutor` only if contention shows |
+
+**Stay separate, no exceptions:** `bus` (broker), `api`/`web` (multiprocess by design),
+`profiler` (353 MB) + `ttp` (308 MB) — big resident state + sustained CPU, co-location just
+serializes them under the GIL.
+
+† `webhook` makes external HTTP calls → hang/crash risk. It only joins `supervise-io` once it
+has hard per-request timeouts; otherwise it stays standalone. Exactly the kind of call the
+"reversible per-worker" rule exists for.
+
+Net: ~18 units → **~9** (bus, api, web, profiler, ttp, + 4 supervise groups). ~13 floors → 4.
+
+**Stage 3 — evaluate prefork (C).** Only if Stage 2's savings aren't enough. On Python 3.14,
+immortal objects (PEP 683) + `gc.freeze()` before `fork()` keep module/code pages out of
+refcount-dirtying, so CoW can share much of the 86 MB floor across *real* child processes —
+full isolation AND the RAM win. But CoW decay is workload-dependent: **measure actual shared
+RSS on 3.14 before committing.** If it shares well, prefork supersedes the groups; if refcounts
+dirty the pages anyway, we keep B and stop.
+
+### Why this order
+B is incremental, reversible, and keeps the ops model you know — it de-risks the supervision
+pattern on one group before betting the fleet. C is the higher ceiling but rests on an
+empirical CoW question we haven't answered yet. Build the primitive once; it serves both.
+
 ## Projected (revised)
 
 - C2–C3 (import floor): only the 2-3 DB-less workers shed the ORM. **~100 MB.** Cheap hygiene.
