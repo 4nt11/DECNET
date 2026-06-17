@@ -170,9 +170,25 @@ B is incremental, reversible, and keeps the ops model you know — it de-risks t
 pattern on one group before betting the fleet. C is the higher ceiling but rests on an
 empirical CoW question we haven't answered yet. Build the primitive once; it serves both.
 
-## Projected (revised)
+## Measured — batch group (2026-06-17, side-effect-free floor measurement)
 
-- C2–C3 (import floor): only the 2-3 DB-less workers shed the ORM. **~100 MB.** Cheap hygiene.
-- **C4–C5 (consolidation): the main event.** Idle herd ~8 × 86 MB → 1 × 86 MB ≈ **−600 MB**.
-- C6 (scapy merge): 3 × 76 MB → 1 × 76 MB ≈ **−150 MB**.
-- Total: 2.57 GB → **~1.0 GB**. The bulk comes from consolidation, which costs isolation.
+The 4 live batch workers vs the consolidated startup floor (imports + repo pool +
+bus client, measured WITHOUT running a mutation tick to avoid racing the live fleet):
+
+| | RSS |
+|---|---:|
+| enrich + reconcile + mutate + orchestrate (4 procs) | **509 MB** |
+| consolidated startup floor (1 proc) | **118.5 MB** |
+| of which DB pool | 15.7 MB (1× vs 4× → ~47 MB saved alone) |
+
+**Delta ≈ −350 MB (~70%) on this group.** 118.5 MB is a lower bound: the live
+consolidated process adds each worker's working set on top (idle workers, so modest —
+estimate ~140–170 MB live). The exact live number needs the controlled unit swap.
+
+## Projected (rest of release)
+
+- Batch group (measured): **−350 MB**, confirmed by floor measurement, swap pending.
+- C-cpu group (4 clusterers): similar shape, ~**−300 MB** expected.
+- C-scapy (collect+probe): share the 76 MB scapy once, ~**−150 MB**.
+- Total: 2.57 GB → **~1.3 GB** realistic (consolidation only; webhook/canary stay out).
+  Prefork (C) could push further but is gated on the 3.14 CoW measurement.
