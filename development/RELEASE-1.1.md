@@ -130,24 +130,29 @@ the existing `system.{worker}.control` bus topic.
 **Stage 1 — build the primitive + ONE group.** Ship `decnet supervise --group <name>` reading
 a config list of `{worker: run-callable}`. Prove it on the safest group first.
 
-**Stage 2 — group by failure domain + resource profile** (not by convenience):
+**Group by failure domain AND co-residency** (corrected against the live `ps`):
+
+`forwarder`/`listener` are role-split swarm singletons (forwarder=agent-side,
+listener=master-side) — never co-resident with the herd, one per role, so consolidating them
+saves nothing. They drop out of the grouping. The actually co-resident master herd is what
+matters.
+
+Bonus discovered during extraction: the batch workers all share the
+`decnet.web.dependencies.repo` singleton → a group initializes it **once** and they share one
+DB connection pool, not N. Savings beyond the import floor.
 
 | Group (1 systemd unit each) | Workers | Why they belong together |
 |---|---|---|
-| `supervise-io` | `forwarder`, `listener`, `mutate`, `webhook`† | pure IO, DB-light, rarely crash |
-| `supervise-batch` | `reconciler`, `enrich`, `orchestrator`, `canary` | periodic DB batch, similar churn |
-| `supervise-scapy` | `collect`, `probe`, `sniffer` | share the 76 MB scapy import once; tolerate blocking threads |
+| `supervise-batch` ⭐ Stage 1 | `reconcile`, `enrich`, `orchestrate`, `mutate` | periodic/event DB loops, all share `repo`; low crash risk |
 | `supervise-cpu` | `clusterer`, `campaign-clusterer`, `attribution`, `reuse-correlate` | bursty/reactive CPU; GIL OK while idle, offload heavy kernels to a shared `ProcessPoolExecutor` only if contention shows |
+| `supervise-scapy` | `collect`, `probe` (+`sniffer` where present) | share the 76 MB scapy import once; tolerate blocking threads |
 
 **Stay separate, no exceptions:** `bus` (broker), `api`/`web` (multiprocess by design),
 `profiler` (353 MB) + `ttp` (308 MB) — big resident state + sustained CPU, co-location just
-serializes them under the GIL.
+serializes them under the GIL. **Deferred standalone:** `webhook` (external HTTP → needs hard
+timeouts before co-location), `canary` (self-manages its own repo; revisit).
 
-† `webhook` makes external HTTP calls → hang/crash risk. It only joins `supervise-io` once it
-has hard per-request timeouts; otherwise it stays standalone. Exactly the kind of call the
-"reversible per-worker" rule exists for.
-
-Net: ~18 units → **~9** (bus, api, web, profiler, ttp, + 4 supervise groups). ~13 floors → 4.
+Net on the master: idle/CPU/scapy herd (~10 procs) → **3 group procs**.
 
 **Stage 3 — evaluate prefork (C).** Only if Stage 2's savings aren't enough. On Python 3.14,
 immortal objects (PEP 683) + `gc.freeze()` before `fork()` keep module/code pages out of
