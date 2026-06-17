@@ -1,0 +1,4 @@
+# /run/decnet hosts bus.sock (UDS, 0660, group={{ group }}).
+# tmpfiles.d recreates it on every boot before any decnet-*.service starts,
+# so the bus worker never silently falls back to ~/.decnet/bus.sock.
+d /run/decnet 0755 root {{ group }} -
