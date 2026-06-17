@@ -22,5 +22,6 @@ def test_unknown_group_exits_2():
     assert "unknown group" in result.stdout
 
 
-def test_batch_group_is_known():
+def test_known_groups():
     assert "batch" in _GROUPS
+    assert "cpu" in _GROUPS

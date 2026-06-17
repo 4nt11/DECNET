@@ -17,7 +17,7 @@ from .utils import console, log
 
 # Groups are intentionally a small static registry, not config — the membership
 # is an architectural decision, not an operator knob.
-_GROUPS = ("batch",)
+_GROUPS = ("batch", "cpu")
 
 
 async def _build_specs(group: str):
@@ -42,6 +42,22 @@ async def _build_specs(group: str):
             ("enrich", lambda: run_intel_loop(repo, poll_interval_secs=60.0, ttl_hours=24)),
             ("orchestrate", lambda: orchestrator_worker(repo, interval=60, llm_enabled=None)),
             ("mutate", lambda: run_watch_loop(repo)),
+        ]
+    if group == "cpu":
+        from decnet.cli.gating import _require_master_mode
+        from decnet.clustering.campaign.worker import run_campaign_clusterer_loop
+        from decnet.clustering.worker import run_clusterer_loop
+        from decnet.correlation.attribution_worker import run_attribution_loop
+        from decnet.correlation.reuse_worker import run_reuse_loop
+        from decnet.web.dependencies import repo
+
+        _require_master_mode("supervise cpu")
+        await repo.initialize()  # shared by every cpu worker → one DB pool
+        return [
+            ("clusterer", lambda: run_clusterer_loop(repo, poll_interval_secs=60.0)),
+            ("campaign-clusterer", lambda: run_campaign_clusterer_loop(repo, poll_interval_secs=60.0)),
+            ("attribution", lambda: run_attribution_loop(repo, multi_actor_tick_secs=60.0)),
+            ("reuse-correlate", lambda: run_reuse_loop(repo, poll_interval_secs=60.0, min_targets=2)),
         ]
     raise ValueError(f"unknown supervise group: {group}")
 
@@ -75,8 +91,32 @@ def register(app: typer.Typer) -> None:
         console.print(f"[bold cyan]Supervisor starting[/] group={group}")
 
         async def _run() -> None:
-            specs = await _build_specs(group)
-            await run_group(specs)
+            pool = None
+            if group == "cpu":
+                # The CPU workers offload their O(n^2) connected-components
+                # kernels to ONE shared pool so they run in parallel instead of
+                # serialising under the GIL. forkserver (not the default fork):
+                # this process is multithreaded via bus clients, and forking a
+                # multithreaded process is unsafe.
+                import multiprocessing as _mp
+                from concurrent.futures import ProcessPoolExecutor
+
+                from decnet import offload
+
+                pool = ProcessPoolExecutor(
+                    max_workers=2, mp_context=_mp.get_context("forkserver")
+                )
+                offload.set_executor(pool)
+                log.info("supervise cpu: kernel offload pool ready (max_workers=2)")
+            try:
+                specs = await _build_specs(group)
+                await run_group(specs)
+            finally:
+                if pool is not None:
+                    from decnet import offload
+
+                    offload.set_executor(None)
+                    pool.shutdown(wait=False, cancel_futures=True)
 
         try:
             asyncio.run(_run())

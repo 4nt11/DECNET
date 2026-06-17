@@ -31,10 +31,15 @@ from decnet.clustering.campaign.impl.similarity import (
     combined_campaign_weight,
 )
 from decnet.logging import get_logger
+from decnet.offload import run_kernel
 from decnet.util.simhash import from_bytes8
 from decnet.web.db.repository import BaseRepository
 
 log = get_logger("clustering.campaign.connected_components")
+
+# Below this many identities the O(n^2) pass is cheaper than the pickle
+# round-trip to a pool worker, so run inline even when a pool is installed.
+_OFFLOAD_MIN_IDENTITIES = 256
 
 
 def cluster_identities(
@@ -220,7 +225,11 @@ class ConnectedComponentsCampaignClusterer(CampaignClusterer):
         row_by_uuid: dict[str, dict[str, Any]] = {
             r["uuid"]: r for r in active_rows
         }
-        labels = cluster_identities(feature_list)
+        labels = await run_kernel(
+            cluster_identities,
+            feature_list,
+            offload_if=len(feature_list) >= _OFFLOAD_MIN_IDENTITIES,
+        )
 
         # Group identities by predicted cluster.
         components: dict[str, list[str]] = {}
