@@ -81,3 +81,6 @@ testfail
 # build copies the pro frontend so the JS toolchain resolves it.
 /decnet/pro/
 /decnet_web/src/pro-impl/
+
+# Internal design/dev notes — not for publication
+/development/
