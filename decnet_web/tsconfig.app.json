@@ -10,6 +10,12 @@
     /* Bundler mode */
     "moduleResolution": "bundler",
     "allowImportingTsExtensions": true,
+
+    /* `@pro` resolves to the empty community stub for type-checking. The
+       Professional build overrides this to decnet/pro/web/index.tsx. Must mirror
+       the Vite alias in vite.config.ts. (bundler resolution => no baseUrl.) */
+    "paths": { "@pro": ["./src/pro/stub.ts"] },
+
     "verbatimModuleSyntax": true,
     "moduleDetection": "force",
     "noEmit": true,

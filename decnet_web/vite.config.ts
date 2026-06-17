@@ -1,10 +1,26 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 import { defineConfig } from 'vitest/config'
 import react from '@vitejs/plugin-react'
+import { fileURLToPath } from 'node:url'
+import { dirname, resolve } from 'node:path'
+import { existsSync } from 'node:fs'
+
+const here = dirname(fileURLToPath(import.meta.url))
+// `@pro` resolves to the real Professional registry only for an explicit pro
+// build (VITE_DECNET_PRO=1) once the pro frontend is mounted at src/pro-impl/
+// (git-ignored; the pro build copies decnet/pro/web there so react/lucide and
+// tsc resolve normally). Otherwise the empty community stub, which tree-shakes
+// the pro surface out of the bundle.
+const proRealEntry = resolve(here, 'src/pro-impl/index.tsx')
+const proEntry =
+  process.env.VITE_DECNET_PRO === '1' && existsSync(proRealEntry)
+    ? proRealEntry
+    : resolve(here, 'src/pro/stub.ts')
 
 // https://vite.dev/config/
 export default defineConfig({
   plugins: [react()],
+  resolve: { alias: { '@pro': proEntry } },
   test: {
     environment: 'jsdom',
     globals: true,

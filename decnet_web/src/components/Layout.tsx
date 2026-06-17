@@ -9,6 +9,7 @@ import {
 } from '../icons';
 import { prefetchRoute } from '../routePrefetch';
 import { useThemeToggle } from '../lib/useThemeToggle';
+import { proRoutes } from '@pro';
 import './Layout.css';
 
 type ThreatLevel = 'nominal' | 'elevated' | 'critical';
@@ -160,6 +161,13 @@ const Layout: React.FC<LayoutProps> = ({
             <NavItem to="/swarm/hosts" icon={<HardDrive size={18} />} label="SWARM Hosts" open={sidebarOpen} indent />
             <NavItem to="/swarm-updates" icon={<Package size={18} />} label="Remote Updates" open={sidebarOpen} indent />
           </NavGroup>
+          {proRoutes.length > 0 && (
+            <NavGroup label="PROFESSIONAL" icon={<Zap size={20} />} open={sidebarOpen}>
+              {proRoutes.map((r) => (
+                <NavItem key={r.path} to={r.path} icon={r.icon} label={r.label} open={sidebarOpen} indent />
+              ))}
+            </NavGroup>
+          )}
           <NavItem to="/config" icon={<Settings size={20} />} label="Config" open={sidebarOpen} />
         </nav>
 

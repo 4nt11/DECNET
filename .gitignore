@@ -76,5 +76,8 @@ testfail
 .phaseloop/
 
 # Professional tier: proprietary, lives in a separate private repo
-# (github.com/DECNET-Foundation/decnet-professional). Must NEVER be tracked by the open-core repo.
-/decnet/services/pro/
+# (github.com/DECNET-Foundation/decnet-professional), mounted at decnet/pro/.
+# Must NEVER be tracked by the open-core repo. src/pro-impl/ is where the pro
+# build copies the pro frontend so the JS toolchain resolves it.
+/decnet/pro/
+/decnet_web/src/pro-impl/

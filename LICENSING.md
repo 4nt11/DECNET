@@ -27,7 +27,7 @@ depends on it.
 | Tier         | Code                                   | License                    |
 |--------------|----------------------------------------|----------------------------|
 | Community    | this repo                              | AGPL-3.0-or-later          |
-| Professional | `decnet/services/pro/` (private repo)  | DECNET Commercial EULA     |
+| Professional | `decnet/pro/` (private repo)           | DECNET Commercial EULA     |
 
 To use DECNET core under terms other than the AGPL, or to obtain DECNET
 Professional, contact **licensing@decnet.cl**.
