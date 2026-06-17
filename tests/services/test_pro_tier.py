@@ -86,3 +86,21 @@ def test_pro_tier_seams():
     finally:
         pro_routes.ROUTERS = saved
         importlib.reload(web_router)  # rebuild a pro-free api_router for others
+
+
+def test_pro_cli_registered_when_mounted():
+    """When decnet/pro/ is mounted, its CLI modules' commands join the root app.
+
+    Read-only against the already-built decnet.cli.app — no reload, no fs
+    mutation. Skips on the Community build, where decnet.pro is absent."""
+    import importlib.util
+
+    if importlib.util.find_spec("decnet.pro.cli") is None:
+        import pytest
+
+        pytest.skip("decnet.pro not mounted (community build)")
+
+    import decnet.cli as cli
+
+    group_names = {g.name for g in cli.app.registered_groups}
+    assert "pro-intel" in group_names  # shipped example pro daemon group

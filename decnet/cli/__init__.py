@@ -65,6 +65,21 @@ for _mod in (
 ):
     _mod.register(app)
 
+# Professional tier (optional): each module in decnet/pro/cli/ exposes
+# register(app) and attaches its commands — e.g. a standalone daemon entry point
+# that a systemd unit ExecStarts. Registered BEFORE the gate so pro commands are
+# mode-filtered like the rest. Absent in the Community build (no decnet.pro).
+try:
+    import decnet.pro.cli as _pro_cli_pkg
+except ModuleNotFoundError:
+    _pro_cli_pkg = None
+if _pro_cli_pkg is not None:
+    import importlib as _importlib
+    import pkgutil as _pkgutil
+
+    for _pmi in _pkgutil.iter_modules(_pro_cli_pkg.__path__):
+        _importlib.import_module(f"decnet.pro.cli.{_pmi.name}").register(app)
+
 _gate_commands_by_mode(app)
 
 # Backwards-compat re-exports. Tests and third-party tooling import these
