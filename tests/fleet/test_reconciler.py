@@ -142,7 +142,6 @@ class TestAggregate:
 
 # ── reconcile_once ────────────────────────────────────────────────────────────
 
-@pytest.mark.anyio
 @pytest.fixture
 def anyio_backend():
     return "asyncio"
