@@ -218,3 +218,13 @@ api_router.include_router(ttp_rules_router)
 api_router.include_router(ttp_tag_details_router)
 api_router.include_router(ttp_navigator_router)
 api_router.include_router(ttp_groups_for_technique_router)
+
+# Professional tier (optional): mount pro routers under /api/v1 when the
+# decnet/pro/ package is present. Absence is the entitlement gate — community
+# builds have no decnet.pro, so this is a no-op there.
+try:
+    from decnet.pro.routes import ROUTERS as _pro_routers
+except ModuleNotFoundError:
+    _pro_routers = []
+for _pro_router in _pro_routers:
+    api_router.include_router(_pro_router)

@@ -10,6 +10,7 @@ import { ToastProvider } from './components/Toasts/ToastProvider';
 import { useToast } from './components/Toasts/useToast';
 import { useGlobalHotkeys } from './hooks/useGlobalHotkeys';
 import { isDeveloperMode } from './lib/devGate';
+import { proRoutes } from '@pro';
 
 // Page components are code-split per route. Each lands as its own
 // chunk and only downloads when the user navigates to that path —
@@ -148,6 +149,10 @@ const AuthedShell: React.FC<AuthedShellProps> = ({ onLogout, onSearch, searchQue
             {isDeveloperMode() && (
               <Route path="/theme-lab" element={<ThemeLab />} />
             )}
+            {/* Professional-tier pages. Empty in the community build (@pro -> stub). */}
+            {proRoutes.map((r) => (
+              <Route key={r.path} path={r.path} element={r.element} />
+            ))}
             <Route path="*" element={<Navigate to="/" replace />} />
           </Routes>
         </Suspense>
