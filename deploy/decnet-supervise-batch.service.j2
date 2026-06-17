@@ -5,7 +5,7 @@ After=network-online.target decnet-bus.service
 Wants=network-online.target decnet-bus.service
 # Replaces the individual decnet-reconciler / decnet-enrich / decnet-orchestrator
 # / decnet-mutator units. Do NOT enable those alongside this one.
-Conflicts=decnet-reconciler.service decnet-orchestrator.service decnet-mutator.service
+Conflicts=decnet-reconciler.service decnet-enrich.service decnet-orchestrator.service decnet-mutator.service
 
 [Service]
 Type=simple
