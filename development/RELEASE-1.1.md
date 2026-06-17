@@ -185,6 +185,20 @@ bus client, measured WITHOUT running a mutation tick to avoid racing the live fl
 consolidated process adds each worker's working set on top (idle workers, so modest —
 estimate ~140–170 MB live). The exact live number needs the controlled unit swap.
 
+### ✅ VERIFIED LIVE (2026-06-17, controlled unit swap on mothership)
+Swapped the 4 individual units → `decnet-supervise-batch.service`. Single PID hosts all
+four (`supervisor: hosting 4 workers: reconcile, enrich, orchestrate, mutate`); reconciler's
+30s pass and the shared aiosqlite repo confirmed working; no crashes/restarts.
+
+| | RSS |
+|---|---:|
+| 4 separate processes (before) | 509 MB |
+| **`decnet supervise batch` (after, live)** | **129 MB** |
+| **saved** | **380 MB (75%)** |
+
+Beat the estimate — one process, one DB pool, four workers. Rollback = disable the
+supervisor, re-enable the 4 units (`Conflicts=` prevents accidental double-run).
+
 ## Projected (rest of release)
 
 - Batch group (measured): **−350 MB**, confirmed by floor measurement, swap pending.
