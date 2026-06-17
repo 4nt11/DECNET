@@ -53,10 +53,14 @@ the ORM into every worker. No production code imports `generate` from the packag
       (`webhook`, `canary`, `listener`, `forwarder`, `mutate`, `enrich`) into reusable
       `async def run(bus, cfg)` in their packages, so they're hostable by a supervisor.
       CLI commands become thin `asyncio.run(run(...))` wrappers. No behaviour change.
-- [ ] **C5 — `decnet supervise`.** TaskGroup supervisor hosting the idle herd in one
-      process; reuses existing bus + `system.{worker}.control` shutdown. One systemd unit
-      replacing ~8. `# ponytail: shared event loop — split a worker back out if it needs
-      its own restart policy / MemoryMax`.
+- [x] **C5 — `decnet supervise` primitive + batch group.** `decnet/supervisor.py`
+      (per-worker restart loops, NOT TaskGroup) + `decnet supervise batch` hosting
+      reconcile/enrich/orchestrate/mutate with one shared repo + `deploy/
+      decnet-supervise-batch.service.j2` (Conflicts= the units it replaces). Unit-tested.
+      **Live verification PENDING** — must be a controlled unit *swap* (stop the 4 units,
+      start supervise-batch), never a parallel run: `mutate`/`orchestrate` are stateful and
+      double-running mutates deckies / doubles synthetic traffic. Measure RSS before/after.
+      Remaining groups (cpu, scapy) and webhook-timeout prerequisite not yet built.
 - [ ] **C6 — merge scapy workers.** Optional. `collect`/`probe`/`sniffer` share the 76 MB
       scapy import once instead of 3×.
 
