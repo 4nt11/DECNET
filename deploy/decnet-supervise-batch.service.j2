@@ -1,0 +1,49 @@
+[Unit]
+Description=DECNET Batch Supervisor (hosts reconcile + enrich + orchestrate + mutate in one process)
+Documentation=https://git.resacachile.cl/anti/DECNET/wiki/Workers#supervisor
+After=network-online.target decnet-bus.service
+Wants=network-online.target decnet-bus.service
+# Replaces the individual decnet-reconciler / decnet-enrich / decnet-orchestrator
+# / decnet-mutator units. Do NOT enable those alongside this one.
+Conflicts=decnet-reconciler.service decnet-orchestrator.service decnet-mutator.service
+
+[Service]
+Type=simple
+User={{ user }}
+Group={{ group }}
+WorkingDirectory={{ install_dir }}
+EnvironmentFile=-{{ install_dir }}/.env.local
+Environment=DECNET_SYSTEM_LOGS=/var/log/decnet/decnet.supervise-batch.log
+ExecStart={{ venv_dir }}/bin/decnet supervise batch
+StandardOutput=append:/var/log/decnet/decnet.supervise-batch.log
+StandardError=append:/var/log/decnet/decnet.supervise-batch.log
+
+# CONSOLIDATION COST: this unit holds the UNION of its members' privileges —
+# docker socket (reconcile + mutate observe/mutate containers) AND network egress
+# (enrich fans out to threat-intel providers). That is a wider blast radius than
+# any single worker had. Acceptable for the batch group; weigh it before adding
+# a member that needs materially more (e.g. raw sockets).
+SupplementaryGroups=docker
+
+CapabilityBoundingSet=
+AmbientCapabilities=
+
+# Security Hardening
+NoNewPrivileges=yes
+ProtectSystem=full
+ProtectHome=read-only
+PrivateTmp=yes
+ProtectKernelTunables=yes
+ProtectKernelModules=yes
+ProtectControlGroups=yes
+RestrictSUIDSGID=yes
+LockPersonality=yes
+ReadOnlyPaths=/var/lib/decnet
+ReadWritePaths={{ install_dir }} /var/log/decnet
+
+Restart=on-failure
+RestartSec=5
+TimeoutStopSec=20
+
+[Install]
+WantedBy=multi-user.target
