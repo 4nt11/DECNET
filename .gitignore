@@ -74,3 +74,7 @@ enterprise-attack-*.json
 # pytest failure dump files
 testfail
 .phaseloop/
+
+# Professional tier: proprietary, lives in a separate private repo
+# (github.com/DECNET-Foundation/decnet-professional). Must NEVER be tracked by the open-core repo.
+/decnet/services/pro/

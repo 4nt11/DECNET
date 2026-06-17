@@ -173,6 +173,11 @@ where = ["."]
 # "decnet*" also globs decnet_web/ and pulls in stray node_modules .py files;
 # pin to the actual package so the wheel/sdist stay clean.
 include = ["decnet", "decnet.*"]
+# Community build is open-core: never ship the Professional-tier honeypots even
+# if a dev tree has the private decnet/services/pro/ submodule mounted. The
+# Professional build overrides this. templates/pro/ is absent from the public
+# tree, so package-data's templates/**/* glob picks up nothing extra here.
+exclude = ["decnet.services.pro", "decnet.services.pro.*"]
 
 [tool.setuptools.package-data]
 # Ship docker build contexts + syslog_bridge.py as package data so they land
