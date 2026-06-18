@@ -423,9 +423,11 @@ def test_clipped_intel_rule_caps_confidence() -> None:
         "abuseipdb_score": 100,
         "abuseipdb_categories": [18],
     })))
+    # Bases are 0.6–0.7; a clipped state caps each at the 0.5 ceiling —
+    # min(base, 0.5) = 0.5 (confidence_max is a ceiling, not a multiplier).
     assert out
     for tag in out:
-        assert tag.confidence <= 0.35 + 1e-6
+        assert tag.confidence == pytest.approx(0.5)
 
 
 # ── Decoupling guard (behavioral counterpart of E.2.7 static check) ─

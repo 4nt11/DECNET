@@ -170,6 +170,7 @@ def test_topics_matches_documented_set() -> None:
         _topics.attacker(_topics.ATTACKER_SESSION_ENDED),
         _topics.attacker(_topics.ATTACKER_OBSERVED),
         _topics.attacker(_topics.ATTACKER_INTEL_ENRICHED),
+        _topics.attacker(_topics.ATTACKER_FINGERPRINTED),
         _topics.identity(_topics.IDENTITY_FORMED),
         _topics.identity(_topics.IDENTITY_MERGED),
         _topics.credential(_topics.CREDENTIAL_REUSE_DETECTED),

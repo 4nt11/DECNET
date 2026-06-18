@@ -114,8 +114,8 @@ def test_clipped_rule_caps_confidence() -> None:
     payload = {"shared_password_hash": "x", "account_count": 9}
     out = asyncio.run(lifter.tag(_ev(payload)))
     assert len(out) == 1
-    # Base confidence 0.9 × 0.5 ceiling clamp.
-    assert out[0].confidence == pytest.approx(0.45)
+    # Base confidence 0.9 capped at the 0.5 ceiling — min(0.9, 0.5).
+    assert out[0].confidence == pytest.approx(0.5)
 
 
 def test_expired_rule_does_not_fire() -> None:
