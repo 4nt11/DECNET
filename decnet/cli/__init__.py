@@ -37,6 +37,7 @@ from . import (
     realism,
     reconciler,
     sniffer,
+    supervise,
     swarm,
     swarmctl,
     topology,
@@ -61,7 +62,7 @@ for _mod in (
     swarm,
     deploy, lifecycle, workers, inventory,
     web, profiler, orchestrator, realism, reconciler, sniffer, db,
-    topology, bus, geoip, init, webhook, canary, ttp,
+    topology, bus, geoip, init, webhook, canary, ttp, supervise,
 ):
     _mod.register(app)
 

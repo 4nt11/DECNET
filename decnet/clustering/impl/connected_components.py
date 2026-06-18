@@ -42,11 +42,16 @@ from decnet.clustering.impl.similarity import (
     combined_edge_weight,
 )
 from decnet.logging import get_logger
+from decnet.offload import run_kernel
 from decnet.profiler.identity_rollup import extract_fp_summaries
 from decnet.util.simhash import from_bytes8, to_bytes8
 from decnet.web.db.repository import BaseRepository
 
 log = get_logger("clustering.connected_components")
+
+# Below this many observations the O(n^2) pass is cheaper than the pickle
+# round-trip to a pool worker, so run inline even when a pool is installed.
+_OFFLOAD_MIN_OBSERVATIONS = 256
 
 # Per-session SimHash observations of the keystroke-rhythm biometric; the
 # rollup folds them into one identity-level centroid.
@@ -173,7 +178,11 @@ class ConnectedComponentsClusterer(Clusterer):
             obs = from_attacker_row(r)
             observations.append(obs)
             row_by_id[obs.observation_id] = r
-        labels = cluster_observations(observations)
+        labels = await run_kernel(
+            cluster_observations,
+            observations,
+            offload_if=len(observations) >= _OFFLOAD_MIN_OBSERVATIONS,
+        )
 
         # Group observations by predicted cluster.
         components: dict[str, list[str]] = {}

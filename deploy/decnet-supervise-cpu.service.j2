@@ -1,0 +1,47 @@
+[Unit]
+Description=DECNET CPU Supervisor (clusterer + campaign-clusterer + attribution + reuse-correlate in one process, kernels offloaded to a shared pool)
+Documentation=https://git.resacachile.cl/anti/DECNET/wiki/Workers#supervisor
+After=network-online.target decnet-bus.service
+Wants=network-online.target decnet-bus.service
+# Replaces the individual clusterer / campaign-clusterer / attribution /
+# reuse-correlator units. Do NOT enable those alongside this one.
+Conflicts=decnet-clusterer.service decnet-campaign-clusterer.service decnet-attribution.service decnet-reuse-correlator.service
+
+[Service]
+Type=simple
+User={{ user }}
+Group={{ group }}
+WorkingDirectory={{ install_dir }}
+EnvironmentFile=-{{ install_dir }}/.env.local
+Environment=DECNET_SYSTEM_LOGS=/var/log/decnet/decnet.supervise-cpu.log
+ExecStart={{ venv_dir }}/bin/decnet supervise cpu
+StandardOutput=append:/var/log/decnet/decnet.supervise-cpu.log
+StandardError=append:/var/log/decnet/decnet.supervise-cpu.log
+
+# These are read-heavy correlators (DB in, DB out, bus). No docker socket, no
+# raw sockets — so unlike the batch supervisor this carries NO extra privilege
+# beyond DB + network. The forkserver pool spawns short-lived compute children
+# that inherit only this unit's sandbox.
+
+CapabilityBoundingSet=
+AmbientCapabilities=
+
+# Security Hardening
+NoNewPrivileges=yes
+ProtectSystem=full
+ProtectHome=read-only
+PrivateTmp=yes
+ProtectKernelTunables=yes
+ProtectKernelModules=yes
+ProtectControlGroups=yes
+RestrictSUIDSGID=yes
+LockPersonality=yes
+ReadOnlyPaths=/var/lib/decnet
+ReadWritePaths={{ install_dir }} /var/log/decnet
+
+Restart=on-failure
+RestartSec=5
+TimeoutStopSec=20
+
+[Install]
+WantedBy=multi-user.target
