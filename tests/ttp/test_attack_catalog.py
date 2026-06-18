@@ -19,7 +19,7 @@ from decnet.ttp import attack_stix
 from decnet.ttp.attack_catalog import technique_name
 
 _RULES_DIR = Path(__file__).resolve().parents[2] / "rules" / "ttp"
-_REPO_BUNDLE = Path(__file__).resolve().parents[2] / "enterprise-attack-19.0.json"
+_REPO_BUNDLE = Path(__file__).resolve().parents[2] / "decnet" / "data" / "enterprise-attack-19.1.json"
 
 
 @pytest.fixture(scope="module", autouse=True)

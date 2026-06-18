@@ -16,12 +16,12 @@ from __future__ import annotations
 
 from typing import Final
 
-ATTACK_BUNDLE_VERSION: Final[str] = "19.0"
+ATTACK_BUNDLE_VERSION: Final[str] = "19.1"
 
-# sha256 of the canonical MITRE-published enterprise-attack-19.0.json
+# sha256 of the canonical MITRE-published enterprise-attack-19.1.json
 # from https://github.com/mitre-attack/attack-stix-data.
 ATTACK_BUNDLE_SHA256: Final[str] = (
-    "df520ea0775a57db7bff760145b02fed89290802913e056b7ed5970b02f3626a"
+    "bdf1ce86a4e604214c5076d37ae4dcb322678afc528df8492e6fdc1b554f5da3"
 )
 
 # Raw download URL for the pinned version.

@@ -26,6 +26,7 @@ from . import (
     canary,
     db,
     deploy,
+    fleet,
     forwarder,
     geoip,
     init,
@@ -62,7 +63,7 @@ for _mod in (
     swarm,
     deploy, lifecycle, workers, inventory,
     web, profiler, orchestrator, realism, reconciler, sniffer, db,
-    topology, bus, geoip, init, webhook, canary, ttp, supervise,
+    topology, bus, geoip, init, webhook, canary, ttp, supervise, fleet,
 ):
     _mod.register(app)
 

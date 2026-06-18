@@ -1,0 +1,48 @@
+[Unit]
+Description=DECNET Heavy Fleet (prefork master forking profiler + ttp as CoW-sharing children)
+Documentation=https://git.resacachile.cl/anti/DECNET/wiki/Workers#fleet
+After=network-online.target decnet-bus.service
+Wants=network-online.target decnet-bus.service
+# Replaces the individual decnet-profiler / decnet-ttp units. Do NOT enable
+# those alongside this one.
+Conflicts=decnet-profiler.service decnet-ttp.service
+
+[Service]
+Type=simple
+User={{ user }}
+Group={{ group }}
+WorkingDirectory={{ install_dir }}
+EnvironmentFile=-{{ install_dir }}/.env.local
+Environment=DECNET_SYSTEM_LOGS=/var/log/decnet/decnet.fleet-heavy.log
+ExecStart={{ venv_dir }}/bin/decnet fleet heavy
+StandardOutput=append:/var/log/decnet/decnet.fleet-heavy.log
+StandardError=append:/var/log/decnet/decnet.fleet-heavy.log
+
+# Prefork master imports the shared base floor once, then forks one child per
+# worker; children share the floor via copy-on-write. Both members are DB-only
+# (no docker socket, no raw sockets) so this unit carries NO extra privilege —
+# the prefork privilege-union cost is nil for this fleet by construction.
+CapabilityBoundingSet=
+AmbientCapabilities=
+
+# Security Hardening
+NoNewPrivileges=yes
+ProtectSystem=full
+# Dev installs under /home need ProtectHome=read-only: the ttp child reads
+# ./rules/ttp/ from the project root (read-only suffices — YAML reads only).
+ProtectHome=read-only
+PrivateTmp=yes
+ProtectKernelTunables=yes
+ProtectKernelModules=yes
+ProtectControlGroups=yes
+RestrictSUIDSGID=yes
+LockPersonality=yes
+ReadWritePaths={{ install_dir }} /var/log/decnet
+
+Restart=on-failure
+RestartSec=5
+# Master forwards SIGTERM to children and reaps; give it room for both to drain.
+TimeoutStopSec=25
+
+[Install]
+WantedBy=multi-user.target

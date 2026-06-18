@@ -19,7 +19,7 @@ from decnet.web.router.ttp.api_get_groups_for_technique import (
     api_groups_for_technique,
 )
 
-_REPO_BUNDLE = Path(__file__).resolve().parents[2] / "enterprise-attack-19.0.json"
+_REPO_BUNDLE = Path(__file__).resolve().parents[2] / "decnet" / "data" / "enterprise-attack-19.1.json"
 
 
 @pytest.fixture(autouse=True)

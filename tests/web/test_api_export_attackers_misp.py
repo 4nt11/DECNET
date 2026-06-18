@@ -14,7 +14,7 @@ from decnet.web.router.attackers.api_export_attackers_misp import (
     api_export_attackers_misp,
 )
 
-_REPO_BUNDLE = Path(__file__).resolve().parents[2] / "enterprise-attack-19.0.json"
+_REPO_BUNDLE = Path(__file__).resolve().parents[2] / "decnet" / "data" / "enterprise-attack-19.1.json"
 _FAKE_USER: dict = {"uuid": "test-user", "role": "viewer"}
 
 

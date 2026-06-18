@@ -5,6 +5,43 @@ All notable changes to DECNET are documented here.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.2.0] - 2026-06-18
+
+Prefork worker consolidation — share the import floor across *separate* processes
+(own GIL, full isolation) via copy-on-write, for the heavy/isolation-critical
+workers the in-process supervisor can't co-host.
+
+### Added
+- `decnet.prefork` — prefork supervisor primitive: a master imports the base
+  floor once, then forks one child per worker (own process/GIL, CoW-shared
+  floor), reaps and restarts with backoff, and shuts down gracefully. CoW
+  viability measured on CPython 3.14 (idle child ~1 MB private, ~71 MB shared;
+  `gc.freeze()` unnecessary thanks to PEP 683 immortal objects).
+- `decnet fleet <name>` — prefork master that imports the shared base floor once
+  then forks one child per worker. First fleet `heavy` = profiler + ttp (DB-only,
+  process-isolated heavy tier); systemd unit `decnet-fleet-heavy.service`
+  Conflicts= the units it replaces and carries no extra privilege.
+  Verified live: fleet footprint ≈412 MB Pss (master 67 + profiler 81 + ttp 264)
+  vs 661 MB standalone — profiler's RSS collapsed 353→110 MB (base floor now
+  CoW-shared). ttp barely moved: its bulk is the privately-parsed ATT&CK bundle,
+  which it alone consumes — so master-warming it was confirmed pointless and
+  dropped. Lesson: prefork pays for base-floor-bound workers, not state-bound ones.
+
+### Changed
+- MITRE ATT&CK Enterprise bundle pinned 19.0 → **19.1**. The bundle and its
+  LICENSE now resolve from `decnet/data/` (hash-pinned in `attack_version.py`,
+  fetched on demand via `python -m decnet.ttp.attack_stix fetch`, gitignored —
+  not committed).
+
+### Removed
+- Per-worker systemd unit templates superseded by consolidation:
+  `decnet-{reconciler,enrich,orchestrator,mutator}` (→ `supervise batch`),
+  `decnet-{clusterer,campaign-clusterer,attribution,reuse-correlator}`
+  (→ `supervise cpu`), and `decnet-{profiler,ttp}` (→ `fleet heavy`).
+  `decnet.target` now pulls in the 3 consolidated units. The underlying CLI
+  commands remain for manual/standalone runs; a worker can be re-extracted to its
+  own unit by editing the group/fleet spec.
+
 ## [1.1.1] - 2026-06-18
 
 ### Fixed
@@ -66,5 +103,7 @@ own unit.
 
 Initial 1.0 release. See tag `v1.0.0`.
 
+[1.2.0]: https://git.resacachile.cl/anti/DECNET/compare/v1.1.1...v1.2.0
+[1.1.1]: https://git.resacachile.cl/anti/DECNET/compare/v1.1.0...v1.1.1
 [1.1.0]: https://git.resacachile.cl/anti/DECNET/compare/v1.0.0...v1.1.0
 [1.0.0]: https://git.resacachile.cl/anti/DECNET/releases/tag/v1.0.0

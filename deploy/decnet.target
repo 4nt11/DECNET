@@ -5,23 +5,21 @@ Documentation=https://git.resacachile.cl/anti/DECNET/wiki/Workers
 # heartbeats to it), then the API + data-plane workers.  systemd resolves the
 # actual ordering via each unit's own After=/Wants= on decnet-bus.service —
 # this target is a convenience grouping, not an ordering primitive.
+# Consolidated since 1.1/1.2: the batch (reconcile/enrich/orchestrate/mutate)
+# and cpu (clusterer/campaign-clusterer/attribution/reuse-correlate) supervisor
+# groups and the heavy (profiler/ttp) prefork fleet replace their per-worker
+# units. The standalone workers below kept their own units.
 Wants=decnet-bus.service \
       decnet-api.service \
       decnet-web.service \
       decnet-collector.service \
-      decnet-profiler.service \
       decnet-sniffer.service \
       decnet-prober.service \
-      decnet-mutator.service \
-      decnet-reconciler.service \
-      decnet-reuse-correlator.service \
-      decnet-enrich.service \
-      decnet-clusterer.service \
-      decnet-campaign-clusterer.service \
-      decnet-ttp.service \
       decnet-webhook.service \
       decnet-canary.service \
-      decnet-orchestrator.service
+      decnet-supervise-batch.service \
+      decnet-supervise-cpu.service \
+      decnet-fleet-heavy.service
 After=decnet-bus.service
 
 [Install]
