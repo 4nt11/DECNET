@@ -5,6 +5,18 @@ All notable changes to DECNET are documented here.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.1.1] - 2026-06-18
+
+### Fixed
+- Test suite: corrected 4 lifter clip tests that encoded the pre-ASVS
+  `confidence_max` semantics (treating it as a `base × ceiling` multiplier).
+  `confidence_max` is a true ceiling — `min(base, ceiling)` — since the ASVS
+  hardening pass (BUG-8); the tests now assert the ceiling. They were masked by
+  the `make test-web` ATT&CK-bundle fail-fast. No production code change.
+- `test_topics_matches_documented_set`: added `attacker.fingerprinted` to the
+  documented topic set — the TTP worker legitimately subscribes to it
+  (JARM/HASSH/tcpfp/ipv6_leak fingerprint results feed TTP tagging).
+
 ## [1.1.0] - 2026-06-18
 
 Worker consolidation: cut the long-running worker fleet's resident memory by
