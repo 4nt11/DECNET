@@ -179,8 +179,8 @@ def test_clipped_rule_caps_confidence() -> None:
         "credential_hash": "x", "reuse_count": 3,
     })))
     assert len(out) == 1
-    # Base 0.9 × 0.5 ceiling.
-    assert out[0].confidence == pytest.approx(0.45)
+    # Base 0.9 capped at the 0.5 ceiling — min(0.9, 0.5).
+    assert out[0].confidence == pytest.approx(0.5)
 
 
 # ── Ownership predicate ─────────────────────────────────────────────

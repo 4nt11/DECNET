@@ -220,11 +220,12 @@ def test_clipped_state_caps_confidence() -> None:
     out = asyncio.run(lifter.tag(
         _ev("session", {"beacon_interval_s": 60, "beacon_jitter_pct": 0.05}),
     ))
-    # Base confidences in YAML are 0.8 and 0.85; clipped to 0.5 ceiling
-    # → 0.4 and 0.425 respectively.
+    # Base confidences in YAML are 0.8 and 0.85; a clipped state caps each
+    # at the 0.5 ceiling — min(base, 0.5) = 0.5. confidence_max is a ceiling,
+    # not a multiplier (BUG-8 in the ASVS hardening pass).
     assert out
     for tag in out:
-        assert tag.confidence < 0.5
+        assert tag.confidence == pytest.approx(0.5)
 
 
 def test_expired_state_treated_as_disabled() -> None:
