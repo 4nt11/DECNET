@@ -16,8 +16,12 @@ workers the in-process supervisor can't co-host.
   floor once, then forks one child per worker (own process/GIL, CoW-shared
   floor), reaps and restarts with backoff, and shuts down gracefully. CoW
   viability measured on CPython 3.14 (idle child ~1 MB private, ~71 MB shared;
-  `gc.freeze()` unnecessary thanks to PEP 683 immortal objects). Not yet wired to
-  a command — the target worker set lands next.
+  `gc.freeze()` unnecessary thanks to PEP 683 immortal objects).
+- `decnet fleet <name>` — prefork master that imports the shared base floor once
+  then forks one child per worker. First fleet `heavy` = profiler + ttp (DB-only,
+  process-isolated heavy tier); systemd unit `decnet-fleet-heavy.service`
+  Conflicts= the units it replaces and carries no extra privilege. Live RSS
+  delta + heavy-state warming pending a controlled swap.
 
 ### Changed
 - MITRE ATT&CK Enterprise bundle pinned 19.0 → **19.1**. The bundle and its
