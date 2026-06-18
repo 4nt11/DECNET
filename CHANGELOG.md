@@ -5,7 +5,7 @@ All notable changes to DECNET are documented here.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [Unreleased] (1.2.0)
+## [1.2.0] - 2026-06-18
 
 Prefork worker consolidation — share the import floor across *separate* processes
 (own GIL, full isolation) via copy-on-write, for the heavy/isolation-critical
@@ -32,6 +32,15 @@ workers the in-process supervisor can't co-host.
   LICENSE now resolve from `decnet/data/` (hash-pinned in `attack_version.py`,
   fetched on demand via `python -m decnet.ttp.attack_stix fetch`, gitignored —
   not committed).
+
+### Removed
+- Per-worker systemd unit templates superseded by consolidation:
+  `decnet-{reconciler,enrich,orchestrator,mutator}` (→ `supervise batch`),
+  `decnet-{clusterer,campaign-clusterer,attribution,reuse-correlator}`
+  (→ `supervise cpu`), and `decnet-{profiler,ttp}` (→ `fleet heavy`).
+  `decnet.target` now pulls in the 3 consolidated units. The underlying CLI
+  commands remain for manual/standalone runs; a worker can be re-extracted to its
+  own unit by editing the group/fleet spec.
 
 ## [1.1.1] - 2026-06-18
 
@@ -94,5 +103,7 @@ own unit.
 
 Initial 1.0 release. See tag `v1.0.0`.
 
+[1.2.0]: https://git.resacachile.cl/anti/DECNET/compare/v1.1.1...v1.2.0
+[1.1.1]: https://git.resacachile.cl/anti/DECNET/compare/v1.1.0...v1.1.1
 [1.1.0]: https://git.resacachile.cl/anti/DECNET/compare/v1.0.0...v1.1.0
 [1.0.0]: https://git.resacachile.cl/anti/DECNET/releases/tag/v1.0.0
