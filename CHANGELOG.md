@@ -5,6 +5,20 @@ All notable changes to DECNET are documented here.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased] (1.2.0)
+
+Prefork worker consolidation — share the import floor across *separate* processes
+(own GIL, full isolation) via copy-on-write, for the heavy/isolation-critical
+workers the in-process supervisor can't co-host.
+
+### Added
+- `decnet.prefork` — prefork supervisor primitive: a master imports the base
+  floor once, then forks one child per worker (own process/GIL, CoW-shared
+  floor), reaps and restarts with backoff, and shuts down gracefully. CoW
+  viability measured on CPython 3.14 (idle child ~1 MB private, ~71 MB shared;
+  `gc.freeze()` unnecessary thanks to PEP 683 immortal objects). Not yet wired to
+  a command — the target worker set lands next.
+
 ## [1.1.1] - 2026-06-18
 
 ### Fixed

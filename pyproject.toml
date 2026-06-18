@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "decnet"
-version = "1.1.1"
+version = "1.2.0.dev0"
 description = "Deception network: deploy honeypot deckies that appear as real LAN hosts"
 readme = "README.md"
 authors = [{ name = "Samuel Paschuan", email = "samuel.paschuan@xmartlab.com" }]
