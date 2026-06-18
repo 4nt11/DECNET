@@ -20,7 +20,7 @@ from decnet.clustering import ukc
 from decnet.ttp import attack_stix
 from decnet.ttp.impl import intel_lifter
 
-_REPO_BUNDLE = Path(__file__).resolve().parents[2] / "enterprise-attack-19.0.json"
+_REPO_BUNDLE = Path(__file__).resolve().parents[2] / "decnet" / "data" / "enterprise-attack-19.1.json"
 
 
 @pytest.fixture(autouse=True)

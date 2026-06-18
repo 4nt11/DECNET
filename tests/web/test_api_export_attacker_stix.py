@@ -2,7 +2,7 @@
 """Tests for GET /api/v1/attackers/{uuid}/export/stix.
 
 Tests call the handler directly (no TestClient). The attack_stix bundle
-is pinned to the repo's enterprise-attack-19.0.json so Sighting and
+is pinned to the repo's decnet/data/enterprise-attack-19.1.json so Sighting and
 Relationship target_refs are real MITRE STIX IDs.
 """
 from __future__ import annotations
@@ -20,7 +20,7 @@ from decnet.web.router.attackers.api_export_attacker_stix import (
     api_export_attacker_stix,
 )
 
-_REPO_BUNDLE = Path(__file__).resolve().parents[2] / "enterprise-attack-19.0.json"
+_REPO_BUNDLE = Path(__file__).resolve().parents[2] / "decnet" / "data" / "enterprise-attack-19.1.json"
 _FAKE_USER: dict = {"uuid": "test-user", "role": "viewer"}
 
 

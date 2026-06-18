@@ -24,7 +24,7 @@ from decnet.ttp.impl._emit import emit_tags
 from decnet.ttp.impl.rule_engine import CompiledRule
 from decnet.ttp.store.base import RuleState
 
-_REPO_BUNDLE = Path(__file__).resolve().parents[2] / "enterprise-attack-19.0.json"
+_REPO_BUNDLE = Path(__file__).resolve().parents[2] / "decnet" / "data" / "enterprise-attack-19.1.json"
 
 
 @pytest.fixture(autouse=True)

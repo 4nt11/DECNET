@@ -19,6 +19,12 @@ workers the in-process supervisor can't co-host.
   `gc.freeze()` unnecessary thanks to PEP 683 immortal objects). Not yet wired to
   a command — the target worker set lands next.
 
+### Changed
+- MITRE ATT&CK Enterprise bundle pinned 19.0 → **19.1**. The bundle and its
+  LICENSE now resolve from `decnet/data/` (hash-pinned in `attack_version.py`,
+  fetched on demand via `python -m decnet.ttp.attack_stix fetch`, gitignored —
+  not committed).
+
 ## [1.1.1] - 2026-06-18
 
 ### Fixed

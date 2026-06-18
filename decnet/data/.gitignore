@@ -1,0 +1,7 @@
+# MITRE ATT&CK STIX bundle + license live here but are NOT committed:
+# ~51MB and MITRE-licensed (fetched on demand, hash-pinned in attack_version.py).
+#
+# Populate locally / in CI with:
+#   DECNET_ATTACK_CACHE_DIR=decnet/data python -m decnet.ttp.attack_stix fetch
+/enterprise-attack-*.json
+/LICENSE.txt
