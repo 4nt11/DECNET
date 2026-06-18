@@ -20,8 +20,12 @@ workers the in-process supervisor can't co-host.
 - `decnet fleet <name>` — prefork master that imports the shared base floor once
   then forks one child per worker. First fleet `heavy` = profiler + ttp (DB-only,
   process-isolated heavy tier); systemd unit `decnet-fleet-heavy.service`
-  Conflicts= the units it replaces and carries no extra privilege. Live RSS
-  delta + heavy-state warming pending a controlled swap.
+  Conflicts= the units it replaces and carries no extra privilege.
+  Verified live: fleet footprint ≈412 MB Pss (master 67 + profiler 81 + ttp 264)
+  vs 661 MB standalone — profiler's RSS collapsed 353→110 MB (base floor now
+  CoW-shared). ttp barely moved: its bulk is the privately-parsed ATT&CK bundle,
+  which it alone consumes — so master-warming it was confirmed pointless and
+  dropped. Lesson: prefork pays for base-floor-bound workers, not state-bound ones.
 
 ### Changed
 - MITRE ATT&CK Enterprise bundle pinned 19.0 → **19.1**. The bundle and its
