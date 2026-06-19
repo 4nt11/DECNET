@@ -26,6 +26,17 @@ workers the in-process supervisor can't co-host.
   CoW-shared). ttp barely moved: its bulk is the privately-parsed ATT&CK bundle,
   which it alone consumes — so master-warming it was confirmed pointless and
   dropped. Lesson: prefork pays for base-floor-bound workers, not state-bound ones.
+- **(Pro) Scan-based topology creation** — the MazeNET *New Topology* wizard
+  gains a third option alongside Blank and Seed-based: import an Nmap XML scan
+  and mirror its live hosts and services as decoys. Parses entirely in-browser
+  (native `DOMParser`, no new dependency), resolves discovered service
+  names/ports to DECNET services against the live catalog, groups hosts one LAN
+  per /24, and builds the topology through the existing CRUD APIs (blank → LANs
+  → deckies → edges) — no new backend. Hosts with no recognizable service
+  (e.g. `nmap -sn`) default to a bare SSH decoy. The XML parser is hardened
+  against XXE/SSRF and entity-expansion DoS, and scan values render as inert
+  text (no XSS). Professional-tier; tree-shaken out of the community build
+  (`decnet/pro` `v1.2.0`).
 
 ### Changed
 - MITRE ATT&CK Enterprise bundle pinned 19.0 → **19.1**. The bundle and its

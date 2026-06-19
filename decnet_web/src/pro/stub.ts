@@ -3,6 +3,10 @@
 // sets VITE_DECNET_PRO=1 with decnet/pro/web/ present, in which case Vite
 // aliases `@pro` to the real registry. proRoutes being empty lets the router
 // and nav tree-shake the pro surface out of the community bundle.
-import type { ProRoute } from './types';
+import type { ProRoute, ProScanImport } from './types';
 
 export const proRoutes: ProRoute[] = [];
+
+// No scan-based topology creation in the community build — the wizard's third
+// card tree-shakes out when this is null.
+export const ScanImport: ProScanImport = null;

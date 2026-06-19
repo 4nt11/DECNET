@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { X, Server, Cpu, FileText, Sparkles, Check } from '../../icons';
+import { X, Server, Cpu, FileText, Sparkles, Check, Crosshair } from '../../icons';
+import { ScanImport } from '@pro';
 import api from '../../utils/api';
 import { useEscapeKey } from '../../hooks/useEscapeKey';
 import { useFocusTrap } from '../../hooks/useFocusTrap';
@@ -28,7 +29,7 @@ interface TopologySummary {
   status_changed_at: string | null;
 }
 
-type Kind = 'blank' | 'seeded';
+type Kind = 'blank' | 'seeded' | 'scan';
 
 interface Props {
   open: boolean;
@@ -103,15 +104,19 @@ const CreateTopologyWizard: React.FC<Props> = ({ open, onClose, onCreated }) => 
     [targetId, hosts],
   );
 
-  const canNext = step === 0 ? !!targetId : !!kind && name.trim().length > 0;
+  const isAgent = !!targetId && targetId !== LOCAL_CARD_ID;
+  const targetHostUuid = isAgent ? targetId : null;
+  const mode = isAgent ? 'agent' : 'unihost';
+
+  // Scan import owns its own name/preview/create sub-flow inside the pro panel,
+  // so the wizard's name gate and CREATE button don't apply to it.
+  const canNext =
+    step === 0 ? !!targetId : kind === 'scan' || (!!kind && name.trim().length > 0);
 
   const handleCreate = async () => {
-    if (!targetId || !kind) return;
+    if (!targetId || !kind || kind === 'scan') return;
     setSubmitting(true);
     setErr(null);
-    const isAgent = targetId !== LOCAL_CARD_ID;
-    const targetHostUuid = isAgent ? targetId : null;
-    const mode = isAgent ? 'agent' : 'unihost';
     try {
       if (kind === 'blank') {
         const { data } = await api.post<TopologySummary>('/topologies/blank', {
@@ -234,6 +239,22 @@ const CreateTopologyWizard: React.FC<Props> = ({ open, onClose, onCreated }) => 
           Runs the MazeNET generator with depth/branching/deckies parameters. Seed is optional — omit for a fresh roll.
         </div>
       </div>
+      {ScanImport && (
+        <div
+          onClick={() => setKind('scan')}
+          className={`ctw-card ${kind === 'scan' ? 'selected' : ''}`}
+        >
+          <div className="ctw-card-head">
+            <Crosshair size={16} className="ctw-violet" />
+            <span className="ctw-card-name">SCAN-BASED</span>
+          </div>
+          <div className="ctw-card-sub">mirror an Nmap scan</div>
+          <div className="ctw-card-desc">
+            Import an Nmap XML scan and mirror the discovered hosts and services
+            as decoys. Review and pick targets before deploying.
+          </div>
+        </div>
+      )}
     </>
   );
 
@@ -285,19 +306,25 @@ const CreateTopologyWizard: React.FC<Props> = ({ open, onClose, onCreated }) => 
               <div className="ctw-label">
                 Target: <span className="ctw-violet">{targetLabel}</span> · pick a starting point.
               </div>
-              <div className="ctw-grid-2">{step1Cards}</div>
+              <div className={ScanImport ? 'ctw-grid-3' : 'ctw-grid-2'}>{step1Cards}</div>
 
-              <div className="ctw-field">
-                <label>NAME</label>
-                <input
-                  autoFocus
-                  type="text"
-                  value={name}
-                  onChange={(e) => setName(e.target.value)}
-                  placeholder="e.g. honeynet-dev"
-                  maxLength={64}
-                />
-              </div>
+              {kind !== 'scan' && (
+                <div className="ctw-field">
+                  <label>NAME</label>
+                  <input
+                    autoFocus
+                    type="text"
+                    value={name}
+                    onChange={(e) => setName(e.target.value)}
+                    placeholder="e.g. honeynet-dev"
+                    maxLength={64}
+                  />
+                </div>
+              )}
+
+              {kind === 'scan' && ScanImport && (
+                <ScanImport mode={mode} targetHostUuid={targetHostUuid} onCreated={onCreated} />
+              )}
 
               {kind === 'seeded' && (
                 <div className="ctw-grid-2">
@@ -371,7 +398,7 @@ const CreateTopologyWizard: React.FC<Props> = ({ open, onClose, onCreated }) => 
                 NEXT →
               </button>
             )}
-            {step === 1 && (
+            {step === 1 && kind !== 'scan' && (
               <button className="ctw-btn" disabled={!canNext || submitting} onClick={handleCreate}>
                 {submitting ? 'CREATING…' : 'CREATE'}
               </button>
