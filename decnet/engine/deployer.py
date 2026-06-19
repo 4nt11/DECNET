@@ -5,8 +5,10 @@ Deploy, teardown, and status via Docker SDK + subprocess docker compose.
 
 import asyncio
 import json
+import os
 import shutil
 import subprocess  # nosec B404
+import tempfile
 import time
 from pathlib import Path
 from typing import cast
@@ -833,7 +835,16 @@ def _teardown_order(lans: list[dict]) -> list[str]:
 
 
 def _topology_compose_path(topology_id: str) -> Path:
-    return Path(f"decnet-topology-{topology_id[:8]}-compose.yml")
+    # Anchor to a stable absolute dir so write and teardown agree
+    # regardless of process CWD — a CWD-relative path littered the
+    # install tree and let teardown's unlink() miss orphaned files.
+    base = Path(os.environ.get("DECNET_RUN_DIR", "/var/lib/decnet/topologies"))
+    try:
+        base.mkdir(parents=True, exist_ok=True)
+    except OSError:
+        base = Path(tempfile.gettempdir()) / "decnet-topologies"
+        base.mkdir(parents=True, exist_ok=True)
+    return base / f"decnet-topology-{topology_id[:8]}-compose.yml"
 
 
 def _topology_compose_project(topology_id: str) -> str:

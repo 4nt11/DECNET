@@ -51,7 +51,7 @@ async def repo(tmp_path):
 
 @pytest.mark.anyio
 async def test_dry_run_writes_compose_and_preserves_pending(repo, tmp_path, monkeypatch):
-    monkeypatch.chdir(tmp_path)
+    monkeypatch.setenv("DECNET_RUN_DIR", str(tmp_path))
     plan = generate(_cfg())
     tid = await persist(repo, plan)
 
@@ -235,3 +235,22 @@ async def test_deploy_and_teardown_against_real_docker(repo, tmp_path, monkeypat
         p.unlink()
     # Sanity: Path roundtrip still resolvable
     assert isinstance(Path(str(p)), Path)
+
+
+def test_compose_path_is_absolute_and_cwd_independent(tmp_path, monkeypatch):
+    """Regression: a CWD-relative compose path littered the install dir and
+    let teardown's unlink() miss orphans. Path must be absolute and stable
+    across CWD changes so write and teardown always agree."""
+    monkeypatch.setenv("DECNET_RUN_DIR", str(tmp_path))
+    tid = "abcdef1234567890"
+
+    monkeypatch.chdir(tmp_path)
+    p1 = _topology_compose_path(tid)
+    sub = tmp_path / "elsewhere"
+    sub.mkdir()
+    monkeypatch.chdir(sub)
+    p2 = _topology_compose_path(tid)
+
+    assert p1.is_absolute()
+    assert p1 == p2, "compose path must not depend on process CWD"
+    assert p1.parent == tmp_path
