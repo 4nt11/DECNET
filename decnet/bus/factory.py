@@ -20,6 +20,7 @@ import os
 from typing import Any, cast
 
 from decnet.bus.base import BaseBus
+from decnet.paths import resolve_runtime_path
 
 
 def get_bus(**kwargs: Any) -> BaseBus:
@@ -58,14 +59,12 @@ def _default_socket_path() -> str:
     ``RuntimeDirectory=decnet`` sets it up with the right perms; the home
     fallback keeps dev boxes usable without systemd.
     """
-    explicit = os.environ.get("DECNET_BUS_SOCKET")
-    if explicit:
-        return explicit
-
-    runtime_dir = "/run/decnet"
-    if os.path.isdir(runtime_dir) and os.access(runtime_dir, os.W_OK):
-        return f"{runtime_dir}/bus.sock"
-    return os.path.expanduser("~/.decnet/bus.sock")
+    return resolve_runtime_path(
+        "bus.sock",
+        env_var="DECNET_BUS_SOCKET",
+        runtime_dir="/run/decnet",
+        user_fallback="~/.decnet/bus.sock",
+    )
 
 
 def _maybe_wrap_telemetry(bus: BaseBus) -> BaseBus:

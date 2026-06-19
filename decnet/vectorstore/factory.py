@@ -26,6 +26,7 @@ import logging
 import os
 from typing import Any
 
+from decnet.paths import resolve_runtime_path
 from decnet.vectorstore.base import BaseVectorStore
 
 LOG = logging.getLogger(__name__)
@@ -65,10 +66,9 @@ def get_vectorstore(**kwargs: Any) -> BaseVectorStore:
 
 
 def _default_db_path() -> str:
-    explicit = os.environ.get("DECNET_VECTORSTORE_PATH")
-    if explicit:
-        return explicit
-    runtime_dir = "/var/lib/decnet"
-    if os.path.isdir(runtime_dir) and os.access(runtime_dir, os.W_OK):
-        return f"{runtime_dir}/vectors.sqlite"
-    return os.path.expanduser("~/.decnet/vectors.sqlite")
+    return resolve_runtime_path(
+        "vectors.sqlite",
+        env_var="DECNET_VECTORSTORE_PATH",
+        runtime_dir="/var/lib/decnet",
+        user_fallback="~/.decnet/vectors.sqlite",
+    )
