@@ -15,7 +15,7 @@ from decnet.cloak import (
     classify_probe,
     next_ipid,
 )
-from decnet.cloak.mangler import _is_synack
+from decnet.cloak.mangler import _is_synack, _rst_needs_ack
 from decnet.os_fingerprint import OS_MANGLE, MangleProfile, get_os_mangle
 
 WIN = OS_MANGLE["windows"]
@@ -101,6 +101,15 @@ def test_is_synack(flags, expected):
     assert _is_synack(flags) is expected
 
 
+@pytest.mark.parametrize("flags,expected", [
+    (0x04, True),    # bare RST (T4/T6 ACK-probe response) → fill ack (A=O)
+    (0x14, False),   # RST+ACK (T5/T7) → already A=S+, leave
+    (0x12, False),   # SYN+ACK
+])
+def test_rst_needs_ack(flags, expected):
+    assert _rst_needs_ack(flags) is expected
+
+
 # ── probe classification ────────────────────────────────────────────────────
 
 OPEN = frozenset({22, 80, 443})
@@ -125,6 +134,14 @@ def test_classify_ignores_normal_traffic():
 
 # ── reply field shaping ─────────────────────────────────────────────────────
 
-def test_reply_fields_windows_shape():
-    f = build_reply_fields(probe_seq=0xDEAD)
+def test_reply_fields_t2_ack_equals_probe_seq():
+    # T2: A=S (ack == probe seq)
+    f = build_reply_fields(0xDEAD, ProbeKind.T2)
     assert f == {"seq": 0, "ack": 0xDEAD, "flags": "RA", "window": 0, "df": True}
+
+
+def test_reply_fields_t3_ack_is_other():
+    # T3: A=O (other — not zero, not the probe seq)
+    f = build_reply_fields(0xDEAD, ProbeKind.T3)
+    assert f["ack"] not in (0, 0xDEAD)
+    assert f["seq"] == 0 and f["flags"] == "RA"
