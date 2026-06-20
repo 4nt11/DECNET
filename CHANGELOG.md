@@ -5,6 +5,41 @@ All notable changes to DECNET are documented here.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.2.1] - 2026-06-20
+
+OS fingerprint **cloak** — make a decky read as its claimed OS under *active*
+fingerprinting (`nmap -O`), not just passively. sysctl profiles only reach global
+packet fields; the cloak owns the SYN-ACK *shape* and stack *behaviours* sysctl
+can't reach. Verified live: a `windows`/`windows_server` decky flips real
+`nmap -O` from Linux to **Microsoft Windows / Windows Server 2012-2016**, with
+client handshakes intact.
+
+### Added
+- `decnet.cloak` — egress TCP/IP masquerading library, run inside the decky base
+  container (`python -m decnet.cloak`, `CAP_NET_ADMIN`/`CAP_NET_RAW`):
+  - **NFQUEUE SYN-ACK mangler** — rewrites the TCP option order, advertised
+    window, and IP-ID generation policy that sysctl cannot set per-container
+    (preserves the kernel's live timestamp; recomputes `dataofs`/checksums).
+  - **T2/T3 probe-response synthesizer** — answers the nmap probes Linux drops
+    but Windows replies to (null-flags / SYN+FIN+PSH+URG to an open port).
+  - Profiles live in `os_fingerprint.OS_MANGLE`, keyed by the same `nmap_os`
+    slug; pure packet-shaping logic is unit-tested offline (scapy/netfilterqueue
+    lazy-imported, Linux-only).
+- `windows_server` nmap_os family — Windows Server stack deltas (ECN negotiated
+  `CC=Y`, randomized IP-ID `TI=RD`); the `windows-server` and `domain-controller`
+  archetypes now use it (workstation stays `windows`).
+- Cloak base image (`templates/_shared/cloak/Dockerfile`, `FROM` the per-decky
+  distro) and `deployer._sync_cloak_sources`, which ships the light `decnet`
+  subtree into the build context. Base containers stay netns-safe — the cloak runs
+  best-effort behind `exec sleep infinity`, so a cloak crash never tears down the
+  decky or the netns its service containers share.
+
+### Fixed
+- **OS fingerprint timestamps bug**: the `windows` sysctl profile disabled TCP
+  timestamps, fingerprinting as an ancient stack. Modern Windows 10/11 run
+  timestamps **on** (`nmap SEQ.TS=A`) — corrected, and the single
+  highest-weighted field in the nmap match.
+
 ## [1.2.0] - 2026-06-18
 
 Prefork worker consolidation — share the import floor across *separate* processes
