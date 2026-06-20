@@ -47,7 +47,7 @@ ARCHETYPES: dict[str, Archetype] = {
         description="Windows domain member: SMB, RDP, and LDAP directory",
         services=["smb", "rdp", "ldap"],
         preferred_distros=["debian", "ubuntu22"],
-        nmap_os="windows",
+        nmap_os="windows_server",
     ),
     "domain-controller": Archetype(
         slug="domain-controller",
@@ -55,7 +55,7 @@ ARCHETYPES: dict[str, Archetype] = {
         description="Active Directory DC: LDAP, SMB, RDP, LLMNR",
         services=["ldap", "smb", "rdp", "llmnr"],
         preferred_distros=["debian", "ubuntu22"],
-        nmap_os="windows",
+        nmap_os="windows_server",
     ),
     "linux-server": Archetype(
         slug="linux-server",

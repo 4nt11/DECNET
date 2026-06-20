@@ -50,8 +50,20 @@ def test_linux_tcp_timestamps_is_1():
     assert get_os_sysctls("linux")["net.ipv4.tcp_timestamps"] == "1"
 
 
-def test_windows_tcp_timestamps_is_0():
-    assert get_os_sysctls("windows")["net.ipv4.tcp_timestamps"] == "0"
+def test_windows_tcp_timestamps_is_1():
+    # Modern Windows 10/11 runs TCP timestamps ON (nmap SEQ.TS=A). A prior
+    # value of 0 here fingerprinted as an ancient stack — see os_fingerprint.py.
+    assert get_os_sysctls("windows")["net.ipv4.tcp_timestamps"] == "1"
+
+
+def test_windows_server_tcp_timestamps_is_1():
+    assert get_os_sysctls("windows_server")["net.ipv4.tcp_timestamps"] == "1"
+
+
+def test_windows_server_tcp_ecn_is_1():
+    # Server negotiates ECN (nmap ECN.CC=Y); workstation does not (CC=N).
+    assert get_os_sysctls("windows_server")["net.ipv4.tcp_ecn"] == "1"
+    assert get_os_sysctls("windows")["net.ipv4.tcp_ecn"] == "0"
 
 
 def test_embedded_tcp_timestamps_is_0():
@@ -237,7 +249,7 @@ def test_all_os_families_non_empty():
     assert "embedded" in families
 
 
-@pytest.mark.parametrize("family", ["linux", "windows", "bsd", "embedded", "cisco"])
+@pytest.mark.parametrize("family", ["linux", "windows", "windows_server", "bsd", "embedded", "cisco"])
 def test_all_os_profiles_have_required_sysctls(family: str):
     """Every OS profile must define the full canonical sysctl set."""
     from decnet.os_fingerprint import _REQUIRED_SYSCTLS
@@ -246,7 +258,7 @@ def test_all_os_profiles_have_required_sysctls(family: str):
     assert not missing, f"OS profile '{family}' is missing sysctls: {missing}"
 
 
-@pytest.mark.parametrize("family", ["linux", "windows", "bsd", "embedded", "cisco"])
+@pytest.mark.parametrize("family", ["linux", "windows", "windows_server", "bsd", "embedded", "cisco"])
 def test_all_os_sysctl_values_are_strings(family: str):
     """Docker Compose requires sysctl values to be strings, never ints."""
     for _key, _val in get_os_sysctls(family).items():
@@ -267,9 +279,13 @@ def test_archetype_nmap_os_is_known(slug, arch):
     )
 
 
-@pytest.mark.parametrize("slug", ["windows-workstation", "windows-server", "domain-controller"])
-def test_windows_archetypes_have_windows_nmap_os(slug):
-    assert ARCHETYPES[slug].nmap_os == "windows"
+def test_windows_workstation_archetype_nmap_os():
+    assert ARCHETYPES["windows-workstation"].nmap_os == "windows"
+
+
+@pytest.mark.parametrize("slug", ["windows-server", "domain-controller"])
+def test_windows_server_archetypes_use_server_nmap_os(slug):
+    assert ARCHETYPES[slug].nmap_os == "windows_server"
 
 
 @pytest.mark.parametrize("slug", ["printer", "iot-device", "industrial-control"])
@@ -403,11 +419,11 @@ def test_compose_linux_sysctls_include_timestamps():
     assert sysctls.get("net.ipv4.tcp_timestamps") == "1"
 
 
-def test_compose_windows_sysctls_no_timestamps():
-    """Windows compose output must have tcp_timestamps disabled (= 0)."""
+def test_compose_windows_sysctls_timestamps_on():
+    """Windows compose output must have tcp_timestamps ENABLED (= 1) — Win10/11."""
     compose = generate_compose(_make_config("windows"))
     sysctls = compose["services"]["decky-01"]["sysctls"]
-    assert sysctls.get("net.ipv4.tcp_timestamps") == "0"
+    assert sysctls.get("net.ipv4.tcp_timestamps") == "1"
 
 
 def test_compose_linux_sysctls_full_set():

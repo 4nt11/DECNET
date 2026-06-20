@@ -21,7 +21,7 @@ import yaml
 
 from decnet.config import DecnetConfig
 from decnet.network import MACVLAN_NETWORK_NAME
-from decnet.os_fingerprint import get_os_sysctls
+from decnet.os_fingerprint import get_os_mangle, get_os_sysctls
 from decnet.services.registry import get_service
 
 _DOCKER_LOGGING = {
@@ -31,6 +31,26 @@ _DOCKER_LOGGING = {
         "max-file": "5",
     },
 }
+
+# Build context for the cloak base image (decnet subtree synced in by
+# deployer._sync_cloak_sources before build).
+_CLOAK_CONTEXT = Path(__file__).parent / "templates" / "_shared" / "cloak"
+
+# Netns-safe: run the cloak best-effort in the background, but keep `sleep
+# infinity` as PID 1 in the foreground so a cloak crash never tears down the
+# base container (and with it the netns every service container shares).
+_CLOAK_COMMAND = ["sh", "-c", "python3 -m decnet.cloak & exec sleep infinity"]
+
+
+def _decky_open_tcp_ports(services: list[str]) -> list[int]:
+    """Sorted, de-duped TCP ports a decky's services listen on (for the cloak
+    responder's T2/T3 classification — DECNET_OPEN_PORTS)."""
+    ports: set[int] = set()
+    for svc_name in services:
+        svc = get_service(svc_name)
+        if svc is not None:
+            ports.update(svc.ports)
+    return sorted(ports)
 
 
 def generate_compose(config: DecnetConfig) -> dict:
@@ -59,6 +79,25 @@ def generate_compose(config: DecnetConfig) -> dict:
         # same network namespace via network_mode: "service:<base>".
         base["sysctls"] = get_os_sysctls(decky.nmap_os)
         base["cap_add"] = ["NET_ADMIN"]
+
+        # sysctls reach only global packet fields. nmap_os families with an
+        # egress mangle profile (windows*) additionally run the cloak in the
+        # base container to rewrite SYN-ACK shape + synthesize T2/T3 replies, so
+        # they read as the claimed OS under active fingerprinting (nmap -O).
+        if get_os_mangle(decky.nmap_os) is not None:
+            base.pop("image", None)
+            base["build"] = {
+                "context": str(_CLOAK_CONTEXT),
+                "args": {"BASE_IMAGE": decky.build_base},
+            }
+            base["command"] = _CLOAK_COMMAND
+            base["cap_add"] = ["NET_ADMIN", "NET_RAW"]  # NET_RAW: responder send/sniff
+            ports = _decky_open_tcp_ports(decky.services)
+            base["environment"] = {
+                "DECNET_NMAP_OS": decky.nmap_os,
+                "DECNET_OPEN_PORTS": ",".join(str(p) for p in ports),
+                "DECKY_IP": decky.ip,
+            }
 
         services[base_key] = base
 
