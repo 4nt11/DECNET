@@ -18,6 +18,7 @@ import os
 import signal
 import subprocess  # nosec B404 — fixed-arg iptables, no shell
 import sys
+import threading
 from typing import Any
 
 from decnet.logging import get_logger
@@ -120,8 +121,12 @@ def run(nmap_os: str) -> int:
         finally:
             sys.exit(0)
 
-    signal.signal(signal.SIGTERM, _cleanup)
-    signal.signal(signal.SIGINT, _cleanup)
+    # signal.signal() only works in the main thread; the `finally` below still
+    # removes the rule on a normal exit, and on container stop the netns (and
+    # its iptables rules) are torn down regardless.
+    if threading.current_thread() is threading.main_thread():
+        signal.signal(signal.SIGTERM, _cleanup)
+        signal.signal(signal.SIGINT, _cleanup)
     log.info("cloak.mangler: rewriting SYN-ACK -> %s (window=%#x ipid=%s)",
              nmap_os, profile.window, profile.ipid)
     try:

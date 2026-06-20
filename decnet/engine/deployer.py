@@ -65,6 +65,20 @@ _CANONICAL_NTLMSSP = Path(__file__).parent.parent / "templates" / "_shared" / "n
 _NTLMSSP_SERVICES = {"smb", "rdp"}
 _CANONICAL_CADDY_MODULES_DIR = Path(__file__).parent.parent / "templates" / "_caddy_modules"
 _CADDY_SERVICES = {"http", "https"}
+# Cloak base image: the decnet package root + the 8 light files shipped into the
+# cloak build context so `python -m decnet.cloak` runs in the base container.
+_DECNET_SRC = Path(__file__).parent.parent
+_CANONICAL_CLOAK_DIR = _DECNET_SRC / "templates" / "_shared" / "cloak"
+_CLOAK_SHIP_FILES = (
+    "__init__.py",
+    "config_ini.py",
+    "logging/__init__.py",
+    "os_fingerprint.py",
+    "cloak/__init__.py",
+    "cloak/__main__.py",
+    "cloak/mangler.py",
+    "cloak/responder.py",
+)
 
 
 def _sync_logging_helper(config: DecnetConfig) -> None:
@@ -85,6 +99,26 @@ def _sync_logging_helper(config: DecnetConfig) -> None:
                 dest = ctx / src.name
                 if not dest.exists() or dest.read_bytes() != src.read_bytes():
                     shutil.copy2(src, dest)
+
+
+def _sync_cloak_sources(config: DecnetConfig) -> None:
+    """Ship the light decnet subtree into the cloak base-image build context.
+
+    Only when at least one decky has an egress mangle profile (windows*). Copies
+    the 8 files in _CLOAK_SHIP_FILES into <cloak ctx>/decnet/ preserving package
+    structure so the image's `python -m decnet.cloak` resolves. The dest tree is
+    gitignored. Mirrors the _sync_*_sources copy-if-changed idiom.
+    """
+    from decnet.os_fingerprint import get_os_mangle
+    if not any(get_os_mangle(d.nmap_os) is not None for d in config.deckies):
+        return
+    dest_root = _CANONICAL_CLOAK_DIR / "decnet"
+    for rel in _CLOAK_SHIP_FILES:
+        src = _DECNET_SRC / rel
+        dest = dest_root / rel
+        dest.parent.mkdir(parents=True, exist_ok=True)
+        if not dest.exists() or dest.read_bytes() != src.read_bytes():
+            shutil.copy2(src, dest)
 
 
 def _sync_auth_helper_sources(config: DecnetConfig) -> None:
@@ -679,6 +713,7 @@ def deploy(config: DecnetConfig, dry_run: bool = False, no_cache: bool = False, 
     _sync_auth_helper_sources(config)
     _sync_ntlmssp_sources(config)
     _sync_caddy_modules(config)
+    _sync_cloak_sources(config)
 
     compose_path = write_compose(config, COMPOSE_FILE)
     console.print(f"[bold cyan]Compose file written[/] → {compose_path}")

@@ -85,3 +85,6 @@ testfail
 # Internal design/dev notes — not for publication
 /development/
 decnet.tar
+
+# cloak base-image build context: decnet subtree synced in at deploy time
+decnet/templates/_shared/cloak/decnet/

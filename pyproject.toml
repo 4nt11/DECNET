@@ -40,6 +40,9 @@ dependencies = [
     # `alembic upgrade head` at boot for managed DBs (see db/migrate.py).
     "alembic>=1.13",
     "scapy>=2.6.1",
+    # cloak egress mangler (NFQUEUE); Linux-only, lazy-imported so absence on
+    # dev/CI/non-Linux is tolerated (decnet.cloak only needs it at run()).
+    "netfilterqueue>=1.1.0 ; sys_platform == 'linux'",
     "orjson>=3.10",
     "cryptography>=48.0.1",
     "python-multipart>=0.0.31",

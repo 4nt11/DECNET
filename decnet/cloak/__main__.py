@@ -35,17 +35,15 @@ def main() -> int:
         log.info("cloak: no mangle profile for %r — exiting", nmap_os)
         return 0
 
-    threads = [
-        threading.Thread(target=mangler.run, args=(nmap_os,),
-                         name="cloak-mangler", daemon=True),
-        threading.Thread(target=responder.run, args=(nmap_os, _open_ports()),
-                         name="cloak-responder", daemon=True),
-    ]
-    for t in threads:
-        t.start()
+    # Responder runs in a daemon thread; the mangler runs in the MAIN thread so
+    # its SIGTERM/SIGINT iptables-teardown handlers can be installed (signal only
+    # works in the main thread).
+    threading.Thread(
+        target=responder.run, args=(nmap_os, _open_ports()),
+        name="cloak-responder", daemon=True,
+    ).start()
     log.info("cloak: started for nmap_os=%r", nmap_os)
-    for t in threads:
-        t.join()
+    mangler.run(nmap_os)
     return 0
 
 
