@@ -35,6 +35,8 @@ Windows (64240) from the kernel's default tcp_rmem settings.
 
 from __future__ import annotations
 
+from dataclasses import dataclass
+
 OS_SYSCTLS: dict[str, dict[str, str]] = {
     "linux": {
         "net.ipv4.ip_default_ttl": "64",
@@ -49,12 +51,31 @@ OS_SYSCTLS: dict[str, dict[str, str]] = {
         "net.ipv4.icmp_ratemask": "6168",
     },
     "windows": {
+        # Windows 10/11 workstation. NOTE: modern Windows runs TCP timestamps
+        # ON (nmap SEQ.TS=A) — an earlier value of 0 here fingerprinted as an
+        # ancient Windows/Linux stack. ECN off → nmap ECN.CC=N (workstation).
         "net.ipv4.ip_default_ttl": "128",
         "net.ipv4.tcp_syn_retries": "2",
-        "net.ipv4.tcp_timestamps": "0",
+        "net.ipv4.tcp_timestamps": "1",
         "net.ipv4.tcp_window_scaling": "1",
         "net.ipv4.tcp_sack": "1",
         "net.ipv4.tcp_ecn": "0",
+        "net.ipv4.ip_no_pmtu_disc": "0",
+        "net.ipv4.tcp_fin_timeout": "30",
+        "net.ipv4.icmp_ratelimit": "0",
+        "net.ipv4.icmp_ratemask": "0",
+    },
+    "windows_server": {
+        # Windows Server 2016/2019. Same NT stack as the workstation; the only
+        # stack-visible deltas nmap reads are ECN negotiated (CC=Y → tcp_ecn=1)
+        # and randomized IP-ID (SEQ.TI=RD, applied by the cloak mangler, not a
+        # sysctl). Everything else == "windows".
+        "net.ipv4.ip_default_ttl": "128",
+        "net.ipv4.tcp_syn_retries": "2",
+        "net.ipv4.tcp_timestamps": "1",
+        "net.ipv4.tcp_window_scaling": "1",
+        "net.ipv4.tcp_sack": "1",
+        "net.ipv4.tcp_ecn": "1",
         "net.ipv4.ip_no_pmtu_disc": "0",
         "net.ipv4.tcp_fin_timeout": "30",
         "net.ipv4.icmp_ratelimit": "0",
@@ -111,4 +132,48 @@ def get_os_sysctls(nmap_os: str) -> dict[str, str]:
 def all_os_families() -> list[str]:
     """Return all registered nmap OS family slugs."""
     return list(OS_SYSCTLS.keys())
+
+
+# ─── Egress mangle profiles (cloak) ──────────────────────────────────────────
+#
+# sysctls above reach only GLOBAL fields (TTL, timestamps on/off, ECN). The
+# SYN-ACK *shape* nmap also scores — exact window, TCP option order, IP-ID
+# generation — cannot be set per-container by sysctl. The cloak mangler
+# (decnet/cloak) rewrites those on egress, driven by these profiles, keyed by
+# the SAME nmap_os slug. A slug ABSENT here needs no mangling (its real Linux
+# stack already approximates the target, e.g. "linux"/"bsd").
+
+
+@dataclass(frozen=True)
+class MangleProfile:
+    """How the cloak rewrites a decky's egress to match an nmap_os family."""
+
+    window: int                    # TCP advertised window on SYN-ACK
+    mss: int                       # MSS option value
+    wscale: int                    # window-scale shift
+    # Ordered TCP option layout to emit on SYN-ACK. "TS" is kept only if the
+    # kernel emitted a Timestamp (sysctl tcp_timestamps=1) so its live,
+    # incrementing value survives the rewrite (nmap SEQ.TS rate test).
+    option_order: tuple[str, ...]
+    ipid: str                      # "incr" (TI=I) | "random" (TI=RD) | "keep"
+    respond_t2t3: bool             # synthesize Windows T2/T3 replies
+
+
+_WIN_OPTS = ("MSS", "NOP", "WScale", "SAckOK", "TS")
+
+OS_MANGLE: dict[str, MangleProfile] = {
+    "windows": MangleProfile(
+        window=0x2000, mss=1460, wscale=8,
+        option_order=_WIN_OPTS, ipid="incr", respond_t2t3=True,
+    ),
+    "windows_server": MangleProfile(
+        window=0x2000, mss=1460, wscale=8,
+        option_order=_WIN_OPTS, ipid="random", respond_t2t3=True,
+    ),
+}
+
+
+def get_os_mangle(nmap_os: str) -> MangleProfile | None:
+    """Return the cloak mangle profile for *nmap_os*, or None if it needs none."""
+    return OS_MANGLE.get(nmap_os)
 
