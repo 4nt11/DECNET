@@ -10,18 +10,23 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 OS fingerprint **cloak** — make a decky read as its claimed OS under *active*
 fingerprinting (`nmap -O`), not just passively. sysctl profiles only reach global
 packet fields; the cloak owns the SYN-ACK *shape* and stack *behaviours* sysctl
-can't reach. Verified live: a `windows`/`windows_server` decky flips real
-`nmap -O` from Linux to **Microsoft Windows / Windows Server 2012-2016**, with
-client handshakes intact.
+can't reach. Verified live against real `nmap -O`: a `windows` decky reads as
+**Windows 10 (95%)** and a `windows_server` decky as **Windows Server 2012/2016
+(94%)** — up from a Linux 2.6 classification — with client handshakes intact.
 
 ### Added
 - `decnet.cloak` — egress TCP/IP masquerading library, run inside the decky base
   container (`python -m decnet.cloak`, `CAP_NET_ADMIN`/`CAP_NET_RAW`):
-  - **NFQUEUE SYN-ACK mangler** — rewrites the TCP option order, advertised
-    window, and IP-ID generation policy that sysctl cannot set per-container
-    (preserves the kernel's live timestamp; recomputes `dataofs`/checksums).
+  - **NFQUEUE mangler** — rewrites the egress packet shape sysctl cannot set
+    per-container: SYN-ACK (TCP option order, window, IP-ID; preserves the
+    kernel's live timestamp; recomputes `dataofs`/checksums), RST (IP-ID + a
+    nonzero ack on bare RSTs → nmap `CI`, `T4`/`T6` `A=O`), and ICMP echo-reply
+    (`code=0` → `IE.CD=Z`). One shared IP-ID counter across all three reads as a
+    shared sequence (`SS=S`).
   - **T2/T3 probe-response synthesizer** — answers the nmap probes Linux drops
     but Windows replies to (null-flags / SYN+FIN+PSH+URG to an open port).
+    Injects at L2 (reflecting the probe's MACs) so its replies bypass the OUTPUT
+    chain and coexist with the mangler's RST rule.
   - Profiles live in `os_fingerprint.OS_MANGLE`, keyed by the same `nmap_os`
     slug; pure packet-shaping logic is unit-tested offline (scapy/netfilterqueue
     lazy-imported, Linux-only).
